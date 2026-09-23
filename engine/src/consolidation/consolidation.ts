@@ -335,6 +335,29 @@ export async function runOwnershipConsolidationIn(
       );
     }
   }
+  // NCI completeness: a full-method interest under 100% ownership allocates
+  // part of the subsidiary's profit (and acquisition-date equity) to
+  // non-controlling interests. Without both NCI accounts that share would
+  // silently never post and parent equity would overstate, so generation
+  // refuses by name before any posting — including the prior-entry reversals
+  // below. A 100%-owned full interest, and proportionate/equity methods,
+  // need no NCI accounts.
+  for (const interest of interests.rows) {
+    if (interest.method !== "full") continue;
+    if (toUnits(interest.ownership_percent) >= toUnits("100")) continue;
+    const label =
+      context.byId.get(interest.subsidiary_id)?.name ?? interest.subsidiary_id;
+    const missing = [
+      ...(!interest.nci_equity_account_id ? ["NCI equity account"] : []),
+      ...(!interest.nci_income_account_id ? ["NCI income account"] : []),
+    ];
+    if (missing.length > 0) {
+      throw new ConsolidationError(
+        `ownership interest ${interest.id} (${label}, ${interest.ownership_percent}% owned) uses the full method with a non-controlling interest but has no ${missing.join(" and ")} — configure the NCI accounts on the ownership interest before consolidating`,
+        "not-configured",
+      );
+    }
+  }
   const run = await tx.execute<{ id: string }>(sql`
     insert into ownership_consolidation_runs (org_id,period_id,status,created_by,updated_by)
     values (${orgId},${periodId},'running',${userId ?? null},${userId ?? null}) returning id

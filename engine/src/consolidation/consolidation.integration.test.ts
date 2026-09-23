@@ -564,6 +564,49 @@ test("auto-elimination translates intercompany P&L activity at the average FX ra
   }
 });
 
+test("a full-method partial interest without NCI accounts refuses before posting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const { interestId } = await seedOwnershipConsolidationFixture(org);
+    // The save-time trigger already refuses new NCI-incomplete policies, so
+    // simulate a legacy row that predates it: lift the trigger just long
+    // enough to null the column, then put the guard straight back before
+    // generation runs.
+    await db.execute(sql`
+      alter table subsidiary_ownership_interests disable trigger ownership_interest_guard
+    `);
+    try {
+      await db.execute(sql`
+        update subsidiary_ownership_interests
+           set nci_income_account_id = null
+         where id = ${interestId} and org_id = ${org.orgId}
+      `);
+    } finally {
+      await db.execute(sql`
+        alter table subsidiary_ownership_interests enable trigger ownership_interest_guard
+      `);
+    }
+    let message = "";
+    try {
+      await runOwnershipConsolidation(org.orgId, org.periodId, actorId);
+      assert.fail("consolidation must refuse an NCI-incomplete interest");
+    } catch (error) {
+      message = error instanceof Error ? error.message : String(error);
+    }
+    assert.match(message, /NCI income account/);
+    assert.match(message, /Owned Co/);
+    assert.match(message, /configure the NCI accounts/);
+    const posted = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and memo like 'Ownership consolidation%'
+    `);
+    assert.equal(posted.rows[0]!.n, 0, "a refused generation must post nothing");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("ownership consolidation uses exact period identity and reverses reruns", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
