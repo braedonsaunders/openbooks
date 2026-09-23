@@ -204,7 +204,8 @@
     "saveSnapshot": "Guardar instantánea",
     "savingSnapshot": "Guardando…",
     "snapshotCreated": "Instantánea de previsión guardada",
-    "snapshotFailed": "No se pudo guardar la instantánea."
+    "snapshotFailed": "No se pudo guardar la instantánea.",
+    "quotasRestrictedNotice": "Las cuotas están ocultas para el acceso restringido a entidades."
   },
   "setup": {
     "title": "CRM",

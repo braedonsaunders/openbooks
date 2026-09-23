@@ -204,7 +204,8 @@
     "saveSnapshot": "Salvar snapshot",
     "savingSnapshot": "Salvando…",
     "snapshotCreated": "Snapshot de previsão salvo",
-    "snapshotFailed": "Não foi possível salvar o snapshot de previsão."
+    "snapshotFailed": "Não foi possível salvar o snapshot de previsão.",
+    "quotasRestrictedNotice": "As cotas ficam ocultas para acesso restrito a entidades."
   },
   "setup": {
     "title": "CRM",

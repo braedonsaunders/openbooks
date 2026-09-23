@@ -204,7 +204,8 @@
     "saveSnapshot": "保存快照",
     "savingSnapshot": "保存中…",
     "snapshotCreated": "预测快照已保存",
-    "snapshotFailed": "无法保存预测快照。"
+    "snapshotFailed": "无法保存预测快照。",
+    "quotasRestrictedNotice": "实体受限访问下不显示配额。"
   },
   "setup": {
     "title": "CRM",

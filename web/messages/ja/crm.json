@@ -204,7 +204,8 @@
     "saveSnapshot": "スナップショットを保存",
     "savingSnapshot": "保存中…",
     "snapshotCreated": "予測スナップショットを保存しました",
-    "snapshotFailed": "予測スナップショットを保存できませんでした。"
+    "snapshotFailed": "予測スナップショットを保存できませんでした。",
+    "quotasRestrictedNotice": "エンティティ制限アクセスではノルマは非表示になります。"
   },
   "setup": {
     "title": "CRM",

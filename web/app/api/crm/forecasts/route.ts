@@ -1,5 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from 'next/server'
+import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -26,9 +27,16 @@ export async function GET(req: NextRequest) {
   if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
   if (ownerUserId && !isUuid(ownerUserId)) return NextResponse.json({ error: 'invalid owner' }, { status: 422 })
   if (salesTeamId && !isUuid(salesTeamId)) return NextResponse.json({ error: 'invalid sales team' }, { status: 422 })
+  // Quotas carry no subsidiary lineage, so a subsidiary-restricted caller
+  // must not receive them at all: a quota for an owner or team whose
+  // opportunities sit in another entity would leak across the boundary.
+  // Fail closed with an explicit notice instead of an empty-looking list.
+  const quotasRestricted = gate.allowedSubsidiaryIds !== null
   const [forecast, quotas, snapshots] = (await Promise.all([
     calculateForecast({ orgId: gate.user.orgId, periodStart, periodEnd, ownerUserId, salesTeamId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }),
-    db.execute(sql`
+    quotasRestricted
+      ? Promise.resolve({ rows: [] })
+      : db.execute(sql`
       select q.*, u.name as owner_name, t.name as sales_team_name from crm_sales_quotas q
       left join users u on u.id = q.owner_user_id left join crm_sales_teams t on t.id = q.sales_team_id and t.org_id = q.org_id
       where q.org_id = ${gate.user.orgId} and q.period_start <= ${periodEnd}::date and q.period_end >= ${periodStart}::date
@@ -43,7 +51,9 @@ export async function GET(req: NextRequest) {
         ${salesTeamId ? sql`and s.sales_team_id = ${salesTeamId}` : sql``}
       order by s.as_of desc limit 50`),
   ]))
-  return NextResponse.json({ periodStart, periodEnd, forecast, quotas: quotas.rows, snapshots: snapshots.rows })
+  const t = await getTranslations('crm')
+  return NextResponse.json({ periodStart, periodEnd, forecast, quotas: quotas.rows, snapshots: snapshots.rows,
+    quotasNotice: quotasRestricted ? t('forecasts.quotasRestrictedNotice') : null })
 }
 
 export async function POST(req: NextRequest) {

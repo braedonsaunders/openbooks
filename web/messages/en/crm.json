@@ -204,7 +204,8 @@
     "saveSnapshot": "Save snapshot",
     "savingSnapshot": "Saving…",
     "snapshotCreated": "Forecast snapshot saved",
-    "snapshotFailed": "The forecast snapshot could not be saved."
+    "snapshotFailed": "The forecast snapshot could not be saved.",
+    "quotasRestrictedNotice": "Quotas are hidden for entity-restricted access."
   },
   "setup": {
     "title": "CRM",

@@ -204,7 +204,8 @@
     "saveSnapshot": "Momentaufnahme speichern",
     "savingSnapshot": "Wird gespeichert…",
     "snapshotCreated": "Prognose-Momentaufnahme gespeichert",
-    "snapshotFailed": "Die Prognose-Momentaufnahme konnte nicht gespeichert werden."
+    "snapshotFailed": "Die Prognose-Momentaufnahme konnte nicht gespeichert werden.",
+    "quotasRestrictedNotice": "Quoten sind bei eingeschränktem Zugriff ausgeblendet."
   },
   "setup": {
     "title": "CRM",
