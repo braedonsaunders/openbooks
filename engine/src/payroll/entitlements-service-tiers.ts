@@ -1,6 +1,18 @@
 const at = (value: string) => new Date(`${value}T00:00:00Z`);
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
+ * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
+ * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
+ * remap onto 1900-1999): this tier module is database-free and must not load
+ * the db-backed platform stack.
+ */
+function utcCivilDate(year: number, monthIndex: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date;
+}
 const lastDayOfMonth = (d: Date) =>
-  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  utcCivilDate(d.getUTCFullYear(), d.getUTCMonth() + 1, 0).getUTCDate();
 
 /**
  * Completed months of continuous service between two ISO dates.

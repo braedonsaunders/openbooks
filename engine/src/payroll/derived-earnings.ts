@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { utcDateFromParts } from "../platform/business-date.ts";
 import {
   add, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
@@ -306,12 +307,12 @@ export function settlementMonth(
     cursor.getTime() <= end.getTime();
     cursor = new Date(cursor.getTime() + DAY)
   ) {
-    const monthEnd = new Date(
-      Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0),
+    const monthEnd = utcDateFromParts(
+      cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0,
     );
     if (iso(monthEnd) === iso(cursor)) {
       return {
-        start: iso(new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1))),
+        start: iso(utcDateFromParts(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1)),
         end: iso(cursor),
       };
     }

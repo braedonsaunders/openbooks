@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { utcDateFromParts } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
   employmentJurisdictionsOf,
@@ -133,7 +134,7 @@ export function easterSunday(year: number): string {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return iso(new Date(Date.UTC(year, month - 1, day)));
+  return iso(utcDateFromParts(year, month - 1, day));
 }
 
 /** The calendar date a recurrence rule produces in a given year, before any
@@ -141,19 +142,19 @@ export function easterSunday(year: number): string {
 export function resolveHolidayRule(rule: PayrollHolidayRule, year: number): string {
   switch (rule.kind) {
     case "fixed":
-      return iso(new Date(Date.UTC(year, rule.month - 1, rule.day)));
+      return iso(utcDateFromParts(year, rule.month - 1, rule.day));
     case "easter_offset":
       return shiftDays(easterSunday(year), rule.days);
     case "nth_weekday": {
       if (rule.nth > 0) {
-        const first = new Date(Date.UTC(year, rule.month - 1, 1));
+        const first = utcDateFromParts(year, rule.month - 1, 1);
         const offset = (rule.weekday - first.getUTCDay() + 7) % 7;
-        return iso(new Date(Date.UTC(year, rule.month - 1, 1 + offset + (rule.nth - 1) * 7)));
+        return iso(utcDateFromParts(year, rule.month - 1, 1 + offset + (rule.nth - 1) * 7));
       }
       // nth < 0 counts back from the end of the month: -1 is the LAST such
       // weekday (US Memorial Day is the last Monday in May, which is the
       // fourth Monday in four years out of seven and the fifth otherwise).
-      const last = new Date(Date.UTC(year, rule.month, 0));
+      const last = utcDateFromParts(year, rule.month, 0);
       const back = (last.getUTCDay() - rule.weekday + 7) % 7;
       return iso(new Date(last.getTime() - (back + (-rule.nth - 1) * 7) * DAY_MS));
     }
@@ -161,7 +162,7 @@ export function resolveHolidayRule(rule: PayrollHolidayRule, year: number): stri
       // The last <weekday> STRICTLY before month/day. Victoria Day is the
       // Monday preceding May 25, so when May 25 is itself a Monday the holiday
       // is May 18 — the single most commonly mis-implemented Canadian holiday.
-      const anchor = new Date(Date.UTC(year, rule.month - 1, rule.day));
+      const anchor = utcDateFromParts(year, rule.month - 1, rule.day);
       const back = ((anchor.getUTCDay() - rule.weekday + 7) % 7) || 7;
       return iso(new Date(anchor.getTime() - back * DAY_MS));
     }

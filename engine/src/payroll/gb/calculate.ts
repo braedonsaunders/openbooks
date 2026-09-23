@@ -374,12 +374,25 @@ export function gbTaxMonthNumber(payDate: string): number {
   return index + 1;
 }
 
+/**
+ * Epoch milliseconds for civil (year, monthIndex, day) parts. Local copy of
+ * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
+ * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
+ * remap onto 1900-1999): this statutory arithmetic is pure with no database
+ * and must not load the db-backed platform stack.
+ */
+function utcMs(year: number, monthIndex: number, day: number): number {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date.getTime();
+}
+
 /** HMRC tax-week number (1–53) for a pay date in the given year. Week 1 = 6–12 Apr. */
 export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR_START): number {
-  const start = Date.UTC(
+  const start = utcMs(
     Number(yearStart.slice(0, 4)), Number(yearStart.slice(5, 7)) - 1, Number(yearStart.slice(8, 10)),
   );
-  const day = Date.UTC(
+  const day = utcMs(
     Number(payDate.slice(0, 4)), Number(payDate.slice(5, 7)) - 1, Number(payDate.slice(8, 10)),
   );
   return Math.floor((day - start) / (7 * 86_400_000)) + 1;
