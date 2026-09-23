@@ -5,6 +5,10 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../../../engine/src/platform/db.ts";
 import {
+  PAYROLL_COUNTRY_PACKS,
+  statutoryRemittanceDeclaration,
+} from "../../../engine/src/payroll/packs.ts";
+import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
@@ -59,12 +63,20 @@ async function seedAccrual(
     liabilityId?: string;
     code?: string;
     name?: string;
-    snapshot?: string;
+    snapshot?: string | null;
+    componentVendor?: string | null;
+    country?: string;
+    systemKey?: string;
+    province?: string;
   } = {},
 ): Promise<{ lineId: string; liability: string }> {
   const amount = overrides.amount ?? "100.00";
   const liability = overrides.liabilityId ?? (await seedLiabilityAccount(fx, "2310", "Withholding payable"));
   const code = overrides.code ?? "GARN";
+  // An explicit null snapshots nothing: statutory components carry their
+  // destination in pack settings, not on the component or the line.
+  const componentVendor = overrides.componentVendor === undefined ? fx.vendorId : overrides.componentVendor;
+  const lineSnapshot = overrides.snapshot === undefined ? fx.vendorId : overrides.snapshot;
   const componentId = randomUUID();
   const scheduleId = randomUUID();
   const employeeId = randomUUID();
@@ -75,10 +87,11 @@ async function seedAccrual(
   const scheduleName = `0296 schedule ${runSeq}`;
   await db.execute(sql`
     insert into pay_components
-      (id, org_id, code, name, kind, country, is_active, liability_account_id,
+      (id, org_id, code, name, kind, country, system_key, is_active, liability_account_id,
        remittance_party_id, sequence, created_by, updated_by)
-    values (${componentId}, ${fx.orgId}, ${code}, ${overrides.name ?? "Garnishment"}, 'deduction', 'US', true,
-            ${liability}, ${overrides.snapshot ?? fx.vendorId}, 10, ${fx.actor}, ${fx.actor})`);
+    values (${componentId}, ${fx.orgId}, ${code}, ${overrides.name ?? "Garnishment"}, 'deduction',
+            ${overrides.country ?? "US"}, ${overrides.systemKey ?? null}, true,
+            ${liability}, ${componentVendor}, 10, ${fx.actor}, ${fx.actor})`);
   await db.execute(sql`
     insert into pay_schedules
       (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -108,7 +121,7 @@ async function seedAccrual(
        periods_per_year, pay_date, tax_year, currency_code, gross,
        pensionable_earnings, insurable_earnings, net_pay, employer_cost,
        vacation_accrued, factors, created_by, updated_by)
-    values (${stubId}, ${fx.orgId}, ${runId}, ${employeeId}, 'ON', 12,
+    values (${stubId}, ${fx.orgId}, ${runId}, ${employeeId}, ${overrides.province ?? "ON"}, 12,
             '2026-07-21', 2026, 'USD', '100.00', '100.00', '100.00', '100.00',
             '100.00', '0', '{}'::jsonb, ${fx.actor}, ${fx.actor})`);
   await db.execute(sql`
@@ -116,7 +129,7 @@ async function seedAccrual(
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
        liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${lineId}, ${fx.orgId}, ${stubId}, ${componentId}, 'deduction', ${overrides.name ?? "Garnishment"},
-            ${amount}, 10, ${liability}, 'commit', ${overrides.snapshot ?? fx.vendorId}, ${fx.actor}, ${fx.actor})`);
+            ${amount}, 10, ${liability}, 'commit', ${lineSnapshot}, ${fx.actor}, ${fx.actor})`);
   return { lineId, liability };
 }
 
@@ -201,12 +214,16 @@ async function namedBills(orgId: string): Promise<{ number: string; reasons: str
         join public.pay_stub_lines l on l.org_id = s.org_id
         join public.pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
         join public.pay_runs r on r.document_id = st.pay_run_document_id and r.org_id = st.org_id
+        join public.pay_components c on c.org_id = l.org_id and c.id = l.component_id
+        cross join lateral (
+          select settings -> 'payroll' as p from public.orgs where id = s.org_id
+        ) ops
        where s.from_date is not null and s.to_date is not null and s.party_id is not null
          and s.filing_ok
          and r.run_status = 'committed'
          and l.kind in ('deduction', 'employer_contribution', 'credit')
          and st.pay_date between s.from_date and s.to_date
-         and l.remittance_party_id is not distinct from s.party_id
+         and ${sql.raw(resolutionFragment(frozenPackMap))}
          and st.filing_account_id is not distinct from s.filing_id
          and exists (
            select 1 from public.documents d
@@ -246,6 +263,70 @@ async function namedBills(orgId: string): Promise<{ number: string; reasons: str
       from flagged
      where party_bad or line_bad
      order by number`)).rows;
+}
+
+// The frozen 0296-era pack map, parsed from the migration under test: the
+// single source of truth for both the parity test and the notice mirror, so
+// neither can drift from the shipped bytes.
+type FrozenPackMap = {
+  defaults: [country: string, key: string, settingsKey: string][];
+  regionals: [country: string, key: string, province: string, settingsKey: string][];
+};
+
+function parseFrozenPackMap(sqlText: string): FrozenPackMap {
+  const ident = String.raw`[A-Za-z0-9_]+`;
+  const takeBlock = (fromMarker: string, toMarker: string): string => {
+    const from = sqlText.indexOf(fromMarker);
+    const to = sqlText.indexOf(toMarker, from);
+    // A migration revision without the frozen map (pre-U4 bytes) parses to
+    // an empty map: the statutory tests then prove the old bytes cover
+    // nothing, instead of the suite failing to load.
+    if (!(from >= 0 && to > from)) return "";
+    return sqlText.slice(from, to);
+  };
+  const parseTuples = (block: string, arity: 3 | 4): string[][] => {
+    const pattern = arity === 3
+      ? new RegExp(String.raw`\(\s*'(` + ident + String.raw`)'\s*,\s*'(` + ident + String.raw`)'\s*,\s*'(` + ident + String.raw`)'\s*\)`, "g")
+      : new RegExp(String.raw`\(\s*'(` + ident + String.raw`)'\s*,\s*'(` + ident + String.raw`)'\s*,\s*'(` + ident + String.raw`)'\s*,\s*'(` + ident + String.raw`)'\s*\)`, "g");
+    return [...block.matchAll(pattern)].map((m) => m.slice(1));
+  };
+  const defaults = parseTuples(
+    takeBlock("pack_default_vendor AS (", "pack_regional_vendor AS ("),
+    3,
+  ).map(([country, key, settingsKey]) => [country!, key!, settingsKey!] as [string, string, string]);
+  const regionals = parseTuples(
+    takeBlock("pack_regional_vendor AS (", "org_payroll_settings AS ("),
+    4,
+  ).map(([country, key, province, settingsKey]) => [country!, key!, province!, settingsKey!] as [string, string, string, string]);
+  return { defaults, regionals };
+}
+
+const frozenPackMap = parseFrozenPackMap(migrationSql);
+
+// The migration's resolution order (regional, snapshot, default) generated
+// from the frozen map, so the notice mirror cannot disagree with the shipped
+// repair on which lines belong to a bill.
+function resolutionFragment(map: FrozenPackMap): string {
+  const settingSql = (sk: string): string =>
+    `case when jsonb_typeof(ops.p -> '${sk}') = 'string' ` +
+    `then nullif(ops.p ->> '${sk}', '') else null end`;
+  // An empty frozen map (pre-U4 bytes under test) degrades to pure snapshot
+  // matching: every WHEN is false and the inner CASEs still parse.
+  const regionBranch = map.regionals.length === 0
+    ? "when false then null"
+    : `when ${map.regionals.map(([c, k, prov]) => `(c.country = '${c}' and c.system_key = '${k}' and st.province = '${prov}')`).join(" or ")} then\n` +
+      `                case ${map.regionals.map(([c, k, prov, sk]) => `when c.country = '${c}' and c.system_key = '${k}' and st.province = '${prov}' then ${settingSql(sk)}`).join("\n              ")} else null end`;
+  const defaultBranch = map.defaults.length === 0
+    ? "when false then null"
+    : `when ${map.defaults.map(([c, k]) => `(c.country = '${c}' and c.system_key = '${k}')`).join(" or ")} then\n` +
+      `                case ${map.defaults.map(([c, k, sk]) => `when c.country = '${c}' and c.system_key = '${k}' then ${settingSql(sk)}`).join("\n              ")} else null end`;
+  // Text on both sides: settings values are text, so the snapshot casts to
+  // text too — exactly the string comparison the TypeScript resolver does.
+  return `(case
+              ${regionBranch}
+              when l.remittance_party_id is not null then l.remittance_party_id::text
+              ${defaultBranch}
+              else null end) is not distinct from s.party_id::text`;
 }
 
 function validMarker(fx: SeededOrg): Record<string, unknown> {
@@ -524,6 +605,43 @@ test(
   },
 );
 
+test("0296 frozen pack map matches the live declarations", async () => {
+  // Pure source-text + declaration comparison: no database needed, so this
+  // runs in every partition. It pins the repair's frozen map against the
+  // TypeScript resolver both ways over the 0296-era key set: a pack edit to
+  // an old key fails here and forces a conscious repair decision instead of
+  // silently diverging SQL from TS. Post-0296 keys are invisible by design —
+  // no pre-0296 line can carry a key its pack had not declared yet.
+  assert.ok(
+    frozenPackMap.defaults.length > 0 && frozenPackMap.regionals.length > 0,
+    "the migration carries a non-empty frozen pack map",
+  );
+  const frozenKeys = new Set([
+    ...frozenPackMap.defaults.map(([c, k]) => `${c}.${k}`),
+    ...frozenPackMap.regionals.map(([c, k]) => `${c}.${k}`),
+  ]);
+  for (const [country, key, settingsKey] of frozenPackMap.defaults) {
+    const live = statutoryRemittanceDeclaration(country).vendorSettingsKeyBySystemKey.get(key);
+    assert.equal(live, settingsKey, `${country}.${key} vendor key changed since 0296`);
+  }
+  for (const [country, key, province, settingsKey] of frozenPackMap.regionals) {
+    const live = statutoryRemittanceDeclaration(country).regionalVendorSettingsKeyBySystemKey.get(key)?.[province];
+    assert.equal(live, settingsKey, `${country}.${key}.${province} regional key changed since 0296`);
+  }
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    const declaration = statutoryRemittanceDeclaration(country);
+    for (const [key, provinces] of declaration.regionalVendorSettingsKeyBySystemKey) {
+      if (!frozenKeys.has(`${country}.${key}`)) continue;
+      const liveEntries = Object.entries(provinces ?? {}).sort();
+      const frozenEntries = frozenPackMap.regionals
+        .filter(([c, k]) => c === country && k === key)
+        .map(([, , prov, sk]) => [prov, sk])
+        .sort();
+      assert.deepEqual(liveEntries, frozenEntries, `${country}.${key} gained a regional route since 0296`);
+    }
+  }
+});
+
 test(
   "0296 frees backfill rows when their bill is voided",
   { skip: !DB },
@@ -547,6 +665,100 @@ test(
       await withBypass(() => runMigration());
       assert.deepEqual(await withBypass(() => coverageRows(fx.orgId)), []);
       assert.ok(billId);
+    } finally {
+      await withBypass(() => dropScratchOrg(fx.orgId));
+    }
+  },
+);
+
+async function setPayrollSetting(fx: SeededOrg, key: string, value: string): Promise<void> {
+  // jsonb_set cannot create a missing parent path, so the payroll object is
+  // ensured first: scratch orgs carry features/control accounts but no
+  // payroll settings until a pack is configured.
+  await db.execute(sql`
+    update orgs
+       set settings = jsonb_set(
+         jsonb_set(
+           coalesce(settings, '{}'::jsonb),
+           string_to_array('payroll', ','),
+           coalesce(settings -> 'payroll', '{}'::jsonb),
+           true
+         ),
+         string_to_array(${`payroll,${key}`}, ','),
+         to_jsonb(${value}::text),
+         true
+       )
+     where id = ${fx.orgId}`);
+}
+
+test(
+  "0296 covers a legacy statutory CRA bill through pack settings",
+  { skip: !DB },
+  async () => {
+    const fx = await withBypass(() => seedOrg());
+    try {
+      const { billId, lineId } = await withBypass(async () => {
+        // A normal pre-0296 CRA bill: the income-tax component names no
+        // vendor (the destination lives in pack settings), so the line
+        // snapshot is NULL and snapshot-only matching covers nothing.
+        await setPayrollSetting(fx, "craRemittancePartyId", fx.vendorId);
+        const { lineId, liability } = await seedAccrual(fx, {
+          country: "CA",
+          systemKey: "income_tax",
+          code: "ITAX",
+          name: "Income tax",
+          componentVendor: null,
+          snapshot: null,
+        });
+        const id = await seedBill(fx, "VB-U4-CRA", validMarker(fx));
+        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "Income tax" }]);
+        await approveBill(fx, id);
+        return { billId: id, lineId };
+      });
+      await withBypass(() => runMigration());
+      const { rows, named } = await withBypass(async () => ({
+        rows: await coverageRows(fx.orgId),
+        named: await namedBills(fx.orgId),
+      }));
+      assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
+      assert.deepEqual(named, []);
+    } finally {
+      await withBypass(() => dropScratchOrg(fx.orgId));
+    }
+  },
+);
+
+test(
+  "0296 covers a legacy regional QPP bill through the RQ key",
+  { skip: !DB },
+  async () => {
+    const fx = await withBypass(() => seedOrg());
+    try {
+      const { billId, lineId } = await withBypass(async () => {
+        // QPP for a Quebec stub routes to the RQ vendor before the snapshot:
+        // the snapshot stays NULL and only pack-aware matching covers it.
+        await setPayrollSetting(fx, "rqRemittancePartyId", fx.vendorId);
+        const { lineId, liability } = await seedAccrual(fx, {
+          country: "CA",
+          systemKey: "cpp",
+          code: "QPP",
+          name: "Quebec Pension Plan",
+          componentVendor: null,
+          snapshot: null,
+          province: "QC",
+        });
+        const id = await seedBill(fx, "VB-U4-RQ", validMarker(fx));
+        await seedBillLines(fx, id, [{ account: liability, amount: "100", description: "QPP" }]);
+        await approveBill(fx, id);
+        return { billId: id, lineId };
+      });
+      await withBypass(() => runMigration());
+      const { rows, named } = await withBypass(async () => ({
+        rows: await coverageRows(fx.orgId),
+        named: await namedBills(fx.orgId),
+      }));
+      assert.deepEqual(rows, [{ bill: billId, line: lineId, amount: "100.0000" }]);
+      assert.deepEqual(named, []);
     } finally {
       await withBypass(() => dropScratchOrg(fx.orgId));
     }

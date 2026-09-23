@@ -228,7 +228,8 @@ COMMENT ON POLICY org_isolation ON public.payroll_remittance_coverage IS 'openbo
 -- it reconciles EXACTLY: its recorded party equals the marker party, and
 -- its lines per liability account equal the committed accrual groups per
 -- liability account (credits netting as the summary nets them; zero-amount
--- lines and zero-net groups dropped on both sides). Anything else — a
+-- lines and zero-net groups dropped on both sides), with each line attributed
+-- through the pack-aware resolution below. Anything else — a
 -- hand-edited wrong-account bill, a re-pointed party, a window that gained
 -- a later run — gets NO rows and is NAMED by the notice below; it keeps the
 -- fail-closed window-overlap refusal until it is voided and recreated (void
@@ -270,9 +271,42 @@ WITH sane_bills AS (
       WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
    )
 ),
+pack_default_vendor AS (
+  -- 0296-era pack-declared vendor settings keys (non-null only), frozen.
+  -- A pre-0296 line can only carry a key its pack declared when the line
+  -- committed; engine/src/payroll/packs.ts statutoryRemittanceDeclaration is
+  -- parity-pinned against this list by the 0296 upgrade test.
+  SELECT * FROM (VALUES
+    ('AU', 'payg_withholding', 'atoRemittancePartyId'),
+    ('CA', 'income_tax', 'craRemittancePartyId'),
+    ('CA', 'cpp', 'craRemittancePartyId'),
+    ('CA', 'cpp2', 'craRemittancePartyId'),
+    ('CA', 'ei', 'craRemittancePartyId'),
+    ('CA', 'qpip', 'craRemittancePartyId'),
+    ('CA', 'hsf', 'craRemittancePartyId'),
+    ('IE', 'ie_paye', 'revenueRemittancePartyId'),
+    ('IE', 'prsi', 'revenueRemittancePartyId'),
+    ('IE', 'usc', 'revenueRemittancePartyId')
+  ) AS t(country, system_key, settings_key)
+),
+pack_regional_vendor AS (
+  SELECT * FROM (VALUES
+    ('CA', 'cpp', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'cpp2', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'qpip', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'hsf', 'QC', 'rqRemittancePartyId')
+  ) AS t(country, system_key, province, settings_key)
+),
+org_payroll_settings AS (
+  SELECT o.id AS org_id, (o.settings -> 'payroll') AS payroll
+    FROM public.orgs o
+),
 scoped_lines AS (
-  -- Candidate accrual lines per bill (snapshot matching; the pack-aware
-  -- resolution lands with the U4 revision of this repair).
+  -- Line attribution resolves each line's destination through the same order
+  -- the bill-creation path uses: a region-scoped key first (an unconfigured
+  -- region stays regional and never falls through to the snapshot), then the
+  -- frozen snapshot, then the pack default. Only non-empty string settings
+  -- values count, matching the TypeScript resolver exactly.
   SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
          l.liability_account_id AS acct,
          CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
@@ -280,12 +314,29 @@ scoped_lines AS (
     JOIN public.pay_stub_lines l ON l.org_id = s.org_id
     JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
     JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+    JOIN public.pay_components c ON c.org_id = l.org_id AND c.id = l.component_id
+    JOIN org_payroll_settings ops ON ops.org_id = s.org_id
+    LEFT JOIN pack_regional_vendor rv
+      ON rv.country = c.country AND rv.system_key = c.system_key AND rv.province = st.province
+    LEFT JOIN pack_default_vendor dv
+      ON dv.country = c.country AND dv.system_key = c.system_key
    WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
      AND s.filing_ok
      AND r.run_status = 'committed'
      AND l.kind IN ('deduction', 'employer_contribution', 'credit')
      AND st.pay_date BETWEEN s.from_date AND s.to_date
-     AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+     AND (
+       CASE
+         WHEN rv.settings_key IS NOT NULL THEN
+           CASE WHEN jsonb_typeof(ops.payroll -> rv.settings_key) = 'string'
+                THEN NULLIF(ops.payroll ->> rv.settings_key, '') ELSE NULL END
+         WHEN l.remittance_party_id IS NOT NULL THEN l.remittance_party_id::text
+         WHEN dv.settings_key IS NOT NULL THEN
+           CASE WHEN jsonb_typeof(ops.payroll -> dv.settings_key) = 'string'
+                THEN NULLIF(ops.payroll ->> dv.settings_key, '') ELSE NULL END
+         ELSE NULL
+       END
+     ) IS NOT DISTINCT FROM s.party_id::text
      AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
      AND EXISTS (
        SELECT 1 FROM public.documents d
@@ -375,7 +426,42 @@ DELETE FROM public.payroll_remittance_coverage cov
          WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
       )
    ),
+   pack_default_vendor AS (
+     -- 0296-era pack-declared vendor settings keys (non-null only), frozen.
+     -- A pre-0296 line can only carry a key its pack declared when the line
+     -- committed; engine/src/payroll/packs.ts statutoryRemittanceDeclaration is
+     -- parity-pinned against this list by the 0296 upgrade test.
+     SELECT * FROM (VALUES
+       ('AU', 'payg_withholding', 'atoRemittancePartyId'),
+       ('CA', 'income_tax', 'craRemittancePartyId'),
+       ('CA', 'cpp', 'craRemittancePartyId'),
+       ('CA', 'cpp2', 'craRemittancePartyId'),
+       ('CA', 'ei', 'craRemittancePartyId'),
+       ('CA', 'qpip', 'craRemittancePartyId'),
+       ('CA', 'hsf', 'craRemittancePartyId'),
+       ('IE', 'ie_paye', 'revenueRemittancePartyId'),
+       ('IE', 'prsi', 'revenueRemittancePartyId'),
+       ('IE', 'usc', 'revenueRemittancePartyId')
+     ) AS t(country, system_key, settings_key)
+   ),
+   pack_regional_vendor AS (
+     SELECT * FROM (VALUES
+       ('CA', 'cpp', 'QC', 'rqRemittancePartyId'),
+       ('CA', 'cpp2', 'QC', 'rqRemittancePartyId'),
+       ('CA', 'qpip', 'QC', 'rqRemittancePartyId'),
+       ('CA', 'hsf', 'QC', 'rqRemittancePartyId')
+     ) AS t(country, system_key, province, settings_key)
+   ),
+   org_payroll_settings AS (
+     SELECT o.id AS org_id, (o.settings -> 'payroll') AS payroll
+       FROM public.orgs o
+   ),
    scoped_lines AS (
+     -- Line attribution resolves each line's destination through the same order
+     -- the bill-creation path uses: a region-scoped key first (an unconfigured
+     -- region stays regional and never falls through to the snapshot), then the
+     -- frozen snapshot, then the pack default. Only non-empty string settings
+     -- values count, matching the TypeScript resolver exactly.
      SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
             l.liability_account_id AS acct,
             CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
@@ -383,12 +469,29 @@ DELETE FROM public.payroll_remittance_coverage cov
        JOIN public.pay_stub_lines l ON l.org_id = s.org_id
        JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
        JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+       JOIN public.pay_components c ON c.org_id = l.org_id AND c.id = l.component_id
+       JOIN org_payroll_settings ops ON ops.org_id = s.org_id
+       LEFT JOIN pack_regional_vendor rv
+         ON rv.country = c.country AND rv.system_key = c.system_key AND rv.province = st.province
+       LEFT JOIN pack_default_vendor dv
+         ON dv.country = c.country AND dv.system_key = c.system_key
       WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
         AND s.filing_ok
         AND r.run_status = 'committed'
         AND l.kind IN ('deduction', 'employer_contribution', 'credit')
         AND st.pay_date BETWEEN s.from_date AND s.to_date
-        AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+        AND (
+          CASE
+            WHEN rv.settings_key IS NOT NULL THEN
+              CASE WHEN jsonb_typeof(ops.payroll -> rv.settings_key) = 'string'
+                   THEN NULLIF(ops.payroll ->> rv.settings_key, '') ELSE NULL END
+            WHEN l.remittance_party_id IS NOT NULL THEN l.remittance_party_id::text
+            WHEN dv.settings_key IS NOT NULL THEN
+              CASE WHEN jsonb_typeof(ops.payroll -> dv.settings_key) = 'string'
+                   THEN NULLIF(ops.payroll ->> dv.settings_key, '') ELSE NULL END
+            ELSE NULL
+          END
+        ) IS NOT DISTINCT FROM s.party_id::text
         AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
         AND EXISTS (
           SELECT 1 FROM public.documents d
@@ -484,7 +587,42 @@ BEGIN
         WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
      )
   ),
+  pack_default_vendor AS (
+    -- 0296-era pack-declared vendor settings keys (non-null only), frozen.
+    -- A pre-0296 line can only carry a key its pack declared when the line
+    -- committed; engine/src/payroll/packs.ts statutoryRemittanceDeclaration is
+    -- parity-pinned against this list by the 0296 upgrade test.
+    SELECT * FROM (VALUES
+      ('AU', 'payg_withholding', 'atoRemittancePartyId'),
+      ('CA', 'income_tax', 'craRemittancePartyId'),
+      ('CA', 'cpp', 'craRemittancePartyId'),
+      ('CA', 'cpp2', 'craRemittancePartyId'),
+      ('CA', 'ei', 'craRemittancePartyId'),
+      ('CA', 'qpip', 'craRemittancePartyId'),
+      ('CA', 'hsf', 'craRemittancePartyId'),
+      ('IE', 'ie_paye', 'revenueRemittancePartyId'),
+      ('IE', 'prsi', 'revenueRemittancePartyId'),
+      ('IE', 'usc', 'revenueRemittancePartyId')
+    ) AS t(country, system_key, settings_key)
+  ),
+  pack_regional_vendor AS (
+    SELECT * FROM (VALUES
+      ('CA', 'cpp', 'QC', 'rqRemittancePartyId'),
+      ('CA', 'cpp2', 'QC', 'rqRemittancePartyId'),
+      ('CA', 'qpip', 'QC', 'rqRemittancePartyId'),
+      ('CA', 'hsf', 'QC', 'rqRemittancePartyId')
+    ) AS t(country, system_key, province, settings_key)
+  ),
+  org_payroll_settings AS (
+    SELECT o.id AS org_id, (o.settings -> 'payroll') AS payroll
+      FROM public.orgs o
+  ),
   scoped_lines AS (
+    -- Line attribution resolves each line's destination through the same order
+    -- the bill-creation path uses: a region-scoped key first (an unconfigured
+    -- region stays regional and never falls through to the snapshot), then the
+    -- frozen snapshot, then the pack default. Only non-empty string settings
+    -- values count, matching the TypeScript resolver exactly.
     SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
            l.liability_account_id AS acct,
            CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
@@ -492,12 +630,29 @@ BEGIN
       JOIN public.pay_stub_lines l ON l.org_id = s.org_id
       JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
       JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+      JOIN public.pay_components c ON c.org_id = l.org_id AND c.id = l.component_id
+      JOIN org_payroll_settings ops ON ops.org_id = s.org_id
+      LEFT JOIN pack_regional_vendor rv
+        ON rv.country = c.country AND rv.system_key = c.system_key AND rv.province = st.province
+      LEFT JOIN pack_default_vendor dv
+        ON dv.country = c.country AND dv.system_key = c.system_key
      WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
        AND s.filing_ok
        AND r.run_status = 'committed'
        AND l.kind IN ('deduction', 'employer_contribution', 'credit')
        AND st.pay_date BETWEEN s.from_date AND s.to_date
-       AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+       AND (
+         CASE
+           WHEN rv.settings_key IS NOT NULL THEN
+             CASE WHEN jsonb_typeof(ops.payroll -> rv.settings_key) = 'string'
+                  THEN NULLIF(ops.payroll ->> rv.settings_key, '') ELSE NULL END
+           WHEN l.remittance_party_id IS NOT NULL THEN l.remittance_party_id::text
+           WHEN dv.settings_key IS NOT NULL THEN
+             CASE WHEN jsonb_typeof(ops.payroll -> dv.settings_key) = 'string'
+                  THEN NULLIF(ops.payroll ->> dv.settings_key, '') ELSE NULL END
+           ELSE NULL
+         END
+       ) IS NOT DISTINCT FROM s.party_id::text
        AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
        AND EXISTS (
          SELECT 1 FROM public.documents d

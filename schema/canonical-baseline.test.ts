@@ -624,9 +624,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // second bill to post (double payment). Commits now snapshot the
     // destination per stub line; pre-existing bills gain per-line coverage
     // only on an exact reconciliation (recorded party equals the marker
-    // party, lines per liability account equal the accrual groups), otherwise
-    // they are left uncovered and named by notice, keeping the fail-closed
-    // window refusal until voided and recreated.
+    // party, lines per liability account equal the accrual groups with each
+    // line's destination resolved pack-aware, as the bill creator resolves
+    // it), otherwise they are left uncovered and named by notice, keeping
+    // the fail-closed window refusal until voided and recreated.
     "0296_payroll_remittance_destination_snapshot.sql",
     // Recognition-rule edits rewrote the live policy row, so rebuilding an
     // existing obligation's unposted schedule repriced and retimed it under
