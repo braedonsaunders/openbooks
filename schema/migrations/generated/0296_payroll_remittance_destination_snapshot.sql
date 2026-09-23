@@ -182,7 +182,21 @@ UPDATE public.pay_stub_lines l
 
 CREATE OR REPLACE FUNCTION public.pay_stub_line_remittance_guard() RETURNS trigger
 LANGUAGE plpgsql AS $$
+DECLARE
+  v_trusted_replay boolean;
 BEGIN
+  -- This is the same paired, transaction-local authority the document-line,
+  -- posted-document and journal guards admit: a source-asserted party merge
+  -- re-points frozen destinations to the survivor (absorbed and survivor are
+  -- the same economic party, so history follows). Migration-only or
+  -- amend-only callers remain blocked; no ordinary writer can turn either
+  -- setting into an edit bypass by itself.
+  v_trusted_replay :=
+    coalesce(current_setting('openbooks.migration', true), 'off') = 'on'
+    AND coalesce(current_setting('openbooks.amend', true), 'off') = 'on';
+  IF v_trusted_replay THEN
+    RETURN NEW;
+  END IF;
   IF OLD.remittance_party_id IS NOT NULL
      AND NEW.remittance_party_id IS DISTINCT FROM OLD.remittance_party_id THEN
     RAISE EXCEPTION USING ERRCODE = '23514', CONSTRAINT = 'pay_stub_line_remittance_immutable',

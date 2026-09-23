@@ -15,13 +15,14 @@
  * documents keep pointing at it, and a disappeared party vanishes silently.
  */
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { loadEntities, type PartyMirrorOutcome } from "./migrate.ts";
 import type { EntityStream, MigrationSource, SourceEntity } from "./source.ts";
-import { PARTY_MERGE_REF_COVERAGE } from "./party-merges.ts";
+import { applySourcePartyMerge, PARTY_MERGE_REF_COVERAGE } from "./party-merges.ts";
 import { buildNativeContext } from "./native.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -454,6 +455,131 @@ test("the native context resolves absorbed refs to the survivor after a merge", 
     const ctx = await withOrg(org.orgId, () => buildNativeContext(org.orgId, adapter.refKey, "CAD"));
     assert.equal(ctx.partyByRef.get("A"), survivorId);
     assert.equal(ctx.partyByRef.get("B"), survivorId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a merge re-points a frozen remittance snapshot through the paired authority", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const absorbed = randomUUID();
+    const survivor = randomUUID();
+    const seed = await withOrg(org.orgId, async () => {
+      for (const [id, name] of [[absorbed, "Absorbed Vendor"], [survivor, "Survivor Vendor"]] as const) {
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                               is_active, custom, created_by, updated_by)
+          values (${id}, ${org.orgId}, 'company', ${name}, ${org.subsidiaryId},
+                  true, '{}'::jsonb, null, null)`);
+      }
+      // One committed US deduction accrual with two lines: one frozen to the
+      // absorbed vendor (as the 0296 UPDATE backfills it), one NULL snapshot
+      // resolving through pack settings.
+      const liability = randomUUID();
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                              reconcilable, required_dimensions, custom, subsidiary_include_children)
+        values (${liability}, ${org.orgId}, '2310', 'Withholding payable', 'liability_current',
+                false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+      const componentId = randomUUID();
+      await db.execute(sql`
+        insert into pay_components
+          (id, org_id, code, name, kind, country, is_active, liability_account_id,
+           remittance_party_id, sequence, created_by, updated_by)
+        values (${componentId}, ${org.orgId}, 'GARN', 'Garnishment', 'deduction', 'US', true,
+                ${liability}, ${absorbed}, 10, null, null)`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules
+          (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+           pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'merge schedule', 'monthly', 12,
+                '2026-07-31', 0, true, null, null)`);
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                             is_active, custom, created_by, updated_by)
+        values (${employeeId}, ${org.orgId}, 'person', 'Merge Accrual', ${org.subsidiaryId},
+                true, '{}'::jsonb, null, null)`);
+      const period = (await db.execute<{ id: string }>(sql`
+        select id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      const runId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, subsidiary_id, document_date,
+           posting_date, posting_period_id, currency, status, memo, created_by, updated_by)
+        values (${runId}, ${org.orgId}, 'pay_run', 'PR-MERGE-1', ${org.subsidiaryId}, '2026-07-21',
+                '2026-07-21', ${period}, 'USD', 'draft', 'merge source', null, null)`);
+      await db.execute(sql`
+        insert into pay_runs
+          (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
+           tax_year, run_status, run_type, created_by, updated_by)
+        values (${runId}, ${org.orgId}, ${scheduleId}, '2026-07-21', '2026-07-21',
+                '2026-07-21', 2026, 'committed', 'regular', null, null)`);
+      const stubId = randomUUID();
+      await db.execute(sql`
+        insert into pay_stubs
+          (id, org_id, pay_run_document_id, employee_party_id, province,
+           periods_per_year, pay_date, tax_year, currency_code, gross,
+           pensionable_earnings, insurable_earnings, net_pay, employer_cost,
+           vacation_accrued, factors, created_by, updated_by)
+        values (${stubId}, ${org.orgId}, ${runId}, ${employeeId}, 'ON', 12,
+                '2026-07-21', 2026, 'USD', '200.00', '200.00', '200.00', '200.00',
+                '200.00', '0', '{}'::jsonb, null, null)`);
+      const frozenLine = randomUUID();
+      const openLine = randomUUID();
+      await db.execute(sql`
+        insert into pay_stub_lines
+          (id, org_id, stub_id, component_id, kind, description, amount, sequence,
+           liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
+        values (${frozenLine}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction', 'Garnishment',
+                '100.00', 10, ${liability}, 'commit', ${absorbed}, null, null),
+               (${openLine}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction', 'Garnishment',
+                '100.00', 20, ${liability}, 'commit', null, null, null)`);
+      return { frozenLine, openLine };
+    });
+
+    // Outside a merge, the frozen destination still refuses a repoint.
+    // (Drizzle reports the failed SQL in .message; the guard's refusal is
+    // in .cause — match the refusal, never the query text.)
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`
+        update pay_stub_lines set remittance_party_id = ${survivor}
+         where org_id = ${org.orgId} and id = ${seed.frozenLine}`).then(
+        () => assert.fail("a direct snapshot repoint must refuse"),
+        (error: unknown) => {
+          const cause = (error as { cause?: Error } | null)?.cause;
+          assert.match(cause?.message ?? "", /immutable/);
+        },
+      );
+    });
+
+    const result = await withOrg(org.orgId, () =>
+      applySourcePartyMerge({
+        orgId: org.orgId,
+        sourceName: "test",
+        absorbedRef: "B",
+        survivorRef: "A",
+        absorbedId: absorbed,
+        survivorId: survivor,
+        actorId: null,
+        runId: null,
+      }),
+    );
+    assert.equal(result.survivorId, survivor);
+    assert.ok(result.moved.some((m) => m.table === "pay_stub_lines.remittance_party_id" && m.rows === 1));
+
+    const snapshots = await withOrg(org.orgId, () =>
+      db.execute<{ id: string; snapshot: string | null }>(sql`
+        select id, remittance_party_id as snapshot from pay_stub_lines
+         where org_id = ${org.orgId} and id in (${seed.frozenLine}, ${seed.openLine})`),
+    );
+    const byId = new Map(snapshots.rows.map((r) => [r.id, r.snapshot]));
+    // The frozen line follows the survivor; the NULL snapshot never equalled
+    // the absorbed id and keeps resolving through pack settings.
+    assert.equal(byId.get(seed.frozenLine), survivor);
+    assert.equal(byId.get(seed.openLine), null);
   } finally {
     await dropScratchOrg(org.orgId);
   }
