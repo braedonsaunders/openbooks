@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SftpResolver, type SftpServerHandle } from "./server.ts";
 
@@ -80,14 +80,34 @@ export function hostKeyFingerprint(hostKeyPem: string): string {
 type ServerRow = { id: string; orgId: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null };
 
 async function loadServer(username: string): Promise<ServerRow | null> {
-  const r = (await db.execute<ServerRow>(sql`
+  // Identity bootstrap over an explicitly trusted boundary. SFTP sessions
+  // arrive on the raw SSH listener with no tenant scope — the boot-started
+  // daemon holds no request identity at all — and sftp_servers is FORCE RLS,
+  // so an unscoped lookup sees zero rows and every valid login is rejected
+  // (while a listener started from a platform-admin PATCH could inherit that
+  // request's org instead). The username is globally unique, which is what
+  // makes this installation-wide resolution deterministic.
+  return withBypassContext(async () => {
+    const r = await db.execute<ServerRow>(sql`
     select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys
       from sftp_servers where username = ${username} and is_active limit 1
-  `));
-  return r.rows[0] ?? null;
+  `);
+    return r.rows[0] ?? null;
+  });
 }
 async function touch(row: ServerRow) {
-  await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
+  // The session's bookkeeping runs under the row's own tenant, independent of
+  // whatever ambient scope the listener inherited from its starter. Exact row
+  // identity: a zero-row outcome (concurrent deactivate/delete, or RLS
+  // denying the row) fails the login instead of reporting success.
+  await withOrgContext(row.orgId, async () => {
+    const updated = await db.execute(sql`update sftp_servers set last_connected_at = now() where id = ${row.id} and org_id = ${row.orgId}`);
+    if (updated.rowCount !== 1) {
+      throw new Error(
+        `refusing SFTP login for ${JSON.stringify(row.username)}: its server row is no longer present in its organization — recreate or reactivate the server and try again`,
+      );
+    }
+  });
 }
 const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
 
