@@ -11,6 +11,9 @@ interface RouteState {
   pendingQueries: string[]
   priorCategories: unknown[]
   priorRevision: number
+  accounts: Map<string, { type: string; is_summary: boolean; subsidiary_id: string | null }>
+  parties: Map<string, { is_vendor: boolean; subsidiary_id: string | null }>
+  allowedSubs: Set<string> | null
   inTransaction: boolean
   transactions: number
   commits: number
@@ -26,6 +29,9 @@ const state: RouteState = {
   pendingQueries: [],
   priorCategories: [],
   priorRevision: 0,
+  accounts: new Map(),
+  parties: new Map(),
+  allowedSubs: null,
   inTransaction: false,
   transactions: 0,
   commits: 0,
@@ -67,7 +73,7 @@ const mockSources = new Map<string, string>([
         if (!state.permissions.has(permission)) {
           return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
         }
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubs }
       }
     `,
   ],
@@ -82,6 +88,11 @@ const mockSources = new Map<string, string>([
         if (state.inTransaction) state.pendingQueries.push(text)
         else state.committedQueries.push(text)
         if (text.includes('select settings')) return { rows: [{ cats: state.priorCategories, rev: state.priorRevision }] }
+        // Reference checks: the double serves exactly the seeded rows, so an
+        // unseeded id refuses — a double that always resolves could never
+        // produce the refusal under test.
+        if (text.includes('from accounts')) return { rows: [...state.accounts].map(([id, row]) => ({ id, ...row })) }
+        if (text.includes('from parties')) return { rows: [...state.parties].map(([id, row]) => ({ id, ...row })) }
         return { rows: [] }
       }
       export const db = {
@@ -149,6 +160,9 @@ function reset(): void {
     },
   ]
   state.priorRevision = 7
+  state.accounts = new Map()
+  state.parties = new Map()
+  state.allowedSubs = null
   state.inTransaction = false
   state.transactions = 0
   state.commits = 0
@@ -313,6 +327,183 @@ test('a stale replacement gets 409 and writes nothing', async () => {
   assert.equal(state.committedQueries.length, 1, 'only the locking read commits')
   assert.doesNotMatch(state.committedQueries[0]!, /update orgs/i)
   assert.doesNotMatch(state.committedQueries[0]!, /insert into audit_log/i)
+})
+
+const ACCT = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+const PARTY = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+const GHOST = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+
+test('a non-UUID reference refuses before the cast can explode', async () => {
+  reset()
+  const response = await put([
+    {
+      id: 'category-gl',
+      name: 'GL',
+      direction: 'outflow',
+      method: 'gl_history_average',
+      accountIds: ['not-a-uuid'],
+    },
+  ])
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 0',
+    message: 'accountIds "not-a-uuid" is not a valid UUID',
+  })
+  assert.equal(state.transactions, 0, 'a malformed reference never opens a transaction')
+})
+
+test('an unknown reference refuses naming the field instead of forecasting zero', async () => {
+  reset()
+  for (const [field, category] of [
+    ['accountIds', { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [GHOST] }],
+    ['partyIds', { id: 'c2', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [GHOST] }],
+    ['cardAccountIds', { id: 'c3', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [GHOST] }],
+    ['bankAccountIds', { id: 'c4', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [GHOST] }],
+  ] as const) {
+    const response = await put([category])
+    assert.equal(response.status, 400, `${field} must refuse`)
+    const body = (await response.json()) as { error: string; message: string }
+    assert.equal(body.error, 'invalid category at index 0')
+    assert.match(body.message, new RegExp(`${field} "${GHOST}" is not (an account|a party) in this organization`))
+    assert.equal(state.transactions, 0, 'an unknown reference never opens a transaction')
+    reset()
+  }
+})
+
+test('a reference from the wrong table refuses', async () => {
+  reset()
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+  const response = await put([
+    {
+      id: 'category-gl',
+      name: 'GL',
+      direction: 'outflow',
+      method: 'gl_history_average',
+      accountIds: [PARTY],
+    },
+  ])
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 0',
+    message: `accountIds "${PARTY}" is not an account in this organization`,
+  })
+  assert.equal(state.transactions, 0)
+})
+
+test('references that resolve persist with their ids intact', async () => {
+  reset()
+  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+  const response = await put([
+    {
+      id: 'category-gl',
+      name: 'GL',
+      direction: 'outflow',
+      method: 'gl_history_average',
+      accountIds: [ACCT],
+    },
+    {
+      id: 'category-vp',
+      name: 'VP',
+      direction: 'outflow',
+      method: 'vendor_payment_history',
+      partyIds: [PARTY],
+    },
+  ])
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { ok: boolean; categories: Array<{ accountIds?: string[]; partyIds?: string[] }>; revision: number }
+  assert.equal(body.revision, 8)
+  assert.deepEqual(body.categories[0]?.accountIds, [ACCT])
+  assert.deepEqual(body.categories[1]?.partyIds, [PARTY])
+})
+
+const SUB_A = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
+const SUB_B = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
+
+test('a mistyped account refuses naming the expected type', async () => {
+  reset()
+  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
+  for (const [field, category, expected] of [
+    ['bankAccountIds', { id: 'c1', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [ACCT] }, 'must be a bank account (asset_bank), got "expense"'],
+    ['cardAccountIds', { id: 'c2', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [ACCT] }, 'must be a card account (liability_card), got "expense"'],
+  ] as const) {
+    const response = await put([category])
+    assert.equal(response.status, 400, `${field} must refuse`)
+    assert.deepEqual(await response.json(), {
+      error: 'invalid category at index 0',
+      message: `${field} "${ACCT}" ${expected}`,
+    })
+    assert.equal(state.transactions, 0, 'a mistyped account never opens a transaction')
+    reset()
+    state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
+  }
+})
+
+test('a summary account refuses as a GL history source', async () => {
+  reset()
+  state.accounts.set(ACCT, { type: 'expense', is_summary: true, subsidiary_id: null })
+  const response = await put([
+    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
+  ])
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 0',
+    message: `accountIds "${ACCT}" must be a postable account, not a summary account`,
+  })
+  assert.equal(state.transactions, 0)
+})
+
+test('a party with no vendor role refuses for vendor methods', async () => {
+  reset()
+  state.parties.set(PARTY, { is_vendor: false, subsidiary_id: null })
+  const response = await put([
+    { id: 'c1', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
+  ])
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 0',
+    message: `partyIds "${PARTY}" is not a vendor in this organization`,
+  })
+  assert.equal(state.transactions, 0)
+})
+
+test('a customer-kind party holding a vendor role saves', async () => {
+  reset()
+  state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
+  const response = await put([
+    { id: 'c1', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
+  ])
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { ok: boolean; revision: number }
+  assert.equal(body.revision, 8)
+})
+
+test('a reference outside the caller subsidiaries refuses', async () => {
+  reset()
+  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
+  state.allowedSubs = new Set([SUB_B])
+  const response = await put([
+    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
+  ])
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'invalid category at index 0',
+    message: `accountIds "${ACCT}" is outside your subsidiaries`,
+  })
+  assert.equal(state.transactions, 0)
+})
+
+test('references in visible subsidiaries and org-wide rows persist', async () => {
+  reset()
+  state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
+  state.accounts.set(GHOST, { type: 'expense', is_summary: false, subsidiary_id: null })
+  state.allowedSubs = new Set([SUB_A])
+  const response = await put([
+    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT, GHOST] },
+  ])
+  assert.equal(response.status, 200)
+  const body = (await response.json()) as { ok: boolean; revision: number }
+  assert.equal(body.revision, 8)
 })
 
 test('an unknown direction refuses instead of flipping the sign', async () => {
