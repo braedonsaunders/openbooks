@@ -32,6 +32,7 @@ import {
   loadFinancialChange,
   proposeFinancialChange,
 } from "../platform/financial-changes.ts";
+import { EQUITY_TYPES } from "../records/account-types.ts";
 import {
   runOwnershipConsolidationIn,
   withOwnershipSourceTransaction,
@@ -698,6 +699,69 @@ async function measure(
       sourceAmount: line.amount,
     });
   }
+  // An OCI release moves a real reserve, so the source must be an equity
+  // reserve account and the amount must be backed by this family's posted OCI
+  // balance in the consolidation book at the control-loss date. The cap
+  // counts prior releases by this interest's other active changes (L4, same
+  // reservation idea as L3), and the evidence persists immutably with the
+  // measurement so approval compares against the same balances at apply.
+  const ociEvidence: {
+    accountId: string;
+    attributableBalance: string;
+    priorAttributed: string;
+    balance: string;
+  }[] = [];
+  for (const o of input.oci) {
+    if (canonicalDecimal(o.balance, 4) === null)
+      throw new Error("OCI balances must be exact signed decimals");
+    const source = (
+      await tx.execute<{ id: string; name: string; type: string }>(
+        sql`select id,name,type from accounts where org_id=${orgId} and id=${o.accountId}`,
+      )
+    ).rows[0];
+    if (!source || !EQUITY_TYPES.includes(source.type))
+      throw new Error(
+        `OCI source "${source?.name ?? o.accountId}" must be an equity reserve account; label the reserve correctly instead of releasing an operating balance as OCI`,
+      );
+    let attributable = "0";
+    const familyBooks = (
+      await tx.execute<{ subsidiary_id: string; amount: string }>(
+        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
+      )
+    ).rows;
+    for (const row of familyBooks)
+      attributable = add(
+        attributable,
+        mulRate(
+          mulRate(row.amount, s.factors[row.subsidiary_id] ?? "0"),
+          input.rates.find((r) => r.subsidiaryId === row.subsidiary_id)!.rate,
+        ),
+      );
+    for (const l of owned.filter((l) => l.account_id === o.accountId))
+      attributable = add(attributable, l.amount);
+    const priorAttributed = (
+      await tx.execute<{ used: string }>(
+        sql`with prior as(select abs((e->>'balance')::numeric) as amount from financial_changes f join consolidation_control_losses c on c.org_id=f.org_id and c.change_id=f.id,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and c.reversed_by_change_id is null and e->>'accountId'=${o.accountId} union all select abs((e->>'balance')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'oci','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.subject_id=${s.interest.id} and f.status in('pending','approved') and e->>'accountId'=${o.accountId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`,
+      )
+    ).rows[0]!.used;
+    ociEvidence.push({
+      accountId: o.accountId,
+      attributableBalance: attributable,
+      priorAttributed,
+      balance: o.balance,
+    });
+    const cap = toUnits(attributable),
+      want = toUnits(o.balance),
+      remaining = (cap < 0n ? -cap : cap) - toUnits(priorAttributed);
+    if (
+      cap === 0n ||
+      cap < 0n !== want < 0n ||
+      (want < 0n ? -want : want) > remaining
+    )
+      throw new Error(
+        `OCI source "${source.name}" carries an attributable reserve balance of ${attributable} at ${input.effectiveOn} after ${priorAttributed} already released by other disposals; release at most the remaining reserve`,
+      );
+  }
   const nciIds = new Set(
     s.policies
       .map((p) => p.nci_equity_account_id)
@@ -875,6 +939,7 @@ async function measure(
   return {
     sourceEntryIds,
     manualEvidence,
+    ociEvidence,
     generatedEntryIds: [...ownershipRun.entryIds, ...assetEntries],
     preview: measured,
     parentLines,
