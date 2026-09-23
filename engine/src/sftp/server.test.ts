@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -12,7 +12,7 @@ const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-server-"));
 const { env } = await import("../platform/db.ts");
 env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
-const { generateHostKey, startSftpServer } = await import("./server.ts");
+const { DEFAULT_SFTP_LIMITS, generateHostKey, sftpSessionLimits, startSftpServer } = await import("./server.ts");
 
 const keyPair = { private: generateHostKey() };
 const parsedPublic = (() => {
@@ -71,8 +71,12 @@ function connect(key: ssh2.ParsedKey): Promise<ssh2.Client> {
 
 let serverPort = 0;
 
-async function withServer<T>(fn: () => Promise<T>, resolver = resolve()): Promise<T> {
-  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolver });
+async function withServer<T>(
+  fn: () => Promise<T>,
+  resolver = resolve(),
+  limits?: { maxFileBytes?: number; maxOpenHandles?: number; maxSessionBufferBytes?: number },
+): Promise<T> {
+  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolver, limits });
   serverPort = server.port;
   try {
     return await fn();
@@ -196,6 +200,130 @@ test("an authorized_keys line that passed validation authenticates a real signed
       client.end();
     }
   }, textResolver);
+});
+
+test("a sparse high-offset write refuses with a named reason instead of gap-filling", async () => {
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+      const handle = await open(sftp, "sparse.bin", "w");
+      try {
+        // RED before the fix: Buffer.alloc(end) gap-filled ~10 MiB for one
+        // byte (and ~4 GiB at a 0xFFFFFFFF offset) inside the shared process.
+        await assert.rejects(
+          write(sftp, handle, Buffer.from("x"), 10 * 1024 * 1024),
+          /per-file SFTP limit/,
+        );
+        // The refused write allocated nothing and the handle still works.
+        await write(sftp, handle, Buffer.from("ok"), 512);
+      } finally {
+        await close(sftp, handle);
+      }
+      assert.deepEqual((await readFile(sftp, "sparse.bin")).subarray(512, 514), Buffer.from("ok"));
+    } finally {
+      client.end();
+    }
+  }, resolve(), { maxFileBytes: 1024 });
+});
+
+test("an over-cap file refuses to OPEN for read and for resume, before any read", async () => {
+  const dir = join(scratchDataDir, "sftp", config.rootPrefix);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "big.bin"), Buffer.alloc(2048, 7));
+  writeFileSync(join(dir, "small.bin"), Buffer.from("fits"));
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+      // RED before the fix: the whole 2048-byte object was read into the
+      // session before anything checked its size.
+      await assert.rejects(open(sftp, "big.bin", "r"), /per-file SFTP limit/);
+      await assert.rejects(open(sftp, "big.bin", "r+"), /per-file SFTP limit/);
+      const handle = await open(sftp, "small.bin", "r");
+      try {
+        assert.deepEqual(await readFile(sftp, "small.bin"), Buffer.from("fits"));
+      } finally {
+        await close(sftp, handle);
+      }
+    } finally {
+      client.end();
+    }
+  }, resolve(), { maxFileBytes: 1024 });
+});
+
+test("concurrent handles and stacked buffers refuse past the session caps", async () => {
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+      const first = await open(sftp, "stack-a.bin", "w");
+      await write(sftp, first, Buffer.alloc(1500, 1), 0);
+      const second = await open(sftp, "stack-b.bin", "w");
+      try {
+        // RED before the fix: every connection buffered without bound until CLOSE.
+        await assert.rejects(write(sftp, second, Buffer.alloc(1500, 2), 0), /per-session SFTP buffer limit/);
+      } finally {
+        await close(sftp, second);
+      }
+      await close(sftp, first);
+    } finally {
+      client.end();
+    }
+  }, resolve(), { maxFileBytes: 2048, maxSessionBufferBytes: 2048 });
+
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+      const first = await open(sftp, "handle-a.bin", "w");
+      const second = await open(sftp, "handle-b.bin", "w");
+      try {
+        await assert.rejects(open(sftp, "handle-c.bin", "w"), /too many open files/);
+        await close(sftp, first);
+        const third = await open(sftp, "handle-c.bin", "w");
+        await close(sftp, third);
+      } finally {
+        await close(sftp, second);
+      }
+    } finally {
+      client.end();
+    }
+  }, resolve(), { maxOpenHandles: 2 });
+});
+
+test("session limit env overrides apply, and garbage never disables a cap", () => {
+  const saved = {
+    file: process.env.SFTP_MAX_FILE_BYTES,
+    handles: process.env.SFTP_MAX_OPEN_HANDLES,
+    session: process.env.SFTP_MAX_SESSION_BUFFER_BYTES,
+  };
+  try {
+    delete process.env.SFTP_MAX_FILE_BYTES;
+    delete process.env.SFTP_MAX_OPEN_HANDLES;
+    delete process.env.SFTP_MAX_SESSION_BUFFER_BYTES;
+    assert.deepEqual(sftpSessionLimits(), DEFAULT_SFTP_LIMITS);
+
+    process.env.SFTP_MAX_FILE_BYTES = "4096";
+    process.env.SFTP_MAX_OPEN_HANDLES = "8";
+    assert.deepEqual(sftpSessionLimits(), {
+      maxFileBytes: 4096,
+      maxOpenHandles: 8,
+      maxSessionBufferBytes: DEFAULT_SFTP_LIMITS.maxSessionBufferBytes,
+    });
+
+    process.env.SFTP_MAX_FILE_BYTES = "banana";
+    process.env.SFTP_MAX_OPEN_HANDLES = "-3";
+    process.env.SFTP_MAX_SESSION_BUFFER_BYTES = "0";
+    assert.deepEqual(sftpSessionLimits(), DEFAULT_SFTP_LIMITS);
+  } finally {
+    if (saved.file === undefined) delete process.env.SFTP_MAX_FILE_BYTES;
+    else process.env.SFTP_MAX_FILE_BYTES = saved.file;
+    if (saved.handles === undefined) delete process.env.SFTP_MAX_OPEN_HANDLES;
+    else process.env.SFTP_MAX_OPEN_HANDLES = saved.handles;
+    if (saved.session === undefined) delete process.env.SFTP_MAX_SESSION_BUFFER_BYTES;
+    else process.env.SFTP_MAX_SESSION_BUFFER_BYTES = saved.session;
+  }
 });
 
 test("SETSTAT and FSETSTAT refuse instead of answering OK for a no-op", async () => {
