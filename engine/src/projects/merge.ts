@@ -166,6 +166,9 @@ type ProjectRow = {
   is_active: boolean;
   parent_id: string | null;
   subsidiary_id: string | null;
+  contract_value: string | null;
+  project_type_id: string | null;
+  invoicing_preference: unknown;
   custom: Record<string, unknown>;
 };
 
@@ -190,10 +193,12 @@ async function loadProject(
 ): Promise<ProjectRow | null> {
   const found = (await runner.execute<ProjectRow>(lock
     ? sql`
-      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id, custom
+      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id,
+             contract_value::text as contract_value, project_type_id, invoicing_preference, custom
         from projects where id = ${id} and org_id = ${orgId} limit 1 for update`
     : sql`
-      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id, custom
+      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id,
+             contract_value::text as contract_value, project_type_id, invoicing_preference, custom
         from projects where id = ${id} and org_id = ${orgId} limit 1`));
   return found.rows[0] ?? null;
 }
@@ -215,6 +220,23 @@ function mergedInto(custom: Record<string, unknown>): string | null {
  * none — the HTTP boundary always passes its allowlist; engine-internal
  * callers without one inherit no enforcement and must be audited.
  */
+/**
+ * Order-insensitive JSON canonical form for comparing jsonb preferences:
+ * two stored documents with the same meaning but different key order must
+ * compare equal, so a cosmetic rewrite never blocks a merge.
+ */
+function stableJson(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`);
+    return `{${entries.join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 function mergeScopeAllows(
   scope: ReadonlySet<string> | null | undefined,
   subsidiaryId: string | null,
@@ -286,21 +308,14 @@ async function planMerge(
   }
   // The scope check runs on the locked rows, not on a pre-transaction read:
   // a scope narrowing between the route's fast-path check and this
-  // transaction must still refuse before anything moves.
+  // transaction must still refuse before anything moves. Scope stays ahead
+  // of the idempotency short-circuit below: access fail-closed wins over a
+  // quiet no-op.
   if (
     !mergeScopeAllows(allowedSubsidiaryIds, survivor.subsidiary_id) ||
     !mergeScopeAllows(allowedSubsidiaryIds, duplicate.subsidiary_id)
   ) {
     throw new ProjectMergeError("merge pair is outside the caller subsidiary scope");
-  }
-  // The merge rewrites project_id on every reference while each row keeps
-  // its own subsidiary, so merging across subsidiaries would silently fold
-  // one legal entity's postings, budgets, and billings into another's.
-  // Refuse with the remedy: set both projects to the same subsidiary first.
-  if (survivor.subsidiary_id !== duplicate.subsidiary_id) {
-    throw new ProjectMergeError(
-      "cannot merge projects from different subsidiaries; set both projects to the same subsidiary first",
-    );
   }
   const prior = mergedInto(duplicate.custom);
   if (prior) {
@@ -309,6 +324,35 @@ async function planMerge(
   }
   if (mergedInto(survivor.custom)) {
     throw new ProjectMergeError("a merged-away project cannot survive another merge");
+  }
+  // The merge rewrites project_id on every reference while each row keeps
+  // its own subsidiary, so merging across subsidiaries would silently fold
+  // one legal entity's postings, budgets, and billings into another's.
+  // Refuse with the remedy: set both projects to the same subsidiary first.
+  // Sits after the idempotent no-op above so re-running a finished pair
+  // stays a no-op.
+  if (survivor.subsidiary_id !== duplicate.subsidiary_id) {
+    throw new ProjectMergeError(
+      "cannot merge projects from different subsidiaries; set both projects to the same subsidiary first",
+    );
+  }
+  // Billing identity reconciles before references move: the survivor's
+  // contract value, project type, and invoicing preference price every
+  // moved line, so a mismatch refuses — naming the field and the remedy,
+  // reconcile it on one side first — instead of silently repricing the
+  // duplicate's history. After the no-op above for the same reason.
+  const billingMismatch =
+    survivor.contract_value !== duplicate.contract_value
+      ? "contract value"
+      : survivor.project_type_id !== duplicate.project_type_id
+        ? "project type"
+        : stableJson(survivor.invoicing_preference) !== stableJson(duplicate.invoicing_preference)
+          ? "invoicing preference"
+          : null;
+  if (billingMismatch) {
+    throw new ProjectMergeError(
+      `cannot merge: the projects disagree on ${billingMismatch}; reconcile it on one side first`,
+    );
   }
   // Cycle fence: the survivor must not sit under the duplicate.
   let cursor: string | null = survivor.parent_id;
