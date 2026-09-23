@@ -548,7 +548,19 @@ test('template preview demands the record type’s read authority and samples in
     preview.indexOf('can(gate, meta.readPermission)') < preview.indexOf('findSamplePdfRecordId('),
     'authority is settled before any sample record is looked up',
   )
-  assert.match(preview, /findSamplePdfRecordId\(meta\.key, user\.orgId, gate\.allowedSubsidiaryIds\)/)
+  // The scope is settled once from the gate and passed to BOTH loads: the
+  // sample is chosen inside scope, and the value load re-enforces it (a
+  // record moved to a hidden subsidiary between the two awaits must read
+  // as not found, never render). Passing the gate set directly to either
+  // call — or scoping only the sample — must fail this test.
+  assert.match(preview, /const scope = gate\.allowedSubsidiaryIds \?\? null/)
+  assert.match(preview, /findSamplePdfRecordId\(meta\.key, user\.orgId, scope\)/)
+  assert.match(preview, /loadPdfRecordValues\(meta\.key, user\.orgId, sampleId, scope\)/)
+  assert.ok(
+    preview.indexOf('findSamplePdfRecordId(meta.key, user.orgId, scope)') <
+      preview.indexOf('loadPdfRecordValues(meta.key, user.orgId, sampleId, scope)'),
+    'the sample is chosen inside scope before its values are loaded inside scope',
+  )
 
   const values = source('lib/pdf-templates/values.ts')
   assert.match(values, /export async function findSamplePdfRecordId\(\s*recordType: string,\s*orgId: string,\s*scope: ReadonlySet<string> \| null,?\s*\)/)
