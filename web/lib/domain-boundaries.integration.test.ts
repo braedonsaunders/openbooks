@@ -279,7 +279,19 @@ for (const boundary of [
                 ).status,
                 404,
               )
-              assert.equal((await estimate(request({}), params)).status, 404)
+              assert.equal(
+                (
+                  await estimate(
+                    new NextRequest('http://audit.local', {
+                      method: 'POST',
+                      body: JSON.stringify({}),
+                      headers: { 'Idempotency-Key': randomUUID() },
+                    }),
+                    params,
+                  )
+                ).status,
+                404,
+              )
               await restrict(org.orgId, null)
               assert.equal(
                 (await opportunityRead(request({}), params)).status,
@@ -430,7 +442,19 @@ for (const boundary of [
               await db.execute(
                 sql`update app_roles set permissions='["ar.read","ar.create","crm.opportunities.read"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
               )
-              const forbidden = await estimate(request({}), params)
+              // The estimate verb now requires one Idempotency-Key per action;
+              // send a fresh key per call so the permission gates (not the
+              // key gate) decide each of these.
+              const keyedEstimate = () =>
+                estimate(
+                  new NextRequest('http://audit.local', {
+                    method: 'POST',
+                    body: JSON.stringify({}),
+                    headers: { 'Idempotency-Key': randomUUID() },
+                  }),
+                  params,
+                )
+              const forbidden = await keyedEstimate()
               assert.equal(forbidden.status, 403)
               assert.deepEqual(
                 (
@@ -452,12 +476,12 @@ for (const boundary of [
               await db.execute(
                 sql`update app_roles set permissions='["crm.opportunities.read","crm.opportunities.manage"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
               )
-              assert.equal((await estimate(request({}), params)).status, 403)
+              assert.equal((await keyedEstimate()).status, 403)
               await db.execute(
                 sql`update app_roles set permissions='["ar.read","ar.create","crm.opportunities.read","crm.opportunities.manage"]'::jsonb where org_id=${org.orgId} and key='domain_auditor'`,
               )
-              const allowed = await estimate(request({}), params)
-              assert.equal(allowed.status, 200, JSON.stringify(await allowed.clone().json()))
+              const allowed = await keyedEstimate()
+              assert.equal(allowed.status, 201, JSON.stringify(await allowed.clone().json()))
             } else {
               const read = () =>
                 forecast(

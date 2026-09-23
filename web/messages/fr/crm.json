@@ -154,6 +154,8 @@
     "estimateCreated": "Devis créé",
     "estimateFailed": "Le devis n’a pas pu être créé.",
     "estimateItemlessLines": "Devis non créé : les lignes {lines} n'ont pas d'article. Ajoutez un article à chaque ligne, puis convertissez à nouveau.",
+    "estimateKeyRequired": "La création d'un devis nécessite un en-tête Idempotency-Key avec un identifiant nouveau pour chaque action.",
+    "estimateKeyConflict": "Cette action de devis a déjà été enregistrée avec des détails différents — réessayez avec un nouvel Idempotency-Key.",
     "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis",
     "saveFirstForEstimate": "Enregistrez d'abord cette opportunité — les devis reprennent le client et les lignes enregistrés.",
     "statuses": {

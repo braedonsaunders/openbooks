@@ -11,6 +11,8 @@ import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { getTranslations } from 'next-intl/server'
+import { claimSetupCreate, SetupCreateConflict } from '../../../../../../lib/api/idempotency'
+import { draftDocumentId } from '../../../../../../lib/order-cycle'
 
 export const runtime = 'nodejs'
 
@@ -60,7 +62,7 @@ function persistEstimateLineUnitPrice(value: unknown): string {
   }
 }
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   // Creating an estimate mutates CRM state (it links the quote to the
   // opportunity and copies its title, amounts, dimensions and lines) AND
   // creates an AR document, so the caller needs both the CRM manage right
@@ -76,6 +78,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // A retry or double click must not mint a second quote. The caller sends
+  // one Idempotency-Key per estimate action (the house draft-route pattern):
+  // same key replays the first quote, a changed payload conflicts, and a
+  // fresh key deliberately starts a new revision.
+  const t = await getTranslations('crm')
+  const idempotencyKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+  if (!isUuid(idempotencyKey)) {
+    return NextResponse.json({ error: t('opportunities.estimateKeyRequired') }, { status: 400 })
+  }
+  const draftId = draftDocumentId(user.orgId, `${id}:${idempotencyKey}`)
   // Opportunity lines stay as stored. Turning Inventory off must 404 a new
   // estimate that would copy inventory / assembly / kit onto a quote.
   if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
@@ -90,11 +102,25 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
   const today = await businessToday(user.orgId)
   const result = await db.transaction(async (tx) => {
+    // Serialize concurrent retries on the key so the loser replays instead
+    // of racing past the claim and dying on the insert conflict.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${draftId}, 0))`)
     const opportunity = (await tx.execute(sql`
       select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`))
     const op = opportunity.rows[0]
     if (!op) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
+    // The revision pins the conversion inputs: an identical retry replays
+    // the first quote, while a reused key over an edited opportunity
+    // conflicts instead of returning a stale quote as though it matched.
+    const match = { opportunity_id: id, opportunity_revision: String(op.revision_seq ?? '') }
+    const claim = await claimSetupCreate(tx, { orgId: user.orgId, table: 'documents', key: draftId, match })
+    if (claim.kind === 'replay') {
+      const live = (await tx.execute<{ id: string; document_number: string }>(sql`
+        select id, document_number from documents where id = ${draftId} and org_id = ${user.orgId}`)).rows[0]
+      if (live) return { replay: true as const, id: live.id, documentNumber: live.document_number }
+    }
     // Every source line must be represented on the quote: document lines
     // require an item or an account (doc_lines_target), and opportunity
     // lines carry no account, so an itemless line has nowhere to post —
@@ -102,7 +128,6 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // name, listing the lines, before the number is consumed or anything is
     // written. (A non-null item_id always joins: the line FK is composite on
     // (org_id, item_id), so the item exists in this org by construction.)
-    const t = await getTranslations('crm')
     const itemless = (await tx.execute<{ line_number: number }>(sql`
       select line_number from crm_opportunity_lines
        where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is null
@@ -122,10 +147,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const projected = persistEstimateProjectedAmount(op.projected_amount ?? '0')
     const document = (await tx.execute<{ id: string }>(sql`
       insert into documents
-        (org_id, kind, document_number, party_id, subsidiary_id, document_date, due_date, currency,
+        (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, due_date, currency,
          status, department_id, location_id, class_id, extra_dims, memo, subtotal, tax_total, total,
          created_by, updated_by)
-      values (${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, ${today},
+      values (${draftId}, ${user.orgId}, 'quote', ${number}, ${op.party_id}, ${op.subsidiary_id}, ${today},
               ${op.expected_close_date}, ${op.currency}, 'draft', ${op.department_id}, ${op.location_id},
               ${op.class_id}, ${JSON.stringify(op.extra_dims ?? {})}::jsonb, ${op.title}, ${projected},
               0, ${projected}, ${user.id}, ${user.id}) returning id`))
@@ -142,9 +167,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     await tx.execute(sql`
       insert into crm_opportunity_documents (org_id, opportunity_id, document_id, created_by, updated_by)
       values (${user.orgId}, ${id}, ${docId}, ${user.id}, ${user.id})`)
-    return { id: docId, documentNumber: number }
-  }).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Could not create estimate' }))
+    // The replay lookup reads this row's match image: without it a retry
+    // could never replay and every key would conflict.
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${user.orgId}, 'documents', ${docId}, 'insert', ${JSON.stringify({ match })}::jsonb, ${user.id}, ${draftId})`)
+    return { replay: false as const, id: docId, documentNumber: number }
+  }).catch((error: unknown) => {
+    if (error instanceof SetupCreateConflict) {
+      return NextResponse.json({ error: t('opportunities.estimateKeyConflict') }, { status: error.status })
+    }
+    return { error: error instanceof Error ? error.message : 'Could not create estimate' }
+  })
   if (result instanceof NextResponse) return result
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: 422 })
-  return NextResponse.json(result)
+  return NextResponse.json({ id: result.id, documentNumber: result.documentNumber }, { status: result.replay ? 200 : 201 })
 }
