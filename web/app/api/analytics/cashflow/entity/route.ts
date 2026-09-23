@@ -44,6 +44,11 @@ export async function GET(req: Request) {
 
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const today = await businessToday(user.orgId);
+  // Cash settlement source kinds, shared by the payment stats and the recent
+  // list: only documents that move cash count as payments. Customer/vendor
+  // credits and other offsets settle balances without cash and are excluded
+  // from payment counts, days and totals.
+  const settlementKinds = side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`;
 
   const [pay, partyOpen, recent] = await Promise.all([
     // Avg days-to-pay + total paid over the trailing 12 months, per distinct
@@ -63,13 +68,16 @@ export async function GET(req: Request) {
         join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
         join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
         join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
+        join documents sp on sp.id = pe.source_document_id and sp.org_id = ap.org_id
         where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
           and bl.party_id = ${party}
           and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
+          and sp.kind in (${settlementKinds})
           ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`sp.subsidiary_id`, gate.allowedSubsidiaryIds)}
         group by pe.source_document_id
       ) t
     `)),
@@ -94,7 +102,7 @@ export async function GET(req: Request) {
       left join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
         ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-        and d.kind in (${side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`})
+        and d.kind in (${settlementKinds})
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
       order by coalesce(d.document_date, d.posting_date) desc
       limit 200

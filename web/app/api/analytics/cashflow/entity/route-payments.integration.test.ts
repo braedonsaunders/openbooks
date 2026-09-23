@@ -90,3 +90,43 @@ test('entity drill counts distinct payment documents with weighted days', { skip
     await dropScratchOrg(org.orgId);
   }
 });
+
+/**
+ * Credits settle balances without cash moving: a bill settled only by a
+ * customer (or vendor) credit changes no payment count, no days and no total
+ * paid.
+ */
+for (const side of ['ar', 'ap'] as const) {
+  test(`entity drill excludes ${side === 'ar' ? 'customer' : 'vendor'} credits from payment stats (${side})`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const { org, actor } = await setup();
+    try {
+      const isAr = side === 'ar';
+      const partyKind = isAr ? 'customer' : 'vendor';
+      const party = randomUUID();
+      await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${party},${org.orgId},${partyKind},'Credit Party',${org.subsidiaryId})`));
+      const billEntry = isAr
+        ? await postEntry(org.orgId, org.bookId, org.subsidiaryId, org.periodId, '2026-07-05', org.accounts.ar, org.accounts.revenue, '50', party, null, true)
+        : await postEntry(org.orgId, org.bookId, org.subsidiaryId, org.periodId, '2026-07-05', org.accounts.cogs, org.accounts.ap, '70', party, null, true)
+      const creditKind = isAr ? 'customer_credit' : 'vendor_credit';
+      const creditTotal = isAr ? '50' : '70';
+      const creditDoc = await postDoc(org.orgId, creditKind, 'CREDIT-1', party, org.subsidiaryId, org.periodId, org.date, creditTotal);
+      const credit = isAr
+        ? await postEntry(org.orgId, org.bookId, org.subsidiaryId, org.periodId, org.date, org.accounts.revenue, org.accounts.ar, creditTotal, party, creditDoc, true)
+        : await postEntry(org.orgId, org.bookId, org.subsidiaryId, org.periodId, org.date, org.accounts.ap, org.accounts.cogs, creditTotal, party, creditDoc, true);
+      await withBypassContext(() => db.execute(sql`update documents set status='posted',posted_entry_id=${credit.entryId},posting_period_id=${org.periodId} where id=${creditDoc}`));
+      // Credit-side AR/AP line settles the bill line.
+      const creditLine = isAr ? credit.creditLine : credit.debitLine;
+      const billLine = isAr ? billEntry.debitLine : billEntry.creditLine;
+      await apply(org.orgId, actor, creditLine, billLine, creditTotal, org.date);
+      await withOrgContext(org.orgId, async () => {
+        const body = await getPay(party, side);
+        assert.equal(body.paymentCount, 0, 'a credit-only settlement is not a payment');
+        assert.equal(Number(body.totalPaid), 0);
+        assert.equal(body.avgDays, null);
+      });
+    } finally {
+      state.user = null;
+      await dropScratchOrg(org.orgId);
+    }
+  });
+}
