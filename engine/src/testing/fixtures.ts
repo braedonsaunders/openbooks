@@ -1338,6 +1338,23 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
       // same pair the full teardown defers, and constraint checks move to
       // commit when both sides are present again.
       await tx.execute(sql`set constraints documents_posted_entry_id_fkey, documents_reversal_entry_id_fkey deferred`);
+      // A test that installed a replacement default fiscal calendar leaves a
+      // non-baseline row carrying is_default while the baseline default row
+      // below still wants its flag back: restoring the flag first trips
+      // fiscal_calendars_one_default (23505) on every bounded retry, because
+      // the conflicting test row is only deleted by the passes that run
+      // AFTER this restore. Clear the test default first, in this same
+      // transaction, so the baseline restore below cannot observe two
+      // defaults. Non-baseline rows are identified against the snapshot, not
+      // by age or name, and only the flag is touched — the row itself is
+      // still removed by the delete passes.
+      if (restoreRemaining.includes("fiscal_calendars")) {
+        await tx.execute(sql.raw(
+          `update public.${quoteIdentifier("fiscal_calendars")} as target set ${quoteIdentifier("is_default")} = false`
+          + ` where target.${quoteIdentifier("org_id")} = '${org.orgId}' and target.${quoteIdentifier("is_default")}`
+          + ` and not exists (select 1 from ${quoteIdentifier(schema)}.${quoteIdentifier("fiscal_calendars")} as baseline where baseline.${quoteIdentifier("id")} = target.${quoteIdentifier("id")})`,
+        ));
+      }
       const failures: { table: string; error: string }[] = [];
       for (const [index, table] of restoreRemaining.entries()) {
         const tableColumns = columns.get(table) ?? [];
