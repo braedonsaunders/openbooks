@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { statementBookExpr } from "../gl-summary";
 import { mulDecimal } from "@openbooks/engine/src/money/money.ts";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
@@ -87,6 +88,13 @@ export interface AgingOptions {
   partyId?: string;
   /** Drill scope: rebuild only this age bucket. Matches `bucketOf`. */
   bucket?: AgingBucket;
+  /**
+   * One accounting book per read (primary when omitted) — the same one-book
+   * contract as every other journal reader. Without this a parallel book's
+   * mirror entries fuse into the aging while the sibling statement readers
+   * stay primary-only.
+   */
+  bookId?: string | null;
 }
 
 /** A needed spot rate has no coverage on or before the as-of date. The
@@ -166,7 +174,7 @@ async function openDocuments(
   orgBase: string,
   kinds: readonly string[],
   creditKind: string,
-  scope?: { partyId?: string; bucket?: AgingBucket },
+  scope?: { partyId?: string; bucket?: AgingBucket; bookId?: string | null },
 ): Promise<OpenDocument[]> {
   // Account gate: the AP side admits liability_payable lines plus the
   // designated employee-payable control (preset-typed liability_current_other,
@@ -208,11 +216,13 @@ async function openDocuments(
              coalesce(sub.base_currency, ${orgBase}) as func_ccy
         from documents d
         join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+        join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
          and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
          and ${accountScope}
+         and e.book_id = ${statementBookExpr(orgId, scope?.bookId)}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
          and ${dimWhere(dims, sql`d`)}
          ${scope?.partyId ? sql`and d.party_id = ${scope.partyId}` : sql``}
@@ -322,8 +332,10 @@ export async function agingByParty(
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
-  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase);
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+    bookId: opts?.bookId,
+  });
+  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
   // A document currency with no spot must never block the BASE report (it
   // converts nothing through it): only request the legs this basis reads,
   // plus the functional legs the residual always needs.
@@ -387,9 +399,11 @@ export async function agingByParty(
  * "(no party)" row, exactly like the registers' unassigned section. Exact
  * ties produce no row at all, so a clean subledger reads exactly as before.
  *
- * Two deliberate scope boundaries. First, no book filter: the document side
- * above reads every book, so the control side must answer in that same
- * scope. Second, document dims attribute by document HEADER while control
+ * Two deliberate scope boundaries. First, one book per read: the document
+ * side above joins each line's entry and keeps the primary (or selected)
+ * book, so the control side answers in that same scope — reading every
+ * book on either side would double-count parallel-book mirrors. Second,
+ * document dims attribute by document HEADER while control
  * lines attribute by LINE (one invoice, lines in many departments): under
  * department/project/location/class/segment filters the two populations
  * partition differently and control-minus-docs is not attributable per
@@ -415,6 +429,7 @@ async function controlResiduals(
   dims: DimFilter | undefined,
   orgId: string,
   orgBase: string,
+  bookId?: string | null,
 ): Promise<ControlResidual[]> {
   if (
     dims?.departmentId || dims?.projectId || dims?.locationId || dims?.classId ||
@@ -438,6 +453,7 @@ async function controlResiduals(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where l.org_id = ${orgId} and ${controlScope} and e.posting_date <= ${asOf}
+       and e.book_id = ${statementBookExpr(orgId, bookId)}
        and ${dimWhere(dims)}
      -- Ordinal, not a repeated expression: the SELECT's coalesce carries a
      -- different bind parameter per occurrence, which GROUP BY will not match.
@@ -588,6 +604,7 @@ export async function agingDetail(
   const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
     partyId: opts?.partyId,
     bucket: opts?.bucket,
+    bookId: opts?.bookId,
   });
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
@@ -652,8 +669,10 @@ export async function agingSummaryAndDetail(
   const basis: AgingCurrencyBasis = opts?.basis ?? "base";
   const orgBase = await presentationCurrency(resolvedOrgId);
   const target = opts?.reportingCurrency ?? orgBase;
-  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind);
-  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase);
+  const docs = await openDocuments(side, asOf, dims, resolvedOrgId, orgBase, kinds, creditKind, {
+    bookId: opts?.bookId,
+  });
+  const residuals = await controlResiduals(side, asOf, dims, resolvedOrgId, orgBase, opts?.bookId);
   const needed = new Set<string>();
   for (const d of docs) needed.add(basis === "transaction" ? d.txnCcy : d.funcCcy);
   for (const res of residuals) needed.add(res.funcCcy);

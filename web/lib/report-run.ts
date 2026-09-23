@@ -254,8 +254,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // explicit secondary-book export cannot silently return primary-book data
   // while the book-aware drill disagrees. When ?book= is absent the readers
   // keep their primary-book default. Aging rebuilds opens from posted journal
-  // lines rather than the documents.open_balance cache, and documents carry
-  // no book column, so it stays unscoped by design.
+  // lines rather than the documents.open_balance cache; the lines join their
+  // entries for the book, so the aging export takes the same detailBookId.
   const bookParam = p.get('book')
   const detailBookId = bookParam == null
     ? undefined
@@ -329,7 +329,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         periodTo: period.to,
         today: asOfParam ?? periodParam ? period.to : (await resolvePeriod('today', { orgId })).to,
       })
-      return { render: 'data', data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId), t) }
+      return { render: 'data', data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, { bookId: detailBookId }), t) }
     }
     case 'cash-flow':
       return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId), from, to, t) }
