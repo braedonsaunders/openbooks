@@ -20,6 +20,8 @@ interface DashboardRow {
 interface RouteState {
   requestKey: string | null
   rows: Map<string, DashboardRow>
+  /** Card ids the visibility predicate admits for the calling org. */
+  visibleCards: Set<string>
   auditAfter: Map<string, Record<string, unknown>>
   auditInserts: number
   transactionQueries: string[]
@@ -28,6 +30,7 @@ interface RouteState {
 const state: RouteState = {
   requestKey: null,
   rows: new Map(),
+  visibleCards: new Set(),
   auditAfter: new Map(),
   auditInserts: 0,
   transactionQueries: [],
@@ -130,7 +133,17 @@ const mockSources = new Map<string, string>([
       const sniffAudit = globalThis.openbooksInsightDashboardsSniffAudit
       function respond(query) {
         const text = sqlText(query)
-        sniffAudit(paramsOf(query))
+        const params = paramsOf(query)
+        sniffAudit(params)
+        if (text.includes('from insight_cards')) {
+          const wanted = []
+          for (const param of params) {
+            if (typeof param === 'string' && param.startsWith('{') && param.endsWith('}')) {
+              wanted.push(...param.slice(1, -1).split(',').filter(Boolean))
+            }
+          }
+          return { rows: wanted.filter((id) => state.visibleCards.has(id)).map((id) => ({ id })) }
+        }
         if (text.includes('insert into insight_dashboards')) {
           if (state.rows.has(state.requestKey)) return { rows: [] }
           state.rows.set(state.requestKey, { id: state.requestKey, org_id: '${ORG_ID}' })
@@ -170,8 +183,14 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:authz',
+    // A faithful editor gate: real gates always carry the effective
+    // permission set the visibility predicate reads.
     `export async function guardPermission(permission) {
-       if (permission === 'insights.create') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+       if (permission === 'insights.create') return {
+         user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
+         permissions: new Set(['insights.read', 'insights.create']),
+         allowedSubsidiaryIds: null,
+       }
        return new Response(null, { status: 403 })
      }`,
   ],
@@ -222,6 +241,7 @@ hooks.deregister()
 function reset(): void {
   state.requestKey = null
   state.rows.clear()
+  state.visibleCards.clear()
   state.auditAfter.clear()
   state.auditInserts = 0
   state.transactionQueries.length = 0
@@ -292,6 +312,44 @@ test('dashboard creation replays only the exact request for an idempotency key',
   const changed = await post(key, { ...BODY, name: 'Something else' })
   assert.equal(changed.status, 409)
   assert.deepEqual(await changed.json(), { error: 'invalid_idempotency_key' })
+})
+
+test('dashboard create accepts a layout whose cards are all visible to the caller', async () => {
+  reset()
+  const key = '00000000-0000-4000-8000-00000000d120'
+  const card = '00000000-0000-4000-8000-00000000c120'
+  state.visibleCards.add(card)
+
+  const response = await post(key, { ...BODY, layout: [{ cardId: card, x: 0, y: 0, w: 6, h: 4 }] })
+  assert.equal(response.status, 201)
+  assert.deepEqual(await response.json(), { id: key })
+  assert.equal(state.auditInserts, 1, 'a valid create still writes its audit event')
+})
+
+test('dashboard create refuses a layout naming a missing card before any write', async () => {
+  reset()
+  const key = '00000000-0000-4000-8000-00000000d121'
+  const missing = '00000000-0000-4000-8000-00000000c121'
+
+  const response = await post(key, { ...BODY, layout: [{ cardId: missing, x: 0, y: 0, w: 6, h: 4 }] })
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'Layout references an unavailable card' })
+  assert.equal(state.rows.size, 0, 'the refusal commits no dashboard row')
+  assert.equal(state.auditInserts, 0, 'the refusal commits no audit event')
+})
+
+test('dashboard create refuses a layout naming another org’s card before any write', async () => {
+  reset()
+  const key = '00000000-0000-4000-8000-00000000d122'
+  // The card exists (a second org holds it) but the visibility predicate
+  // does not admit it for this caller, so the check sees zero rows.
+  const foreign = '00000000-0000-4000-8000-00000000c122'
+
+  const response = await post(key, { ...BODY, layout: [{ cardId: foreign, x: 0, y: 0, w: 6, h: 4 }] })
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'Layout references an unavailable card' })
+  assert.equal(state.rows.size, 0, 'the refusal commits no dashboard row')
+  assert.equal(state.auditInserts, 0, 'the refusal commits no audit event')
 })
 
 test('dashboard create refuses a key colliding with another org without disclosing it', async () => {

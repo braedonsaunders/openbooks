@@ -1,4 +1,4 @@
-import { getAuthz } from '@/lib/authz'
+import { getAuthz, type Authz } from '@/lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { sql } from 'drizzle-orm'
@@ -195,6 +195,28 @@ export async function resolveHomeDashboard(
 
   const row = res.rows[0]
   return row ? { dashboardId: row.id, source: row.source } : null
+}
+
+/**
+ * Every card a layout places must exist in this org and be visible to the
+ * caller — the same predicate the dashboard PATCH applies and the embed
+ * loader re-checks. A layout naming a missing or foreign card is refused
+ * here so a create can never commit an audited 201 whose board renders
+ * empty. Runs inside the caller's transaction (the check and the insert
+ * commit atomically).
+ */
+export async function layoutCardsVisible(
+  runner: Pick<typeof db, 'execute'>,
+  authz: Authz,
+  layout: { cardId: string }[],
+): Promise<boolean> {
+  if (layout.length === 0) return true
+  const ids = [...new Set(layout.map((widget) => widget.cardId))]
+  const cards = await runner.execute<{ id: string }>(sql`
+    select id from insight_cards where id = any(${`{${ids.join(',')}}`}::uuid[])
+      and ${insightVisibilitySql(authz)}
+  `)
+  return cards.rows.length === ids.length
 }
 
 /** Normalize a dashboard layout array — clamp geometry, drop malformed entries. */
