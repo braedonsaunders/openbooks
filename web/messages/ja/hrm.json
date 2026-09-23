@@ -75,6 +75,7 @@
       "overdueLabel": "期限切れ",
       "upcomingLabel": "期限間近",
       "empty": "未完了のチェックリストはありません。",
+      "noDueSoon": "7日以内に期限のチェックリストのステップはありません。",
       "viewAll": "すべてのプロセスを表示"
     },
     "trend": {

@@ -156,6 +156,7 @@ export const HRM_WIDGETS = {
       overdueLabel={str(props, 'overdueLabel') ?? ''}
       upcomingLabel={str(props, 'upcomingLabel') ?? ''}
       empty={str(props, 'empty') ?? ''}
+      noDueSoon={str(props, 'noDueSoon') ?? ''}
       viewAll={str(props, 'viewAll') ?? ''}
       viewAllHref={str(props, 'viewAllHref') ?? '/hrm/processes'}
     />

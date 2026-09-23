@@ -75,6 +75,7 @@
       "overdueLabel": "En retard",
       "upcomingLabel": "Bientôt dû",
       "empty": "Aucune liste ouverte.",
+      "noDueSoon": "Aucune étape due dans les 7 prochains jours.",
       "viewAll": "Voir tous les processus"
     },
     "trend": {

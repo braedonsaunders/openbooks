@@ -75,6 +75,7 @@
       "overdueLabel": "Überfällig",
       "upcomingLabel": "Bald fällig",
       "empty": "Keine offenen Checklisten.",
+      "noDueSoon": "Keine Checklisten-Schritte in den nächsten 7 Tagen fällig.",
       "viewAll": "Alle Vorgänge anzeigen"
     },
     "trend": {

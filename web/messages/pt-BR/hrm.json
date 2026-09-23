@@ -75,6 +75,7 @@
       "overdueLabel": "Atrasado",
       "upcomingLabel": "A vencer",
       "empty": "Nenhuma lista aberta.",
+      "noDueSoon": "Nenhuma etapa de lista prevista para os próximos 7 dias.",
       "viewAll": "Ver todos os processos"
     },
     "trend": {
