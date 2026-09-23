@@ -54,6 +54,9 @@ interface GenerateResult {
   id: string
   documentNumber: string
   kind: string
+  /** Whether the billing request requires a backup packet for this invoice. */
+  backupRequired: boolean
+  backupType: string
 }
 
 /** One locked billing_requests row — jsonb option bags arrive parsed. */
@@ -61,6 +64,8 @@ interface BillingRequestRow extends Record<string, unknown> {
   id: string
   status: string
   basis: string
+  backup_required: boolean | null
+  backup_type: string | null
   billing_method_snapshot: string | null
   project_id: string
   invoice_description: string | null
@@ -1021,7 +1026,13 @@ export async function generateInvoiceFromBillingRequest(
       )
     `)
 
-    return { id: invoiceId, documentNumber, kind: 'customer_invoice' }
+    return {
+      id: invoiceId,
+      documentNumber,
+      kind: 'customer_invoice',
+      backupRequired: req.backup_required === true,
+      backupType: typeof req.backup_type === 'string' && req.backup_type ? req.backup_type : 'none',
+    }
   })
 }
 
