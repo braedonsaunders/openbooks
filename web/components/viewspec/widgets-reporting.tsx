@@ -96,6 +96,7 @@ export const REPORTING_WIDGETS = {
       partyId={(props.partyId as string | null) ?? null}
       partyName={str(props, 'partyName') ?? ''}
       href={str(props, 'href') ?? ''}
+      note={str(props, 'note')}
     />
   ),
   'aging-strip': (props) => (

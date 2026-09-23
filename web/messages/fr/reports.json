@@ -235,7 +235,8 @@
       "outstanding": "Impayé",
       "glLines": "Lignes du GL"
     },
-    "noPartyOnLines": "(aucun tiers sur les lignes)"
+    "noPartyOnLines": "(aucun tiers sur les lignes)",
+    "noPartyDrillLabel": "Lignes de comptes de contrôle sans contrepartie"
   },
   "aging": {
     "receivablesTitle": "Balance âgée clients",
@@ -244,6 +245,7 @@
     "receivables": "Comptes clients",
     "payables": "Comptes fournisseurs",
     "noParty": "(aucun tiers)",
+    "noPartyNote": "Aucune contrepartie enregistrée — par exemple une écriture d'ouverture.",
     "empty": "Aucun poste ouvert à cette date.",
     "columns": {
       "total": "Total",

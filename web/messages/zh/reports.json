@@ -235,7 +235,8 @@
       "outstanding": "未清",
       "glLines": "总账行数"
     },
-    "noPartyOnLines": "（行上无往来方）"
+    "noPartyOnLines": "（行上无往来方）",
+    "noPartyDrillLabel": "无往来方的统制科目明细"
   },
   "aging": {
     "receivablesTitle": "应收账龄",
@@ -244,6 +245,7 @@
     "receivables": "应收款",
     "payables": "应付款",
     "noParty": "（无往来方）",
+    "noPartyNote": "未记录往来方——例如期初余额日记账。",
     "empty": "截至该日期无未清项目。",
     "columns": {
       "total": "合计",

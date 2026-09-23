@@ -64,6 +64,8 @@ export interface AgingSummaryRow {
   partyId: string | null
   partyName: string
   partyHref: string
+  /** Provenance caption for partyless rows; null once a party names the row. */
+  partyNote: string | null
   current: BucketCell
   b1: BucketCell
   b2: BucketCell
@@ -78,6 +80,8 @@ export interface AgingDetailRow {
   partyId: string | null
   partyName: string
   partyHref: string
+  /** Provenance caption for partyless rows; null once a party names the row. */
+  partyNote: string | null
   reference: string
   /** Open items without terms carry no due date. */
   dueDate: string | null
@@ -241,6 +245,12 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     }
   }
   const noParty = t('noParty')
+  // OM-06: a partyless row is control lines with no counterparty — on a
+  // sample tenant the opening-balance journal, on a live one possibly a
+  // genuine break. The note says what is proven (no counterparty) and names
+  // the common example without asserting it, so it can never mask a real
+  // control/subledger divergence as "just opening balances".
+  const noPartyNote = t('noPartyNote')
 
   const bucketLabels: Record<(typeof BUCKETS)[number], string> = {
     current: t('buckets.current'),
@@ -323,6 +333,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
         partyId: r.partyId,
         partyName: name,
         partyHref: `/reports/statements/${r.partyId}?side=${side}`,
+        partyNote: r.partyId ? null : noPartyNote,
         current: bucketCell(row, 'current', name, r.partyId),
         b1: bucketCell(row, 'b1', name, r.partyId),
         b2: bucketCell(row, 'b2', name, r.partyId),
@@ -337,6 +348,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       partyId: r.partyId,
       partyName: r.partyName ?? noParty,
       partyHref: `/reports/statements/${r.partyId}?side=${side}`,
+      partyNote: r.partyId ? null : noPartyNote,
       reference: r.reference ?? '',
       dueDate: r.dueDate,
       ageDays: String(r.ageDays),
@@ -394,6 +406,7 @@ function partyCell() {
     partyId: item('partyId'),
     partyName: item('partyName'),
     href: item('partyHref'),
+    note: item('partyNote'),
   })
 }
 

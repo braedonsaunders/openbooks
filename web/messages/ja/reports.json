@@ -235,7 +235,8 @@
       "outstanding": "未払・未収残高",
       "glLines": "元帳明細"
     },
-    "noPartyOnLines": "（明細に取引先なし）"
+    "noPartyOnLines": "（明細に取引先なし）",
+    "noPartyDrillLabel": "相手先のない統制勘定の明細"
   },
   "aging": {
     "receivablesTitle": "売掛金年齢分析",
@@ -244,6 +245,7 @@
     "receivables": "売掛金",
     "payables": "買掛金",
     "noParty": "（取引先なし）",
+    "noPartyNote": "相手先が記録されていません — 例: 開始残高の仕訳。",
     "empty": "この日付時点で未消込項目はありません。",
     "columns": {
       "total": "合計",
