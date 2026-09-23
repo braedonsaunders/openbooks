@@ -436,10 +436,11 @@ export interface LienWaiverCoverage {
  * Does a signed waiver release this bill?
  *
  * A waiver explicitly linked to the bill governs it — that is the pairing the
- * signatory intended. Otherwise the newest signed waiver for the same project
- * counts, provided it reaches the bill's date and its amount at least matches
- * the bill. Currencies must agree: a release stated in another currency is not
- * a release this control can measure.
+ * signatory intended. Otherwise only waivers linked to NO bill (project-level
+ * releases) count, provided one reaches the bill's date and its amount at
+ * least matches the bill. A waiver linked to a DIFFERENT bill is that bill's
+ * release and never covers this one. Currencies must agree: a release stated
+ * in another currency is not a release this control can measure.
  */
 export function evaluateLienWaiverCoverage(args: {
   enforcement: LienWaiverEnforcement;
@@ -468,7 +469,7 @@ export function evaluateLienWaiverCoverage(args: {
     (w) => w.direction === "received" && w.status === "signed" && w.projectId === args.projectId,
   );
   const linked = signed.filter((w) => w.billDocumentId === args.billDocumentId);
-  const pool = linked.length > 0 ? linked : signed;
+  const pool = linked.length > 0 ? linked : signed.filter((w) => w.billDocumentId === null);
   const coveredThrough = pool.reduce<string | null>(
     (max, w) => (max === null || w.throughDate > max ? w.throughDate : max),
     null,

@@ -407,6 +407,31 @@ test("a waiver linked to the bill governs, even when a larger unlinked one exist
   assert.equal(c.shortfall, "40000.0000");
 });
 
+test("a waiver linked to another bill never covers this one", () => {
+  // Bill B carries no linked waiver of its own; the signed waiver explicitly
+  // linked to bill A is A's release, not a project-level one, so B is
+  // uncovered even though A's waiver would suffice on amount and date.
+  const c = coverage({
+    billDocumentId: "bill-2",
+    waivers: [lien({ id: "a-waiver", waiverNumber: "LW-A", billDocumentId: "bill-1" })],
+  });
+  assert.equal(c.covered, false);
+  assert.equal(c.reason, "no_signed_waiver");
+  assert.equal(c.blocksPayment, true);
+});
+
+test("an unlinked project waiver still covers a bill with no linked waiver", () => {
+  const c = coverage({
+    billDocumentId: "bill-2",
+    waivers: [
+      lien({ id: "a-waiver", waiverNumber: "LW-A", billDocumentId: "bill-1" }),
+      lien({ id: "proj-waiver", waiverNumber: "LW-PROJ" }),
+    ],
+  });
+  assert.equal(c.covered, true);
+  assert.equal(c.waiverNumber, "LW-PROJ");
+});
+
 test("the tightest sufficient waiver is the one reported", () => {
   const c = coverage({
     waivers: [lien({ id: "big", waiverNumber: "LW-BIG", amount: "500000.0000" }), lien({ id: "fit", waiverNumber: "LW-FIT", amount: "50000.0000" })],
