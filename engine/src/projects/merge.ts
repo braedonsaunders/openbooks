@@ -184,10 +184,15 @@ async function loadProject(
   runner: SqlExecutor,
   orgId: string,
   id: string,
+  lock = false,
 ): Promise<ProjectRow | null> {
-  const found = (await runner.execute<ProjectRow>(sql`
-    select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id, custom
-      from projects where id = ${id} and org_id = ${orgId} limit 1`));
+  const found = (await runner.execute<ProjectRow>(lock
+    ? sql`
+      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id, custom
+        from projects where id = ${id} and org_id = ${orgId} limit 1 for update`
+    : sql`
+      select id, code, name, customer_id, status, is_active, parent_id, subsidiary_id, custom
+        from projects where id = ${id} and org_id = ${orgId} limit 1`));
   return found.rows[0] ?? null;
 }
 
@@ -231,14 +236,32 @@ async function planMerge(
   orgId: string,
   survivorId: string,
   duplicateId: string,
+  lock = false,
 ): Promise<{ survivor: ProjectRow; duplicate: ProjectRow; moved: MergePreview["moved"]; customRefs: MergePreview["customRefs"]; alreadyMerged: boolean }> {
   if (survivorId === duplicateId) {
     throw new ProjectMergeError("a project cannot merge into itself");
   }
-  const [survivor, duplicate] = await Promise.all([
-    loadProject(runner, orgId, survivorId),
-    loadProject(runner, orgId, duplicateId),
-  ]);
+  // A committing merge locks both rows in deterministic id order BEFORE
+  // planning: two merges racing on overlapping pairs serialize here instead
+  // of both planning against unlocked reads — the loser would otherwise move
+  // zero refs, overwrite merged_into, and audit success. The merged_into
+  // checks below then re-read locked state, so the loser becomes a no-op (or
+  // refuses) rather than a second success. Previews stay unlocked: they are
+  // read-only, and the committing merge re-checks under its own locks.
+  let survivor: ProjectRow | null;
+  let duplicate: ProjectRow | null;
+  if (lock) {
+    const [firstId, secondId] = [survivorId, duplicateId].sort() as [string, string];
+    const first = await loadProject(runner, orgId, firstId, true);
+    const second = await loadProject(runner, orgId, secondId, true);
+    survivor = firstId === survivorId ? first : second;
+    duplicate = firstId === survivorId ? second : first;
+  } else {
+    [survivor, duplicate] = await Promise.all([
+      loadProject(runner, orgId, survivorId),
+      loadProject(runner, orgId, duplicateId),
+    ]);
+  }
   if (!survivor || !duplicate) {
     throw new ProjectMergeError("both projects must exist in this organization");
   }
@@ -355,7 +378,7 @@ export async function mergeProjects(
 ): Promise<MergeResult> {
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
-      const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId);
+      const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true);
       if (plan.alreadyMerged) {
         return {
           survivorId: opts.survivorId,
