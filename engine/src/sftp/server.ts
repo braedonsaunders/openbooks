@@ -34,7 +34,22 @@ export interface SftpServerConfig {
    * or delete an approved bank file while delivery evidence describes it.
    */
   readOnlyDirs?: string[];
+  /**
+   * Opaque credential/state version captured at authentication (the DB
+   * resolver fills this from the row's updated_at plus its credential
+   * material). The per-operation liveness fence hands the whole config back
+   * to the resolver, which compares this against the live row: any rotation,
+   * disable, or delete since auth fails the fence.
+   */
+  sessionRev?: string;
 }
+
+/**
+ * Outcome of the per-operation liveness fence. A dead session names its
+ * reason — the daemon surfaces it on the refused operation so the operator
+ * sees the remedy, not a bare failure code.
+ */
+export type SessionLiveness = { alive: true } | { alive: false; reason: string };
 
 export interface SftpResolver {
   /**
@@ -50,12 +65,22 @@ export interface SftpResolver {
    */
   publicKey?(username: string, keyAlgo: string, keyData: Buffer): Promise<SftpServerConfig | null>;
   /**
+  /**
    * Record a successful login (e.g. last-connected bookkeeping). Called at
    * most once per connection, only after ctx.accept of a VERIFIED attempt —
    * never for an unsigned probe and never for a rejected signature. A throw
    * rejects the login instead of accepting an unrecorded session.
    */
   loginSucceeded?(config: SftpServerConfig): Promise<void>;
+  /**
+   * Re-validate a live session's config against the current authority
+   * (is_active, credential version). Absent means every session stays alive —
+   * fixed-config tests and resolvers with no revocation source. Production's
+   * DB resolver implements it; the daemon calls it before EVERY SFTP
+   * operation, so a disable or rotation takes effect on the session's next
+   * request no matter which process serves the daemon.
+   */
+  checkSession?(config: SftpServerConfig): Promise<SessionLiveness>;
 }
 
 interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
@@ -137,12 +162,23 @@ export function generateHostKey(): string {
 export interface SftpServerHandle {
   close(): Promise<void>;
   port: number;
+  /**
+   * End every live connection authenticated as this server id, promptly.
+   * Same-process promptness for a revocation the PATCH route just committed;
+   * the per-operation fence below is the authority that also covers
+   * listeners in other processes. Unknown ids are a no-op.
+   */
+  revoke(serverId: string): void;
 }
 
 export function startSftpServer(opts: { port: number; hostKey: string; resolve: SftpResolver; limits?: Partial<SftpSessionLimits> }): Promise<SftpServerHandle> {
   const limits: SftpSessionLimits = { ...sftpSessionLimits(), ...opts.limits };
   // Same floor as the env resolution: one open file must always fit.
   limits.maxSessionBufferBytes = Math.max(limits.maxSessionBufferBytes, limits.maxFileBytes);
+  // Live connections by authenticated server id, for prompt same-process
+  // revocation. The per-operation fence is the authority (it also covers a
+  // listener in another process); this registry only hurries the local end.
+  const liveByServer = new Map<string, Set<Connection>>();
   const server = new Server({ hostKeys: [opts.hostKey] }, (client: Connection) => {
     let config: SftpServerConfig | null = null;
     client.on("authentication", async (ctx) => {
@@ -186,6 +222,18 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
     });
 
     client.on("ready", () => {
+      // Authenticated: track the connection under its server id until it closes.
+      const id = config!.id;
+      let set = liveByServer.get(id);
+      if (!set) liveByServer.set(id, (set = new Set()));
+      set.add(client);
+      client.on("close", () => {
+        const tracked = liveByServer.get(id);
+        if (tracked) {
+          tracked.delete(client);
+          if (tracked.size === 0) liveByServer.delete(id);
+        }
+      });
       client.on("session", (acceptSession) => {
         const session = acceptSession();
         session.on("sftp", (acceptSftp) => {
@@ -219,12 +267,37 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           const overHandleCap = () => files.size + dirs.size >= limits.maxOpenHandles;
           const handleCapRefusal = `too many open files (limit ${limits.maxOpenHandles} per session); close a handle and retry`;
 
-          sftp.on("REALPATH", (reqid, p) => {
+          // Authoritative per-operation liveness fence: the session's config
+          // is re-validated against the resolver before EVERY operation, so
+          // a disable or credential rotation takes effect on the next request
+          // — no matter which process serves this listener, and no matter how
+          // long the connection has been held. A resolver without
+          // checkSession keeps every session alive. Failures fail closed: a
+          // fence that errors refuses, and the revoked connection is ended
+          // promptly because none of its further operations can succeed.
+          const checkAlive = async (reqid: number): Promise<boolean> => {
+            const check = opts.resolve.checkSession;
+            if (!check) return true;
+            let live: SessionLiveness;
+            try {
+              live = await check(config!);
+            } catch {
+              live = { alive: false, reason: "sftp login could not be re-validated; reconnect" };
+            }
+            if (live.alive) return true;
+            sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, live.reason);
+            client.end();
+            return false;
+          };
+
+          sftp.on("REALPATH", async (reqid, p) => {
+            if (!(await checkAlive(reqid))) return;
             const cp = cleanPath(p === "." || p === "" ? "/" : p);
             sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) }]);
           });
 
           const doStat = async (reqid: number, p: string) => {
+            if (!(await checkAlive(reqid))) return;
             try {
               // In-flight publishes are invisible to bank clients: report the
               // temp pattern as absent, exactly like a name that was never
@@ -237,13 +310,15 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           };
           sftp.on("STAT", doStat);
           sftp.on("LSTAT", doStat);
-          sftp.on("FSTAT", (reqid, handle) => {
+          sftp.on("FSTAT", async (reqid, handle) => {
+            if (!(await checkAlive(reqid))) return;
             const f = files.get(handle.toString());
             if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
             sftp.attrs(reqid, attrsFor(false, f.buf.length, Date.now()));
           });
 
           sftp.on("OPENDIR", async (reqid, p) => {
+            if (!(await checkAlive(reqid))) return;
             if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
             try {
               // Temp siblings of in-flight publishes never appear in a bank
@@ -256,7 +331,8 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
           });
-          sftp.on("READDIR", (reqid, handle) => {
+          sftp.on("READDIR", async (reqid, handle) => {
+            if (!(await checkAlive(reqid))) return;
             const d = dirs.get(handle.toString());
             if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
             if (d.sent) return sftp.status(reqid, STATUS_CODE.EOF);
@@ -265,6 +341,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           });
 
           sftp.on("OPEN", async (reqid, filename, flags) => {
+            if (!(await checkAlive(reqid))) return;
             // Neither reading a partial publish nor squatting its temp name:
             // both directions report the temp pattern as absent.
             if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
@@ -330,13 +407,15 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
           });
-          sftp.on("READ", (reqid, handle, offset, length) => {
+          sftp.on("READ", async (reqid, handle, offset, length) => {
+            if (!(await checkAlive(reqid))) return;
             const f = files.get(handle.toString());
             if (!f || f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
             if (offset >= f.buf.length) return sftp.status(reqid, STATUS_CODE.EOF);
             sftp.data(reqid, f.buf.subarray(offset, Math.min(offset + length, f.buf.length)));
           });
-          sftp.on("WRITE", (reqid, handle, offset, data) => {
+          sftp.on("WRITE", async (reqid, handle, offset, data) => {
+            if (!(await checkAlive(reqid))) return;
             const f = files.get(handle.toString());
             if (!f || !f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
             const position = f.append ? f.buf.length : Number(offset);
@@ -368,6 +447,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             }
           });
           sftp.on("CLOSE", async (reqid, handle) => {
+            if (!(await checkAlive(reqid))) return;
             const key = handle.toString();
             const f = files.get(key);
             if (f) {
@@ -391,6 +471,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // break the atomic rename the writer is about to perform, so temp
           // names refuse here exactly as they do for open and stat.
           const wrap = (op: (p: string) => Promise<void>) => async (reqid: number, p: string) => {
+            if (!(await checkAlive(reqid))) return;
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, p)) return;
@@ -413,6 +494,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             }
           });
           sftp.on("RENAME", async (reqid, from, to) => {
+            if (!(await checkAlive(reqid))) return;
             try {
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
@@ -427,14 +509,17 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // ignored. OP_UNSUPPORTED names the refusal; a future
           // implementation must apply attributes atomically through the
           // backend (especially size/truncate) before answering OK.
-          // A system-published payment path refuses first with
-          // PERMISSION_DENIED, so the published artifact's protection does
-          // not depend on which refusal the generic path carries.
-          sftp.on("SETSTAT", (reqid, p) => {
+          // A system-published payment path refuses with PERMISSION_DENIED
+          // after the liveness fence, so the published artifact's protection
+          // does not depend on which refusal the generic path carries — and
+          // a revoked session is ended before it can probe anything.
+          sftp.on("SETSTAT", async (reqid, p) => {
+            if (!(await checkAlive(reqid))) return;
             if (denyPublished(reqid, p)) return;
             sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
           });
-          sftp.on("FSETSTAT", (reqid, handle) => {
+          sftp.on("FSETSTAT", async (reqid, handle) => {
+            if (!(await checkAlive(reqid))) return;
             const f = files.get(handle.toString());
             if (f && denyPublished(reqid, f.path)) return;
             sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
@@ -451,7 +536,22 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
       const port = (server.address() as { port: number }).port;
       resolve({
         port,
-        close: () => new Promise<void>((res) => server.close(() => res())),
+        close: () => new Promise<void>((res) => {
+          liveByServer.clear();
+          server.close(() => res());
+        }),
+        revoke: (serverId: string) => {
+          const tracked = liveByServer.get(serverId);
+          if (!tracked) return;
+          for (const conn of [...tracked]) {
+            try {
+              conn.end();
+            } catch {
+              // A half-closed socket refuses nothing: the fence ends it on
+              // its next operation, and 'close' untracks it either way.
+            }
+          }
+        },
       });
     });
   });

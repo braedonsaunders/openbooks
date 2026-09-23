@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
+import { encryptSecret, revokeSftpSessions, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
 import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
@@ -73,6 +73,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return after.username
     })
     if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // The password just changed: end this process's live sessions for the
+    // login now. Sessions on any other listener die on their next operation
+    // through the daemon's liveness fence; revokeSftpSessions never throws.
+    revokeSftpSessions(id)
     return NextResponse.json({ username, password })
   }
   const nextActive = body.isActive !== false
@@ -116,6 +120,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   })
   if (refused) return refused
   if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!nextActive) {
+    // The login was just disabled: end this process's live sessions now.
+    // Any other listener's sessions die on their next operation through
+    // the daemon's liveness fence; revokeSftpSessions never throws.
+    revokeSftpSessions(id)
+  }
   return NextResponse.json({ ok: true })
 }
 
@@ -184,5 +194,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   if (refused) return refused
   if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // The login row is gone: end this process's live sessions now. Any other
+  // listener's sessions die on their next operation through the daemon's
+  // liveness fence; revokeSftpSessions never throws.
+  revokeSftpSessions(id)
   return NextResponse.json({ ok: true })
 }

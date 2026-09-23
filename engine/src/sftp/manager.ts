@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
-import { startSftpServer, generateHostKey, type SftpResolver, type SftpServerHandle } from "./server.ts";
+import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
 import { assertSftpStorageReady } from "./backend.ts";
 
 /**
@@ -78,7 +78,7 @@ export function hostKeyFingerprint(hostKeyPem: string): string {
   const pub = (parsed as { getPublicSSH(): Buffer }).getPublicSSH();
   return "SHA256:" + createHash("sha256").update(pub).digest("base64").replace(/=+$/, "");
 }
-type ServerRow = { id: string; orgId: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null };
+type ServerRow = { id: string; orgId: string; username: string; backend: string; bucket: string | null; root_prefix: string; password_encrypted: string | null; authorized_keys: string | null; updated_at: Date | string };
 
 async function loadServer(username: string): Promise<ServerRow | null> {
   // Identity bootstrap over an explicitly trusted boundary. SFTP sessions
@@ -90,7 +90,7 @@ async function loadServer(username: string): Promise<ServerRow | null> {
   // makes this installation-wide resolution deterministic.
   return withBypassContext(async () => {
     const r = await db.execute<ServerRow>(sql`
-    select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys
+    select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys, updated_at
       from sftp_servers where username = ${username} and is_active limit 1
   `);
     return r.rows[0] ?? null;
@@ -110,7 +110,37 @@ async function touch(row: { id: string; orgId: string; username: string }) {
     }
   });
 }
-const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
+
+/**
+ * Opaque credential/state version captured into the session config at
+ * authentication. Any disable, password rotation, or key change bumps
+ * updated_at or the credential material itself, so the fence's comparison
+ * fails for sessions authenticated before the change. No migration: the
+ * columns already exist, and comparing ciphertext (not plaintext) keeps
+ * secrets out of the session config beyond their hashes.
+ */
+function sessionRevFor(row: Pick<ServerRow, "updated_at" | "password_encrypted" | "authorized_keys">): string {
+  const updatedAtMs = new Date(row.updated_at).getTime();
+  const secretHash = (v: string | null) => createHash("sha256").update(v ?? "").digest("hex");
+  return `${updatedAtMs}:${secretHash(row.password_encrypted)}:${secretHash(row.authorized_keys)}`;
+}
+const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix, sessionRev: sessionRevFor(row) });
+
+type SessionRow = Pick<ServerRow, "id" | "orgId" | "username" | "password_encrypted" | "authorized_keys" | "updated_at"> & { is_active: boolean };
+
+/** The live row for a held session, by stable id — no is_active filter: the fence must SEE a disabled row to name it. */
+async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | null> {
+  // Same explicitly trusted boundary as loadServer: the fence runs on the
+  // listener with no tenant scope, so without the bypass an unscoped or
+  // wrongly-scoped lookup would read every held session as deleted.
+  return withBypassContext(async () => {
+    const r = await db.execute<SessionRow>(sql`
+    select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
+      from sftp_servers where id = ${id} and org_id = ${orgId} limit 1
+  `);
+    return r.rows[0] ?? null;
+  });
+}
 
 /**
  * The payment folders this login must treat as read-only, resolved from the
@@ -173,7 +203,42 @@ export const dbResolver: SftpResolver = {
   async loginSucceeded(config) {
     await touch({ id: config.id, orgId: config.orgId, username: config.username });
   },
+  /**
+   * The daemon's per-operation liveness fence: a held session stays usable
+   * only while its row still exists, is active, and carries the exact
+   * credential/state version captured at authentication. Every refusal names
+   * its remedy.
+   */
+  async checkSession(config): Promise<SessionLiveness> {
+    const row = await loadSessionRow(config.id, config.orgId);
+    if (!row) {
+      return { alive: false, reason: `sftp login '${config.username}' no longer exists — ask your administrator to recreate it, then reconnect` };
+    }
+    if (!row.is_active) {
+      return { alive: false, reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect` };
+    }
+    if (sessionRevFor(row) !== config.sessionRev) {
+      return { alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` };
+    }
+    return { alive: true };
+  },
 };
+
+/**
+ * End every live connection authenticated as this server id on THIS
+ * process's listener, promptly. Best-effort by design: it is only the
+ * same-process hurry — the per-operation fence above is the authority that
+ * refuses the session's next request on every listener, including ones in
+ * other processes. Never throws: a revocation must not fail the PATCH or
+ * DELETE that just committed it.
+ */
+export function revokeSftpSessions(serverId: string): void {
+  try {
+    handle?.revoke(serverId);
+  } catch {
+    // The fence still ends the session on its next operation.
+  }
+}
 
 let handle: SftpServerHandle | null = null;
 let currentPort: number | null = null;
