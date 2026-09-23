@@ -80,8 +80,18 @@ export async function POST(req: Request) {
           taxCodeId: string | null;
           isOptional: boolean;
         }> = [];
+        if (body.components !== undefined && !Array.isArray(body.components)) {
+          return NextResponse.json({ error: "components must be an array" }, { status: 422 });
+        }
         if (Array.isArray(body.components)) {
-          for (const component of body.components as Record<string, unknown>[]) {
+          for (const [index, entry] of body.components.entries()) {
+            // Property access on a null/primitive throws a TypeError the
+            // handler below does not catch (HTTP 500), so the shape is
+            // refused with an indexed 422 before anything is read.
+            if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+              return NextResponse.json({ error: `components[${index}] must be an object` }, { status: 422 });
+            }
+            const component = entry as Record<string, unknown>;
             const quantity = exactMoney(component.quantity ?? "1");
             const unitPrice = exactMoney(component.unitPrice ?? "0");
             if (quantity === null) return invalidDecimal("quantity");
@@ -140,11 +150,44 @@ export async function POST(req: Request) {
           typeof body.effectiveOn !== "string" || typeof body.idempotencyKey !== "string") {
           return NextResponse.json({ error: "subscription, amendment type, effective date and idempotency key must be strings" }, { status: 400 });
         }
-        const amendment: AmendmentRequest = { ...body,
+        // The amendment is built field by field from an allowlist — never by
+        // spreading the request body — so unknown or mistyped input cannot
+        // reach the engine or the persisted request snapshot. Value rules
+        // stay in applyAmendment; the route only enforces transport shape.
+        const amendmentText = (name: string): string | null | undefined | NextResponse => {
+          const value = (body as Record<string, unknown>)[name];
+          if (value === undefined || value === null) return value;
+          if (typeof value !== "string") return NextResponse.json({ error: `amendment field ${name} must be a string` }, { status: 422 });
+          return value;
+        };
+        const text: Record<string, string | null | undefined> = {};
+        for (const name of ["reason", "componentKey", "name", "description", "incomeAccountId", "itemId", "taxCodeId", "termEndsOn", "billingTiming", "anchorSubscriptionId"] as const) {
+          const value = amendmentText(name);
+          if (value instanceof NextResponse) return value;
+          text[name] = value;
+        }
+        const renewalTermMonthsRaw = (body as Record<string, unknown>).renewalTermMonths;
+        if (renewalTermMonthsRaw !== undefined && renewalTermMonthsRaw !== null &&
+          typeof renewalTermMonthsRaw !== "number" && typeof renewalTermMonthsRaw !== "string") {
+          return NextResponse.json({ error: "amendment field renewalTermMonths must be a number" }, { status: 422 });
+        }
+        const amendment: AmendmentRequest = {
           subscriptionId: body.subscriptionId,
           type: body.type as AmendmentType,
           effectiveOn: body.effectiveOn,
-          idempotencyKey: body.idempotencyKey };
+          idempotencyKey: body.idempotencyKey,
+          reason: text.reason,
+          componentKey: text.componentKey ?? undefined,
+          name: text.name ?? undefined,
+          description: text.description,
+          incomeAccountId: text.incomeAccountId,
+          itemId: text.itemId,
+          taxCodeId: text.taxCodeId,
+          termEndsOn: text.termEndsOn,
+          billingTiming: (text.billingTiming ?? undefined) as BillingTiming | undefined,
+          renewalTermMonths: (renewalTermMonthsRaw ?? undefined) as number | undefined,
+          anchorSubscriptionId: text.anchorSubscriptionId ?? undefined,
+        };
         if (body.quantity != null && body.quantity !== "") {
           const quantity = exactMoney(body.quantity);
           if (quantity === null) return invalidDecimal("quantity");
