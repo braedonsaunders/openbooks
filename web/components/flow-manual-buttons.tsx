@@ -65,8 +65,16 @@ export function FlowManualButtons({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ subjectKind, subjectId, buttonId: button.buttonId }),
       })
+      // The refusal is in the body, so check the status BEFORE parsing: parsing
+      // an error body first turns refusals with unparsable bodies into parse
+      // errors instead of the operator-visible message.
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        toast.error(errData.error ?? tc('feedback.somethingWentWrong'))
+        return
+      }
       const data = await res.json().catch(() => ({}))
-      if (!res.ok || data.ok === false) {
+      if (data.ok === false) {
         toast.error(data.error ?? tc('feedback.somethingWentWrong'))
         return
       }

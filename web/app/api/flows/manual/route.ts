@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, type EvalContext } from '@openbooks/forms-core'
 import { db, schema, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import {
+  dispatchFailureReason,
   getFlowAdapter,
   parseFlowGraph,
   runRecordFlows,
@@ -157,10 +158,21 @@ export async function POST(req: Request) {
       { orgId: authz.user.orgId, userId: authz.user.id },
     ),
   )
-  const failed = result.runs.some((r) => r.status === 'failed')
+  // A dispatch-level failure leaves NO runs behind (the dispatch threw before
+  // any flow ran). Reporting 200 ok:true for that would toast success for
+  // work that never ran — refuse loudly with the dispatch reason instead.
+  if (result.failed && result.runs.length === 0) {
+    return NextResponse.json(
+      { error: result.error ?? 'flow dispatch failed' },
+      { status: 500 },
+    )
+  }
+  const failed = result.failed || result.runs.some((r) => r.status === 'failed')
+  const reason = failed ? dispatchFailureReason(result) : null
   return NextResponse.json({
     ok: !failed,
     runs: result.runs,
     gatesCreated: result.gatesCreated,
+    ...(reason ? { error: reason } : {}),
   })
 }
