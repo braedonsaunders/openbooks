@@ -5,14 +5,21 @@
 -- membership, and touches two pre-existing shapes while doing it:
 --
 -- (a) assignment_open_window_end_dated: a deactivated assignment whose
--- window is still open (effective_to NULL or covering today). The old model
--- flipped only the flag, so the resolver's new window read would resurrect
--- it for current dates; 0327 end-dates it to the day before its last touch
--- (deactivation is the only write such rows receive), floored at
--- effective_from. Predicate owned by m74: NOT is_active AND (effective_to
--- IS NULL OR effective_to >= current_date) — exactly the migration's own
--- backfill predicate, so the pre-upgrade count IS the number of rows the
--- upgrade will end-date. Zero rows means no window moves.
+-- window is still open (effective_to NULL or covering today), started before
+-- today. The old model flipped only the flag, so the resolver's new window
+-- read would resurrect it for current dates; 0327 end-dates it to the day
+-- before its last touch (deactivation is the only write such rows receive),
+-- floored at effective_from. Predicate owned by m74 plus the PRC15c same-day
+-- carve-out: NOT is_active AND effective_from <> current_date AND
+-- (effective_to IS NULL OR effective_to >= current_date) — exactly the
+-- migration's own backfill predicate, so the pre-upgrade count IS the number
+-- of rows the upgrade will end-date. Zero rows means no window moves.
+--
+-- (c) assignment_same_day_revoked_removed: a deactivated assignment starting
+-- today with an open window (PRC15c). End-dating it would violate the dates
+-- CHECK and any storable window would still price today, so 0327 removes the
+-- never-effective row to match the post-upgrade trigger. Zero rows means no
+-- removal.
 --
 -- (b) inactive_level_historical_active: a level deactivated before
 -- versioned activation existed. Its deactivation instant was never
@@ -30,6 +37,19 @@ SELECT '0327.assignment_open_window_end_dated' AS code,
        'No action required: the upgrade end-dates the window deterministically. If the assignment should be live instead, reactivate it and set its window explicitly after the upgrade.' AS remedy
   FROM public.customer_price_level_assignments a
  WHERE NOT a.is_active
+   AND a.effective_from <> current_date
+   AND (a.effective_to IS NULL OR a.effective_to >= current_date)
+UNION ALL
+SELECT '0327.assignment_same_day_revoked_removed' AS code,
+       'notice' AS severity,
+       format('customer_price_level_assignments %s (org %s) for customer %s on level %s starts today with an open window',
+              a.id, a.org_id, a.customer_id, a.price_level_id) AS subject,
+       format('deactivated assignment %s starts today and never covered any date; 0327 removes the never-effective row so the post-upgrade trigger and the backfill agree',
+              a.id) AS detail,
+       'No action required: nothing could have priced off this row. If the customer should hold the level, create a new assignment after the upgrade.' AS remedy
+  FROM public.customer_price_level_assignments a
+ WHERE NOT a.is_active
+   AND a.effective_from = current_date
    AND (a.effective_to IS NULL OR a.effective_to >= current_date)
 UNION ALL
 SELECT '0327.inactive_level_historical_active' AS code,

@@ -1591,6 +1591,26 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "digest moves. Restamp, not reapply: the revision stages the build but "
       + "changes no enforced state.",
   },
+  {
+    filename: "generated/0327_item_price_level_activation_history.sql",
+    from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
+    to: "74408c2026f5e84d304f1a1586dca7e7967222efd6cdb388f02ffd128f9552be",
+    strategy: "reapply",
+    reason:
+      "corrective revision PRC15c: deactivating an assignment that starts "
+      + "today removed no row and end-dated the window to yesterday, which "
+      + "violates the customer_price_level_dates CHECK — the operator got an "
+      + "opaque database error and could not revoke a mistaken same-day "
+      + "assignment. The trigger now removes the never-effective row (it never "
+      + "covered any date, so no pricing history is lost) and the backfill "
+      + "deletes matching pre-upgrade rows instead of flooring them at a "
+      + "single live day. Every statement stays idempotent against the old "
+      + "migration's successful state — IF NOT EXISTS DDL, CREATE OR REPLACE "
+      + "FUNCTION, conditional triggers, gap-only backfills — so reapplying "
+      + "redefines the trigger and converges rows the old revision left "
+      + "behind. Reapply, not restamp: the revision changes enforced trigger "
+      + "behavior the old state lacks.",
+  },
 ];
 
 async function executeTrackedMigration(
