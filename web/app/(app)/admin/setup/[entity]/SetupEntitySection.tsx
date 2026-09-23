@@ -196,8 +196,12 @@ export async function SetupEntitySection({
             }>(sql`
               select line.item_id, line.unit_code, line.unit_name, line.base_quantity,
                      line.cost_rate, line.bill_rate, line.time_type_bill_rates,
-                     profile.base_unit, profile.pricing_policy, profile.invoice_presentation
+                     coalesce(pin.base_unit, profile.base_unit) as base_unit,
+                     coalesce(pin.pricing_policy, profile.pricing_policy) as pricing_policy,
+                     coalesce(pin.invoice_presentation, profile.invoice_presentation) as invoice_presentation
                 from item_rate_lines line
+                left join item_rate_version_profiles pin
+                  on pin.org_id = line.org_id and pin.version_id = line.version_id and pin.item_id = line.item_id
                 left join item_rate_profiles profile
                   on profile.org_id = line.org_id and profile.item_id = line.item_id
                where line.org_id = ${orgId} and line.version_id = ${version.id}

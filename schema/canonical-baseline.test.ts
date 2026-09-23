@@ -619,6 +619,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // requestID correlation, and storage refuses a second 'sent' row per
     // ticket so a concurrent double-claim fails instead of corrupting.
     "0295_qbd_web_connector_in_flight.sql",
+    // Item-rate pricing read the live profile before choosing the historical
+    // version, so a later policy switch repriced late entries dated in the
+    // old month (0298 pins policy, base unit and presentation per
+    // (version, item) at save time, backfilled from current values).
+    "0298_item_rate_version_profile_pins.sql",
     // Item price schedules were rewritten or deleted in place while the
     // resolver reads the same live rows for any onDate, so history could be
     // silently repriced: this adds the revision fence, the supersedes link

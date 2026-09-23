@@ -211,6 +211,16 @@ export async function resolveItemRate(input: {
     if(!fxRate) {
       throw new Error(`No spot rate for ${sourceCurrency}→${ctx.target_currency} on or before ${input.onDate} — the selected rate card prices in ${sourceCurrency}`)
     }
+    // Pricing behavior is pinned per (version, item) at save time: a policy
+    // switch for next month must never reprice a late entry dated in this
+    // version's month. The live profile above is only the participation gate
+    // (and the defaults for new versions). Versions without a pin — labor
+    // rate-card versions, which carry no item policy — resolve as before.
+    const pin = (await db.execute<{ base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
+      select base_unit, pricing_policy, invoice_presentation from item_rate_version_profiles
+       where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
+    `)).rows[0]
+    const behavior = pin ?? p
     const lines = (await db.execute<{ id: string; unit_code: string; unit_name: string; base_quantity: string; cost_rate: string | null; bill_rate: string | null }>(sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
@@ -239,22 +249,22 @@ export async function resolveItemRate(input: {
     return {
       rateBookId: candidate.rate_book_id,
       rateVersionId,
-      baseUnit: p.base_unit,
-      policy: p.pricing_policy,
-      invoicePresentation: p.invoice_presentation,
+      baseUnit: behavior.base_unit,
+      policy: behavior.pricing_policy,
+      invoicePresentation: behavior.invoice_presentation,
       sourceCurrency,
       targetCurrency:ctx.target_currency,
       fxRate,
       baseQuantity: normalizedBaseQuantity,
-      transactionUnitCode: selectedTier?.unitCode ?? p.base_unit,
-      transactionUnitName: selectedTier?.unitName ?? p.base_unit,
+      transactionUnitCode: selectedTier?.unitCode ?? behavior.base_unit,
+      transactionUnitName: selectedTier?.unitName ?? behavior.base_unit,
       rateUnits,
       cost: selectedTier
         ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'cost')
-        : priceItemRate(input.baseQuantity, tiers, 'cost', p.pricing_policy),
+        : priceItemRate(input.baseQuantity, tiers, 'cost', behavior.pricing_policy),
       bill: selectedTier
         ? priceSelectedRateUnit(input.baseQuantity, selectedTier, 'bill')
-        : priceItemRate(input.baseQuantity, tiers, 'bill', p.pricing_policy),
+        : priceItemRate(input.baseQuantity, tiers, 'bill', behavior.pricing_policy),
     }
   }
   return null

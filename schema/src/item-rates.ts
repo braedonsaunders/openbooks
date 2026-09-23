@@ -230,6 +230,42 @@ export const itemRateVersions = pgTable(
   ],
 );
 
+/** Per-(version, item) pin of the pricing behavior in force when that rate
+ * version was saved (0298). Resolution reads the selected version's pin, so
+ * a later policy switch for next month can never reprice a late entry dated
+ * in an older month; item_rate_profiles keeps only the defaults for new
+ * versions. Writers insert the row atomically with the version's lines and
+ * carry other items' pins forward exactly like their lines. */
+export const itemRateVersionProfiles = pgTable(
+  "item_rate_version_profiles",
+  {
+    id: id(),
+    orgId: orgRef(),
+    versionId: uuid("version_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    baseUnit: text("base_unit").notNull(),
+    pricingPolicy: text("pricing_policy", {
+      enum: ["explicit", "capped_ladder", "lowest_cost"],
+    }).notNull(),
+    invoicePresentation: text("invoice_presentation", {
+      enum: ["summary", "rate_components"],
+    }).notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("item_rate_version_profiles_item").on(t.orgId, t.id),
+    uniqueIndex("item_rate_version_profiles_version_item").on(
+      t.versionId,
+      t.itemId,
+    ),
+    index("item_rate_version_profiles_item_lookup").on(
+      t.orgId,
+      t.itemId,
+      t.versionId,
+    ),
+  ],
+);
+
 /** Item-level behavior shared by every rate book. A tier's base_quantity is
  * expressed in this base unit (for example day=1, week=4, month=12). */
 export const itemRateProfiles = pgTable(
