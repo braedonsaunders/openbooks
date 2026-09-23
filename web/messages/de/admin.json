@@ -2819,6 +2819,7 @@
       "initialAmountPercent": "Anfangsbetrag %",
       "deferredAccountId": "Konto abgegrenzter Umsatz",
       "recognizedAccountId": "Konto realisierter Umsatz",
+      "version": "Version",
       "isForecast": "Prognoseregel",
       "itemId": "Artikel",
       "unitPrice": "Stückpreis",
@@ -3081,6 +3082,7 @@
       "reviewMonths": "Prüfrhythmus (Monate)"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "Wenn Sie Methode, Laufzeit, Daten, Versätze, Prozentsatz oder Konten einer bereits im Umsatz verwendeten Regel ändern, entsteht eine neue Version; bestehende Verpflichtungen behalten die alte Version.",
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
       "basisCapAmountPerPeriod": "Diese Komponente stoppen, sobald sie in einer Lohnperiode diesen Betrag erreicht hat.",
       "basisCapAmountPerYear": "Diese Komponente stoppen, sobald sie im Steuerjahr diesen Betrag erreicht hat – die CRA-Grenze für Money-Purchase-Pläne oder die US-Grenze 402(g) für freiwillige Beiträge. Bereits in diesem Jahr gebundene Beträge, einschließlich Eröffnungssalden, zählen mit.",

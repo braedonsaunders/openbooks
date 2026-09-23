@@ -2702,6 +2702,7 @@
       "initialAmountPercent": "Montant initial %",
       "deferredAccountId": "Compte de produits différés",
       "recognizedAccountId": "Compte de produits comptabilisés",
+      "version": "Version",
       "isForecast": "Règle de prévision",
       "itemId": "Article",
       "unitPrice": "Prix unitaire",
@@ -2968,6 +2969,7 @@
       "reviewMonths": "Cadence (mois)"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "Modifier la méthode, la durée, les dates, les décalages, le pourcentage ou les comptes d’une règle déjà utilisée pour les produits crée une nouvelle version ; les obligations existantes conservent l’ancienne version.",
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
       "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",
       "defaultLienWaiverType": "Présélectionné lors de la création d'une renonciation pour ces contreparties.",

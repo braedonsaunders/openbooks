@@ -2790,6 +2790,7 @@
       "initialAmountPercent": "初始金额 %",
       "deferredAccountId": "递延收入科目",
       "recognizedAccountId": "已确认收入科目",
+      "version": "版本",
       "isForecast": "预测规则",
       "itemId": "物料",
       "unitPrice": "单价",
@@ -3013,6 +3014,7 @@
       "reviewMonths": "评审周期（月）"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "更改已用于收入的规则的方法、期限、日期、偏移、百分比或科目会创建新版本；现有履约义务保留旧版本。",
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
       "lienWaiverEnforcement": "“阻止”表示此类交易对方的账单在有签署的弃权书覆盖之前不得付款。",
       "defaultLienWaiverType": "为此类交易对方创建弃权书时预选此项。",
