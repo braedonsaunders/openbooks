@@ -8,6 +8,8 @@ import {
   type TaxReturnResult,
   type TaxReturnTranslation,
 } from "./return.ts";
+import { resolveCoveringPeriodsInWindow } from "../close/period-resolution.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**
  * Tax filing lifecycle — the governed prepared → filed transition.
@@ -174,39 +176,72 @@ type FilingRow = {
 };
 
 /**
- * Every accounting period the filing window touches, closed for gl AND tax on
- * the primary book. A tax return is organization-scoped, so its covered legal
- * entities are the active, non-elimination subsidiaries. The effective lock
- * for each entity is its subsidiary row when one exists, otherwise the
- * org-wide default. This means an org-wide close may govern every entity, but
- * a scoped close must cover every entity and a scoped reopen cannot be hidden
- * by an older org-wide close. Only an explicit `closed` state is evidence;
- * open, soft-closed, or lapsed-reopen rows fail closed.
+ * Every posting-calendar period the filing window touches, closed for gl AND
+ * tax on the primary book. The covered legal entities are the filing's FROZEN
+ * subsidiary scope — the exact set the return summed — so closing one
+ * entity's periods certifies that entity's filing while an unrelated entity
+ * stays open. A filing with no frozen scope (pre-snapshot, NULL) is the
+ * legacy org-wide return and still needs every active, non-elimination
+ * subsidiary closed. A frozen scope naming subsidiaries outside this
+ * organization fails closed by name: the scope can no longer be honored, so
+ * the filing is stale, not certifiable.
+ *
+ * The effective lock for each entity is its subsidiary row when one exists,
+ * otherwise the org-wide default. This means an org-wide close may govern
+ * every entity, but a scoped close must cover every entity and a scoped
+ * reopen cannot be hidden by an older org-wide close. Only an explicit
+ * `closed` state is evidence; open, soft-closed, or lapsed-reopen rows fail
+ * closed.
  */
 async function assertCoveredPeriodsClosed(
   orgId: string,
   from: string,
   to: string,
+  subsidiaryIds: string[] | null,
 ): Promise<void> {
   const book = (await db.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_primary limit 1`));
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new TaxFilingError("period-not-closed", "no primary accounting book");
 
-  const periods = (await db.execute<{ id: string; name: string }>(sql`
-    select id, name from accounting_periods
-     where org_id = ${orgId} and is_adjustment = false
-       and starts_on <= ${to} and ends_on >= ${from}
-     order by starts_on`));
-  if (periods.rows.length === 0) {
+  // The window resolves through the shared posting-calendar resolver, never
+  // an unscoped period read: an alternate planning calendar's open periods
+  // must not hold a posting fence hostage.
+  const periods = await resolveCoveringPeriodsInWindow(db, orgId, from, to);
+  if (periods.length === 0) {
     throw new TaxFilingError(
       "period-not-closed",
       `no accounting period covers ${from}..${to} — generate the fiscal calendar before filing`,
     );
   }
 
+  // A frozen scope that no longer resolves is not an empty covered set (which
+  // would certify against org-wide locks alone) — it is a filing whose terms
+  // changed after preparation. A frozen scope is honored EXACTLY (no
+  // active/elimination filter): the scope was validated at prepare time, and
+  // silently dropping a deactivated entity from the fence would certify a
+  // narrower world than the return summed.
+  let coveredWhere: ReturnType<typeof sql>;
+  if (subsidiaryIds === null) {
+    coveredWhere = sql`where s.org_id = ${orgId} and s.is_active and not s.is_elimination`;
+  } else if (subsidiaryIds.length === 0) {
+    coveredWhere = sql`where false`;
+  } else {
+    const known = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and id = any(${uuidArray(subsidiaryIds)}::uuid[])`)).rows.map((r) => r.id);
+    const missing = subsidiaryIds.filter((id) => !known.includes(id));
+    if (missing.length > 0) {
+      throw new TaxFilingError(
+        "stale",
+        `filing's frozen subsidiary scope references subsidiaries outside this organization: ${missing.join(", ")} — prepare a new version`,
+      );
+    }
+    coveredWhere = sql`where s.org_id = ${orgId} and s.id = any(${uuidArray(subsidiaryIds)}::uuid[])`;
+  }
+
   for (const module of ["gl", "tax"] as const) {
-    for (const period of periods.rows) {
+    for (const period of periods) {
       const closure = (await db.execute<{
         covered: number;
         closed: number;
@@ -215,9 +250,7 @@ async function assertCoveredPeriodsClosed(
         with covered_entities as (
           select s.id
             from subsidiaries s
-           where s.org_id = ${orgId}
-             and s.is_active
-             and not s.is_elimination
+           ${coveredWhere}
         )
         select
           count(*)::int as covered,
@@ -335,7 +368,10 @@ export async function markTaxFilingFiled(
         hashtext(${`tax-filing:${orgId}:${row.form_code}:${row.period_from}:${row.period_to}`}))`);
 
     // GOVERNANCE — the covered periods must be closed before certifying.
-    await assertCoveredPeriodsClosed(orgId, row.period_from, row.period_to);
+    // The fence covers the filing's FROZEN subsidiary scope, never every
+    // entity unconditionally: an unrelated open entity cannot alter a scoped
+    // filing's fenced source or hash.
+    await assertCoveredPeriodsClosed(orgId, row.period_from, row.period_to, row.subsidiary_ids);
 
     // INTEGRITY — reproduce the prepare-time fingerprint from the live source
     // ledger on this transaction's pinned connection: computeTaxReturn runs on
