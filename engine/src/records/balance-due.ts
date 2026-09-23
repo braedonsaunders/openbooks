@@ -1,6 +1,36 @@
 import { sql, type SQL } from "drizzle-orm";
 
 /**
+ * Which carrying column an application consumes through each of its legs.
+ * A to-leg settles its line in the TARGET columns (`amount`,
+ * `target_transaction_amount`); a from-leg is consumed in the SOURCE columns
+ * (`source_amount`, `source_transaction_amount`) — exactly the caps the
+ * `app_check_open` trigger enforces and the split the maintained
+ * `document_open_balance_amount` cache computes. Reading `amount` for both
+ * legs mixes denominations on every cross-currency settlement and leaves
+ * false remainders on the consumed (from) line. One expression, every
+ * reader: the live lateral below and the as-of open-item queries (web cash,
+ * the cash agent) all build their applied sums from this, so the leg split
+ * cannot drift apart again.
+ *
+ * @param appAlias the SQL alias of the `applications` row (a static
+ * identifier from the calling query, never user input).
+ * @param lineId the open-item line whose consumption is measured.
+ * @param denomination "base" for the carrying columns, "transaction" for the
+ * document-currency legs.
+ */
+export function appliedLegAmountExpr(
+  appAlias: string,
+  lineId: SQL,
+  denomination: "base" | "transaction",
+): SQL {
+  const a = sql.raw(appAlias);
+  const toCol = sql.raw(denomination === "base" ? "amount" : "target_transaction_amount");
+  const fromCol = sql.raw(denomination === "base" ? "source_amount" : "source_transaction_amount");
+  return sql`case when ${a}.from_line_id = ${lineId} then ${a}.${fromCol} else ${a}.${toCol} end`;
+}
+
+/**
  * The live "what is still due on this document" applied-amount subquery, in
  * both denominations the callers need. Every surface that names a document
  * balance — the generic drawer (`web/lib/documents.ts`), record PDFs and
@@ -49,9 +79,9 @@ export function documentBalanceDueLateral(docAlias = "d", opts?: { base?: boolea
   const d = sql.raw(docAlias);
   return sql`
     left join lateral (
-      select coalesce(sum(case when a.from_line_id = jl.id then a.source_transaction_amount else a.target_transaction_amount end), 0) as applied
+      select coalesce(sum(${appliedLegAmountExpr("a", sql`jl.id`, "transaction")}), 0) as applied
         ${opts?.base
-          ? sql`, coalesce(sum(case when a.from_line_id = jl.id then a.source_amount else a.amount end), 0) as applied_base`
+          ? sql`, coalesce(sum(${appliedLegAmountExpr("a", sql`jl.id`, "base")}), 0) as applied_base`
           : sql``}
         from journal_lines jl
         join applications a on a.org_id = jl.org_id and (a.to_line_id = jl.id or a.from_line_id = jl.id) and a.unapplied_at is null
