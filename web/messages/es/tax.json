@@ -150,7 +150,10 @@
         "loss_carryforward": "Pérdidas arrastradas",
         "other": "Otro"
       },
-      "valuationAllowanceIas12": "Ajuste de reconocimiento del activo diferido"
+      "valuationAllowanceIas12": "Ajuste de reconocimiento del activo diferido",
+      "rowDescriptionRequiredPermanent": "La fila {row} de diferencias permanentes necesita una descripción: añádela o borra el importe.",
+      "rowDescriptionRequiredTemporary": "La fila {row} de diferencias temporarias necesita una descripción: añádela o vacía la fila.",
+      "computeFailed": "No se pudo calcular la provisión."
     },
     "detail": {
       "title": "Provisión {year} · v{version}",

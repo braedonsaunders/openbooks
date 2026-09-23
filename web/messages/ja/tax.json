@@ -150,7 +150,10 @@
         "loss_carryforward": "繰越欠損金",
         "other": "その他"
       },
-      "valuationAllowanceIas12": "繰延税金資産の認識調整額"
+      "valuationAllowanceIas12": "繰延税金資産の認識調整額",
+      "rowDescriptionRequiredPermanent": "永久差異の{row}行目に説明が必要です。説明を追加するか、金額をクリアしてください。",
+      "rowDescriptionRequiredTemporary": "一時差異の{row}行目に説明が必要です。説明を追加するか、行をクリアしてください。",
+      "computeFailed": "税金計算を実行できませんでした。"
     },
     "detail": {
       "title": "{year}年度 税金計算 · v{version}",

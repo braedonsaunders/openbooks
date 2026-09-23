@@ -150,7 +150,10 @@
         "loss_carryforward": "Report déficitaire",
         "other": "Autre"
       },
-      "valuationAllowanceIas12": "Ajustement de comptabilisation de l'IDA"
+      "valuationAllowanceIas12": "Ajustement de comptabilisation de l'IDA",
+      "rowDescriptionRequiredPermanent": "La ligne {row} des différences permanentes nécessite une description : ajoutez-en une ou effacez le montant.",
+      "rowDescriptionRequiredTemporary": "La ligne {row} des différences temporaires nécessite une description : ajoutez-en une ou videz la ligne.",
+      "computeFailed": "La provision n'a pas pu être calculée."
     },
     "detail": {
       "title": "Provision {year} · v{version}",

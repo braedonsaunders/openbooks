@@ -67,11 +67,19 @@ export async function POST(req: Request) {
     return normalizeMoney(exact);
   };
   // A grid row with no description is an empty line ONLY when it carries no
-  // data — no amount and (for temporary differences) no category. A populated
-  // row without a description refuses by row, naming the required
+  // data — no amount and (for temporary differences) no chosen category. A
+  // populated row without a description refuses by row, naming the required
   // description, instead of silently shrinking the provision.
+  //
+  // The compute grid always carries a category: a pristine trailing row
+  // arrives as description "", difference "" with the grid default "other".
+  // That default is not user data — it must read as blank, never refuse —
+  // while a deliberately CHOSEN category with no description still refuses.
+  const PRISTINE_GRID_CATEGORY = "other";
   const isBlank = (v: unknown): boolean =>
     v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  const isBlankCategory = (v: unknown): boolean =>
+    isBlank(v) || (typeof v === "string" && v.trim() === PRISTINE_GRID_CATEGORY);
   const described = (v: unknown): string | null =>
     typeof v === "string" && v.trim() ? v.trim() : null;
   if (body.permanentDifferences !== undefined && !Array.isArray(body.permanentDifferences)) {
@@ -101,7 +109,7 @@ export async function POST(req: Request) {
     // is a caller error: dropping it would silently understate the run.
     const description = described(d?.description);
     if (!description) {
-      if (isBlank(d?.difference) && isBlank(d?.category)) continue;
+      if (isBlank(d?.difference) && isBlankCategory(d?.category)) continue;
       return NextResponse.json(
         { error: `additionalDifferences[${i}]: description is required when an amount or category is provided` },
         { status: 400 },
@@ -160,7 +168,7 @@ export async function POST(req: Request) {
     for (const [i, d] of ((additionalRaw ?? []) as { category?: unknown; description?: unknown; difference?: unknown }[]).entries()) {
       const description = described(d?.description);
       if (!description) {
-        if (isBlank(d?.difference) && isBlank(d?.category)) continue;
+        if (isBlank(d?.difference) && isBlankCategory(d?.category)) continue;
         return fail(`${path}.additionalDifferences[${i}]: description is required when an amount or category is provided`);
       }
       if (!DIFF_CATEGORIES.has(String(d!.category))) return fail("invalid provision entities");
