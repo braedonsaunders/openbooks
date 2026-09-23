@@ -124,9 +124,9 @@ test("two replicas racing one recurring occurrence post exactly one invoice", { 
   }
 });
 
-const HAS_REDIS = Boolean(process.env.REDIS_URL ?? process.env.OPENBOOKS_REDIS_URL);
-
-test("two replicas racing one dunning notice send exactly one", { skip: !DB || !HAS_REDIS }, async () => {
+// Both gates are infrastructure, spelled as the env the runner provides so
+// the skip checker can audit them: no database, or no redis to race on.
+test("two replicas racing one dunning notice send exactly one", { skip: !DB || !(process.env.REDIS_URL ?? process.env.OPENBOOKS_REDIS_URL) }, async () => {
   const org = await createScratchOrg();
   try {
     await db.execute(sql`update parties set email = 'dunning-race@example.com' where id = ${org.customerId} and org_id = ${org.orgId}`);

@@ -79,6 +79,38 @@ test("probe", (t) => { t.skip("a brand new reason nobody recorded"); });
   }
 });
 
+test("a DB gate combined with any other condition fails", () => {
+  const root = fixtureTree({
+    "engine/src/combined.test.ts": `import test from "node:test";
+test("date", { skip: !DB || new Date() < new Date("2026-12-02") }, async () => {});
+test("bomb", {
+  skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
+    ? "annual settlement needs a December 2026 pay period to have begun"
+    : false,
+}, async () => {});
+test("flag", { skip: !DB || !FEATURE_READY }, async () => {});
+test("pure", { skip: !DB }, async () => {});
+test("infra-pair", { skip: !DB || !process.env.OPENBOOKS_REDIS_URL }, async () => {});
+test("platform", { skip: process.platform !== "linux" }, async () => {});
+`,
+  });
+  try {
+    const findings = scanFile(join(root, "engine/src/combined.test.ts"), root);
+    assert.equal(findings.length, 3, JSON.stringify(findings));
+    assert.ok(findings.every((finding) => finding.kind === "skip-combined"));
+    assert.deepEqual(
+      findings.map((finding) => finding.value).sort(),
+      [
+        "!DB || !FEATURE_READY",
+        '!DB || new Date() < new Date("2026-12-02")',
+        '!DB || new Date().toISOString().slice(0, 10) < "2026-12-02" ? "annual settlement needs a December 2026 pay period to have begun"',
+      ],
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("the live repository has no non-infra test skips", () => {
   const findings = scanTree();
   assert.deepEqual(findings, [], `${findings.length} skip violations:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`).join("\n")}`);

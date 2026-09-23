@@ -53,6 +53,38 @@ const TSKIP_ALLOW = [
   "database user cannot disable enforcement triggers for the probe session",
 ];
 
+// A skip that gates on the database must gate ONLY on infrastructure.
+// `skip: !DB || new Date() < new Date("2026-12-02")` sails through the
+// allow-list on the DB token while the date does the real gating — the
+// time-bomb shape that once parked four payroll suites silently. Strip every
+// known infra token plus boolean/negation/grouping syntax; anything left is
+// a second, non-infra condition riding on the infra gate.
+const DB_GATE = /OPENBOOKS_DB_URL|RUNTIME_DB|OPENBOOKS_TEST_DB_MARKER|databaseUrl|(^|[^A-Za-z0-9_$])DB([^A-Za-z0-9_$]|$)/;
+const INFRA_STRIP = [
+  /OPENBOOKS_DB_URL/g,
+  /OPENBOOKS_REDIS_URL/g,
+  /REDIS_URL/g,
+  /RUNTIME_DB/g,
+  /OPENBOOKS_TEST_DB_MARKER/g,
+  /databaseUrl/g,
+  /(?<![A-Za-z0-9_$])DB(?![A-Za-z0-9_$])/g,
+  /(?<![A-Za-z0-9_$])enabled(?![A-Za-z0-9_$])/g,
+  /(?<![A-Za-z0-9_$])behavior(?![A-Za-z0-9_$])/g,
+  /(?<![A-Za-z0-9_$])ENABLED(?![A-Za-z0-9_$])/g,
+  /process\.platform/g,
+  /process/g,
+  /env/g,
+];
+const SKIP_SYNTAX_STRIP = /[!|&()?\s.:'"]/g;
+
+export function combinesInfraWithOther(value) {
+  if (!DB_GATE.test(value)) return false;
+  let rest = value;
+  for (const token of INFRA_STRIP) rest = rest.replace(token, "");
+  rest = rest.replace(SKIP_SYNTAX_STRIP, "");
+  return /[A-Za-z0-9_$]/.test(rest);
+}
+
 export function scanFile(path, root = ROOT) {
   const findings = [];
   // Scan the code-only projection (same length/newlines): fixture templates
@@ -65,11 +97,28 @@ export function scanFile(path, root = ROOT) {
   // also catch data assertions shaped like { skip: "..." } (fail-closed
   // markers in some connector suites), so position matters.
   const checkOptions = (index, options) => {
+    // Ternary form: skip: <condition> ? "<reason>" : false. The condition
+    // decides and the reason names it, so judge the condition and report
+    // the reason. Without this branch the 120-char value cap below misses
+    // long ternaries entirely — the December-2026 time bombs were invisible.
+    const ternary = options.match(/skip\s*:\s*([^?][^?]{0,300}?)\?\s*(['"`])((?:\\\2|(?!\2).){0,200})\2\s*:\s*false\s*(,|}|$)/);
+    if (ternary) {
+      const condition = ternary[1].trim();
+      const reason = ternary[3].slice(0, 80);
+      if (!SKIP_VALUE_ALLOW.some((allowed) => allowed.test(condition))) {
+        findings.push({ file: rel, line: lineOf(index), kind: "skip-option", value: reason });
+      } else if (combinesInfraWithOther(condition)) {
+        findings.push({ file: rel, line: lineOf(index), kind: "skip-combined", value: `${condition} ? "${reason}"` });
+      }
+      return;
+    }
     const skip = options.match(/skip\s*:\s*([^,}][^,}]{0,120}?)\s*(,|}|$)/);
     if (!skip) return;
     const value = skip[1].trim();
     if (!SKIP_VALUE_ALLOW.some((allowed) => allowed.test(value))) {
       findings.push({ file: rel, line: lineOf(index), kind: "skip-option", value });
+    } else if (combinesInfraWithOther(value)) {
+      findings.push({ file: rel, line: lineOf(index), kind: "skip-combined", value });
     }
   };
   for (const match of src.matchAll(/(?:test|it)\s*\(\s*(['"`])((?:\\\1|(?!\1).){1,200})\1\s*,\s*\{([^{}]*)\}/g)) {
@@ -103,6 +152,9 @@ if (invoked) {
   const findings = scanTree(root);
   for (const finding of findings) {
     console.log(`${finding.file}:${finding.line} [${finding.kind}] ${finding.value}`);
+  }
+  if (findings.some((finding) => finding.kind === "skip-combined")) {
+    console.log("skip-combined: a DB gate must gate on infrastructure only — split the extra condition into its own declared skip, or pin the clock so the test runs now instead of on a date.");
   }
   console.log(`checked test skips; violations=${findings.length}`);
   process.exit(findings.length > 0 ? 1 : 0);
