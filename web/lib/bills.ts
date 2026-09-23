@@ -32,6 +32,7 @@ import {
   resolveEntityTaxAddress,
   resolveProviderTaxComponents,
   type Address,
+  type ProviderDocumentKind,
   type TaxQuoteRequest,
   type TaxQuoteResult,
 } from '@openbooks/engine/src/tax/rate-providers.ts'
@@ -269,6 +270,9 @@ export async function computeBillTotalsWithProvider(
       currency: options.currency,
       shipFrom,
       shipTo,
+      // PROVIDER_DOCUMENT_KINDS gates this path to the four provider kinds,
+      // so the kind always narrows to the request union here.
+      documentKind: options.kind as ProviderDocumentKind,
       itemCode: line.custom?.taxItemCode == null ? null : String(line.custom.taxItemCode),
       quotedOn: options.documentDate,
     }
