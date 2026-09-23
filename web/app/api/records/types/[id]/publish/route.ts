@@ -5,6 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { describeIssue, lintRecordFields, typeKeyError } from '../../../../../../lib/record-schema'
+import { auditSetupChange } from '../../../../../../lib/setup/audit'
 
 export const runtime = 'nodejs'
 
@@ -38,15 +39,27 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { action?: string }
+  const body = (parsedBody.data) as { action?: string; reason?: string }
   const action = body.action ?? 'publish'
   if (action !== 'archive' && action !== 'publish') {
     return NextResponse.json({ error: 'unknown action' }, { status: 400 })
   }
+  // Every publish/archive transition lands in the immutable audit with its
+  // reason — updated_by/updated_at alone only show the last writer. The
+  // reason is required so the audit never carries an unexplained transition;
+  // the builder prompts for it before calling.
+  const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+  if (!reason || reason.length > 2000) {
+    return NextResponse.json(
+      { error: 'A reason is required to publish or archive a record type — include a reason for the audit trail' },
+      { status: 422 },
+    )
+  }
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<LockedType>(sql`
-      select id, key, name, plural_name, fields, status
+    const locked = (await db.execute<LockedType & { snapshot: Record<string, unknown> }>(sql`
+      select id, key, name, plural_name, fields, status,
+             to_jsonb(custom_record_types) as snapshot
         from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
@@ -60,13 +73,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           response: NextResponse.json({ error: 'Only published types can be archived' }, { status: 422 }),
         }
       }
-      const archived = await db.execute(sql`
+      const archived = await db.execute<{ snapshot: Record<string, unknown> }>(sql`
         update custom_record_types
            set status = 'archived',
                updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
                updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId} and status = 'published'
-        returning id
+        returning to_jsonb(custom_record_types) as snapshot
       `)
       if (archived.rows.length === 0) {
         return {
@@ -74,6 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           response: NextResponse.json({ error: 'Only published types can be archived' }, { status: 422 }),
         }
       }
+      await auditTransition(locked.snapshot, archived.rows[0]!.snapshot)
       return { kind: 'ok' as const, status: 'archived' as const }
     }
 
@@ -112,13 +126,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    const published = await db.execute(sql`
+    const published = await db.execute<{ snapshot: Record<string, unknown> }>(sql`
       update custom_record_types
          set status = 'published',
              updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
              updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId} and status in ('draft', 'archived')
-      returning id
+      returning to_jsonb(custom_record_types) as snapshot
     `)
     if (published.rows.length === 0) {
       const live = (await db.execute<{ status: string }>(sql`
@@ -140,8 +154,29 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         ),
       }
     }
+    await auditTransition(locked.snapshot, published.rows[0]!.snapshot)
     return { kind: 'ok' as const, status: 'published' as const }
   })
+
+  /**
+   * One append-only transition event per publish/archive, written in the
+   * same transaction as the status change: before/after status plus the
+   * operator's reason, so the full lifecycle reads from the audit instead
+   * of the last-writer columns.
+   */
+  async function auditTransition(
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+  ): Promise<void> {
+    await auditSetupChange({
+      orgId: user.orgId,
+      table: 'custom_record_types',
+      rowId: id,
+      action: 'update',
+      changes: { before, after, reason },
+      actorId: user.id,
+    })
+  }
 
   if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (outcome.kind === 'response') return outcome.response
