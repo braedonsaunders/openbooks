@@ -160,8 +160,10 @@ export function ApprovalActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
       })
-      const data = await res.json().catch(() => ({}))
+      // Check the status before parsing: the refusal rides in the body, and
+      // parsing an error body first turns refusals into parse errors.
       if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
         toast.error(
           typeof data.error === 'string' && data.error ? data.error : t('approvalFlow.submitFailed'),
         )

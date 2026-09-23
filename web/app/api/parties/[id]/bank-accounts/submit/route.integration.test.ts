@@ -225,3 +225,144 @@ test('the party payload carries a submittable revision token for bank accounts',
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+async function seedPendingAccount(orgId: string, partyId: string, manager: string, bankName: string): Promise<string> {
+  const accountId = randomUUID()
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into party_bank_accounts
+        (id, org_id, party_id, bank_name, country, currency, routing,
+         account_number_encrypted, account_last_four,
+         approval_status, is_active, approved_at, approved_by,
+         submitted_by, submitted_at, created_by, updated_by)
+      values (${accountId}, ${orgId}, ${partyId}, ${bankName}, 'CA', 'CAD', '{}'::jsonb,
+              ${encryptAccountNumber('123456789')}, '6789',
+              'pending', false, null, null,
+              ${manager}, now(), ${manager}, ${manager})`)
+  })
+  return accountId
+}
+
+async function liveGateCount(orgId: string, accountId: string): Promise<number> {
+  return withBypassContext(async () =>
+    Number(
+      (await db.execute<{ count: string }>(
+        sql`select count(*)::text as count from flow_gates
+             where org_id = ${orgId} and subject_id = ${accountId}
+               and status in ('pending', 'escalated')`,
+      )).rows[0]!.count,
+    ),
+  )
+}
+
+async function seedActionOnlyFlow(orgId: string, userId: string): Promise<string> {
+  const flowId = randomUUID()
+  const graph = {
+    schemaVersion: 1,
+    nodes: [
+      {
+        id: 'trigger', position: { x: 0, y: 0 },
+        data: { kind: 'trigger', trigger: { trigger: 'on_create' } },
+      },
+      {
+        id: 'notify_1', position: { x: 0, y: 1 },
+        data: {
+          kind: 'action',
+          action: { action: 'notify', to: [{ type: 'user', userId }], title: 'Bank details submitted' },
+        },
+      },
+    ],
+    edges: [{ id: 'e1', source: 'trigger', target: 'notify_1' }],
+  }
+  await withBypassContext(async () => {
+    await db.execute(sql`
+      insert into flows (id, org_id, name, subject_kind, enabled, graph)
+      values (${flowId}, ${orgId}, 'Notify-only bank flow', 'party_bank_account', true,
+              ${JSON.stringify(graph)}::jsonb)`)
+  })
+  return flowId
+}
+
+test('an action-only flow refuses the submit instead of stranding the record gateless', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    const manager = actors.submitterId
+    const approver = actors.approver1Id
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
+    })
+    const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Action-only Bank')
+    await seedActionOnlyFlow(org.orgId, approver)
+    state.user = asUser(manager, org.orgId, 'manager')
+
+    // The flow completes (its notification ran) but creates zero gates: the
+    // submit must refuse with the flow named, not report pending with no
+    // approver able to release the record.
+    const refused = await withOrgContext(org.orgId, () =>
+      submit(submitRequest(org.vendorId, accountId), paramsFor(org.vendorId)))
+    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
+    const body = (await refused.json()) as { error: string }
+    assert.match(body.error, /Notify-only bank flow/, 'the refusal names the gateless flow')
+    assert.match(body.error, /no approval gate/, 'the refusal names the cause')
+    // The refusal rolled the dispatch back: no run persists, the record is
+    // still pending, and a resubmit after fixing the flow can proceed.
+    assert.equal(await runCount(org.orgId, accountId), 0)
+    assert.equal(await liveGateCount(org.orgId, accountId), 0)
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('a failing sibling flow rolls the whole bank submit back instead of committing its gates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    const manager = actors.submitterId
+    const approver = actors.approver1Id
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions = '["parties.read","parties.manage"]'::jsonb where org_id = ${org.orgId} and key = 'accountant'`)
+    })
+    const accountId = await seedPendingAccount(org.orgId, org.vendorId, manager, 'Mixed Bank')
+    const good = await withBypassContext(() =>
+      seedApprovalFlow(org.orgId, {
+        subjectKind: 'party_bank_account',
+        trigger: 'on_create',
+        assignees: [{ type: 'user', userId: approver }],
+        mode: 'any',
+      }),
+    )
+    const bad = await withBypassContext(() =>
+      seedApprovalFlow(org.orgId, {
+        subjectKind: 'party_bank_account',
+        trigger: 'on_create',
+        assignees: [{ type: 'role', role: 'nonexistent_role' }],
+        mode: 'any',
+      }),
+    )
+    await withBypassContext(async () => {
+      await db.execute(sql`update flows set name = 'Working bank flow' where id = ${good.flowId}`)
+      await db.execute(sql`update flows set name = 'Broken bank flow' where id = ${bad.flowId}`)
+    })
+    state.user = asUser(manager, org.orgId, 'manager')
+
+    // Flow A gated while flow B failed: the old code RETURNED the 422 from
+    // inside the transaction, committing A's live gate — approving it would
+    // have released the record despite the refusal.
+    const refused = await withOrgContext(org.orgId, () =>
+      submit(submitRequest(org.vendorId, accountId), paramsFor(org.vendorId)))
+    assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
+    const body = (await refused.json()) as { error: string }
+    assert.match(body.error, /could not enter the approval flow/)
+    assert.match(body.error, /Broken bank flow/, 'the refusal names the failed flow')
+    assert.match(body.error, /zero assignees/, 'the refusal names the cause')
+    // The refusal threw, so the transaction rolled back: no run and no live
+    // gate survive behind it.
+    assert.equal(await runCount(org.orgId, accountId), 0)
+    assert.equal(await liveGateCount(org.orgId, accountId), 0)
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

@@ -1,11 +1,21 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { dispatchFailureReason } from '@openbooks/engine/src/flows/index.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { denyOutsidePartyScope } from '../party-scope'
+
+/**
+ * A submit refusal raised INSIDE the submit transaction so the dispatch rolls
+ * back with it. Returning a 422 from inside withOrgTransaction would COMMIT
+ * whatever the dispatch opened — a sibling flow's live gates would survive
+ * the refusal and could later release the record. The outer catch maps this
+ * to the 422 the surface renders.
+ */
+class BankAccountSubmitError extends Error {}
 
 export const runtime = 'nodejs'
 
@@ -120,17 +130,25 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     const runId = flows.runs[0]?.runId ?? null
     if (flows.failed) {
-      const errRow = runId
-        ? (await db.execute<{ error: string | null }>(sql`
-            select error from flow_runs where id = ${runId} and org_id = ${user.orgId}
-          `)).rows[0]
-        : null
-      const detail = errRow?.error ?? 'bank-detail approval routing failed'
-      // Fail closed like the collection PATCH: the row stays pending, and the
-      // failed run is returned so the surface can offer the retry path.
-      return NextResponse.json(
-        { error: `these bank details could not enter the approval flow: ${detail}`, runId },
-        { status: 422 },
+      // Throw, never return: the dispatch opened gates/runs inside this
+      // transaction and the refusal must roll them back, not commit them.
+      // The operator resubmits after fixing the flow (no failed run survives
+      // to retry — the retry path only serves committed runs).
+      throw new BankAccountSubmitError(
+        `these bank details could not enter the approval flow: ${dispatchFailureReason(flows) ?? 'bank-detail approval routing failed'}`,
+      )
+    }
+    if (flows.gatesCreated === 0) {
+      // An action-only flow completed with zero gates: answering success here
+      // would report approvalStatus pending while no approver can ever
+      // release the record (there is deliberately no auto-approve fallback).
+      // Refuse and roll the completed actions back so a resubmit re-runs them
+      // exactly once instead of stranding the record.
+      const ran = [...new Set(flows.runs.map((r) => r.flowName))]
+      throw new BankAccountSubmitError(
+        'these bank details could not enter the approval flow: ' +
+          `flow ${ran.map((n) => `"${n}"`).join(', ')} ran but produced no approval gate ` +
+          `— add an approval gate to the flow, then submit again`,
       )
     }
     await db.execute(sql`
@@ -147,5 +165,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       )
     `)
     return NextResponse.json({ id: accountId, approvalStatus: 'pending', runId, gatesCreated: flows.gatesCreated })
+  }).catch((e) => {
+    if (e instanceof BankAccountSubmitError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
+    throw e
   })
 }
