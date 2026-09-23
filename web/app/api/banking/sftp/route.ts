@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
 import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/src/sftp/backend.ts'
+import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
@@ -71,13 +72,31 @@ export async function POST(req: Request) {
   let created: Created | null = null
   let username = ''
   let rootPrefix = ''
-  for (let attempt = 0; attempt < USERNAME_MINT_ATTEMPTS && !created; attempt++) {
+  let overlapRefusal: string | null = null
+  for (let attempt = 0; attempt < USERNAME_MINT_ATTEMPTS && !created && !overlapRefusal; attempt++) {
     // A longer suffix after repeated losses keeps the mint converging.
     username = `${base}-${randomBytes(attempt < USERNAME_MINT_ATTEMPTS - 3 ? 3 : 8).toString('hex')}`
     rootPrefix = requestedPrefix
       ? assertTenantRootPrefix(requestedPrefix, user.orgId)
       : assertTenantRootPrefix(`sftp/${user.orgId}/${username}`, user.orgId)
     created = await db.transaction(async (tx) => {
+      // Overlap gate: lock every server row of this org and refuse a root
+      // that is equal to, inside, or containing an ACTIVE sibling's root —
+      // two bank logins must never share a folder. The row lock serializes
+      // concurrent creates so two requests cannot pass the check with the
+      // same folder and both insert. Inactive servers do not block: they
+      // serve no login, and reactivating into an overlap refuses on toggle.
+      const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
+        select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} for update
+      `))
+      const hit = findRootOverlap(
+        rootPrefix,
+        siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+      )
+      if (hit) {
+        overlapRefusal = rootOverlapRefusal(rootPrefix, hit)
+        return null
+      }
       const row = (await tx.execute<Created>(sql`
         insert into sftp_servers (org_id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, created_by, updated_by)
         values (${user.orgId}, ${String(body.name).trim()}, ${username}, ${encryptSecret(password)}, ${authorizedKeys},
@@ -96,6 +115,9 @@ export async function POST(req: Request) {
       }, tx)
       return row.rows[0]!
     })
+  }
+  if (overlapRefusal) {
+    return NextResponse.json({ error: overlapRefusal, code: 'sftp_root_overlap' }, { status: 409 })
   }
   if (!created) {
     return NextResponse.json({ error: 'could not allocate a unique username' }, { status: 503 })
