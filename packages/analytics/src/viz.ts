@@ -34,6 +34,35 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0
 }
 
+/** Exact decimal display without a Number hop. Intl.NumberFormat accepts a
+ *  decimal STRING and formats it exactly — the same mechanism as the house
+ *  formatter web/lib/money-format.ts `formatDecimal` for canonical ledger
+ *  strings. Routing through Number() first would round anything past 2^53
+ *  (9007199254740993.00 prints …992.00) and cement the error in the grouping.
+ *  Returns null when the value is not a plain decimal string. */
+function formatDecimalString(
+  raw: string,
+  minimumFractionDigits: number,
+  maximumFractionDigits: number,
+): string | null {
+  const text = raw.trim()
+  if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/.test(text)) return null
+  return new Intl.NumberFormat(undefined, {
+    minimumFractionDigits,
+    maximumFractionDigits,
+    useGrouping: true,
+  }).format(text as unknown as number)
+}
+
+/** Fraction scale carried by a plain decimal string, or null when it is not
+ *  one. Currency cells keep their stored scale (a 3-decimal ledger value
+ *  prints 3 places, never forced to 2). */
+function decimalScale(raw: string): number | null {
+  const match = /^[+-]?(?:\d+(?:\.(\d*))?|\.\d+)$/.exec(raw.trim())
+  if (!match) return null
+  return match[1]?.length ?? 0
+}
+
 function isCurrency(col: ResultColumn | undefined): boolean {
   return col?.type === 'currency'
 }
@@ -217,14 +246,36 @@ function compactCurrencyFormatter(value: number): string {
 }
 
 /** Cell formatting for the table renderer — mirrors the money/number/date rules
- *  the rest of the app uses. */
+ *  the rest of the app uses. Money arrives from pg as exact decimal strings
+ *  (numeric → string); those strings are formatted EXACTLY — never through
+ *  Number(), which cannot represent them past 2^53. */
 export function formatCell(value: unknown, type: ResultColumn['type']): string {
   if (value == null || value === '') return '—'
   if (type === 'currency') {
+    if (typeof value === 'string') {
+      const scale = decimalScale(value)
+      if (scale !== null) {
+        // Ledger scale is preserved: 2-place values print 2 places, a
+        // 3-decimal currency prints 3 — never truncated to a 2-dp shape the
+        // ledger never held.
+        return formatDecimalString(value, 2, Math.max(2, scale)) ?? String(value)
+      }
+    }
+    if (typeof value === 'bigint') {
+      return new Intl.NumberFormat(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+        useGrouping: true,
+      }).format(value)
+    }
     const n = num(value)
     return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
   if (type === 'number') {
+    if (typeof value === 'string') {
+      const exact = formatDecimalString(value, 0, 2)
+      if (exact !== null) return exact
+    }
     const n = num(value)
     return Number.isInteger(n) ? n.toLocaleString() : n.toLocaleString(undefined, { maximumFractionDigits: 2 })
   }
