@@ -24,6 +24,19 @@
 -- No backfill is needed: the new CHECK is a strict superset of the old one,
 -- so every existing row already satisfies it, and 'staged' rows arise only
 -- from runner claims written after this migration lands.
+--
+-- Staged build (U12): replacing the CHECK the validated way would scan every
+-- dunning_log row while holding the ALTER TABLE lock. The replacement
+-- arrives NOT VALID (a short lock that still enforces every new write —
+-- safe here precisely because the superset property above means no existing
+-- row can violate it) and a later statement VALIDATEs it under SHARE UPDATE
+-- EXCLUSIVE, which blocks neither reads nor writes. Both steps are
+-- replay-safe: the DROP is guarded on pg_constraint, the ADD is guarded the
+-- same way, and the VALIDATE runs only while the constraint is unvalidated,
+-- so a retry treats an already-validated guard as done. The end state is
+-- identical to the validated build: the same constraint name, the same
+-- expression, validated. No statement here needs CONCURRENTLY, so the file
+-- stays inside the tracked transaction.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -31,10 +44,44 @@ SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 
-ALTER TABLE public.dunning_log DROP CONSTRAINT dunning_log_status;
-ALTER TABLE public.dunning_log
-  ADD CONSTRAINT dunning_log_status
-  CHECK ((status = ANY (ARRAY['sent'::text, 'failed'::text, 'skipped'::text, 'staged'::text, 'suppressed'::text])));
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.dunning_log'::regclass
+       AND conname = 'dunning_log_status'
+  ) THEN
+    ALTER TABLE public.dunning_log DROP CONSTRAINT dunning_log_status;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.dunning_log'::regclass
+       AND conname = 'dunning_log_status'
+  ) THEN
+    ALTER TABLE public.dunning_log
+      ADD CONSTRAINT dunning_log_status
+      CHECK ((status = ANY (ARRAY['sent'::text, 'failed'::text, 'skipped'::text, 'staged'::text, 'suppressed'::text])))
+      NOT VALID;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.dunning_log'::regclass
+       AND conname = 'dunning_log_status'
+       AND NOT convalidated
+  ) THEN
+    ALTER TABLE public.dunning_log
+      VALIDATE CONSTRAINT dunning_log_status;
+  END IF;
+END
+$$;
 
 -- The lifecycle guard. INSERT opens a new (document, stage) slot — the
 -- runner always opens 'staged'; terminal evidence may be opened directly by

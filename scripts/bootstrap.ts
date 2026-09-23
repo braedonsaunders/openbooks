@@ -1560,6 +1560,21 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "fresh-install catalog. Reapply, not restamp: the revision adds the "
       + "exemption the old CHECK lacks.",
   },
+  {
+    filename: "generated/0294_dunning_delivery_state_machine.sql",
+    from: "d911b36ae7fc8eace336a44b4d45f4f32d7025e48d5e4ebaedfc9a6e0de213a9",
+    to: "09a6e05f50536bb6d2c36bae7193548c8f713200f06b458c0463e69727e9078d",
+    strategy: "restamp",
+    reason:
+      "staged revision (U12) replaces the validated CHECK with a guarded DROP "
+      + "plus ADD CONSTRAINT ... NOT VALID and a guarded VALIDATE that treats an "
+      + "already-validated guard as done. The new CHECK is a strict superset of "
+      + "the old one, so every existing row already satisfies it. A database "
+      + "recorded at the old digest applied the old validated guard successfully "
+      + "and holds the identical end catalog — same name, same expression, "
+      + "validated — so only the digest moves. Restamp, not reapply: the "
+      + "revision stages the build but changes no enforced state.",
+  },
 ];
 
 async function executeTrackedMigration(
