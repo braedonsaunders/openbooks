@@ -205,7 +205,9 @@
     "savingSnapshot": "Saving…",
     "snapshotCreated": "Forecast snapshot saved",
     "snapshotFailed": "The forecast snapshot could not be saved.",
-    "quotasRestrictedNotice": "Quotas are hidden for entity-restricted access."
+    "quotasRestrictedNotice": "Quotas are hidden for entity-restricted access.",
+    "invalidOwnerTarget": "forecast owner must be a user id or null",
+    "invalidTeamTarget": "forecast team must be a sales team id or null"
   },
   "setup": {
     "title": "CRM",

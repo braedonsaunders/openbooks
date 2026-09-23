@@ -70,12 +70,24 @@ export async function POST(req: NextRequest) {
   if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
   // An explicit null means the caller is targeting a team (or, with both
   // null, the whole organization). When the owner key is absent we retain the
-  // convenient personal-snapshot default.
-  const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
-  const salesTeamId = body.salesTeamId ?? null
-  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1 ||
-    (ownerUserId && (typeof ownerUserId !== 'string' || !isUuid(ownerUserId))) ||
-    (salesTeamId && (typeof salesTeamId !== 'string' || !isUuid(salesTeamId)))) return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
+  // convenient personal-snapshot default. Each target must be a UUID or an
+  // explicit null: falsy non-null values (false, 0, "") used to skip the
+  // format check, sail through the forecast as unscoped, then die in
+  // Postgres on the uuid columns as a generic 500.
+  const t = await getTranslations('crm')
+  const rawOwnerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
+  if (rawOwnerUserId !== null && (typeof rawOwnerUserId !== 'string' || !isUuid(rawOwnerUserId))) {
+    return NextResponse.json({ error: t('forecasts.invalidOwnerTarget') }, { status: 422 })
+  }
+  const rawSalesTeamId = Object.prototype.hasOwnProperty.call(body, 'salesTeamId') ? body.salesTeamId : null
+  if (rawSalesTeamId !== null && (typeof rawSalesTeamId !== 'string' || !isUuid(rawSalesTeamId))) {
+    return NextResponse.json({ error: t('forecasts.invalidTeamTarget') }, { status: 422 })
+  }
+  const ownerUserId = rawOwnerUserId
+  const salesTeamId = rawSalesTeamId
+  if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1) {
+    return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
+  }
   const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
     ? null
     : canonicalDecimal(body.overrideAmount, 4)
