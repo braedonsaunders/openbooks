@@ -35,6 +35,33 @@ async function seedProject(
   return id;
 }
 
+async function seedPostedEntry(args: {
+  orgId: string;
+  subsidiaryId: string;
+  bookId: string;
+  periodId: string;
+  date: string;
+  adjustmentAccount: string;
+  bankAccount: string;
+  projectId: string;
+  tag: string;
+}): Promise<void> {
+  const entry = randomUUID();
+  await db.execute(sql`
+    insert into journal_entries
+      (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+    values (${entry}, ${args.orgId}, ${args.bookId}, ${args.subsidiaryId}, ${`JE-${args.tag}`},
+            ${args.date}, ${args.periodId}, 'merge posted lines', 'draft', 'manual')`);
+  // One balanced pair: the deferred entry-balance trigger fires at commit.
+  await db.execute(sql`
+    insert into journal_lines
+      (org_id, entry_id, line_number, account_id, subsidiary_id, project_id, amount, currency, txn_amount, fx_rate)
+    values
+      (${args.orgId}, ${entry}, 1, ${args.adjustmentAccount}, ${args.subsidiaryId}, ${args.projectId}, '25', 'CAD', '25', '1'),
+      (${args.orgId}, ${entry}, 2, ${args.bankAccount}, ${args.subsidiaryId}, ${args.projectId}, '-25', 'CAD', '-25', '1')`);
+  await db.execute(sql`update journal_entries set status = 'posted' where id = ${entry} and org_id = ${args.orgId}`);
+}
+
 async function seedReferences(
   orgId: string,
   subsidiaryId: string,
@@ -257,6 +284,70 @@ test("merge routes pass the caller scope into the locked merge", () => {
   const route = readFileSync(new URL("../../../web/app/api/projects/merge/route.ts", import.meta.url), "utf8");
   assert.match(route, /previewProjectMerge\(gate\.user\.orgId, survivorId, duplicateId, gate\.allowedSubsidiaryIds\)/);
   assert.match(route, /allowedSubsidiaryIds: gate\.allowedSubsidiaryIds,/);
+});
+
+test("merge moves posted journal lines in open periods through the amend path", async () => {
+  // A plain in-place rewrite of posted lines dies in the journal guard
+  // ("lines of a posted journal entry are immutable"). The merge runs the
+  // move through the governed amend path instead, so open-period posted
+  // history follows the survivor.
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J1", "Posted one");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J2", "Posted two");
+    await seedPostedEntry({
+      orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
+      date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
+      projectId: duplicate, tag: "JOPEN",
+    });
+    const preview = await previewProjectMerge(org.orgId, survivor, duplicate);
+    assert.equal(preview.moved.find((m) => m.table === "journal_lines")?.rows, 2);
+    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+    const left = await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from journal_lines
+       where org_id = ${org.orgId} and project_id = ${duplicate}`);
+    assert.equal(left.rows[0]?.n, "0");
+    const moved = await db.execute<{ n: string; status: string }>(sql`
+      select count(*)::text as n, max(e.status) as status
+        from journal_lines jl join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
+       where jl.org_id = ${org.orgId} and jl.project_id = ${survivor}`);
+    assert.equal(moved.rows[0]?.n, "2");
+    assert.equal(moved.rows[0]?.status, "posted", "the entry stays posted through the move");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("merge refuses posted journal lines in a closed GL period", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J3", "Closed one");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-J4", "Closed two");
+    await seedPostedEntry({
+      orgId: org.orgId, subsidiaryId: org.subsidiaryId, bookId: org.bookId, periodId: org.periodId,
+      date: org.date, adjustmentAccount: org.accounts.adjustment, bankAccount: org.accounts.bank,
+      projectId: duplicate, tag: "JCLOSED",
+    });
+    await db.execute(sql`
+      insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by)
+      values (${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', 'closed', now(), ${actor})`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor }),
+      /cannot merge: 2 posted journal line\(s\) sit in a closed GL period; reopen the period before merging/,
+    );
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /closed GL period/,
+    );
+    const marker = await db.execute<{ is_active: boolean }>(sql`
+      select is_active from projects where id = ${duplicate} and org_id = ${org.orgId}`);
+    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
 
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
