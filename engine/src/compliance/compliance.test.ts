@@ -65,6 +65,7 @@ function waiver(over: Partial<WaiverRecord> = {}): WaiverRecord {
     projectId: null,
     effectiveFrom: "2026-06-01",
     expiresOn: "2026-08-01",
+    approvedAt: "2026-06-01T00:00:00Z",
     revokedAt: null,
     revokedOn: null,
     ...over,
@@ -250,6 +251,15 @@ test("expired and revoked waivers do not suppress anything", () => {
   assert.equal(evaluate(policy(), [], [waiver({ expiresOn: "2026-06-01" })]).blocksPayment, true);
   assert.equal(evaluate(policy(), [], [waiver({ effectiveFrom: "2026-08-01", expiresOn: "2026-09-01" })]).blocksPayment, true);
   assert.equal(evaluate(policy(), [], [waiver({ revokedAt: "2026-06-15T00:00:00Z" })]).blocksPayment, true);
+});
+
+test("a requested but unapproved exception covers nothing", () => {
+  const pending = waiver({ approvedAt: null });
+  assert.equal(waiverInForceOn(pending, "2026-07-01"), false);
+  const f = evaluate(policy(), [], [pending]);
+  assert.equal(f.state, "missing");
+  assert.equal(f.waiverId, null);
+  assert.equal(f.blocksPayment, true);
 });
 
 test("a revoked waiver still covers as-of dates before its revocation", () => {

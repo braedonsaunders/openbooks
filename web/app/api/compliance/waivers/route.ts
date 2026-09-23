@@ -14,11 +14,14 @@ export const runtime = 'nodejs'
 const MAX_WAIVER_DAYS = 120
 
 /**
- * Grant an exception to a compliance requirement for one vendor.
+ * Request an exception to a compliance requirement for one vendor.
  *
- * This is the ONLY legitimate way past a blocking requirement, and it is
- * deliberately expensive to use: its own permission, a mandatory reason, a
- * mandatory end date inside a hard ceiling, and a permanent audit entry.
+ * Requesting is the first half of the ONLY legitimate way past a blocking
+ * requirement: the request files as pending and covers nothing. It becomes
+ * effective only when a different person approves it (PATCH waivers/[id]).
+ * Both halves are deliberately expensive: their own permission, a mandatory
+ * reason, a mandatory end date inside a hard ceiling, segregation of duties,
+ * and a permanent audit entry for each transition.
  */
 export async function POST(req: Request) {
   const gate = await guardPermission('compliance.waive')
@@ -71,22 +74,28 @@ export async function POST(req: Request) {
 
   try {
     const id = await db.transaction(async (tx) => {
+      // Requesting is not granting: the exception files as pending and
+      // covers nothing until a different holder of compliance.waive
+      // approves it (PATCH waivers/[id]). Whoever requests can never be
+      // the one who approves — approval is a separate transition, and the
+      // evaluator only honours approved exceptions.
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into compliance_waivers
           (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
-           approved_by, created_by, updated_by)
+           requested_by, approved_by, approved_at, created_by, updated_by)
         values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
-                ${reason}, ${effectiveFrom}, ${body.expiresOn}, ${actorId}, ${actorId}, ${actorId})
+                ${reason}, ${effectiveFrom}, ${body.expiresOn},
+                ${actorId}, null, null, ${actorId}, ${actorId})
         returning id
       `))
       const newId = inserted.rows[0]!.id
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_waivers', ${newId}, 'insert',
-                ${JSON.stringify({ after: { ...body, reason, effectiveFrom } })}::jsonb, ${actorId})`)
+                ${JSON.stringify({ after: { ...body, reason, effectiveFrom, status: 'pending_approval', requestedBy: actorId } })}::jsonb, ${actorId})`)
       return newId
     })
-    return NextResponse.json({ id })
+    return NextResponse.json({ id, status: 'pending_approval' })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
   }
