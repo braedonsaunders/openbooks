@@ -3,7 +3,7 @@ import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
-import { MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
+import { copyS3Blob, deleteS3Blobs, MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -243,4 +243,73 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   }, { isolationLevel: "REPEATABLE READ" });
 
   return { tablesCopied: perTable.length, rowsCopied, perTable };
+}
+
+/**
+ * S3 object keys are `file-cabinet/<versionId>`, so a row copy that rebases
+ * file_versions.id orphans every S3-backed attachment: the sandbox row points
+ * at a key that was never written. Copy each production object onto its
+ * rebased key (server-side — bytes never transit the clone worker).
+ *
+ * Masked clones are excluded by construction: their version rows carry the
+ * MASKED_STORAGE_KIND tombstone instead of 's3', so the pair query below
+ * matches nothing. Tiers that skip files (dev) likewise match nothing via
+ * the sandbox-side existence check, and a restricted `onlyTables` copy
+ * without file_versions returns early.
+ *
+ * Runs AFTER the row-copy transaction commits — object storage cannot roll
+ * back with it. On failure the objects already copied are deleted and the
+ * error rethrown, so the caller marks the sandbox failed instead of
+ * publishing a clone whose cabinet 404s.
+ */
+export async function copyClonedFileObjects(opts: {
+  productionOrgId: string;
+  sandboxOrgId: string;
+  seed: string;
+  onlyTables?: Set<string>;
+}): Promise<{ objectsCopied: number }> {
+  if (opts.onlyTables && !opts.onlyTables.has("file_versions")) return { objectsCopied: 0 };
+  // assertUuid at this boundary: both ids are interpolated below (the shared
+  // PARENT_FILTER pattern), so they must provably be values, not statements.
+  const seed = assertUuid(opts.seed);
+  const prod = assertUuid(opts.productionOrgId);
+  const pairs = (await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql.raw(`
+    select fv.id as "prodVersionId", ob_rebase(fv.id, '${seed}') as "sandboxVersionId"
+      from file_versions fv
+      join files f on f.id = fv.file_id
+     where f.org_id = '${prod}'
+       and fv.storage_kind = 's3'
+       and exists (
+         select 1 from file_versions sv
+          where sv.id = ob_rebase(fv.id, '${seed}') and sv.storage_kind = 's3'
+       )
+  `))).rows;
+  const copied: string[] = [];
+  try {
+    for (const pair of pairs) {
+      await copyS3Blob(pair.prodVersionId, pair.sandboxVersionId);
+      copied.push(pair.sandboxVersionId);
+    }
+  } catch (err) {
+    await deleteS3Blobs(copied).catch(() => undefined);
+    throw err;
+  }
+  return { objectsCopied: copied.length };
+}
+
+/**
+ * S3 version ids currently referenced by a sandbox's cabinet. Collected
+ * BEFORE a wipe so delete/refresh can remove the sandbox's objects after
+ * its rows are gone (objects cannot roll back with the row transaction, so
+ * they are deleted after the row commit, never before).
+ */
+export async function listSandboxS3VersionIds(sandboxOrgId: string): Promise<string[]> {
+  const org = assertUuid(sandboxOrgId);
+  const rows = (await db.execute<{ id: string }>(sql.raw(`
+    select fv.id as id
+      from file_versions fv
+      join files f on f.id = fv.file_id
+     where f.org_id = '${org}' and fv.storage_kind = 's3'
+  `))).rows;
+  return rows.map((row) => row.id);
 }
