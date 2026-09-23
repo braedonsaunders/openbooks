@@ -152,6 +152,7 @@
     "estimateCreated": "Estimate created",
     "estimateFailed": "The estimate could not be created.",
     "estimateNeedsAccount": "Set an account before creating an estimate",
+    "saveFirstForEstimate": "Save this opportunity first — estimates convert the saved customer and lines.",
     "statuses": {
       "qualification": "Qualification",
       "discovery": "Discovery",
