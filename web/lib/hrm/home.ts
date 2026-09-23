@@ -142,6 +142,13 @@ export interface HrmHomeData {
   newProcessLabel: string
   /** Present exactly when the viewer holds hrm.process.read; otherwise the rail stays headcount-only. */
   onboarding: HrmOnboardingPanelData | null
+  /** True while the module has anything to show. The cockpit quiets a
+   *  fully quiet module (UX-14): the grant still owns the directory and tab
+   *  entry points, so collapsing the empty panel hides no destination. */
+  onboardingHasActivity: boolean
+  leaveHasActivity: boolean
+  benefitsHasActivity: boolean
+  recruitingHasActivity: boolean
   /** Whether the org runs more than one subsidiary; the subsidiary column
    *  and grouping render only then — a single-entity org sees departments. */
   multiSubsidiary: boolean
@@ -780,6 +787,19 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
     },
     newProcessLabel: t('processes.newChecklist'),
     onboarding,
+    // UX-14: a subordinate feature panel renders only while its module has
+    // something to say. A quiet module collapses so the pending request —
+    // the hire and its owner at the top of the hero column — stays the task.
+    onboardingHasActivity:
+      (onboarding?.openCount ?? 0) > 0 || (onboarding?.overdue.length ?? 0) > 0 || (onboarding?.upcoming.length ?? 0) > 0,
+    leaveHasActivity: (leavePanel?.onLeaveToday.length ?? 0) > 0 || (leavePanel?.pendingCount ?? 0) > 0,
+    benefitsHasActivity:
+      (benefitsPanel?.openWindows.length ?? 0) > 0 ||
+      (benefitsPanel?.pendingCount ?? 0) > 0 ||
+      (benefitsPanel?.missingCount ?? 0) > 0,
+    recruitingHasActivity: recruiting
+      ? Number(recruiting.openValue) > 0 || Number(recruiting.awaitingValue) > 0 || Number(recruiting.interviewsValue) > 0
+      : false,
     headcountLabel: t('home.vitals.headcount'),
     headcountValue: String(headcount.total),
     headcountSub: t('home.vitals.headcountSub', {
