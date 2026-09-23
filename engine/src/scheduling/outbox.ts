@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
 import { normalizeEmailDeliveryInput, type EmailAttachmentPayload } from "@openbooks/emails";
-import { storeEmailAttachments } from "../delivery/email-attachments.ts";
+import { deleteStoredEmailAttachments, storeEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,
   ensureAllocationRunOutboxRows,
@@ -232,22 +232,30 @@ export async function deliverFlowEmail(
   // Stage attachment bytes outside the queue payload; the worker fetches
   // them at send time instead of Redis holding file contents for days.
   const attachments = await storeEmailAttachments(delivery.attachments);
-  await enqueue(
-    {
-      orgId: row.org_id,
-      to: delivery.to,
-      subject: delivery.subject,
-      html: delivery.html,
-      text: delivery.text,
-      ...(attachments.length > 0 ? { attachments } : {}),
-      ...(delivery.meta ? { meta: delivery.meta } : {}),
-      ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
-    },
-    // One stable identity per row closes the DB/Redis crash gap: if the
-    // process dies between this enqueue and the PG success mark, the
-    // recovered row retries onto the same job instead of a duplicate send.
-    { jobId: flowEmailJobId(row.id) },
-  );
+  try {
+    await enqueue(
+      {
+        orgId: row.org_id,
+        to: delivery.to,
+        subject: delivery.subject,
+        html: delivery.html,
+        text: delivery.text,
+        ...(attachments.length > 0 ? { attachments } : {}),
+        ...(delivery.meta ? { meta: delivery.meta } : {}),
+        ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
+      },
+      // One stable identity per row closes the DB/Redis crash gap: if the
+      // process dies between this enqueue and the PG success mark, the
+      // recovered row retries onto the same job instead of a duplicate send.
+      { jobId: flowEmailJobId(row.id) },
+    );
+  } catch (error) {
+    // The staged bytes belong to this attempt alone: a failed handoff must
+    // delete the refs it just staged (each staged under a fresh random id),
+    // or every one of the row's retries orphans another set of blobs.
+    await deleteStoredEmailAttachments(attachments);
+    throw error;
+  }
 }
 
 /**
