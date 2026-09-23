@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import type { LineGridOption } from '../../../../../components/line-grid'
+import { confirmDialog } from '@/lib/confirm'
 
 export interface RateBookLine extends Record<string, unknown> {
   itemId: string
@@ -216,6 +217,20 @@ export function RateBookDrawer({
   ]
 
   async function save() {
+    // A replacement with no effective lines would clear every rate in the
+    // book from the new date. The server refuses it without an explicit
+    // confirmation, so ask here and send the flag only after the operator
+    // confirms clearing all rates.
+    const effectiveLines = lines.filter((line) =>
+      line.itemId.trim() || line.unitCode.trim() || line.unitName.trim()
+      || line.baseQuantity.trim() || line.costRate.trim() || line.billRate.trim()
+      || line.baseUnit.trim() || Object.keys(line.timeTypeBillRates ?? {}).length > 0)
+    let confirmEmptyReplacement = false
+    if (ratesChanged && effectiveLines.length === 0) {
+      const confirmed = await confirmDialog({ message: t('confirmClearAll'), confirmLabel: common('actions.delete'), tone: 'danger' })
+      if (!confirmed) return
+      confirmEmptyReplacement = true
+    }
     setBusy(true)
     setError('')
     try {
@@ -231,6 +246,7 @@ export function RateBookDrawer({
           isActive,
           replaceRates: ratesChanged,
           effectiveFrom,
+          ...(confirmEmptyReplacement ? { confirmEmptyReplacement: true } : {}),
           lines: lines.map(({ clientKey: _clientKey, ...line }) => line),
         }),
       })

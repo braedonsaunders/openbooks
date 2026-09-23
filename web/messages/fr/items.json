@@ -171,6 +171,7 @@
     "ratesHelp": "L'enregistrement de lignes modifiées crée une nouvelle version immuable; les versions précédentes restent disponibles pour l'historique.",
     "item": "Article",
     "addItem": "Ajouter un tarif",
+    "confirmClearAll": "Enregistrer sans aucune ligne de taux met fin à tous les taux de ce barème à compter de la nouvelle date d'effet. Mettre fin à tous les taux ?",
     "inactive": "Inactif",
     "unchangedHelp": "La grille est inchangée; l'enregistrement ne mettra à jour que les détails du catalogue."
   },
