@@ -151,14 +151,41 @@ for (const action of ["settings", "save-rate", "end-rate", "delete-rate", "recon
         : { action, id: rate.id, currency: "CAD", rate: "35", effectiveFrom: "2026-07-10", effectiveTo: periodEnd,
             periodStart, periodEnd, subsidiaryId: action === "save-rate" ? undefined : org.subsidiaryId };
       const req = request(method, body);
-      const original = req.json.bind(req);
+      // The route parses through the shared JSON boundary, which streams
+      // req.body directly and never calls req.json() — so the mid-parse
+      // disable rides the stream's first read, strictly after the route's
+      // native initial feature guard. The replacement bytes are the exact
+      // payload the helper serialized; the original stream is never consumed.
+      //
+      // highWaterMark 0 is load-bearing, not tuning: a default stream fires
+      // pull spontaneously on construction, so the disable would commit
+      // before the entry guard runs and the test would pin the entry refusal
+      // instead of the in-transaction recheck (and flake on whether the
+      // snapshot finishes before the assertion). With a zero watermark pull
+      // fires only on the parse read, and the read awaits the disable plus
+      // the snapshot — so `before` is always set and the disable always
+      // lands between the entry guard and the locked recheck.
+      const rawBytes = new TextEncoder().encode(JSON.stringify(body));
       let before: Awaited<ReturnType<typeof snapshot>> | undefined;
-      req.json = async () => {
-        // This executes only after the route's native initial feature guard.
-        await setProjects(org.orgId, false);
-        before = await snapshot(org.orgId);
-        return original();
-      };
+      let armed = true;
+      Object.defineProperty(req, "body", {
+        configurable: true,
+        value: new ReadableStream(
+          {
+            async pull(controller) {
+              if (armed) {
+                armed = false;
+                // This executes only after the route's native initial feature guard.
+                await setProjects(org.orgId, false);
+                before = await snapshot(org.orgId);
+              }
+              controller.enqueue(rawBytes);
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      });
       const denied = await withOrgContext(org.orgId, () => handler(req));
       assert.ok(before, "request must pass the enabled feature guard before disabling Projects");
       assert.equal(denied.status, 404, JSON.stringify(await denied.json()));
