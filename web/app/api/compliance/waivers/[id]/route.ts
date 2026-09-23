@@ -115,6 +115,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const reason = (body.reason ?? '').trim()
   if (!reason) return NextResponse.json({ error: 'a revocation needs a reason' }, { status: 400 })
 
+  // Subsidiary fence before the revocation: a hidden-entity exception reads
+  // as 404 and is never touched. Missing and hidden are indistinguishable,
+  // so the refusal never oracles which ids exist elsewhere.
+  const fenced = (await db.execute<{ partySubsidiaryId: string | null; projectSubsidiaryId: string | null }>(sql`
+    select party.subsidiary_id as "partySubsidiaryId", pj.subsidiary_id as "projectSubsidiaryId"
+      from compliance_waivers w
+      join parties party on party.id = w.party_id and party.org_id = w.org_id
+      left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
+     where w.org_id = ${orgId} and w.id = ${id}
+  `)).rows[0]
+  if (!fenced) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const fencedPartyDenied = guardSubsidiaryScope(gate, fenced.partySubsidiaryId, { orgWideNull: true })
+  if (fencedPartyDenied) return fencedPartyDenied
+  const fencedProjectDenied = guardSubsidiaryScope(gate, fenced.projectSubsidiaryId, { orgWideNull: true })
+  if (fencedProjectDenied) return fencedProjectDenied
+
   const revokedId = await db.transaction(async (tx) => {
     const updated = (await tx.execute<{ id: string }>(sql`
       update compliance_waivers
