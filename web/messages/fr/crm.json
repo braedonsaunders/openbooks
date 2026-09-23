@@ -383,6 +383,7 @@
     "timelineTitle": "Chronologie des interactions",
     "timelineDescription": "Historique chronologique des activités, devis, commandes clients, factures et règlements.",
     "timelineEmpty": "Aucune activité ni transaction enregistrée pour ce compte.",
+    "restrictedNotice": "Non disponible avec votre accès.",
     "loadFailed": "Impossible de charger le pouls de ce compte."
   }
 }

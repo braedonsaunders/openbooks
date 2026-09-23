@@ -19,6 +19,46 @@ export interface CustomerAgingBreakdown {
   totalOverdue: number
 }
 
+/**
+ * Which pulse sections the caller may see. The pulse is a combined payload
+ * across domains, so one read permission cannot unlock all of it:
+ *
+ *   - `ar` covers receivables telemetry (aging, credit terms and headroom,
+ *     payment history) and every commercial-document timeline entry
+ *     (quotes, sales orders, invoices, payments) — the same `ar.read` the
+ *     standalone statement and order surfaces require.
+ *   - `crm` covers the relationship side (opportunity pipeline, activity
+ *     timeline) — the `crm.accounts.read` the account drawer requires.
+ *   - `projects` covers the delivery rollup — `projects.read`.
+ *
+ * Subsidiary/record scope inside each section is the same scope helper the
+ * standalone endpoint for that section enforces; gating here never re-derives
+ * it. Sections the caller cannot see are OMITTED from the payload — never
+ * nulled with data-shaped defaults, which would read as genuine zeros.
+ */
+export interface CustomerPulseSections {
+  ar: boolean
+  crm: boolean
+  projects: boolean
+}
+
+/**
+ * Map effective permissions to pulse sections. Returns null when the caller
+ * may see nothing at all — the route turns that into a 403 naming the
+ * permissions that would grant access.
+ */
+export function pulseSectionsFor(
+  covers: (permission: string) => boolean,
+): CustomerPulseSections | null {
+  const sections: CustomerPulseSections = {
+    ar: covers('ar.read'),
+    crm: covers('crm.accounts.read'),
+    projects: covers('projects.read'),
+  }
+  if (!sections.ar && !sections.crm && !sections.projects) return null
+  return sections
+}
+
 export interface CustomerPulseData {
   party: {
     id: string
@@ -28,27 +68,39 @@ export interface CustomerPulseData {
     website: string | null
     currency: string
     subsidiaryName: string | null
-    paymentTermsName: string | null
-    isOnHold: boolean
-    holdReason: string | null
-    creditLimit: number | null
-    hasCreditLimit: boolean
+    /** Credit controls live on the customer role (AR domain): present only with ar.read. */
+    paymentTermsName?: string | null
+    /** Credit controls live on the customer role (AR domain): present only with ar.read. */
+    isOnHold?: boolean
+    /** Credit controls live on the customer role (AR domain): present only with ar.read. */
+    holdReason?: string | null
+    /** Credit controls live on the customer role (AR domain): present only with ar.read. */
+    creditLimit?: number | null
+    /** Credit controls live on the customer role (AR domain): present only with ar.read. */
+    hasCreditLimit?: boolean
   }
-  aging: CustomerAgingBreakdown
-  credit: {
+  /** Echo of the sections granted for this response, so consumers (UI,
+   *  assistant tools) can tell "omitted for access" apart from "empty". */
+  sections: CustomerPulseSections
+  /** Present only with ar.read. */
+  aging?: CustomerAgingBreakdown
+  /** Present only with ar.read. */
+  credit?: {
     creditLimit: number | null
     openArBalance: number
     unbilledOrdersBalance: number
     remainingCredit: number | null
     creditUtilizationPercent: number | null
   }
-  paymentMetrics: {
+  /** Present only with ar.read. */
+  paymentMetrics?: {
     dso: number
     partyAvgDaysToPay: number | null
     orgAvgDaysToPay: number
     settlementsCount: number
   }
-  pipeline: {
+  /** Present only with crm.accounts.read. */
+  pipeline?: {
     totalOpportunities: number
     openOpportunities: number
     wonOpportunities: number
@@ -58,7 +110,8 @@ export interface CustomerPulseData {
     wonAmount: number
     winRatePercent: number | null
   }
-  projects: {
+  /** Present only with projects.read (and the Projects feature enabled). */
+  projects?: {
     enabled: boolean
     totalCount: number
     activeCount: number
@@ -68,6 +121,12 @@ export interface CustomerPulseData {
     grossProfit: number
     grossMarginPercent: number | null
   }
+  /**
+   * Always present but permission-filtered: CRM activities ride the CRM
+   * section, commercial documents (quotes, sales orders, invoices,
+   * payments) ride the AR section. A caller with neither section gets an
+   * empty timeline rather than anyone else's entries.
+   */
   timeline: Array<{
     id: string
     type: 'activity' | 'estimate' | 'sales_order' | 'invoice' | 'payment' | 'stage_event'
@@ -85,7 +144,13 @@ export async function loadCustomerPulse(
   partyId: string,
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  sections?: CustomerPulseSections,
 ): Promise<CustomerPulseData | null> {
+  // No sections means no access: callers must resolve permissions through
+  // pulseSectionsFor first. Defaulting to everything here would reintroduce
+  // the leak the parameter exists to close.
+  if (!sections || (!sections.ar && !sections.crm && !sections.projects)) return null
+
   const asOf = await businessToday(orgId)
   const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined
 
@@ -126,119 +191,173 @@ export async function loadCustomerPulse(
   const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined
   const creditLimitNum = hasCreditLimit ? parseFloat(creditLimitRaw!) || 0 : null
 
-  // 2. Open AR items and aging buckets
-  const [allOpenItems, stats, projectsEnabled] = await Promise.all([
-    openItems(orgId, 'ar', asOf, allowedSubArray),
-    paymentStats('ar', asOf, allowedSubArray, orgId),
-    isFeatureEnabled(orgId, 'projects'),
-  ])
+  const party: CustomerPulseData['party'] = {
+    id: partyRow.id,
+    displayName: partyRow.display_name,
+    email: partyRow.email,
+    phone: partyRow.phone,
+    website: partyRow.website,
+    currency: partyRow.currency ?? 'USD',
+    subsidiaryName: partyRow.subsidiary_name,
+  }
+  // Credit controls are AR-domain facts (same rows the directory's `crm`
+  // bundle withholds from crm.accounts.read holders). A caller without
+  // ar.read gets identity only — the keys are absent, not nulled.
+  if (sections.ar) {
+    party.paymentTermsName = partyRow.terms_name
+    party.isOnHold = Boolean(partyRow.is_on_hold)
+    party.holdReason = partyRow.hold_reason
+    party.creditLimit = creditLimitNum
+    party.hasCreditLimit = hasCreditLimit
+  }
 
-  const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId)
-  const asOfDate = parseIsoDate(asOf)
+  // 2-4. Receivables telemetry (AR section only). Skipped entirely without
+  // ar.read: no open-item, order-commitment, or payment-history query runs,
+  // so no AR figure can reach a CRM-only caller.
+  let aging: CustomerPulseData['aging']
+  let credit: CustomerPulseData['credit']
+  let paymentMetrics: CustomerPulseData['paymentMetrics']
+  if (sections.ar) {
+    // 2. Open AR items and aging buckets
+    const [allOpenItems, stats] = await Promise.all([
+      openItems(orgId, 'ar', asOf, allowedSubArray),
+      paymentStats('ar', asOf, allowedSubArray, orgId),
+    ])
 
-  let current = 0
-  let days1To30 = 0
-  let days31To60 = 0
-  let days61To90 = 0
-  let days90Plus = 0
-  let totalOpen = 0
-  let totalOverdue = 0
+    const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId)
+    const asOfDate = parseIsoDate(asOf)
 
-  for (const item of customerOpenItems) {
-    const val = parseFloat(item.remaining) || 0
-    totalOpen += val
+    let current = 0
+    let days1To30 = 0
+    let days31To60 = 0
+    let days61To90 = 0
+    let days90Plus = 0
+    let totalOpen = 0
+    let totalOverdue = 0
 
-    if (!item.dueDate) {
-      current += val
-      continue
+    for (const item of customerOpenItems) {
+      const val = parseFloat(item.remaining) || 0
+      totalOpen += val
+
+      if (!item.dueDate) {
+        current += val
+        continue
+      }
+
+      const diffDays = Math.floor(
+        (asOfDate.getTime() - item.dueDate.getTime()) / (1000 * 60 * 60 * 24),
+      )
+
+      if (diffDays <= 0) {
+        current += val
+      } else {
+        totalOverdue += val
+        if (diffDays <= 30) days1To30 += val
+        else if (diffDays <= 60) days31To60 += val
+        else if (diffDays <= 90) days61To90 += val
+        else days90Plus += val
+      }
     }
 
-    const diffDays = Math.floor(
-      (asOfDate.getTime() - item.dueDate.getTime()) / (1000 * 60 * 60 * 24),
-    )
+    // 3. Unbilled orders (approved/pending sales orders commitment)
+    const ordersResult = await db.execute<{ unbilled_total: string | null }>(sql`
+      select sum(d.total)::text as unbilled_total
+        from documents d
+       where d.org_id = ${orgId}
+         and d.party_id = ${partyId}
+         and d.kind = 'sales_order'
+         and d.status in ('pending_approval', 'approved')
+         and d.voided_at is null
+         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
+    `)
+    const unbilledOrdersBalance = parseFloat(ordersResult.rows[0]?.unbilled_total ?? '0') || 0
 
-    if (diffDays <= 0) {
-      current += val
-    } else {
-      totalOverdue += val
-      if (diffDays <= 30) days1To30 += val
-      else if (diffDays <= 60) days31To60 += val
-      else if (diffDays <= 90) days61To90 += val
-      else days90Plus += val
+    // Remaining credit headroom
+    let remainingCredit: number | null = null
+    let creditUtilizationPercent: number | null = null
+    if (hasCreditLimit && creditLimitNum !== null) {
+      const committed = totalOpen + unbilledOrdersBalance
+      remainingCredit = Math.max(0, creditLimitNum - committed)
+      creditUtilizationPercent = creditLimitNum > 0 ? Math.min(100, (committed / creditLimitNum) * 100) : 100
+    }
+
+    // 4. Payment metrics & DSO
+    const partyStat = stats.map.get(partyId)
+    const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null
+    const dso = partyAvgDaysToPay ?? Math.round(stats.globalAvg)
+
+    aging = {
+      current,
+      days1To30,
+      days31To60,
+      days61To90,
+      days90Plus,
+      totalOpen,
+      totalOverdue,
+    }
+    credit = {
+      creditLimit: creditLimitNum,
+      openArBalance: totalOpen,
+      unbilledOrdersBalance,
+      remainingCredit,
+      creditUtilizationPercent,
+    }
+    paymentMetrics = {
+      dso,
+      partyAvgDaysToPay,
+      orgAvgDaysToPay: Math.round(stats.globalAvg),
+      settlementsCount: partyStat?.n ?? 0,
     }
   }
 
-  // 3. Unbilled orders (approved/pending sales orders commitment)
-  const ordersResult = await db.execute<{ unbilled_total: string | null }>(sql`
-    select sum(d.total)::text as unbilled_total
-      from documents d
-     where d.org_id = ${orgId}
-       and d.party_id = ${partyId}
-       and d.kind = 'sales_order'
-       and d.status in ('pending_approval', 'approved')
-       and d.voided_at is null
-       ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-  `)
-  const unbilledOrdersBalance = parseFloat(ordersResult.rows[0]?.unbilled_total ?? '0') || 0
+  // 5. Commercial Pipeline (CRM section only)
+  let pipeline: CustomerPulseData['pipeline']
+  if (sections.crm) {
+    const oppsResult = await db.execute<{
+      total_count: number
+      open_count: number
+      won_count: number
+      lost_count: number
+      projected_sum: string | null
+      weighted_sum: string | null
+      won_sum: string | null
+    }>(sql`
+      select count(*)::int as total_count,
+             count(*) filter (where not s.is_closed)::int as open_count,
+             count(*) filter (where s.is_won)::int as won_count,
+             count(*) filter (where s.is_closed and not s.is_won)::int as lost_count,
+             sum(case when not s.is_closed then o.projected_amount else 0 end)::text as projected_sum,
+             sum(case when not s.is_closed then o.weighted_amount else 0 end)::text as weighted_sum,
+             sum(case when s.is_won then o.projected_amount else 0 end)::text as won_sum
+        from crm_opportunities o
+        join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+       where o.org_id = ${orgId}
+         and o.party_id = ${partyId}
+         and o.is_active
+         ${crmOpportunityScope(allowedSubsidiaryIds)}
+    `)
 
-  // Remaining credit headroom
-  let remainingCredit: number | null = null
-  let creditUtilizationPercent: number | null = null
-  if (hasCreditLimit && creditLimitNum !== null) {
-    const committed = totalOpen + unbilledOrdersBalance
-    remainingCredit = Math.max(0, creditLimitNum - committed)
-    creditUtilizationPercent = creditLimitNum > 0 ? Math.min(100, (committed / creditLimitNum) * 100) : 100
+    const oppRow = oppsResult.rows[0]
+    const wonCount = oppRow?.won_count ?? 0
+    const lostCount = oppRow?.lost_count ?? 0
+    const closedCount = wonCount + lostCount
+    const winRatePercent = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null
+
+    pipeline = {
+      totalOpportunities: oppRow?.total_count ?? 0,
+      openOpportunities: oppRow?.open_count ?? 0,
+      wonOpportunities: wonCount,
+      lostOpportunities: lostCount,
+      projectedPipeline: parseFloat(oppRow?.projected_sum ?? '0') || 0,
+      weightedPipeline: parseFloat(oppRow?.weighted_sum ?? '0') || 0,
+      wonAmount: parseFloat(oppRow?.won_sum ?? '0') || 0,
+      winRatePercent,
+    }
   }
 
-  // 4. Payment metrics & DSO
-  const partyStat = stats.map.get(partyId)
-  const partyAvgDaysToPay = partyStat ? Math.round(partyStat.avg) : null
-  const dso = partyAvgDaysToPay ?? Math.round(stats.globalAvg)
-
-  // 5. Commercial Pipeline
-  const oppsResult = await db.execute<{
-    total_count: number
-    open_count: number
-    won_count: number
-    lost_count: number
-    projected_sum: string | null
-    weighted_sum: string | null
-    won_sum: string | null
-  }>(sql`
-    select count(*)::int as total_count,
-           count(*) filter (where not s.is_closed)::int as open_count,
-           count(*) filter (where s.is_won)::int as won_count,
-           count(*) filter (where s.is_closed and not s.is_won)::int as lost_count,
-           sum(case when not s.is_closed then o.projected_amount else 0 end)::text as projected_sum,
-           sum(case when not s.is_closed then o.weighted_amount else 0 end)::text as weighted_sum,
-           sum(case when s.is_won then o.projected_amount else 0 end)::text as won_sum
-      from crm_opportunities o
-      join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-     where o.org_id = ${orgId}
-       and o.party_id = ${partyId}
-       and o.is_active
-       ${crmOpportunityScope(allowedSubsidiaryIds)}
-  `)
-
-  const oppRow = oppsResult.rows[0]
-  const wonCount = oppRow?.won_count ?? 0
-  const lostCount = oppRow?.lost_count ?? 0
-  const closedCount = wonCount + lostCount
-  const winRatePercent = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null
-
-  // 6. Project Rollups (if enabled)
-  let projectsData = {
-    enabled: projectsEnabled,
-    totalCount: 0,
-    activeCount: 0,
-    totalContractValue: 0,
-    totalBilled: 0,
-    totalCost: 0,
-    grossProfit: 0,
-    grossMarginPercent: null as number | null,
-  }
-
-  if (projectsEnabled) {
+  // 6. Project Rollups (projects section only, and only when enabled)
+  let projects: CustomerPulseData['projects']
+  if (sections.projects && await isFeatureEnabled(orgId, 'projects')) {
     const projectsResult = await db.execute<{
       total_count: number
       active_count: number
@@ -265,7 +384,7 @@ export async function loadCustomerPulse(
     if (prjRow) {
       const contract = parseFloat(prjRow.total_contract ?? '0') || 0
       const billed = parseFloat(prjRow.total_billed ?? '0') || 0
-      projectsData = {
+      projects = {
         enabled: true,
         totalCount: prjRow.total_count ?? 0,
         activeCount: prjRow.active_count ?? 0,
@@ -278,9 +397,15 @@ export async function loadCustomerPulse(
     }
   }
 
-  // 7. Unified Activity & Document Timeline
-  const [activitiesRes, documentsRes] = await Promise.all([
-    db.execute<{
+  // 7. Unified Activity & Document Timeline, permission-filtered. CRM
+  // activities ride the CRM section; commercial documents (quotes, sales
+  // orders, invoices, payments) ride the AR section — quotes and sales
+  // orders require ar.read on their standalone surfaces, so a CRM-only
+  // caller must not read them here either.
+  const timelineItems: NonNullable<CustomerPulseData['timeline']> = []
+
+  if (sections.crm) {
+    const activitiesRes = await db.execute<{
       id: string
       kind: string
       subject: string
@@ -299,8 +424,22 @@ export async function loadCustomerPulse(
          ${crmActivityScope(allowedSubsidiaryIds)}
        order by coalesce(a.starts_at, a.due_at, a.created_at) desc
        limit 25
-    `),
-    db.execute<{
+    `)
+
+    for (const a of activitiesRes.rows) {
+      timelineItems.push({
+        id: a.id,
+        type: 'activity',
+        title: a.subject,
+        description: a.body,
+        status: a.status,
+        timestamp: a.timestamp,
+      })
+    }
+  }
+
+  if (sections.ar) {
+    const documentsRes = await db.execute<{
       id: string
       kind: string
       document_number: string
@@ -319,92 +458,39 @@ export async function loadCustomerPulse(
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
        order by d.document_date desc, d.created_at desc
        limit 35
-    `),
-  ])
+    `)
 
-  const timelineItems: CustomerPulseData['timeline'] = []
+    for (const d of documentsRes.rows) {
+      let type: NonNullable<CustomerPulseData['timeline']>[number]['type'] = 'invoice'
+      if (d.kind === 'quote') type = 'estimate'
+      else if (d.kind === 'sales_order') type = 'sales_order'
+      else if (d.kind === 'customer_payment') type = 'payment'
 
-  for (const a of activitiesRes.rows) {
-    timelineItems.push({
-      id: a.id,
-      type: 'activity',
-      title: a.subject,
-      description: a.body,
-      status: a.status,
-      timestamp: a.timestamp,
-    })
-  }
-
-  for (const d of documentsRes.rows) {
-    let type: CustomerPulseData['timeline'][number]['type'] = 'invoice'
-    if (d.kind === 'quote') type = 'estimate'
-    else if (d.kind === 'sales_order') type = 'sales_order'
-    else if (d.kind === 'customer_payment') type = 'payment'
-
-    timelineItems.push({
-      id: d.id,
-      type,
-      title: `${d.document_number} (${d.kind.replace('_', ' ')})`,
-      description: d.memo,
-      amount: parseFloat(d.total) || 0,
-      currency: d.currency,
-      status: d.status,
-      timestamp: d.document_date,
-      reference: d.document_number,
-    })
+      timelineItems.push({
+        id: d.id,
+        type,
+        title: `${d.document_number} (${d.kind.replace('_', ' ')})`,
+        description: d.memo,
+        amount: parseFloat(d.total) || 0,
+        currency: d.currency,
+        status: d.status,
+        timestamp: d.document_date,
+        reference: d.document_number,
+      })
+    }
   }
 
   // Sort unified feed chronologically desc
   timelineItems.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
 
   return {
-    party: {
-      id: partyRow.id,
-      displayName: partyRow.display_name,
-      email: partyRow.email,
-      phone: partyRow.phone,
-      website: partyRow.website,
-      currency: partyRow.currency ?? 'USD',
-      subsidiaryName: partyRow.subsidiary_name,
-      paymentTermsName: partyRow.terms_name,
-      isOnHold: Boolean(partyRow.is_on_hold),
-      holdReason: partyRow.hold_reason,
-      creditLimit: creditLimitNum,
-      hasCreditLimit,
-    },
-    aging: {
-      current,
-      days1To30,
-      days31To60,
-      days61To90,
-      days90Plus,
-      totalOpen,
-      totalOverdue,
-    },
-    credit: {
-      creditLimit: creditLimitNum,
-      openArBalance: totalOpen,
-      unbilledOrdersBalance,
-      remainingCredit,
-      creditUtilizationPercent,
-    },
-    paymentMetrics: {
-      dso,
-      partyAvgDaysToPay,
-      orgAvgDaysToPay: Math.round(stats.globalAvg),
-      settlementsCount: partyStat?.n ?? 0,
-    },
-    pipeline: {
-      totalOpportunities: oppRow?.total_count ?? 0,
-      openOpportunities: oppRow?.open_count ?? 0,
-      wonOpportunities: wonCount,
-      lostOpportunities: lostCount,
-      projectedPipeline: parseFloat(oppRow?.projected_sum ?? '0') || 0,
-      weightedPipeline: parseFloat(oppRow?.weighted_sum ?? '0') || 0,
-      wonAmount: parseFloat(oppRow?.won_sum ?? '0') || 0,
-      winRatePercent,
-    },
-    projects: projectsData,
+    party,
+    sections: { ...sections },
+    ...(aging !== undefined ? { aging } : null),
+    ...(credit !== undefined ? { credit } : null),
+    ...(paymentMetrics !== undefined ? { paymentMetrics } : null),
+    ...(pipeline !== undefined ? { pipeline } : null),
+    ...(projects !== undefined ? { projects } : null),
     timeline: timelineItems.slice(0, 50),
   }
 }

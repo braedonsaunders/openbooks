@@ -383,6 +383,7 @@
     "timelineTitle": "やり取りのタイムライン",
     "timelineDescription": "活動、見積、受注、請求、入金の時系列の履歴です。",
     "timelineEmpty": "この取引先に記録された活動や取引はありません。",
+    "restrictedNotice": "このアクセスでは利用できません。",
     "loadFailed": "この取引先のパルスを読み込めません。"
   }
 }

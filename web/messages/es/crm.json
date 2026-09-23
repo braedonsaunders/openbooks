@@ -383,6 +383,7 @@
     "timelineTitle": "Cronología de interacciones",
     "timelineDescription": "Historial cronológico de actividades, presupuestos, pedidos de venta, facturas y cobros.",
     "timelineEmpty": "No hay actividades ni transacciones registradas para esta cuenta.",
+    "restrictedNotice": "No disponible con su acceso.",
     "loadFailed": "No se pudo cargar el pulso de esta cuenta."
   }
 }

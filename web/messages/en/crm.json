@@ -383,6 +383,7 @@
     "timelineTitle": "Interaction timeline",
     "timelineDescription": "Chronological history of activities, quotes, sales orders, invoices, and payments.",
     "timelineEmpty": "No recorded activities or transactions for this account.",
+    "restrictedNotice": "Not available with your access.",
     "loadFailed": "Unable to load this account's pulse."
   }
 }
