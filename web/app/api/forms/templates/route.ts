@@ -4,6 +4,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { emptyFormSchema } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../lib/authz'
+import { auditSetupChange } from '../../../../lib/setup/audit'
+import { pgErrorCode } from '../../../../lib/setup/coerce'
 
 export const runtime = 'nodejs'
 
@@ -67,26 +69,52 @@ export async function POST(req: Request) {
   }
   const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'form'
 
-  const dupe = ((await db.execute(sql`
-    select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-  `)))
-  if (dupe.rows.length > 0) {
-    return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
+  // Parent + version 1 commit atomically: separate autocommitted statements
+  // strand an unusable template (key burned, no draft) when the version
+  // write fails, and concurrent creators can both pass the dupe check.
+  try {
+    const outcome = await db.transaction(async (tx) => {
+      const dupe = ((await tx.execute(sql`
+        select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
+      `)))
+      if (dupe.rows.length > 0) return { kind: 'dupe' as const }
+
+      const inserted = (await tx.execute<{ id: string }>(sql`
+        insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
+        values (${user.orgId}, ${key}, ${name}, ${body.category?.trim() || null},
+                ${body.description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
+        returning id
+      `))
+      const templateId = inserted.rows[0]!.id
+
+      await tx.execute(sql`
+        insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
+        values (${user.orgId}, ${templateId}, 1,
+                ${JSON.stringify(emptyFormSchema(name))}::jsonb, ${user.id}, ${user.id})
+      `)
+      await auditSetupChange(
+        {
+          orgId: user.orgId,
+          table: 'form_templates',
+          rowId: templateId,
+          action: 'insert',
+          changes: { after: { key, name, kind } },
+          actorId: user.id,
+        },
+        tx,
+      )
+      return { kind: 'created' as const, templateId }
+    })
+    if (outcome.kind === 'dupe') {
+      return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
+    }
+    return NextResponse.json({ id: outcome.templateId, key }, { status: 201 })
+  } catch (e) {
+    // The in-transaction dupe check loses to a concurrent creator; the
+    // unique index is the arbiter and its violation is the same 409.
+    if (pgErrorCode(e) === '23505') {
+      return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
+    }
+    throw e
   }
-
-  const inserted = (await db.execute<{ id: string }>(sql`
-    insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
-    values (${user.orgId}, ${key}, ${name}, ${body.category?.trim() || null},
-            ${body.description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
-    returning id
-  `))
-  const templateId = inserted.rows[0]!.id
-
-  await db.execute(sql`
-    insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
-    values (${user.orgId}, ${templateId}, 1,
-            ${JSON.stringify(emptyFormSchema(name))}::jsonb, ${user.id}, ${user.id})
-  `)
-
-  return NextResponse.json({ id: templateId, key }, { status: 201 })
 }
