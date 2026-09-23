@@ -22,7 +22,7 @@ const hooks = registerHooks({
     return nextResolve(specifier, context)
   },
 })
-const { allocateTimesheetBillAmounts } = await import('./invoice-backup.ts')
+const { allocateTimesheetBillAmounts, provenanceOf } = await import('./invoice-backup.ts')
 hooks.deregister()
 
 const unitsTotal = (amounts: readonly string[]) => amounts.reduce((total, amount) => total + toUnits(amount), 0n)
@@ -73,6 +73,41 @@ test('a line linked to one entry keeps its exact posted amount', () => {
     allocateTimesheetBillAmounts({ lineAmount: '12.34', nativeBillAmounts: ['125.0000'] }),
     ['12.3400'],
   )
+})
+
+test('a backup manifest entry pins the exact template design that printed it', () => {
+  // The archived packet's component manifest is the immutable evidence of
+  // which design each page was printed with: id + revision + content hash.
+  assert.deepEqual(
+    provenanceOf({
+      compiledHtml: '<p/>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: null,
+      footerHtml: null,
+      provenance: { templateId: 'template-9', revision: 2, contentHash: 'cafe01' },
+    }),
+    { id: 'template-9', revision: 2, hash: 'cafe01' },
+  )
+  assert.deepEqual(
+    provenanceOf({
+      compiledHtml: '<p/>',
+      paperSize: 'letter',
+      orientation: 'portrait',
+      marginMm: 14,
+      headerHtml: null,
+      footerHtml: null,
+      provenance: { templateId: null, revision: null, contentHash: 'cafe02' },
+    }),
+    { id: null, revision: null, hash: 'cafe02' },
+  )
+})
+
+test('template-rendered backup components record their design in the manifest', () => {
+  const source = readFileSync(new URL('./invoice-backup.ts', import.meta.url), 'utf8')
+  assert.match(source, /manifest\.push\(\{ kind, pages, template: provenanceOf\(tpl\) \}\)/)
+  assert.match(source, /manifest\.push\(\{ kind, sourceDocumentId: tk\.field_ticket_id, pages, template: provenanceOf\(tpl\) \}\)/)
 })
 
 test('invoice backup replacement serializes and audits the complete lifecycle unit', () => {

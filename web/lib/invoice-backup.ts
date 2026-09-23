@@ -9,7 +9,13 @@ import { renderHtmlDocumentPdf } from '@openbooks/pdf'
 import { deleteS3Blobs, getS3Blob, refuseMaskedStorageKind } from './file-storage'
 import { listAttachments, uploadAndAttach } from './file-cabinet'
 import { recordFileEvent } from './file-audit'
-import { resolvePdfTemplate } from './pdf-templates/store'
+import { resolvePdfTemplate, type PdfTemplateProvenance, type ResolvedPdfTemplate } from './pdf-templates/store'
+
+/** Shape a resolved template's provenance for the archived packet manifest. */
+export function provenanceOf(tpl: ResolvedPdfTemplate): { id: string | null; revision: number | null; hash: string } {
+  const provenance: PdfTemplateProvenance = tpl.provenance
+  return { id: provenance.templateId, revision: provenance.revision, hash: provenance.contentHash }
+}
 import { loadPdfRecordValues } from './pdf-templates/values'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { getMoneyFormatter } from './money-server'
@@ -51,6 +57,12 @@ export interface BackupManifestEntry {
   sourceDocumentId?: string
   sourceFileId?: string
   pages: number
+  /**
+   * Which template design rendered this component: id + revision + content
+   * hash, so the archived packet pins the exact design each page was
+   * printed with. Present only on template-rendered components.
+   */
+  template?: { id: string | null; revision: number | null; hash: string }
 }
 
 export interface AssembleResult {
@@ -303,7 +315,7 @@ export async function assembleInvoiceBackup(
       if (tpl && record) {
         const buf = await mergeAndPrintPdf(tpl, record.values)
         const pages = await mergePdfInto(out, buf)
-        manifest.push({ kind, pages })
+        manifest.push({ kind, pages, template: provenanceOf(tpl) })
       }
     } else if (kind === 'costed_timesheets' || kind === 'shop_time') {
       const title = kind === 'shop_time' ? 'Shop Labour Backup' : 'Costed Timesheet'
@@ -331,7 +343,9 @@ export async function assembleInvoiceBackup(
             if (!record) continue
             const buf = await mergeAndPrintPdf(tpl, record.values)
             const pages = await mergePdfInto(out, buf)
-            if (pages > 0) manifest.push({ kind, sourceDocumentId: tk.field_ticket_id, pages })
+            if (pages > 0) {
+              manifest.push({ kind, sourceDocumentId: tk.field_ticket_id, pages, template: provenanceOf(tpl) })
+            }
           }
         }
       }

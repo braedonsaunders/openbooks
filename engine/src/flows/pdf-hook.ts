@@ -13,6 +13,16 @@ export interface FlowPdfAttachment {
   filename: string;
   content: Buffer;
   contentType: "application/pdf";
+  /**
+   * Which template design produced the attached PDF, when the renderer
+   * knows it: id + revision + content hash, recorded on the outbox payload
+   * beside the bytes. Optional so renderer-less processes keep working.
+   */
+  template?: {
+    id: string | null;
+    revision: number | null;
+    hash: string;
+  };
 }
 
 export type FlowPdfRenderer = (args: {
@@ -35,4 +45,23 @@ export async function renderFlowPdf(args: {
 }): Promise<FlowPdfAttachment | null> {
   if (!renderer) return null;
   return renderer(args);
+}
+
+/**
+ * Flatten an attachment's template provenance for the outbox payload meta,
+ * which carries string values only (parseFlowEmailPayload enforces it). A
+ * starter-rendered PDF has no id or revision — its content hash still rides
+ * along, so the issuance record always names the exact design.
+ */
+export function flowPdfTemplateMeta(
+  template: FlowPdfAttachment["template"],
+): Record<string, string> {
+  if (!template) return {};
+  return {
+    ...(template.id ? { pdfTemplateId: template.id } : {}),
+    ...(template.revision !== null && template.revision !== undefined
+      ? { pdfTemplateRevision: String(template.revision) }
+      : {}),
+    pdfTemplateHash: template.hash,
+  };
 }

@@ -97,6 +97,13 @@ export async function registerNodeInstrumentation() {
       filename: `${meta.docTitle} ${record.reference}-${stamp}.pdf`.replace(/[\\/:*?"<>|]/g, '-'),
       content: pdf,
       contentType: 'application/pdf' as const,
+      // Which template design produced this attachment: the flow executor
+      // records it on the durable outbox payload beside the bytes.
+      template: {
+        id: tpl.provenance.templateId,
+        revision: tpl.provenance.revision,
+        hash: tpl.provenance.contentHash,
+      },
     }
   })
 }

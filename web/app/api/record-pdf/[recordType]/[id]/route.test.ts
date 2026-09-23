@@ -22,6 +22,7 @@ interface PrintRouteState {
     marginMm: number
     headerHtml: null
     footerHtml: null
+    provenance: { templateId: string | null; revision: number | null; contentHash: string }
   } | null
   renderCalls: number
 }
@@ -32,6 +33,11 @@ const defaultTemplate = {
   marginMm: 14,
   headerHtml: null,
   footerHtml: null,
+  provenance: {
+    templateId: '00000000-0000-4000-8000-00000000b001',
+    revision: 4,
+    contentHash: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+  },
 }
 const state: PrintRouteState = {
   granted: new Set(),
@@ -166,6 +172,34 @@ test('a well-formed id prints on read authority', async () => {
   assert.equal(response.status, 200)
   assert.equal(state.renderCalls, 1)
   assert.deepEqual(state.templateCalls, [null], 'omitting the template query still resolves the default')
+})
+
+test('a printed PDF carries its template provenance on the issued bytes', async () => {
+  // Which design produced this PDF travels WITH it: template id + revision
+  // + content hash as response headers, so a disputed print resolves to an
+  // exact design version.
+  reset()
+  const response = await get('00000000-0000-4000-8000-00000000a001')
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('x-pdf-template-id'), '00000000-0000-4000-8000-00000000b001')
+  assert.equal(response.headers.get('x-pdf-template-revision'), '4')
+  assert.equal(
+    response.headers.get('x-pdf-template-hash'),
+    '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+  )
+})
+
+test('a starter-printed PDF carries a hash but no template id or revision', async () => {
+  reset()
+  state.templateResult = {
+    ...defaultTemplate,
+    provenance: { templateId: null, revision: null, contentHash: 'abc123' },
+  }
+  const response = await get('00000000-0000-4000-8000-00000000a001')
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('x-pdf-template-id'), null)
+  assert.equal(response.headers.get('x-pdf-template-revision'), null)
+  assert.equal(response.headers.get('x-pdf-template-hash'), 'abc123')
 })
 
 test('a malformed id is refused exactly like a missing record, before scope or record loads', async () => {

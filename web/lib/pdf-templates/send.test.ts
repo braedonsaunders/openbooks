@@ -192,7 +192,14 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:store',
-    `export async function resolvePdfTemplate() { return { id: 'template-1' } }`,
+    // Mirrors the resolve contract: the saved template's id + revision plus
+    // the hash of the compiled HTML actually printed.
+    `export async function resolvePdfTemplate() {
+      return {
+        id: 'template-1',
+        provenance: { templateId: 'template-1', revision: 7, contentHash: 'deadbeef' },
+      }
+    }`,
   ],
   [
     'mock:values',
@@ -321,6 +328,22 @@ test('an interactive direct delivery is attributed to the sending user in the ca
   assert.equal(meta.recordId, 'inv-1')
 
   assert.match(state.updates.at(-1)!.text, /status = 'sent'/)
+})
+
+test('a sent PDF pins its template design in the email_log evidence', async () => {
+  // The email_log row is the immutable evidence of this issuance: template
+  // id + revision + content hash, so a later redesign cannot rewrite what
+  // was actually sent.
+  reset()
+  state.requestScope = true
+  state.currentUser = { id: USER_ID }
+
+  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' })
+
+  const meta = lastMeta()
+  assert.equal(meta.templateId, 'template-1')
+  assert.equal(meta.templateRevision, 7)
+  assert.equal(meta.templateHash, 'deadbeef')
 })
 
 test('a sessionless delivery records explicit system provenance instead of an anonymous row', async () => {
