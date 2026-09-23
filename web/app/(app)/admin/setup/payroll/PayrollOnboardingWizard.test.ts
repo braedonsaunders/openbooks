@@ -2,12 +2,30 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
+const source = readFileSync(new URL('./PayrollOnboardingWizard.tsx', import.meta.url), 'utf8')
+// Comments explain history; only code can default.
+const code = source
+  .replace(/\/\*[\s\S]*?\*\//g, '')
+  .replace(/(^|\s)\/\/.*$/gm, '$1')
+
+// The onboarding wizard offers whatever packs the settings API declares: a
+// CA/US-only i18n map with a bare-code fallback renders every other pack as
+// "GB"/"DE"/"FR" for both the title AND the description. Country names come
+// from the pack declarations via the API payload, never from a map here.
+test('onboarding wizard names no payroll pack in code', () => {
+  assert.doesNotMatch(code, /PACK_I18N/)
+  assert.doesNotMatch(code, /['"]CA['"]/)
+  assert.doesNotMatch(code, /['"]US['"]/)
+  assert.doesNotMatch(code, /packs\.canada\b/)
+  assert.doesNotMatch(code, /packs\.us\b/)
+})
+
 // Regression suite for the onboarding wizard's pay-schedule create (D6):
 // the generic setup API refuses a POST without a UUID Idempotency-Key, and
 // a fresh key per click would mint a duplicate schedule when the operator
 // retries an ambiguous failure.
 
-const wizard = readFileSync(new URL('./PayrollOnboardingWizard.tsx', import.meta.url), 'utf8')
+const wizard = source
 
 test('the pay-schedule create sends an Idempotency-Key', () => {
   const post = wizard.indexOf("fetch('/api/admin/setup/pay-schedules'")
