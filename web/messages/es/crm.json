@@ -207,7 +207,9 @@
     "snapshotFailed": "No se pudo guardar la instantánea.",
     "quotasRestrictedNotice": "Las cuotas están ocultas para el acceso restringido a entidades.",
     "invalidOwnerTarget": "El responsable del pronóstico debe ser un id de usuario o nulo.",
-    "invalidTeamTarget": "El equipo del pronóstico debe ser un id de equipo de ventas o nulo."
+    "invalidTeamTarget": "El equipo del pronóstico debe ser un id de equipo de ventas o nulo.",
+    "ownerOutsideOrganization": "El responsable del pronóstico no pertenece a esta organización.",
+    "teamOutsideOrganization": "El equipo del pronóstico no pertenece a esta organización."
   },
   "setup": {
     "title": "CRM",

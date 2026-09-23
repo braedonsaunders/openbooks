@@ -207,7 +207,9 @@
     "snapshotFailed": "Die Prognose-Momentaufnahme konnte nicht gespeichert werden.",
     "quotasRestrictedNotice": "Quoten sind bei eingeschränktem Zugriff ausgeblendet.",
     "invalidOwnerTarget": "Der Forecast-Verantwortliche muss eine Benutzer-ID oder null sein.",
-    "invalidTeamTarget": "Das Forecast-Team muss eine Vertriebsteam-ID oder null sein."
+    "invalidTeamTarget": "Das Forecast-Team muss eine Vertriebsteam-ID oder null sein.",
+    "ownerOutsideOrganization": "Der Forecast-Verantwortliche gehört nicht zu dieser Organisation.",
+    "teamOutsideOrganization": "Das Forecast-Team gehört nicht zu dieser Organisation."
   },
   "setup": {
     "title": "CRM",
