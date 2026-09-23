@@ -48,10 +48,31 @@ export async function POST(req: Request) {
   const weekFrom = days[0]!
   const weekTo = days[6]!
 
+  // Fast path only: the authoritative state check happens under the header
+  // lock inside the transaction, where a concurrent reopen's commit is
+  // visible and the loser is refused instead of auditing a phantom unwind.
   const before = await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds)
   if (before.status !== 'approved') return bad('Only an approved week can be reopened')
 
   return withOrgTransaction(orgId, async () => {
+    // Lock the header FIRST — the same order approval uses (header, then
+    // entries) — so a concurrent approval cannot deadlock against this
+    // reopen. The locked status is the authoritative state check: the
+    // pre-transaction read above is only a fast path, and a replay that
+    // passed it before the winner committed observes draft here and is
+    // refused instead of writing a second 'reopened' audit over a week that
+    // is already draft.
+    const header = ((await db.execute<{ id: string; status: string }>(sql`
+      select id, status from timesheet_weeks
+       where org_id = ${orgId}
+         and employee_party_id = ${employee}
+         and week_start = ${week}::date
+       for update
+    `)).rows[0])
+    if (!header || header.status !== 'approved') {
+      return bad('Only an approved week can be reopened')
+    }
+
     const rows = ((await db.execute<{
         invoiced_by_line_id: string | null
         payroll_batch_ref: string | null
@@ -114,17 +135,10 @@ export async function POST(req: Request) {
     }
 
     // Clear the approval stamp with the status: a row reading "draft" while it
-    // still names an approver would misreport who signed off on what.
-    // Lock the header for its audit before-image: the pre-transaction read
-    // above confirmed an approved week, and this row pins what the unwind
-    // transitions from under concurrency.
-    const header = ((await db.execute<{ id: string; status: string }>(sql`
-      select id, status from timesheet_weeks
-       where org_id = ${orgId}
-         and employee_party_id = ${employee}
-         and week_start = ${week}::date
-       for update
-    `)).rows[0])
+    // still names an approver would misreport who signed off on what. The
+    // header locked at the top of this transaction is the audit before-image:
+    // it was verified approved under the lock, so the audit names the state
+    // this unwind actually transitions from.
     await setTimesheetWeekStatus(
       orgId,
       employee,
@@ -145,18 +159,16 @@ export async function POST(req: Request) {
     // Durable unwind evidence, part of the same atomic unit: unwinding an
     // approval without it would leave hours editable again with no record of
     // who cleared the sign-off. An audit failure rolls the reopen back with it.
-    if (header) {
-      await db.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
-          event: 'reopened',
-          actor: { kind: 'user', userId: user.id },
-          before: { status: header.status },
-          after: { status: 'draft' },
-          weekStart: week,
-        })}::jsonb, ${user.id})
-      `)
-    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'timesheet_weeks', ${header.id}, 'update', ${JSON.stringify({
+        event: 'reopened',
+        actor: { kind: 'user', userId: user.id },
+        before: { status: header.status },
+        after: { status: 'draft' },
+        weekStart: week,
+      })}::jsonb, ${user.id})
+    `)
 
     return NextResponse.json(await loadWeek(orgId, employee, week, gate.allowedSubsidiaryIds))
   })
