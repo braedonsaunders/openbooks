@@ -2,9 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { receiveInventory } from "./movements.ts";
-import { createStockCount } from "./stock-counts.ts";
+import {
+  createStockCount,
+  postStockCount,
+  recordCountedQuantity,
+  startStockCount,
+  submitStockCountForReview,
+} from "./stock-counts.ts";
 import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -24,6 +30,30 @@ async function receiveTen(org: ScratchOrg): Promise<void> {
     offsetAccountId: org.accounts.clearing,
     date: org.date,
   });
+}
+
+async function openCountedReview(org: ScratchOrg, counted: string): Promise<{ countId: string; lineId: string }> {
+  const count = await createStockCount(org.orgId, null, {
+    locationId: org.locationId,
+    subsidiaryId: org.subsidiaryId,
+    countedOn: org.date,
+    lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+  });
+  await startStockCount(org.orgId, null, count.id);
+  const lineId = (await db.execute<{ id: string }>(sql`
+    select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+  await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: counted });
+  await submitStockCountForReview(org.orgId, null, count.id);
+  return { countId: count.id, lineId };
+}
+
+async function countStatus(orgId: string, countId: string): Promise<string> {
+  return (await db.execute<{ status: string }>(sql`
+    select status from stock_counts where org_id = ${orgId} and id = ${countId}`)).rows[0]!.status;
+}
+
+async function setInventoryFeature(orgId: string, enabled: boolean): Promise<void> {
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${`{"inventory":${enabled}}`}::jsonb) where id=${orgId}`);
 }
 
 test("duplicate count lines are refused at creation, naming the subject", async () => {
@@ -180,6 +210,60 @@ test("creating a count binds its multi-id lookups as one pg array", async () => 
       ],
     });
     assert.equal(count.status, "draft");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("disabled Inventory refuses every count mutation inside its own transaction", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    await setInventoryFeature(org.orgId, false);
+    const input = {
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      countedOn: org.date,
+      lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    };
+    await assert.rejects(createStockCount(org.orgId, null, input), /inventory feature is disabled/i);
+    await setInventoryFeature(org.orgId, true);
+    const count = await createStockCount(org.orgId, null, input);
+    await startStockCount(org.orgId, null, count.id);
+    const lineId = (await db.execute<{ id: string }>(sql`
+      select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+    await setInventoryFeature(org.orgId, false);
+    try {
+      await assert.rejects(
+        recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" }),
+        /inventory feature is disabled/i,
+      );
+      await assert.rejects(submitStockCountForReview(org.orgId, null, count.id), /inventory feature is disabled/i);
+    } finally {
+      await setInventoryFeature(org.orgId, true);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a zero-variance post with Inventory disabled refuses instead of marking posted", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    // Counted == expected: no line ever reaches adjustInventory's own gate,
+    // so only the post-level fence can refuse this.
+    const { countId } = await openCountedReview(org, "10");
+    await setInventoryFeature(org.orgId, false);
+    try {
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+        /inventory feature is disabled/i,
+      );
+    } finally {
+      await setInventoryFeature(org.orgId, true);
+    }
+    assert.equal(await countStatus(org.orgId, countId), "review");
   } finally {
     await dropScratchOrg(org.orgId);
   }
