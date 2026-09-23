@@ -383,6 +383,7 @@
     "timelineTitle": "Zeitleiste der Interaktionen",
     "timelineDescription": "Chronologischer Verlauf von Aktivitäten, Angeboten, Kundenaufträgen, Rechnungen und Zahlungen.",
     "timelineEmpty": "Für dieses Konto sind keine Aktivitäten oder Transaktionen erfasst.",
+    "restrictedNotice": "Für Ihren Zugriff nicht verfügbar.",
     "loadFailed": "Der Puls dieses Kontos kann nicht geladen werden."
   }
 }

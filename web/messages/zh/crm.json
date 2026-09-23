@@ -383,6 +383,7 @@
     "timelineTitle": "互动时间线",
     "timelineDescription": "活动、报价、销售订单、发票与收款的时间顺序记录。",
     "timelineEmpty": "该客户暂无活动或交易记录。",
+    "restrictedNotice": "当前访问权限不可用。",
     "loadFailed": "无法加载该客户的动态。"
   }
 }

@@ -32,11 +32,33 @@ import type { CustomerPulseData } from '../../../lib/customer-pulse'
  * locale: the same amount must read identically here and on the invoice it
  * came from.
  */
+/**
+ * Placeholder for a pulse section the caller's permissions omit. The section
+ * is absent from the payload (never nulled with data-shaped defaults), so the
+ * panel names the missing access instead of rendering zeros.
+ */
+function RestrictedCard({ title, className }: { title: string; className?: string }) {
+  const t = useTranslations('crm.pulse')
+  return (
+    <Card className={className ?? 'p-4'}>
+      <div className="text-xs font-medium text-slate-500">{title}</div>
+      <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-400">
+        <ShieldAlert className="h-4 w-4 shrink-0" />
+        {t('restrictedNotice')}
+      </div>
+    </Card>
+  )
+}
+
 export function PulsePanel({ data }: { data: CustomerPulseData }) {
-  const { party, aging, credit, paymentMetrics, pipeline, projects, timeline } = data
+  const { party, sections, aging, credit, paymentMetrics, pipeline, projects, timeline } = data
   const t = useTranslations('crm.pulse')
   const tc = useTranslations('common')
   const { money } = useMoney(party.currency)
+  // An empty timeline means "nothing recorded" only when the caller may see
+  // at least one timeline-carrying section; otherwise entries were withheld
+  // for access and the panel must say so instead of reporting no activity.
+  const timelineWithheld = timeline.length === 0 && !sections.ar && !sections.crm
   // Document statuses have their own catalog; anything it does not name keeps
   // the stored value rather than rendering a raw message key.
   const statusLabel = (value: string) =>
@@ -94,6 +116,8 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {aging && credit && paymentMetrics ? (
+          <>
         <Card className="p-4">
           <div className="text-xs font-medium text-slate-500">{t('openReceivables')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -142,7 +166,15 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
               : t('unrestricted')}
           </div>
         </Card>
-
+          </>
+        ) : (
+          <>
+            <RestrictedCard title={t('openReceivables')} />
+            <RestrictedCard title={t('dso')} />
+            <RestrictedCard title={t('creditHeadroom')} />
+          </>
+        )}
+        {pipeline ? (
         <Card className="p-4">
           <div className="text-xs font-medium text-slate-500">{t('pipelineValue')}</div>
           <div className="mt-1 text-2xl font-bold text-slate-900 dark:text-slate-100">
@@ -158,9 +190,14 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
             )}
           </div>
         </Card>
+        ) : (
+          <RestrictedCard title={t('pipelineValue')} />
+        )}
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
+        {aging && credit ? (
+          <>
         <Card className="p-5 lg:col-span-2">
           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('agingTitle')}</h3>
           <p className="mt-0.5 text-xs text-slate-500">{t('agingDescription')}</p>
@@ -236,9 +273,16 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
             </div>
           </div>
         </Card>
+          </>
+        ) : (
+          <>
+            <RestrictedCard title={t('agingTitle')} className="p-5 lg:col-span-2" />
+            <RestrictedCard title={t('creditTitle')} className="p-5" />
+          </>
+        )}
       </div>
 
-      {projects.enabled && (
+      {projects ? (
         <Card className="p-5">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">{t('projectsTitle')}</h3>
@@ -269,6 +313,8 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
             </div>
           </div>
         </Card>
+      ) : sections.projects ? null : (
+        <RestrictedCard title={t('projectsTitle')} className="p-5" />
       )}
 
       <Card className="p-5">
@@ -323,7 +369,7 @@ export function PulsePanel({ data }: { data: CustomerPulseData }) {
 
           {timeline.length === 0 && (
             <div className="py-8 text-center text-xs text-slate-400">
-              {t('timelineEmpty')}
+              {timelineWithheld ? t('restrictedNotice') : t('timelineEmpty')}
             </div>
           )}
         </div>
