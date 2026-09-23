@@ -98,7 +98,7 @@
     "scopes": { "base": "基础价格", "level": "价格级别", "customer": "指定客户" },
     "priceLevel": "价格级别", "customer": "客户", "selectCustomer": "选择客户…", "currency": "币种", "quantityBasis": "数量基准",
     "quantityBases": { "line": "行数量", "overallItem": "此物料总数量" },
-    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格"
+    "effectiveFrom": "生效日期", "effectiveTo": "结束日期", "breaksTitle": "数量阶梯", "breaksDescription": "达到的最高最低数量决定所有单位的单价。", "addBreak": "添加数量阶梯", "saveFailed": "无法保存定价计划。", "loadFailed": "无法加载定价计划。", "saved": "定价计划已保存", "changeReason": "更改原因", "changeReasonPlaceholder": "此价格为何更改？", "changeReasonHint": "当新价格覆盖已生效日期时必填。先前版本将保留，原因记录在审计中。", "endDateTitle": "结束定价计划", "endDateReasonLabel": "结束原因", "ended": "定价计划已结束", "confirmDelete": "删除此定价计划？", "deleteFailed": "无法删除定价计划。", "deleted": "定价计划已删除", "customerTarget": "客户 · {customer}", "baseTarget": "基础价格", "empty": "此物料尚未配置矩阵价格。", "target": "目标", "effective": "生效区间", "breaks": "数量价格"
   },
   "rates": {
     "title": "高级费率定价",

@@ -98,7 +98,7 @@
     "scopes": { "base": "基本価格", "level": "価格レベル", "customer": "特定顧客" },
     "priceLevel": "価格レベル", "customer": "顧客", "selectCustomer": "顧客を選択…", "currency": "通貨", "quantityBasis": "数量基準",
     "quantityBases": { "line": "行数量", "overallItem": "この品目の合計数量" },
-    "effectiveFrom": "発効日", "effectiveTo": "終了日", "breaksTitle": "数量区分", "breaksDescription": "到達した最大の最低数量が全数量の単価になります。", "addBreak": "数量区分を追加", "saveFailed": "価格スケジュールを保存できませんでした。", "loadFailed": "価格スケジュールを読み込めませんでした。", "saved": "価格スケジュールを保存しました", "confirmDelete": "この価格スケジュールを削除しますか？", "deleteFailed": "価格スケジュールを削除できませんでした。", "deleted": "価格スケジュールを削除しました", "customerTarget": "顧客 · {customer}", "baseTarget": "基本価格", "empty": "この品目にマトリクス価格はありません。", "target": "対象", "effective": "有効期間", "breaks": "数量価格"
+    "effectiveFrom": "発効日", "effectiveTo": "終了日", "breaksTitle": "数量区分", "breaksDescription": "到達した最大の最低数量が全数量の単価になります。", "addBreak": "数量区分を追加", "saveFailed": "価格スケジュールを保存できませんでした。", "loadFailed": "価格スケジュールを読み込めませんでした。", "saved": "価格スケジュールを保存しました", "changeReason": "変更理由", "changeReasonPlaceholder": "この価格を変更する理由は？", "changeReasonHint": "新しい価格がすでに有効な日付をカバーする場合は必須です。以前のバージョンは保持され、理由は監査に記録されます。", "endDateTitle": "価格スケジュールを終了", "endDateReasonLabel": "終了理由", "ended": "価格スケジュールを終了しました", "confirmDelete": "この価格スケジュールを削除しますか？", "deleteFailed": "価格スケジュールを削除できませんでした。", "deleted": "価格スケジュールを削除しました", "customerTarget": "顧客 · {customer}", "baseTarget": "基本価格", "empty": "この品目にマトリクス価格はありません。", "target": "対象", "effective": "有効期間", "breaks": "数量価格"
   },
   "rates": {
     "title": "高度なレート価格設定",

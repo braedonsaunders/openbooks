@@ -41,10 +41,30 @@ test('matrix editing reuses the shared paged table, line grid, and confirmation 
   assert.match(editor, /<LineGrid/)
   assert.match(editor, /addPlacement="top"/)
   assert.match(editor, /confirmDialog/)
+  assert.match(editor, /promptDialog/)
   assert.doesNotMatch(editor, /window\.confirm/)
   const failed = editor.indexOf('if (!response.ok)')
   const parsedError = editor.indexOf('response.json().catch', failed)
   assert.ok(failed >= 0 && failed < parsedError, 'error bodies are parsed only after response status is checked')
+})
+
+test('effective schedules are versioned, never rewritten or hard-deleted', () => {
+  // A history-touching change inserts a successor linked to its predecessor
+  // and retires the old row; it is refused without an explicit reason.
+  assert.match(scheduleRoute, /supersedes_id/)
+  assert.match(scheduleRoute, /change_reason/)
+  assert.match(scheduleRoute, /Provide a reason for the correction/)
+  assert.match(scheduleRoute, /retained prior version/)
+  assert.match(scheduleRoute, /retained as pricing history/)
+  // Ending an effective schedule keeps the row with an effective-to date.
+  assert.match(scheduleRoute, /endDated/)
+  assert.match(scheduleRoute, /requestedAction: 'delete \(end-dated\)'/)
+  // A create over a retained window is refused instead of forking history.
+  assert.match(scheduleRoute, /retained prior version already covers that scope/)
+  // The editor names the reason for history-touching changes and endings.
+  assert.match(editor, /changeReason/)
+  assert.match(editor, /endDateTitle/)
+  assert.match(editor, /revision/)
 })
 
 test('sales lines resolve the hierarchy without overwriting a manual price', () => {

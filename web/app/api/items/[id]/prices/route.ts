@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -61,6 +62,28 @@ async function validateReferences(tx: Pick<typeof db, 'execute'>, orgId: string,
   if (parsed.customerId && !(await tx.execute(sql`select 1 from customer_roles where org_id=${orgId} and party_id=${parsed.customerId} and is_active`)).rows[0]) throw new Error('Customer is not active in this organization')
 }
 
+/** Normalize a DATE column value (driver may return a Date or a string) to YYYY-MM-DD. */
+function toDay(value: unknown): string {
+  if (value instanceof Date) return value.toISOString().slice(0, 10)
+  return String(value).slice(0, 10)
+}
+
+/** Add (or subtract) whole days to a YYYY-MM-DD calendar date in UTC. */
+function addDays(day: string, delta: number): string {
+  const base = new Date(`${day}T00:00:00Z`)
+  base.setUTCDate(base.getUTCDate() + delta)
+  return base.toISOString().slice(0, 10)
+}
+
+function breaksEqual(prior: { minimum_quantity: string; unit_price: string }[], next: { minimumQuantity: string; unitPrice: string }[]): boolean {
+  if (prior.length !== next.length) return false
+  return prior.every((row, index) => {
+    const candidate = next[index]!
+    return (canonicalDecimal(row.minimum_quantity, 4) ?? row.minimum_quantity) === (canonicalDecimal(candidate.minimumQuantity, 4) ?? candidate.minimumQuantity)
+      && (canonicalDecimal(row.unit_price, 4) ?? row.unit_price) === (canonicalDecimal(candidate.unitPrice, 4) ?? candidate.unitPrice)
+  })
+}
+
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.read')
   if (gate instanceof NextResponse) return gate
@@ -74,6 +97,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     db.execute(sql`
       select schedule.id,schedule.price_level_id,schedule.customer_id,schedule.currency,schedule.quantity_basis,
              schedule.effective_from::text,schedule.effective_to::text,schedule.is_active,
+             schedule.revision,schedule.supersedes_id,schedule.change_reason,
              level.name as price_level_name,customer.display_name as customer_name,
              coalesce(jsonb_agg(jsonb_build_object('id',price.id,'minimumQuantity',price.minimum_quantity::text,'unitPrice',price.unit_price::text) order by price.minimum_quantity) filter (where price.id is not null),'[]'::jsonb) as breaks
         from item_price_schedules schedule
@@ -123,9 +147,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       }
       if (!(await tx.execute(sql`select 1 from items where org_id=${gate.user.orgId} and id=${id} for update`)).rows[0]) throw new Error('not found')
       await validateReferences(tx, gate.user.orgId, parsed)
+      // A retained prior version (inactive) still owns its window: creating
+      // over it would silently fork history, so a correction must go through
+      // PATCH with a reason instead. The overlap exclusion below stays as the
+      // backstop for a concurrent insert that slips past this read.
+      const scopeOverlap = parsed.customerId
+        ? sql`schedule.customer_id = ${parsed.customerId}`
+        : sql`schedule.customer_id is null and schedule.price_level_id = ${parsed.priceLevelId}`
+      const overlapped = (await tx.execute(sql`
+        select schedule.id, schedule.is_active from item_price_schedules schedule
+         where schedule.org_id = ${gate.user.orgId} and schedule.item_id = ${id}
+           and schedule.currency = ${parsed.currency} and (${scopeOverlap})
+           and schedule.effective_from <= coalesce(${parsed.effectiveTo}::date, 'infinity'::date)
+           and ${parsed.effectiveFrom}::date <= coalesce(schedule.effective_to, 'infinity'::date)
+         limit 1`)).rows[0] as { id: string; is_active: boolean } | undefined
+      if (overlapped) {
+        throw new Error(overlapped.is_active
+          ? 'An active pricing schedule already covers that scope and date range'
+          : 'A retained prior version already covers that scope and date range; edit the existing schedule instead')
+      }
       const row = (await tx.execute<Record<string, unknown>>(sql`
         insert into item_price_schedules (id,org_id,item_id,price_level_id,customer_id,currency,quantity_basis,effective_from,effective_to,is_active,created_by,updated_by)
         values (${requestId},${gate.user.orgId},${id},${parsed.priceLevelId},${parsed.customerId},${parsed.currency},${parsed.quantityBasis},${parsed.effectiveFrom},${parsed.effectiveTo},${parsed.isActive},${gate.user.id},${gate.user.id})
+        -- The row id IS the idempotency key: a retried insert with the same
+        -- key collides here and resolves through resolveIdempotentReplay.
         on conflict (id) do nothing
         returning *`)).rows[0]
       if (!row) {
@@ -139,10 +184,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ id: requestId }, { status: outcome.kind === 'created' ? 201 : 200 })
   } catch (error) {
     const code = (error as { code?: string }).code
-    return NextResponse.json({ error: code === '23P01' ? 'An active pricing schedule already covers that scope and date range' : error instanceof Error ? error.message : 'Pricing schedule could not be saved' }, { status: code === '23P01' ? 409 : 400 })
+    const message = error instanceof Error ? error.message : 'Pricing schedule could not be saved'
+    if (code === '23P01' || message === 'An active pricing schedule already covers that scope and date range') {
+      return NextResponse.json({ error: 'An active pricing schedule already covers that scope and date range' }, { status: 409 })
+    }
+    if (message === 'A retained prior version already covers that scope and date range; edit the existing schedule instead') {
+      return NextResponse.json({ error: message }, { status: 409 })
+    }
+    return NextResponse.json({ error: message }, { status: code === '23P01' ? 409 : 400 })
   }
 }
 
+interface LockedSchedule extends Record<string, unknown> {
+  id: string
+  price_level_id: string | null
+  customer_id: string | null
+  currency: string
+  quantity_basis: string
+  is_active: boolean
+  revision: number
+  supersedes_id: string | null
+  change_reason: string | null
+  from_day: string
+  to_day: string | null
+}
+
+/**
+ * Price schedules are effective-dated and version-preserving: the resolver
+ * reads the version effective on the transaction date, so a change must
+ * never rewrite an already-effective period in place. PATCH therefore has
+ * three flows. A prospective change (the schedule was already effective and
+ * the new window starts in the future) truncates the predecessor and
+ * inserts a successor: past resolution is untouched, so no reason is
+ * needed. A history-touching change (new prices covering an
+ * already-effective date) inserts a corrected version over the same window
+ * and retires the prior row, and requires an explicit reason recorded in
+ * the audit and on the new row. Anything else (a never-effective schedule,
+ * future end-dating, reactivation that stays in the future) edits the row
+ * in place. Inactive rows are retained history and cannot be edited except
+ * by reactivating them.
+ */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
@@ -155,19 +236,108 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!isUuid(scheduleId)) return NextResponse.json({ error: 'Schedule id is required' }, { status: 400 })
   const parsed = parseSchedule(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  const reason = String(body.reason ?? '').trim()
   try {
-    const found = await db.transaction(async (tx) => {
-      const before = (await tx.execute<Record<string, unknown>>(sql`select * from item_price_schedules where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`)).rows[0]
-      if (!before) return false
+    const outcome = await db.transaction(async (tx) => {
+      const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+      const locked = (await tx.execute(sql`
+        select *,effective_from::text as from_day,effective_to::text as to_day
+          from item_price_schedules
+         where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
+        .rows[0] as LockedSchedule | undefined
+      if (!locked) return { kind: 'missing' as const }
+      const before = {
+        priceLevelId: locked.price_level_id,
+        customerId: locked.customer_id,
+        currency: locked.currency,
+        quantityBasis: locked.quantity_basis,
+        fromDay: toDay(locked.from_day),
+        toDay: locked.to_day === null ? null : toDay(locked.to_day),
+        isActive: locked.is_active,
+      }
       await validateReferences(tx, gate.user.orgId, parsed)
-      const priorBreaks = (await tx.execute(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
-      const after = (await tx.execute<Record<string, unknown>>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${gate.user.id} where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+      const priorBreaks = (await tx.execute<{ minimum_quantity: string; unit_price: string }>(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
+      const contentChanged = before.priceLevelId !== parsed.priceLevelId
+        || before.customerId !== parsed.customerId
+        || before.currency !== parsed.currency
+        || before.quantityBasis !== parsed.quantityBasis
+        || !breaksEqual(priorBreaks, parsed.breaks)
+      const windowChanged = before.fromDay !== parsed.effectiveFrom || before.toDay !== parsed.effectiveTo
+      const coversPastBefore = before.isActive && before.fromDay <= today
+      const coversPastAfter = parsed.isActive && parsed.effectiveFrom <= today
+      // An end-date change only touches history when the past-coverage
+      // endpoint moves: narrowing or widening inside the future keeps every
+      // already-effective date resolving exactly as before.
+      const pastEndpoint = (endpoint: string | null) => (endpoint === null || endpoint > today ? 'FUTURE' : endpoint)
+      const endTouchesHistory = pastEndpoint(before.toDay) !== pastEndpoint(parsed.effectiveTo)
+
+      if (!before.isActive && !parsed.isActive) {
+        return { kind: 'refused' as const, status: 422, error: 'This schedule is a retained prior version; history cannot be edited — reload and edit the current version instead' }
+      }
+      if (before.isActive && !parsed.isActive && coversPastBefore) {
+        return { kind: 'refused' as const, status: 422, error: 'Deactivating would hide prices that are already effective; end-date the schedule instead' }
+      }
+      // Prospective successor: the predecessor keeps its prices through the
+      // day before the new window, so a late transaction inside the old
+      // window still prices under the old version.
+      const successor = before.isActive && parsed.isActive && before.fromDay <= today && parsed.effectiveFrom > today
+      const touchesHistory = successor ? false : (
+        (contentChanged && coversPastAfter)
+        || (parsed.effectiveFrom !== before.fromDay && (coversPastBefore || coversPastAfter))
+        || (windowChanged && endTouchesHistory)
+        || (!before.isActive && parsed.isActive && coversPastAfter)
+      )
+      if (touchesHistory && !reason) {
+        return { kind: 'refused' as const, status: 400, error: 'This schedule already prices effective dates. Provide a reason for the correction; the prior version is kept and the reason is recorded in the audit' }
+      }
+
+      const insertVersion = async (supersedesId: string, changeReason: string | null) => {
+        const versionId = randomUUID()
+        await tx.execute(sql`
+          insert into item_price_schedules (id,org_id,item_id,price_level_id,customer_id,currency,quantity_basis,effective_from,effective_to,is_active,revision,supersedes_id,change_reason,created_by,updated_by)
+          values (${versionId},${gate.user.orgId},${id},${parsed.priceLevelId},${parsed.customerId},${parsed.currency},${parsed.quantityBasis},${parsed.effectiveFrom},${parsed.effectiveTo},${parsed.isActive},0,${supersedesId},${changeReason},${gate.user.id},${gate.user.id})`)
+        for (const price of parsed.breaks) await tx.execute(sql`insert into item_price_breaks (org_id,schedule_id,minimum_quantity,unit_price,created_by,updated_by) values (${gate.user.orgId},${versionId},${price.minimumQuantity},${price.unitPrice},${gate.user.id},${gate.user.id})`)
+        await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: versionId, action: 'insert', changes: { before: null, after: { item_id: id, price_level_id: parsed.priceLevelId, customer_id: parsed.customerId, currency: parsed.currency, quantity_basis: parsed.quantityBasis, effective_from: parsed.effectiveFrom, effective_to: parsed.effectiveTo, is_active: parsed.isActive, supersedes_id: supersedesId, change_reason: changeReason, breaks: parsed.breaks } }, actorId: gate.user.id }, tx)
+        return versionId
+      }
+
+      if (successor) {
+        // Truncate only when the predecessor still covers the successor
+        // start; an already-ended predecessor is left untouched.
+        const truncates = before.toDay === null || before.toDay >= parsed.effectiveFrom
+        const truncatedTo = addDays(parsed.effectiveFrom, -1)
+        if (truncates && truncatedTo < before.fromDay) throw new Error('The successor must start after the current schedule begins')
+        const after = truncates
+          ? (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${truncatedTo},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+          : locked
+        if (truncates) {
+          await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...after, breaks: priorBreaks } }, actorId: gate.user.id }, tx)
+        }
+        const versionId = await insertVersion(scheduleId, null)
+        return { kind: 'saved' as const, scheduleId: versionId }
+      }
+
+      if (touchesHistory) {
+        // Reasoned correction: the new version carries the requested window
+        // (past dates reprice under it — that is what a correction is for)
+        // and the prior row is retired but retained. The predecessor is
+        // retired BEFORE the insert so the two active windows never coexist
+        // under the overlap exclusion.
+        const retired = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set is_active=false,updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+        await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...retired, breaks: priorBreaks }, reason }, actorId: gate.user.id }, tx)
+        const versionId = await insertVersion(scheduleId, reason)
+        return { kind: 'saved' as const, scheduleId: versionId }
+      }
+
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
       await tx.execute(sql`delete from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId}`)
       for (const price of parsed.breaks) await tx.execute(sql`insert into item_price_breaks (org_id,schedule_id,minimum_quantity,unit_price,created_by,updated_by) values (${gate.user.orgId},${scheduleId},${price.minimumQuantity},${price.unitPrice},${gate.user.id},${gate.user.id})`)
-      await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...before, breaks: priorBreaks }, after: { ...after, breaks: parsed.breaks } }, actorId: gate.user.id }, tx)
-      return true
+      await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...after, breaks: parsed.breaks }, ...(reason ? { reason } : {}) }, actorId: gate.user.id }, tx)
+      return { kind: 'saved' as const, scheduleId }
     })
-    return found ? NextResponse.json({ id: scheduleId }) : NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (outcome.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
+    return NextResponse.json({ id: outcome.scheduleId })
   } catch (error) {
     const code = (error as { code?: string }).code
     return NextResponse.json({ error: code === '23P01' ? 'An active pricing schedule already covers that scope and date range' : error instanceof Error ? error.message : 'Pricing schedule could not be saved' }, { status: code === '23P01' ? 409 : 400 })
@@ -178,16 +348,45 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  const scheduleId = new URL(request.url).searchParams.get('schedule') ?? ''
+  const query = new URL(request.url).searchParams
+  const scheduleId = query.get('schedule') ?? ''
   if (!isUuid(id) || !isUuid(scheduleId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const found = await db.transaction(async (tx) => {
-    const before = (await tx.execute<Record<string, unknown>>(sql`select * from item_price_schedules where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`)).rows[0]
-    if (!before) return false
+  const reason = (query.get('reason') ?? '').trim()
+  const outcome = await db.transaction(async (tx) => {
+    const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
+    const locked = (await tx.execute(sql`
+      select *,effective_from::text as from_day,effective_to::text as to_day
+        from item_price_schedules
+       where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
+      .rows[0] as LockedSchedule | undefined
+    if (!locked) return { kind: 'missing' as const }
     const breaks = (await tx.execute(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
+    const fromDay = toDay(locked.from_day)
+    const toDayValue = locked.to_day === null ? null : toDay(locked.to_day)
+    // Only a never-effective schedule may be deleted: anything that priced
+    // (or could have priced) a real transaction stays as history.
+    if (fromDay <= today) {
+      if (!locked.is_active) {
+        return { kind: 'refused' as const, status: 422, error: 'This schedule is a retained prior version; history cannot be deleted' }
+      }
+      if (toDayValue !== null && toDayValue < today) {
+        return { kind: 'refused' as const, status: 422, error: `This schedule ended on ${toDayValue} and is retained as pricing history; it cannot be deleted` }
+      }
+      if (!reason) {
+        return { kind: 'refused' as const, status: 400, error: 'This schedule is already effective. Provide a reason to end it; the schedule stays in history with an effective-to date' }
+      }
+      const endedTo = toDayValue === null || toDayValue > today ? today : toDayValue
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${endedTo},change_reason=${reason},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+      await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks }, after: { ...after, breaks }, reason, requestedAction: 'delete (end-dated)' }, actorId: gate.user.id }, tx)
+      return { kind: 'ended' as const }
+    }
+    // A future schedule never priced anything: hard-delete it with its breaks.
     const deleted = await tx.execute(sql`delete from item_price_schedules where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning id`)
     if (!deleted.rows[0]) throw new Error('Pricing schedule was not deleted')
-    await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'delete', changes: { before: { ...before, breaks } }, actorId: gate.user.id }, tx)
-    return true
+    await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'delete', changes: { before: { ...locked, breaks } }, actorId: gate.user.id }, tx)
+    return { kind: 'deleted' as const }
   })
-  return found ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
+  return NextResponse.json({ ok: true, endDated: outcome.kind === 'ended' })
 }
