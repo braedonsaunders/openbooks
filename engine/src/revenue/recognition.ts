@@ -814,6 +814,21 @@ export async function buildRecognitionScheduleOn(
   if (!o) throw new Error("obligation not found");
   if (o.status === "cancelled") throw new RevenueRecognitionError("cancelled obligations cannot be rebuilt");
 
+  // Historical deferral rate (0256): the invoice's own rate, immutable once
+  // posted, so recognition drains deferred revenue at the rate it was
+  // credited at. Document-less (project) obligations measure in the
+  // contract currency at par.
+  const txMoney = (await runner.execute<{ tx_currency: string | null; tx_fx_rate: string | null }>(sql`
+    select coalesce(d.currency, c.currency) as tx_currency,
+           coalesce(d.fx_rate, 1)::text as tx_fx_rate
+      from performance_obligations o
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+      left join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+     where o.id = ${obligationId} and o.org_id = ${orgId}`)).rows[0];
+  const txCurrency = txMoney?.tx_currency ?? undefined;
+  const txFxRate = txMoney?.tx_fx_rate ?? "1";
+
   const startOn = o.recognition_starts_on ?? o.contract_starts;
   if (!startOn) throw new Error("obligation has no recognition start date");
   const endOn = o.recognition_ends_on ?? (o.end_date_source === "contract" ? o.contract_ends : null);
@@ -832,14 +847,17 @@ export async function buildRecognitionScheduleOn(
     scheduleId = existing.rows[0].id;
     await runner.execute(sql`
       update recognition_schedules
-         set total_amount = ${scheduleTotal}, updated_at = now(), updated_by = ${actorId}
+         set total_amount = ${scheduleTotal},
+             transaction_currency = coalesce(transaction_currency, ${txCurrency ?? null}),
+             transaction_fx_rate = coalesce(transaction_fx_rate, ${txFxRate}),
+             updated_at = now(), updated_by = ${actorId}
        where id = ${scheduleId} and org_id = ${orgId}`);
     } else {
       // Concurrent replays may race on the (obligation, book) identity; lose
       // deterministically to the winner and adopt its row instead of failing.
       const ins = (await runner.execute<{ id: string }>(sql`
-        insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
-        values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${actorId}, ${actorId})
+        insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, transaction_currency, transaction_fx_rate, created_by, updated_by)
+        values (${orgId}, ${obligationId}, ${bookId}, ${o.allocated_price}, ${txCurrency ?? null}, ${txFxRate}, ${actorId}, ${actorId})
         on conflict do nothing
         returning id`));
       scheduleId =
@@ -1438,8 +1456,8 @@ export interface RunRecognitionResult {
 export async function recognitionUnearnedRemaining(
  tx:SqlExecutor,input:{orgId:string;obligationId:string;bookId:string;deferredAccountId:string},
 ):Promise<{remaining:string;credited:string;exposure:CreditExposure}> {
- const row=(await tx.execute<{allocated:string;recognized:string;change_basis:RevenueChangeBasis|null;invoice_id:string|null;currency:string|null}>(sql`
- select coalesce(s.total_amount,o.allocated_price)::text as allocated,s.change_basis,inv.id as invoice_id,inv.currency,
+ const row=(await tx.execute<{allocated:string;recognized:string;change_basis:RevenueChangeBasis|null;invoice_id:string|null;currency:string|null;tx_fx_rate:string|null}>(sql`
+ select coalesce(s.total_amount,o.allocated_price)::text as allocated,s.change_basis,inv.id as invoice_id,inv.currency,s.transaction_fx_rate::text as tx_fx_rate,
    coalesce((select sum(case when l.journal_entry_id is not null and l.reversal_journal_entry_id is null then coalesce(l.recognized_amount,0) else 0 end)
      from recognition_schedule_lines l where l.org_id=o.org_id and l.schedule_id=s.id),0)::text as recognized
  from performance_obligations o left join recognition_schedules s on s.obligation_id=o.id and s.org_id=o.org_id and s.book_id=${input.bookId}
@@ -1455,7 +1473,9 @@ export async function recognitionUnearnedRemaining(
     where o.org_id=${input.orgId} and dl.document_id=${row.invoice_id} and coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id)=${input.deferredAccountId} order by o.id`)).rows;
    const index=peers.findIndex(p=>p.id===input.obligationId);
    if(index<0)throw new RevenueRecognitionError('the invoice credit allocation omitted this promise');
-   exposure={kind:'invoice',source:{invoiceId:row.invoice_id,deferredAccountId:input.deferredAccountId,baseline:'0',currency:row.currency,fxRate:'1'},weights:peers.map(p=>p.weight),index};
+   // The credit pool measures in transaction units, but the evidence names
+   // the historical deferral rate (0256), not a defaulted 1.
+   exposure={kind:'invoice',source:{invoiceId:row.invoice_id,deferredAccountId:input.deferredAccountId,baseline:'0',currency:row.currency,fxRate:row.tx_fx_rate ?? '1'},weights:peers.map(p=>p.weight),index};
  }
  const credited=await measureCreditExposure(tx,input.orgId,input.bookId,exposure);
  return {remaining:sum([row.allocated,neg(row.recognized),neg(credited)]),credited,exposure};
@@ -1525,9 +1545,9 @@ async function recognitionPostingRows(
   return (await runner.execute<RecognitionPostingRow>(sql`
     select l.id             as line_id,
            l.recognition_on::text as recognition_on,
-           s.change_basis->>'currency' as recognition_currency,
+           coalesce(s.change_basis->>'currency',s.transaction_currency) as recognition_currency,
            s.change_basis->>'functionalCurrency' as functional_currency,
-           coalesce(s.change_basis->>'fxRate','1') as recognition_fx_rate,
+           coalesce(s.change_basis->>'fxRate',s.transaction_fx_rate::text,'1') as recognition_fx_rate,
            l.planned_amount as planned,
            l.period_id      as period_id,
            l.sequence       as sequence,

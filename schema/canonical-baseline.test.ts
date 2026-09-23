@@ -495,6 +495,9 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // Hours-denominated entitlement plans cannot accrue a percent of (money)
     // earnings: the dollars would be stored, and later paid, as hours.
     "0253_hours_plan_percent_accrual_guard.sql",
+    // Foreign-currency invoices recognized revenue at rate 1: schedules
+    // stamp their transaction currency and historical deferral rate (0256).
+    "0256_recognition_schedule_transaction_rate.sql",
     // Negative-stock deficits keyed on org + item + location only, so one
     // subsidiary's receipt settled another's shortfall (0257, allocated by
     // the fleet coordinator; 0252 through 0256 belong to other lanes).
