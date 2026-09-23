@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { neg } from '@openbooks/engine/src/money/money.ts'
 import { pinTimesheetEmployee, pinTimesheetLineRefs, setTimesheetWeekStatus, weekStart, weekWindow } from '../app/api/timesheets/_lib'
+import { checkProjectsWriteEnabled } from './features'
 import { lockReasonsFor } from './time-lifecycle'
 
 /**
@@ -121,6 +122,13 @@ async function insertAmendment(
 ): Promise<string> {
   const ownedEmployee = await pinTimesheetEmployee(orgId, row.employee_party_id)
   if (!ownedEmployee) throw new Error('employee not found')
+  // The contra inherits the original's project as a draft entry — a new
+  // Projects disable-blocker — so a disable racing this insert must refuse
+  // one side or the other. Both amendment entry points ride this insert.
+  // The default runner is the caller's pinned transaction.
+  if (row.project_id != null && !(await checkProjectsWriteEnabled(orgId))) {
+    throw new Error('Projects feature is disabled')
+  }
   const ownedRefs = await pinTimesheetLineRefs(orgId, {
     projectId: row.project_id,
     itemId: row.item_id,

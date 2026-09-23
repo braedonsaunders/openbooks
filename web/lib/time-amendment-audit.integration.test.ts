@@ -71,6 +71,10 @@ const SEED = `
     \`);
     await seedActiveEmployment(org.orgId, employeeId);
     await db.execute(sql\`
+      insert into employee_roles (id, org_id, party_id, is_active)
+      values (\${randomUUID()}, \${org.orgId}, \${employeeId}, true)
+    \`);
+    await db.execute(sql\`
       insert into timesheet_weeks
         (id, org_id, employee_party_id, week_start, status,
          created_by, updated_by)

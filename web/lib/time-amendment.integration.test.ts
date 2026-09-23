@@ -128,3 +128,35 @@ test('amending an editable entry is refused and writes no offset', {skip:!proces
     }
   })
 })
+
+test('amending a project-linked entry refuses while Projects is disabled', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId
+      const employee = randomUUID(), project = randomUUID(), original = randomUUID()
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employee}, ${org.orgId}, 'employee', 'Gated worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await db.execute(sql`insert into employee_roles (id, org_id, party_id, is_active)
+        values (${randomUUID()}, ${org.orgId}, ${employee}, true)`)
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+        values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'GATED', 'Gated job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+      await db.execute(sql`insert into time_entries
+        (id, org_id, employee_party_id, worked_on, hours, project_id, status, is_billable, custom, created_by, updated_by)
+        values (${original}, ${org.orgId}, ${employee}, ${org.date}, '8.0000', ${project}, 'approved', true, '{}'::jsonb, ${actor}, ${actor})`)
+      // The contra would land as a draft project-linked entry — a new
+      // Projects disable-blocker — so it must refuse instead.
+      await db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','false'::jsonb) where id = ${org.orgId}`)
+      await assert.rejects(
+        amendTimeEntry(org.orgId, actor, original),
+        /Projects feature is disabled/,
+      )
+      const offsets = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${org.orgId} and amends_entry_id = ${original}`)).rows[0]!.n
+      assert.equal(offsets, 0, 'the refused amendment writes no contra entry')
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})
