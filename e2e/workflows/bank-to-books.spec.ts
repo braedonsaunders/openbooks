@@ -204,14 +204,14 @@ async function uiApplyAndPost(page: Page, payId: string, amount: string, expecte
   }
   await expect(drawer.getByText(`Applying ${expectedItems} item`).first()).toBeVisible();
   await expect(drawer.getByText(`Total ${expectedTotal}`).first()).toBeVisible();
-  // Save lives inside the Actions menu (TransactionDrawer shell), not
-  // beside it: open the menu, save the applied lines, reopen for posting.
-  await drawer.getByRole('button', { name: 'Actions', exact: true }).click();
+  // In edit mode Save is the drawer's primary header button (UX-18) and the
+  // Actions menu is hidden: save the applied lines directly, then reopen
+  // Actions in view mode for posting.
   {
     const saved = page.waitForResponse(
       (r) => r.url().endsWith(`/api/payments/${payId}`) && r.request().method() === 'PATCH',
     );
-    await page.locator('button', { hasText: /^Save$/ }).click();
+    await drawer.getByRole('button', { name: 'Save', exact: true }).click();
     const saveRes = await saved;
     expect(saveRes.status(), await saveRes.text()).toBe(200);
   }
