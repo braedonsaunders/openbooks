@@ -67,6 +67,19 @@ test('effective schedules are versioned, never rewritten or hard-deleted', () =>
   assert.match(editor, /revision/)
 })
 
+test('stale schedule writes are refused with a reload remedy', () => {
+  // PATCH and DELETE require the revision the caller read: absent it never
+  // reaches the row, stale it is refused instead of overwriting the winner.
+  assert.match(scheduleRoute, /parseRevision/)
+  assert.match(scheduleRoute, /A current schedule revision is required; reload the schedule and try again/)
+  assert.match(scheduleRoute, /changed since you loaded it — reload and try again/)
+  assert.match(scheduleRoute, /revision=\$\{expectedRevision\}/)
+  // The editor echoes the token it read and closes on a conflict instead of
+  // retrying on a dead token.
+  assert.match(editor, /revision: editingRevision/)
+  assert.match(editor, /response\.status === 409/)
+})
+
 test('sales lines resolve the hierarchy without overwriting a manual price', () => {
   assert.match(orderDrawer, /fetch\('\/api\/items\/price'/)
   assert.match(orderDrawer, /if \(!response\.ok\) return null/)
