@@ -328,14 +328,19 @@ test("broad-doorway tools narrow to the caller's grant inside execute", () => {
   );
 });
 
-/** Tool stricter than the route: documented, must not be loosened. */
-test("analytics_sentinel stays stricter than the detector routes (audit-log access)", () => {
+/** Detector route and tool share the whole-company forensics gate: documented, must not be loosened. */
+test("analytics_sentinel matches the detector routes (audit-log access)", () => {
   const gate = gateOf(blockOf("./tools-analytics.ts", "analytics_sentinel"));
   assert.equal(gate.mode, "allOf");
   assert.deepEqual([...gate.perms].sort(), ["admin.audit.read", "reports.read"]);
+  const route = read("../../app/api/analytics/sentinel/benford/route.ts");
   assert.ok(
-    read("../../app/api/analytics/sentinel/benford/route.ts").includes('guardPermission("reports.read")'),
-    "detector route stays reports.read — the tool's extra admin.audit.read is the documented hardening",
+    route.includes('guardPermission("reports.read")'),
+    "detector route still starts from the reports.read identity gate",
+  );
+  assert.ok(
+    route.includes("sentinelAccessDenied"),
+    "detector route enforces the shared sentinel gate (unrestricted reports + audit access), exactly like the page",
   );
 });
 

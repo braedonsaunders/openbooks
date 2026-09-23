@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../../lib/authz";
+import { sentinelAccessDenied } from "../../../../../lib/analytics/sentinel-access";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
@@ -21,6 +22,12 @@ const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", 
 export async function GET(req: Request) {
   const gate = await guardPermission("reports.read");
   if (gate instanceof NextResponse) return gate;
+  // Whole-ledger forensics: the same gate as the page loader (unrestricted
+  // reports + audit access). A reports-only role gets a 403, never rows.
+  const denied = sentinelAccessDenied(gate);
+  if (denied) {
+    return NextResponse.json({ error: "forbidden", message: `sentinel forensics requires ${denied}` }, { status: 403 });
+  }
   const user = gate.user;
   const url = new URL(req.url);
   const digit = Number(url.searchParams.get("digit"));
