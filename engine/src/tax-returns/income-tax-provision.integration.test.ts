@@ -1412,3 +1412,67 @@ for (const policy of ["account", "inactive subsidiary", "inactive book", "non-po
   });
 }
 }
+
+test("per-entity overrides keyed by an unknown or out-of-scope subsidiary refuse with zero writes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Scope Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-SCP-1", userId });
+
+    // A foreign (or mistyped) subsidiary id carrying a material DTA input
+    // must refuse BY ID — never compute a draft that silently omits it.
+    const foreign = randomUUID();
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, {
+        entities: {
+          [foreign]: {
+            additionalDifferences: [
+              { category: "provisions", description: "Warranty reserve", difference: "10000.0000", source: "manual" },
+            ],
+          },
+        },
+      }, userId),
+      (error: unknown) => {
+        assert.ok(error instanceof IncomeTaxProvisionError);
+        assert.match(error.message, new RegExp(foreign.replace(/-/g, "-")));
+        assert.match(error.message, /not a subsidiary of this organization/);
+        return true;
+      },
+    );
+
+    // A real subsidiary outside the caller's scope refuses the same way.
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, {
+        entities: { [org.subsidiaryId]: { valuationAllowance: "1.0000" } },
+      }, userId, new Set()),
+      /outside your authorized subsidiary scope/,
+    );
+
+    // The same key inside the caller's scope still computes (with a
+    // deductible difference backing the allowance so it stays measurable).
+    const runId = await computeProvisionRun(org.orgId, 2026, {
+      entities: {
+        [org.subsidiaryId]: {
+          valuationAllowance: "1.0000",
+          additionalDifferences: [
+            { category: "provisions", description: "Warranty reserve", difference: "-80000.0000", source: "manual" },
+          ],
+        },
+      },
+    }, userId, new Set([org.subsidiaryId]));
+    assert.ok(runId);
+
+    // Both rejections wrote nothing: exactly one run (the in-scope one) and
+    // one audit row exist for this org's provision history.
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`));
+    assert.equal(runs.rows[0]!.n, 1);
+    const audits = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
+    assert.equal(audits.rows[0]!.n, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

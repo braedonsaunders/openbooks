@@ -1199,12 +1199,18 @@ export async function spotRateToPresentation(
 }
 
 /** Compute (or recompute) the draft run for a fiscal year. Prior DRAFT runs
- *  of the same FY are replaced; posted runs are never touched. */
+ *  of the same FY are replaced; posted runs are never touched.
+ *
+ *  Every per-entity override key is validated against this organization's
+ *  subsidiary set (and the caller's scope when one is given) BEFORE anything
+ *  is measured: an unknown or out-of-scope key refuses by id with zero
+ *  writes, instead of being silently filtered out of the run. */
 export async function computeProvisionRun(
   orgId: string,
   fiscalYear: number,
   opts: ComputeProvisionOptions,
   actorId: string,
+  scope?: ProvisionSubsidiaryScope,
 ): Promise<string> {
   if (!actorId) {
     throw new IncomeTaxProvisionError(
@@ -1226,6 +1232,25 @@ export async function computeProvisionRun(
     const roots = subsidiaries.filter((s) => s.parentId === null);
     const root = roots[0] ?? null;
     const known = new Set(subsidiaries.map((s) => s.id));
+
+    // Per-entity override keys are caller-supplied ids: a foreign or mistyped
+    // subsidiary must refuse BY ID here, before measurement. Letting it fall
+    // through to the entity-set filter below would silently omit a material
+    // DTA/DTD input while reporting success.
+    if (opts.entities) {
+      for (const id of Object.keys(opts.entities)) {
+        if (!known.has(id)) {
+          throw new IncomeTaxProvisionError(
+            `provision entities["${id}"] is not a subsidiary of this organization — remove it or correct the subsidiary id`,
+          );
+        }
+        if (scope != null && !scope.has(id)) {
+          throw new IncomeTaxProvisionError(
+            `provision entities["${id}"] is outside your authorized subsidiary scope — remove it or request access`,
+          );
+        }
+      }
+    }
 
     const orgRow = (await db.execute<{ base_currency: string | null }>(sql`
       select base_currency from orgs where id = ${orgId}

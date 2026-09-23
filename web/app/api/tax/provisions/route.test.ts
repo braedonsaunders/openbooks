@@ -17,6 +17,7 @@ interface ProvisionCreateCall {
     valuationAllowance: string;
   };
   actorId: string;
+  scope: unknown;
 }
 interface RouteState {
   calls: ProvisionCreateCall[];
@@ -45,8 +46,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.tax-provision-create-route-test')]
       export class IncomeTaxProvisionError extends Error {}
-      export async function computeProvisionRun(orgId, fiscalYear, input, actorId) {
-        state.calls.push({ orgId, fiscalYear, input, actorId })
+      export async function computeProvisionRun(orgId, fiscalYear, input, actorId, scope) {
+        state.calls.push({ orgId, fiscalYear, input, actorId, scope })
         return 'run-1'
       }
       export async function listProvisionRuns() { return [] }
@@ -188,6 +189,17 @@ test("POST passes per-entity inputs and presentation currency to the run", async
     },
   });
   assert.equal(input.presentationCurrency, "USD");
+});
+
+test("POST forwards the caller's subsidiary scope so unknown entity keys fail loudly", async () => {
+  routeState.calls.length = 0;
+
+  const response = await post({ fiscalYear: 2026 });
+
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls.length, 1);
+  assert.equal("scope" in routeState.calls[0]!, true);
+  assert.equal(routeState.calls[0]!.scope, null);
 });
 
 test("POST omits entity keys when no per-entity inputs are given", async () => {
