@@ -564,10 +564,105 @@ async function secretsOf(row: TaxRateProviderConfigRow): Promise<Record<string, 
 }
 
 /**
+ * Total deadline for one provider round trip, headers AND body: a provider
+ * that accepts the connection and never finishes the body used to strand
+ * the financial save awaiting it. Applies on every adapter, on the test
+ * transport too — bounds are orthogonal to the SSRF switch.
+ */
+export const TAX_PROVIDER_REQUEST_TIMEOUT_MS = 15_000;
+/** Largest provider response body kept in memory or persisted as evidence. */
+export const TAX_PROVIDER_MAX_RESPONSE_BYTES = 1_048_576;
+
+/**
+ * One bounded reader shared by all three adapters. Streams the body with an
+ * early byte cap (a declared or actual oversize refuses before the payload
+ * is fully buffered, and nothing is persisted), then parses: a non-JSON body
+ * falls back to {} exactly like the old res.json().catch, so the adapters'
+ * missing-field refusals still name the field they were owed. An abort from
+ * the request deadline surfaces here as the named provider timeout.
+ */
+async function readTaxProviderJson(
+  res: Response,
+  providerLabel: string,
+  timeoutMs: number,
+): Promise<Record<string, unknown>> {
+  const oversize = (): TaxRateProviderError =>
+    new TaxRateProviderError(
+      `${providerLabel} tax quote response exceeded ${TAX_PROVIDER_MAX_RESPONSE_BYTES} bytes — refusing rather than persisting oversize quote evidence`,
+    );
+  const declared = res.headers.get("content-length");
+  if (declared != null) {
+    const length = Number(declared.trim());
+    if (Number.isFinite(length) && length > TAX_PROVIDER_MAX_RESPONSE_BYTES) {
+      try {
+        await res.body?.cancel();
+      } catch {
+        // Best effort: the refusal below is what matters.
+      }
+      throw oversize();
+    }
+  }
+  let bytes: Uint8Array;
+  if (!res.body) {
+    const text = await res.text();
+    if (text.length > TAX_PROVIDER_MAX_RESPONSE_BYTES) throw oversize();
+    bytes = new TextEncoder().encode(text);
+  } else {
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > TAX_PROVIDER_MAX_RESPONSE_BYTES) {
+          try {
+            await reader.cancel();
+          } catch {
+            // Best effort: the refusal below is what matters.
+          }
+          throw oversize();
+        }
+        chunks.push(value);
+      }
+    } catch (error) {
+      // The adapters never supply their own abort signal, so an abort here
+      // is the request deadline firing mid-body: the stalled-body refusal.
+      // AbortSignal.timeout() aborts with TimeoutError, manual aborts with
+      // AbortError — both names map, since no other abort source exists here.
+      if (error instanceof TaxRateProviderError) throw error;
+      if (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) {
+        throw new TaxRateProviderError(
+          `${providerLabel} tax quote timed out after ${timeoutMs}ms — check the provider endpoint and retry the quote`,
+          { cause: error },
+        );
+      }
+      throw error;
+    } finally {
+      reader.releaseLock();
+    }
+    bytes = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return {};
+  }
+  return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+}
+
+/**
  * Tax provider credentials must never cross an HTTP redirect boundary. Even a
  * trusted provider origin can answer a quote POST with a 3xx, and fetch would
  * then replay the `Authorization` header — the Avalara account's license key,
- * the TaxJar API key, or the custom hook's bearer secret — to whichever host
+ * the TaxJar API key, or the custom hook's Bearer [REDACTED] — to whichever host
  * the Location names. Every credential-bearing tax call goes through here so
  * a redirect fails closed instead of leaking.
  */
@@ -600,14 +695,26 @@ async function taxProviderFetch(
   const runFetch: typeof fetch = options.allowPrivateEndpoints
     ? (input, fetchInit) => fetch(input, { ...fetchInit, redirect: "error" })
     : (input, fetchInit) => guardedFetch(input, fetchInit ?? {}, { lookup: options.lookup });
+  // One total deadline for connect, headers and body: without it a provider
+  // that accepts the connection and never finishes strands the financial
+  // save awaiting the quote. Combined with a caller signal when present.
+  const timeoutMs = options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS;
+  const timeout = AbortSignal.timeout(timeoutMs);
+  const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   try {
-    return await runFetch(target, { ...init, redirect: "error" });
+    return await runFetch(target, { ...init, signal, redirect: "error" });
   } catch (error) {
     // A computed refusal must reach the operator as the module error the
     // route maps to 422 — never a bare transport fault. This also covers the
     // rebind window: the pre-check above passed on public DNS, then the
     // shared guard refused the rebound address at connect time.
     if (error instanceof TaxRateProviderError) throw error;
+    if (timeout.aborted) {
+      throw new TaxRateProviderError(
+        `${options.providerLabel} tax quote timed out after ${timeoutMs}ms — check the provider endpoint and retry the quote`,
+        { cause: error },
+      );
+    }
     const detail = error instanceof Error ? error.message : String(error);
     throw new TaxRateProviderError(
       `${options.providerLabel} tax quote refused: ${detail} — point the provider at its public https endpoint and retry`,
@@ -665,7 +772,7 @@ export async function quoteViaAvalara(
     },
     { ...options, providerLabel: "Avalara" },
   );
-  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const raw = await readTaxProviderJson(res, "Avalara", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const totalTax = providerMoney((raw as { totalTax?: number }).totalTax, "totalTax");
   const details = ((raw as { summary?: { jurisdictionType?: string; rate?: number; tax?: number; taxName?: string }[] }).summary ??
@@ -742,7 +849,7 @@ export async function quoteViaTaxJar(
     },
     { ...options, providerLabel: "TaxJar" },
   );
-  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const raw = await readTaxProviderJson(res, "TaxJar", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new TaxRateProviderError(`TaxJar ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const tax = (raw as { tax?: Record<string, unknown> }).tax ?? {};
   const amountToCollect = providerMoney(tax.amount_to_collect, "amount_to_collect");
@@ -827,7 +934,7 @@ export async function quoteViaCustomHttp(
     },
     { ...options, providerLabel: "custom tax hook" },
   );
-  const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+  const raw = await readTaxProviderJson(res, "custom tax hook", options.timeoutMs ?? TAX_PROVIDER_REQUEST_TIMEOUT_MS);
   if (!res.ok) throw new TaxRateProviderError(`custom tax hook ${res.status}`);
   const components = (Array.isArray(raw.components) ? raw.components : []) as TaxComponentQuote[];
   const hasHeadline = raw.taxAmount !== undefined && raw.taxAmount !== null && raw.taxAmount !== "";
