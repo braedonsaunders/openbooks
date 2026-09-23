@@ -862,6 +862,27 @@ export async function requireHrmLeaveManageOnEmployment(
 }
 
 /**
+ * The aggregate half of the manager file gate above, for list-shaped reads
+ * that name no single employment: the same hrm.leave.manage grant, then the
+ * employer-subsidiary scope for the caller to filter by (null =
+ * unrestricted), never a boolean to trust. The on-behalf employment picker
+ * lists through this gate, so the picker and the filing gate can never
+ * disagree about who may manage leave for whom.
+ */
+export async function requireAggregateLeaveManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
+    throw new HrmAuthorizationError(
+      "Leave access requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
+    );
+  }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
  * Self-service file gate: hrm.leave.request plus proof the employment is
  * the actor's own. Throws HrmAuthorizationError naming the refused shape —
  * the caller must not learn whether the id exists elsewhere.

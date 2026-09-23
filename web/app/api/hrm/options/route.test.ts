@@ -36,7 +36,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.hrm-options-route-test')]
       const NextResponse = globalThis.openbooksHrmOptionsNextResponse
       export async function guardFeaturePermission(permission, feature) {
-        if ((permission !== 'hrm.employment.read' && permission !== 'hrm.position.read') || feature !== 'hrm') {
+        if ((permission !== 'hrm.employment.read' && permission !== 'hrm.position.read' && permission !== 'hrm.leave.manage') || feature !== 'hrm') {
           throw new Error('unexpected gate ' + permission + ' ' + feature)
         }
         if (state.gate && 'status' in state.gate) {
@@ -95,6 +95,20 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
+  [
+    "mock:leave-read",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-options-route-test')]
+      export async function listLeaveTypeOptions(orgId) {
+        return [{ id: 'type-1', label: 'VAC — Vacation' }]
+      }
+      export async function listLeaveFilingEmploymentOptions(args) {
+        state.calls.push({ fn: 'leave-filing-employments', args })
+        if (state.serviceThrow) throw state.serviceThrow
+        return [{ employmentId: 'employment-9', label: 'Quinn Vidal · Main · Nurse' }]
+      }
+    `,
+  ],
 ]);
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmOptionsNextResponse = NextResponse;
@@ -104,6 +118,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/authorization.ts", "mock:authz-engine"],
   ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
   ["@openbooks/engine/src/hrm/positions-read.ts", "mock:service"],
+  ["@openbooks/engine/src/hrm/leave-read.ts", "mock:leave-read"],
 ]);
 
 let optionsRoute: typeof import("./route.ts") | undefined;
@@ -264,5 +279,37 @@ if (isVitest) {
         },
       },
     ]);
+  });
+
+  test("leave-filing-employments sits behind the manage grant and projects to id/label", async () => {
+    reset();
+    const include = "00000000-0000-4000-8000-000000000034";
+    const response = await optionsRoute!.GET(
+      getRequest(`?source=leave-filing-employments&q=qui&limit=10&include=${include}`),
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      options: [{ id: "employment-9", label: "Quinn Vidal · Main · Nurse" }],
+    });
+    assert.deepEqual(routeState.calls, [
+      {
+        fn: "leave-filing-employments",
+        args: {
+          orgId: "org-1",
+          actorId: "user-1",
+          q: "qui",
+          limit: 10,
+          includeEmploymentId: include,
+        },
+      },
+    ]);
+  });
+
+  test("leave-filing-employments without the manage grant never reaches the service", async () => {
+    reset();
+    routeState.gate = { status: 403 };
+    const response = await optionsRoute!.GET(getRequest("?source=leave-filing-employments"));
+    assert.equal(response.status, 403);
+    assert.deepEqual(routeState.calls, []);
   });
 }

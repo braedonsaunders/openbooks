@@ -8,8 +8,10 @@ import {
 import {
   HrmAuthorizationError,
   loadOwnEmploymentIds,
+  requireAggregateLeaveManage,
   requireHrmLeaveRead,
 } from "./authorization.ts";
+import { EmploymentReadError, likeEscape } from "./employment-read.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { LeaveError } from "./leave-errors.ts";
@@ -370,6 +372,140 @@ export async function listLeaveTypeOptions(
      where org_id = ${orgId} and is_active order by code limit 200
   `)).rows;
   return rows.map((row) => ({ id: row.id, label: `${row.code} — ${row.name}` }));
+}
+
+export interface LeaveFilingEmploymentOptionsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  /** Substring match on the worker's display name; empty matches all. */
+  readonly q?: string;
+  /** Bounded page size; defaults to 25, refuses above 100. */
+  readonly limit?: number;
+  /** Employment id to pin first (the draft's stored value under edit). */
+  readonly includeEmploymentId?: string;
+}
+
+export interface LeaveFilingEmploymentOption {
+  readonly employmentId: string;
+  readonly label: string;
+}
+
+/**
+ * Employments the actor may file leave on behalf of, for the drawer's
+ * manager filing mode. Authority is the aggregate half of the filing gate
+ * (requireAggregateLeaveManage — the same hrm.leave.manage grant plus
+ * employer-subsidiary scope the per-employment filing gate enforces), so
+ * the picker can never offer an employment the filing refusal would reject.
+ * Labels name the person, the employer, and the live primary job title —
+ * the drawer submits the employment id, never a name. An empty page is
+ * truthful (the actor manages leave for nobody in scope), never a refusal.
+ */
+export async function loadLeaveFilingEmploymentOptions(
+  exec: SqlExecutor,
+  query: LeaveFilingEmploymentOptionsQuery,
+): Promise<readonly LeaveFilingEmploymentOption[]> {
+  const orgId = query.orgId;
+  const actorId = query.actorId;
+  if (typeof orgId !== "string" || orgId.length === 0) {
+    throw new EmploymentReadError("orgId must be a non-empty string");
+  }
+  if (typeof actorId !== "string" || actorId.length === 0) {
+    throw new EmploymentReadError("actorId must be a non-empty string");
+  }
+  const limit = query.limit ?? 25;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new EmploymentReadError(
+      "options limit must be an integer from 1 to 100 — the picker pages, it never dumps the roster",
+    );
+  }
+  const allowed = await requireAggregateLeaveManage(exec, orgId, actorId);
+  const fragment = (query.q ?? "").trim();
+  const includeId = query.includeEmploymentId?.trim() ? query.includeEmploymentId.trim() : null;
+
+  type FilingOptionRow = {
+    employmentId: string;
+    employerSubsidiaryId: string;
+    personName: string;
+    employerName: string;
+    jobTitle: string | null;
+  };
+  const page = (await exec.execute<FilingOptionRow>(sql`
+    select e.id::text as "employmentId",
+           e.employer_subsidiary_id::text as "employerSubsidiaryId",
+           p.display_name as "personName",
+           s.name as "employerName",
+           jt.job_title as "jobTitle"
+      from worker_employments e
+      join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+      join subsidiaries s on s.org_id = e.org_id and s.id = e.employer_subsidiary_id
+      left join lateral (
+        select av.job_title
+          from employment_assignment_versions av
+         where av.org_id = e.org_id
+           and av.employment_id = e.id
+           and av.recorded_until is null
+           and av.is_primary
+         order by av.version_no desc
+         limit 1
+      ) jt on true
+     where e.org_id = ${orgId}::uuid
+       and e.employer_subsidiary_id is not null
+       ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
+     order by p.display_name, e.id
+     limit ${limit}`)).rows.filter(
+    (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
+  );
+  // The pinned draft value is read by id, never by page position: it leads
+  // even when it falls outside the bounded page. An unknown or out-of-scope
+  // id stays absent rather than leaking existence.
+  const pinned = includeId
+    ? (await exec.execute<FilingOptionRow>(sql`
+      select e.id::text as "employmentId",
+             e.employer_subsidiary_id::text as "employerSubsidiaryId",
+             p.display_name as "personName",
+             s.name as "employerName",
+             jt.job_title as "jobTitle"
+        from worker_employments e
+        join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+        join subsidiaries s on s.org_id = e.org_id and s.id = e.employer_subsidiary_id
+        left join lateral (
+          select av.job_title
+            from employment_assignment_versions av
+           where av.org_id = e.org_id
+             and av.employment_id = e.id
+             and av.recorded_until is null
+             and av.is_primary
+           order by av.version_no desc
+           limit 1
+        ) jt on true
+       where e.org_id = ${orgId}::uuid
+         and e.id = ${includeId}::uuid
+         and e.employer_subsidiary_id is not null`)).rows.filter(
+        (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
+      )[0] ?? null
+    : null;
+  const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
+
+  return rows.slice(0, limit + (pinned ? 1 : 0)).map((row) => ({
+    employmentId: row.employmentId,
+    label: row.jobTitle
+      ? `${row.personName} · ${row.employerName} · ${row.jobTitle}`
+      : `${row.personName} · ${row.employerName}`,
+  }));
+}
+
+/**
+ * Public boundary: one tenant-scoped transaction, then the scoped
+ * on-behalf employment options. Read only. The HRM feature switch rides on
+ * the caller (the options route double-gates it with the manage grant),
+ * exactly like every other read in this module.
+ */
+export async function listLeaveFilingEmploymentOptions(
+  query: LeaveFilingEmploymentOptionsQuery,
+): Promise<readonly LeaveFilingEmploymentOption[]> {
+  return withOrgTransaction(query.orgId, async () => {
+    return loadLeaveFilingEmploymentOptions(db, query);
+  });
 }
 
 // --- Request reads ----------------------------------------------------------

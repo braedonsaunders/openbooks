@@ -5576,3 +5576,33 @@ test('rate-card labor/material selector labels ship localized in every locale', 
     }
   }
 })
+
+test('leave on-behalf filing copy ships localized in every locale', () => {
+  // OM-11: the leave drawer renders a manager on-behalf mode (mode labels,
+  // employee picker, filer hint, missing-employee refusal) — absent outside
+  // en the mode would fall back to English inside otherwise translated
+  // drawers. Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = [
+    'hrm.leave.onBehalfFilingForLabel',
+    'hrm.leave.onBehalfSelfLabel',
+    'hrm.leave.onBehalfOtherLabel',
+    'hrm.leave.onBehalfEmployeeLabel',
+    'hrm.leave.onBehalfEmployeePlaceholder',
+    'hrm.leave.onBehalfHint',
+    'hrm.leave.onBehalfEmploymentRequired',
+  ]
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
