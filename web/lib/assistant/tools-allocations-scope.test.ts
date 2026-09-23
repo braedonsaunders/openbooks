@@ -209,7 +209,7 @@ test("allocation reads reuse the setup routes' engine services", () => {
     "listRuns(",
     "getRun(",
     "queryLineage(",
-    "runSubsidiaryVisible(",
+    "allocationScopeVisible(",
     "validateLineageAnchor(",
     "reportBookSelection(",
     "getDimensionValueLabels(",
@@ -234,7 +234,7 @@ test("feature gate, subsidiary scope, and report-permission surfacing", () => {
   assert.match(tools, /allocations_feature_disabled/);
   // Runs reads carry the actor's subsidiary scope exactly as the routes do.
   assert.match(tools, /allowedSubsidiaryIds: authz\.allowedSubsidiaryIds/);
-  assert.match(tools, /runSubsidiaryVisible\(authz\.allowedSubsidiaryIds/);
+  assert.match(tools, /allocationScopeVisible\(authz\.allowedSubsidiaryIds/);
   assert.match(tools, /must be inside your scope/);
   // Report-definition drivers are enforced by the engine under the
   // triggering actor; the refusal surfaces instead of an opaque failure.

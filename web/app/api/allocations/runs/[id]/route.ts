@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { isUuid } from "../../../../../lib/list-params";
-import { RunQueryError, getRun, runSubsidiaryVisible } from "../../../../../../engine/src/allocations/run-queries.ts";
+import { RunQueryError, getRun } from "../../../../../../engine/src/allocations/run-queries.ts";
+import { allocationScopeVisible } from "../../../../../../engine/src/allocations/subsidiary-scope.ts";
 
 export const runtime = "nodejs";
 
@@ -15,7 +16,9 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   try {
     const run = await getRun(gate.user.orgId, id);
-    if (!runSubsidiaryVisible(gate.allowedSubsidiaryIds, run.subsidiaryId)) {
+    // Full computation scope, not just the pin: a pinned run whose targets
+    // cross into a hidden subsidiary stays invisible to restricted callers.
+    if (!allocationScopeVisible(gate.allowedSubsidiaryIds, run.subsidiaryId, run.computation)) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
     }
     return NextResponse.json({ run });
