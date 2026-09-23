@@ -13,6 +13,7 @@ import { ApprovalActions } from '../../../components/approval-actions'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
 import { mergeHref } from '../../../lib/list-params'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -46,6 +47,7 @@ export function BudgetDrawer({
   years,
   sources,
   newlyCreated,
+  createMode,
   canManage,
   canApprove,
   canExport,
@@ -58,13 +60,17 @@ export function BudgetDrawer({
   years: number[]
   sources: { id: string; name: string; fiscal_year: number }[]
   newlyCreated: boolean
+  /** Unsaved-create: no persisted row exists — every edit stays local until an explicit Save. */
+  createMode?: boolean
   canManage: boolean
   canApprove: boolean
   canExport: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('budgets')
+  const tc = useTranslations('common')
   const router = useRouter()
+  const unsaved = createMode === true
   const pathname = usePathname()
   const [scenario, setScenario] = useState(initial.scenario)
   const revisionRef = useRef(initial.scenario.revision)
@@ -124,6 +130,7 @@ export function BudgetDrawer({
   }, [t])
 
   const flushCells = useCallback(async (): Promise<boolean> => {
+    if (unsaved) return true
     if (saveTimer.current) clearTimeout(saveTimer.current)
     const pending: PendingCellSnapshot[] = [...pendingRef.current.entries()].map(([key, cell]) => ({
       key,
@@ -148,12 +155,32 @@ export function BudgetDrawer({
       toast.error(t('workspace.saveFailed'))
       return false
     }
-  }, [dims, execute, scenario.id, t, toStorage])
+  }, [dims, execute, scenario.id, t, toStorage, unsaved])
+
+  // Annual-total drafts keyed by account: while an annual figure is being
+  // typed, the input is controlled and the totals below read the draft, so
+  // the total updates live instead of waiting for blur. Cleared on commit.
+  const [annualDrafts, setAnnualDrafts] = useState<Record<string, string>>({})
 
   function queueCell(cell: Omit<Cell, 'subsidiaryId'>) {
     const full: Cell = { ...cell, subsidiaryId: sliceSubsidiaryId }
     const key = cellKey(full.accountId, full.periodId, full.subsidiaryId)
     setValues((current) => ({ ...current, [key]: full.amount }))
+    // A month edit supersedes a half-typed annual figure for the same
+    // account: the draft no longer describes the months, so drop it and let
+    // the total follow the months.
+    setAnnualDrafts((current) => {
+      if (!(full.accountId in current)) return current
+      const next = { ...current }
+      delete next[full.accountId]
+      return next
+    })
+    if (unsaved) {
+      // No persisted row exists yet: the edit stays in local state until the
+      // explicit Save commits the scenario and its lines together.
+      setSaveState('dirty')
+      return
+    }
     pendingRef.current.set(key, full)
     pendingVersionsRef.current.set(key, (pendingVersionsRef.current.get(key) ?? 0) + 1)
     setSaveState('dirty')
@@ -162,7 +189,7 @@ export function BudgetDrawer({
   }
 
   const saveMetadataNow = useCallback(async (): Promise<boolean> => {
-    if (!editable) return true
+    if (unsaved || !editable) return true
     if (metadataTimer.current) clearTimeout(metadataTimer.current)
     const snapshot = JSON.stringify([name, description, kind, bookId, fiscalYear])
     if (snapshot === metadataBaselineRef.current) return true
@@ -182,7 +209,7 @@ export function BudgetDrawer({
       toast.error(t('workspace.saveFailed'))
       return false
     }
-  }, [bookId, description, editable, execute, fiscalYear, kind, name, router, scenario.id, t])
+  }, [bookId, description, editable, execute, fiscalYear, kind, name, router, scenario.id, t, unsaved])
 
   // Keep the unmount handler pointed at the latest callbacks without making
   // the handler itself rerun (and flush) whenever an editor value changes.
@@ -208,10 +235,22 @@ export function BudgetDrawer({
     void saveMetadataNowRef.current()
   }, [])
 
-  const pageTotalUnits = useMemo(() => Object.entries(values).reduce((sum, [key, value]) => {
-    if (!initial.accounts.some((account) => key.startsWith(`${account.id}|`))) return sum
-    try { return sum + budgetToUnits(value || '0') } catch { return sum }
-  }, 0n), [initial.accounts, values])
+  // A half-typed annual figure counts toward the totals while it parses, so
+  // the slice total follows keystrokes instead of waiting for blur; an
+  // unparseable intermediate falls back to the committed months.
+  const rowTotal = useCallback((accountId: string) => {
+    const draft = annualDrafts[accountId]
+    if (draft !== undefined) {
+      try { return budgetToUnits(draft) } catch { /* fall through to committed months */ }
+    }
+    return initial.periods.reduce((sum, period) => {
+      try { return sum + budgetToUnits(values[cellKey(accountId, period.id, sliceSubsidiaryId)] ?? '0') } catch { return sum }
+    }, 0n)
+  }, [annualDrafts, initial.periods, sliceSubsidiaryId, values])
+
+  const pageTotalUnits = useMemo(() => initial.accounts.reduce((sum, account) => {
+    try { return sum + rowTotal(account.id) } catch { return sum }
+  }, 0n), [initial.accounts, rowTotal])
   const initialPageTotalUnits = useMemo(() => initial.lines.reduce((sum, line) => {
     try { return sum + budgetToUnits(toDisplay(line.accountId, line.amount)) } catch { return sum }
   }, 0n), [initial.lines, toDisplay])
@@ -240,10 +279,14 @@ export function BudgetDrawer({
     }
   }
 
-  function rowTotal(accountId: string) {
-    return initial.periods.reduce((sum, period) => {
-      try { return sum + budgetToUnits(values[cellKey(accountId, period.id, sliceSubsidiaryId)] ?? '0') } catch { return sum }
-    }, 0n)
+  function commitAnnual(accountId: string, raw: string) {
+    setAnnualDrafts((current) => {
+      if (!(accountId in current)) return current
+      const next = { ...current }
+      delete next[accountId]
+      return next
+    })
+    spreadRow(accountId, raw)
   }
 
   function copyMonth(accountId: string, periodId: string, forwardOnly: boolean) {
@@ -301,7 +344,9 @@ export function BudgetDrawer({
   // until the next action — a 4-second toast alone reads as nothing
   // happening once it dismisses (F-t13-006).
   const [actionError, setActionError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
   async function action(actionName: string, extra: Record<string, unknown> = {}) {
+    if (unsaved) return
     if (actionName === 'archive' && !window.confirm(t('confirm.archive'))) return
     if (actionName === 'copy_prior_actuals' && !window.confirm(t('confirm.copyPriorActuals'))) return
     if (actionName === 'apply_source' && !window.confirm(t('confirm.applySource'))) return
@@ -349,11 +394,12 @@ export function BudgetDrawer({
   }
 
   async function deleteDraft() {
+    if (unsaved) return
     if (!window.confirm(t('confirm.delete'))) return
     setBusy(true)
     try {
       const response = await fetch(`/api/budgets/${scenario.id}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error('delete_failed')
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('feedback.actionFailed')))
       toast.success(t('feedback.deleted'))
       router.push(closeHref)
       router.refresh()
@@ -364,11 +410,99 @@ export function BudgetDrawer({
     }
   }
 
+  /**
+   * Unsaved-create Save: the single explicit write. Refuses a nameless
+   * budget and unparseable cells with named remedies BEFORE anything is
+   * persisted, then creates the scenario and commits the entered non-zero
+   * lines. Abandoning the drawer (Cancel/close) writes nothing at all.
+   */
+  async function saveNew() {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      setCreateError(t('create.nameRequired'))
+      return
+    }
+    const cells: Record<string, unknown>[] = []
+    for (const account of initial.accounts) {
+      for (const period of initial.periods) {
+        const raw = values[cellKey(account.id, period.id, sliceSubsidiaryId)]
+        if (raw === undefined) continue
+        let units: bigint
+        try {
+          units = budgetToUnits(raw)
+        } catch {
+          setCreateError(t('create.invalidAmount', { account: account.name }))
+          return
+        }
+        if (units === 0n) continue
+        cells.push({
+          ...dims,
+          accountId: account.id,
+          periodId: period.id,
+          subsidiaryId: sliceSubsidiaryId,
+          amount: toStorage(account.id, raw),
+        })
+      }
+    }
+    setBusy(true)
+    setCreateError(null)
+    try {
+      const draftBody: Record<string, unknown> = {
+        name: trimmedName,
+        bookId,
+        fiscalYear: Number(fiscalYear),
+        kind,
+      }
+      if (description.trim() !== '') draftBody.description = description.trim()
+      if (sourceScenarioId !== '') draftBody.sourceScenarioId = sourceScenarioId
+      const draftResponse = await fetch('/api/budgets/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftBody),
+      })
+      if (!draftResponse.ok) throw new Error(await readApiErrorMessage(draftResponse, t('create.failed')))
+      const draft = await draftResponse.json() as { id: string; revision: number }
+      if (cells.length > 0) {
+        const linesResponse = await fetch(`/api/budgets/${draft.id}/lines`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedRevision: draft.revision, cells }),
+        })
+        if (!linesResponse.ok) throw new Error(await readApiErrorMessage(linesResponse, t('create.failed')))
+      }
+      toast.success(t('feedback.created'))
+      router.push((mergeHref('/budgets', currentParams, {
+        budget: draft.id,
+        budgetNew: null,
+        budgetQ: null,
+        budgetPage: null,
+        budgetSubsidiary: null,
+        budgetDepartment: null,
+        budgetProject: null,
+        budgetLocation: null,
+        budgetClass: null,
+        budgetImport: null,
+        budgetView: null,
+      })))
+      router.refresh()
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : t('create.failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const badgeVariant = scenario.status === 'approved' ? 'success' : scenario.status === 'pending_approval' ? 'warning' : scenario.status === 'archived' ? 'outline' : 'secondary'
   const selectedBook = books.find((book) => book.id === bookId)
   const importHref = mergeHref('/budgets', currentParams, { budgetImport: '1' })
   const importCloseHref = mergeHref('/budgets', currentParams, { budgetImport: null })
-  const headerActions = <>
+  // Unsaved-create chrome: an explicit Save plus a Cancel that writes
+  // nothing — no report link, approvals, import, or row actions exist before
+  // the first Save commits the row they would act on.
+  const headerActions = unsaved ? <>
+    <Button size="sm" disabled={busy} onClick={() => void saveNew()}>{t('create.save')}</Button>
+    <Button variant="outline" size="sm" asChild><Link href={closeHref}>{tc('actions.cancel')}</Link></Button>
+  </> : <>
     {editable ? <Button variant="outline" size="sm" asChild><Link href={(importHref)}><FileUp size={15} />{t('import.button')}</Link></Button> : null}
     <Button variant="outline" size="sm" asChild><Link href={`/reports/budget?scenario=${scenario.id}`}>{t('actions.openReport')}</Link></Button>
     <FlowManualButtons subjectKind="budget_scenario" subjectId={scenario.id} />
@@ -388,18 +522,19 @@ export function BudgetDrawer({
     title={<span className="flex items-center gap-2.5"><span>{newlyCreated ? t('create.title') : name || scenario.name}</span><Badge variant={badgeVariant}>{t(`status.${scenario.status}`)}</Badge></span>}
     description={t('workspace.subtitle', { book: selectedBook?.name ?? scenario.bookName, year: fiscalYear })}
     headerActions={headerActions}
-    footer={<div className="flex w-full items-center justify-between text-xs text-slate-500 dark:text-slate-400"><span>{saveState === 'saving' ? t('workspace.saving') : saveState === 'dirty' ? t('workspace.unsaved') : saveState === 'error' ? t('workspace.saveFailed') : t('workspace.saved')}</span><span>{t('workspace.autosaveHint')}</span></div>}
+    footer={<div className="flex w-full items-center justify-between text-xs text-slate-500 dark:text-slate-400"><span>{unsaved ? (saveState === 'dirty' ? t('workspace.unsaved') : t('create.unsavedHint')) : saveState === 'saving' ? t('workspace.saving') : saveState === 'dirty' ? t('workspace.unsaved') : saveState === 'error' ? t('workspace.saveFailed') : t('workspace.saved')}</span>{unsaved ? null : <span>{t('workspace.autosaveHint')}</span>}</div>}
   >
     <div className="space-y-4">
       {!editable ? <Alert variant="info" className="flex items-center gap-2"><LockKeyhole size={16} /><span>{t('workspace.locked')}</span></Alert> : null}
       {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
+      {createError ? <Alert variant="destructive">{createError}</Alert> : null}
       <Card>
         <CardContent className="grid gap-4 pt-6 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-1.5"><Label htmlFor={editable ? 'scenario-name' : undefined}>{t('workspace.name')}</Label>{editable ? <Input id="scenario-name" value={name} onChange={(event) => setName(event.target.value)} /> : <ReadOnlyValue value={name} />}</div>
           <div className="space-y-1.5"><Label htmlFor={editable ? 'scenario-book' : undefined}>{t('create.book')}</Label>{editable ? <Select id="scenario-book" value={bookId} onChange={(event) => setBookId(event.target.value)}>{books.map((book) => <option key={book.id} value={book.id}>{book.name}</option>)}</Select> : <ReadOnlyValue value={books.find((book) => book.id === bookId)?.name ?? scenario.bookName} />}</div>
           <div className="space-y-1.5"><Label htmlFor={editable ? 'scenario-year' : undefined}>{t('create.year')}</Label>{editable ? <Select id="scenario-year" value={fiscalYear} onChange={(event) => setFiscalYear(event.target.value)}>{years.map((year) => <option key={year} value={year}>{year}</option>)}</Select> : <ReadOnlyValue value={fiscalYear} className="tabular-nums" />}</div>
           <div className="space-y-1.5"><Label htmlFor={editable ? 'scenario-kind' : undefined}>{t('create.kind')}</Label>{editable ? <Select id="scenario-kind" value={kind} onChange={(event) => setKind(event.target.value as 'budget' | 'forecast')}><option value="budget">{t('kind.budget')}</option><option value="forecast">{t('kind.forecast')}</option></Select> : <ReadOnlyValue value={t(`kind.${kind}`)} />}</div>
-          {editable ? <div className="space-y-1.5"><Label htmlFor="scenario-source">{t('create.source')}</Label><div className="flex gap-2"><Select id="scenario-source" value={sourceScenarioId} disabled={busy} onChange={(event) => setSourceScenarioId(event.target.value)}><option value="">{t('create.blank')}</option>{sources.filter((source) => source.id !== scenario.id).map((source) => <option key={source.id} value={source.id}>{t('create.sourceOption', { name: source.name, year: source.fiscal_year })}</option>)}</Select>{sourceScenarioId ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('apply_source', { sourceScenarioId })}>{t('actions.applySource')}</Button> : null}</div></div> : null}
+          {editable ? <div className="space-y-1.5"><Label htmlFor="scenario-source">{t('create.source')}</Label><div className="flex gap-2"><Select id="scenario-source" value={sourceScenarioId} disabled={busy} onChange={(event) => setSourceScenarioId(event.target.value)}><option value="">{t('create.blank')}</option>{sources.filter((source) => source.id !== scenario.id).map((source) => <option key={source.id} value={source.id}>{t('create.sourceOption', { name: source.name, year: source.fiscal_year })}</option>)}</Select>{sourceScenarioId && !unsaved ? <Button variant="outline" size="sm" disabled={busy} onClick={() => void action('apply_source', { sourceScenarioId })}>{t('actions.applySource')}</Button> : null}</div></div> : null}
           <div className="space-y-1.5 md:col-span-2 xl:col-span-5"><Label htmlFor={editable ? 'scenario-description' : undefined}>{t('workspace.description')}</Label>{editable ? <Textarea id="scenario-description" rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t('workspace.descriptionPlaceholder')} /> : <ReadOnlyValue value={description} className="whitespace-pre-wrap" />}</div>
         </CardContent>
       </Card>
@@ -429,7 +564,7 @@ export function BudgetDrawer({
               <Input className="h-8 w-28" inputMode="decimal" value={uplift} onChange={(event) => setUplift(event.target.value)} placeholder={t('workspace.uplift')} aria-label={t('workspace.uplift')} />
               <Button variant="outline" size="sm" disabled={!uplift} onClick={upliftPage}>{t('workspace.applyUplift')}</Button>
               <Button variant="outline" size="sm" onClick={clearPage}>{t('workspace.clearPage')}</Button>
-              <Button variant="outline" size="sm" onClick={() => void action('copy_prior_actuals')}>{t('actions.copyPriorActuals')}</Button>
+              {unsaved ? null : <Button variant="outline" size="sm" onClick={() => void action('copy_prior_actuals')}>{t('actions.copyPriorActuals')}</Button>}
             </div> : null}
           </div>
         </CardHeader>
@@ -451,7 +586,7 @@ export function BudgetDrawer({
                     const key = cellKey(account.id, period.id, sliceSubsidiaryId)
                     return <td key={period.id} className="px-2 py-1.5 text-right tabular-nums" onContextMenu={(event) => openCellMenu(event, account.id, period.id)}>{editable ? <Input className="h-8 min-w-24 text-right tabular-nums" inputMode="decimal" value={values[key] ?? ''} onChange={(event) => queueCell({ accountId: account.id, periodId: period.id, amount: event.target.value })} onBlur={() => void flushCells()} aria-label={`${account.name} ${period.name}`} /> : money(values[key] ?? '0')}</td>
                   }) : null}
-                  <td className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>{editable ? <div className="flex items-center justify-end gap-1"><Input key={annual.toString()} className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" defaultValue={budgetFromUnits(annual)} onBlur={(event) => spreadRow(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} /><Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}><MoreHorizontal size={15} /></Button></div> : money(budgetFromUnits(annual))}</td>
+                  <td className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>{editable ? <div className="flex items-center justify-end gap-1"><Input className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" value={annualDrafts[account.id] ?? budgetFromUnits(annual)} onChange={(event) => { setAnnualDrafts((current) => ({ ...current, [account.id]: event.target.value })); setSaveState('dirty') }} onBlur={(event) => commitAnnual(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} /><Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}><MoreHorizontal size={15} /></Button></div> : money(budgetFromUnits(annual))}</td>
                 </tr>
               }) : <tr><td colSpan={viewMode === 'monthly' ? initial.periods.length + 2 : 2} className="px-4 py-10 text-center text-slate-500">{t('workspace.emptyAccounts')}</td></tr>}</tbody>
               <tfoot><tr className="border-t border-slate-200 bg-slate-50 font-semibold dark:border-slate-800 dark:bg-slate-950/50"><td className="sticky left-0 border-r border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">{t('workspace.sliceTotal')}</td><td colSpan={viewMode === 'monthly' ? initial.periods.length + 1 : 1} className="px-3 py-2 text-right tabular-nums">{money(budgetFromUnits(pageTotalUnits))}</td></tr></tfoot>
@@ -463,7 +598,7 @@ export function BudgetDrawer({
     </div>
   </UrlDrawer>
   <ContextMenu open={cellMenu.open} position={cellMenu.position} items={menuItems} onClose={cellMenu.close} />
-  {editable && currentParams.budgetImport === '1' ? <BudgetImport scenarioId={scenario.id} closeHref={importCloseHref} revisionRef={revisionRef} execute={execute} onCommitted={() => { router.push((importCloseHref)); router.refresh() }} /> : null}
+  {editable && !unsaved && currentParams.budgetImport === '1' ? <BudgetImport scenarioId={scenario.id} closeHref={importCloseHref} revisionRef={revisionRef} execute={execute} onCommitted={() => { router.push((importCloseHref)); router.refresh() }} /> : null}
   </>
 }
 

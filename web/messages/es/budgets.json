@@ -6,7 +6,7 @@
     "search": "Buscar presupuestos…",
     "new": "Nuevo presupuesto",
     "emptyTitle": "Aún no hay presupuestos",
-    "emptyDescription": "Cree un borrador persistente e introduzca objetivos por cuenta y período.",
+    "emptyDescription": "Cree un presupuesto y empiece a introducir objetivos por cuenta y período.",
     "statusFilter": "Estado",
     "kindFilter": "Tipo",
     "yearFilter": "Ejercicio fiscal",
@@ -40,7 +40,11 @@
     "blank": "Presupuesto en blanco",
     "sourceOption": "{name} · AF{year}",
     "creating": "Creando…",
-    "failed": "No se pudo crear el borrador de presupuesto."
+    "failed": "No se pudo crear el borrador de presupuesto.",
+    "save": "Guardar presupuesto",
+    "nameRequired": "Asigne un nombre al presupuesto antes de guardarlo.",
+    "invalidAmount": "«{account}» tiene un importe que no es un número válido; corríjalo antes de guardar.",
+    "unsavedHint": "Aún no guardado: no se almacena nada hasta que lo guarde."
   },
   "workspace": {
     "back": "Presupuestos",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "Agregue al menos una línea presupuestaria distinta de cero antes de enviar para su aprobación.",
     "actionFailed": "La acción del presupuesto falló.",
     "revisionConflict": "Este presupuesto se modificó en otro lugar. Recargue para continuar.",
-    "selfApprovalForbidden": "No puede aprobar un presupuesto que usted ha enviado. Pida a otra persona aprobadora que lo revise."
+    "selfApprovalForbidden": "No puede aprobar un presupuesto que usted ha enviado. Pida a otra persona aprobadora que lo revise.",
+    "created": "Borrador de presupuesto creado."
   },
   "import": {
     "button": "Importar",

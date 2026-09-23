@@ -6,7 +6,7 @@
     "search": "Search budgets…",
     "new": "New budget",
     "emptyTitle": "No budgets yet",
-    "emptyDescription": "Create a persisted draft and start entering account targets by period.",
+    "emptyDescription": "Create a budget and start entering account targets by period.",
     "statusFilter": "Status",
     "kindFilter": "Type",
     "yearFilter": "Fiscal year",
@@ -40,7 +40,11 @@
     "blank": "Blank budget",
     "sourceOption": "{name} · FY{year}",
     "creating": "Creating…",
-    "failed": "The budget draft could not be created."
+    "failed": "The budget draft could not be created.",
+    "save": "Save budget",
+    "nameRequired": "Give the budget a name before saving.",
+    "invalidAmount": "“{account}” has an amount that is not a valid number — fix it before saving.",
+    "unsavedHint": "Not saved yet — nothing is stored until you save."
   },
   "workspace": {
     "back": "Budgets",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "Add at least one non-zero budget line before submitting for approval.",
     "actionFailed": "The budget action failed.",
     "revisionConflict": "This budget changed elsewhere. Reload to continue.",
-    "selfApprovalForbidden": "You cannot approve a budget you submitted. Ask another approver to decide."
+    "selfApprovalForbidden": "You cannot approve a budget you submitted. Ask another approver to decide.",
+    "created": "Budget draft created."
   },
   "import": {
     "button": "Import",

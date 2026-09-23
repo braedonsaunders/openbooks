@@ -6,7 +6,7 @@
     "search": "予算を検索…",
     "new": "新規予算",
     "emptyTitle": "予算はまだありません",
-    "emptyDescription": "永続化された下書きを作成し、期間ごとに勘定の目標値を入力し始めてください。",
+    "emptyDescription": "予算を作成し、期間ごとに勘定の目標値を入力し始めてください。",
     "statusFilter": "ステータス",
     "kindFilter": "タイプ",
     "yearFilter": "会計年度",
@@ -40,7 +40,11 @@
     "blank": "空白の予算",
     "sourceOption": "{name} · FY{year}",
     "creating": "作成中…",
-    "failed": "予算の下書きを作成できませんでした。"
+    "failed": "予算の下書きを作成できませんでした。",
+    "save": "予算を保存",
+    "nameRequired": "保存する前に予算に名前を付けてください。",
+    "invalidAmount": "「{account}」に有効な数値ではない金額があります — 保存する前に修正してください。",
+    "unsavedHint": "まだ保存されていません — 保存するまで何も記録されません。"
   },
   "workspace": {
     "back": "予算",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "承認に提出する前に、ゼロ以外の予算行を少なくとも1つ追加してください。",
     "actionFailed": "予算アクションに失敗しました。",
     "revisionConflict": "この予算は別の場所で変更されました。続行するには再読み込みしてください。",
-    "selfApprovalForbidden": "自分が提出した予算を承認することはできません。他の承認者に判断を依頼してください。"
+    "selfApprovalForbidden": "自分が提出した予算を承認することはできません。他の承認者に判断を依頼してください。",
+    "created": "予算の下書きを作成しました。"
   },
   "import": {
     "button": "インポート",

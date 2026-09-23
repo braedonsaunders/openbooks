@@ -181,3 +181,40 @@ test('draft creation rejects an unknown explicit kind instead of defaulting to b
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('draft creation stores an explicit description for the unsaved-create Save', { skip: !DB }, async () => {
+  const { org, fy } = await fixture()
+  try {
+    const response = await post({
+      bookId: org.bookId,
+      fiscalYear: fy,
+      name: 'Named Save',
+      description: 'Board-approved envelope',
+    })
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
+    const targetId = (await response.json() as { id: string }).id
+    const stored = (await db.execute<{ description: string | null }>(sql`
+      select description from budget_scenarios where id = ${targetId} and org_id = ${org.orgId}`)).rows[0]
+    assert.equal(stored?.description, 'Board-approved envelope')
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('draft creation refuses a non-string description instead of coercing it', { skip: !DB }, async () => {
+  const { org, fy } = await fixture()
+  try {
+    const before = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    const response = await post({ bookId: org.bookId, fiscalYear: fy, description: 42 })
+    assert.equal(response.status, 422)
+    assert.deepEqual(await response.json(), { error: 'invalid_description' })
+    const after = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from budget_scenarios where org_id = ${org.orgId}`)).rows[0]!.n
+    assert.equal(after, before, 'malformed description input must not create a draft')
+  } finally {
+    state.allowed = null
+    await dropScratchOrg(org.orgId)
+  }
+})

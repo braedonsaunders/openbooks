@@ -6,7 +6,7 @@
     "search": "Rechercher des budgets…",
     "new": "Nouveau budget",
     "emptyTitle": "Aucun budget",
-    "emptyDescription": "Créez un brouillon persistant et saisissez les objectifs par compte et par période.",
+    "emptyDescription": "Créez un budget et saisissez les objectifs par compte et par période.",
     "statusFilter": "Statut",
     "kindFilter": "Type",
     "yearFilter": "Exercice",
@@ -40,7 +40,11 @@
     "blank": "Budget vide",
     "sourceOption": "{name} · EF{year}",
     "creating": "Création…",
-    "failed": "Le brouillon budgétaire n’a pas pu être créé."
+    "failed": "Le brouillon budgétaire n’a pas pu être créé.",
+    "save": "Enregistrer le budget",
+    "nameRequired": "Nommez le budget avant de l’enregistrer.",
+    "invalidAmount": "« {account} » comporte un montant qui n’est pas un nombre valide — corrigez-le avant d’enregistrer.",
+    "unsavedHint": "Pas encore enregistré — rien n’est stocké avant l’enregistrement."
   },
   "workspace": {
     "back": "Budgets",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "Ajoutez au moins une ligne budgétaire non nulle avant de soumettre pour approbation.",
     "actionFailed": "L’action budgétaire a échoué.",
     "revisionConflict": "Ce budget a été modifié ailleurs. Rechargez la page pour continuer.",
-    "selfApprovalForbidden": "Vous ne pouvez pas approuver un budget que vous avez soumis. Demandez à un autre approbateur de statuer."
+    "selfApprovalForbidden": "Vous ne pouvez pas approuver un budget que vous avez soumis. Demandez à un autre approbateur de statuer.",
+    "created": "Brouillon budgétaire créé."
   },
   "import": {
     "button": "Importer",

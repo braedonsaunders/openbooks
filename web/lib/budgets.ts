@@ -2,6 +2,7 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PNL_TYPES } from './account-types'
 
 export const BUDGET_KINDS = ['budget', 'forecast'] as const
@@ -172,35 +173,38 @@ export async function loadBudgetScenario(id: string, orgId: string): Promise<Bud
   }
 }
 
-/** Load one editable account page for a single dimensional worksheet slice. */
-export async function loadBudgetWorkspace(
-  id: string,
+/**
+ * The scenario-independent half of the worksheet: entity-slice defaulting,
+ * default-calendar periods for the year, the paged P&L account page, and the
+ * dimension pickers. Shared by the persisted workspace and the unsaved-create
+ * workspace so both drawers edit the same sheet over the same accounts.
+ */
+async function loadWorksheetSlice(
   orgId: string,
-  opts: { q?: string; page: number; perPage: number; dims: BudgetDimensions },
-): Promise<BudgetWorkspace | null> {
-  const scenario = await loadBudgetScenario(id, orgId)
-  if (!scenario) return null
-
+  fiscalYear: number,
+  dimsIn: BudgetDimensions,
+  opts: { q?: string; page: number; perPage: number },
+) {
   // The entity slice defaults to the tenant root — the same default the
   // import, the save path and the storage trigger apply to an omitted
   // entity. Without this, one account/period cell would collapse every
   // subsidiary's line into a single input (and an edit would overwrite the
   // root line while the hidden entity lines still counted in totals).
-  const rootSubsidiaryId = opts.dims.subsidiaryId ?? (await db.execute<{ id: string }>(sql`
+  const rootSubsidiaryId = dimsIn.subsidiaryId ?? (await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${orgId}
        and parent_id is null and is_active and not is_elimination
      order by created_at, id
      limit 1
   `)).rows[0]?.id ?? null
-  const dims: BudgetDimensions = { ...opts.dims, subsidiaryId: rootSubsidiaryId }
+  const dims: BudgetDimensions = { ...dimsIn, subsidiaryId: rootSubsidiaryId }
 
   const search = opts.q?.trim()
   const accountWhere = sql`a.org_id = ${orgId} and a.is_active and not a.is_summary
     and a.type in ${accountTypesSql}
     ${search ? sql`and (a.name ilike ${`%${search}%`} or coalesce(a.number, '') ilike ${`%${search}%`})` : sql``}`
 
-  const [periodRows, accountRows, accountCount, dimensions, total] = await Promise.all([
+  const [periodRows, accountRows, accountCount, dimensions] = await Promise.all([
     // A budget is pinned to ONE calendar — the org default. The line guard
     // admits default-calendar periods only, so the worksheet, the line query
     // and the totals below all read that same set: a line on another calendar
@@ -209,7 +213,7 @@ export async function loadBudgetWorkspace(
       select p.id, p.name, p.period_number, p.starts_on, p.ends_on
         from accounting_periods p
         join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       where p.org_id = ${orgId} and p.fiscal_year = ${scenario.fiscalYear} and not p.is_adjustment
+       where p.org_id = ${orgId} and p.fiscal_year = ${fiscalYear} and not p.is_adjustment
          and fc.is_default
        order by p.period_number
     `),
@@ -224,35 +228,10 @@ export async function loadBudgetWorkspace(
       rows: { n: string }[]
     }>,
     loadBudgetDimensionOptions(orgId),
-    db.execute(sql`
-      select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
-        from budget_lines bl
-        join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
-        join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
-        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       where bl.org_id = ${orgId} and bl.scenario_id = ${id}
-         and fc.is_default
-         and ${dimensionWhere('bl', dims)}
-    `) as Promise<{ rows: { total: string }[] }>,
   ])
 
-  const accountIds = accountRows.rows.map((row) => String(row.id))
-  const lineRows = accountIds.length
-    ? ((await db.execute<BudgetWorkspaceLineRow>(sql`
-        select bl.id, bl.account_id, bl.period_id, bl.subsidiary_id, bl.department_id,
-               bl.project_id, bl.location_id, bl.class_id, bl.amount::text, bl.note
-          from budget_lines bl
-          join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
-          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-         where bl.org_id = ${orgId} and bl.scenario_id = ${id}
-           and fc.is_default
-           and bl.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])
-           and ${dimensionWhere('bl', dims)}
-      `))).rows
-    : []
-
   return {
-    scenario,
+    dims,
     periods: periodRows.rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -266,6 +245,52 @@ export async function loadBudgetWorkspace(
       name: row.name,
       type: row.type,
     })),
+    totalAccounts: Number(accountCount.rows[0]?.n ?? 0),
+    dimensions,
+  }
+}
+
+/** Load one editable account page for a single dimensional worksheet slice. */
+export async function loadBudgetWorkspace(
+  id: string,
+  orgId: string,
+  opts: { q?: string; page: number; perPage: number; dims: BudgetDimensions },
+): Promise<BudgetWorkspace | null> {
+  const scenario = await loadBudgetScenario(id, orgId)
+  if (!scenario) return null
+
+  const slice = await loadWorksheetSlice(orgId, scenario.fiscalYear, opts.dims, opts)
+
+  const total = (await db.execute(sql`
+      select coalesce(sum(case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end), 0)::text as total
+        from budget_lines bl
+        join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+        join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+       where bl.org_id = ${orgId} and bl.scenario_id = ${id}
+         and fc.is_default
+         and ${dimensionWhere('bl', slice.dims)}
+    `) as { rows: { total: string }[] })
+
+  const accountIds = slice.accounts.map((account) => account.id)
+  const lineRows = accountIds.length
+    ? ((await db.execute<BudgetWorkspaceLineRow>(sql`
+        select bl.id, bl.account_id, bl.period_id, bl.subsidiary_id, bl.department_id,
+               bl.project_id, bl.location_id, bl.class_id, bl.amount::text, bl.note
+          from budget_lines bl
+          join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+         where bl.org_id = ${orgId} and bl.scenario_id = ${id}
+           and fc.is_default
+           and bl.account_id = any(${`{${accountIds.join(',')}}`}::uuid[])
+           and ${dimensionWhere('bl', slice.dims)}
+      `))).rows
+    : []
+
+  return {
+    scenario,
+    periods: slice.periods,
+    accounts: slice.accounts,
     lines: lineRows.map((row) => ({
       id: row.id,
       accountId: row.account_id,
@@ -278,12 +303,98 @@ export async function loadBudgetWorkspace(
       amount: row.amount,
       note: row.note,
     })),
-    totalAccounts: Number(accountCount.rows[0]?.n ?? 0),
+    totalAccounts: slice.totalAccounts,
     page: opts.page,
     perPage: opts.perPage,
     sliceTotal: total.rows[0]?.total ?? '0.0000',
-    dimensions,
-    effectiveSubsidiaryId: dims.subsidiaryId,
+    dimensions: slice.dimensions,
+    effectiveSubsidiaryId: slice.dims.subsidiaryId,
+  }
+}
+
+/** Refusal when a budget cannot be started: no usable book or no periods. */
+export class BudgetPrerequisiteError extends Error {
+  readonly name = 'BudgetPrerequisiteError'
+}
+
+/**
+ * Unsaved-create workspace: the same worksheet slice over the same accounts,
+ * but bound to an in-memory scenario (no id, no lines, zero total). Opening
+ * it writes nothing; the drawer's explicit Save persists the scenario and
+ * its lines. Defaults (primary book, current-or-latest fiscal year) mirror
+ * POST /api/budgets/draft so the drawer opens exactly as a fresh draft
+ * would — minus the persisted row.
+ */
+export async function loadUnsavedBudgetWorkspace(
+  orgId: string,
+  opts: { q?: string; page: number; perPage: number; dims: BudgetDimensions; bookId?: string | null; fiscalYear?: number | null; kind?: BudgetKind },
+): Promise<BudgetWorkspace> {
+  const requestedBook = opts.bookId ?? null
+  const today = await businessToday(orgId)
+  const defaults = (await db.execute<{ book_id: string | null; book_code: string | null; book_name: string | null; fiscal_year: number | null }>(sql`
+    select
+      (select id from accounting_books
+        where org_id = ${orgId} and is_active
+        order by is_primary desc, name limit 1) as book_id,
+      (select code from accounting_books
+        where org_id = ${orgId} and is_active
+        order by is_primary desc, name limit 1) as book_code,
+      (select name from accounting_books
+        where org_id = ${orgId} and is_active
+        order by is_primary desc, name limit 1) as book_name,
+      coalesce(
+        (select fiscal_year from accounting_periods
+          where org_id = ${orgId} and ${today}::date between starts_on and ends_on and not is_adjustment
+          order by starts_on desc limit 1),
+        (select max(fiscal_year) from accounting_periods where org_id = ${orgId})
+      ) as fiscal_year
+  `))
+  const resolved = requestedBook
+    ? ((await db.execute(sql`
+        select id as book_id, code as book_code, name as book_name from accounting_books
+         where id = ${requestedBook} and org_id = ${orgId} and is_active
+      `)) as { rows: { book_id: string; book_code: string; book_name: string }[] }).rows[0]
+    : defaults.rows[0]
+  if (requestedBook && !resolved) throw new BudgetPrerequisiteError('invalid_book_or_fiscal_year')
+  const bookId = resolved?.book_id ?? null
+  const fiscalYear = opts.fiscalYear ?? Number(defaults.rows[0]?.fiscal_year)
+  if (!bookId || !Number.isInteger(fiscalYear)) {
+    throw new BudgetPrerequisiteError('configure_an_accounting_book_and_periods_first')
+  }
+  const havePeriods = (await db.execute(sql`
+    select 1 from accounting_periods
+     where org_id = ${orgId} and fiscal_year = ${fiscalYear} and not is_adjustment limit 1
+  `))
+  if (!havePeriods.rows[0]) {
+    throw new BudgetPrerequisiteError('invalid_book_or_fiscal_year')
+  }
+
+  const slice = await loadWorksheetSlice(orgId, fiscalYear, opts.dims, opts)
+  return {
+    scenario: {
+      id: '',
+      name: '',
+      description: null,
+      fiscalYear,
+      kind: opts.kind ?? 'budget',
+      status: 'draft',
+      revision: 0,
+      bookId,
+      bookName: resolved?.book_name ?? '',
+      bookCode: resolved?.book_code ?? '',
+      submittedAt: null,
+      approvedAt: null,
+      updatedAt: new Date().toISOString(),
+    },
+    periods: slice.periods,
+    accounts: slice.accounts,
+    lines: [],
+    totalAccounts: slice.totalAccounts,
+    page: opts.page,
+    perPage: opts.perPage,
+    sliceTotal: '0.0000',
+    dimensions: slice.dimensions,
+    effectiveSubsidiaryId: slice.dims.subsidiaryId,
   }
 }
 

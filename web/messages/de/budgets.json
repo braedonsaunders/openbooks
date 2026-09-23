@@ -6,7 +6,7 @@
     "search": "Budgets suchen…",
     "new": "Neues Budget",
     "emptyTitle": "Noch keine Budgets",
-    "emptyDescription": "Erstellen Sie einen gespeicherten Entwurf und beginnen Sie mit der Eingabe von Kontenzielen nach Periode.",
+    "emptyDescription": "Erstellen Sie ein Budget und beginnen Sie mit der Eingabe von Kontenzielen nach Periode.",
     "statusFilter": "Status",
     "kindFilter": "Typ",
     "yearFilter": "Geschäftsjahr",
@@ -40,7 +40,11 @@
     "blank": "Leeres Budget",
     "sourceOption": "{name} · GJ{year}",
     "creating": "Wird erstellt…",
-    "failed": "Der Budgetentwurf konnte nicht erstellt werden."
+    "failed": "Der Budgetentwurf konnte nicht erstellt werden.",
+    "save": "Budget speichern",
+    "nameRequired": "Geben Sie dem Budget vor dem Speichern einen Namen.",
+    "invalidAmount": "„{account}“ enthält einen Betrag, der keine gültige Zahl ist — korrigieren Sie ihn vor dem Speichern.",
+    "unsavedHint": "Noch nicht gespeichert — bis zum Speichern wird nichts abgelegt."
   },
   "workspace": {
     "back": "Budgets",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "Fügen Sie mindestens eine Budgetzeile ungleich null hinzu, bevor Sie zur Genehmigung einreichen.",
     "actionFailed": "Die Budgetaktion ist fehlgeschlagen.",
     "revisionConflict": "Dieses Budget wurde anderweitig geändert. Laden Sie neu, um fortzufahren.",
-    "selfApprovalForbidden": "Sie können ein von Ihnen eingereichtes Budget nicht genehmigen. Bitten Sie eine andere approbierende Person um eine Entscheidung."
+    "selfApprovalForbidden": "Sie können ein von Ihnen eingereichtes Budget nicht genehmigen. Bitten Sie eine andere approbierende Person um eine Entscheidung.",
+    "created": "Budgetentwurf erstellt."
   },
   "import": {
     "button": "Importieren",
