@@ -14,7 +14,8 @@ globalThis.__paymentRemittanceEmailTest = state
 
 const sources = {
   bullmq: 'export class Worker { constructor(_queue, handler) { globalThis.__paymentRemittanceEmailTest.handler = handler } }',
-  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({});',
+  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
+  '../delivery/email-attachments.ts': 'export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};',
   '@openbooks/emails': `
     export const deriveEmailDeliveryKey = () => 'delivery';
     export const reconcileDeliveryAttempts = () => ({ action: 'send' });

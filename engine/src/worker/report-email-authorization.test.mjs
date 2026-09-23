@@ -6,7 +6,8 @@ const state = { handler: null, sent: 0, events: [], accepted: false }
 globalThis.__reportEmailTest = state
 const sources = {
   bullmq: 'export class Worker { constructor(_queue, handler) { globalThis.__reportEmailTest.handler = handler } }',
-  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({});',
+  '@openbooks/jobs': 'export const EMAIL_QUEUE = "test"; export const getBlockingConnection = () => ({}); export const resolveEmailDeliveryKey = () => "delivery-key";',
+  '../delivery/email-attachments.ts': 'export const loadEmailAttachments = async () => []; export const deleteStoredEmailAttachments = async () => {};',
   '@openbooks/emails': `
     export const deriveEmailDeliveryKey = () => 'delivery';
     export const reconcileDeliveryAttempts = () => globalThis.__reportEmailTest.accepted
