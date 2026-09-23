@@ -32,27 +32,26 @@ export function ProvisionComputeButton() {
     });
   }, [open]);
 
-  // A grid row is blank when it carries no data: an empty description AND an
-  // empty amount/difference. The temporary grid always holds a category, but
-  // its pristine "other" default is not data — only the server decides that,
-  // so every non-blank row is sent and the server's by-row refusal (400)
-  // names the offending line instead of the client silently shrinking the
-  // provision.
-  const permanentRows = permanent.filter((p) => p.description.trim() || p.amount.trim());
-  const temporaryRows = temporary.filter((d) => d.description.trim() || d.difference.trim());
-
+  // Grid rows travel UNFILTERED: the server skips blank rows itself, so its
+  // by-row index [i] always equals the grid row the preparer sees. Filtering
+  // client-side would shift every later refusal onto the wrong line.
   /** Render a server row refusal in translated copy naming the grid row
    *  (1-based, as the preparer sees it). Anything unrecognized falls back to
    *  the server's own text so a refusal never renders as a blank alert. */
   function describeRowError(serverError: string | undefined): string {
-    const match = /^(permanentDifferences|additionalDifferences)\[(\d+)\]: description is required/.exec(
+    const match = /^(permanentDifferences|additionalDifferences)\[(\d+)\]: (description|amount|difference) is required/.exec(
       serverError ?? "",
     );
     if (match) {
       const row = Number(match[2]) + 1;
-      return match[1] === "permanentDifferences"
-        ? t("rowDescriptionRequiredPermanent", { row })
-        : t("rowDescriptionRequiredTemporary", { row });
+      if (match[1] === "permanentDifferences") {
+        return match[3] === "description"
+          ? t("rowDescriptionRequiredPermanent", { row })
+          : t("rowAmountRequiredPermanent", { row });
+      }
+      return match[3] === "description"
+        ? t("rowDescriptionRequiredTemporary", { row })
+        : t("rowDifferenceRequiredTemporary", { row });
     }
     return serverError || t("computeFailed");
   }
@@ -65,8 +64,8 @@ export function ProvisionComputeButton() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         fiscalYear,
-        permanentDifferences: permanentRows,
-        additionalDifferences: temporaryRows,
+        permanentDifferences: permanent,
+        additionalDifferences: temporary,
         lossCarryforwardUsed: lossUsed || "0",
         valuationAllowance: va || "0",
       }),

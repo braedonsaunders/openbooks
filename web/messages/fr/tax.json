@@ -153,7 +153,9 @@
       "valuationAllowanceIas12": "Ajustement de comptabilisation de l'IDA",
       "rowDescriptionRequiredPermanent": "La ligne {row} des différences permanentes nécessite une description : ajoutez-en une ou effacez le montant.",
       "rowDescriptionRequiredTemporary": "La ligne {row} des différences temporaires nécessite une description : ajoutez-en une ou videz la ligne.",
-      "computeFailed": "La provision n'a pas pu être calculée."
+      "computeFailed": "La provision n'a pas pu être calculée.",
+      "rowAmountRequiredPermanent": "La ligne {row} des différences permanentes nécessite un montant : ajoutez-en un ou effacez la description.",
+      "rowDifferenceRequiredTemporary": "La ligne {row} des différences temporaires nécessite une différence : ajoutez-en une ou effacez la description."
     },
     "detail": {
       "title": "Provision {year} · v{version}",

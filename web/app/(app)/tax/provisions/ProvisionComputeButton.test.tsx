@@ -128,34 +128,37 @@ async function mountDialog() {
   };
 }
 
-test("an amount without a description reaches the server and its refusal names the row in translated copy", async () => {
+test("a blank first row does not shift the refusal: the second grid row is named row 2", async () => {
   const restore = installFetch();
-  // The server refuses the undescribed row by row, exactly as the route does.
+  // The server refuses the undescribed row by grid index, exactly as the route does.
   globalThis.__provisionPostStatus = {
     status: 400,
-    body: { error: "permanentDifferences[0]: description is required when an amount is provided" },
+    body: { error: "permanentDifferences[1]: description is required when an amount is provided" },
   };
   const dialog = await mountDialog();
   try {
+    // A second permanent line: the first stays blank.
+    await click(buttonsNamed("Add line")[0]!);
     const amounts = inputsWithPlaceholder("0.00");
-    assert.equal(amounts.length, 2);
+    assert.equal(amounts.length, 3);
     await act(async () => {
-      setInputValue(amounts[0]!, "25000");
+      setInputValue(amounts[1]!, "25000");
       await tick();
     });
     await tick();
     await click(buttonsNamed("Compute")[0]!);
 
-    // The row was sent, not swallowed client-side.
+    // Both rows travel unfiltered, so the server index equals the grid row.
     assert.equal(globalThis.__provisionPosts!.length, 1);
     assert.deepEqual(globalThis.__provisionPosts![0]!.body.permanentDifferences, [
+      { description: "", amount: "" },
       { description: "", amount: "25000" },
     ]);
-    // The 400 surfaces in the dialog, naming the row the preparer sees.
+    // The 400 surfaces in the dialog, naming the grid row the preparer sees.
     const alert = document.querySelector('[role="alert"]');
     assert.equal(
       alert?.textContent,
-      "Permanent differences row 1 needs a description \u2014 add one or clear the amount.",
+      "Permanent differences row 2 needs a description \u2014 add one or clear the amount.",
     );
     assert.equal(globalThis.__provisionPushed!.length, 0);
   } finally {
@@ -164,7 +167,39 @@ test("an amount without a description reaches the server and its refusal names t
   }
 });
 
-test("a pristine trailing row is not sent and a valid grid still saves", async () => {
+test("a described row with an empty amount refuses by row in translated copy", async () => {
+  const restore = installFetch();
+  globalThis.__provisionPostStatus = {
+    status: 400,
+    body: { error: "permanentDifferences[0]: amount is required when a description is provided" },
+  };
+  const dialog = await mountDialog();
+  try {
+    const descriptions = inputsWithPlaceholder("Description");
+    await act(async () => {
+      setInputValue(descriptions[0]!, "Meals");
+      await tick();
+    });
+    await tick();
+    await click(buttonsNamed("Compute")[0]!);
+
+    assert.equal(globalThis.__provisionPosts!.length, 1);
+    assert.deepEqual(globalThis.__provisionPosts![0]!.body.permanentDifferences, [
+      { description: "Meals", amount: "" },
+    ]);
+    const alert = document.querySelector('[role="alert"]');
+    assert.equal(
+      alert?.textContent,
+      "Permanent differences row 1 needs an amount \u2014 add one or clear the description.",
+    );
+    assert.equal(globalThis.__provisionPushed!.length, 0);
+  } finally {
+    await dialog.unmount();
+    restore();
+  }
+});
+
+test("grid rows travel unfiltered and a valid grid with a pristine trailing row still saves", async () => {
   const restore = installFetch();
   globalThis.__provisionPostStatus = { status: 201, body: { runId: "run-9" } };
   const dialog = await mountDialog();
@@ -179,13 +214,15 @@ test("a pristine trailing row is not sent and a valid grid still saves", async (
     await tick();
     await click(buttonsNamed("Compute")[0]!);
 
-    // The untouched trailing temporary row (category on its "other"
-    // default, no data) is blank and stays client-side; the valid row saves.
+    // The untouched trailing temporary row travels as-is (the server skips
+    // pristine rows itself); the valid row saves.
     assert.equal(globalThis.__provisionPosts!.length, 1);
     assert.deepEqual(globalThis.__provisionPosts![0]!.body.permanentDifferences, [
       { description: "Meals", amount: "10.00" },
     ]);
-    assert.deepEqual(globalThis.__provisionPosts![0]!.body.additionalDifferences, []);
+    assert.deepEqual(globalThis.__provisionPosts![0]!.body.additionalDifferences, [
+      { category: "other", description: "", difference: "" },
+    ]);
     assert.deepEqual(globalThis.__provisionPushed, ["/tax/provisions/run-9"]);
     assert.equal(document.querySelector('[role="alert"]'), null);
   } finally {
