@@ -56,8 +56,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   `))
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
+  // The scope rides into both locked writes: the visibility precheck above
+  // races a concurrent PATCH moving the asset to a restricted subsidiary.
+  const scope = gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined
   try {
-    await buildAllSchedules(id, gate.user.orgId, gate.user.id)
+    await buildAllSchedules(id, gate.user.orgId, gate.user.id, scope)
     const result = await recordDepreciationInput({
       orgId: gate.user.orgId,
       assetId: id,
@@ -68,6 +71,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       memo,
       evidenceFileId,
       actorId: gate.user.id,
+      allowedSubsidiaryIds: scope,
     })
     return NextResponse.json(result)
   } catch (error) {

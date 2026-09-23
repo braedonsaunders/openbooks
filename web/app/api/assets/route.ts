@@ -4,7 +4,6 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
-import { buildAllSchedulesWithRunner } from "@openbooks/engine/src/assets/depreciation.ts";
 import { cmp } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardFeaturePermission } from "../../../lib/feature-gates";
@@ -332,15 +331,9 @@ export async function POST(request: Request) {
                ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
                ${user.id}, ${requestId})
           `);
-          try {
-            // A fresh row has no history, so a schedule builds whenever the
-            // draft carries enough inputs — exactly like PATCH. Partial
-            // drafts legitimately lack schedule inputs; that failure is not
-            // the save's failure.
-            await buildAllSchedulesWithRunner(tx, requestId, user.orgId, user.id);
-          } catch {
-            /* partial draft: the schedule builds on a later save */
-          }
+          // A fresh row is always a draft, and drafts own no postable schedules
+          // (only in-service assets do) — the schedule builds when the asset
+          // is placed in service through PATCH.
           return { id: requestId, replayed: false };
         });
         createdId = outcome.id;

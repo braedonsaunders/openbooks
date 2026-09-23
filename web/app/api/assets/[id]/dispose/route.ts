@@ -50,9 +50,11 @@ export async function POST(
   const date =
     body.date === undefined ? await businessToday(gate.user.orgId) : body.date;
   const writeOff = body.writeOff === true;
-  const proceedsRaw = writeOff
-    ? "0"
-    : canonicalDecimal(body.proceeds ?? "0", 4);
+  // The supplied proceeds pass through untouched — even on a write-off — so
+  // the engine's own writeOff + nonzero-proceeds refusal fires instead of
+  // this route silently coercing {writeOff: true, proceeds: 500} into a
+  // zero-proceeds write-off reported as success.
+  const proceedsRaw = canonicalDecimal(body.proceeds ?? "0", 4);
   if (proceedsRaw === null || compareDecimal(proceedsRaw, "0") < 0) {
     return NextResponse.json(
       { error: "proceeds must be a non-negative amount" },
