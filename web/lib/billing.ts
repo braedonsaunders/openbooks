@@ -144,6 +144,8 @@ interface BillingCostRow extends Record<string, unknown> {
   department_id: string | null
   document_date: string | null
   subsidiary_id: string | null
+  location_id: string | null
+  class_id: string | null
   rate_presentation: string | null
   income_account_id: string | null
   tax_code_id: string | null
@@ -440,8 +442,8 @@ export async function generateInvoiceFromBillingRequest(
           -- Adjustment targets can select the worker's trade: every active
           -- role counts, so a second active role cannot hide the match.
           left join lateral (
-            select coalesce(array_agg(distinct r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
-                   coalesce(array_agg(distinct r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+            select coalesce(array_agg(distinct r.trade_id order by r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title order by r.job_title) filter (where r.job_title is not null), '{}') as job_titles
               from employee_roles r
              where r.org_id = te.org_id and r.party_id = te.employee_party_id and r.is_active
           ) er on true
@@ -548,6 +550,8 @@ export async function generateInvoiceFromBillingRequest(
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
                coalesce(dl.subsidiary_id, d.subsidiary_id) as subsidiary_id,
+               coalesce(dl.location_id, d.location_id) as location_id,
+               coalesce(dl.class_id, d.class_id) as class_id,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category,
                coalesce(rc.components, '[]'::jsonb) as bill_components,
@@ -556,8 +560,8 @@ export async function generateInvoiceFromBillingRequest(
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
           left join items i on i.id = dl.item_id and i.org_id = dl.org_id
           left join lateral (
-            select coalesce(array_agg(distinct r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
-                   coalesce(array_agg(distinct r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+            select coalesce(array_agg(distinct r.trade_id order by r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title order by r.job_title) filter (where r.job_title is not null), '{}') as job_titles
               from employee_roles r
              where r.org_id = dl.org_id and r.party_id = dl.employee_id and r.is_active
           ) er on true
@@ -622,6 +626,8 @@ export async function generateInvoiceFromBillingRequest(
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
             subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
+            locationId: cl.location_id != null ? String(cl.location_id) : null,
+            classId: cl.class_id != null ? String(cl.class_id) : null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
           }))
         } else {
@@ -644,6 +650,8 @@ export async function generateInvoiceFromBillingRequest(
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
             subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
+            locationId: cl.location_id != null ? String(cl.location_id) : null,
+            classId: cl.class_id != null ? String(cl.class_id) : null,
             hasLineMarkup: cl.markup_percent != null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
             unit: cl.unit,
@@ -708,11 +716,18 @@ export async function generateInvoiceFromBillingRequest(
       const kept: typeof built = []
       for (const l of built) {
         // Taxable sources retain their individual rounding bases. Other lines
-        // may combine only when their pricing and source attribution agree.
+        // may combine only when their pricing and source attribution agree —
+        // including every dimension an adjustment target can see. Merging two
+        // lines with different subsidiary or trade contexts would charge both
+        // (or neither) under a scoped surcharge depending on row order, so
+        // the key carries the full target context and merged lines always
+        // measure alike.
         const key = l.isLabor || !l.itemId || l.taxCodeId ? null : JSON.stringify([
           l.itemId, l.unitPrice, l.accountId, l.unit ?? null, l.departmentId ?? null,
           l.equipmentUnitId ?? null, l.rateVersionId ?? null, l.workedOn ?? null,
           l.sourceKind ?? null, l.hasLineMarkup ?? false,
+          l.subsidiaryId ?? null, l.locationId ?? null, l.classId ?? null,
+          l.itemCategory ?? null, l.tradeIds ?? null, l.jobTitles ?? null,
         ])
         if (!key) { kept.push(l); continue }
         const prior = grouped.get(key)
@@ -745,13 +760,31 @@ export async function generateInvoiceFromBillingRequest(
     //      measures, and whether it bills separately at all, is card
     //      configuration; nothing here is specific to a trade or tenant.
     if (built.length) {
-      const departments = [...new Set(built.map((l) => l.departmentId ?? null))]
+      // One partition per (department, location, class): a location-A-only
+      // card's terms apply to A's work and lapse only A's work, never the
+      // unscoped work.
+      const partitions = new Map<string, {
+        departmentId: string | null; locationId: string | null; classId: string | null; lines: typeof built
+      }>()
+      for (const l of built) {
+        const key = JSON.stringify([l.departmentId ?? null, l.locationId ?? null, l.classId ?? null])
+        const prior = partitions.get(key)
+        if (prior) prior.lines.push(l)
+        else {
+          partitions.set(key, {
+            departmentId: l.departmentId ?? null, locationId: l.locationId ?? null,
+            classId: l.classId ?? null, lines: [l],
+          })
+        }
+      }
       const charges = mergeCharges(
-        (await Promise.all(departments.map(async (departmentId) => {
-          // A lapse is per department, so each is asked separately: one
-          // department's card running out says nothing about another's.
+        (await Promise.all([...partitions.values()].map(async (partition) => {
+          // A lapse is per partition, so each is asked separately: one
+          // partition's card running out says nothing about another's.
           const lapsed = await findLapsedRateCard({
-            orgId, projectId: req.project_id, onDate: rateDate, departmentId,
+            orgId, projectId: req.project_id, onDate: rateDate,
+            departmentId: partition.departmentId,
+            locationId: partition.locationId, classId: partition.classId,
           })
           // Carry-forward needs an earlier agreement to carry. A future-only
           // card is not evidence of terms for this work and must still fail
@@ -766,19 +799,21 @@ export async function generateInvoiceFromBillingRequest(
           // a later one: a card that starts after the work was done was not the deal.
           const cardDate = lapsed?.lastEffectiveTo ?? rateDate
           return priceAdjustments(
-            built.filter((l) => (l.departmentId ?? null) === departmentId).map((l) => ({
+            partition.lines.map((l) => ({
               amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
               itemCategory: l.itemCategory ?? null,
               tradeIds: l.tradeIds ?? null, jobTitles: l.jobTitles ?? null,
-              departmentId, customerId: project.customer_id, projectId: req.project_id,
+              departmentId: partition.departmentId,
+              customerId: project.customer_id, projectId: req.project_id,
               subsidiaryId: l.subsidiaryId ?? null,
-              // The line's own location/class arrive with PRC13; until then
-              // a location/class-targeted adjustment matches nothing rather
-              // than everything.
-              locationId: l.locationId ?? null, classId: l.classId ?? null,
+              locationId: partition.locationId, classId: partition.classId,
               isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
-            await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: cardDate, departmentId }),
+            await resolveRateAdjustments({
+              orgId, projectId: req.project_id, onDate: cardDate,
+              departmentId: partition.departmentId,
+              locationId: partition.locationId, classId: partition.classId,
+            }),
             invoicing.surchargeRounding ?? 'half_up',
           )
         }))).flat(),

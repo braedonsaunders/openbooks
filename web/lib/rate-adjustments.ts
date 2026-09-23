@@ -147,8 +147,12 @@ export async function findLapsedRateCard(input: {
   projectId: string
   onDate: string
   /** A lapse is per DEPARTMENT: a customer's electrical card covering the date
-   *  says nothing about whether their mechanical card has run out. */
+   *  says nothing about whether their mechanical card has run out. Location
+   *  and class scope the same way: a location-A card running out must lapse
+   *  A's work, never the unscoped work. */
   departmentId?: string | null
+  locationId?: string | null
+  classId?: string | null
 }): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
   const r = (await db.execute<{ customer_id: string; last_effective_to: string | null }>(sql`
     with context as (
@@ -173,7 +177,8 @@ export async function findLapsedRateCard(input: {
          and (a.customer_id is null or a.customer_id = c.customer_id)
          and (a.department_id is null or a.department_id = ${input.departmentId ?? null}::uuid)
          and (a.subsidiary_id is null or a.subsidiary_id = c.subsidiary_id)
-         and a.location_id is null and a.class_id is null
+         and (a.location_id is null or a.location_id = ${input.locationId ?? null}::uuid)
+         and (a.class_id is null or a.class_id = ${input.classId ?? null}::uuid)
          and (a.effective_from is null or a.effective_from <=
               case when a.date_basis = 'project_start' then coalesce(c.starts_on, ${input.onDate}::date) else ${input.onDate}::date end)
          and (a.effective_to is null or a.effective_to >=
@@ -201,6 +206,8 @@ export async function findLapsedRateCard(input: {
                    and ${versionScopePredicate(input.orgId, {
                      departmentId: input.departmentId,
                      subsidiaryId: sql`(select subsidiary_id from context)`,
+                     locationId: input.locationId,
+                     classId: input.classId,
                    })}
               ))
        )
@@ -235,6 +242,8 @@ export async function findLapsedRateCard(input: {
                 and ${versionScopePredicate(input.orgId, {
                   departmentId: input.departmentId,
                   subsidiaryId: sql`(select subsidiary_id from context)`,
+                  locationId: input.locationId,
+                  classId: input.classId,
                 })}
            ))
     )
