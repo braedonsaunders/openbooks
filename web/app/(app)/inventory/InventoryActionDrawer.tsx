@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
+import { useBusinessToday } from '@/components/business-date-provider'
 
 interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
@@ -50,6 +51,18 @@ export function InventoryActionDrawer({
   // silence (F-t07-001). Insufficient stock is a real inventory refusal and
   // must stay visible with the typed values intact.
   const [postError, setPostError] = useState<string | null>(null)
+  // The posting date freezes when the drawer opens — the org's business day
+  // from the server, never the browser's UTC day. The server hashes the date
+  // into the idempotency request, so a retry after a midnight rollover must
+  // carry the SAME date or the key replays as a 409 instead of the posting.
+  const [postingDate] = useState(useBusinessToday())
+  // ONE retry identity per intended action: a committed-but-lost response
+  // followed by Post again with unchanged fields must replay the posting,
+  // not mint a second movement and journal. The key is reused across
+  // transport-uncertain retries and rotates only after success or when the
+  // inputs change (a reused key with different input would 409).
+  const retryKeyRef = useRef<string | null>(null)
+  const retryFingerprintRef = useRef<string | null>(null)
 
   const itemOptions = items.map((i) => ({ value: i.id, label: `${i.code ? `${i.code} · ` : ''}${i.name ?? ''}`.trim() }))
   const locOptions = stockLocations.map((l) => ({ value: l.id, label: l.code ?? '' }))
@@ -70,6 +83,23 @@ export function InventoryActionDrawer({
     setBusy(true)
     setPostError(null)
     try {
+      const fingerprint = JSON.stringify([
+        action,
+        itemId,
+        stockLocationId,
+        toStockLocationId,
+        quantity,
+        unitCost,
+        offsetAccountId,
+        basis,
+        memo,
+        postingDate,
+      ])
+      if (retryKeyRef.current === null || retryFingerprintRef.current !== fingerprint) {
+        retryKeyRef.current = crypto.randomUUID()
+        retryFingerprintRef.current = fingerprint
+      }
+      const idempotencyKey = retryKeyRef.current
       const res = await fetch('/api/inventory/actions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -83,7 +113,8 @@ export function InventoryActionDrawer({
           offsetAccountId: offsetAccountId || undefined,
           basis: action === 'landed' ? basis : undefined,
           memo: memo || undefined,
-          idempotencyKey: crypto.randomUUID(),
+          date: postingDate,
+          idempotencyKey,
         }),
       })
       if (!res.ok) {
@@ -94,6 +125,9 @@ export function InventoryActionDrawer({
       }
       const data = await res.json()
       toast.success(t('drawer.posted', { value: data.value }))
+      // Success consumes the retry identity: the next Post is a new action.
+      retryKeyRef.current = null
+      retryFingerprintRef.current = null
       router.push(closeHref)
       router.refresh()
     } catch (error) {
