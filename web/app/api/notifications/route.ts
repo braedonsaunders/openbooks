@@ -1,6 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { markNotificationsRead } from '@openbooks/engine/src/inbox/adapters/notification.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getAuthz } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -53,13 +54,22 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ ok: true })
   }
 
-  const ids = Array.isArray(body.ids) ? body.ids.filter((id) => isUuid(id)) : []
+  const requested = Array.isArray(body.ids) ? body.ids.filter((id) => isUuid(id)) : []
+  // De-duplicate: the same id twice is one replay, not a foreign id.
+  const ids = [...new Set(requested)]
   if (ids.length === 0) {
     return NextResponse.json({ error: 'ids or all required' }, { status: 400 })
   }
-  await db.execute(sql`
-    update notifications set read_at = now(), updated_at = now()
-     where org_id = ${orgId} and user_id = ${userId} and read_at is null
-       and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`)
+  // Mark-read is idempotent: already-read own ids succeed with no change
+  // (a second tab, a double click, a partly-read mark-all). Only ids that
+  // are NOT the caller's own — foreign or nonexistent, which match zero
+  // rows under the self-scoped predicate — 404 rather than report {ok:true}.
+  const { own } = await markNotificationsRead(db, { orgId, userId, ids })
+  if (own < ids.length) {
+    return NextResponse.json(
+      { error: 'some notifications are not yours — they may belong to someone else or no longer exist' },
+      { status: 404 },
+    )
+  }
   return NextResponse.json({ ok: true })
 }

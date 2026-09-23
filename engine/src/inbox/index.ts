@@ -49,7 +49,7 @@ registerInboxAdapter(payrollAnomalyBlockAdapter);
 registerInboxAdapter(aiCapabilityReviewAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
-export { writeNotification, type NotificationWrite } from "./adapters/notification.ts";
+export { markNotificationsRead, writeNotification, type NotificationWrite } from "./adapters/notification.ts";
 export type { InboxAdapter } from "./registry.ts";
 export type {
   InboxActionDef,
