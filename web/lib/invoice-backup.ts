@@ -75,6 +75,19 @@ export class InvoiceBackupNotFoundError extends Error {
   constructor() { super('Invoice not found') }
 }
 
+/**
+ * Refusal when a caller tries to regenerate the backup packet of an issued
+ * (approved/posted) invoice. Issued evidence is immutable: the packet frozen
+ * at issue is the one the customer received, so replacing it — or deleting
+ * the old file — would rewrite history. Correct a wrong packet by reversing
+ * the invoice, never by regenerating its evidence.
+ */
+export class InvoiceBackupImmutableError extends Error {
+  constructor() {
+    super('This invoice is already issued, so its backup packet cannot be regenerated — issued evidence is immutable')
+  }
+}
+
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
 
 /** Backup packets retain the ownership of every underlying financial record. */
@@ -380,8 +393,8 @@ export async function assembleInvoiceBackup(
   const persisted = await inDbTransaction(async (tx) => {
     // Lock the invoice row even when no invoice_backups row exists yet. This
     // serializes concurrent generators without relying on a process-local lock.
-    const invoice = (await tx.execute<{ id: string; project_id: string | null }>(sql`
-      select d.id, d.project_id from documents d
+    const invoice = (await tx.execute<{ id: string; project_id: string | null; status: string }>(sql`
+      select d.id, d.project_id, d.status from documents d
        where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
          ${backupScopeFilter(allowedSubsidiaryIds)}
        for update of d
@@ -405,6 +418,14 @@ export async function assembleInvoiceBackup(
        where org_id = ${orgId} and document_id = ${documentId}
        for update
     `)).rows[0]
+    // Issued evidence is immutable: once the invoice is approved or posted,
+    // its packet is frozen — regenerating would replace the file the customer
+    // received and delete the old versions. A first packet for an issued
+    // invoice (predating this rule, or lost) still generates; only replacing
+    // an existing one refuses.
+    if (prior && (invoice.status === 'approved' || invoice.status === 'posted')) {
+      throw new InvoiceBackupImmutableError()
+    }
     const next = await uploadAndAttach({
       orgId,
       targetTable: 'documents',

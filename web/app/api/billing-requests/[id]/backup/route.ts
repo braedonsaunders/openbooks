@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { pdfResponse, safeName } from '../../../../../lib/export'
-import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupNotFoundError, type BackupType } from '../../../../../lib/invoice-backup'
+import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, type BackupType } from '../../../../../lib/invoice-backup'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
@@ -41,11 +41,16 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof InvoiceBackupImmutableError) return NextResponse.json({ error: e.message }, { status: 422 })
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
 }
 
-/** GET — stream the stored backup PDF (assembling on the fly if missing). */
+/**
+ * GET — stream the stored backup PDF. A read never assembles: generating the
+ * packet persists a PDF plus file-cabinet evidence, which a reader holding
+ * only ar.read must not be able to create.
+ */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.read')
   if (gate instanceof NextResponse) return gate
