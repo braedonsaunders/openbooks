@@ -158,6 +158,64 @@ function longname(name: string, isDir: boolean, size: number): string {
   return `${perm} 1 owner group ${String(size).padStart(12)} Jan  1 00:00 ${name}`;
 }
 
+/**
+ * Which SFTP status a backend/storage throw becomes on the wire.
+ *
+ * A genuine absence reads NO_SUCH_FILE; a permission refusal reads
+ * PERMISSION_DENIED; everything else — an S3 outage or timeout, a disk
+ * error, a path that exists but is not a file — reads FAILURE, never a
+ * phantom "absent" that tells a bank client its file is gone when storage
+ * is down. The FAILURE cause is logged server-side (see fail()); the
+ * client gets the operation name and the error class, never server paths.
+ */
+export function sftpStatusForError(e: unknown): number {
+  const err = e as {
+    code?: unknown;
+    name?: unknown;
+    message?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  } | null | undefined;
+  const code = typeof err?.code === "string" ? err.code : "";
+  const name = typeof err?.name === "string" ? err.name : "";
+  const message = typeof err?.message === "string" ? err.message : "";
+  const httpStatus =
+    err?.$metadata != null && typeof err.$metadata.httpStatusCode === "number"
+      ? err.$metadata.httpStatusCode
+      : null;
+  if (
+    /path escapes root|permission denied/i.test(message) ||
+    /^(EACCES|EPERM)$/i.test(code) ||
+    httpStatus === 403 ||
+    /AccessDenied/i.test(`${code} ${name}`)
+  ) {
+    return STATUS_CODE.PERMISSION_DENIED;
+  }
+  if (
+    /^ENOENT$/i.test(code) ||
+    httpStatus === 404 ||
+    /(^|[^a-z])NoSuchKey([^a-z]|$)|(^|[^a-z])NotFound([^a-z]|$)|no such file/i.test(
+      `${code} ${name} ${message}`,
+    )
+  ) {
+    return STATUS_CODE.NO_SUCH_FILE;
+  }
+  return STATUS_CODE.FAILURE;
+}
+
+/**
+ * Client-facing message for a FAILURE-classified error: the operation and
+ * the error class plus the retry/remedy wording. Server paths stay in the
+ * server log, never on the wire.
+ */
+export function sftpFailureMessage(e: unknown, what: string): string {
+  const err = e as { code?: unknown; name?: unknown } | null | undefined;
+  const kind =
+    (typeof err?.code === "string" && err.code) ||
+    (typeof err?.name === "string" && err.name) ||
+    "storage error";
+  return `${what} failed (${kind}) — retry the operation, and ask your administrator if it persists`;
+}
+
 /** Generate a fresh ed25519 host key PEM (persist it so the fingerprint is stable). */
 export function generateHostKey(): string {
   // ssh2's DER conversion strips leading zero bytes from Ed25519 public keys.
@@ -257,9 +315,18 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           let handleSeq = 0;
           const newHandle = () => Buffer.from(String(++handleSeq));
 
-          const fail = (reqid: number, e: unknown) => {
-            const msg = `${(e as { name?: string })?.name ?? ""} ${(e as { message?: string })?.message ?? ""}`;
-            sftp.status(reqid, /path escapes root|permission denied/i.test(msg) ? STATUS_CODE.PERMISSION_DENIED : STATUS_CODE.NO_SUCH_FILE);
+          // Backend/storage failures reach the client honestly: absence reads
+          // absent, permission reads permission, and anything else (an S3
+          // outage, a timeout, a disk error) reads FAILURE with the cause
+          // logged server-side — never a phantom NO_SUCH_FILE.
+          const fail = (reqid: number, e: unknown, what: string) => {
+            const status = sftpStatusForError(e);
+            if (status === STATUS_CODE.FAILURE) {
+              console.error(`[sftp] ${what} failed:`, e);
+              sftp.status(reqid, status, sftpFailureMessage(e, what));
+              return;
+            }
+            sftp.status(reqid, status);
           };
           // A mutation of a system-published payment path is refused with
           // PERMISSION_DENIED — never executed, and never disguised as
@@ -330,7 +397,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               const st = await backend.stat(p);
               if (!st) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs));
-            } catch (e) { fail(reqid, e); }
+            } catch (e) { fail(reqid, e, "stat"); }
           });
           sftp.on("STAT", doStat);
           sftp.on("LSTAT", doStat);
@@ -351,7 +418,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               const h = newHandle();
               dirs.set(h.toString(), { entries, next: 0 });
               sftp.handle(reqid, h);
-            } catch (e) { fail(reqid, e); }
+            } catch (e) { fail(reqid, e, "list"); }
           }));
           sftp.on("READDIR", fenced(async (reqid: number, handle: Buffer) => {
             const d = dirs.get(handle.toString());
@@ -436,7 +503,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
                 files.set(h.toString(), { path: cleanPath(filename), backend, write: false, append: false, buf });
               }
               sftp.handle(reqid, h);
-            } catch (e) { fail(reqid, e); }
+            } catch (e) { fail(reqid, e, "open"); }
           }));
           sftp.on("READ", fenced(async (reqid: number, handle: Buffer, offset: number, length: number) => {
             const f = files.get(handle.toString());
@@ -489,7 +556,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
                   return sftp.status(reqid, STATUS_CODE.FAILURE, `file is ${f.buf.length} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit and cannot be saved`);
                 }
                 try { await backend.write(f.path, f.buf); }
-                catch (e) { return fail(reqid, e); }
+                catch (e) { return fail(reqid, e, "save"); }
               }
             } else dirs.delete(key);
             sftp.status(reqid, STATUS_CODE.OK);
@@ -498,15 +565,15 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // Deleting or moving an in-flight publish's temp sibling would
           // break the atomic rename the writer is about to perform, so temp
           // names refuse here exactly as they do for open and stat.
-          const wrap = (op: (p: string) => Promise<void>) => fenced(async (reqid: number, p: string) => {
+          const wrap = (what: string, op: (p: string) => Promise<void>) => fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, p)) return;
               await op(p); sftp.status(reqid, STATUS_CODE.OK);
-            } catch (e) { fail(reqid, e); }
+            } catch (e) { fail(reqid, e, what); }
           });
-          sftp.on("REMOVE", wrap((p) => backend.remove(p)));
-          sftp.on("MKDIR", wrap((p) => backend.mkdir(p)));
+          sftp.on("REMOVE", wrap("remove", (p) => backend.remove(p)));
+          sftp.on("MKDIR", wrap("make folder", (p) => backend.mkdir(p)));
           sftp.on("RMDIR", fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
@@ -517,7 +584,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               // A populated folder refuses with FAILURE and its reason —
               // never a phantom success, never a misleading NO_SUCH_FILE.
               if (e instanceof SftpDirectoryNotEmptyError) return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
-              fail(reqid, e);
+              fail(reqid, e, "remove folder");
             }
           }));
           sftp.on("RENAME", fenced(async (reqid: number, from: string, to: string) => {
@@ -525,7 +592,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
               await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
-            } catch (e) { fail(reqid, e); }
+            } catch (e) { fail(reqid, e, "rename"); }
           }));
           // Attribute mutation is not implemented and SftpBackend exposes no
           // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
