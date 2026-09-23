@@ -390,6 +390,7 @@ export async function updateManagedProperty(input: {
   depositLiabilityAccountId?: string | null;
   defaultBankAccountId?: string | null;
   custom?: Record<string, unknown>;
+  reason?: string | null;
 }): Promise<{ id: string }> {
   const code = input.code.trim();
   const name = input.name.trim();
@@ -419,6 +420,17 @@ export async function updateManagedProperty(input: {
         currentSubsidiaryId: string;
         currentCurrency: string;
         currentFixedAssetId: string | null;
+        currentCode: string;
+        currentName: string;
+        currentPropertyType: string;
+        currentStatus: string;
+        currentLocationId: string | null;
+        currentAddress: Record<string, string> | null;
+        currentRentIncomeAccountId: string | null;
+        currentCamIncomeAccountId: string | null;
+        currentDepositLiabilityAccountId: string | null;
+        currentDefaultBankAccountId: string | null;
+        currentCustom: Record<string, unknown> | null;
         has_leases: boolean;
         has_active_leases: boolean;
         subsidiary_ok: boolean;
@@ -431,6 +443,11 @@ export async function updateManagedProperty(input: {
         bank_account_ok: boolean;
       }>(sql`
       select p.subsidiary_id as "currentSubsidiaryId",p.currency as "currentCurrency",p.fixed_asset_id as "currentFixedAssetId",
+        p.code as "currentCode",p.name as "currentName",p.property_type as "currentPropertyType",p.status as "currentStatus",
+        p.location_id as "currentLocationId",p.address as "currentAddress",
+        p.rent_income_account_id as "currentRentIncomeAccountId",p.cam_income_account_id as "currentCamIncomeAccountId",
+        p.deposit_liability_account_id as "currentDepositLiabilityAccountId",p.default_bank_account_id as "currentDefaultBankAccountId",
+        p.custom as "currentCustom",
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
         exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id and status in ('active','notice')) as has_active_leases,
         exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}) as subsidiary_ok,
@@ -517,6 +534,27 @@ export async function updateManagedProperty(input: {
         custom=${JSON.stringify(input.custom ?? {})}::jsonb,updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.propertyId}
     `);
+    // Rent, CAM income, deposit liability, bank controls, location, fixed
+    // asset, currency and custom policy all move money or posting scope, so
+    // the audit carries every material field before/after (the lease-update
+    // shape) plus the optional change reason — never just the new code.
+    const changeReason = input.reason?.trim() ? input.reason.trim() : null;
+    const before = {
+      code: row.currentCode, name: row.currentName, propertyType: row.currentPropertyType, status: row.currentStatus,
+      subsidiaryId: row.currentSubsidiaryId, locationId: row.currentLocationId, fixedAssetId: currentAssetId,
+      currency: row.currentCurrency, address: row.currentAddress ?? {},
+      rentIncomeAccountId: row.currentRentIncomeAccountId, camIncomeAccountId: row.currentCamIncomeAccountId,
+      depositLiabilityAccountId: row.currentDepositLiabilityAccountId, defaultBankAccountId: row.currentDefaultBankAccountId,
+      custom: row.currentCustom ?? {},
+    };
+    const after = {
+      code, name, propertyType: input.propertyType, status: input.status,
+      subsidiaryId: input.subsidiaryId, locationId: input.locationId ?? null, fixedAssetId: nextAssetId,
+      currency: nextCurrency, address: input.address ?? {},
+      rentIncomeAccountId: input.rentIncomeAccountId ?? null, camIncomeAccountId: input.camIncomeAccountId ?? null,
+      depositLiabilityAccountId: input.depositLiabilityAccountId ?? null, defaultBankAccountId: input.defaultBankAccountId ?? null,
+      custom: input.custom ?? {},
+    };
     await audit(
       tx,
       input.orgId,
@@ -525,10 +563,10 @@ export async function updateManagedProperty(input: {
       "update",
       input.actorId,
       {
-        code,
-        name,
-        propertyType: input.propertyType,
-        status: input.status,
+        before,
+        after,
+        changedFields: Object.keys(after).filter((key) => JSON.stringify(after[key as keyof typeof after]) !== JSON.stringify(before[key as keyof typeof before])),
+        ...(changeReason == null ? {} : { reason: changeReason }),
       },
     );
     return { id: input.propertyId };
@@ -578,6 +616,7 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
 export async function updatePropertyUnit(input: {
   orgId: string; actorId: string; unitId: string; code: string; name?: string | null;
   unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string;
+  reason?: string | null;
 }): Promise<{ id: string }> {
   const code = input.code.trim();
   const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : exactMoney(input.rentableArea, "Rentable area");
@@ -586,10 +625,14 @@ export async function updatePropertyUnit(input: {
   if (input.bedrooms != null && (!Number.isInteger(input.bedrooms) || input.bedrooms < 0)) {
     throw new PropertyManagementError("Bedrooms must be a non-negative whole number");
   }
+  const changeReason = input.reason?.trim() ? input.reason.trim() : null;
   return db.transaction(async (tx) => {
     await assertEnabled(tx, input.orgId);
-    const currentResult = (await tx.execute<{ status: string; has_active_lease: boolean }>(sql`
-      select u.status,
+    const currentResult = (await tx.execute<{
+      status: string; has_active_lease: boolean; code: string; name: string | null;
+      unit_type: string | null; rentable_area: string | null; bedrooms: number | null;
+    }>(sql`
+      select u.status,u.code,u.name,u.unit_type,u.rentable_area::text as rentable_area,u.bedrooms,
         exists(select 1 from property_leases l where l.org_id=u.org_id and l.unit_id=u.id and l.status in ('active','notice')) as has_active_lease
       from property_units u where u.org_id=${input.orgId} and u.id=${input.unitId} for update
     `));
@@ -599,14 +642,33 @@ export async function updatePropertyUnit(input: {
     if (!["vacant", "occupied", "notice", "offline"].includes(status)) throw new PropertyManagementError("Invalid unit status");
     if (current.has_active_lease && status !== current.status) throw new PropertyManagementError("End the active lease before changing unit availability");
     if (!current.has_active_lease && ["occupied", "notice"].includes(status)) throw new PropertyManagementError("Unit occupancy is controlled by lease activation");
+    const name = input.name?.trim() || null;
+    const unitType = input.unitType?.trim() || null;
+    const bedrooms = input.bedrooms ?? null;
     const result = (await tx.execute<{ id: string; propertyId: string }>(sql`
-      update property_units set code=${code},name=${input.name?.trim() || null},unit_type=${input.unitType?.trim() || null},
-        rentable_area=${rentableArea},bedrooms=${input.bedrooms ?? null},status=${status},updated_at=now(),updated_by=${input.actorId}
+      update property_units set code=${code},name=${name},unit_type=${unitType},
+        rentable_area=${rentableArea},bedrooms=${bedrooms},status=${status},updated_at=now(),updated_by=${input.actorId}
       where org_id=${input.orgId} and id=${input.unitId} returning id,property_id as "propertyId"
     `));
     const unit = result.rows[0];
     if (!unit) throw new PropertyManagementError("Unit not found");
-    await audit(tx, input.orgId, "property_units", unit.id, "update", input.actorId, { propertyId: unit.propertyId, code });
+    // Rentable area is the CAM weight and bedrooms/status drive availability:
+    // the audit carries the full before/after pair (the lease-update shape),
+    // never just the new code, so a later allocation can be traced to the
+    // edit that moved it.
+    const before = {
+      code: current.code, name: current.name, unitType: current.unit_type,
+      rentableArea: current.rentable_area == null ? null : normalizeMoney(current.rentable_area),
+      bedrooms: current.bedrooms, status: current.status,
+    };
+    const after = { code, name, unitType, rentableArea, bedrooms, status };
+    await audit(tx, input.orgId, "property_units", unit.id, "update", input.actorId, {
+      propertyId: unit.propertyId,
+      before,
+      after,
+      changedFields: Object.keys(after).filter((key) => JSON.stringify(after[key as keyof typeof after]) !== JSON.stringify(before[key as keyof typeof before])),
+      ...(changeReason == null ? {} : { reason: changeReason }),
+    });
     return { id: unit.id };
   });
 }

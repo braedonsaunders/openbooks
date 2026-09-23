@@ -463,7 +463,7 @@ export async function POST(request: Request) {
           ...body,
           custom: validation.cleaned,
           ...common,
-        } as unknown as { orgId: string; actorId: string; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
+        } as unknown as { orgId: string; actorId: string; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
         break;
       }
       case "deleteProperty":
@@ -485,7 +485,7 @@ export async function POST(request: Request) {
           ...body,
           ...common,
           rentableArea: persistMoney(body.rentableArea),
-        } as unknown as { orgId: string; actorId: string; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; });
+        } as unknown as { orgId: string; actorId: string; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
         break;
       case "deleteUnit":
         result = await deletePropertyUnit(

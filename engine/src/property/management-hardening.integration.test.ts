@@ -12,12 +12,15 @@ import {
   billDueLeaseCharges,
   createCamPool,
   createPropertyLease,
+  createPropertyUnit,
   finalizeCamPool,
   recordSecurityDeposit,
   reopenFinalizedCamPool,
   scheduleLeaseCharges,
   terminatePropertyLease,
+  updateManagedProperty,
   updatePropertyLease,
+  updatePropertyUnit,
 } from "./management.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -479,6 +482,7 @@ test("R11: duplicate lease/escalation identities and invalid charge references f
     await dropScratchOrg(fx.org.orgId);
   }
 });
+
 test("R13: CAM finalization refuses an overlapping lease with no rentable area instead of shifting its share", async () => {
   const fx = await seedProperty();
   try {
@@ -635,6 +639,67 @@ test("R14: CAM finalization waits for a concurrent lease-weight edit and seals t
   }
 });
 
+test("R15: unit and property edits leave before/after audit evidence with actor, time, and reason", async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const unit = await createPropertyUnit({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId,
+      code: "U-AUDIT", name: "Audit flat", rentableArea: "100", bedrooms: 2,
+    });
+    await updatePropertyUnit({
+      orgId, actorId: fx.actorId, unitId: unit.id, code: "U-AUDIT", name: "Audit flat, remeasured",
+      rentableArea: "150", bedrooms: 3, reason: "remeasured after renovation",
+    });
+    const unitAudit = (await db.execute<{
+      changes: { propertyId?: string; before?: Record<string, unknown>; after?: Record<string, unknown>; changedFields?: string[]; reason?: string | null };
+      actorId: string | null; at: string;
+    }>(sql`
+      select changes, actor_id as "actorId", at::text as at from audit_log
+       where org_id = ${orgId} and table_name = 'property_units' and row_id = ${unit.id} and action = 'update'
+       order by at desc, id desc limit 1`)).rows[0]!;
+    assert.equal(unitAudit.actorId, fx.actorId, "the edit names its actor");
+    assert.ok(unitAudit.at, "the edit stamps its time");
+    assert.deepEqual(unitAudit.changes.before, {
+      code: "U-AUDIT", name: "Audit flat", unitType: null,
+      rentableArea: "100.0000", bedrooms: 2, status: "vacant",
+    });
+    assert.deepEqual(unitAudit.changes.after, {
+      code: "U-AUDIT", name: "Audit flat, remeasured", unitType: null,
+      rentableArea: "150.0000", bedrooms: 3, status: "vacant",
+    });
+    assert.deepEqual((unitAudit.changes.changedFields ?? []).sort(), ["bedrooms", "name", "rentableArea"]);
+    assert.equal(unitAudit.changes.reason, "remeasured after renovation");
+    // The CAM weight moved: the evidence must show what it moved from.
+    assert.equal(unitAudit.changes.before!.rentableArea, "100.0000");
+    assert.equal(unitAudit.changes.after!.rentableArea, "150.0000");
+
+    await updateManagedProperty({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, subsidiaryId: fx.org.subsidiaryId,
+      locationId: fx.org.locationId, code: "PRP-HARD", name: "Hardening Tower II",
+      propertyType: "commercial", status: "active",
+      rentIncomeAccountId: fx.org.accounts.revenue, camIncomeAccountId: fx.org.accounts.revenue,
+      depositLiabilityAccountId: fx.org.accounts.deferred, defaultBankAccountId: fx.org.accounts.bank,
+      reason: "rebrand",
+    });
+    const propertyAudit = (await db.execute<{
+      changes: { before?: Record<string, unknown>; after?: Record<string, unknown>; changedFields?: string[]; reason?: string | null };
+      actorId: string | null;
+    }>(sql`
+      select changes, actor_id as "actorId" from audit_log
+       where org_id = ${orgId} and table_name = 'managed_properties' and row_id = ${fx.propertyId} and action = 'update'
+       order by at desc, id desc limit 1`)).rows[0]!;
+    assert.equal(propertyAudit.actorId, fx.actorId);
+    assert.equal(propertyAudit.changes.before!.name, "Hardening Tower");
+    assert.equal(propertyAudit.changes.after!.name, "Hardening Tower II");
+    assert.equal(propertyAudit.changes.before!.rentIncomeAccountId, fx.org.accounts.revenue);
+    assert.equal(propertyAudit.changes.after!.rentIncomeAccountId, fx.org.accounts.revenue);
+    assert.deepEqual(propertyAudit.changes.changedFields, ["name"]);
+    assert.equal(propertyAudit.changes.reason, "rebrand");
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
 
 test("R12: a blank termination date is refused without mutating the lease", { skip: !DB }, async () => {
   const fx = await seedProperty();
