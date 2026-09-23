@@ -1,6 +1,8 @@
 /**
  * Source-system query builders for the GL reconciliation harness
- * (`gl-reconcile.ts`).
+ * (`engine/src/validation/gl-reconcile.ts`). They speak the source connector's
+ * query dialect, so they live in the connector scope; the harness stays
+ * vendor-neutral and consumes them through this module.
  *
  * Both sides of the comparison filter on the actual transaction date: the
  * source queries below use `t.trandate`, matching the OpenBooks side's
@@ -10,7 +12,7 @@
  * manufacturing parity differences out of nothing.
  */
 import { fromUnits, toUnits } from "../money/money.ts";
-import { netSuiteCurrencyIso } from "../sync/netsuite-native.ts";
+import { netSuiteCurrencyIso } from "./netsuite-native.ts";
 
 export const DEFAULT_SINCE = "2024-06-01";
 

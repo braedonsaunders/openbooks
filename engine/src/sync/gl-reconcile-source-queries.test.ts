@@ -14,7 +14,7 @@ import {
   sourceIsoCurrency,
   sourcePlQuery,
   verdictsDiffer,
-} from "./gl-reconcile-queries.ts";
+} from "./gl-reconcile-source-queries.ts";
 
 test("since defaults to the cutover month", () => {
   assert.equal(parseSince(undefined), DEFAULT_SINCE);
