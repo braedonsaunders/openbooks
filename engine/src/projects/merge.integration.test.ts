@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, pool } from "../platform/db.ts";
 import {
   findDuplicateProjects,
   mergeProjects,
@@ -138,6 +138,49 @@ test("duplicate projects merge every reference and deactivate with a pointer", {
     const after = await findDuplicateProjects(org.orgId);
     assert.ok(!after.some((group) => group.projects.some((p) => p.id === duplicate)));
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a committing merge takes both project row locks before planning", async () => {
+  // Two merges racing on overlapping pairs used to plan against unlocked
+  // reads: the loser moved zero refs, overwrote merged_into, and audited
+  // success. The committing merge now locks both rows (deterministic order)
+  // and re-checks merged_into on locked state. This test holds the
+  // duplicate row in a separate session, fires a merge, and asserts the
+  // merge blocks on the row lock instead of planning past it.
+  const org = await createScratchOrg();
+  const holder = await pool.connect();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-L1", "Lock one");
+    const duplicate = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-L2", "Lock two");
+    await holder.query("BEGIN");
+    await holder.query("select set_config('app.bypass_rls', 'on', false)");
+    await holder.query("select id from projects where id = $1 for update", [duplicate]);
+    const pending = mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor });
+    const deadline = Date.now() + 15000;
+    for (;;) {
+      const waiting = await db.execute<{ waiting: boolean }>(sql`
+        select exists(
+          select 1 from pg_stat_activity
+           where wait_event_type = 'Lock' and query ilike '%from projects%for update%'
+        ) as waiting`);
+      if (waiting.rows[0]?.waiting) break;
+      if (Date.now() > deadline) throw new Error("merge never took the project row locks");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await holder.query("COMMIT");
+    const result = await pending;
+    assert.equal(result.alreadyMerged, false);
+    assert.ok(result.auditId);
+    const audits = await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from audit_log
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${duplicate} and action = 'merge'`);
+    assert.equal(audits.rows[0]?.n, "1");
+  } finally {
+    try { await holder.query("ROLLBACK"); } catch { /* already committed */ }
+    holder.release();
     await dropScratchOrg(org.orgId);
   }
 });
