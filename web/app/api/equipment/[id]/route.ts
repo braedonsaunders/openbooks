@@ -144,21 +144,39 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const current = ((await db.execute(sql`select status, subsidiary_id from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
-  if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.rows[0].subsidiary_id))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  }
-  if (current.rows[0].status !== 'draft') return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
-  const used = ((await db.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)))
-  if (used.rows[0]) return NextResponse.json({ error: 'charge_history_delete' }, { status: 409 })
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`delete from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)
+  return db.transaction(async (tx) => {
+    // The draft check happens under the row lock inside the same transaction
+    // as the delete: a concurrent activation can no longer slip between the
+    // check and the write and get deleted. The delete predicate repeats the
+    // status so the affected-row count is the claim — zero rows means the
+    // race was lost, and the re-read names whether the unit is gone (404)
+    // or merely no longer a draft (409) instead of auditing a stale success.
+    const locked = ((await tx.execute(sql`
+      select status, subsidiary_id from equipment_units
+       where id = ${id} and org_id = ${gate.user.orgId}
+       for update`)))
+    const row = locked.rows[0] as { status: string; subsidiary_id: string } | undefined
+    if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id))) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    }
+    if (row.status !== 'draft') return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
+    const used = ((await tx.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)))
+    if (used.rows[0]) return NextResponse.json({ error: 'charge_history_delete' }, { status: 409 })
+    const deleted = await tx.execute(sql`
+      delete from equipment_units
+       where id = ${id} and org_id = ${gate.user.orgId} and status = 'draft'
+       returning id`)
+    if (deleted.rows.length !== 1) {
+      const again = ((await tx.execute(sql`select status from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
+      if (!again.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
+    }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${gate.user.orgId}, 'equipment_units', ${id}, 'delete',
-              ${JSON.stringify({ before: current.rows[0] })}::jsonb, ${gate.user.id})
+              ${JSON.stringify({ before: row })}::jsonb, ${gate.user.id})
     `)
+    return NextResponse.json({ ok: true })
   })
-  return NextResponse.json({ ok: true })
 }
