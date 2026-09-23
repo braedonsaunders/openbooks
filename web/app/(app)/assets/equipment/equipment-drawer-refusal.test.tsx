@@ -136,6 +136,7 @@ function payload() {
       serial_number: "",
       capacity_quantity: null,
       capacity_unit: null,
+      revision: 0,
     },
     metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0" },
   };

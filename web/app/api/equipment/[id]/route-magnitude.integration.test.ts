@@ -67,7 +67,7 @@ async function purchasePrice(unitId: string): Promise<string> {
 test('PATCH refuses a purchase price wider than numeric(19,4) without writing', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { purchasePrice: '99999999999999999999' })
+    const result = await patch(unitId, { purchasePrice: '99999999999999999999', revision: 0 })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await purchasePrice(unitId), '100.0000')
   } finally {
@@ -78,7 +78,7 @@ test('PATCH refuses a purchase price wider than numeric(19,4) without writing', 
 test('PATCH refuses a capacity quantity wider than numeric(19,4) without writing', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { capacityQuantity: '99999999999999999999', capacityUnit: 'hours' })
+    const result = await patch(unitId, { capacityQuantity: '99999999999999999999', capacityUnit: 'hours', revision: 0 })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.equal(await purchasePrice(unitId), '100.0000')
   } finally {
@@ -89,7 +89,7 @@ test('PATCH refuses a capacity quantity wider than numeric(19,4) without writing
 test('PATCH still saves a column-maximum purchase price with identical read-back', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { purchasePrice: '999999999999999.9999' })
+    const result = await patch(unitId, { purchasePrice: '999999999999999.9999', revision: 0 })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.equal(await purchasePrice(unitId), '999999999999999.9999')
   } finally {

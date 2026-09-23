@@ -166,7 +166,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       const newId = ins.rows[0]!.id
       const linked = (await tx.execute<{ fixed_asset_id: string }>(sql`
         update equipment_units
-           set fixed_asset_id = ${newId}, updated_at = now(), updated_by = ${userId}
+           set fixed_asset_id = ${newId}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
          where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
          returning fixed_asset_id`))
       // The row lock above makes this path unreachable for a normal race, but

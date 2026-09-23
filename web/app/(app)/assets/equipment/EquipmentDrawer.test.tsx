@@ -65,6 +65,14 @@ test('a missing charge item at activation names the typed reason, not the generi
   )
 })
 
+test('save() echoes the loaded revision so concurrent edits fence instead of overwrite', () => {
+  assert.match(
+    saveFn,
+    /revision: e\.revision/,
+    'the PATCH body must carry the loaded revision: without it a stale full-form save silently overwrites the concurrent winner',
+  )
+})
+
 test('the charge-item refusal flags the Charge item field', () => {
   assert.match(
     drawerSource,

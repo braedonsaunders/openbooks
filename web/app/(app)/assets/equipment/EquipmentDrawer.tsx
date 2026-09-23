@@ -58,6 +58,8 @@ interface EquipmentUnitRow {
   serial_number: string | null
   capacity_quantity: string | null
   capacity_unit: string | null
+  /** Optimistic-concurrency token echoed on every PATCH. */
+  revision: number
   charge_item_name: string | null
   rate_book_name: string | null
   fixed_asset_number: string | null
@@ -165,7 +167,9 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     }
     const ok = await execute(
       async () => {
-        const result = await fetchAction(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({...form, ...extra}) })
+        // The revision echoes the loaded row: a concurrent writer bumps it
+        // first and this save is refused as stale instead of overwriting it.
+        const result = await fetchAction(`/api/equipment/${e.id}`, { method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ revision: e.revision, ...form, ...extra }) })
         // The API names the blocker as a stable code (e.g.
         // charge_item_required at activation): surface its translated
         // reason, not the generic failure (F-t07-006) — and never the raw

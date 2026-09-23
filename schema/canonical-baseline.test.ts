@@ -540,6 +540,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // fiscal calendar; backfill one for every org whose calendars carry
     // none, refusing ambiguous orgs by id instead of guessing.
     "0275_default_calendar_backfill.sql",
+    // Equipment PATCH rewrote every column from a pre-transaction read, so
+    // concurrent edits silently lost one writer's changes. equipment_units
+    // gains the revision counter the PATCH fence compares under lock.
+    "0278_equipment_unit_revision.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

@@ -168,6 +168,7 @@ export async function loadEquipmentPage(
       in_service_on: null,
       serial_number: null,
       capacity_quantity: null,
+      revision: 0,
       capacity_unit: null,
       charge_item_name: null,
       rate_book_name: null,

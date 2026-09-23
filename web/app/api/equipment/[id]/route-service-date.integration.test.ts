@@ -56,16 +56,16 @@ test("equipment PATCH refuses an impossible service date with a 422", { skip: !e
     await db.execute(sql`insert into equipment_units (id, org_id, subsidiary_id, unit_number, name, status)
       values (${unitId}, ${org.orgId}, ${org.subsidiaryId}, 'EX-001', 'Test excavator', 'draft')`);
 
-    const bad = await patch(unitId, { acquiredOn: "2026-02-30" });
+    const bad = await patch(unitId, { acquiredOn: "2026-02-30", revision: 0 });
     assert.equal(bad.status, 422);
     const stored = (await db.execute<{ acquired_on: string | null }>(sql`
       select acquired_on::text as acquired_on from equipment_units where id = ${unitId} and org_id = ${org.orgId}`)).rows[0]!;
     assert.equal(stored.acquired_on, null);
 
-    const badService = await patch(unitId, { acquiredOn: "2026-01-15", inServiceOn: "2026-02-30" });
+    const badService = await patch(unitId, { acquiredOn: "2026-01-15", inServiceOn: "2026-02-30", revision: 0 });
     assert.equal(badService.status, 422);
 
-    const good = await patch(unitId, { acquiredOn: "2026-01-15", inServiceOn: "2026-02-27" });
+    const good = await patch(unitId, { acquiredOn: "2026-01-15", inServiceOn: "2026-02-27", revision: 0 });
     assert.equal(good.status, 200);
   } finally {
     identity.gate = null;
