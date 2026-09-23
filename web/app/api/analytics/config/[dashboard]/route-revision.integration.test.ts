@@ -192,3 +192,111 @@ test(
     assert.equal((await storedSettings(f.orgId)).revision, 0);
   },
 );
+
+const UTILIZATION = "utilization";
+const UTILIZATION_DEFAULTS = { targetBillablePct: 70, costSpikeThreshold: 1000, minHours: 10 };
+
+test(
+  "a non-numeric threshold is a named 422 with nothing saved",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, costSpikeThreshold: "bad" } },
+        UTILIZATION,
+      ),
+      params(UTILIZATION),
+    );
+    assert.equal(res.status, 422);
+    assert.match(((await res.json()) as { error: string }).error, /costSpikeThreshold/);
+    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+  },
+);
+
+test(
+  "an out-of-range threshold is a named 422 with nothing saved",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, targetBillablePct: 999 } },
+        UTILIZATION,
+      ),
+      params(UTILIZATION),
+    );
+    assert.equal(res.status, 422);
+    const error = ((await res.json()) as { error: string }).error;
+    assert.match(error, /targetBillablePct/);
+    assert.match(error, /between 10 and 100/);
+    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+  },
+);
+
+test(
+  "unknown and missing thresholds are named 422s with nothing saved",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const unknown = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { ...UTILIZATION_DEFAULTS, bonusRate: 5 } },
+        UTILIZATION,
+      ),
+      params(UTILIZATION),
+    );
+    assert.equal(unknown.status, 422);
+    assert.match(((await unknown.json()) as { error: string }).error, /unknown threshold 'bonusRate'/);
+
+    const { minHours: _dropped, ...partial } = UTILIZATION_DEFAULTS;
+    const missing = await PUT(
+      putRequest({ expectedRevision: 0, values: partial }, UTILIZATION),
+      params(UTILIZATION),
+    );
+    assert.equal(missing.status, 422);
+    assert.match(((await missing.json()) as { error: string }).error, /minHours/);
+    assert.deepEqual(await storedSettings(f.orgId, UTILIZATION), { values: null, revision: 0 });
+  },
+);
+
+test(
+  "ledger-money thresholds validate exactly: bad cap and bad flag refuse, a good cap normalizes",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const badCap = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { weeklyApCap: "bad", restrictToSafe: 0 } },
+        "cashflow",
+      ),
+      params("cashflow"),
+    );
+    assert.equal(badCap.status, 422);
+    assert.match(((await badCap.json()) as { error: string }).error, /weeklyApCap/);
+
+    const badFlag = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { weeklyApCap: "0.0000", restrictToSafe: 2 } },
+        "cashflow",
+      ),
+      params("cashflow"),
+    );
+    assert.equal(badFlag.status, 422);
+    assert.match(((await badFlag.json()) as { error: string }).error, /restrictToSafe/);
+    assert.deepEqual(await storedSettings(f.orgId, "cashflow"), { values: null, revision: 0 });
+
+    const good = await PUT(
+      putRequest(
+        { expectedRevision: 0, values: { weeklyApCap: "5000", restrictToSafe: 1 } },
+        "cashflow",
+      ),
+      params("cashflow"),
+    );
+    assert.equal(good.status, 200);
+    assert.deepEqual((await storedSettings(f.orgId, "cashflow")).values, {
+      weeklyApCap: "5000.0000",
+      restrictToSafe: 1,
+    });
+  },
+);

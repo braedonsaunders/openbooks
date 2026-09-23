@@ -4,7 +4,15 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
-import { ANALYTICS_CONFIG, mergeConfig, type AnalyticsDashboard } from "../../../../../lib/analytics/config";
+import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
+import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import {
+  ANALYTICS_CONFIG,
+  mergeConfig,
+  type AnalyticsConfigValues,
+  type AnalyticsDashboard,
+  type ConfigField,
+} from "../../../../../lib/analytics/config";
 
 export const runtime = "nodejs";
 
@@ -19,12 +27,16 @@ const DASHBOARD_FEATURE: Partial<Record<string, string>> = {
  * optimistic-concurrency token (the cashflow-categories shape — the sibling
  * key keeps every existing reader of the overrides blob compatible). GET
  * returns the effective (merged) config plus the defaults, the field spec,
- * and the revision; PUT replaces the dashboard's overrides (unknown keys
- * dropped, values clamped — see lib/analytics/config.ts) and requires the
+ * and the revision; PUT replaces the dashboard's overrides and requires the
  * exact revision from the last read. A stale token is a 409 carrying the
  * current values, so a later PUT can never silently restore another admin's
  * threshold to its stale value. Editing is gated on the same permission as
  * the Setup workspace.
+ *
+ * WRITE validation is strict per field (types, ranges, no unknown keys — a
+ * named 422 otherwise), because the merge-and-clamp reader exists to stay
+ * tolerant of legacy stored settings, not to silently rewrite what an admin
+ * asked to save. READ stays tolerant: mergeConfig still clamps legacy blobs.
  */
 async function gateDashboard(permission: string, dashboard: string) {
   const gate = await guardPermission(permission);
@@ -56,6 +68,123 @@ function revisionRequired(dashboard: string): string {
 
 function revisionConflict(dashboard: string): string {
   return `this ${dashboard} configuration changed after you opened it; the latest values are returned — reapply your change and save again`;
+}
+
+class InvalidDashboardValue extends Error {
+  constructor(
+    readonly field: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InvalidDashboardValue";
+  }
+}
+
+function fieldName(field: ConfigField): string {
+  return `'${field.label}' (${field.key})`;
+}
+
+/**
+ * Strict plain-number parsing with no coercion: null, "", booleans,
+ * thousands separators, and scientific notation all refuse rather than
+ * becoming 0 or a guess.
+ */
+function strictNumber(value: unknown): number | null {
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (!/^-?\d+(\.\d+)?$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function cleanThresholdValue(
+  dashboard: string,
+  field: ConfigField,
+  value: unknown,
+): number | string {
+  if (dashboard === "cashflow" && field.key === "weeklyApCap") {
+    const exact = canonicalDecimal(value, 4);
+    if (exact === null) {
+      throw new InvalidDashboardValue(
+        field.key,
+        `threshold ${fieldName(field)} must be a non-negative dollar amount with at most 4 decimal places — enter a plain number like 5000 or 5000.25`,
+      );
+    }
+    if (compareDecimal(exact, "0") < 0 || compareDecimal(exact, "100000000") > 0) {
+      throw new InvalidDashboardValue(
+        field.key,
+        `threshold ${fieldName(field)} must be between 0 and 100000000`,
+      );
+    }
+    try {
+      return normalizeMoney(exact);
+    } catch {
+      throw new InvalidDashboardValue(
+        field.key,
+        `threshold ${fieldName(field)} must be a non-negative dollar amount with at most 4 decimal places — enter a plain number like 5000 or 5000.25`,
+      );
+    }
+  }
+  if (dashboard === "cashflow" && field.key === "restrictToSafe") {
+    if (value === 0 || value === 1 || value === "0" || value === "1") return Number(value);
+    throw new InvalidDashboardValue(
+      field.key,
+      `threshold ${fieldName(field)} must be 0 or 1`,
+    );
+  }
+  const parsed = strictNumber(value);
+  if (parsed === null) {
+    throw new InvalidDashboardValue(
+      field.key,
+      `threshold ${fieldName(field)} must be a number between ${field.min} and ${field.max}`,
+    );
+  }
+  if (parsed < field.min || parsed > field.max) {
+    throw new InvalidDashboardValue(
+      field.key,
+      `threshold ${fieldName(field)} must be between ${field.min} and ${field.max} (received ${String(value).slice(0, 60)})`,
+    );
+  }
+  return parsed;
+}
+
+/**
+ * Strict per-dashboard write validator built from the single field spec the
+ * form renders: every threshold required on each whole-object save, unknown
+ * keys refused, each value type- and range-checked with a named 422. Never
+ * the tolerant mergeConfig — that reader clamps legacy stored settings, and
+ * using it at write would persist something other than what was requested.
+ */
+function cleanDashboardOverrides(dashboard: AnalyticsDashboard, raw: unknown): AnalyticsConfigValues {
+  const spec = ANALYTICS_CONFIG[dashboard]!;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new InvalidDashboardValue(
+      "",
+      `threshold values for the ${dashboard} configuration must be an object of per-threshold values`,
+    );
+  }
+  const input = raw as Record<string, unknown>;
+  const known = new Set(spec.fields.map((field) => field.key));
+  for (const key of Object.keys(input)) {
+    if (!known.has(key)) {
+      throw new InvalidDashboardValue(
+        key,
+        `unknown threshold '${key}' for the ${dashboard} configuration — remove it and retry`,
+      );
+    }
+  }
+  const out: Record<string, number | string> = {};
+  for (const field of spec.fields) {
+    if (!(field.key in input)) {
+      throw new InvalidDashboardValue(
+        field.key,
+        `threshold ${fieldName(field)} is required — send every threshold on each save`,
+      );
+    }
+    out[field.key] = cleanThresholdValue(dashboard, field, input[field.key]);
+  }
+  return out;
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
@@ -95,8 +224,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
     return NextResponse.json({ error: revisionRequired(dashboard) }, { status: 409 });
   }
 
-  // Keep only known keys, clamped — then store the cleaned overrides verbatim.
-  const cleaned = mergeConfig(dashboard as AnalyticsDashboard, body.values);
+  // Strict write validation: refuse unknown keys, missing thresholds, wrong
+  // types, and out-of-range values with a named 422 before any lock or write.
+  let cleaned: AnalyticsConfigValues;
+  try {
+    cleaned = cleanDashboardOverrides(dashboard as AnalyticsDashboard, body.values);
+  } catch (error) {
+    if (error instanceof InvalidDashboardValue) {
+      return NextResponse.json({ error: error.message }, { status: 422 });
+    }
+    throw error;
+  }
 
   // Lock and compare in the same transaction as the replacement. Concurrent
   // editors serialize on the org row, but serialization alone would still let
