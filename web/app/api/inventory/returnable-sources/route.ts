@@ -71,11 +71,10 @@ export async function GET(req: Request) {
   if (scopeDenied) return scopeDenied
 
   // A restricted reader must not learn of movements in entities it cannot
-  // see. One allowed entity narrows the query at SQL level; several leave
-  // it party-scoped, which the party's own scope check above already
-  // bounded — exactly the old scoping, through the new typed parameter.
-  // Passing the full grant set (and failing a grant of none closed)
-  // follows in the legal-entity commit.
+  // see. The FULL allowed set scopes every source movement at SQL level: for
+  // an org-wide party a grant of {A,B} must never surface subsidiary C's
+  // shipment ids, quantities, costs, document numbers, lots or serials. An
+  // empty grant matches nothing — it fails closed, never unfiltered.
   const allowed = gate.allowedSubsidiaryIds
   const limitParam = url.searchParams.get('limit')
   const offsetParam = url.searchParams.get('offset')
@@ -98,7 +97,7 @@ export async function GET(req: Request) {
     partyId,
     itemId,
     stockLocationId,
-    subsidiaryIds: allowed && allowed.size === 1 ? [[...allowed][0]!] : null,
+    subsidiaryIds: allowed === null ? null : [...allowed],
     limit,
     offset,
   })

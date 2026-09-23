@@ -313,6 +313,75 @@ test("a return source on a kind that cannot return stock is refused", { skip: !D
   }
 });
 
+test("a return source from another legal entity is refused at save", { skip: !DB }, async () => {
+  const fx = await newFixture();
+  try {
+    const subB = randomUUID();
+    await withBypassContext(async () => {
+      // One root per org: the fixture already created it, so the second
+      // legal entity hangs under the root.
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${subB}, ${fx.org.orgId}, ${fx.org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    });
+    // Stock received and shipped in B for the same customer, item and
+    // warehouse as the A credit below: only the legal entity differs.
+    // The customer must transact with B before an invoice can post there.
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into party_subsidiaries (id, org_id, party_id, subsidiary_id)
+        values (${randomUUID()}, ${fx.org.orgId}, ${fx.org.customerId}, ${subB})`);
+    });
+    await withBypassContext(() =>
+      receiveInventory(fx.org.orgId, null, {
+        itemId: fx.org.items.fifo, stockLocationId: fx.org.stockLocationId,
+        quantity: "5", unitCost: "4", subsidiaryId: subB,
+        offsetAccountId: fx.org.accounts.clearing, date: fx.org.date,
+      }),
+    );
+    const invoiceId = randomUUID();
+    const invoiceLineId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
+           posting_date, currency, fx_rate, status, subtotal, tax_total, total, custom, created_by)
+        values (${invoiceId}, ${fx.org.orgId}, 'customer_invoice', ${`INV-B-${invoiceId.slice(0, 8)}`},
+                ${fx.org.customerId}, ${subB}, ${fx.org.date}, ${fx.org.date}, 'CAD', 1,
+                'draft', '100', '0', '100', '{}'::jsonb, ${fx.userId})`);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
+           amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
+           stock_location_id, custom, tax_overridden)
+        values (${invoiceLineId}, ${fx.org.orgId}, ${invoiceId}, 1, ${fx.org.items.fifo}, ${fx.org.accounts.revenue},
+                '5', '20', '100', '0', false, '0', '0',
+                ${fx.org.stockLocationId}, '{}'::jsonb, false)`);
+      await db.execute(sql`
+        update documents set status = 'approved' where id = ${invoiceId} and org_id = ${fx.org.orgId}`);
+    });
+    await withBypassContext(() => postDocument(invoiceId, depsFor(fx.org)));
+    const foreignIssue = (await withBypassContext(async () =>
+      (await db.execute<{ id: string }>(sql`
+        select id from inventory_movements
+         where org_id = ${fx.org.orgId} and document_line_id = ${invoiceLineId} and kind = 'issue'`)).rows[0]!.id,
+    ));
+    // A draft credit in A naming B's shipment: refused at save (422), before
+    // the posting guard would see it, and nothing is stored.
+    const creditId = await draftCredit(fx, "1", "20", "20");
+    const refusal = await save(fx, creditId, (lines) => [
+      drawerLine(lines[0]!, { inventoryReturnSource: { movementId: foreignIssue } }),
+    ]);
+    assert.ok(refusal, "a cross-entity return source must be refused at save");
+    assert.equal(refusal.status, 422);
+    assert.match(refusal.message, /not available to return/);
+    assert.match(refusal.message, /nothing was changed/);
+    assert.equal(storedReturn((await linesOf(fx, creditId))[0]!), null);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(fx.org.orgId));
+  }
+});
+
 test("an authored return posts and restores the stock end to end", { skip: !DB }, async () => {
   const fx = await newFixture();
   try {
