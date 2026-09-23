@@ -7,9 +7,10 @@ import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revisi
  * Recall eligibility for an expense report (F-user-003): a pending_approval
  * or approved-but-unposted report is editable via recall — Edit cancels the
  * open gates and returns it to draft. Only the submitter (or document
- * author for legacy rows) or an org admin may recall; the recall action
- * re-checks authoritatively. A report with a void in flight stays with the
- * void flow. Shared by the reports page and the related-transaction drawer.
+ * author for legacy rows with no recorded submitter) or an org admin may
+ * recall; the recall action re-checks authoritatively. A report with a void
+ * in flight stays with the void flow. Shared by the reports page and the
+ * related-transaction drawer.
  */
 export function canRecallExpenseReport(
   doc: {
@@ -24,7 +25,11 @@ export function canRecallExpenseReport(
     isSuperAdmin?: boolean
   },
 ): boolean {
-  const isSubmitter = doc.submitted_by === user.id || doc.created_by === user.id
+  // The author fallback is legacy-only: once a submitter is recorded, the
+  // creator (possibly a different person) must not see recall affordances
+  // for another user's submission.
+  const isSubmitter =
+    doc.submitted_by === user.id || (doc.submitted_by == null && doc.created_by === user.id)
   return (
     (doc.status === 'pending_approval' || doc.status === 'approved') &&
     doc.void_requested_at == null &&

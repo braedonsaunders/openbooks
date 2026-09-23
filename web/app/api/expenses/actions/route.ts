@@ -87,7 +87,15 @@ async function recallExpenseReport(input: {
     if (expectedRevision !== locked.revision) {
       throw new DocumentEditError(409, 'this document changed after you opened it; reload and review the latest revision')
     }
-    if (locked.submittedBy !== input.actorId && locked.createdBy !== input.actorId && !input.isAdmin) {
+    // The document author recalls only legacy rows that were never submitted
+    // through this flow (no recorded submitter). Once a submitter exists, the
+    // creator — who may be a different person (e.g. an assistant who drafted
+    // for someone else) — must not be able to pull another user's submission
+    // back to draft.
+    const isSubmitter =
+      locked.submittedBy === input.actorId ||
+      (locked.submittedBy == null && locked.createdBy === input.actorId)
+    if (!isSubmitter && !input.isAdmin) {
       throw new DocumentEditError(403, 'only the submitter or an admin can recall this report to draft')
     }
     const gates = (await db.execute<{ id: string }>(sql`
