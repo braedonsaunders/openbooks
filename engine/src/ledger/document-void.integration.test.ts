@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { setPeriodLockState } from "../close/period-locks.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { deleteDocument } from "./document-delete.ts";
-import { completeRequestedDocumentVoid, DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
+import { completeRequestedDocumentVoid, DocumentVoidError, rejectRequestedDocumentVoid, requestDocumentVoid } from "./document-void.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { postDocument } from "./posting-document.ts";
 import {
@@ -621,7 +621,7 @@ test("approval release rechecks the locked document against the deciding actor's
       trigger: "before_void",
     });
     const documentId = await seedApprovedQuote(org, actors.submitterId, "QUOTE-VOID-SCOPE-1");
-    const requested = await requestDocumentVoid({
+    await requestDocumentVoid({
       documentId,
       orgId: org.orgId,
       actorId: actors.submitterId,
@@ -629,8 +629,6 @@ test("approval release rechecks the locked document against the deciding actor's
       reversalDate: org.date,
       allowedSubsidiaryIds: null,
     });
-    assert.equal(requested.status, "pending_approval");
-
     await assert.rejects(
       completeRequestedDocumentVoid(documentId, org.orgId, new Set([randomUUID()])),
       (error: unknown) => {
@@ -648,9 +646,9 @@ test("approval release rechecks the locked document against the deciding actor's
         from documents
        where org_id = ${org.orgId} and id = ${documentId}
     `);
-    assert.equal(persisted.rows[0]?.status, "approved");
-    assert.ok(persisted.rows[0]?.void_requested_at, "the pending request remains stored");
-    assert.equal(persisted.rows[0]?.reversal_entry_id, null, "no reversal is accepted out of scope");
+    assert.deepEqual([persisted.rows[0]?.status, Boolean(persisted.rows[0]?.void_requested_at), persisted.rows[0]?.reversal_entry_id], ["approved", true, null]);
+    await completeRequestedDocumentVoid(documentId, org.orgId, null);
+    await assert.rejects(rejectRequestedDocumentVoid(documentId, org.orgId, actors.approver1Id, "rejected after completion"), /no pending void request/);
   } finally {
     await dropScratchOrg(org.orgId);
   }

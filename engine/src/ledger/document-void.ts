@@ -1266,22 +1266,23 @@ export async function rejectRequestedDocumentVoid(
   comment: string | null,
 ): Promise<void> {
   await withOrgTransaction(orgId, async () => {
-    await db.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      select org_id, 'documents', id, 'reject',
-             jsonb_build_object(
-               'mode', 'void_request_rejected',
-               'reason', ${comment?.trim() || "approval_rejected"},
-               'requestedReason', void_reason,
-               'requestedBy', void_requested_by
-             ),
-             ${actorId}, 'flows'
+    const locked = await db.execute<{
+      id: string;
+      void_requested_at: Date | null;
+      void_reason: string | null;
+      void_requested_by: string | null;
+    }>(sql`
+      select id, void_requested_at, void_reason, void_requested_by
         from documents
        where id = ${documentId} and org_id = ${orgId}
-         and void_requested_at is not null
+       for update
     `);
-    await db.execute(sql`
+    const request = locked.rows[0];
+    if (!request?.void_requested_at || !request.void_requested_by || !request.void_reason) {
+      throw new DocumentVoidError("the document has no pending void request", 409);
+    }
+
+    const cleared = await db.execute<{ id: string }>(sql`
       update documents
          set void_requested_at = null,
              void_requested_by = null,
@@ -1291,6 +1292,27 @@ export async function rejectRequestedDocumentVoid(
              updated_at = now(),
              updated_by = ${actorId}
        where id = ${documentId} and org_id = ${orgId}
+         and void_requested_at is not null
+         and void_requested_by is not null
+         and void_reason is not null
+      returning id
+    `);
+    if (!cleared.rows[0]) {
+      throw new DocumentVoidError("the document has no pending void request", 409);
+    }
+    await db.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${orgId}, 'documents', ${request.id}, 'reject',
+        ${JSON.stringify({
+          mode: "void_request_rejected",
+          reason: comment?.trim() || "approval_rejected",
+          requestedReason: request.void_reason,
+          requestedBy: request.void_requested_by,
+        })}::jsonb,
+        ${actorId}, 'flows'
+      )
     `);
   });
 }
