@@ -28,6 +28,7 @@ registerHooks({
           return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
         }
         export function can() { return true }
+        export function guardSubsidiaryScope() { return null }
       `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);

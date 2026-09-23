@@ -109,6 +109,13 @@ const mockSources = new Map<string, string>([
           return { rows: [state.committedRecord] }
         }
 
+        // Subsidiary-fence lookups: the unrestricted double resolves every
+        // subject to the same visible subsidiary; the restricted fence is
+        // covered by the dedicated scope tests.
+        if (text.includes('from parties') || text.includes('from projects')) {
+          return { rows: [{ subsidiaryId: '00000000-0000-4000-8000-00000000a007' }] }
+        }
+
         if (text.includes('update compliance_records')) {
           // The next row is the deterministic result for the action under test.
           // Transaction-local writes remain invisible until transaction commit.
@@ -180,6 +187,7 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: '00000000-0000-0000-0000-000000000001', id: '00000000-0000-0000-0000-000000000002' }, allowedSubsidiaryIds: null }
       }
       export function can() { return true }
+      export function guardSubsidiaryScope() { return null }
     `,
   ],
   [
@@ -199,6 +207,7 @@ mockSources.set(
       return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: null }
     }
     export function can() { return true }
+    export function guardSubsidiaryScope() { return null }
   `,
 )
 
@@ -240,6 +249,7 @@ function certificate(overrides: Certificate = {}): Certificate {
     id: RECORD_ID,
     status: 'pending_review',
     party_id: PARTY_ID,
+    project_id: null,
     requirement_id: REQUIREMENT_ID,
     supersedes_id: null,
     revision: 1,
