@@ -86,7 +86,7 @@ async function submitForApprovalLocked(
      limit 1
   `));
   if (blockedCorrection.rows[0]) {
-    throw new Error(
+    throw new SubmitError(
       `the correction cannot be submitted until ${blockedCorrection.rows[0].document_number}'s void is approved and completed`,
     );
   }
