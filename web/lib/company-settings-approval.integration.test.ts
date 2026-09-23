@@ -79,3 +79,44 @@ test('vendor-bill approval requirement refuses non-boolean input', { skip: !proc
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+// IN11: the stock-count independent-review switch persists in the same
+// orgs.settings.approvals object (default OFF), validates booleans, and
+// audits flips — the engine gate reads this key, so this stays the single
+// source of truth, not a parallel gate.
+test('stock-count review requirement defaults OFF and persists through Company Settings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Admin', 'admin'))
+    const me = { orgId: org.orgId, id: actor }
+
+    const before = await withBypassContext(() => readCompanySettings(org.orgId))
+    assert.equal(before.status, 200)
+    assert.equal((before.body.org as Record<string, unknown>).requireStockCountReview, false)
+
+    const saved = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: true }))
+    assert.equal(saved.status, 200)
+    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireStockCountReview, true)
+    const after = await withBypassContext(() => readCompanySettings(org.orgId))
+    assert.equal((after.body.org as Record<string, unknown>).requireStockCountReview, true)
+
+    for (const bad of ['yes', 1, null, {}, []]) {
+      const res = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: bad }))
+      assert.equal(res.status, 400, `${JSON.stringify(bad)} must be refused`)
+    }
+
+    const off = await withBypassContext(() => updateCompanySettings(me, { requireStockCountReview: false }))
+    assert.equal(off.status, 200)
+    assert.equal(((await orgSettings(org.orgId)).approvals as Record<string, unknown>).requireStockCountReview, false)
+    const audits = await withBypassContext(async () =>
+      (await db.execute<{ changes: Record<string, unknown> }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'orgs' and action = 'update'`)).rows,
+    )
+    assert.ok(
+      audits.some((row) => JSON.stringify(row.changes.requireStockCountReview) === '[false,true]'),
+      `the ON flip is audited with before/after, got ${JSON.stringify(audits.map((row) => row.changes))}`,
+    )
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

@@ -3144,8 +3144,13 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // CTRL-01 (+7) + UX-19 (+3) + g22 UX-17 (+5 redirect/home keys): 4084 = 4069 + 15, all 7 locales.
   // TZ1 (+5 business-time-zone keys: settings.organization timeZone/timeZoneHint/
   // timeZonePlaceholder, wizard.company.timeZone, wizard.review.timeZone):
-  // 4091 = 4084 + 5 (TZ1) + 2 (RM3 recognition-rule versioning), all 7 locales.
-  assert.equal(wanted.length, 4091, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // 4089 = 4084 + 5, all 7 locales.
+  // g31/IN11 (+2 stock-count independent-review keys:
+  // settings.approvals requireStockCountReview/requireStockCountReviewHint):
+  // 4091 = 4089 + 2, all 7 locales.
+  // +2 from main (recognition-rule policy keys, translated by their shard):
+  // 4093 = 4091 + 2.
+  assert.equal(wanted.length, 4093, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3528,8 +3533,11 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // CTRL-01 + UX-19 + UX-17: 4084 + rehash.
   // TZ1: 4091 + rehash for the 5 business-time-zone keys, translated in
   // all 7 locales.
-  const ADMIN_I2_SOURCE_COUNT = 4091
-  const ADMIN_I2_SOURCE_HASH = 'dd4c268cf2df6eb667d4c7252b52dffd99596c8b86013860ae8b747bfb3022cc'
+  // g31/IN11: 4091 + rehash for the 2 stock-count independent-review keys,
+  // translated in all 7 locales.
+  // +2 from main (recognition-rule policy keys): 4093.
+  const ADMIN_I2_SOURCE_COUNT = 4093
+  const ADMIN_I2_SOURCE_HASH = '6e52afc28e79f219053f57784e565a52dd812d79d6f82494326c614ca01461d0'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))
@@ -5481,7 +5489,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 270,
-  "inventory": 185,
+  "inventory": 186,
   "reports": 1774,
   "sync": 172,
   "login": 33,

@@ -68,6 +68,9 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           requireVendorBillApproval:
             (settings.approvals as Record<string, unknown> | undefined)
               ?.requireVendorBillApproval === true,
+          requireStockCountReview:
+            (settings.approvals as Record<string, unknown> | undefined)
+              ?.requireStockCountReview === true,
           controlAccounts: {
             ar: control.ar ?? '',
             ap: control.ap ?? '',

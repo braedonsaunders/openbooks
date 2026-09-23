@@ -745,6 +745,8 @@
       "description": "控制供应商账单在提交后何时下达。",
       "requireVendorBillApproval": "供应商账单下达前需要审批",
       "requireVendorBillApprovalHint": "开启后，供应商账单只能通过审批流程下达。没有匹配流程的账单将保持已提交状态，并提示提交人设置流程或关闭此选项。",
+      "requireStockCountReview": "盘点过账需要其他用户",
+      "requireStockCountReviewHint": "开启后，记录或提交盘点的人不能过账 — 必须由有过账权限的其他用户完成。关闭后，任何有过账权限的人都可以过账自己的盘点。",
       "noFlowTitle": "供应商账单没有审批流程",
       "noFlowWarningAuto": "尚未为供应商账单配置审批流程。<flows>请在“流程”中设置</flows>——在此之前，提交的账单将在没有审批人的情况下自动下达。",
       "noFlowWarningRequired": "尚未为供应商账单配置审批流程。<flows>请在“流程”中设置</flows>——在此之前，每次提交供应商账单都会被拒绝。"

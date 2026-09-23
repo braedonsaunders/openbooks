@@ -15,6 +15,7 @@ import {
   assertCountWarehouses,
   assertPeriodCovers,
   countVariance,
+  isStockCountReviewRequired,
   loadCountHeader,
   parseCountQuantity,
   requireAllLinesCounted,
@@ -524,6 +525,34 @@ export async function postStockCount(
     if (count.status !== "review") {
       assertCountTransition(count.status, "posted");
     }
+    // Maker/checker (CTRL-01 pattern): when the org requires independent
+    // review, the actor who recorded or submitted the count cannot post it.
+    // Contributors are everyone who created, transitioned, or recorded on
+    // the count; the refusal names the poster, and the audit row after the
+    // flip records the review evidence either way.
+    const reviewRequired = await isStockCountReviewRequired(orgId, tx);
+    const contributors = (await tx.execute<{ actor: string }>(sql`
+      select distinct actor from (
+        select created_by as actor from stock_counts where org_id = ${orgId} and id = ${count.id}
+        union
+        select updated_by as actor from stock_counts where org_id = ${orgId} and id = ${count.id}
+        union
+        select updated_by as actor from stock_count_lines where org_id = ${orgId} and stock_count_id = ${count.id}
+      ) actors where actor is not null`)).rows.map((row) => row.actor);
+    if (reviewRequired) {
+      if (!actorId) {
+        throw new InventoryError(
+          "posting this stock count requires independent review — post with a named user account, not an automated one",
+        );
+      }
+      if (contributors.includes(actorId)) {
+        const poster = (await tx.execute<{ name: string }>(sql`
+          select name from users where org_id = ${orgId} and id = ${actorId}`)).rows[0]?.name?.trim() || actorId;
+        throw new InventoryError(
+          `${poster} recorded or submitted this count — independent review is required: a different user with count-posting authority must post it`,
+        );
+      }
+    }
     const periodId = await assertPeriodCovers(tx, orgId, count.countedOn);
     const bookId = await primaryBookId(orgId, tx);
     try {
@@ -598,7 +627,7 @@ export async function postStockCount(
           : `cannot post: expected quantity drifted for ${drifted.length} lines (first: ${where}, snapshot ${first.line.expectedQuantity}, on hand now ${first.live}) — send the count back to counting, recount the drifted lines, and re-submit`,
       );
     }
-    return { count, lines };
+    return { count, lines, reviewRequired, contributors };
   });
 
   const results: PostedLineResult[] = [];
@@ -667,6 +696,29 @@ export async function postStockCount(
     throw new InventoryError(
       "stock count left review while this post was in flight — reload the count; lines already stamped keep their adjustments and are skipped on retry",
     );
+  }
+  // Review evidence either way, in the same atomic unit: who posted, who
+  // contributed, and the total variance — or the explicit note that no
+  // independent review happened.
+  const totalVariance = results.reduce((sum, line) => add(sum, line.variance), "0");
+  const reviewed = (await db.execute<{ id: string }>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'stock_counts', ${prepared.count.id}, 'update',
+            ${JSON.stringify({
+              operation: "post",
+              review: {
+                required: prepared.reviewRequired,
+                postedBy: actorId,
+                contributors: [...prepared.contributors].sort(),
+                totalVariance,
+                lineCount: results.length,
+              },
+              ...(prepared.reviewRequired ? {} : { note: "posted without independent review" }),
+            })}::jsonb,
+            ${actorId})
+    returning id`));
+  if (reviewed.rows.length === 0) {
+    throw new InventoryError("stock count post was not audited — reload the count and try again");
   }
   return { id: prepared.count.id, status: "posted", lines: results };
 }

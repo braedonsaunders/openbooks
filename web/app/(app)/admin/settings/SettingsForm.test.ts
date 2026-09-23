@@ -36,6 +36,24 @@ test('the approvals card exposes the vendor-bill requirement and the no-flow war
   )
 })
 
+// IN11: the stock-count independent-review policy lives on the same
+// Approvals card as an explicit opt-in (default off). While off, the
+// counts review panel warns that the same user may post; while on, a
+// contributor's self-post is refused by name — both surfaces must exist
+// here.
+test('the approvals card exposes the stock-count independent-review requirement', () => {
+  assert.match(
+    source,
+    /requireStockCountReview/,
+    'the form must carry the stock-count review requirement field',
+  )
+  assert.match(
+    source,
+    /approvals\.requireStockCountReviewHint/,
+    'the requirement must explain both the on and the off behaviour',
+  )
+})
+
 // TZ1: the org business time zone is settable on Company Settings — the
 // ~155 businessToday/businessTimeZone call sites ran on UTC around local
 // midnight because no surface wrote orgs.settings->>'timeZone'.

@@ -745,6 +745,8 @@
       "description": "Steuern, wann Lieferantenrechnungen nach dem Einreichen freigegeben werden.",
       "requireVendorBillApproval": "Freigabe für Lieferantenrechnungen erforderlich",
       "requireVendorBillApprovalHint": "Wenn aktiviert, wird eine Lieferantenrechnung nur über einen Genehmigungs-Workflow freigegeben. Eine Rechnung ohne passenden Workflow bleibt eingereicht, und der Einreicher wird aufgefordert, einen Workflow einzurichten oder diese Option zu deaktivieren.",
+      "requireStockCountReview": "Andere Person für die Buchung von Inventuren erforderlich",
+      "requireStockCountReviewHint": "Wenn aktiviert, kann die Person, die eine Inventur erfasst oder eingereicht hat, sie nicht buchen — eine andere Person mit Buchungsrecht muss dies tun. Wenn deaktiviert, kann jede Person mit Buchungsrecht ihre eigene Inventur buchen.",
       "noFlowTitle": "Kein Genehmigungs-Workflow für Lieferantenrechnungen",
       "noFlowWarningAuto": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin werden eingereichte Rechnungen automatisch ohne Genehmiger freigegeben.",
       "noFlowWarningRequired": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin wird jede Einreichung einer Lieferantenrechnung abgelehnt."

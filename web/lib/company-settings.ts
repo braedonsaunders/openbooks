@@ -85,6 +85,9 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       requireVendorBillApproval:
         (settings.approvals as Record<string, unknown> | undefined)
           ?.requireVendorBillApproval === true,
+      requireStockCountReview:
+        (settings.approvals as Record<string, unknown> | undefined)
+          ?.requireStockCountReview === true,
     },
   } };
 }
@@ -116,6 +119,7 @@ export async function updateCompanySettings(
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
     requireVendorBillApproval?: unknown;
+    requireStockCountReview?: unknown;
   };
 
   // This feature probe does not contribute persisted state. Do it before the
@@ -463,6 +467,27 @@ export async function updateCompanySettings(
           requireVendorBillApproval: body.requireVendorBillApproval,
         };
         changes.requireVendorBillApproval = [curRequired, body.requireVendorBillApproval];
+        settingsChanged = true;
+      }
+    }
+    // --- stock-count posting policy (approvals): when on, the user who
+    // recorded or submitted a count cannot post it — a different user with
+    // posting authority must. Default OFF (absent reads as false), so
+    // existing orgs keep today's behaviour. Turning the requirement off
+    // preserves the stored value's history in audit_log and never touches
+    // already-posted counts.
+    if (body.requireStockCountReview !== undefined) {
+      if (typeof body.requireStockCountReview !== "boolean") {
+        return { status: 400, body: { error: "requireStockCountReview must be a boolean" } };
+      }
+      const curApprovals = (settings.approvals ?? {}) as Record<string, unknown>;
+      const curRequired = curApprovals.requireStockCountReview === true;
+      if (body.requireStockCountReview !== curRequired) {
+        nextSettings.approvals = {
+          ...curApprovals,
+          requireStockCountReview: body.requireStockCountReview,
+        };
+        changes.requireStockCountReview = [curRequired, body.requireStockCountReview];
         settingsChanged = true;
       }
     }

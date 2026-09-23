@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
+import { isStockCountReviewRequired } from '@openbooks/engine/src/inventory/stock-count-gates.ts'
 import { Button, PageHeader } from '@openbooks/ui'
 import { Plus } from 'lucide-react'
 import { EntityListView } from '../../../components/entity-list-view'
@@ -114,6 +115,10 @@ export default async function Inventory({
       ])
     : null
 
+  // Maker/checker posture for the counts detail: when the independent-review
+  // requirement is off, the review panel warns that the same user may post.
+  const reviewRequired = view === 'counts' ? await isStockCountReviewRequired(orgId, db) : false
+
   const bomData = view === 'bom'
     ? await Promise.all([
         db.execute<BomAssembly>(sql`
@@ -201,6 +206,7 @@ export default async function Inventory({
           stockLocations={countData[4].rows}
           lots={countData[5].rows}
           canPost={canPost}
+          reviewRequired={reviewRequired}
           canManageStockLocations={canSetup}
           canManageItems={canManage}
           itemsExcludedCount={countData[6].rows[0]?.excluded ?? 0}

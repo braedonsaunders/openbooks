@@ -227,7 +227,8 @@
       "loading": "Zählung wird geladen…",
       "noLines": "Keine Zeilen in dieser Zählung.",
       "postedBadge": "Verbucht",
-      "unpostedBadge": "Nicht verbucht"
+      "unpostedBadge": "Nicht verbucht",
+      "noIndependentReviewWarning": "Unabhängige Prüfung ist deaktiviert — dieselbe Person, die diese Inventur erfasst hat, kann sie buchen. Fordern Sie in Unternehmenseinstellungen → Genehmigungen eine zweite Person."
     },
     "list": {
       "showMore": "Mehr anzeigen ({loaded} von {total})",
