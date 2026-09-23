@@ -20,6 +20,8 @@ import {
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
+import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
 import { ensureClockPhotoFolder } from '@openbooks/engine/src/hrm/field-time/photos.ts'
@@ -59,24 +61,93 @@ export interface ClockPageData {
   hoursLabel: string
   geoLabel: string
   rows: Record<string, unknown>[]
+  /**
+   * Set when the login carries no linked employee party: the page renders
+   * the house empty-state block with the refusal and its remedy instead of
+   * throwing out of render (which production shows as generic copy).
+   */
+  refusal: PageRefusal | null
 }
 
 const f = ref<ClockPageData>()
+
+type ClockText = (key: string) => string
 
 export async function loadClockPage(): Promise<ClockPageData> {
   const authz = await requirePermission('time.clock')
   await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
-  const orgId = authz.user.orgId
-  const partyId = await resolveOwnParty(orgId, authz.user.id)
-  const day = await myClockDay(orgId, authz.user.id)
+  return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText)
+}
+
+/**
+ * The clock page data for one user, minus authz and the feature gate —
+ * separated so the refusal path is testable without a session. A login
+ * with no linked employee party is a correct refusal (resolveOwnParty
+ * throws FieldTimeError no_employee_link carrying the HR remedy), and
+ * only that refusal converts to page state; every other error still
+ * throws out of the loader.
+ */
+export async function loadClockPageData(
+  orgId: string,
+  userId: string,
+  t: ClockText,
+): Promise<ClockPageData> {
+  const tabs = [
+    { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
+    { href: '/time/clock', label: t('field.clockTab'), active: true },
+    { href: '/time/crew', label: t('field.crewTab'), active: false },
+  ]
+  const base = {
+    title: t('field.title'),
+    description: t('field.description'),
+    tabs,
+  }
+  const outcome = await loadOrRefuse(() => clockBody(orgId, userId, t), {
+    refusals: [{ error: FieldTimeError, code: 'no_employee_link' }],
+    title: t('field.title'),
+  })
+  if (outcome.ok) return { ...base, ...outcome.data, refusal: null }
+  return { ...base, ...emptyClockBody(t), refusal: outcome.refusal }
+}
+
+function emptyClockBody(t: ClockText) {
+  return {
+    clock: {
+      clockedIn: false,
+      since: null,
+      projectId: null,
+      projectName: null,
+      costCodeRef: null,
+      onBreak: false,
+    },
+    projects: [],
+    tasks: [],
+    photoRequired: false,
+    photoFolderId: null,
+    geoHint: t('field.geoHint'),
+    clockOutLabel: t('field.clockOut'),
+    pairsTitle: t('field.todayTitle'),
+    emptyPairs: t('field.noPairs'),
+    inLabel: t('field.inLabel'),
+    outLabel: t('field.outLabel'),
+    projectLabel: t('field.projectLabel'),
+    hoursLabel: t('field.hoursLabel'),
+    geoLabel: t('field.geoLabel'),
+    rows: [],
+  }
+}
+
+async function clockBody(orgId: string, userId: string, t: ClockText) {
+  const partyId = await resolveOwnParty(orgId, userId)
+  const day = await myClockDay(orgId, userId)
   const settings = await loadFieldTimeSettings(orgId)
   const photoOn = await isFeatureEnabled(orgId, 'fieldTimePhoto')
   const photoRequired = photoOn || settings.photoRequired
   let photoFolderId: string | null = null
   if (photoRequired) {
     try {
-      photoFolderId = await ensureClockPhotoFolder(orgId, authz.user.id)
+      photoFolderId = await ensureClockPhotoFolder(orgId, userId)
     } catch {
       photoFolderId = null
     }
@@ -97,13 +168,6 @@ export async function loadClockPage(): Promise<ClockPageData> {
      order by t.name limit 500`)).rows
   const projectNames = new Map(projects.map((project) => [project.id, project.name]))
   return {
-    title: t('field.title'),
-    description: t('field.description'),
-    tabs: [
-      { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
-      { href: '/time/clock', label: t('field.clockTab'), active: true },
-      { href: '/time/crew', label: t('field.crewTab'), active: false },
-    ],
     clock: {
       clockedIn: day.status.clockedIn,
       since: day.status.since,
@@ -151,6 +215,16 @@ export function clockSpec(data: ClockPageData): PageSpec {
       }),
     ],
     body: [
+      // No linked employee party: the loader carries the refusal with its
+      // remedy (the same house block /me renders for its own NO_LINK).
+      widgetBlock(
+        'empty-state',
+        {
+          title: data.refusal?.title ?? '',
+          description: data.refusal?.message,
+        },
+        f('refusal'),
+      ),
       widgetBlock('hrm-clock-controls', {
         initial: data.clock,
         projects: data.projects,
