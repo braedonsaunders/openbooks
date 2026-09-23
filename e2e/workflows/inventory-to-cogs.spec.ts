@@ -393,7 +393,7 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
 
   /** Purchase order -> goods receipt -> vendor bill, bill submitted + posted. */
   async function receiveLot(page: Page, qty: string, unitPrice: string, documentDate: string): Promise<{ poId: string; receiptId: string; billId: string; poNumber: string }> {
-    const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {});
+    const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
     const poId = str(req(poDraft, "POST /api/purchase-orders/draft").id, "PO id");
     const poGet = await api(page, "GET", `/api/purchase-orders/${poId}`);
     const poEdit = await api(page, "PATCH", `/api/purchase-orders/${poId}`, {
@@ -501,7 +501,7 @@ test.describe("inventory receipt to fulfillment to COGS to return", () => {
 
   /** Sales order seeded + approved through the product order routes. */
   async function seedSalesOrder(page: Page, qty: string, documentDate: string): Promise<{ soId: string; soNumber: string }> {
-    const soDraft = await api(page, "POST", "/api/sales-orders/draft", {});
+    const soDraft = await api(page, "POST", "/api/sales-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
     const soId = str(req(soDraft, "POST /api/sales-orders/draft").id, "SO id");
     const soGet = await api(page, "GET", `/api/sales-orders/${soId}`);
     const soEdit = await api(page, "PATCH", `/api/sales-orders/${soId}`, {

@@ -638,7 +638,7 @@ test.describe("procure-to-pay workflows", () => {
       await expect(page.locator("main")).toContainText(vendorName);
 
       // Purchase order: 100 widgets @ $25 on the stock item.
-      const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {});
+      const poDraft = await api(page, "POST", "/api/purchase-orders/draft", {}, { "Idempotency-Key": crypto.randomUUID() });
       const poId = str(req(poDraft, "POST /api/purchase-orders/draft").id, "PO id");
       const poGet = await api(page, "GET", `/api/purchase-orders/${poId}`);
       const poEdit = await api(page, "PATCH", `/api/purchase-orders/${poId}`, {

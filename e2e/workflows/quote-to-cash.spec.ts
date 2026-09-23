@@ -215,8 +215,10 @@ async function seedQuote(
   seed: ScenarioSeed,
   opts: { documentDate: string; dueDate: string; quantity: string; unitPrice: string },
 ): Promise<QuoteSeed> {
-  const qd = await api(page, 'POST', '/api/estimates/draft', {});
-  expect(qd.status).toBe(200);
+  // Instant drafts mint through the idempotent draft factory: a caller UUID
+  // key is required, a fresh key creates (201), and a replay returns 200.
+  const qd = await api(page, 'POST', '/api/estimates/draft', {}, { 'Idempotency-Key': crypto.randomUUID() });
+  expect(qd.status).toBe(201);
   const quoteId = str(qd.body.id);
   const qg = await api(page, 'GET', `/api/estimates/${quoteId}`);
   expect(qg.status).toBe(200);
