@@ -98,6 +98,12 @@ export async function POST(req: Request) {
         { status: 400 },
       );
     }
+    if (isBlank(p!.amount)) {
+      return NextResponse.json(
+        { error: `permanentDifferences[${i}]: amount is required when a description is provided` },
+        { status: 400 },
+      );
+    }
     const amount = money(p!.amount);
     if (amount === null) return NextResponse.json({ error: "invalid permanent-difference amount" }, { status: 400 });
     permanentDifferences.push({ description, amount });
@@ -117,6 +123,12 @@ export async function POST(req: Request) {
     }
     if (!DIFF_CATEGORIES.has(String(d!.category))) {
       return NextResponse.json({ error: "invalid temporary-difference category" }, { status: 400 });
+    }
+    if (isBlank(d!.difference)) {
+      return NextResponse.json(
+        { error: `additionalDifferences[${i}]: difference is required when a description is provided` },
+        { status: 400 },
+      );
     }
     const difference = money(d!.difference);
     if (difference === null) return NextResponse.json({ error: "invalid temporary-difference amount" }, { status: 400 });
@@ -156,6 +168,9 @@ export async function POST(req: Request) {
         if (isBlank(p?.amount)) continue;
         return fail(`${path}.permanentDifferences[${i}]: description is required when an amount is provided`);
       }
+      if (isBlank(p!.amount)) {
+        return fail(`${path}.permanentDifferences[${i}]: amount is required when a description is provided`);
+      }
       const amount = money(p!.amount);
       if (amount === null) return fail("invalid provision entities");
       permanent.push({ description, amount });
@@ -172,6 +187,9 @@ export async function POST(req: Request) {
         return fail(`${path}.additionalDifferences[${i}]: description is required when an amount or category is provided`);
       }
       if (!DIFF_CATEGORIES.has(String(d!.category))) return fail("invalid provision entities");
+      if (isBlank(d!.difference)) {
+        return fail(`${path}.additionalDifferences[${i}]: difference is required when a description is provided`);
+      }
       const difference = money(d!.difference);
       if (difference === null) return fail("invalid provision entities");
       additional.push({

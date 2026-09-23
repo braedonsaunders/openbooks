@@ -157,7 +157,9 @@
       "valuationAllowanceIas12": "DTA recognition adjustment",
       "rowDescriptionRequiredPermanent": "Permanent differences row {row} needs a description — add one or clear the amount.",
       "rowDescriptionRequiredTemporary": "Temporary differences row {row} needs a description — add one or clear the row.",
-      "computeFailed": "The provision could not be computed."
+      "computeFailed": "The provision could not be computed.",
+      "rowAmountRequiredPermanent": "Permanent differences row {row} needs an amount — add one or clear the description.",
+      "rowDifferenceRequiredTemporary": "Temporary differences row {row} needs a difference — add one or clear the description."
     },
     "detail": {
       "title": "FY{year} provision · v{version}",

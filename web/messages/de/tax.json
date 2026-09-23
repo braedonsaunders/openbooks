@@ -153,7 +153,9 @@
       "valuationAllowanceIas12": "Ansatzkorrektur aktive latente Steuern",
       "rowDescriptionRequiredPermanent": "Zeile {row} der permanenten Differenzen braucht eine Beschreibung – bitte ergänzen oder den Betrag entfernen.",
       "rowDescriptionRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Beschreibung – bitte ergänzen oder die Zeile leeren.",
-      "computeFailed": "Die Abgrenzung konnte nicht berechnet werden."
+      "computeFailed": "Die Abgrenzung konnte nicht berechnet werden.",
+      "rowAmountRequiredPermanent": "Zeile {row} der permanenten Differenzen braucht einen Betrag – bitte ergänzen oder die Beschreibung entfernen.",
+      "rowDifferenceRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Differenz – bitte ergänzen oder die Beschreibung entfernen."
     },
     "detail": {
       "title": "Abgrenzung {year} · v{version}",

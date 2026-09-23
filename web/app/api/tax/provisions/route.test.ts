@@ -194,6 +194,57 @@ test("POST refuses a populated row without a description instead of dropping it"
   assert.equal(routeState.calls.length, 0);
 });
 
+test("a blank first row does not shift a later refusal off its grid row", async () => {
+  routeState.calls.length = 0;
+  const response = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [
+      { description: "", amount: "" },
+      { description: "", amount: "25000" },
+    ],
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "permanentDifferences[1]: description is required when an amount is provided",
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("a described row with an empty amount refuses by row instead of an unnamed amount error", async () => {
+  for (const body of [
+    {
+      fiscalYear: 2026,
+      permanentDifferences: [{ description: "Meals", amount: "" }],
+      expect: "permanentDifferences[0]: amount is required when a description is provided",
+    },
+    {
+      fiscalYear: 2026,
+      additionalDifferences: [{ description: "Lease", category: "other", difference: "" }],
+      expect: "additionalDifferences[0]: difference is required when a description is provided",
+    },
+  ]) {
+    routeState.calls.length = 0;
+    const { expect, ...request } = body;
+    const response = await post(request);
+    assert.equal(response.status, 400, JSON.stringify(request));
+    assert.deepEqual(await response.json(), { error: expect });
+    assert.equal(routeState.calls.length, 0);
+  }
+
+  routeState.calls.length = 0;
+  const entity = await post({
+    fiscalYear: 2026,
+    entities: {
+      "sub-1": { permanentDifferences: [{ description: "Meals", amount: "" }] },
+    },
+  });
+  assert.equal(entity.status, 400);
+  assert.deepEqual(await entity.json(), {
+    error: 'entities["sub-1"].permanentDifferences[0]: amount is required when a description is provided',
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
 test("POST rejects non-array top-level difference lists instead of ignoring them", async () => {
   for (const body of [
     { fiscalYear: 2026, permanentDifferences: "bogus" },

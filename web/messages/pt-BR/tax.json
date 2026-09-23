@@ -153,7 +153,9 @@
       "valuationAllowanceIas12": "Ajuste de reconhecimento do IDA",
       "rowDescriptionRequiredPermanent": "A linha {row} de diferenças permanentes precisa de uma descrição — adicione uma ou limpe o valor.",
       "rowDescriptionRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma descrição — adicione uma ou limpe a linha.",
-      "computeFailed": "Não foi possível calcular a provisão."
+      "computeFailed": "Não foi possível calcular a provisão.",
+      "rowAmountRequiredPermanent": "A linha {row} de diferenças permanentes precisa de um valor — adicione um ou limpe a descrição.",
+      "rowDifferenceRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma diferença — adicione uma ou limpe a descrição."
     },
     "detail": {
       "title": "Provisão {year} · v{version}",

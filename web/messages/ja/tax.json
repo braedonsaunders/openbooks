@@ -153,7 +153,9 @@
       "valuationAllowanceIas12": "繰延税金資産の認識調整額",
       "rowDescriptionRequiredPermanent": "永久差異の{row}行目に説明が必要です。説明を追加するか、金額をクリアしてください。",
       "rowDescriptionRequiredTemporary": "一時差異の{row}行目に説明が必要です。説明を追加するか、行をクリアしてください。",
-      "computeFailed": "税金計算を実行できませんでした。"
+      "computeFailed": "税金計算を実行できませんでした。",
+      "rowAmountRequiredPermanent": "永久差異の{row}行目に金額が必要です。金額を追加するか、説明をクリアしてください。",
+      "rowDifferenceRequiredTemporary": "一時差異の{row}行目に差異金額が必要です。金額を追加するか、説明をクリアしてください。"
     },
     "detail": {
       "title": "{year}年度 税金計算 · v{version}",
