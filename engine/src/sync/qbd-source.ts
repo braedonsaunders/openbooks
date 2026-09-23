@@ -237,7 +237,22 @@ export class QbdSource implements MigrationSource {
 
   private async ledgerRows(family: string) {
     const responses = await this.responseRows(family);
-    return responses.flatMap((response) => parseReportRows(response.responseXml).filter((row) => row.rowType === "DataRow"));
+    const rows = responses.flatMap((response) => parseReportRows(response.responseXml).filter((row) => row.rowType === "DataRow"));
+    // A nonzero GeneralLedger DataRow without a TxnID cannot be grouped into
+    // its transaction: buildQbdLedgerDocuments would silently drop the leg
+    // (and a fully TxnID-less transaction would vanish from the pulled set
+    // and become a source-deletion candidate). Refuse by month and row BEFORE
+    // any deletion inference. Zero-amount TxnID-less rows (headings, blanks)
+    // carry no balance and stay skippable downstream.
+    const month = family.startsWith("ledger:") ? family.slice("ledger:".length) : family;
+    rows.forEach((row, index) => {
+      if (row.columns.TxnID) return;
+      const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+      if (amount !== 0n) {
+        throw new Error(`QuickBooks GeneralLedger response for month ${month} contains a nonzero row without a TxnID (row ${index + 1}, account "${row.columns.Account ?? ""}", debit "${row.columns.Debit ?? ""}", credit "${row.columns.Credit ?? ""}"); the sync is refused before any deletion inference`);
+      }
+    });
+    return rows;
   }
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
