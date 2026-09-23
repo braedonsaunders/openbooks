@@ -90,3 +90,32 @@ test('a zero or absent rate produces no charge', () => {
   assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ value: '0' })]).length, 0)
   assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ value: null })]).length, 0)
 })
+
+test('a customer-targeted adjustment charges only that customer', () => {
+  const a = adjustment({ targets: [{ targetType: 'customer', targetValueId: 'cust-a', targetValueText: null }] })
+  const lines = [
+    { ...labor('1000.00'), customerId: 'cust-a' },
+    { ...labor('2000.00'), customerId: 'cust-b' },
+  ]
+  const charges = priceAdjustments(lines, [a])
+  assert.equal(charges.length, 1)
+  assert.equal(charges[0]!.basis, '1000.0000')
+})
+
+test('a location-targeted adjustment charges only that location', () => {
+  const a = adjustment({ targets: [{ targetType: 'location', targetValueId: 'loc-a', targetValueText: null }] })
+  const lines: AdjustableLine[] = [
+    { amount: '500.00', isLabor: false, locationId: 'loc-a' },
+    { amount: '700.00', isLabor: false, locationId: 'loc-b' },
+  ]
+  const charges = priceAdjustments(lines, [a])
+  assert.equal(charges.length, 1)
+  assert.equal(charges[0]!.basis, '500.0000')
+})
+
+test('a targeted adjustment with no line context matches nothing, never everything', () => {
+  for (const targetType of ['customer', 'project', 'subsidiary', 'location', 'class']) {
+    const a = adjustment({ targets: [{ targetType, targetValueId: 'some-id', targetValueText: null }] })
+    assert.equal(priceAdjustments([labor('1000.00')], [a]).length, 0, targetType)
+  }
+})

@@ -15,6 +15,13 @@ import {
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { isFeatureEnabled } from "../../../../lib/features";
+import {
+  ADJUSTMENT_CALCULATIONS,
+  ADJUSTMENT_CATEGORIES,
+  ADJUSTMENT_PRESENTATIONS,
+  ADJUSTMENT_TARGET_TYPES,
+  ADJUSTMENT_TEXT_TARGETS,
+} from "../../../../lib/rate-adjustment-types";
 
 export const runtime = "nodejs";
 
@@ -25,24 +32,12 @@ const nameBodySchema = z.looseObject({
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
-const CATEGORIES = [
-  "markup",
-  "travel",
-  "allowance",
-  "minimum",
-  "surcharge",
-  "other",
-] as const;
-const CALCULATIONS = [
-  "percent",
-  "fixed",
-  "per_hour",
-  "per_day",
-  "distance",
-  "time",
-  "text",
-] as const;
-const PRESENTATIONS = ["included", "separate", "informational"] as const;
+// The accepted adjustment vocabulary lives in ONE place (the pricing engine
+// and the card UI import the same lists): a type the save accepts but
+// pricing cannot match would bill zero forever.
+const CATEGORIES = ADJUSTMENT_CATEGORIES;
+const CALCULATIONS = ADJUSTMENT_CALCULATIONS;
+const PRESENTATIONS = ADJUSTMENT_PRESENTATIONS;
 const SCOPE_TYPES = [
   "department",
   "subsidiary",
@@ -52,28 +47,8 @@ const SCOPE_TYPES = [
   "job_title",
   "other",
 ] as const;
-const TARGET_TYPES = [
-  "item",
-  "item_kind",
-  "item_category",
-  "transaction_type",
-  "department",
-  "subsidiary",
-  "location",
-  "class",
-  "trade",
-  "job_title",
-  "project",
-  "customer",
-  "other",
-] as const;
-const TEXT_TARGETS = new Set([
-  "item_kind",
-  "item_category",
-  "transaction_type",
-  "job_title",
-  "other",
-]);
+const TARGET_TYPES = ADJUSTMENT_TARGET_TYPES;
+const TEXT_TARGETS = ADJUSTMENT_TEXT_TARGETS;
 const UUID_TARGET_TABLES: Record<string, string> = {
   item: "items",
   department: "departments",

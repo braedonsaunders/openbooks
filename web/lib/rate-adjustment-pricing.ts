@@ -52,6 +52,14 @@ export interface AdjustableLine {
   itemId?: string | null
   itemKind?: string | null
   departmentId?: string | null
+  /** Who the work is for and where it sits — the card assignment selects the
+   * card, but an adjustment's own targets still constrain which lines it
+   * measures. Missing context never matches: it fails closed. */
+  customerId?: string | null
+  projectId?: string | null
+  subsidiaryId?: string | null
+  locationId?: string | null
+  classId?: string | null
   /** True when the charge came from billable time rather than a cost document. */
   isLabor?: boolean
   /** Time-type bucket, when the line came from labor. */
@@ -76,9 +84,14 @@ export function lineMatchesAdjustment(line: AdjustableLine, adjustment: Resolved
       case 'item': return !!line.itemId && line.itemId === t.targetValueId
       case 'item_kind': return !!line.itemKind && line.itemKind === (t.targetValueText ?? '')
       case 'department': return !!line.departmentId && line.departmentId === t.targetValueId
-      // Customer/project/subsidiary targets are already satisfied by the card
-      // assignment that selected this adjustment, so they match every line.
-      case 'customer': case 'project': case 'subsidiary': case 'location': case 'class': return true
+      // The card assignment selects WHICH adjustments apply; each
+      // adjustment's own targets still select WHICH lines they measure. A
+      // customer-A adjustment on shared work must not charge customer B.
+      case 'customer': return !!line.customerId && line.customerId === t.targetValueId
+      case 'project': return !!line.projectId && line.projectId === t.targetValueId
+      case 'subsidiary': return !!line.subsidiaryId && line.subsidiaryId === t.targetValueId
+      case 'location': return !!line.locationId && line.locationId === t.targetValueId
+      case 'class': return !!line.classId && line.classId === t.targetValueId
       default: return false
     }
   })
