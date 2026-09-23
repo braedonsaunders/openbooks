@@ -187,7 +187,11 @@ test('post first: primary reassignment waits and refuses the newly committed his
 test('in-transit inventory cannot switch accounting representations between ship and receive', enabled, async () => fixture(async (org, actor, next) => {
   await withOrgContext(org.orgId, () => receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: '5', unitCost: '10', subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date }));
   await withBypassContext(() => db.execute(sql`insert into stock_locations(org_id,location_id,code,kind,is_active) values(${org.orgId},${org.locationId},'TRANSIT','transit',true)`));
-  const transfer = await withOrgContext(org.orgId, () => createTransferOrder(org.orgId, actor, { fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2, subsidiaryId: org.subsidiaryId, orderedOn: org.date, inTransitAccountId: org.accounts.clearing, lines: [{ itemId: org.items.fifo, quantity: '2' }] }));
+  // Goods in transit sit in a balance-sheet asset account (5d520db39 refuses a
+  // liability clearing account), so the fixture seeds one like the transfer suites.
+  const inTransitAccountId = randomUUID();
+  await withBypassContext(() => db.execute(sql`insert into accounts (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children) values (${inTransitAccountId},${org.orgId},'1390','Goods in transit','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`));
+  const transfer = await withOrgContext(org.orgId, () => createTransferOrder(org.orgId, actor, { fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2, subsidiaryId: org.subsidiaryId, orderedOn: org.date, inTransitAccountId, lines: [{ itemId: org.items.fifo, quantity: '2' }] }));
   const shipped = await withOrgContext(org.orgId, () => shipTransferOrder(org.orgId, actor, transfer.id, org.date));
   await assert.rejects(promote(org, actor, next), error => historyError.test(errorText(error)));
   const received = await withOrgContext(org.orgId, () => receiveTransferOrder(org.orgId, actor, transfer.id, org.date));
@@ -195,7 +199,7 @@ test('in-transit inventory cannot switch accounting representations between ship
   assert.equal(await entryBook(org, shipped.entryId), org.bookId);
   assert.equal(await entryBook(org, received.entryId), org.bookId);
   await withOrgContext(org.orgId, async () => {
-    assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${org.accounts.clearing} and entry_id in (${shipped.entryId},${received.entryId})`)).rows[0]!.amount, '0.0000');
+    assert.equal((await db.execute<{ amount: string }>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and account_id=${inTransitAccountId} and entry_id in (${shipped.entryId},${received.entryId})`)).rows[0]!.amount, '0.0000');
   });
 }));
 
