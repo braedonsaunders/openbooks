@@ -48,6 +48,12 @@ const state: ResetHarnessState = {
     if (query.text.includes("select count(*)::int as n")) {
       return { rows: [{ n: 0 }] };
     }
+    // Delivery re-checks, under its per-user lock, that the token it is about
+    // to email is still the user's current one. A token this test just
+    // minted is current (nothing superseded or consumed it).
+    if (query.text.includes("from auth_password_resets cur")) {
+      return { rows: [{ id: "reset-current" }] };
+    }
     return { rows: [] };
   },
 };
