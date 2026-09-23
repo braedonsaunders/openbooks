@@ -15,7 +15,7 @@ import {
   type ParsedStatementLine,
   type StatementSourceContent,
 } from "../banking/banking.ts";
-import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
+import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, reclaimExpiredDeliveryClaims, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
 import { backendFor } from "./backend.ts";
 import { resolveOutboundPath } from "./delivery-path.ts";
 
@@ -190,6 +190,12 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
 
 /** Outbound: write a payment run's bank file into an SFTP server's outbound folder. */
 export async function deliverRunToSftp(runId: string, sftpServerId: string, orgId: string, userId: string, now: Date): Promise<{ filename: string; path: string }> {
+  // Reclaim first: a worker that crashed mid-publish leaves its file in
+  // delivering with a dead lease, and the reclaim has no other production
+  // caller — without this call the file would wedge there forever. Expired
+  // leases park as delivery_uncertain (never silent re-publish), so this is
+  // safe to run ahead of every delivery.
+  await reclaimExpiredDeliveryClaims({ orgId, userId });
   const svr = (await db.execute<{ org_id: string; backend: string; bucket: string | null; root_prefix: string; payment_folder: string }>(sql`
     select s.org_id, s.backend, s.bucket, s.root_prefix, coalesce(p.sftp_folder, 'outbound') as payment_folder
       from payment_runs r join payment_bank_profiles p on p.id = r.payment_bank_profile_id and p.org_id = r.org_id

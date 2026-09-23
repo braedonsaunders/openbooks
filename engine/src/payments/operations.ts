@@ -1099,6 +1099,26 @@ export async function recordPaymentFileDownload(fileId: string, orgId: string, u
 /** How long one publish attempt owns its file before the lease is reclaimable. */
 export const DELIVERY_CLAIM_TTL_SECONDS = 300;
 
+/**
+ * Every payment_files.status the engine can write: the seven drizzle-level
+ * states plus the two delivery-claim states (migration 0290). The claim
+ * transitions below use these literals; the RunDrawer fileStatus catalog
+ * must label every member in every locale (covered by a derived test that
+ * imports this list, never a hand copy). Extend this list — never shrink
+ * it — when a new file state is introduced.
+ */
+export const PAYMENT_FILE_STATUSES = [
+  "generated",
+  "pending_approval",
+  "approved",
+  "rejected",
+  "delivered",
+  "superseded",
+  "voided",
+  "delivering",
+  "delivery_uncertain",
+] as const;
+
 export interface DeliveryClaim {
   token: string;
   owner: string;
@@ -1388,6 +1408,8 @@ export async function resolveUncertainDelivery(opts: {
   userId: string;
   outcome: "delivered" | "approved";
   reason: string;
+  /** When the caller authorized a run (not an arbitrary file), keep lineage inside it. */
+  runId?: string | null;
 }): Promise<void> {
   if (!opts.reason.trim()) throw new PaymentError("resolving an uncertain delivery requires a reason");
   if (opts.outcome !== "delivered" && opts.outcome !== "approved") {
@@ -1397,6 +1419,7 @@ export async function resolveUncertainDelivery(opts: {
     const file = (await db.execute<{ payment_run_id: string }>(sql`
       select payment_run_id from payment_files
        where id = ${opts.fileId} and org_id = ${opts.orgId} and status = 'delivery_uncertain'
+         ${opts.runId ? sql`and payment_run_id = ${opts.runId}` : sql``}
        for update
     `));
     if (!file.rows[0]) {
