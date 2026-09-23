@@ -31,7 +31,7 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { createView, deleteView, loadView, updateView } = await import('./views.ts')
@@ -39,16 +39,23 @@ const { PATCH } = await import('../app/api/views/[id]/route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 const NO_PERMS = new Set<string>()
 
+// Direct reads run under the org's own scope: with request-org loaded, the
+// ambient test bypass is replaced, so an unscoped SELECT silently returns
+// zero rows and the audit assertions would pass/fail on nothing.
 async function audits(orgId: string, rowId: string) {
-  return (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+  return withOrgContext(orgId, async () => (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
     select action, changes, actor_id from audit_log
      where org_id = ${orgId} and table_name = 'saved_views' and row_id = ${rowId}
-     order by at`)).rows
+     order by at`)).rows)
 }
 
 test('view edits and deletes audit before/after in the same transaction', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
+  // Fixture writes run inside the approved bypass scope: this file reaches
+  // request-org through the route import, which replaces the ambient test
+  // bypass, so unscoped writes would die on RLS (inserts) or silently match
+  // zero rows (updates/deletes).
+  const org = await withBypassContext(() => createScratchOrg())
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
   try {
     const { id } = await createView({ orgId: org.orgId, userId: actorId, name: 'Audited view' })
 
@@ -73,8 +80,8 @@ test('view edits and deletes audit before/after in the same transaction', { skip
 })
 
 test('an owner sharing a view with foreign roles keeps their own access', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const org = await withBypassContext(() => createScratchOrg())
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
   try {
     const { id } = await createView({ orgId: org.orgId, userId: actorId, name: 'Shared view' })
     const shared = await updateView(org.orgId, id, actorId, false, {
@@ -91,8 +98,8 @@ test('an owner sharing a view with foreign roles keeps their own access', { skip
 })
 
 test('mistyped view fields refuse naming the field, never 500', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const org = await withBypassContext(() => createScratchOrg())
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
   try {
     const { id } = await createView({ orgId: org.orgId, userId: actorId, name: 'Typed view' })
     for (const [field, patch] of [
@@ -117,8 +124,8 @@ test('mistyped view fields refuse naming the field, never 500', { skip: !DB }, a
 })
 
 test('PATCH {"name": 42} answers 422 naming the field', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
+  const org = await withBypassContext(() => createScratchOrg())
+  const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
   state.orgId = org.orgId
   state.actorId = actorId
   try {
