@@ -11,6 +11,7 @@ import {
   prepareCapture,
   recordConnectionError,
   releaseCapture,
+  terminateConnectionSessions,
   waitForCapture,
   webConnectorLastError,
 } from "./bridge.ts";
@@ -581,6 +582,62 @@ test("a truncated ledger response fails the capture instead of recording an empt
     const progress = await acceptWebConnectorResponse(auth.ticket, emptyMonth, "", "");
     assert.ok(progress > 0 && progress < 100, `empty report month is stored, got progress ${progress}`);
     await closeWebConnectorSession(auth.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("pausing between auth and send stops the ticket from claiming or submitting", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const first = await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    assert.match(first, /<CompanyQueryRq requestID="/);
+
+    // The owner pauses between auth and send. With the session still open,
+    // the in-lock re-read must observe the CURRENT connection status and
+    // claim nothing — the pause commits after the pre-transaction lookup.
+    await db.execute(sql`update connections set status = 'paused' where id = ${connection.id}`);
+    assert.equal(await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 }), "");
+    assert.match(await webConnectorLastError(ticket), /connection is paused/);
+
+    // Terminating the paused connection closes the session and re-queues the
+    // in-flight request, same shape as close.
+    assert.equal(await terminateConnectionSessions(orgId, connection.id), 1);
+    const session = (await db.execute<{ status: string }>(sql`select status from qbd_sessions where id = ${ticket}`));
+    assert.equal(session.rows[0]?.status, "closed");
+    const requeued = (await db.execute<{ status: string; session: string | null }>(sql`
+      select status, session_id as session from qbd_requests where capture_id = ${captureId} and family = 'company'`));
+    assert.equal(requeued.rows[0]?.status, "queued");
+    assert.equal(requeued.rows[0]?.session, null);
+
+    // The pre-pause ticket claims nothing and submits nothing afterwards.
+    assert.equal(await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 }), "");
+    assert.match(await webConnectorLastError(ticket), /paused/);
+    const companyId = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and family = 'company'`));
+    await db.execute(sql`update qbd_requests set status = 'sent', session_id = ${ticket}, sent_at = now() where id = ${companyId.rows[0]?.id}`);
+    const unpaused = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><CompanyRet><CompanyName>Pause Test</CompanyName></CompanyRet></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+    assert.equal(await acceptWebConnectorResponse(ticket, unpaused, "", ""), -101);
+    const untouched = (await db.execute<{ status: string; xml: string | null }>(sql`
+      select status, response_xml as xml from qbd_requests where id = ${companyId.rows[0]?.id}`));
+    assert.equal(untouched.rows[0]?.status, "sent");
+    assert.equal(untouched.rows[0]?.xml, null);
+
+    // Re-terminating with no open session touches nothing but still
+    // re-queues the request stranded on the dead ticket.
+    assert.equal(await terminateConnectionSessions(orgId, connection.id), 0);
+
+    // Resume: a fresh ticket claims the re-queued work again.
+    await db.execute(sql`update connections set status = 'active' where id = ${connection.id}`);
+    const reauth = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(reauth.ticket);
+    const reclaimed = await nextWebConnectorRequest(reauth.ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    assert.match(reclaimed, /<CompanyQueryRq requestID="/);
+    await closeWebConnectorSession(reauth.ticket);
   } finally {
     await db.execute(sql`delete from connections where id = ${connection.id}`);
   }
