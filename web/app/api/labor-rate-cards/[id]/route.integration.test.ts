@@ -387,3 +387,43 @@ test(
     }
   },
 );
+
+test(
+  "PUT refuses unmatchable adjustment targets by name instead of billing zero",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // transaction_type and other have no matcher case: an adjustment saved
+    // with one would measure nothing and bill zero forever. The save names
+    // them rather than storing the silence.
+    const fixture = await withBypass(seed);
+    try {
+      for (const target of [
+        { targetType: "transaction_type", targetValueText: "vendor_bill" },
+        { targetType: "other", targetValueText: "Something bespoke" },
+      ]) {
+        const body = {
+          ...putBody(fixture),
+          adjustments: [
+            {
+              code: "badtarget",
+              name: "Bad target",
+              category: "surcharge",
+              calculation: "percent",
+              value: "5",
+              presentation: "separate",
+              targets: [target],
+            },
+          ],
+        };
+        const response = await withOrgContext(fixture.orgId, () => put(fixture, body));
+        const payload = (await response.json()) as { errorCode?: string };
+        assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(payload)}`);
+        assert.equal(payload.errorCode, "target", JSON.stringify(target));
+      }
+      const stored = (await db.execute<{ n: number }>(sql`select count(*)::int as n from labor_rate_adjustments where version_id = ${fixture.versionId}`));
+      assert.equal(stored.rows[0]?.n, 0, "refused targets store nothing");
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
