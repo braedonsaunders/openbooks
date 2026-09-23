@@ -165,7 +165,23 @@ test("v1ConvertOrder forwards the path id and targetKind", async () => {
     expectedUpdatedAt: "rev-1",
     creditOverrideReason: undefined,
     idempotencyKey: "key-4",
+    expectedKind: "quote",
   }]);
+});
+
+test("v1ConvertOrder binds the route kind so a sibling-kind id cannot convert", async () => {
+  routeState.converted = [];
+  await v1ConvertOrder(
+    new Request("http://openbooks.test/api/v1/purchase-orders/po-1/convert", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-5" },
+      body: JSON.stringify({ targetKind: "vendor_bill", expectedUpdatedAt: "rev-2" }),
+    }),
+    "purchase-orders",
+    "po-1",
+  );
+  assert.equal(routeState.converted[0]?.expectedKind, "purchase_order");
+  assert.equal(routeState.converted[0]?.documentId, "po-1");
 });
 
 test("v1ListOrders and v1GetOrder bind the record type", async () => {

@@ -54,6 +54,7 @@ export function v1ConvertOrder(request: Request, typeKey: string, id: string): P
       expectedUpdatedAt: typeof body.expectedUpdatedAt === "string" ? body.expectedUpdatedAt : undefined,
       creditOverrideReason: typeof body.creditOverrideReason === "string" ? body.creditOverrideReason : undefined,
       idempotencyKey: requireV1IdempotencyKey(request),
+      expectedKind: ORDER_TYPE_KIND[key],
     });
     return { status: 201, body: outcome.result, replayed: outcome.replayed };
   });
