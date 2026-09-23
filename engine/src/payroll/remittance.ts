@@ -1599,10 +1599,12 @@ export function remittanceFenceLockKey(
 /**
  * The duplicate refusal, or null when the coast is clear.
  *
- * Pure, so the rule — one NON-voided remittance bill per key, and no second
- * short of voiding the first — is verifiable without a database. A voided bill
- * frees the key deliberately: the correction path is void-then-recreate, never
- * two live drafts debiting the same liabilities.
+ * Pure, so the rule — one bill per uncovered remainder, and no second bill
+ * for lines a live bill already consumed — is verifiable without a database.
+ * An exact re-run with nothing new left to bill is refused naming the first
+ * bill; a voided bill frees its lines deliberately, so the correction path
+ * stays void-then-recreate, never two live drafts debiting the same
+ * liabilities.
  */
 export function duplicateRemittanceMessage(
   existing: { documentNumber: string | null } | undefined,
@@ -1694,10 +1696,14 @@ export function pickRemittanceSlice(
  * spanning several entities splits — one call per slice — and an omitted
  * `subsidiaryId` there is refused naming the entities.
  *
- * Creating is IDEMPOTENT per (destination, period, filing account, entity): a
- * transaction-scoped advisory lock serializes concurrent creators (a
- * double-click, a retried request), and an existing non-voided bill for the
- * same key is refused by name rather than minted twice.
+ * Creating is IDEMPOTENT per (destination, period, filing account, entity)
+ * AND consumed line: a transaction-scoped advisory lock serializes
+ * concurrent creators (a double-click, a retried request), per-accrual
+ * coverage records exactly which lines each bill consumed, and a later
+ * same-window run bills only the unbilled remainder. An exact re-run with
+ * nothing left to bill is refused by name rather than minted twice, and an
+ * intersecting live bill with no coverage rows (an unreconciled legacy bill)
+ * fails closed rather than risk a double bill.
  */
 export async function createRemittanceBill(
   orgId: string,
@@ -1827,12 +1833,9 @@ export async function createRemittanceBill(
       // rather than bill a slice the caller never saw.
       throw new PayrollError("nothing to remit to this vendor for the period");
     }
-    const missing = slice.components.filter((c) => !c.liabilityAccountId);
-    if (missing.length > 0) {
-      throw new PayrollError(
-        `no liability account for: ${missing.map((c) => c.name).join(", ")} — set it in Payroll setup → Accounts & posting`,
-      );
-    }
+    // Liability-account assignment is checked against the lines this bill
+    // will actually consume (below): a line an earlier bill already covered
+    // was assigned then, and only the remainder can refuse now.
 
     // The AUTHORITATIVE entity resolution. The summary labelled this slice
     // from its own snapshot; the bill stamps what the subsidiaries table says
@@ -1895,11 +1898,13 @@ export async function createRemittanceBill(
     // markers for this destination/account/entity and reject any intersecting
     // date window, not only exact from/to equality. A legacy bill with no
     // entity marker covered the consolidated group, so it fails closed for
-    // every slice rather than risking a double remittance.
+    // every slice rather than risking a double remittance — unless coverage
+    // proves exactly which lines it consumed (below), in which case a later
+    // same-window bill covers only the unbilled remainder.
     const overlap = (await tx.execute<{
-      document_number: string | null; subsidiary_id: string | null; from: string; to: string;
+      id: string; document_number: string | null; subsidiary_id: string | null; from: string; to: string;
     }>(sql`
-      select document_number, subsidiary_id,
+      select id::text as id, document_number, subsidiary_id,
              custom->'payrollRemittance'->>'from' as from,
              custom->'payrollRemittance'->>'to' as to
         from documents
@@ -1911,26 +1916,30 @@ export async function createRemittanceBill(
          and ((custom->'payrollRemittance'->>'subsidiaryId') is null
               or (custom->'payrollRemittance'->>'subsidiaryId') = ${entityId})
       order by custom->'payrollRemittance'->>'from', created_at
-      limit 1
     `));
     const existing = overlap.rows[0];
-    if (existing) {
+    // Refuse by name over an intersecting live bill. The first bill whose
+    // window matches exactly keeps the established idempotency message; any
+    // other overlap names both windows so a controller can choose a
+    // non-overlapping correction period without guessing.
+    const refuseOverlapping = (found: NonNullable<typeof existing>): never => {
       // Keep the overlap fence org-wide: hiding a conflicting document must
       // never permit a duplicate liability bill. Its identifying metadata is
       // only available to actors who can read that document's legal entity.
-      if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, existing.subsidiary_id)) {
+      if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, found.subsidiary_id)) {
         throw new PayrollError("nothing to remit to this vendor for the period");
       }
-      const exact = existing.from === input.from && existing.to === input.to;
+      const exact = found.from === input.from && found.to === input.to;
       const refusal = exact
-        ? duplicateRemittanceMessage({ documentNumber: existing.document_number })
+        ? duplicateRemittanceMessage({ documentNumber: found.document_number })
         : overlappingRemittanceMessage({
-            documentNumber: existing.document_number,
-            from: existing.from,
-            to: existing.to,
+            documentNumber: found.document_number,
+            from: found.from,
+            to: found.to,
           });
       if (refusal) throw new PayrollError(refusal);
-    }
+      throw new PayrollError("nothing to remit to this vendor for the period");
+    };
 
     // Number off the org's EXISTING vendor_bill series — its prefix, padding
     // and current position — falling back to seeding the org-level 'BILL-'
@@ -1955,7 +1964,84 @@ export async function createRemittanceBill(
     `));
     const number = `${seq.rows[0]!.prefix}${String(seq.rows[0]!.next_number).padStart(seq.rows[0]!.padding, "0")}`;
 
-    const total = sum(slice.components.map((c) => c.amount));
+    // Per-accrual coverage (migration 0296): record exactly which committed
+    // lines this bill consumed, resolved through the same resolver the
+    // summary folds by — including region-scoped rows whose snapshot party
+    // is not their resolved destination. The equality below is the insert's
+    // own receipt: coverage that does not sum to the billed slice is a
+    // failure, not a success.
+    const creatorResolution = makeRemittanceDestinationResolver(await rawPayrollSettings(orgId, tx));
+    const billed = (await remittanceScopeLines(tx, orgId, {
+      from: input.from, to: input.to, filingAccountId, entityId,
+    })).filter((line) =>
+      !creatorResolution.isInternalAccrual(line)
+      && creatorResolution.resolveDestination(line).partyId === input.partyId,
+    );
+    const billedTotal = sum(billed.map((line) => (line.kind === "credit" ? neg(line.amount) : line.amount)));
+    const scopeTotal = sum(slice.components.map((c) => c.amount));
+    if (cmp(billedTotal, scopeTotal) !== 0) {
+      throw new PayrollError(
+        "remittance bill coverage does not match the billed payroll — regenerate this bill",
+      );
+    }
+    // Coverage-aware remainder: lines a live bill already consumed are never
+    // billed twice. A later same-window run bills only its unbilled lines;
+    // with nothing left unbilled the fence refusals above still apply, so an
+    // exact re-run keeps the established duplicate message.
+    const coveredLineIds = await coveredRemittanceStubLines(tx, orgId);
+    const billable = billed.filter((line) => !coveredLineIds.has(line.lineId));
+    if (billable.length === 0) {
+      if (existing) refuseOverlapping(existing);
+      throw new PayrollError("nothing to remit to this vendor for the period");
+    }
+    if (existing) {
+      // An intersecting live bill with no coverage rows consumed an
+      // unknowable set (a legacy bill the 0296 repair could not reconcile):
+      // no remainder can be proven against its window, so fail closed.
+      const blind = await remittanceBillsWithoutCoverage(
+        tx,
+        orgId,
+        overlap.rows.map((bill) => bill.id),
+      );
+      if (blind.length > 0) refuseOverlapping(existing);
+    }
+    // Aggregate the remainder by the same (component, kind, liability
+    // account) identity the summary folds by, in first-seen line order, so
+    // the bill debits exactly the accounts its own lines credited.
+    const entries: {
+      componentId: string; kind: RemittanceScopeLine["kind"]; name: string;
+      liabilityAccountId: string | null; amount: string;
+    }[] = [];
+    for (const line of billable) {
+      const amount = line.kind === "credit" ? neg(line.amount) : line.amount;
+      const found = entries.find((entry) =>
+        entry.componentId === line.componentId
+        && entry.kind === line.kind
+        && entry.liabilityAccountId === line.liabilityAccountId,
+      );
+      if (found) found.amount = add(found.amount, amount);
+      else {
+        entries.push({
+          componentId: line.componentId,
+          kind: line.kind,
+          name: line.componentName,
+          liabilityAccountId: line.liabilityAccountId,
+          amount,
+        });
+      }
+    }
+    const missing = entries.filter((entry) => !entry.liabilityAccountId);
+    if (missing.length > 0) {
+      throw new PayrollError(
+        `no liability account for: ${missing.map((entry) => entry.name).join(", ")} — set it in Payroll setup → Accounts & posting`,
+      );
+    }
+    const total = sum(entries.map((entry) => entry.amount));
+    if (cmp(sum(billable.map((line) => (line.kind === "credit" ? neg(line.amount) : line.amount))), total) !== 0) {
+      throw new PayrollError(
+        "remittance bill coverage does not match the billed payroll — regenerate this bill",
+      );
+    }
     // The bill's due date comes from the DESTINATION's schedule when a pack
     // declares one (Revenu Québec's, today) — the filing account's CRA
     // remitter type is a registration with another agency and never applies
@@ -1996,48 +2082,29 @@ export async function createRemittanceBill(
     `));
     const documentId = doc.rows[0]!.id;
     let lineNumber = 1;
-    for (const component of slice.components) {
+    for (const entry of entries) {
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount, created_by, updated_by)
-        values (${orgId}, ${documentId}, ${lineNumber++}, ${component.liabilityAccountId},
-                ${`${component.name} · ${input.from} – ${input.to}`}, 1, ${component.amount},
-                ${component.amount}, ${actorId}, ${actorId})
+        values (${orgId}, ${documentId}, ${lineNumber++}, ${entry.liabilityAccountId},
+                ${`${entry.name} · ${input.from} – ${input.to}`}, 1, ${entry.amount},
+                ${entry.amount}, ${actorId}, ${actorId})
       `);
     }
-    // Per-accrual coverage (migration 0296): record exactly which committed
-    // lines this bill consumed, resolved through the same resolver the
-    // summary folds by — including region-scoped rows whose snapshot party
-    // is not their resolved destination. A later same-window bill covers
-    // only lines no non-voided bill has covered. The equality below is the
-    // insert's own receipt: coverage that does not sum to the billed slice
-    // is a failure, not a success.
-    const creatorResolution = makeRemittanceDestinationResolver(await rawPayrollSettings(orgId, tx));
-    const billed = (await remittanceScopeLines(tx, orgId, {
-      from: input.from, to: input.to, filingAccountId, entityId,
-    })).filter((line) =>
-      !creatorResolution.isInternalAccrual(line)
-      && creatorResolution.resolveDestination(line).partyId === input.partyId,
-    );
-    const billedTotal = sum(billed.map((line) => (line.kind === "credit" ? neg(line.amount) : line.amount)));
-    if (cmp(billedTotal, total) !== 0) {
+    // The remainder's own coverage rows: one per consumed line, never one per
+    // bill. The row count below is the insert's receipt — a short write means
+    // a later same-window bill would re-bill the missing line, so refuse.
+    const covered = (await tx.execute<{ stub_line_id: string }>(sql`
+      insert into payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount, created_by)
+      select ${orgId}, ${documentId}, cov.line_id, cov.line_amount::numeric, ${actorId}
+        from unnest(${`{${billable.map((line) => line.lineId).join(",")}}`}::uuid[],
+                    ${`{${billable.map((line) => line.amount).join(",")}}`}::text[]) as cov(line_id, line_amount)
+      returning stub_line_id::text as stub_line_id
+    `));
+    if (covered.rows.length !== billable.length) {
       throw new PayrollError(
-        "remittance bill coverage does not match the billed payroll — regenerate this bill",
+        "remittance bill coverage was not recorded — regenerate this bill",
       );
-    }
-    if (billed.length > 0) {
-      const covered = (await tx.execute<{ stub_line_id: string }>(sql`
-        insert into payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount, created_by)
-        select ${orgId}, ${documentId}, cov.line_id, cov.line_amount::numeric, ${actorId}
-          from unnest(${`{${billed.map((line) => line.lineId).join(",")}}`}::uuid[],
-                      ${`{${billed.map((line) => line.amount).join(",")}}`}::text[]) as cov(line_id, line_amount)
-        returning stub_line_id::text as stub_line_id
-      `));
-      if (covered.rows.length !== billed.length) {
-        throw new PayrollError(
-          "remittance bill coverage was not recorded — regenerate this bill",
-        );
-      }
     }
     return { documentId, documentNumber: number };
   }, { isolationLevel: "read committed" });
@@ -2060,6 +2127,14 @@ export interface RemittanceScopeLine {
   systemKey: string | null;
   country: string | null;
   province: string;
+  /** Which component accrued this line — the bill aggregates remainder lines
+   *  by the same (component, kind, liability account) identity the summary
+   *  folds by, so an incremental bill debits exactly the accounts its own
+   *  lines credited. */
+  componentId: string;
+  componentName: string;
+  /** The historical liability account credited at commit. */
+  liabilityAccountId: string | null;
 }
 
 /**
@@ -2077,10 +2152,13 @@ export async function remittanceScopeLines(
     line_id: string; kind: "deduction" | "employer_contribution" | "credit";
     amount: string; snapshot_party_id: string | null;
     system_key: string | null; country: string | null; province: string;
+    component_id: string; component_name: string; liability_account_id: string | null;
   }>(sql`
     select l.id::text as line_id, l.kind, l.amount::text as amount,
            l.remittance_party_id::text as snapshot_party_id,
-           c.system_key, c.country, s.province
+           c.system_key, c.country, s.province,
+           c.id::text as component_id, c.name as component_name,
+           l.liability_account_id::text as liability_account_id
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
@@ -2100,7 +2178,53 @@ export async function remittanceScopeLines(
     systemKey: row.system_key,
     country: row.country,
     province: row.province,
+    componentId: row.component_id,
+    componentName: row.component_name,
+    liabilityAccountId: row.liability_account_id,
   }));
+}
+
+/**
+ * Every accrual line a live (non-voided) remittance bill has consumed, by
+ * stub line id. Voiding a bill frees its lines: the void-then-recreate
+ * correction path re-bills them, and the overlap fence treats a freed window
+ * as open. A live bill with no coverage rows at all (a legacy bill the 0296
+ * repair could not reconcile) covers an unknowable set, so callers fail
+ * closed on it rather than guess a remainder.
+ */
+export async function coveredRemittanceStubLines(
+  executor: RemittanceExecutor,
+  orgId: string,
+): Promise<Set<string>> {
+  const rows = (await executor.execute<{ stub_line_id: string }>(sql`
+    select cov.stub_line_id::text as stub_line_id
+      from payroll_remittance_coverage cov
+      join documents bill
+        on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
+     where cov.org_id = ${orgId} and bill.status <> 'voided'
+  `));
+  return new Set(rows.rows.map((row) => row.stub_line_id));
+}
+
+/**
+ * Which live (non-voided) intersecting bills carry no coverage rows. Such a
+ * bill consumed an unknowable set of lines, so no remainder can be proven
+ * against its window — the creator refuses rather than risk a double bill.
+ */
+export async function remittanceBillsWithoutCoverage(
+  executor: RemittanceExecutor,
+  orgId: string,
+  billIds: readonly string[],
+): Promise<string[]> {
+  if (billIds.length === 0) return [];
+  const rows = (await executor.execute<{ bill_document_id: string }>(sql`
+    select distinct cov.bill_document_id::text as bill_document_id
+      from payroll_remittance_coverage cov
+     where cov.org_id = ${orgId}
+       and cov.bill_document_id = any(${`{${billIds.join(",")}}`}::uuid[])
+  `));
+  const withCoverage = new Set(rows.rows.map((row) => row.bill_document_id));
+  return billIds.filter((id) => !withCoverage.has(id));
 }
 
 /**
