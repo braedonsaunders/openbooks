@@ -287,9 +287,16 @@ test('project activation and creation take the same fence before changing active
     assert.ok(mutation > gate, `${path}: the active-state write follows the gated re-check`)
   }
   const lib = source('./features.ts')
-  assert.match(lib, /export function featureGateLockKey\(orgId: string\): string/)
-  assert.match(lib, /return `openbooks:feature-gate:\$\{orgId\}`/)
-  assert.match(lib, /pg_advisory_xact_lock\(hashtextextended\(\$\{featureGateLockKey\(orgId\)\}, 0\)\)/)
+  // The switchboard holds no fence literal of its own: it runs the single
+  // engine implementation through a web-shaped alias.
+  assert.match(lib, /from '@openbooks\/engine\/src\/organization\/org-feature-lock\.ts'/)
+  assert.match(lib, /await acquireOrgFeatureGateLock\(runner, orgId\)/)
+  assert.doesNotMatch(lib, /openbooks:feature-gate:/)
+  // The fence identity lives in exactly one place: the engine module.
+  const lock = source('../../engine/src/organization/org-feature-lock.ts')
+  assert.match(lock, /export function featureGateLockKey\(orgId: string\): string/)
+  assert.match(lock, /return `openbooks:feature-gate:\$\{orgId\}`/)
+  assert.match(lock, /pg_advisory_xact_lock\(hashtextextended\(\$\{featureGateLockKey\(orgId\)\}, 0\)\)/)
 })
 
 test('serial order disable-then-activate: the disable applies, the stale-guard activation is refused', { skip: !DB }, async () => {
