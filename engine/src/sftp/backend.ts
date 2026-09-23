@@ -31,6 +31,7 @@ import {
   HeadObjectCommand,
 } from "@aws-sdk/client-s3";
 import { env } from "../platform/db.ts";
+import { encodeS3CopySource } from "../platform/file-storage.ts";
 
 /**
  * Storage backend for the built-in SFTP server. Two implementations:
@@ -235,20 +236,8 @@ export function setSftpS3ClientForTests(replacement: S3Client | null): void {
   s3 = replacement;
 }
 
-/**
- * Build the `x-amz-copy-source` header value for an S3 rename: the bucket
- * plus the source key with every path segment URL-encoded (`/` separators
- * kept). The installed SDK sends CopySource verbatim, and AWS requires the
- * encoded form — a raw `b/a #1.ofx` renames nothing and the source file is
- * left behind to be re-scanned as a duplicate.
- */
-export function encodeS3CopySource(bucket: string, sourceKey: string): string {
-  const encodedKey = sourceKey
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
-  return `${encodeURIComponent(bucket)}/${encodedKey}`;
-}
+/** The shared CopySource encoder lives in platform; re-exported for SFTP callers. */
+export { encodeS3CopySource };
 
 export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBackend {
   // Keep the exported constructor safe on its own as well as through
