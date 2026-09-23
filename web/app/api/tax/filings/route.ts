@@ -26,8 +26,18 @@ export async function GET(req: Request) {
   if (scopeDenied) return scopeDenied
   const p = new URL(req.url).searchParams
   const today = await businessToday(gate.user.orgId)
-  const from = p.get('from') && DATE_RE.test(p.get('from')!) ? p.get('from')! : `${today.slice(0, 4)}-01-01`
-  const to = p.get('to') && DATE_RE.test(p.get('to')!) ? p.get('to')! : today
+  // A supplied date must be a REAL calendar date, not merely YYYY-MM-DD
+  // shaped: the calendar builder normalizes 2026-02-30 to March and would
+  // answer 200 with empty obligations instead of a named refusal. Absent
+  // params still fall back to the defaults.
+  for (const name of ['from', 'to'] as const) {
+    const value = p.get(name)
+    if (value !== null && !isIsoDate(value)) {
+      return NextResponse.json({ error: `invalid ${name} date "${value}" (expected a real YYYY-MM-DD calendar date)` }, { status: 422 })
+    }
+  }
+  const from = p.get('from') ?? `${today.slice(0, 4)}-01-01`
+  const to = p.get('to') ?? today
   if (from > to) return NextResponse.json({ error: 'invalid period' }, { status: 422 })
   const obligations = await loadOrgFilingCalendar(gate.user.orgId, from, to)
   return NextResponse.json({ from, to, obligations })

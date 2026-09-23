@@ -181,7 +181,7 @@ const hooks = registerHooks({
 })
 
 const postRouteUrl = './route.ts?tax-filing-permission-test'
-const { POST } = (await import(postRouteUrl)) as typeof import('./route.ts')
+const { POST, GET } = (await import(postRouteUrl)) as typeof import('./route.ts')
 const patchRouteUrl = './[id]/route.ts?tax-filing-permission-test'
 const { PATCH } = (await import(patchRouteUrl)) as typeof import('./[id]/route.ts')
 hooks.deregister()
@@ -298,6 +298,40 @@ test('PATCH mark-filed 409s carry the typed refusal code', async () => {
   const duplicate = await patch(filingId)
   assert.equal(duplicate.status, 409)
   assert.deepEqual(await duplicate.json(), { code: 'already-filed', error: 'filing is already filed' })
+})
+
+function get(query: string): Promise<Response> {
+  return GET(new Request(`http://openbooks.test/api/tax/filings${query}`))
+}
+
+// Impossible calendar dates must refuse by name: the calendar builder
+// normalizes 2026-02-30 into March and would otherwise answer 200 with empty
+// obligations instead of a 422.
+test('GET refuses impossible calendar dates by name', async () => {
+  reset(['reports.read'])
+
+  for (const [query, bad] of [
+    ['?from=2026-02-30&to=2026-03-01', '2026-02-30'],
+    ['?from=2026-01-01&to=2026-13-01', '2026-13-01'],
+    ['?from=2025-02-29&to=2025-03-01', '2025-02-29'],
+  ] as const) {
+    const response = await get(query)
+    assert.equal(response.status, 422)
+    const body = (await response.json()) as { error: string }
+    assert.match(body.error, new RegExp(`invalid (from|to) date "${bad}"`))
+  }
+})
+
+test('GET accepts a real leap day and keeps absent-param defaults', async () => {
+  reset(['reports.read'])
+
+  const leap = await get('?from=2024-02-29&to=2024-03-01')
+  assert.equal(leap.status, 200)
+  assert.deepEqual(await leap.json(), { from: '2024-02-29', to: '2024-03-01', obligations: [] })
+
+  const defaults = await get('')
+  assert.equal(defaults.status, 200)
+  assert.deepEqual(await defaults.json(), { from: '2026-01-01', to: '2026-08-24', obligations: [] })
 })
 
 test('a reports.create holder cannot certify a statutory filing', async () => {
