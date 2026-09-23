@@ -22,16 +22,21 @@ registerHooks({
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { convertApplicationOrder } = await import("./orders.ts");
-const { ApplicationError } = await import("./errors.ts");
-type ApplicationContext = import("./context.ts").ApplicationContext;
+const { convertApplicationOrder } = await import("./orders");
+const { ApplicationError } = await import("./errors");
+type ApplicationContext = import("./context").ApplicationContext;
 
 
-async function insertOrder(orgId: string, actor: string, kind: string, subsidiaryId: string | null, number: string): Promise<string> {
+async function insertOrder(orgId: string, actor: string, kind: string, subsidiaryId: string | null, number: string): Promise<{ id: string; revision: string }> {
   const id = randomUUID();
   await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,currency,subtotal,tax_total,total,subsidiary_id,created_by)
     values (${id},${orgId},${kind},${number},'2026-07-15','CAD','0','0','0',${subsidiaryId},${actor})`));
-  return id;
+  // The caller's real revision token — the same revision_seq counter the
+  // converter compares against. Every v1 convert must carry one.
+  const revision = (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+    select revision_seq::text as revision from documents where id = ${id}`))).rows[0]?.revision;
+  assert.ok(revision);
+  return { id, revision };
 }
 
 function contextFor(orgId: string, actor: string, allowed: Set<string> | null): ApplicationContext {
@@ -51,14 +56,15 @@ test("convert refuses a sibling-kind id on the wrong route", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));
-    const quoteId = await insertOrder(org.orgId, actor, "quote", org.subsidiaryId, "EST-SCOPE-1");
+    const quote = await insertOrder(org.orgId, actor, "quote", org.subsidiaryId, "EST-SCOPE-1");
     const ctx = contextFor(org.orgId, actor, null);
     await assert.rejects(
       () => convertApplicationOrder(ctx, {
-        documentId: quoteId,
+        documentId: quote.id,
         targetKind: "vendor_bill",
         idempotencyKey: `scope-kind-${randomUUID()}`,
         expectedKind: "purchase_order",
+        expectedUpdatedAt: quote.revision,
       }),
       (error: unknown) => {
         assert.ok(error instanceof ApplicationError);
@@ -78,14 +84,15 @@ test("convert refuses an out-of-scope subsidiary PO for a restricted caller", as
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));
     const hidden = randomUUID();
     await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`));
-    const poId = await insertOrder(org.orgId, actor, "purchase_order", hidden, "PO-SCOPE-1");
+    const po = await insertOrder(org.orgId, actor, "purchase_order", hidden, "PO-SCOPE-1");
     const ctx = contextFor(org.orgId, actor, new Set([org.subsidiaryId]));
     await assert.rejects(
       () => convertApplicationOrder(ctx, {
-        documentId: poId,
+        documentId: po.id,
         targetKind: "vendor_bill",
         idempotencyKey: `scope-sub-${randomUUID()}`,
         expectedKind: "purchase_order",
+        expectedUpdatedAt: po.revision,
       }),
       (error: unknown) => {
         assert.ok(error instanceof ApplicationError);
@@ -103,16 +110,18 @@ test("convert passes the guards for a matching kind in scope", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));
-    const quoteId = await insertOrder(org.orgId, actor, "quote", org.subsidiaryId, "EST-SCOPE-2");
+    const quote = await insertOrder(org.orgId, actor, "quote", org.subsidiaryId, "EST-SCOPE-2");
     const ctx = contextFor(org.orgId, actor, new Set([org.subsidiaryId]));
-    // A draft cannot convert: reaching the converter's own draft refusal
-    // proves the kind and subsidiary guards passed.
+    // A draft cannot convert: carrying the draft's real revision token past
+    // the fence and reaching the converter's own draft refusal proves the
+    // token, kind, and subsidiary guards all passed.
     await assert.rejects(
       () => convertApplicationOrder(ctx, {
-        documentId: quoteId,
+        documentId: quote.id,
         targetKind: "sales_order",
         idempotencyKey: `scope-pass-${randomUUID()}`,
         expectedKind: "quote",
+        expectedUpdatedAt: quote.revision,
       }),
       (error: unknown) => {
         assert.ok(error instanceof ApplicationError);
