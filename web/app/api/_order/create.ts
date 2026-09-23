@@ -3,13 +3,11 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import type { OrderKind } from '../../../lib/order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from "../../../lib/bills.ts";
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -19,12 +17,10 @@ import type { Authz } from '../../../lib/authz'
 import {
   computeOrderTotals,
   exactOrderMoney,
-  exactOrderQuantity,
-  exactOrderUnitPrice,
   loadOrder,
   orderTaxProfileMap,
-  type OrderLineInput,
 } from './lib'
+import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
 
 /**
  * Shared collection-POST for the three order-cycle modules (quote /
@@ -206,26 +202,11 @@ export async function createOrder(
     }
   }
 
-  // Valid lines are the drawer's save shape: rows with something to post
-  // (an item or an account), a positive quantity and a non-negative price.
-  // Blank grid rows never persist; malformed numerics refuse by name.
-  const valid: OrderLineInput[] = []
-  for (const line of lines) {
-    if (!(line.itemId || line.accountId)) continue
-    const quantity = exactOrderQuantity(line.quantity ?? '0')
-    const unitPrice = exactOrderUnitPrice(line.unitPrice ?? '0')
-    if (quantity === 'invalid' || unitPrice === 'invalid') {
-      return bad('Order lines contain an invalid quantity or amount')
-    }
-    try {
-      toUnits(quantity)
-    } catch {
-      return bad('Order lines contain an invalid quantity or amount')
-    }
-    if (compareDecimal(quantity, '0') > 0 && cmp(unitPrice, '0') >= 0) {
-      valid.push({ ...line, quantity, unitPrice })
-    }
-  }
+  // The drawer's save shape: blank grid rows never persist, while any
+  // populated row that cannot post refuses by line number (shared helper).
+  const selected = selectPostableOrderLines(lines)
+  if ('error' in selected) return bad(selected.error)
+  const valid: OrderLineInput[] = selected.valid
   if (valid.length > 0) {
     const scope = {
       active: await activeStockLocations(user.orgId),

@@ -1462,6 +1462,19 @@ test('an exact revision token admits draft save, issue, and discard', async () =
   assert.equal(harness.deleted, true)
 })
 
+test('a populated line with no quantity fails the draft save before any write', async () => {
+  harness.reset('draft')
+  const refused = await patch({
+    lines: [
+      { accountId: '22222222-0000-4000-8000-000000000002', quantity: '2', unitPrice: '50' },
+      { accountId: '22222222-0000-4000-8000-000000000003', quantity: '0', unitPrice: '50' },
+    ],
+  })
+  assert.equal(refused.status, 422)
+  assert.match(((await refused.json()) as { error: string }).error, /Order line 2.*quantity/i)
+  assert.equal(harness.headerWrites, 0)
+})
+
 test('a refused line warehouse fails the draft save before any write', async () => {
   harness.reset('draft')
   harness.stockLocationFailure = 'Line 1: stock location is not an active warehouse in this organization'

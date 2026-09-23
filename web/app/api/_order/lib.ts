@@ -2,7 +2,7 @@ import 'server-only'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, mul, normalizeDecimal, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
+import { add, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
 import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
 import { canonicalDecimal } from '../../../lib/exact-decimal'
@@ -20,30 +20,6 @@ export function exactOrderMoney(v: unknown): string | 'invalid' {
   }
 }
 
-/** Quantity columns are numeric(28,8); do not force ledger money scale. */
-export function exactOrderQuantity(v: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(v, 8)
-  if (exact === null) return 'invalid'
-  try {
-    return normalizeDecimal(exact, 8)
-  } catch {
-    return 'invalid'
-  }
-}
-
-/** unit_price columns are numeric(28,8): a saved line reads back at storage
- * scale, so validation must accept it — otherwise no saved order can ever be
- * re-saved. Ledger totals stay 4dp (exactOrderMoney below). */
-export function exactOrderUnitPrice(v: unknown): string | 'invalid' {
-  const exact = canonicalDecimal(v, 8)
-  if (exact === null) return 'invalid'
-  try {
-    return normalizeDecimal(exact, 8)
-  } catch {
-    return 'invalid'
-  }
-}
-
 /**
  * Shared loader + line-save helpers for the order-cycle documents
  * (quote / sales_order / purchase_order). These live in `documents` with
@@ -52,21 +28,12 @@ export function exactOrderUnitPrice(v: unknown): string | 'invalid' {
  * progress, and expose `document_links` (origin + converted-into edges).
  */
 
-export interface OrderLineInput {
-  itemId?: string | null
-  accountId?: string | null
-  description?: string | null
-  quantity?: string | null
-  unit?: string | null
-  unitPrice?: string | null
-  taxCodeId?: string | null
-  taxGroupId?: string | null
-  departmentId?: string | null
-  projectId?: string | null
-  /** Warehouse relieve/fulfil effects use for a stocked line. */
-  stockLocationId?: string | null
-  extraDims?: Record<string, string | null>
-}
+// Drawer line shape + exact quantity/price parsing live in
+// ./line-selection (kept out of this DB-bound module so the route suites
+// can double this file while the pure line validation always runs real).
+import type { OrderLineInput } from './line-selection'
+export type { OrderLineInput } from './line-selection'
+export { exactOrderQuantity, exactOrderUnitPrice, selectPostableOrderLines } from './line-selection'
 
 /** qty × price per line → per-line amount + tax + document totals. */
 export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfiles) {
