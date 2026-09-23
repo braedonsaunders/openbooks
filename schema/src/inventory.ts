@@ -326,6 +326,9 @@ export const stockCountLines = pgTable(
     unique("stock_count_lines_no_duplicate_subject")
       .on(t.orgId, t.stockCountId, t.itemId, t.stockLocationId, t.lotId)
       .nullsNotDistinct(),
+    // A physical count is never negative; NULL stays legal for uncounted
+    // lines (0299).
+    check("stock_count_lines_counted_nonnegative", sql`${t.countedQuantity} IS NULL OR ${t.countedQuantity} >= 0`),
   ],
 );
 

@@ -631,6 +631,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // old month (0298 pins policy, base unit and presentation per
     // (version, item) at save time, backfilled from current values).
     "0298_item_rate_version_profile_pins.sql",
+    // A physical count is never negative, but counted_quantity carried no
+    // CHECK and the engine checked width and scale only: a count of -1
+    // reviewed and posted as a negative variance. Storage refuses negatives
+    // (NULL stays legal for uncounted lines); the engine preflights the
+    // same gate at record and at variance math.
+    "0299_stock_count_line_counted_nonnegative.sql",
     // Item price schedules were rewritten or deleted in place while the
     // resolver reads the same live rows for any onDate, so history could be
     // silently repriced: this adds the revision fence, the supersedes link
@@ -2480,6 +2486,29 @@ test("0295 keeps one in-flight Web Connector request per ticket", () => {
     migration,
     /CREATE UNIQUE INDEX IF NOT EXISTS qbd_requests_one_sent_per_session\s+ON public\.qbd_requests \(session_id\)\s+WHERE status = 'sent';/,
   );
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("0299 refuses negative counted quantities on stock-count lines", () => {
+  // A physical count is never negative, but counted_quantity carried no
+  // CHECK and the engine checked width and scale only, so a count of -1
+  // reviewed and posted as a negative variance. Storage refuses negatives
+  // while NULL stays legal for uncounted lines; the engine preflights the
+  // same gate at record and at variance math.
+  const migration = readFileSync("schema/migrations/generated/0299_stock_count_line_counted_nonnegative.sql", "utf8");
+  assert.match(migration, /^-- OpenBooks forward migration 0299_stock_count_line_counted_nonnegative\./m);
+  assert.match(migration, /SET statement_timeout = 0;/);
+  assert.match(migration, /SET idle_in_transaction_session_timeout = 0;/);
+  assert.doesNotMatch(migration, /lock_timeout/i);
+  // Preflight refuses existing negatives by name with the re-record remedy;
+  // nothing is auto-zeroed.
+  assert.match(migration, /WHERE counted_quantity IS NOT NULL AND counted_quantity < 0/);
+  assert.match(migration, /re-record the true physical count/);
+  assert.match(migration, /ADD CONSTRAINT stock_count_lines_counted_nonnegative/);
+  assert.match(migration, /CHECK \(counted_quantity IS NULL OR counted_quantity >= 0\)/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
