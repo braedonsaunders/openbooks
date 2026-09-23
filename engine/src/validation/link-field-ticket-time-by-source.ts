@@ -14,24 +14,14 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { withOrg } from "../platform/db.ts";
+import {
+  applyTimeTicketLinks,
+  classifyTimeTicketLinks,
+  resolveTimeTicketLinks,
+  type SourceLink,
+} from "./field-ticket-time-links.ts";
 import { resolveTargetOrg } from "./target-org.ts";
-
-interface SourceLink {
-  sourceRef: string;
-  ticketNumber: string;
-}
-
-interface ResolvedLink extends SourceLink {
-  timeEntryId: string | null;
-  currentTicketId: string | null;
-  currentTicketNumber: string | null;
-  targetTicketId: string | null;
-  entryProjectId: string | null;
-  ticketProjectId: string | null;
-  protectedEvidence: boolean;
-}
 
 const args = new Map(
   process.argv
@@ -90,103 +80,27 @@ for (const link of links) {
   uniqueLinks.set(link.sourceRef, link);
 }
 
-const resolved: ResolvedLink[] = [];
 const BATCH = 1_000;
-for (let offset = 0; offset < uniqueLinks.size; offset += BATCH) {
-  const batch = [...uniqueLinks.values()].slice(offset, offset + BATCH);
-  const result = await db.execute(sql`
-    with source as (
-      select *
-        from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-             as x("sourceRef" text, "ticketNumber" text)
-    )
-    select source."sourceRef" as source_ref,
-           source."ticketNumber" as ticket_number,
-           te.id as time_entry_id,
-           te.project_id as entry_project_id,
-           te.field_ticket_id as current_ticket_id,
-           current_ticket.document_number as current_ticket_number,
-           target_ticket.id as target_ticket_id,
-           target_ticket.project_id as ticket_project_id,
-           (te.billing_status = 'billed'
-             or te.invoiced_by_line_id is not null
-             or te.cost_journal_entry_id is not null
-             or te.overhead_journal_entry_id is not null) as protected_evidence
-      from source
-      left join time_entries te
-        on te.org_id = ${orgId}
-       and te.custom ->> ${sourceKey} = source."sourceRef"
-      left join documents current_ticket
-        on current_ticket.org_id = te.org_id
-       and current_ticket.id = te.field_ticket_id
-      left join documents target_ticket
-        on target_ticket.org_id = ${orgId}
-       and target_ticket.kind = 'field_ticket'
-       and target_ticket.document_number = source."ticketNumber"
-  `);
-  for (const row of result.rows as Array<Record<string, unknown>>) {
-    resolved.push({
-      sourceRef: String(row.source_ref),
-      ticketNumber: String(row.ticket_number),
-      timeEntryId: row.time_entry_id ? String(row.time_entry_id) : null,
-      currentTicketId: row.current_ticket_id
-        ? String(row.current_ticket_id)
-        : null,
-      currentTicketNumber: row.current_ticket_number
-        ? String(row.current_ticket_number)
-        : null,
-      targetTicketId: row.target_ticket_id
-        ? String(row.target_ticket_id)
-        : null,
-      entryProjectId: row.entry_project_id
-        ? String(row.entry_project_id)
-        : null,
-      ticketProjectId: row.ticket_project_id
-        ? String(row.ticket_project_id)
-        : null,
-      protectedEvidence: Boolean(row.protected_evidence),
-    });
-  }
-}
+const resolved = await resolveTimeTicketLinks(
+  orgId,
+  sourceKey,
+  [...uniqueLinks.values()],
+);
 
 if (resolved.length !== uniqueLinks.size) {
   throw new Error(
     `source-link cardinality changed: ${uniqueLinks.size} inputs produced ${resolved.length} rows; duplicate source IDs or ticket numbers exist in the target`,
   );
 }
-const missingTimeEntries = resolved.filter((row) => !row.timeEntryId);
-const missingTickets = resolved.filter((row) => !row.targetTicketId);
-const projectConflicts = resolved.filter(
-  (row) =>
-    row.timeEntryId &&
-    row.targetTicketId &&
-    row.entryProjectId !== row.ticketProjectId,
-);
-const changes = resolved.filter(
-  (row) =>
-    row.timeEntryId &&
-    row.targetTicketId &&
-    row.currentTicketId !== row.targetTicketId,
-);
-const applicableChanges = changes.filter(
-  (row) => row.entryProjectId === row.ticketProjectId,
-);
-const protectedChanges = applicableChanges.filter(
-  (row) => row.protectedEvidence,
-);
-const summary = {
-  sourceRows: links.length,
-  uniqueSourceLinks: uniqueLinks.size,
-  exactCurrentLinks:
-    resolved.length - missingTimeEntries.length - missingTickets.length - changes.length,
-  requiredChanges: changes.length,
-  applicableChanges: applicableChanges.length,
-  protectedChanges: protectedChanges.length,
-  missingTimeEntries: missingTimeEntries.length,
-  missingTickets: missingTickets.length,
-  projectConflicts: projectConflicts.length,
-  applied: false,
-};
+const {
+  missingTimeEntries,
+  missingTickets,
+  projectConflicts,
+  changes,
+  applicableChanges,
+  protectedChanges,
+  summary,
+} = classifyTimeTicketLinks(resolved, links.length, uniqueLinks.size);
 
 if (apply) {
   if (
@@ -211,54 +125,20 @@ if (apply) {
       fromTicketId: row.currentTicketId,
       fromTicketNumber: row.currentTicketNumber,
       toTicketId: row.targetTicketId!,
+      entryProjectId: row.entryProjectId,
+      ticketProjectId: row.ticketProjectId,
     }));
-    await withOrg(orgId, async () => {
-      await db.execute(sql`
-        with change as (
-          select *
-            from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-                 as x("timeEntryId" uuid, "sourceRef" text,
-                      "ticketNumber" text, "fromTicketId" uuid,
-                      "fromTicketNumber" text, "toTicketId" uuid)
-        )
-        insert into audit_log
-          (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        select ${orgId}, 'time_entries', change."timeEntryId", 'update',
-               jsonb_build_object(
-                 'mode', 'source_lineage_correction',
-                 'reason', ${reason}::text,
-                 'sourceRef', change."sourceRef",
-                 'inputSha256', ${inputSha256}::text,
-                 'before', jsonb_build_object(
-                   'fieldTicketId', change."fromTicketId",
-                   'fieldTicketNumber', change."fromTicketNumber"
-                 ),
-                 'after', jsonb_build_object(
-                   'fieldTicketId', change."toTicketId",
-                   'fieldTicketNumber', change."ticketNumber"
-                 )
-               ),
-               null, ${runId}
-          from change
-      `);
-      await db.execute(sql`
-        with change as (
-          select *
-            from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-                 as x("timeEntryId" uuid, "ticketNumber" text, "toTicketId" uuid)
-        )
-        update time_entries te
-           set field_ticket_id = change."toTicketId",
-               custom = te.custom || jsonb_build_object(
-                 'sourceFieldTicketNumber', change."ticketNumber"
-               ),
-               updated_at = now()
-          from change
-         where te.org_id = ${orgId}
-           and te.id = change."timeEntryId"
-           and te.field_ticket_id is distinct from change."toTicketId"
-      `);
-    });
+    // One tenant transaction per batch: entries are re-read FOR UPDATE and
+    // verified against this plan inside it, so a concurrent bill, post, or
+    // ticket edit between planning and applying refuses instead of writing.
+    await withOrg(orgId, () =>
+      applyTimeTicketLinks(orgId, batch, {
+        reason,
+        inputSha256,
+        runId,
+        actorId: null,
+      }),
+    );
   }
   summary.applied = true;
 }
