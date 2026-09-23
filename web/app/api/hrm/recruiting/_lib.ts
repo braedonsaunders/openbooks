@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
+import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
+import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
 import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
 
 /**
@@ -10,6 +13,44 @@ import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts"
  */
 export function recruitingErrorResponse(e: unknown): NextResponse {
   if (e instanceof RecruitingError) {
+    const status =
+      e.code === "INVALID_INPUT"
+        ? 400
+        : e.code === "NOT_FOUND"
+          ? 404
+          : e.code === "BAD_STATE" || e.code === "STALE_REVISION"
+            ? 409
+            : 422;
+    return NextResponse.json({ error: e.message }, { status });
+  }
+  // acceptOfferAsHire files the hire through the change-request service
+  // inside the hire transaction: a missing approval flow (NO_FLOW), a
+  // vacancy refusal, or a headcount-plan refusal is a computed 4xx with
+  // the remedy intact — never a 500 — and the throw still rolls the hire
+  // back before this mapping runs.
+  if (e instanceof HrmChangeRequestError) {
+    const status =
+      e.code === "INVALID_PAYLOAD"
+        ? 400
+        : e.code === "NOT_FOUND"
+          ? 404
+          : e.code === "BAD_STATE" || e.code === "STALE_REVISION"
+            ? 409
+            : 422;
+    return NextResponse.json({ error: e.message }, { status });
+  }
+  if (e instanceof HrmPositionError) {
+    const status =
+      e.code === "INVALID_INPUT"
+        ? 400
+        : e.code === "NOT_FOUND"
+          ? 404
+          : e.code === "BAD_STATE" || e.code === "STALE_REVISION"
+            ? 409
+            : 422;
+    return NextResponse.json({ error: e.message }, { status });
+  }
+  if (e instanceof CompensationError) {
     const status =
       e.code === "INVALID_INPUT"
         ? 400
