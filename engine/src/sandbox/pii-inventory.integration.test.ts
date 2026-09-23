@@ -1315,6 +1315,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payment_files.content_hash",
   "payment_files.content_type",
   "payment_files.currency",
+  "payment_files.delivery_claim_owner",
   "payment_files.filename",
   "payment_files.rejection_reason",
   "payment_files.status",
