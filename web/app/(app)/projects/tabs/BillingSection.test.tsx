@@ -183,7 +183,9 @@ test("a 422 pins the server reason beside the section", async (t) => {
   assert.equal(button.disabled, false, "the button must release after a refusal");
   const alert = drawer.host.querySelector('[role="alert"]');
   assert.ok(alert, "the refusal must pin beside the section, not live only in a toast");
-  assert.match(alert!.textContent ?? "", new RegExp(reason.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  // \x5c is the backslash member: the class stays a regex literal with no
+  // double-backslash run, so the escape ratchet keeps scanning it.
+  assert.match(alert!.textContent ?? "", new RegExp(reason.replace(/[.*+?^${}()|[\]\x5c]/g, "\\$&")));
 });
 
 test("a created invoice navigates to its edit page", async (t) => {
