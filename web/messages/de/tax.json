@@ -150,7 +150,10 @@
         "loss_carryforward": "Verlustvortrag",
         "other": "Sonstige"
       },
-      "valuationAllowanceIas12": "Ansatzkorrektur aktive latente Steuern"
+      "valuationAllowanceIas12": "Ansatzkorrektur aktive latente Steuern",
+      "rowDescriptionRequiredPermanent": "Zeile {row} der permanenten Differenzen braucht eine Beschreibung – bitte ergänzen oder den Betrag entfernen.",
+      "rowDescriptionRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Beschreibung – bitte ergänzen oder die Zeile leeren.",
+      "computeFailed": "Die Abgrenzung konnte nicht berechnet werden."
     },
     "detail": {
       "title": "Abgrenzung {year} · v{version}",

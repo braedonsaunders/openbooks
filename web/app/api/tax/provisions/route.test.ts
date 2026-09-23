@@ -223,6 +223,36 @@ test("POST refuses a populated per-entity row without a description, naming the 
   assert.equal(routeState.calls.length, 0);
 });
 
+test("POST treats a pristine grid row (default category, no data) as blank, never a refusal", async () => {
+  routeState.calls.length = 0;
+  const response = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [{ description: "Meals", amount: "10.00" }],
+    // Exactly what the compute grid sends for an untouched trailing line:
+    // no description, no difference, category still on its "other" default.
+    additionalDifferences: [{ description: "", category: "other", difference: "" }],
+  });
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls.length, 1);
+  assert.deepEqual(routeState.calls[0]!.input.permanentDifferences, [
+    { description: "Meals", amount: "10.0000" },
+  ]);
+  assert.deepEqual(routeState.calls[0]!.input.additionalDifferences, []);
+});
+
+test("POST still refuses a deliberately chosen category with no description", async () => {
+  routeState.calls.length = 0;
+  const response = await post({
+    fiscalYear: 2026,
+    additionalDifferences: [{ description: "", category: "provisions", difference: "" }],
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: "additionalDifferences[0]: description is required when an amount or category is provided",
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
 test("POST still skips truly empty grid rows at root and per-entity level", async () => {
   routeState.calls.length = 0;
   const response = await post({

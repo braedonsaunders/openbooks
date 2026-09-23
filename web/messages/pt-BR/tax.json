@@ -150,7 +150,10 @@
         "loss_carryforward": "Prejuízos acumulados",
         "other": "Outro"
       },
-      "valuationAllowanceIas12": "Ajuste de reconhecimento do IDA"
+      "valuationAllowanceIas12": "Ajuste de reconhecimento do IDA",
+      "rowDescriptionRequiredPermanent": "A linha {row} de diferenças permanentes precisa de uma descrição — adicione uma ou limpe o valor.",
+      "rowDescriptionRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma descrição — adicione uma ou limpe a linha.",
+      "computeFailed": "Não foi possível calcular a provisão."
     },
     "detail": {
       "title": "Provisão {year} · v{version}",
