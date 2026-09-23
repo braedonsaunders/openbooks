@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { createConnection } from "node:net";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext } from "../platform/db.ts";
+import { deleteSandbox } from "../sandbox/lifecycle.ts";
 import { SIM_ORG_PREFIX } from "../sim/db-guard.ts";
 
 /**
@@ -1160,6 +1161,62 @@ export async function dropScratchOrgReporting(orgId: string): Promise<void> {
     console.error(`scratch-org teardown failed for ${orgId} (rows may be leaked on the shared dev DB):`, error);
     if (fixtureOwnerPort() || fixturePoolingEnabled()) throw error;
   }
+}
+
+/**
+ * Delete a sample-company clone org through the product's own sandbox
+ * deletion path: a finalized sample company (env_kind 'preview') or a
+ * promoted sample template (env_kind 'sandbox'). There is no product removal
+ * path for these orgs, and deleteSandbox cannot wipe a preview org as-is:
+ * every wipe guard funnels through openbooks_sandbox_wipe_allowed, which
+ * admits only env_kind = 'sandbox', so the wipe of a preview org is refused
+ * with "audit_log is append-only" and the org (plus every org cloned from
+ * it) leaks. The caller must own the org; the helper refuses anything that
+ * is not a sandbox-clone row carrying a sample-company marker, normalizes a
+ * preview org to 'sandbox' first (the same prep dropScratchOrg applies to
+ * its own orgs), deletes through deleteSandbox, and verifies the orgs row
+ * is actually gone instead of reporting an unverified delete as success.
+ */
+export async function dropSampleCloneOrg(orgId: string): Promise<void> {
+  return withBypassContext(async () => {
+    const row = (await db.execute<{ name: string; envKind: string; isSample: boolean }>(sql`
+      select name, env_kind as "envKind",
+             ((settings ? 'sampleCompany')
+              or (settings ? 'sampleTemplatePromotion')
+              or coalesce((settings->>'simHarness')::boolean, false)) as "isSample"
+        from orgs where id = ${orgId}`)).rows[0];
+    if (!row) {
+      throw new Error(
+        `dropSampleCloneOrg(${orgId}): orgs row is gone; refusing to report an unverified delete as success`,
+      );
+    }
+    if (!row.isSample) {
+      throw new Error(
+        `dropSampleCloneOrg refused: org ${orgId} is named ${JSON.stringify(row.name)} and carries no sample-company marker`,
+      );
+    }
+    if (row.envKind !== "preview" && row.envKind !== "sandbox") {
+      throw new Error(
+        `dropSampleCloneOrg refused: org ${orgId} has env_kind ${JSON.stringify(row.envKind)}, expected 'preview' or 'sandbox'`,
+      );
+    }
+    if (row.envKind === "preview") {
+      await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
+    }
+    const sandboxRows = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes where org_id = ${orgId}`)).rows;
+    if (sandboxRows.length !== 1) {
+      throw new Error(
+        `dropSampleCloneOrg(${orgId}): expected exactly one sandboxes row, found ${sandboxRows.length}`,
+      );
+    }
+    await deleteSandbox(sandboxRows[0]!.id);
+    const remaining = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+    if (remaining !== 0) {
+      throw new Error(`dropSampleCloneOrg(${orgId}): orgs row survived deleteSandbox`);
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------
