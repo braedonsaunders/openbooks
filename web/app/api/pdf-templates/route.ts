@@ -41,6 +41,7 @@ export async function GET(req: Request) {
       footerHtml: row.footerHtml,
       isDefault: row.isDefault,
       isActive: row.isActive,
+      revision: row.revision,
       updatedAt: row.updatedAt,
     })),
   });
@@ -99,10 +100,18 @@ export async function POST(req: Request) {
 
   try {
     const row = await db.transaction(async (tx) => {
-      if (body.isDefault)
+      if (body.isDefault) {
+        // Serialize default-swaps per (org, kind) under an advisory
+        // transaction lock: without it two concurrent creates both clear,
+        // both insert is_default=true, and the partial unique index answers
+        // 500. The lock orders them; the index stays as the backstop, so a
+        // 23505 here still means the name index (handled below).
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(hashtextextended(${'pdf-template-default:' + user.orgId + ':' + body.recordType}, 0))`);
         await tx.execute(sql`
           update pdf_templates set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${body.recordType} and is_default`);
+      }
       const result = (await tx.execute<{ id: string; name: string; snapshot: Record<string, unknown> }>(sql`
         insert into pdf_templates (org_id, record_type, name, description, paper_size, orientation,
                                    margin_mm, header_html, footer_html, source_html, compiled_html,

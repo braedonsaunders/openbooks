@@ -559,6 +559,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // fiscal calendar; backfill one for every org whose calendars carry
     // none, refusing ambiguous orgs by id instead of guessing.
     "0275_default_calendar_backfill.sql",
+    // Concurrent PDF-template default-sets both committed (clear-then-set
+    // with no mutual exclusion): storage now refuses a second default per
+    // (org, record type), pre-existing duplicates resolve to the template
+    // the print resolver already returns (demotions audited), and the
+    // template gains the revision counter issued PDFs cite.
+    "0277_pdf_template_default_and_revision.sql",
     // Equipment PATCH rewrote every column from a pre-transaction read, so
     // concurrent edits silently lost one writer's changes. equipment_units
     // gains the revision counter the PATCH fence compares under lock.
