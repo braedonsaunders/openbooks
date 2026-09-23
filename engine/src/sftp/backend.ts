@@ -1,5 +1,26 @@
+import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
+
+/** Unique suffix for an in-flight publish temp name (never reused, never cleaned by others). */
+function randomSuffix(): string {
+  return `${Date.now().toString(36)}-${randomBytes(8).toString("hex")}`;
+}
+
+/** Best-effort directory fsync so the publish rename is durable, not only visible. */
+async function syncDir(dir: string): Promise<void> {
+  try {
+    const handle = await fs.open(dir, "r");
+    try {
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // Platforms that refuse directory fsync still have the atomic rename;
+    // durability of the directory entry is a bonus, not the guarantee.
+  }
+}
 import {
   S3Client,
   PutObjectCommand,
@@ -46,6 +67,22 @@ export function cleanPath(p: string): string {
   return norm === "" ? "/" : norm;
 }
 
+/**
+ * Marker inside the file name of an in-flight local publish. `localBackend`
+ * stages every write under a hidden sibling carrying this marker and renames
+ * it onto the final name only after fsync, so a bank polling mid-write can
+ * never fetch truncated bytes. The marker is part of the SFTP contract:
+ * `server.ts` hides these names from listings and refuses to open, stat, or
+ * delete them, and the import scan already skips dotfiles.
+ */
+export const SFTP_TEMP_WRITE_MARKER = ".sftp-part-";
+
+/** Whether a backend-relative path (or bare name) names an in-flight publish. */
+export function isSftpTempName(p: string): boolean {
+  const base = p.split("/").pop() ?? p;
+  return base.startsWith(".") && base.includes(SFTP_TEMP_WRITE_MARKER);
+}
+
 // --------------------------------------------------------------------------
 // Local filesystem backend
 // --------------------------------------------------------------------------
@@ -81,9 +118,36 @@ export function localBackend(rootDir: string): SftpBackend {
       return fs.readFile(abs(p));
     },
     async write(p, data) {
+      // Atomic publish: stage under a hidden temp sibling in the SAME
+      // directory (same filesystem, so the rename is atomic), fsync the
+      // content, then rename onto the final name. A concurrent reader —
+      // through this backend or the SFTP daemon, which hides the temp
+      // pattern — observes either the previous complete file or the new
+      // complete file, never truncated bytes. The S3 backend needs none of
+      // this: PutObject is already atomic. The temp name is unique per
+      // write; only THIS write's temp is ever removed, and only on failure
+      // (a crashed writer's temp stays hidden and harmless rather than
+      // risking another in-flight publish during cleanup).
       const full = abs(p);
       await fs.mkdir(path.dirname(full), { recursive: true });
-      await fs.writeFile(full, data);
+      const tmp = path.join(
+        path.dirname(full),
+        `.${path.basename(full)}${SFTP_TEMP_WRITE_MARKER}${process.pid}-${randomSuffix()}`,
+      );
+      try {
+        const handle = await fs.open(tmp, "w");
+        try {
+          await handle.writeFile(data);
+          await handle.sync();
+        } finally {
+          await handle.close();
+        }
+        await fs.rename(tmp, full);
+        await syncDir(path.dirname(full));
+      } catch (e) {
+        await fs.unlink(tmp).catch(() => {});
+        throw e;
+      }
     },
     async remove(p) {
       await fs.unlink(abs(p));
