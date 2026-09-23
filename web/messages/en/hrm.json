@@ -733,6 +733,7 @@
       "amount": "Amount",
       "currency": "Currency",
       "basis": "Basis",
+      "employer": "Employer",
       "expires": "Expires",
       "submit": "Draft offer",
       "failed": "The offer could not be drafted."

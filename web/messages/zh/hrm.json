@@ -675,6 +675,7 @@
       "amount": "金额",
       "currency": "币种",
       "basis": "基准",
+      "employer": "雇主",
       "expires": "到期",
       "submit": "拟定通知",
       "failed": "无法拟定录用通知。"

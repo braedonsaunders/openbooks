@@ -675,6 +675,7 @@
       "amount": "金額",
       "currency": "通貨",
       "basis": "基準",
+      "employer": "雇用主",
       "expires": "期限",
       "submit": "オファーを作成",
       "failed": "オファーを作成できませんでした。"

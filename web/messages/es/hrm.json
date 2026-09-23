@@ -675,6 +675,7 @@
       "amount": "Importe",
       "currency": "Moneda",
       "basis": "Base",
+      "employer": "Empleador",
       "expires": "Vence",
       "submit": "Redactar oferta",
       "failed": "No se pudo redactar la oferta."

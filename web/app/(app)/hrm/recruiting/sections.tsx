@@ -72,6 +72,7 @@ export interface DrawerLabels {
   completeFailed: string
   cancelLabel: string
   offerTitle: string
+  offerEmployer: string
   offerJob: string
   offerStart: string
   offerAmount: string
@@ -126,6 +127,13 @@ export interface RequisitionDrawerData {
   /** HR-21 "Draft from evidence" link for the description (job_description kind). */
   draft: { href: string; label: string } | null
   labels: DrawerLabels
+  /**
+   * The opening's legal entity the offer draft inherits (id for the POST,
+   * NAME for the eye), plus the authorized employers the caller may
+   * instead choose. The POST route stays authoritative on scope.
+   */
+  offerEmployer: { value: string; label: string }
+  offerEmployerOptions: Option[]
   /**
    * Lifecycle controls (open/hold/resume/cancel) as the status allows.
    * canManage mirrors the hrm.recruiting.manage grant the PATCH endpoint
@@ -303,7 +311,10 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
                       <OfferCreateIsland
                         applicationId={application.id}
                         bases={detail.basisOptions}
+                        employer={detail.offerEmployer}
+                        employers={detail.offerEmployerOptions}
                         labels={{
+                          employer: labels.offerEmployer,
                           job: labels.offerJob,
                           start: labels.offerStart,
                           amount: labels.offerAmount,
