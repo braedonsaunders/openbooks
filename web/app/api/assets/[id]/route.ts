@@ -537,11 +537,21 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const visible = (await db.execute(sql`
-    select 1 from fixed_assets where id = ${id} and org_id = ${user.orgId}
+  const visible = (await db.execute<{ status: string }>(sql`
+    select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `))
   if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Only a draft that was never placed in service may be hard-deleted. Any
+  // other status — in service, fully depreciated, disposed, written off —
+  // owns financial meaning and leaves only through the lifecycle
+  // (dispose/write-off with their journals), never through deletion.
+  if (visible.rows[0].status !== 'draft') {
+    return NextResponse.json(
+      { error: `Only draft assets can be deleted (status: ${visible.rows[0].status}). Dispose of or write off the asset instead.` },
+      { status: 409 },
+    )
+  }
 
   // Lifecycle events are storage-append-only (asset_event_append_only_guard):
   // an impairment, revaluation, disposal, write-off, or reversal can never be
@@ -573,15 +583,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     )
   }
 
-  await db.transaction(async (tx) => {
+  // A delete that matches zero rows is a failure, not success: under RLS an
+  // unscoped delete silently matches nothing, so the final delete proves its
+  // effect with RETURNING instead of reporting {ok} for a no-op.
+  const deleted = await db.transaction(async (tx) => {
     await tx.execute(sql`
       delete from depreciation_schedule_lines
        where org_id = ${user.orgId}
          and schedule_id in (select id from depreciation_schedules where asset_id = ${id} and org_id = ${user.orgId})`)
     await tx.execute(sql`delete from depreciation_schedules where asset_id = ${id} and org_id = ${user.orgId}`)
     await tx.execute(sql`delete from asset_events where asset_id = ${id} and org_id = ${user.orgId}`)
-    await tx.execute(sql`delete from fixed_assets where id = ${id} and org_id = ${user.orgId}`)
-  })
+    const gone = (await tx.execute<{ id: string }>(sql`
+      delete from fixed_assets where id = ${id} and org_id = ${user.orgId} returning id
+    `))
+    if (gone.rows.length !== 1) throw new Error('asset not found')
+    return gone.rows[0]!.id
+  }).catch(() => null)
+  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   return NextResponse.json({ ok: true })
 }
