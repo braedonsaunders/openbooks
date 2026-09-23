@@ -6,6 +6,7 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { hasSubsidiaryField, loadRecordTypeById } from '../../../../../lib/records'
+import { auditSetupChange } from '../../../../../lib/setup/audit'
 import {
   describeIssue,
   lintRecordFields,
@@ -159,8 +160,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const fence = gate.allowedSubsidiaryIds ?? null
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<{ updated_at: string; fields: unknown; name: string }>(sql`
-      select ${TYPE_REVISION_SQL} as updated_at, fields, name
+    // The full before-image rides the row lock: the audit event below must
+    // show before/after of the configuration this save mutates (fields,
+    // roles, key), and the image has to predate this transaction's own
+    // UPDATE.
+    const locked = (await db.execute<{ updated_at: string; fields: unknown; name: string; snapshot: Record<string, unknown> }>(sql`
+      select ${TYPE_REVISION_SQL} as updated_at, fields, name,
+             to_jsonb(custom_record_types) as snapshot
         from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
@@ -184,7 +190,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         ),
       }
     }
-    const updated = await db.execute(sql`
+    const updated = await db.execute<{ snapshot: Record<string, unknown> }>(sql`
       update custom_record_types set
         name = coalesce(${body.name ?? null}, name),
         plural_name = coalesce(${body.pluralName ?? null}, plural_name),
@@ -199,9 +205,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
         and ${TYPE_REVISION_SQL} = ${expectedRevision}
-      returning id
+      returning to_jsonb(custom_record_types) as snapshot
     `)
     if (updated.rows.length === 0) return { kind: 'conflict' as const }
+    // Immutable configuration audit in the SAME transaction: a committed
+    // builder save without its before/after evidence is a lost refusal
+    // surface, so the audit write failing rolls the save back with it.
+    await auditSetupChange({
+      orgId: user.orgId,
+      table: 'custom_record_types',
+      rowId: id,
+      action: 'update',
+      changes: { before: locked.snapshot, after: updated.rows[0]!.snapshot },
+      actorId: user.id,
+    })
     return { kind: 'ok' as const }
   })
   if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -222,8 +239,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
-    const locked = (await db.execute<{ status: string }>(sql`
-      select status from custom_record_types
+    const locked = (await db.execute<{ status: string; snapshot: Record<string, unknown> }>(sql`
+      select status, to_jsonb(custom_record_types) as snapshot
+        from custom_record_types
        where id = ${id} and org_id = ${user.orgId}
        for update
     `)).rows[0]
@@ -280,6 +298,17 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
         ),
       }
     }
+    // The deleted draft's configuration leaves an immutable delete event in
+    // the same transaction (the before-image rode the row lock above), so a
+    // removed type is still auditable after no read can observe it.
+    await auditSetupChange({
+      orgId: user.orgId,
+      table: 'custom_record_types',
+      rowId: id,
+      action: 'delete',
+      changes: { before: locked.snapshot },
+      actorId: user.id,
+    })
     return { kind: 'ok' as const }
   })
   if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
