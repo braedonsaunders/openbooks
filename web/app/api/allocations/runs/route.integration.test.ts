@@ -547,3 +547,32 @@ test("lineage drill anchors on one object", { skip: !DB }, async () => {
     await dropScratchOrg(s.orgId);
   }
 });
+
+test("S3: lineage route scopes anchors and paginates", { skip: !DB }, async () => {
+  const s = await setup();
+  try {
+    // Restricted to nothing: the pinned run's drill is a 404, not a 200 with
+    // foreign amounts.
+    authenticate(s.orgId, s.actorId, ["allocations.read"], []);
+    const hidden = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}`, "GET"));
+    assert.equal(hidden.status, 404);
+    // Unrestricted: the shape carries total + truncated, and paging works.
+    authenticate(s.orgId, s.actorId, ["allocations.read"]);
+    const paged = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=0`, "GET"));
+    assert.equal(paged.status, 200);
+    const body = (await paged.json()) as { rows: unknown[]; total: number; truncated: boolean; limit: number; offset: number };
+    assert.equal(body.total, 1);
+    assert.equal(body.rows.length, 1);
+    assert.equal(body.truncated, false);
+    assert.equal(body.limit, 1);
+    assert.equal(body.offset, 0);
+    const empty = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=1&offset=5`, "GET"));
+    assert.equal(empty.status, 200);
+    assert.deepEqual(((await empty.json()) as { rows: unknown[] }).rows, []);
+    const bad = await lineageRoute.GET(jsonRequest(`/api/allocations/lineage?runId=${s.runId}&limit=nope`, "GET"));
+    assert.equal(bad.status, 400);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(s.orgId);
+  }
+});

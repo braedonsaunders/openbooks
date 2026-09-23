@@ -76,7 +76,7 @@ test('drivers + runs + lineage copy exists and is non-empty', () => {
     ['previewed', 'pending_approval', 'posted', 'reversed', 'failed', 'superseded'],
     'statuses',
   )
-  assertStrings('lineage', ['title', 'rule', 'driver', 'amount', 'share', 'empty', 'viewJournal', 'loadFailed'])
+  assertStrings('lineage', ['title', 'rule', 'driver', 'amount', 'share', 'empty', 'viewJournal', 'loadFailed', 'truncated'])
 })
 
 test('a8 copy carries no interpolation other than named {args}', () => {

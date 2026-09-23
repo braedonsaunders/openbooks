@@ -35,12 +35,13 @@ export function LineagePanel({
 }) {
   const t = useTranslations('allocations.lineage')
   const [rows, setRows] = useState<LineageRow[] | null>(null)
+  const [truncated, setTruncated] = useState<{ shown: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     Promise.resolve()
-      .then(() => buildLineageQuery(anchor))
+      .then(() => buildLineageQuery(anchor, { limit: pageSize }))
       .then(
         (url) =>
           fetch(url).then(async (res) => {
@@ -50,8 +51,16 @@ export function LineagePanel({
               setRows([])
               return
             }
-            const body = (await res.json()) as { rows: LineageRow[] }
-            if (!cancelled) setRows(body.rows.slice(0, pageSize))
+            const body = (await res.json()) as {
+              rows: LineageRow[]
+              total: number
+              truncated: boolean
+            }
+            if (cancelled) return
+            // Server-paginated: the page is complete as returned, and a
+            // truncated drill says so instead of looking complete.
+            setRows(body.rows.slice(0, pageSize))
+            setTruncated(body.truncated ? { shown: body.rows.length, total: body.total } : null)
           }),
         () => {
           if (!cancelled) setRows([])
@@ -103,6 +112,11 @@ export function LineagePanel({
           ))}
         </TableBody>
       </Table>
+      {truncated ? (
+        <p className="text-sm text-slate-500">
+          {t('truncated', { shown: truncated.shown, total: truncated.total })}
+        </p>
+      ) : null}
     </div>
   )
 }

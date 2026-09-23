@@ -13,6 +13,17 @@ test("lineage query needs exactly one anchor", () => {
   assert.throws(() => buildLineageQuery({ runId: "" }), /exactly one/);
 });
 
+test("lineage query carries server paging", () => {
+  assert.equal(
+    buildLineageQuery({ runId: "r-1" }, { limit: 50 }),
+    "/api/allocations/lineage?runId=r-1&limit=50",
+  );
+  assert.equal(
+    buildLineageQuery({ runId: "r-1" }, { limit: 50, offset: 100 }),
+    "/api/allocations/lineage?runId=r-1&limit=50&offset=100",
+  );
+});
+
 test("shortId compacts uuids and tolerates empties", () => {
   assert.equal(shortId("11111111-2222-3333-4444-555555555555"), "11111111");
   assert.equal(shortId("abc"), "abc");

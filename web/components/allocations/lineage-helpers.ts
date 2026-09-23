@@ -10,7 +10,10 @@ export interface LineageAnchorInput {
 }
 
 /** Exactly one anchor → its query string; otherwise throws for the caller. */
-export function buildLineageQuery(anchor: LineageAnchorInput): string {
+export function buildLineageQuery(
+  anchor: LineageAnchorInput,
+  page?: { limit?: number; offset?: number },
+): string {
   const entries = (
     Object.entries(anchor) as [keyof LineageAnchorInput, string | undefined][]
   ).filter(([, value]) => value !== undefined && value !== "");
@@ -18,7 +21,10 @@ export function buildLineageQuery(anchor: LineageAnchorInput): string {
     throw new Error("lineage needs exactly one of runId, journalEntryId, documentId");
   }
   const [[key, value]] = entries as [[keyof LineageAnchorInput, string]];
-  return `/api/allocations/lineage?${key}=${encodeURIComponent(value)}`;
+  const paging =
+    (page?.limit !== undefined ? `&limit=${encodeURIComponent(String(page.limit))}` : "") +
+    (page?.offset !== undefined ? `&offset=${encodeURIComponent(String(page.offset))}` : "");
+  return `/api/allocations/lineage?${key}=${encodeURIComponent(value)}${paging}`;
 }
 
 /** First 8 chars of a uuid for compact drill tables. */

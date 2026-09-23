@@ -595,6 +595,7 @@
     "share": "份额",
     "empty": "没有分摊明细可追溯到该记录。",
     "viewJournal": "打开记账凭证",
-    "loadFailed": "无法加载溯源。"
+    "loadFailed": "无法加载溯源。",
+    "truncated": "共 {total} 行，当前显示前 {shown} 行。"
   }
 }
