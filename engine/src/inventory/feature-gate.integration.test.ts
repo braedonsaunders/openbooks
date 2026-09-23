@@ -45,6 +45,12 @@ for (const operation of ["receipt", "issue", "adjustment", "transfer", "build", 
           lines: [{ itemId: org.items.fifo, quantity: "1" }] })).id;
         if (operation === "receive order") await shipTransferOrder(org.orgId, actorId, orderId, org.date);
       }
+      if (operation === "create order") {
+        // Creation resolves the transit default up front and refuses when
+        // none is eligible, so the happy path needs a warehouse to resolve.
+        await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active)
+          values(${randomUUID()},${org.orgId},${org.locationId},'CREATE-TRANSIT','transit',true)`);
+      }
       const before = await evidence(org.orgId);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":false}'::jsonb) where id=${org.orgId}`);
       const run = () => operation === "receipt" ? receiveInventory(org.orgId, actorId, input)

@@ -29,6 +29,7 @@ const advancedInventoryBody = z.looseObject({
   toStockLocationId: uuidId.optional(),
   stockLocationId: nullableUuidId.optional(),
   inTransitAccountId: nullableUuidId.optional(),
+  transitStockLocationId: nullableUuidId.optional(),
   freightAccountId: uuidId.optional(),
   sourceDocumentLineId: nullableUuidId.optional(),
   orderedOn: isoDate().optional(),
@@ -225,6 +226,7 @@ export async function POST(req: Request) {
           subsidiaryId,
           orderedOn: body.orderedOn ?? (await businessToday(orgId)),
           inTransitAccountId: body.inTransitAccountId ?? null,
+          transitStockLocationId: body.transitStockLocationId ?? null,
           memo: body.memo ?? null,
           lines,
         };

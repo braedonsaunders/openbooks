@@ -275,3 +275,55 @@ test("recall filters are validated at the boundary before they reach the engine"
   assert.equal(state.recallFilters[0]?.itemId, uuid);
   assert.equal(state.recallFilters[0]?.expiresOnOrBefore, "2026-08-31");
 });
+
+test("createTransfer carries a caller-selected transit warehouse to the engine", async () => {
+  reset(null);
+  const ids = {
+    from: "00000000-0000-4000-8000-000000000021",
+    to: "00000000-0000-4000-8000-000000000022",
+    item: "00000000-0000-4000-8000-000000000023",
+    subsidiary: "00000000-0000-4000-8000-000000000024",
+    transit: "00000000-0000-4000-8000-000000000025",
+  };
+  const response = await POST(
+    post({
+      action: "createTransfer",
+      idempotencyKey: "transit-key-1",
+      fromStockLocationId: ids.from,
+      toStockLocationId: ids.to,
+      subsidiaryId: ids.subsidiary,
+      transitStockLocationId: ids.transit,
+      orderedOn: "2026-08-28",
+      lines: [{ itemId: ids.item, quantity: "2" }],
+    }),
+  );
+  assert.equal(response.status, 201);
+  assert.equal(state.idempotencyCalls.length, 1);
+  assert.equal(state.idempotencyCalls[0]!.operation, "inventory.transfer-order.create");
+  const request = state.idempotencyCalls[0]!.request as Record<string, unknown>;
+  assert.equal(request.transitStockLocationId, ids.transit);
+});
+
+test("createTransfer without a transit warehouse sends null for engine defaulting", async () => {
+  reset(null);
+  const ids = {
+    from: "00000000-0000-4000-8000-000000000021",
+    to: "00000000-0000-4000-8000-000000000022",
+    item: "00000000-0000-4000-8000-000000000023",
+    subsidiary: "00000000-0000-4000-8000-000000000024",
+  };
+  const response = await POST(
+    post({
+      action: "createTransfer",
+      idempotencyKey: "transit-key-2",
+      fromStockLocationId: ids.from,
+      toStockLocationId: ids.to,
+      subsidiaryId: ids.subsidiary,
+      orderedOn: "2026-08-28",
+      lines: [{ itemId: ids.item, quantity: "2" }],
+    }),
+  );
+  assert.equal(response.status, 201);
+  const request = state.idempotencyCalls[0]!.request as Record<string, unknown>;
+  assert.equal(request.transitStockLocationId, null);
+});
