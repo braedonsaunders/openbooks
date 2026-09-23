@@ -56,7 +56,7 @@ const priorSecret = process.env.SESSION_SECRET;
         assert.ok(enrollment);
       }
       if (scenario === 'revoked enrollment') {
-        assert.equal(await auth.revokeUserSession(userId, sessionId), true);
+        assert.deepEqual(await auth.revokeUserSession(userId, sessionId, sessionId), { ok: true, revoked: true });
         assert.equal(await auth.confirmMfaSetup(userId, sessionId, totpCode(enrollment!.secret)!.code), null);
         assert.equal((await auth.getMfaStatus(userId)).enabled, false);
         return;
