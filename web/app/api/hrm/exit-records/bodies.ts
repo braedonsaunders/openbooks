@@ -34,6 +34,11 @@ export const recordExitBody = z.object({
 });
 
 export const patchExitBody = z.object({
+  // The revision read with the record: a stale revision refuses instead
+  // of overwriting a newer correction.
+  expectedRevision: z.number().int().min(1),
+  // Why the record is corrected — stored on the audit event beside the change.
+  reason: z.string().trim().max(2000).nullable().optional(),
   reasonKind: reasonKind.optional(),
   isVoluntary: z.boolean().optional(),
   isRegrettable: z.boolean().nullable().optional(),

@@ -64,6 +64,7 @@ type ExitRecord = {
   isVoluntary: boolean
   destination: string | null
   notes: string | null
+  revision: number
 }
 
 type ExitState = {

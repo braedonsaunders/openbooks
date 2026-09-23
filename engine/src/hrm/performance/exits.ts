@@ -80,6 +80,8 @@ export interface ExitRecordDTO {
   readonly notes: string | null;
   readonly recordedBy: string | null;
   readonly recordedAt: string;
+  /** Optimistic revision the next correction must present (0281). */
+  readonly revision: number;
 }
 
 type StoredExit = {
@@ -97,6 +99,7 @@ type StoredExit = {
   notes: string | null;
   recordedBy: string | null;
   recordedAt: string;
+  revision: number;
 };
 
 function toExitDTO(row: StoredExit): ExitRecordDTO {
@@ -117,10 +120,16 @@ function toExitDTO(row: StoredExit): ExitRecordDTO {
     notes: row.notes,
     recordedBy: row.recordedBy,
     recordedAt: row.recordedAt,
+    revision: row.revision,
   };
 }
 
-async function loadExit(exec: SqlExecutor, orgId: string, exitId: string): Promise<StoredExit> {
+async function loadExit(
+  exec: SqlExecutor,
+  orgId: string,
+  exitId: string,
+  forUpdate = false,
+): Promise<StoredExit> {
   const row = (await exec.execute<StoredExit>(sql`
     select x.id,
            x.employment_id as "employmentId",
@@ -134,11 +143,13 @@ async function loadExit(exec: SqlExecutor, orgId: string, exitId: string): Promi
            x.interviewer_party_id as "interviewerPartyId",
            x.destination, x.notes,
            x.recorded_by as "recordedBy",
-           x.recorded_at as "recordedAt"
+           x.recorded_at as "recordedAt",
+           x.revision
       from hrm_exit_records x
       join worker_employments e
         on e.org_id = x.org_id and e.id = x.employment_id
      where x.org_id = ${orgId} and x.id = ${exitId}
+     ${forUpdate ? sql`for update of x` : sql``}
   `)).rows[0];
   if (!row) {
     throw new HrmPerformanceError(
@@ -162,6 +173,32 @@ function assertExitInScope(allowed: Set<string> | null, exit: StoredExit): void 
     throw new HrmPerformanceError(
       "NOT_FOUND",
       `exit record ${exit.id} is not visible in this organization — check the id or the organization`,
+    );
+  }
+}
+
+/** Append the immutable correction-evidence event beside the row it describes. */
+async function appendExitEvent(args: {
+  exitId: string;
+  orgId: string;
+  kind: "recorded" | "corrected";
+  actorId: string;
+  reason: string | null;
+  before: ExitRecordDTO | null;
+  after: ExitRecordDTO;
+}): Promise<void> {
+  const inserted = (await db.execute<{ id: string }>(sql`
+    insert into hrm_exit_record_events
+      (org_id, exit_record_id, kind, actor_user_id, reason, before_snapshot, after_snapshot)
+    values (${args.orgId}, ${args.exitId}, ${args.kind}, ${args.actorId}, ${args.reason},
+      ${args.before === null ? null : JSON.stringify(args.before)}::jsonb,
+      ${JSON.stringify(args.after)}::jsonb)
+    returning id
+  `)).rows[0];
+  if (!inserted) {
+    throw new HrmPerformanceError(
+      "REFUSED",
+      `exit record ${args.exitId} was stored without its audit event — no event was written; retry the action`,
     );
   }
 }
@@ -305,6 +342,8 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           ${input.notes ?? null}, ${actorId}, ${actorId}, ${actorId})
         returning id,
           employment_id as "employmentId",
+          (select employer_subsidiary_id from worker_employments
+            where org_id = ${orgId} and id = ${employmentId}) as "employerSubsidiaryId",
           termination_change_id as "terminationChangeId",
           reason_kind as "reasonKind",
           is_voluntary as "isVoluntary",
@@ -314,7 +353,8 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           interviewer_party_id as "interviewerPartyId",
           destination, notes,
           recorded_by as "recordedBy",
-          recorded_at as "recordedAt"
+          recorded_at as "recordedAt",
+          revision
       `)).rows[0]!;
     } catch (e) {
       // The one-per-employment unique is the authority: a second record is
@@ -328,7 +368,17 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
       }
       throw e;
     }
-    return toExitDTO(row);
+    const recorded = toExitDTO(row);
+    await appendExitEvent({
+      exitId: recorded.id,
+      orgId,
+      kind: "recorded",
+      actorId,
+      reason: null,
+      before: null,
+      after: recorded,
+    });
+    return recorded;
   });
 }
 
@@ -336,6 +386,10 @@ export interface UpdateExitInput {
   readonly orgId: string;
   readonly actorId: string;
   readonly exitId: string;
+  /** The revision the caller read: a stale revision refuses instead of overwriting. */
+  readonly expectedRevision: number;
+  /** Why the record is corrected — stored on the audit event beside the change. */
+  readonly reason?: string | null;
   readonly reasonKind?: ExitReasonKind;
   readonly isVoluntary?: boolean;
   readonly isRegrettable?: boolean | null;
@@ -346,15 +400,35 @@ export interface UpdateExitInput {
   readonly notes?: string | null;
 }
 
-/** Correct the one exit record for its employment. */
+/**
+ * Correct the one exit record for its employment. Omitted fields keep
+ * their value; an explicit null clears a nullable field. The caller
+ * presents the revision it read: a correction landing on a newer revision
+ * is refused by name instead of silently overwriting it, and the row lock
+ * serializes racers so two disjoint corrections cannot interleave. Every
+ * correction appends its audit event in the same transaction.
+ */
 export async function updateExitRecord(input: UpdateExitInput): Promise<ExitRecordDTO> {
   const orgId = requireId("orgId", input.orgId);
   const actorId = requireId("actorId", input.actorId);
   const exitId = requireId("exitId", input.exitId);
+  if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
+    throw new HrmPerformanceError(
+      "INVALID_INPUT",
+      `expectedRevision must be the positive revision read with the exit record, got ${JSON.stringify(input.expectedRevision)}`,
+    );
+  }
+  const reason = input.reason == null ? null : input.reason.trim();
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    const current = await loadExit(db, orgId, exitId);
+    const current = await loadExit(db, orgId, exitId, true);
     await requireHrmPerformanceOnEmployment(db, orgId, actorId, current.employmentId, "hrm.performance.manage");
+    if (input.expectedRevision !== current.revision) {
+      throw new HrmPerformanceError(
+        "BAD_STATE",
+        `exit record ${exitId} is at revision ${current.revision}, not ${input.expectedRevision} — re-read it and retry the correction on the latest revision`,
+      );
+    }
     const reasonKind = input.reasonKind ?? current.reasonKind;
     if (!(EXIT_REASONS as readonly string[]).includes(reasonKind)) {
       throw new HrmPerformanceError(
@@ -397,22 +471,35 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
              interviewer_party_id = ${interviewerPartyId},
              destination = ${destination},
              notes = ${notes},
+             revision = revision + 1,
              updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${exitId}
+       where org_id = ${orgId} and id = ${exitId} and revision = ${input.expectedRevision}
     `)).rowCount ?? 0;
     if (moved !== 1) {
       throw new HrmPerformanceError(
-        "NOT_FOUND",
-        `exit record ${exitId} is not visible in this organization — check the id or the organization`,
+        "BAD_STATE",
+        `exit record ${exitId} moved while correcting — re-read it and retry the correction on the latest revision`,
       );
     }
-    return toExitDTO(await loadExit(db, orgId, exitId));
+    const before = toExitDTO(current);
+    const after = toExitDTO(await loadExit(db, orgId, exitId));
+    await appendExitEvent({
+      exitId,
+      orgId,
+      kind: "corrected",
+      actorId,
+      reason: reason !== null && reason.length > 0 ? reason : null,
+      before,
+      after,
+    });
+    return after;
   });
 }
 
 /**
- * One exit record through the retention read gate (HR only). Writes stay
- * on hrm.performance.manage above; reads never do.
+ * One exit record through the retention read gate (HR only, inside their
+ * legal-entity scope). Writes stay on hrm.performance.manage above; reads
+ * never do.
  */
 export async function getExitRecord(args: {
   orgId: string;
@@ -471,7 +558,8 @@ export async function listExitRecords(args: {
              x.interviewer_party_id as "interviewerPartyId",
              x.destination, x.notes,
              x.recorded_by as "recordedBy",
-             x.recorded_at as "recordedAt"
+             x.recorded_at as "recordedAt",
+             x.revision
         from hrm_exit_records x
         join worker_employments e
           on e.org_id = x.org_id and e.id = x.employment_id

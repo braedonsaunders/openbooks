@@ -206,6 +206,7 @@ export interface PerformancePageData {
       isVoluntary: boolean
       destination: string | null
       notes: string | null
+      revision: number
     } | null
     canRecord: boolean
     title: string
@@ -665,6 +666,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
                 isVoluntary: first.isVoluntary,
                 destination: first.destination,
                 notes: first.notes,
+                revision: first.revision,
               }
             : null,
           canRecord: canManage,

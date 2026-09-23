@@ -35,6 +35,7 @@ export function ExitRecordForm({
     isVoluntary: boolean
     destination: string | null
     notes: string | null
+    revision: number
   } | null
 }) {
   const t = useTranslations('hrm')
@@ -51,7 +52,10 @@ export function ExitRecordForm({
     setBusy(true)
     setError(null)
     try {
+      // A correction presents the revision it was read at: a stale
+      // revision refuses instead of overwriting a newer correction.
       const body = {
+        ...(existing ? { expectedRevision: existing.revision } : {}),
         reasonKind: reason,
         isVoluntary: voluntary,
         destination: destination.trim().length > 0 ? destination.trim() : null,

@@ -448,6 +448,7 @@ test("exits refuse unterminated employments, duplicates, and unpaired interviews
       orgId: h.org.orgId,
       actorId: h.hrId,
       exitId: exit.id,
+      expectedRevision: exit.revision,
       wouldRehire: true,
     });
     assert.equal(corrected.wouldRehire, true);
