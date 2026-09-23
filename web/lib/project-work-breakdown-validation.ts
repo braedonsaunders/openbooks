@@ -22,6 +22,78 @@ export class ProjectWorkBreakdownError extends Error {
   }
 }
 
+/**
+ * Closed-task lifecycle: a finished task never slides sideways between
+ * terminal states — complete ↔ cancelled moves reopen through open, so the
+ * reopen (and its reason) is always visible in history.
+ */
+const TASK_TRANSITIONS: Record<TaskStatus, readonly TaskStatus[]> = {
+  open: ['open', 'complete', 'cancelled'],
+  complete: ['complete', 'open'],
+  cancelled: ['cancelled', 'open'],
+}
+
+const CLOSED_STATUSES: readonly TaskStatus[] = ['complete', 'cancelled']
+
+/** Canonical four-decimal comparison: '10' and '10.0000' are the same budget. */
+export function sameTaskDecimal(before: string | null | undefined, after: string | null | undefined): boolean {
+  const normalized = (value: string | null | undefined): string | null => {
+    if (value === null || value === undefined || value === '') return null
+    return canonicalDecimal(value, 4)
+  }
+  return normalized(before) === normalized(after)
+}
+
+/**
+ * Enforce the status transition table and the reason rule for closed tasks:
+ * reopening a complete/cancelled task, or changing its estimates while it
+ * stays closed, requires a reason — renames and same-state saves do not.
+ * Throws ProjectWorkBreakdownError naming the remedy.
+ */
+export function assertTaskTransition(args: {
+  from: TaskStatus
+  to: TaskStatus
+  estimatedHoursChanged: boolean
+  estimatedCostChanged: boolean
+  reason: string | null
+}): void {
+  if (!TASK_TRANSITIONS[args.from].includes(args.to)) {
+    if (args.from === 'complete' && args.to === 'cancelled') {
+      throw new ProjectWorkBreakdownError('Reopen the task before cancelling it')
+    }
+    if (args.from === 'cancelled' && args.to === 'complete') {
+      throw new ProjectWorkBreakdownError('Reopen the task before completing it')
+    }
+    throw new ProjectWorkBreakdownError(`Cannot move a task from ${args.from} to ${args.to}`)
+  }
+  const wasClosed = (CLOSED_STATUSES as readonly string[]).includes(args.from)
+  const reopening = wasClosed && args.to === 'open'
+  const budgetChangedOnClosed = wasClosed && (args.estimatedHoursChanged || args.estimatedCostChanged)
+  if ((reopening || budgetChangedOnClosed) && !args.reason) {
+    throw new ProjectWorkBreakdownError(
+      reopening
+        ? 'Reopening a closed task requires a reason'
+        : 'Changing estimates on a closed task requires a reason',
+    )
+  }
+}
+
+/**
+ * Parse the optional reopen/budget-change reason: absent or blank stays
+ * null (the transition rule decides whether null is acceptable); a present
+ * reason must be short text, matching the admin identity-link reason shape.
+ */
+export function parseTaskReason(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value !== 'string') throw new ProjectWorkBreakdownError('Reason must be text')
+  const reason = value.trim()
+  if (!reason) return null
+  if (reason.length > 500) {
+    throw new ProjectWorkBreakdownError('Reason must be 500 characters or fewer')
+  }
+  return reason
+}
+
 function optionalText(value: unknown, max: number, label: string): string | null {
   if (value == null || value === '') return null
   if (typeof value !== 'string') throw new ProjectWorkBreakdownError(`${label} must be text`)

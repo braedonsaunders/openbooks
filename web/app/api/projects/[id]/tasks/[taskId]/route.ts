@@ -8,6 +8,7 @@ import {
 } from '../../../../../../lib/project-work-breakdown'
 import {
   parseExpectedTaskVersion,
+  parseTaskReason,
   parseWorkBreakdownTaskInput,
   ProjectWorkBreakdownError,
 } from '../../../../../../lib/project-work-breakdown-validation'
@@ -35,7 +36,10 @@ export async function PATCH(
       throw new ProjectWorkBreakdownError('Task details are required')
     }
     const body = rawBody as Record<string, unknown>
-    const { expectedUpdatedAt, ...taskInput } = body
+    // reason rides alongside the editor payload, not inside it: the input
+    // parser rejects unknown task fields, and the reason evidences closed
+    // transitions (reopens, closed-task budget changes) in the audit row.
+    const { expectedUpdatedAt, reason: rawReason, ...taskInput } = body
     const task = await updateWorkBreakdownTask({
       orgId: gate.user.orgId,
       projectId: id,
@@ -44,6 +48,7 @@ export async function PATCH(
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       expectedUpdatedAt: parseExpectedTaskVersion(expectedUpdatedAt),
       input: parseWorkBreakdownTaskInput(taskInput),
+      reason: parseTaskReason(rawReason),
     })
     return NextResponse.json({ task })
   } catch (error) {

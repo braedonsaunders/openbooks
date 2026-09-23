@@ -6,7 +6,9 @@ import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import {
+  assertTaskTransition,
   ProjectWorkBreakdownError,
+  sameTaskDecimal,
   type WorkBreakdownTaskInput,
 } from './project-work-breakdown-validation'
 import { pgTextArrayLiteral } from './pg-array'
@@ -125,6 +127,7 @@ async function recordTaskAudit(args: {
   action: 'insert' | 'update'
   before: TaskRow | null
   after: TaskRow
+  reason?: string | null
 }) {
   await args.exec.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -138,6 +141,7 @@ async function recordTaskAudit(args: {
         source: 'project_work_breakdown',
         before: args.before,
         after: args.after,
+        ...(args.reason ? { reason: args.reason } : {}),
       })}::jsonb,
       ${args.actorId}
     )
@@ -214,6 +218,7 @@ export async function updateWorkBreakdownTask(args: {
   allowedSubsidiaryIds: ReadonlySet<string> | null
   expectedUpdatedAt: string
   input: WorkBreakdownTaskInput
+  reason?: string | null
 }): Promise<WorkBreakdownTaskClient> {
   return db.transaction(async (tx) => {
     await assertProjectsEnabledTx(tx, args.orgId)
@@ -233,6 +238,16 @@ export async function updateWorkBreakdownTask(args: {
         409,
       )
     }
+    // Closed tasks never reopen or re-budget silently: sideways moves
+    // between terminal states refuse, and reopening or changing estimates
+    // on a closed task requires a reason, evidenced in the audit row below.
+    assertTaskTransition({
+      from: before.status,
+      to: args.input.status,
+      estimatedHoursChanged: !sameTaskDecimal(before.estimated_hours, args.input.estimatedHours),
+      estimatedCostChanged: !sameTaskDecimal(before.estimated_cost, args.input.estimatedCost),
+      reason: args.reason ?? null,
+    })
 
     // The locked snapshot comparison preserves every PostgreSQL microsecond.
     // Advance the token even when multiple writes share a transaction clock.
@@ -271,6 +286,7 @@ export async function updateWorkBreakdownTask(args: {
       action: 'update',
       before,
       after,
+      reason: args.reason ?? null,
     })
     return clientTask(after)
   })
