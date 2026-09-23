@@ -124,6 +124,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'choose one currency for the override amount' }, { status: 422 })
   }
   const created = await db.transaction(async (tx) => {
+    // Snapshot targets are UUID-shaped at this point but may belong to
+    // another organization — the foreign keys are single-column, so
+    // Postgres would store tenant B's user or team id in tenant A's
+    // snapshot. Refuse by name inside the write, mirroring the quota save.
+    if (ownerUserId) {
+      const owner = await tx.execute(sql`select id from users where id = ${ownerUserId} and org_id = ${gate.user.orgId}`)
+      if (!owner.rows.length) {
+        return NextResponse.json({ error: t('forecasts.ownerOutsideOrganization') }, { status: 422 })
+      }
+    }
+    if (salesTeamId) {
+      const team = await tx.execute(sql`select id from crm_sales_teams where id = ${salesTeamId} and org_id = ${gate.user.orgId}`)
+      if (!team.rows.length) {
+        return NextResponse.json({ error: t('forecasts.teamOutsideOrganization') }, { status: 422 })
+      }
+    }
     if (requestedCurrency && !(await tx.execute(sql`select code from currencies where code=${requestedCurrency}`)).rows.length) {
       return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
     }

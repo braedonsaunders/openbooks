@@ -207,7 +207,9 @@
     "snapshotFailed": "无法保存预测快照。",
     "quotasRestrictedNotice": "实体受限访问下不显示配额。",
     "invalidOwnerTarget": "预测负责人必须是用户 ID 或 null。",
-    "invalidTeamTarget": "预测团队必须是销售团队 ID 或 null。"
+    "invalidTeamTarget": "预测团队必须是销售团队 ID 或 null。",
+    "ownerOutsideOrganization": "预测负责人不属于本组织。",
+    "teamOutsideOrganization": "预测团队不属于本组织。"
   },
   "setup": {
     "title": "CRM",

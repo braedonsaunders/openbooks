@@ -207,7 +207,9 @@
     "snapshotFailed": "予測スナップショットを保存できませんでした。",
     "quotasRestrictedNotice": "エンティティ制限アクセスではノルマは非表示になります。",
     "invalidOwnerTarget": "予測担当者はユーザーIDまたはnullである必要があります。",
-    "invalidTeamTarget": "予測チームは営業チームIDまたはnullである必要があります。"
+    "invalidTeamTarget": "予測チームは営業チームIDまたはnullである必要があります。",
+    "ownerOutsideOrganization": "予測担当者はこの組織のメンバーではありません。",
+    "teamOutsideOrganization": "予測チームはこの組織に属していません。"
   },
   "setup": {
     "title": "CRM",

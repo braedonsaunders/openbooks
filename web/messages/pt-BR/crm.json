@@ -207,7 +207,9 @@
     "snapshotFailed": "Não foi possível salvar o snapshot de previsão.",
     "quotasRestrictedNotice": "As cotas ficam ocultas para acesso restrito a entidades.",
     "invalidOwnerTarget": "O responsável pela previsão deve ser um id de usuário ou nulo.",
-    "invalidTeamTarget": "A equipe da previsão deve ser um id de equipe de vendas ou nulo."
+    "invalidTeamTarget": "A equipe da previsão deve ser um id de equipe de vendas ou nulo.",
+    "ownerOutsideOrganization": "O responsável pela previsão não pertence a esta organização.",
+    "teamOutsideOrganization": "A equipe da previsão não pertence a esta organização."
   },
   "setup": {
     "title": "CRM",
