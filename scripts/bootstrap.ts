@@ -1575,6 +1575,22 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "validated — so only the digest moves. Restamp, not reapply: the "
       + "revision stages the build but changes no enforced state.",
   },
+  {
+    filename: "generated/0301_item_price_schedule_versioning.sql",
+    from: "e829a51ac2cc235bfa00408adb33ff55ecc7ff2c6fb0261c9aed8be7c3b7d5f8",
+    to: "31b3e345c6a76b900e0a2d0fc51f59cae3f65f4c81b96fbab2638f56ba6ff668",
+    strategy: "restamp",
+    reason:
+      "staged revision (U12): the two CHECKs and the self-referential foreign "
+      + "key arrive NOT VALID with guarded VALIDATEs that treat "
+      + "already-validated guards as done, instead of scanning the schedule "
+      + "history under the ALTER TABLE lock. Existing rows start at revision 0 "
+      + "with no predecessor and no reason, so none can violate the new guards. "
+      + "A database recorded at the old digest holds the identical end catalog "
+      + "— same names, expressions and references, validated — so only the "
+      + "digest moves. Restamp, not reapply: the revision stages the build but "
+      + "changes no enforced state.",
+  },
 ];
 
 async function executeTrackedMigration(

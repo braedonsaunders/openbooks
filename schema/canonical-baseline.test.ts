@@ -2614,6 +2614,12 @@ test("0301 keeps superseded item price schedules as retained history", () => {
   assert.match(migration, /ADD COLUMN IF NOT EXISTS change_reason text/);
   assert.match(migration, /item_price_schedule_revision_nonnegative CHECK \(revision >= 0\)/);
   assert.match(migration, /FOREIGN KEY \(org_id, supersedes_id\) REFERENCES public\.item_price_schedules \(org_id, id\)/);
+  // Staged, not validated in one lock: every guard arrives NOT VALID and a
+  // guarded VALIDATE treats an already-validated guard as done (U12).
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT item_price_schedule_revision_nonnegative/);
+  assert.match(migration, /VALIDATE CONSTRAINT item_price_schedule_reason_present/);
+  assert.match(migration, /VALIDATE CONSTRAINT item_price_schedule_supersedes_fk/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
