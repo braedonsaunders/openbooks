@@ -358,3 +358,74 @@ test("DSAR zip contents against a seeded person", { skip: !DB }, async () => {
     assert.equal(status.status, "delivered");
   });
 });
+
+test("DSAR exports paginate unbounded histories instead of truncating at 2000", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    // 2500 time entries: three keyset pages where the old
+    // ORDER BY worked_on LIMIT 2000 silently dropped 500 rows while the
+    // export still reported ready.
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
+      select ${h.org.orgId}, ${h.partyId}, date '2020-01-01' + g, '8.0000', 'approved'
+        from generate_series(0, 2499) g
+    `);
+    // 510 stubs sharing one pay run, one line each: two stub pages plus
+    // chunked line fetches instead of one unbounded IN list.
+    const scheduleId = randomUUID();
+    await db.execute(sql`
+      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
+      values (${scheduleId}, ${h.org.orgId}, 'Weekly', 'weekly', 52, '2026-01-01'::date)
+    `);
+    // One stub per (pay run, employee) — pay_stubs_run_employee — so the
+    // 510 stubs need 510 runs, built in one statement.
+    await db.execute(sql`
+      with docs as (
+        insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date, currency, status, created_by, updated_by)
+        select ${h.org.orgId}, uuid_generate_v7(), 'pay_run', 'PAY-PG-' || g::text,
+               ${h.org.subsidiaryId}, date '2020-01-01' + g, 'USD', 'committed', ${h.hrId}, ${h.hrId}
+          from generate_series(0, 509) g
+        returning id, document_date
+      ),
+      prs as (
+        insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status)
+        select id, ${h.org.orgId}, ${scheduleId}, document_date, document_date, document_date, 2020, 'committed'
+          from docs
+        returning document_id
+      )
+      insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province, periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
+      select ${h.org.orgId}, document_id, ${h.partyId}, 'TX', 52,
+             date '2020-01-01' + ((row_number() over () - 1)::int), 2020, 'USD', '900.0000', '700.0000'
+        from prs
+    `);
+    await db.execute(sql`
+      insert into pay_stub_lines (org_id, stub_id, kind, description, amount)
+      select ${h.org.orgId}, s.id, 'earning', 'Seeded wage', '900.0000'
+        from pay_stubs s
+       where s.org_id = ${h.org.orgId} and s.employee_party_id = ${h.partyId}
+    `);
+
+    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
+    await buildExport(h.org.orgId, requested.id);
+    const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
+    assert.equal(listed[0]!.status, "ready");
+    const scope = listed[0]!.scope as { module: string; status: string }[];
+    assert.equal(scope.find((s) => s.module === "time")?.status, "included");
+    assert.equal(scope.find((s) => s.module === "payroll")?.status, "included");
+
+    const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.employeeId, exportId: requested.id });
+    const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-page-"));
+    const path = join(dir, "export.zip");
+    writeFileSync(path, bytes);
+    const raw = execFileSync("unzip", ["-p", path, "export.json"], { maxBuffer: 128 * 1024 * 1024 });
+    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as Record<string, unknown>;
+    // Every row survives: nothing truncated, nothing duplicated.
+    const timeEntries = (payload.timeEntries ?? []) as { id: string }[];
+    assert.equal(timeEntries.length, 2500);
+    assert.equal(new Set(timeEntries.map((e) => e.id)).size, 2500);
+    const payStubs = (payload.payStubs ?? []) as { id: string }[];
+    assert.equal(payStubs.length, 510);
+    const payStubLines = (payload.payStubLines ?? []) as { stub_id: string }[];
+    assert.equal(payStubLines.length, 510);
+    assert.equal(new Set(payStubLines.map((l) => l.stub_id)).size, 510);
+  });
+});

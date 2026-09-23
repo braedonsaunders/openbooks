@@ -312,13 +312,30 @@ export async function buildExport(orgId: string, exportId: string): Promise<void
     });
 
     await gather("time", async () => {
-      payload.timeEntries = (await db.execute<Record<string, unknown>>(sql`
-        select id, worked_on::text as worked_on, hours, status, project_id
-          from time_entries
-         where org_id = ${orgId} and employee_party_id = ${partyId}
-         order by worked_on
-         limit 2000
-      `)).rows;
+      // Keyset-paginated (worked_on, id): a bare LIMIT would silently
+      // truncate a long-serving worker's history while the export still
+      // reports ready. Pages of 1000 keep each statement bounded no
+      // matter how many decades the history spans.
+      type TimeRow = { id: string; worked_on: string };
+      const timeEntries: Record<string, unknown>[] = [];
+      let lastWorkedOn: string | null = null;
+      let lastId: string | null = null;
+      for (;;) {
+        const page: (Record<string, unknown> & TimeRow)[] = (await db.execute<Record<string, unknown> & TimeRow>(sql`
+          select id, worked_on::text as worked_on, hours, status, project_id
+            from time_entries
+           where org_id = ${orgId} and employee_party_id = ${partyId}
+             and (${lastWorkedOn}::date is null
+                  or (worked_on, id) > (${lastWorkedOn}::date, ${lastId}::uuid))
+           order by worked_on, id
+           limit 1000
+        `)).rows;
+        timeEntries.push(...page);
+        if (page.length < 1000) break;
+        lastWorkedOn = page[page.length - 1]!.worked_on;
+        lastId = page[page.length - 1]!.id;
+      }
+      payload.timeEntries = timeEntries;
     });
 
     await gather("reviews", async () => {
@@ -391,30 +408,51 @@ export async function buildExport(orgId: string, exportId: string): Promise<void
 
     await gather("payroll", async () => {
       // The persisted stub records (snapshots at calculate time — the
-      // payroll read seam), never live re-resolution.
-      const stubs = (await db.execute<{
+      // payroll read seam), never live re-resolution. Stubs paginate by
+      // (pay_date, id) and lines fetch per stub chunk: a lifetime of pay
+      // history has no bound, and one giant IN list would blow the
+      // statement past the parameter limit while a bare query would hold
+      // the whole history in one statement either way.
+      type StubRow = {
         id: string;
         pay_date: string;
         tax_year: number;
         gross: string;
         net_pay: string;
         currency: string;
-      }>(sql`
-        select id, pay_date::text as pay_date, tax_year, gross::text as gross,
-               net_pay::text as net_pay, currency_code as currency
-          from pay_stubs
-         where org_id = ${orgId} and employee_party_id = ${partyId}
-         order by pay_date
-      `)).rows;
+      };
+      const stubs: StubRow[] = [];
+      let lastPayDate: string | null = null;
+      let lastStubId: string | null = null;
+      for (;;) {
+        const page: StubRow[] = (await db.execute<StubRow>(sql`
+          select id, pay_date::text as pay_date, tax_year, gross::text as gross,
+                 net_pay::text as net_pay, currency_code as currency
+            from pay_stubs
+           where org_id = ${orgId} and employee_party_id = ${partyId}
+             and (${lastPayDate}::date is null
+                  or (pay_date, id) > (${lastPayDate}::date, ${lastStubId}::uuid))
+           order by pay_date, id
+           limit 500
+        `)).rows;
+        stubs.push(...page);
+        if (page.length < 500) break;
+        lastPayDate = page[page.length - 1]!.pay_date;
+        lastStubId = page[page.length - 1]!.id;
+      }
       payload.payStubs = stubs;
-      const lines = stubs.length
-        ? (await db.execute<Record<string, unknown>>(sql`
-            select stub_id, description, kind, amount::text as amount
-              from pay_stub_lines
-             where stub_id in (${sql.join(stubs.map((s) => sql`${s.id}`), sql`, `)})
-             order by stub_id
-          `)).rows
-        : [];
+      // Chunks follow stub order and each chunk orders by stub_id, so the
+      // concatenated lines keep the old global stub_id order.
+      const lines: Record<string, unknown>[] = [];
+      for (let at = 0; at < stubs.length; at += 500) {
+        const chunk = stubs.slice(at, at + 500);
+        lines.push(...(await db.execute<Record<string, unknown>>(sql`
+          select stub_id, description, kind, amount::text as amount
+            from pay_stub_lines
+           where stub_id in (${sql.join(chunk.map((s) => sql`${s.id}`), sql`, `)})
+           order by stub_id
+        `)).rows);
+      }
       payload.payStubLines = lines;
     });
 
