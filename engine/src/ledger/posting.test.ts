@@ -681,8 +681,8 @@ test("zero discount, zero fee, and a fee equal to the receipt post without extra
 });
 
 test("payment refunds post the opposite direction on the same side", () => {
-  // Connector refund imports (e.g. a Xero payment against an ACCRECCREDIT
-  // credit note) arrive as a negative bank line: a customer refund of 50
+  // Connector refund imports (a payment recorded against a receivable credit
+  // note) arrive as a negative bank line: a customer refund of 50
   // posts CR bank 50 / DR AR 50, and a supplier refund of 50 posts DR bank
   // 50 / CR AP 50 — the mirror image of the normal flow on the same side.
   const refundLine = (lineNumber: number) =>
