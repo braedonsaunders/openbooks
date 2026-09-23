@@ -204,7 +204,8 @@
     "saveSnapshot": "Enregistrer l’instantané",
     "savingSnapshot": "Enregistrement…",
     "snapshotCreated": "Instantané de prévision enregistré",
-    "snapshotFailed": "L’instantané n’a pas pu être enregistré."
+    "snapshotFailed": "L’instantané n’a pas pu être enregistré.",
+    "quotasRestrictedNotice": "Les quotas sont masqués pour l'accès restreint aux entités."
   },
   "setup": {
     "title": "CRM",
