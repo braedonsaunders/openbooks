@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, schema, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid } from "./catalog.ts";
+import { withSandboxRefreshLock } from "./lifecycle.ts";
 import { remapRoleRestriction, sandboxSubsidiaryMap } from "./json-references.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { computeScheduledScriptNextRunAt } from "../scripting/scripting.ts";
@@ -84,7 +85,7 @@ function mappedUserReference(value: unknown, ids: ReadonlyMap<string, string>, l
   return mapped;
 }
 
-interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string }
+interface SandboxTargetRow extends Record<string, unknown> { org_id: string; production_org_id: string; status: string }
 interface SandboxSeedRow extends Record<string, unknown> { sandbox_seed: string }
 interface TableNameRow extends Record<string, unknown> { table_name: string }
 interface ChangeDiffRow extends Record<string, unknown> {
@@ -221,13 +222,27 @@ export async function buildChangeSet(
   const creator = createdBy == null ? null : requireActor(createdBy, "change-set creation");
   // The header and every item are one trusted, cross-tenant transaction.  A
   // failed catalog read or item insert therefore rolls back the header too;
-  // no partially captured draft can become an applyable artifact.
-  return withMaintenanceTransaction(null, async () => {
+  // no partially captured draft can become an applyable artifact.  The whole
+  // capture holds the same-sandbox lock refresh uses, so a refresh can
+  // neither wipe rows under the diff nor commit a new clone under it.
+  const sid = assertUuid(sandboxId);
+  return withSandboxRefreshLock(sid, () => withMaintenanceTransaction(null, async () => {
     await db.execute(sql`set local time zone 'UTC'`);
     const s = await db.execute<SandboxTargetRow>(sql`
-      select org_id, production_org_id from sandboxes where id = ${sandboxId}`);
+      select org_id, production_org_id, status from sandboxes where id = ${sandboxId}`);
     const row = s.rows[0];
     if (!row) throw new Error(`sandbox not found: ${sandboxId}`);
+    // Only a ready sandbox has a complete, quiescent customization layer to
+    // diff. A failed/provisioning sandbox is missing rows (every production
+    // customization without a counterpart reads as a DELETE), and a
+    // refreshing/deleting one is mid-rewrite — either way the change set
+    // would propose mass production deletions for sandbox absence.
+    if (row.status !== "ready") {
+      throw new Error(
+        `cannot capture a change set: sandbox is ${row.status}, not ready — ` +
+          `wait for provisioning or refresh to finish (or resolve the failure and refresh), then recapture`,
+      );
+    }
     const sbx = assertUuid(row.org_id);
     const prod = assertUuid(row.production_org_id);
     if (creator) await assertActiveActor(creator, prod);
@@ -335,7 +350,7 @@ export async function buildChangeSet(
          set capture_complete = true, item_count = ${itemCount}, updated_at = now(), updated_by = ${creator}
        where id = ${cs.id} and org_id = ${prod}`);
     return { changeSetId: cs.id, itemCount };
-  });
+  }));
 }
 
 /** Mark a complete capture as reviewed by an independent production actor who holds admin.sandboxes.manage. */
@@ -411,6 +426,23 @@ export async function applyChangeSet(changeSetId: string, applierId?: string | n
     await assertActiveActor(actor, prod);
     if (c.status !== "approved") throw new Error(`change set is ${c.status}, not approved`);
     if (!c.capture_complete) throw new Error("change set capture is incomplete");
+    // The sandbox may have refreshed (or started to) after approval: refuse
+    // to apply while its customization layer is anything but quiescent. The
+    // per-item expected_before check below still guards drift that landed
+    // between two ready states; this guards the mid-rewrite window itself.
+    if (c.sandbox_org_id) {
+      const sbx = (await db.execute<{ status: string }>(sql`
+        select status from sandboxes where org_id = ${c.sandbox_org_id}`)).rows[0];
+      if (!sbx) {
+        throw new Error("change set's sandbox is gone — recapture from a live sandbox before applying");
+      }
+      if (sbx.status !== "ready") {
+        throw new Error(
+          `change set's sandbox is ${sbx.status}, not ready — wait until it is ready again, ` +
+            `and recapture and re-review if the refresh changed customizations`,
+        );
+      }
+    }
     await assertDistinctActors(actor, [
       ["creator", c.created_by],
       ["reviewer", c.reviewed_by],
