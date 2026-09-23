@@ -23,8 +23,10 @@ interface RuleSlotEntity {
   readonly generated: readonly string[]
   /** Folded body key → jsonb column. `kind: 'array'` persists a JSON
    *  array (signer roles, merge keys); the default 'object' persists a
-   *  JSON object (rules, scales). */
-  readonly folded: readonly { key: string; column: string; kind?: 'object' | 'array' }[]
+   *  JSON object (rules, scales). `slots` names the drawer field keys
+   *  that fold into the object: readable prefills, never written, whose
+   *  requiredness the folded object satisfies once the normalizer runs. */
+  readonly folded: readonly { key: string; column: string; kind?: 'object' | 'array'; slots?: readonly string[] }[]
 }
 
 export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
@@ -36,7 +38,7 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
     // No generated slot columns: the scale has no tenant-identity slots
     // to project, so the drawer fields fold straight into rating_scale.
     generated: [],
-    folded: [{ key: 'ratingScale', column: 'rating_scale' }],
+    folded: [{ key: 'ratingScale', column: 'rating_scale', slots: ['ratingScaleMin', 'ratingScaleMax', 'ratingScaleLabels'] }],
   },
   'leave-policies': {
     generated: [
@@ -67,6 +69,25 @@ export const RULE_SLOT_ENTITIES: Readonly<Record<string, RuleSlotEntity>> = {
     ],
   },
   // HR-19 end
+}
+
+/**
+ * Slot field keys whose folded object is present in this body. buildRow
+ * skips exactly these fields (required check and column emission alike):
+ * the normalizer already stripped them, their columns do not exist, and
+ * the folded object carries their requirement into the integrity check.
+ * A body with no fold covers nothing, so a scaleless create still fails
+ * on the slot's own required field by name.
+ */
+export function coveredSlotFields(entityKey: string, body: Record<string, unknown>): Set<string> {
+  const spec = RULE_SLOT_ENTITIES[entityKey]
+  const covered = new Set<string>()
+  if (!spec) return covered
+  for (const entry of spec.folded) {
+    if (body[entry.key] === undefined || (entry.slots ?? []).length === 0) continue
+    for (const slot of entry.slots ?? []) covered.add(slot)
+  }
+  return covered
 }
 
 /**

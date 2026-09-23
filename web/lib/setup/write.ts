@@ -1567,7 +1567,9 @@ export async function createSetupRecord(
   const createEntity = entity.key === 'item-rate-books' && !multiCurrency
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
-  const built = buildRow(await entityForValidation(createEntity), body, { forCreate: true })
+  // The writer normalizes slot fields into their folded objects before this
+  // point, so a present fold covers its slots' requiredness and columns.
+  const built = buildRow(await entityForValidation(createEntity), body, { forCreate: true, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) {
@@ -1887,7 +1889,8 @@ export async function updateSetupRecord(
   const patchEntity = entity.key === 'item-rate-books' && !multiCurrency
     ? { ...writableEntity, fields: writableEntity.fields.filter((field) => field.key !== 'currency') }
     : writableEntity
-  const built = buildRow(await entityForValidation(patchEntity), body, { forCreate: false })
+  // Same folded-slot cover as the create path: the normalizer ran above.
+  const built = buildRow(await entityForValidation(patchEntity), body, { forCreate: false, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) {

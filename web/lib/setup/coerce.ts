@@ -10,6 +10,7 @@
 
 import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
+import { coveredSlotFields } from './hrm-rule-slots'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
 
@@ -223,10 +224,17 @@ export function coerceBoolean(raw: unknown): boolean {
 export function buildRow(
   entity: SetupEntity,
   body: Record<string, unknown>,
-  opts: { forCreate: boolean },
+  opts: { forCreate: boolean; coverFoldedSlots?: boolean },
 ): { cols: Coerced[] } | { error: string } {
+  // Rule-slot prefills (ratingScaleMin/Max/Labels and kin) are never
+  // written and never required once their folded object is present: the
+  // normalizer stripped them and the integrity check proves the fold.
+  // Opt-in per caller so import paths that never normalize keep the loud
+  // required refusal instead of silently dropping the fold.
+  const covered = opts.coverFoldedSlots ? coveredSlotFields(entity.key, body) : undefined
   const cols: Coerced[] = []
   for (const field of scalarFields(entity)) {
+    if (covered?.has(field.key)) continue
     // On edit, natural-key / immutable columns are never rewritten.
     if (!opts.forCreate && field.lockedOnEdit) continue
     // Omission is not a negative policy choice. Apply declared defaults only
