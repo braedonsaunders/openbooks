@@ -619,6 +619,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // requestID correlation, and storage refuses a second 'sent' row per
     // ticket so a concurrent double-claim fails instead of corrupting.
     "0295_qbd_web_connector_in_flight.sql",
+    // Item price schedules were rewritten or deleted in place while the
+    // resolver reads the same live rows for any onDate, so history could be
+    // silently repriced: this adds the revision fence, the supersedes link
+    // that retains the prior version, and the stored change reason.
+    "0301_item_price_schedule_versioning.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -2457,6 +2462,28 @@ test("0295 keeps one in-flight Web Connector request per ticket", () => {
     migration,
     /CREATE UNIQUE INDEX IF NOT EXISTS qbd_requests_one_sent_per_session\s+ON public\.qbd_requests \(session_id\)\s+WHERE status = 'sent';/,
   );
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("0301 keeps superseded item price schedules as retained history", () => {
+  // PATCH rewrote the effective-dated schedule row and DELETE removed it
+  // while the resolver reads the same live rows for any onDate, so an admin
+  // could silently reprice booked transactions. The schedule gains the
+  // revision fence, the supersedes link that retains the prior version, and
+  // the stored change reason; resolution needs no change.
+  const migration = readFileSync("schema/migrations/generated/0301_item_price_schedule_versioning.sql", "utf8");
+  assert.match(migration, /^-- OpenBooks forward migration 0301_item_price_schedule_versioning\./m);
+  assert.match(migration, /SET statement_timeout = 0;/);
+  assert.match(migration, /SET idle_in_transaction_session_timeout = 0;/);
+  assert.doesNotMatch(migration, /lock_timeout/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS revision integer NOT NULL DEFAULT 0/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS supersedes_id uuid/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS change_reason text/);
+  assert.match(migration, /item_price_schedule_revision_nonnegative CHECK \(revision >= 0\)/);
+  assert.match(migration, /FOREIGN KEY \(org_id, supersedes_id\) REFERENCES public\.item_price_schedules \(org_id, id\)/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
