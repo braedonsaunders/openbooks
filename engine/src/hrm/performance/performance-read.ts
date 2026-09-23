@@ -248,6 +248,24 @@ export async function listCycleProgress(args: {
   });
 }
 
+/**
+ * One subject-safe projection for every subject-facing read: the
+ * calibration justification (calibrationReason) is HR and reviewer
+ * evidence, never subject evidence. HR (performance read grant) and the
+ * review's own reviewer see the full row; a subject-only reader sees the
+ * calibrated rating with its share note, never the reason. Applied here —
+ * never in the UI alone — so every read surface strips identically.
+ */
+function projectReviewForReader(
+  review: ReviewDTO,
+  args: { granted: boolean; actorPartyId: string | null },
+): ReviewDTO {
+  if (args.granted) return review;
+  if (args.actorPartyId !== null && args.actorPartyId === review.reviewerPartyId) return review;
+  if (review.calibrationReason === null) return review;
+  return { ...review, calibrationReason: null };
+}
+
 export interface CycleDetailDTO extends CycleProgressDTO {
   readonly reviews: ReviewDTO[];
 }
@@ -281,9 +299,10 @@ export async function getCycleDetail(args: {
     `)).rows
       .map((row) => row.id)
       .filter((id) => visible === null || visible.has(id));
+    const person = await loadApprovalPerson(db, orgId, actorId);
     const reviews: ReviewDTO[] = [];
     for (const id of ids) {
-      reviews.push(await readReviewRow(db, orgId, id));
+      reviews.push(projectReviewForReader(await readReviewRow(db, orgId, id), { granted, actorPartyId: person.partyId }));
     }
     return { ...cycle, scoped: !granted, ...progress, reviews };
   });
@@ -366,13 +385,10 @@ export async function getReviewDetail(args: {
     const answers = await loadAnswers(db, orgId, reviewId);
     // HR-17 calibrated share: the employee-visible share shows the
     // calibrated rating with the note that calibration occurred — never
-    // the delta, never the justification. Subject-only readers (not HR,
-    // not the reviewer) get calibrationReason stripped here, never in
-    // the UI alone.
+    // the delta, never the justification. Stripped through the shared
+    // subject-safe projection, never in the UI alone.
     const person = await loadApprovalPerson(db, orgId, actorId);
-    const subjectOnly =
-      !granted && person.partyId !== stored.reviewerPartyId;
-    const review = subjectOnly ? { ...stored, calibrationReason: null } : stored;
+    const review = projectReviewForReader(stored, { granted, actorPartyId: person.partyId });
     return { review, answers };
   });
 }
@@ -388,6 +404,7 @@ export async function listMyReviews(args: { orgId: string; actorId: string }): P
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
+    const granted = await hasPerformanceGrant(db, orgId, actorId);
     const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) return { asSubject: [], asReviewer: [] };
     const rows = (await db.execute<{ id: string; subjectPartyId: string }>(sql`
@@ -402,7 +419,10 @@ export async function listMyReviews(args: { orgId: string; actorId: string }): P
     const asSubject: ReviewDTO[] = [];
     const asReviewer: ReviewDTO[] = [];
     for (const row of rows) {
-      const review = await readReviewRow(db, orgId, row.id);
+      const review = projectReviewForReader(await readReviewRow(db, orgId, row.id), {
+        granted,
+        actorPartyId: person.partyId,
+      });
       if (row.subjectPartyId === person.partyId && review.reviewerPartyId !== person.partyId) {
         asSubject.push(review);
       } else {
