@@ -379,6 +379,7 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
           overdueLabel: t('home.onboarding.overdueLabel'),
           upcomingLabel: t('home.onboarding.upcomingLabel'),
           empty: t('home.onboarding.empty'),
+          noDueSoon: t('home.onboarding.noDueSoon'),
           viewAll: t('home.onboarding.viewAll'),
           viewAllHref: '/hrm/processes',
         }))

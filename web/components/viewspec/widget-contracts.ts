@@ -216,7 +216,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-me-survey-respond': { props: ['actionFailed', 'invitationId', 'respondLabel'] },
   'hrm-new-menu': { props: ['canCreateEmployee', 'canCreateProcess', 'canProposeChange', 'changeLabel', 'employeeLabel', 'processLabel'] },
   'hrm-note': { props: ['note'] },
-  'hrm-onboarding-panel': { props: ['empty', 'openCount', 'openLabel', 'overdue', 'overdueLabel', 'upcoming', 'upcomingLabel', 'viewAll', 'viewAllHref'] },
+  'hrm-onboarding-panel': { props: ['empty', 'noDueSoon', 'openCount', 'openLabel', 'overdue', 'overdueLabel', 'upcoming', 'upcomingLabel', 'viewAll', 'viewAllHref'] },
   'hrm-one-on-one-drawer': { props: ['detail'] },
   'hrm-org-chart-person': { props: ['closeHref', 'labels', 'selected'] },
   'hrm-pacing-bar': { props: ['note', 'pct'] },

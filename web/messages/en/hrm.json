@@ -75,6 +75,7 @@
       "overdueLabel": "Overdue",
       "upcomingLabel": "Due soon",
       "empty": "No open checklists.",
+      "noDueSoon": "No checklist steps due in the next 7 days.",
       "viewAll": "View all processes"
     },
     "trend": {

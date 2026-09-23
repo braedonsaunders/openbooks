@@ -75,6 +75,7 @@
       "overdueLabel": "Vencido",
       "upcomingLabel": "Próximo",
       "empty": "No hay listas abiertas.",
+      "noDueSoon": "Sin pasos de lista pendientes en los próximos 7 días.",
       "viewAll": "Ver todos los procesos"
     },
     "trend": {

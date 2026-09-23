@@ -31,6 +31,7 @@ export function OnboardingPanel({
   overdueLabel,
   upcomingLabel,
   empty,
+  noDueSoon,
   viewAll,
   viewAllHref,
 }: {
@@ -41,6 +42,9 @@ export function OnboardingPanel({
   overdueLabel: string
   upcomingLabel: string
   empty: string
+  /** Shown when checklists are open but no step is overdue or due soon:
+   * the generic `empty` would contradict the count above it. */
+  noDueSoon: string
   viewAll: string
   viewAllHref: string
 }) {
@@ -56,7 +60,7 @@ export function OnboardingPanel({
       <p className="text-sm text-slate-500 dark:text-slate-400">{openLabel}</p>
       <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-slate-100">{openCount}</p>
       {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">{noDueSoon}</p>
       ) : (
         <ul className="mt-2 space-y-2">
           {rows.slice(0, 7).map((row, i) => (

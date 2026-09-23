@@ -75,6 +75,7 @@
       "overdueLabel": "逾期",
       "upcomingLabel": "即将到期",
       "empty": "暂无进行中的清单。",
+      "noDueSoon": "未来7天内暂无到期的清单步骤。",
       "viewAll": "查看所有流程"
     },
     "trend": {
