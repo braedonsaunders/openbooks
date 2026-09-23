@@ -9,7 +9,7 @@ import test from 'node:test'
 // route surfaces a database error as a 500.
 
 const stateKey = Symbol.for('openbooks.pdf-template-id-route-test')
-const state = { lookups: [] as string[], writes: 0 }
+const state = { lookups: [] as string[], writes: 0, template: null as null | Record<string, unknown> }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -60,7 +60,7 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.pdf-template-id-route-test')]
       export async function getPdfTemplate(_orgId, id) {
         state.lookups.push(id)
-        return null
+        return state.template
       }
     `,
   ],
@@ -105,6 +105,24 @@ hooks.deregister()
 function reset(): void {
   state.lookups = []
   state.writes = 0
+  state.template = null
+}
+
+const STORED_TEMPLATE = {
+  id: '00000000-0000-4000-8000-00000000b002',
+  recordType: 'customer_invoice',
+  name: 'Standard',
+  description: null,
+  paperSize: 'letter',
+  orientation: 'portrait',
+  marginMm: 14,
+  headerHtml: null,
+  footerHtml: null,
+  sourceHtml: '<p>Hi</p>',
+  compiledHtml: '<p>Hi</p>',
+  isDefault: false,
+  isActive: true,
+  updatedAt: '2026-08-24T12:00:00.000000Z',
 }
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -122,6 +140,30 @@ test('a missing template is a plain 404 on every verb', async () => {
     assert.deepEqual(await response.json(), { error: 'not found' })
   }
   assert.deepEqual(state.lookups, [id, id, id])
+})
+
+test('a PATCH whose row vanishes mid-flight is a 404, not a success', async () => {
+  // The pre-check sees the template but the UPDATE matches zero rows (a
+  // concurrent delete): reporting {ok:true} would commit a phantom audit
+  // event for a design that no longer exists.
+  reset()
+  state.template = { ...STORED_TEMPLATE }
+  const id = STORED_TEMPLATE.id as string
+  const response = await PATCH(
+    new Request(url(id), { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: '{"name":"Renamed"}' }),
+    params(id),
+  )
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: 'not found' })
+})
+
+test('a DELETE whose row vanishes mid-flight is a 404, not a success', async () => {
+  reset()
+  state.template = { ...STORED_TEMPLATE }
+  const id = STORED_TEMPLATE.id as string
+  const response = await DELETE(new Request(url(id), { method: 'DELETE' }), params(id))
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: 'not found' })
 })
 
 test('a malformed template id is indistinguishable from a missing one and never reaches the store', async () => {
