@@ -220,11 +220,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/field-tickets/FieldTicketDrawer.tsx",
-    "fn": "setPreferredForm",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/insights/CardStudio.tsx",
     "fn": "CardStudio",
     "reason": "server always returns JSON; guard adoption pending. POST /api/insights/query (web/app/api/insights/query/route.ts): runInsightQuery sits inside try/catch-all answering NextResponse.json (400/500); no rethrow; isFeatureEnabled outside is a framework read whose failure mode is infra. Verified by reading the handler."
@@ -367,11 +362,6 @@
   {
     "path": "web/components/assistant/proposal-card.tsx",
     "fn": "apply",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/components/views-menu.tsx",
-    "fn": "setDefault",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   }
 ]
