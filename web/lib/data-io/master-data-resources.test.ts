@@ -12,6 +12,7 @@ interface MasterImportState {
   attemptedMutations: string[]
   committedMutations: { table: string; id: string }[]
   masterInserts: string[]
+  roleEnsures: string[]
   scopedAccountOwnershipChecks: string[]
   scopedAccountLabelLookups: string[]
   auditInsertCalls: number
@@ -31,6 +32,7 @@ const importState: MasterImportState = {
   attemptedMutations: [],
   committedMutations: [],
   masterInserts: [],
+  roleEnsures: [],
   scopedAccountOwnershipChecks: [],
   scopedAccountLabelLookups: [],
   auditInsertCalls: 0,
@@ -118,6 +120,13 @@ const mockSources = new Map<string, string>([
         const insertedTable = tableFromInsert(text)
         if (insertedTable === 'accounts' || insertedTable === 'items' || insertedTable === 'parties') {
           return mutationFromInsert(text, pending)
+        }
+        // OM-16: the resource backs an imported role kind with its canonical
+        // role row. Record the ensure so the kind/role pairing stays honest.
+        const ensuredRole = text.match(/insert\\s+into\\s+(customer_roles|vendor_roles|employee_roles)\\b/i)?.[1]?.toLowerCase()
+        if (ensuredRole) {
+          state.roleEnsures.push(ensuredRole)
+          return { rows: [] }
         }
         if (/select\\s+id\\s+from\\s+accounts\\s+where\\s+id\\s*=.*and\\s+org_id\\s*=/i.test(text)) {
           const id = String(query.values?.[0] ?? '')
@@ -299,6 +308,7 @@ function resetImportState(failAudit: boolean): void {
   importState.attemptedMutations.length = 0
   importState.committedMutations.length = 0
   importState.masterInserts.length = 0
+  importState.roleEnsures.length = 0
   importState.scopedAccountOwnershipChecks.length = 0
   importState.scopedAccountLabelLookups.length = 0
   importState.auditInsertCalls = 0
@@ -462,6 +472,34 @@ test('parties import accepts the role kinds export emits', async () => {
   ], 'insert', writeContext)
 
   assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
+})
+
+// OM-16: an imported role kind names its role row — the write must back
+// the claim in the same row transaction instead of stranding a "Kind:
+// Vendor" no read can observe. company/person kinds back nothing.
+test('parties import backs an imported role kind with its role row', async () => {
+  resetImportState(false)
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'VEN-1', displayName: 'Vendor One', kind: 'vendor' },
+    { shortCode: 'CUS-1', displayName: 'Customer One', kind: 'customer' },
+    { shortCode: 'COM-1', displayName: 'Company One', kind: 'company' },
+  ], 'insert', writeContext)
+
+  assert.deepEqual(outcome, { created: 3, updated: 0, failed: 0, errors: [] })
+  assert.deepEqual(importState.roleEnsures, ['vendor_roles', 'customer_roles'])
+})
+
+test('parties import backs a role kind adopted on upsert', async () => {
+  resetImportState(false)
+  importState.readRows.parties = [{ id: 'party-9', short_code: 'VEN-9', kind: 'company', is_active: true }]
+
+  const outcome = await resource('parties').write([
+    { shortCode: 'VEN-9', displayName: 'Vendor Nine', kind: 'vendor' },
+  ], 'upsert', writeContext)
+
+  assert.deepEqual(outcome, { created: 0, updated: 1, failed: 0, errors: [] })
+  assert.deepEqual(importState.roleEnsures, ['vendor_roles'])
 })
 
 // F-t10-006: SIM/CRM parties carry no short_code and export emits them

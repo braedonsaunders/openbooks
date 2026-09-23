@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '../exact-decimal'
+import { ensurePartyRoleRow } from '../party-roles'
 import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'
 import { coerceBoolean, UUID_RE } from '../setup/coerce'
@@ -650,6 +651,20 @@ async function writeMaster(
                returning *`)) as { rows: Record<string, unknown>[] }
             const after = written.rows[0] ?? null
             if (!after) throw new Error('master-data mutation did not return a row')
+            // OM-16: a role-kind kind names its role row — keep the claim
+            // backed in the same row transaction (see ensurePartyRoleRow).
+            // Effective values — the row's cells over the stored row — so a
+            // partial update re-checks the kind as it will stand.
+            if (m.key === 'parties') {
+              const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+              await ensurePartyRoleRow(tx, {
+                orgId: ctx.orgId,
+                partyId: existingId,
+                kind: cell('kind') ?? after.kind,
+                isActive: cell('is_active') ?? after.is_active ?? true,
+                actorId: ctx.actorId,
+              })
+            }
             return { rowId: existingId, after }
           })
         }
@@ -675,6 +690,18 @@ async function writeMaster(
             const after = ins.rows[0] ?? null
             if (!after || typeof after.id !== 'string') {
               throw new Error('master-data mutation did not return a row')
+            }
+            // OM-16: a role-kind kind names its role row — keep the claim
+            // backed in the same row transaction (see ensurePartyRoleRow).
+            if (m.key === 'parties') {
+              const cell = (column: string): unknown => setCols.find((c) => c.column === column)?.value
+              await ensurePartyRoleRow(tx, {
+                orgId: ctx.orgId,
+                partyId: after.id,
+                kind: cell('kind') ?? after.kind,
+                isActive: cell('is_active') ?? after.is_active ?? true,
+                actorId: ctx.actorId,
+              })
             }
             return { rowId: after.id, after }
           })

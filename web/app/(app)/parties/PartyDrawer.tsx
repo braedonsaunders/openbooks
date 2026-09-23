@@ -390,11 +390,16 @@ export function PartyDrawer({
   // The Compliance tab needs a vendor in a compliance-enabled org — the same
   // predicate gates the tab button and the deep-link, so a stale
   // ?partyTab=compliance can never strand the drawer on a missing panel.
-  const showComplianceTab = complianceEnabled && (role === 'vendor' || (!role && payload.vendor != null))
+  // OM-16: "a vendor" means the vendor ROLE row, never the role filter or
+  // the kind column — ?role=vendor on a role-less party must not fake the
+  // tab into existence. Employment, wages, and payroll read the same way.
+  const showComplianceTab = complianceEnabled && payload.vendor != null
   // The Employment tab needs an employee in an HRM-enabled org whose viewer
   // holds the read grant — the loader passes null unless both hold, so the
   // same predicate gates the tab button and the deep-link like Compliance.
-  const showEmploymentTab = hrm !== null && (role === 'employee' || (!role && payload.employee != null))
+  const showEmploymentTab = hrm !== null && payload.employee != null
+  const showWagesTab = role === 'employee' && canManageWages && payload.employee != null
+  const showPayrollTab = role === 'employee' && canManagePayroll && payload.employee != null
   // The relationship (CRM) profile is an account-side concern: it rides the
   // customer role, and it is what a lead or prospect has INSTEAD of one.
   const showRelationshipTab = canReadCrmAccounts && (role === 'customer' || (!role && payload.customer != null))
@@ -418,8 +423,8 @@ export function PartyDrawer({
   ])
   const allowedInitialTab = createMode
     ? 'overview'
-    : (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
-    (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll)) ||
+    : (initialTab === 'wages' && !showWagesTab) ||
+    (initialTab === 'payroll' && !showPayrollTab) ||
     (initialTab === 'activities' && !canReadActivities) ||
     (initialTab === 'relationship' && !showRelationshipTab) ||
     (initialTab === 'pulse' && (role !== 'customer' || payload.party.display_name === 'New party' || payload.party.display_name === 'New lead')) ||
@@ -469,13 +474,28 @@ export function PartyDrawer({
   // The stored kind can be any of the five party kinds (role lists are that
   // kind by construction) — the label must render what is stored, never fall
   // through to Company for a customer/vendor/employee row (F-t05-002).
-  const kindLabel = kind === 'person'
-    ? t('kindPerson')
-    : kind === 'customer'
-      ? t('kindCustomer')
+  // OM-16: a role-kind label additionally needs its ACTIVE role row behind
+  // it — the list's role badges derive from the same rows, so the drawer
+  // must not claim "Vendor" the badges (and compliance) cannot see. A
+  // stored role-kind with no backing role (rows predating the write guards)
+  // falls back to Company, the product default for a party with no roles;
+  // company/person need no backing and render as stored, even beside roles.
+  const kindRoleBacked =
+    kind === 'customer'
+      ? payload.customer != null && payload.customer.is_active !== false
       : kind === 'vendor'
-        ? t('kindVendor')
+        ? payload.vendor != null && payload.vendor.is_active !== false
         : kind === 'employee'
+          ? payload.employee != null && payload.employee.is_active !== false
+          : true
+  const effectiveKind = kindRoleBacked ? kind : 'company'
+  const kindLabel = effectiveKind === 'person'
+    ? t('kindPerson')
+    : effectiveKind === 'customer'
+      ? t('kindCustomer')
+      : effectiveKind === 'vendor'
+        ? t('kindVendor')
+        : effectiveKind === 'employee'
           ? t('kindEmployee')
           : t('kindCompany')
   const [displayName, setDisplayName] = useState<string>(isPlaceholderName ? '' : (p.display_name ?? ''))
@@ -1074,8 +1094,8 @@ export function PartyDrawer({
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
     ...(showComplianceTab ? [{ key: 'compliance' as const, label: t('tabs.compliance') }] : []),
-    ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
-    ...(role === 'employee' && canManagePayroll ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
+    ...(showWagesTab ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
+    ...(showPayrollTab ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
     ...(showEmploymentTab ? [{ key: 'employment' as const, label: t('tabs.employment') }] : []),
     // Attachments and Audit trail close the rail. They are the shared shell's
     // own panels, so the shell appends them itself — listing them here would

@@ -295,8 +295,10 @@ export async function loadParties(
 
   // F-t04-003: the vendor Compliance tab needs the assigned class and the
   // active classes — drawer-open only, vendors only, feature on.
-  const showCompliance =
-    complianceEnabled && openParty != null && (role === 'vendor' || (!role && openParty.vendor != null))
+  // OM-16: "vendors only" means the vendor ROLE row, never the role filter
+  // or the kind column — a ?role=vendor URL on a role-less party must not
+  // fake the tab (or its data) into existence.
+  const showCompliance = complianceEnabled && openParty?.vendor != null
   const compliance =
     showCompliance && partyId && isUuid(partyId)
       ? {

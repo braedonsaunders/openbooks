@@ -195,14 +195,15 @@ test('the employee drawer gates every confidential tab on its own grant', () => 
   // Employment tab through the structural team fallback, while payroll,
   // wages, and compliance stay hidden unless their own grants hold — the
   // team read selects no pay data, so there is nothing to leak.
+  // OM-16: each gate additionally needs the backing role row (see below).
   assert.match(
     drawerSource,
-    /\.\.\.\(role === 'employee' && canManageWages \? \[\{ key: 'wages' as const/,
+    /\.\.\.\(showWagesTab \? \[\{ key: 'wages' as const/,
     'wages tab needs the setup grant',
   )
   assert.match(
     drawerSource,
-    /\.\.\.\(role === 'employee' && canManagePayroll \? \[\{ key: 'payroll' as const/,
+    /\.\.\.\(showPayrollTab \? \[\{ key: 'payroll' as const/,
     'payroll tab needs the payroll grant',
   )
   assert.match(
@@ -210,4 +211,30 @@ test('the employee drawer gates every confidential tab on its own grant', () => 
     /showEmploymentTab \? \[\{ key: 'employment' as const/,
     'employment tab renders whenever the view resolves scoped employments',
   )
+})
+
+// OM-16: a party showing "Kind: Vendor" with no vendor_roles row left the
+// Compliance tab unreachable while a ?role=vendor URL faked it (and wages,
+// payroll, employment the same way) into existence. Every role tab now
+// needs its role ROW — never the role filter or the kind column — and the
+// Kind label falls back to Company when no active role backs a role-kind.
+test('role tabs need the role row and Kind falls back without one', () => {
+  assert.match(drawerSource, /const showComplianceTab = complianceEnabled && payload\.vendor != null/)
+  assert.match(drawerSource, /const showEmploymentTab = hrm !== null && payload\.employee != null/)
+  assert.match(
+    drawerSource,
+    /const showWagesTab = role === 'employee' && canManageWages && payload\.employee != null/,
+  )
+  assert.match(
+    drawerSource,
+    /const showPayrollTab = role === 'employee' && canManagePayroll && payload\.employee != null/,
+  )
+  assert.match(drawerSource, /const effectiveKind = kindRoleBacked \? kind : 'company'/)
+  assert.match(drawerSource, /payload\.vendor != null && payload\.vendor\.is_active !== false/)
+  assert.match(drawerSource, /payload\.customer != null && payload\.customer\.is_active !== false/)
+  assert.match(drawerSource, /payload\.employee != null && payload\.employee\.is_active !== false/)
+  // No role-filter-only gate may remain for these tabs: the filter must not
+  // make invalid data look valid.
+  assert.doesNotMatch(drawerSource, /role === 'vendor' \|\| \(!role && payload\.vendor/)
+  assert.doesNotMatch(drawerSource, /role === 'employee' \|\| \(!role && payload\.employee/)
 })

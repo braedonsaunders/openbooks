@@ -7,6 +7,10 @@ const stateKey = Symbol.for('openbooks.party-route-hold-test')
 interface ExistingParty {
   display_name: string
   is_active: boolean
+  kind: string
+  has_customer_role: boolean
+  has_vendor_role: boolean
+  has_employee_role: boolean
   updated_at: string
   customer_hold: boolean
   customer_hold_reason: string | null
@@ -33,6 +37,10 @@ const routeState: RouteState = {
   existing: {
     display_name: 'Test party',
     is_active: true,
+    kind: 'company',
+    has_customer_role: false,
+    has_vendor_role: false,
+    has_employee_role: false,
     updated_at: REVISION,
     customer_hold: false,
     customer_hold_reason: null,
@@ -164,6 +172,10 @@ function reset(existing: Partial<ExistingParty> = {}): void {
   routeState.existing = {
     display_name: 'Test party',
     is_active: true,
+    kind: 'company',
+    has_customer_role: false,
+    has_vendor_role: false,
+    has_employee_role: false,
     updated_at: REVISION,
     customer_hold: false,
     customer_hold_reason: null,
@@ -259,22 +271,81 @@ test('valid hired-on dates reach the employee upsert', async () => {
   assert.ok(call.values.includes('2026-02-28'), 'the valid hired-on date is stored')
 })
 
-test('edits echoing a stored role kind persist instead of 422ing (F-t05-002)', async () => {
+test('edits echoing a backed role kind persist instead of 422ing (F-t05-002, OM-16)', async () => {
   // F-t05-002: parties store customer/employee/vendor kinds (the drawer
   // echoes the stored kind back), but PATCH only accepted company|person —
   // so EVERY save of an employee-kind party failed while the UI reported
-  // success. The stored vocabulary must round-trip.
+  // success. OM-16 narrows the round-trip: a role kind persists only while
+  // its role row backs it — the echo of a backed kind must still succeed.
   for (const kind of ['customer', 'vendor', 'employee']) {
-    reset()
+    reset({
+      kind,
+      has_customer_role: kind === 'customer',
+      has_vendor_role: kind === 'vendor',
+      has_employee_role: kind === 'employee',
+    })
 
     const response = await patch({ kind, shortCode: 'DE-001' })
 
-    assert.equal(response.status, 200, `kind ${kind} must be accepted`)
+    assert.equal(response.status, 200, `backed kind ${kind} must be accepted`)
     const call = routeState.calls.find(({ text }) => text.includes('update parties set'))
     assert.ok(call, `kind ${kind} must reach the party update`)
     assert.ok(call.values.includes(kind), `kind ${kind} must be stored`)
     assert.ok(call.values.includes('DE-001'), 'the short code must be stored alongside')
   }
+})
+
+test('an unbacked role kind is refused by name before any write (OM-16)', async () => {
+  // OM-16: storing kind "vendor" with no vendor role strands a "Kind:
+  // Vendor" no read can back. Naming the kind without enabling (or holding)
+  // the role must refuse, with the remedy in the message.
+  for (const kind of ['customer', 'vendor', 'employee']) {
+    reset({ kind: 'company' })
+
+    const response = await patch({ kind, shortCode: 'DE-001' })
+
+    assert.equal(response.status, 422, `unbacked kind ${kind} must be refused`)
+    const body = (await response.json()) as { error: string }
+    assert.ok(
+      body.error.includes(`kind "${kind}" needs the ${kind} role`),
+      `the refusal must name the missing role, got: ${body.error}`,
+    )
+    assert.equal(writeCalls().length, 0, 'no role or party write may run')
+  }
+})
+
+test('enabling the role alongside the kind heals the claim atomically (OM-16)', async () => {
+  // The role-scoped drawer forces its role on every save, so opening a
+  // kind-vendor party with ?role=vendor and saving must create the missing
+  // role rather than refuse.
+  reset({ kind: 'vendor', has_vendor_role: false })
+
+  const response = await patch({ kind: 'vendor', roles: { vendor: { enabled: true } } })
+
+  assert.equal(response.status, 200)
+  assert.ok(
+    routeState.calls.some(({ text }) => text.includes('insert into vendor_roles')),
+    'the missing vendor role must be created by the same save',
+  )
+})
+
+test('dropping the role a stored kind names is refused until the kind is renamed (OM-16)', async () => {
+  reset({ kind: 'vendor', has_vendor_role: true })
+
+  const refused = await patch({ roles: { vendor: { enabled: false } } })
+
+  assert.equal(refused.status, 422)
+  const body = (await refused.json()) as { error: string }
+  assert.ok(
+    body.error.includes('change kind to "company" or "person"'),
+    `the refusal must name the remedy, got: ${body.error}`,
+  )
+  assert.equal(writeCalls().length, 0, 'no role or party write may run')
+
+  reset({ kind: 'vendor', has_vendor_role: true })
+  const renamed = await patch({ kind: 'company', roles: { vendor: { enabled: false } } })
+
+  assert.equal(renamed.status, 200, 'renaming the kind alongside the drop must succeed')
 })
 
 test('an unknown party kind is still refused before any write', async () => {
