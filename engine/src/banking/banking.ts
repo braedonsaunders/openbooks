@@ -2394,8 +2394,9 @@ export interface SourceClearedEntryEvidence {
 
 /**
  * Stamp the mirror's source-cleared evidence onto posted journal lines. The
- * stamp applies per (entry, account) group only when EVERY contributing
- * source line is cleared: a partially cleared group stays unstamped (and the
+ * stamp applies per (entry, account) group only when EVERY journal line of
+ * the group is evidenced as cleared: a partially cleared group — or a group
+ * whose evidence omits some of the group's lines — stays unstamped (and the
  * account stays open) rather than recording evidence the source did not
  * give. Only reconcilable accounts stamp; already-stamped lines keep their
  * first stamp (the trigger's append-only carve-out enforces it).
@@ -2425,6 +2426,18 @@ export async function applySourceLineEvidence(
           );
         }
         for (const date of dates) validateSourceClearedDate(date!);
+        // Completeness fence: the supplied group must account for EVERY
+        // journal line of this (entry, account) — not just the cleared ones
+        // the connector chose to send. An entry with two bank lines where
+        // only one cleared would otherwise stamp both irreversibly, because
+        // the stamp below targets the whole (entry, account). An incomplete
+        // group stays unstamped (and the account stays open) rather than
+        // recording evidence the source did not give.
+        const actual = (await tx.execute<{ count: string }>(sql`
+          select count(*)::text as count from journal_lines
+           where org_id = ${orgId} and entry_id = ${entry.entryId} and account_id = ${accountId}
+        `));
+        if (group.length !== Number(actual.rows[0]!.count)) continue;
         const maxDate = [...dates].sort().at(-1)!;
         const stamped = (await tx.execute<{ id: string }>(sql`
           update journal_lines jl

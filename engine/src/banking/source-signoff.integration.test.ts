@@ -140,6 +140,41 @@ test("applySourceLineEvidence stamps unanimous groups and skips the rest", { ski
   }
 });
 
+test("applySourceLineEvidence refuses a group that omits some of the entry's lines", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+    // Two bank lines on one entry, but evidence for only the first: the
+    // group is incomplete, so NEITHER line may be stamped — the stamp targets
+    // the whole (entry, account) and cannot tell evidenced lines apart.
+    const entry = await postBankJournal(org, actor, ["100", "50"], "partial");
+    const result = await applySourceLineEvidence(org.orgId, "test-connector", [
+      {
+        entryId: entry,
+        lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: org.date }],
+      },
+    ]);
+    assert.equal(result.entries, 1);
+    assert.equal(result.linesStamped, 0);
+    assert.equal(await clearedCount(org.orgId, org.accounts.bank), 0);
+    // The complete re-supply stamps both.
+    const complete = await applySourceLineEvidence(org.orgId, "test-connector", [
+      {
+        entryId: entry,
+        lines: [
+          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+          { accountId: org.accounts.bank, cleared: true, clearedDate: org.date },
+        ],
+      },
+    ]);
+    assert.equal(complete.linesStamped, 2);
+    assert.equal(await clearedCount(org.orgId, org.accounts.bank), 2);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("signOffFromSourceEvidence signs off fully-cleared accounts without statements", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
