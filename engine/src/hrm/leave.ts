@@ -27,6 +27,7 @@ import {
 import { LeaveError } from "./leave-errors.ts";
 import {
   applicablePolicy,
+  policyScopeForEmployment,
   timeBalanceAsOf,
   type PolicyRow,
   type PolicyScope,
@@ -652,18 +653,18 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
     throw new LeaveError("INVALID_INPUT", "filing on behalf carries a non-blank reason — record why the manager files for the worker");
   }
   return withOrgTransaction(orgId, async () => {
-    const subject = await requireFileAccess(db, orgId, actorId, employmentId, query.onBehalf === true);
+    await requireFileAccess(db, orgId, actorId, employmentId, query.onBehalf === true);
     await assertHrmEnabled(db, orgId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
     if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before filing`);
     await assertLiveEmploymentRange(db, orgId, employmentId, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, employmentId, startsOn, endsOn, null);
-    await assertTimeBalance(db, orgId, leaveTypeId, {
-      employmentId,
-      employerSubsidiaryId: subject.employerSubsidiaryId,
-      departmentId: null,
-    }, startsOn, hours);
-    await assertNotice(db, orgId, leaveTypeId, subject.employerSubsidiaryId, startsOn, query.onBehalf === true, reason);
+    // The gates resolve scope the same way the balance display does —
+    // subsidiary from the employment, department from the primary
+    // assignment — never a hardcoded null department.
+    const scope = await policyScopeForEmployment(db, orgId, employmentId, startsOn);
+    await assertTimeBalance(db, orgId, leaveTypeId, scope, startsOn, hours);
+    await assertNotice(db, orgId, leaveTypeId, scope, startsOn, query.onBehalf === true, reason);
     const inserted = (await db.execute<RequestRow>(sql`
       insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on,
         hours, reason, status, created_by, updated_by)
@@ -680,16 +681,12 @@ async function assertNotice(
   exec: SqlExecutor,
   orgId: string,
   leaveTypeId: string,
-  employerSubsidiaryId: string,
+  scope: PolicyScope,
   startsOn: string,
   onBehalf: boolean,
   reason: string | null,
 ): Promise<void> {
-  const policy = await applicablePolicy(exec, orgId, leaveTypeId, {
-    employmentId: "",
-    employerSubsidiaryId,
-    departmentId: null,
-  }, startsOn);
+  const policy = await applicablePolicy(exec, orgId, leaveTypeId, scope, startsOn);
   const required = policy?.minimum_notice_days ?? 0;
   if (required <= 0) return;
   const today = await businessToday(orgId);
@@ -743,15 +740,11 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
     }
     const startsOn = String(current.starts_on).slice(0, 10);
     const endsOn = String(current.ends_on).slice(0, 10);
-    const subject = await requireFileAccess(db, orgId, actorId, current.employment_id, onBehalf);
     await assertLiveEmploymentRange(db, orgId, current.employment_id, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, current.employment_id, startsOn, endsOn, requestId);
-    await assertTimeBalance(db, orgId, current.leave_type_id, {
-      employmentId: current.employment_id,
-      employerSubsidiaryId: subject.employerSubsidiaryId,
-      departmentId: null,
-    }, startsOn, String(current.hours));
-    await assertNotice(db, orgId, current.leave_type_id, subject.employerSubsidiaryId, startsOn, onBehalf, current.reason);
+    const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
+    await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, String(current.hours));
+    await assertNotice(db, orgId, current.leave_type_id, scope, startsOn, onBehalf, current.reason);
 
     // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
     const { runRecordFlows } = await import("../flows/run.ts");

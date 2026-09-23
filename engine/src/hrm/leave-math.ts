@@ -293,6 +293,50 @@ function sliceStartDay(k: number, yearDays: number, periodsPerYear: number): num
   return Math.floor(((k - 1) * yearDays) / periodsPerYear) + 1;
 }
 
+export interface ReignSegment {
+  /** Accrual rule of the policy governing this reign. */
+  readonly rule: AccrualRule;
+  /** Inclusive reign window (YYYY-MM-DD). */
+  readonly from: string;
+  readonly to: string;
+}
+
+/**
+ * Per-day applicable-policy reigns over [from, to]: maximal runs of days
+ * governed by one policy under selectPolicy's precedence. A department
+ * policy REPLACES the org-wide rule for its workers — it never stacks —
+ * so accrual walks these reigns, never the raw type-wide segment list
+ * (which would price org-wide unlimited into a capped worker's balance
+ * and grant org + department twice). Gap days carry no reign and earn
+ * nothing. Pure and day-walked (at most a civil year plus the tail).
+ */
+export function selectReigns<T extends PolicyCandidate & { rule: AccrualRule }>(
+  policies: readonly T[],
+  scope: { employerSubsidiaryId: string | null; departmentId: string | null },
+  from: string,
+  to: string,
+): ReignSegment[] {
+  const reigns: ReignSegment[] = [];
+  let openId: string | null = null;
+  let openRule: AccrualRule | null = null;
+  let openFrom = from;
+  for (const day of eachDayOfRange(from, to)) {
+    const pick = selectPolicy(policies, scope, day);
+    if (pick?.id !== openId) {
+      if (openId !== null && openRule !== null) {
+        reigns.push({ rule: openRule, from: openFrom, to: prevDay(day) });
+      }
+      openId = pick?.id ?? null;
+      openRule = pick?.rule ?? null;
+      openFrom = day;
+    }
+  }
+  if (openId !== null && openRule !== null) {
+    reigns.push({ rule: openRule, from: openFrom, to });
+  }
+  return reigns;
+}
+
 function prevDay(date: string): string {
   const parts = splitParts(date);
   if (parts.day > 1) return formatParts({ ...parts, day: parts.day - 1 });

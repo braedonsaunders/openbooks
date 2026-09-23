@@ -920,6 +920,149 @@ test("same-scope overlapping policies refuse by name; other scopes and adjacent 
   });
 });
 
+/** Primary assignment pinning the employment to a department from 2020 on. */
+async function seedDepartmentAssignment(orgId: string, employmentId: string, departmentId: string): Promise<void> {
+  const assignmentId = randomUUID();
+  await db.execute(sql`
+    insert into employment_assignments (id, org_id, employment_id, assignment_key)
+    values (${assignmentId}, ${orgId}, ${employmentId}, 'primary')
+  `);
+  await db.execute(sql`
+    insert into employment_assignment_versions (org_id, assignment_id, employment_id, version_no,
+      job_title, department_id, fte, is_primary, effective_from)
+    values (${orgId}, ${assignmentId}, ${employmentId}, 1,
+      'Crew Hand', ${departmentId}, 1, true, '2020-01-01')
+  `);
+}
+
+/** Civil date n days after today (UTC) — notice tests stay relative, never stale. */
+function daysFromNow(n: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + n);
+  return date.toISOString().slice(0, 10);
+}
+
+test("a department-only policy covers its department worker at file time", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const departmentId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${h.org.orgId}, 'Crew')`);
+    await seedDepartmentAssignment(h.org.orgId, employmentId, departmentId);
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    // No org-wide policy at all: the department pin is the only coverage.
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentId },
+      accrualRule: { kind: "per_year", hours: "40" },
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    // The null-department gate read this worker as uncovered and refused.
+    const draft = await fileLeaveRequest({
+      orgId: h.org.orgId,
+      actorId: h.employeeId,
+      employmentId,
+      leaveTypeId: type.id,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-01",
+      hours: "8",
+    });
+    assert.equal(draft.status, "draft");
+  });
+});
+
+test("org-wide unlimited never launders a department cap at file time", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const departmentId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${h.org.orgId}, 'Crew')`);
+    await seedDepartmentAssignment(h.org.orgId, employmentId, departmentId);
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "unlimited" },
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentId },
+      accrualRule: { kind: "per_year", hours: "8" },
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    // 40 hours against an 8-hour department cap refuses; the null-department
+    // gate early-returned on org-wide unlimited and filed it.
+    await assertLeaveRefusal(
+      () => fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        employmentId,
+        leaveTypeId: type.id,
+        startsOn: "2026-09-01",
+        endsOn: "2026-09-05",
+        hours: "40",
+      }),
+      /policy time balance is 8 hours but the request needs 40/,
+      async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_requests
+         where org_id = ${h.org.orgId} and employment_id = ${employmentId}
+      `)).rows[0]?.n ?? 0,
+    );
+    const within = await fileLeaveRequest({
+      orgId: h.org.orgId,
+      actorId: h.employeeId,
+      employmentId,
+      leaveTypeId: type.id,
+      startsOn: "2026-09-01",
+      endsOn: "2026-09-01",
+      hours: "8",
+    });
+    assert.equal(within.status, "draft");
+  });
+});
+
+test("a department minimum notice binds its workers at file time", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const departmentId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${h.org.orgId}, 'Crew')`);
+    await seedDepartmentAssignment(h.org.orgId, employmentId, departmentId);
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "120" },
+      minimumNoticeDays: 0,
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentId },
+      accrualRule: { kind: "per_year", hours: "120" },
+      minimumNoticeDays: 5,
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    // Three days notice against a five-day department rule refuses; the
+    // null-department gate read the org-wide zero and filed it.
+    await assertLeaveRefusal(
+      () => fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        employmentId,
+        leaveTypeId: type.id,
+        startsOn: daysFromNow(3),
+        endsOn: daysFromNow(3),
+        hours: "8",
+      }),
+      /needs 5 days notice/,
+      async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_requests
+         where org_id = ${h.org.orgId} and employment_id = ${employmentId}
+      `)).rows[0]?.n ?? 0,
+    );
+  });
+});
+
 test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
