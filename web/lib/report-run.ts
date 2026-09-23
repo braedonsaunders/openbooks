@@ -376,7 +376,7 @@ async function loadAuthorizedDefinition(orgId: string, id: string): Promise<{
   const r = (await db.execute<ReportDefinitionRecord>(sql`
     select kind, slug, report_type, name, description, query, statement
       from report_definitions
-     where id = ${id} and org_id = ${orgId}
+     where id = ${id} and org_id = ${orgId} and archived_at is null
   `))
   const row = r.rows[0]
   if (!row) throw new Error('report not found')

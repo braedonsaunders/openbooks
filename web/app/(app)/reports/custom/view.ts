@@ -160,7 +160,8 @@ export async function loadCustomReports(
       : sql``
   const visible = sql`${visibleEntity}${visibleStatement}`
 
-  const where = sql`org_id = ${authz.user.orgId}${visible}
+  // Archived definitions hide from the catalog everywhere it is listed.
+  const where = sql`org_id = ${authz.user.orgId} and archived_at is null${visible}
     ${kind && kind !== 'all' ? sql` and kind = ${kind}` : sql``}
     ${params.q ? sql` and (name ilike ${'%' + params.q + '%'} or description ilike ${'%' + params.q + '%'})` : sql``}`
 
@@ -180,7 +181,7 @@ export async function loadCustomReports(
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}`),
     db.execute<{ kind: string; n: string }>(sql`
       select kind, count(*) as n from report_definitions
-       where org_id = ${authz.user.orgId}${visible} group by kind`),
+       where org_id = ${authz.user.orgId} and archived_at is null${visible} group by kind`),
     db.execute<{ n: string }>(sql`select count(*) as n from report_definitions where ${where}`),
   ])
 

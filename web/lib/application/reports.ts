@@ -63,7 +63,7 @@ async function loadVisibleDefinitions(
            coalesce(report_type, 'query') as report_type,
            slug, query, statement
       from report_definitions
-     where org_id = ${context.authz.user.orgId}
+     where org_id = ${context.authz.user.orgId} and archived_at is null
      order by updated_at desc, name
   `)).rows;
   const visible: ReportDefinitionRow[] = [];

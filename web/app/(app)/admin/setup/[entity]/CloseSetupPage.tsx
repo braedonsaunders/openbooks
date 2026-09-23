@@ -297,7 +297,7 @@ export async function CloseSetupPage({
       sql`select key, name from app_roles where org_id = ${orgId} order by name`,
     ),
     db.execute<ReportDefinitionRow>(
-      sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} order by kind, name`,
+      sql`select slug, name, kind, report_type, query, statement from report_definitions where org_id = ${orgId} and archived_at is null order by kind, name`,
     ),
     db.execute<{ id: string; name: string }>(
       sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,

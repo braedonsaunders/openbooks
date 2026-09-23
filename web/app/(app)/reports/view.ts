@@ -72,7 +72,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
           // twelve unrelated reports had been edited more recently, and the
           // page would look complete while doing it. Saved views below keep
           // their cap — those really are "the twelve most recent".
-          sql`select id, slug, name, description, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and coalesce(report_type, 'query') = 'query' order by name`,
+          sql`select id, slug, name, description, kind, query->>'entity' as entity from report_definitions where org_id = ${orgId} and archived_at is null and coalesce(report_type, 'query') = 'query' order by name`,
         ) as Promise<{
           rows: { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[]
         }>

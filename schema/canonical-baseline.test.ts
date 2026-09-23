@@ -530,6 +530,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // posted a second numbered journal. documents gains a nullable
     // idempotency_key with a partial unique index (org_id, key).
     "0268_script_journal_idempotency_key.sql",
+    // Report history preservation: deleting a saved definition cascaded
+    // through runs into artifacts and CSV evidence. Deletion is now an
+    // archive (archived_at/by), and the definition FKs move off CASCADE to
+    // RESTRICT so no hard delete can cascade again.
+    "0271_report_definition_archive.sql",
     // Budget lines planned the P&L but admitted balance-sheet accounts, read
     // any fiscal calendar while the worksheet reads the default, and let the
     // book change under existing lines: this pins the line guard to P&L

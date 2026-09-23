@@ -79,7 +79,7 @@ export async function GET() {
     db.execute<{ id: string; label: string; extra: string }>(sql`
       select id::text as id, name as label, slug as extra
         from report_definitions
-       where org_id = ${orgId}
+       where org_id = ${orgId} and archived_at is null
        order by name`),
     // Approval-flow picker (A14): only enabled flows authored over the
     // allocation_run subject can gate a run — every other kind would fail

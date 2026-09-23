@@ -37,7 +37,7 @@ export async function GET() {
   const rows = (await db.execute<{ query: unknown; statement: { kind?: string } | null }>(sql`
     select id, kind, slug, name, description, query, statement, updated_at
       from report_definitions
-     where org_id = ${user.orgId}
+     where org_id = ${user.orgId} and archived_at is null
      order by kind, name
   `))
   const visible = []
