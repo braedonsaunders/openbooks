@@ -46,18 +46,24 @@ export async function markNotificationsRead(
   exec: SqlExecutor,
   args: { orgId: string; userId: string; ids: readonly string[] },
 ): Promise<{ flipped: number; own: number }> {
+  // Ownership first: a mixed request (own plus foreign ids) is refused
+  // before any write, so the refusal leaves the own rows untouched
+  // instead of marking them while reporting failure.
+  const own = (await exec.execute<{ n: number }>(sql`
+    select count(*)::int as n from notifications
+     where org_id = ${args.orgId} and user_id = ${args.userId}
+       and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
+  `)).rows[0]?.n ?? 0;
+  if (own < args.ids.length) {
+    return { flipped: 0, own };
+  }
   const flipped = await exec.execute<{ id: string }>(sql`
     update notifications set read_at = now(), updated_at = now()
      where org_id = ${args.orgId} and user_id = ${args.userId} and read_at is null
        and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
     returning id
   `);
-  const own = (await exec.execute<{ n: number }>(sql`
-    select count(*)::int as n from notifications
-     where org_id = ${args.orgId} and user_id = ${args.userId}
-       and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
-  `)).rows[0];
-  return { flipped: flipped.rows.length, own: own?.n ?? 0 };
+  return { flipped: flipped.rows.length, own };
 }
 
 /**

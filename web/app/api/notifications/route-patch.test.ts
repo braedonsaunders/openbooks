@@ -181,6 +181,22 @@ test("PATCH with a foreign id is 404, never {ok:true}", async () => {
   );
 });
 
+test("PATCH with a mixed own+foreign request refuses before any write", async () => {
+  // Ownership first: the refusal must leave the own unread notice unread.
+  // The helper counts ownership before flipping, so a mixed request issues
+  // no UPDATE at all — the own row stays unread for the next read.
+  reset([KNOWN_ID], []);
+
+  const response = await patch({ ids: [KNOWN_ID, FOREIGN_ID] });
+
+  assert.equal(response.status, 404);
+  assert.equal(
+    routeState.calls.filter((text) => /update\s+notifications\s+set\s+read_at/i.test(text)).length,
+    0,
+    "a refused mixed request issues no mark-read UPDATE",
+  );
+});
+
 test("PATCH with a nonexistent id is 404, never {ok:true}", async () => {
   reset([], []);
 
