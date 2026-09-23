@@ -17,7 +17,14 @@ registerHooks({
   },
 });
 
-const { exactMoney: exactMoneySchema, isoDate, nullableUuidId, parseJsonBody, uuidId } = await import("./json");
+const {
+  DEFAULT_MAX_JSON_BODY_BYTES,
+  exactMoney: exactMoneySchema,
+  isoDate,
+  nullableUuidId,
+  parseJsonBody,
+  uuidId,
+} = await import("./json");
 
 function jsonRequest(body: unknown): Request {
   return new Request("http://localhost/api/test", {
@@ -82,6 +89,84 @@ test("parseJsonBody surfaces the first issue message and all issues", async () =
       ],
     );
   }
+});
+
+/**
+ * The stream cap is the whole point: Content-Length is sender-declared and
+ * absent on chunked uploads, so only the streamed bytes can justify a 413.
+ * Streamed bodies carry no Content-Length (asserted below), which is exactly
+ * the shape that used to bypass the old header-only check.
+ */
+function streamRequest(bodyText: string, headers: Record<string, string> = {}): Request {
+  const bytes = new TextEncoder().encode(bodyText);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  return new Request("http://localhost/api/test", {
+    method: "POST",
+    body: stream,
+    headers: { "content-type": "application/json", ...headers },
+    duplex: "half",
+  } as RequestInit);
+}
+
+test("parseJsonBody refuses a chunked body with no Content-Length over the limit", async () => {
+  const over = JSON.stringify({ text: "x".repeat(40 * 1024) });
+  const req = streamRequest(over);
+  assert.equal(req.headers.get("content-length"), null, "premise: streamed bodies carry no length");
+  const parsed = await parseJsonBody(req, z.object({}), { maxBodyBytes: 32 * 1024 });
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.equal(parsed.response.status, 413);
+    const body = (await parsed.response.json()) as { error: string; message: string };
+    assert.match(body.error, /32 KiB/);
+    assert.equal(body.message, body.error, "dialogs surface `message` on non-ok responses");
+  }
+});
+
+test("parseJsonBody refuses a lying Content-Length (small header, big body)", async () => {
+  const over = JSON.stringify({ text: "x".repeat(40 * 1024) });
+  const req = streamRequest(over, { "content-length": "10" });
+  assert.equal(req.headers.get("content-length"), "10");
+  const parsed = await parseJsonBody(req, z.object({}), { maxBodyBytes: 32 * 1024 });
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.equal(parsed.response.status, 413);
+  }
+});
+
+test("parseJsonBody refuses an oversized declared length before reading", async () => {
+  const req = streamRequest(JSON.stringify({}), { "content-length": String(64 * 1024) });
+  const parsed = await parseJsonBody(req, z.object({}), { maxBodyBytes: 32 * 1024 });
+  assert.equal(parsed.ok, false);
+  if (!parsed.ok) {
+    assert.equal(parsed.response.status, 413);
+  }
+});
+
+test("parseJsonBody accepts a normal body under a per-route override", async () => {
+  const req = jsonRequest({ text: "something broke" });
+  const parsed = await parseJsonBody(req, z.object({ text: z.string() }), {
+    maxBodyBytes: 32 * 1024,
+  });
+  assert.equal(parsed.ok, true);
+});
+
+test("parseJsonBody default ceiling applies without an explicit override", async () => {
+  assert.equal(DEFAULT_MAX_JSON_BODY_BYTES, 1024 * 1024);
+  const big = jsonRequest({ text: "x".repeat(DEFAULT_MAX_JSON_BODY_BYTES) });
+  const refused = await parseJsonBody(big, z.object({ text: z.string() }));
+  assert.equal(refused.ok, false);
+  if (!refused.ok) {
+    assert.equal(refused.response.status, 413);
+    const body = (await refused.response.json()) as { error: string };
+    assert.match(body.error, /1 MiB/);
+  }
+  const small = jsonRequest({ text: "fine" });
+  assert.equal((await parseJsonBody(small, z.object({ text: z.string() }))).ok, true);
 });
 
 test("exactMoney accepts decimal strings and safe integer numbers without IEEE-754 drift", () => {

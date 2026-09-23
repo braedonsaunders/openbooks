@@ -31,9 +31,34 @@ export type FeedbackTurnRequest = {
   sessionId: string | null
 }
 
+/**
+ * Raw ceilings on the answers object, enforced BEFORE the transform below.
+ * The transform already caps kept answers and truncates values, but it runs
+ * after the whole object is parsed — these refinements refuse an object that
+ * is large by construction (thousands of keys, megabyte values) with a named
+ * schema failure instead of buffering it into the trim-and-drop loop.
+ */
+const MAX_ANSWER_KEY_CHARS = 128
+const MAX_RAW_ANSWER_CHARS = 4_000
+
 /** Answers to the model's clarifying questions: bounded, trimmed, blanks dropped. */
 const answers = z
   .record(z.string(), z.unknown())
+  .refine(
+    (raw) => Object.keys(raw).length <= MAX_ANSWERS,
+    `at most ${MAX_ANSWERS} answers are accepted`,
+  )
+  .refine(
+    (raw) => Object.keys(raw).every((key) => key.length <= MAX_ANSWER_KEY_CHARS),
+    `answer ids must be at most ${MAX_ANSWER_KEY_CHARS} characters`,
+  )
+  .refine(
+    (raw) =>
+      Object.values(raw).every(
+        (value) => typeof value !== 'string' || value.length <= MAX_RAW_ANSWER_CHARS,
+      ),
+    `an answer must be at most ${MAX_RAW_ANSWER_CHARS} characters`,
+  )
   .transform((raw): Record<string, string> => {
     const kept: Record<string, string> = {}
     for (const [key, value] of Object.entries(raw)) {
