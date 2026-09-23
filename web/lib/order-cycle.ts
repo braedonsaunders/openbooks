@@ -1134,8 +1134,19 @@ export async function convertOrder(
     const doc = src.rows[0]
     if (!doc) throw new ConversionError('Order not found')
     if (!ORDER_KINDS.includes(doc.kind as OrderKind)) throw new ConversionError('Not an order document')
-    if (doc.status === 'draft') throw new ConversionError('Issue the order before converting it')
-    if (doc.status === 'voided') throw new ConversionError('This order is voided')
+    // Only an issued order converts. The switch is exhaustive so a status
+    // added later (pending_approval today) refuses closed instead of
+    // converting an order that was never issued.
+    switch (doc.status) {
+      case 'approved':
+        break
+      case 'draft':
+        throw new ConversionError('Issue the order before converting it')
+      case 'voided':
+        throw new ConversionError('This order is voided')
+      default:
+        throw new ConversionError(`Only an issued order can be converted — this order is ${doc.status}`)
+    }
 
     const target = (CONVERSION_TARGETS[doc.kind as OrderKind] || []).find((t) => t.kind === targetKind)
     if (!target) throw new ConversionError(`Cannot convert a ${doc.kind} into ${targetKind}`)
