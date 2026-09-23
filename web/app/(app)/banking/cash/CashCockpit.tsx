@@ -288,6 +288,7 @@ export function CashCockpit({
           restrictToSafe={data.apSettings.restrictToSafe}
           vendorOptions={data.vendorOptions}
           accountOptions={data.accountOptions}
+          subsidiaryOptions={data.subsidiaryOptions}
           initialCategories={data.categories.map((c) => ({ id: c.id, name: c.name, direction: c.direction, method: c.method }))}
         />
       ) : null}
