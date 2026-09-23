@@ -403,7 +403,22 @@ test('global search threads allowedSubsidiaryIds into contacts and transactions'
   const src = source('lib/search.ts')
   assert.match(src, /const scope = authz\.allowedSubsidiaryIds/)
   assert.match(src, /searchContacts\(orgId, q, like, scope\)/)
-  assert.match(src, /searchTransactions\(orgId, q, like, num, transactionKinds, scope\)/)
+  // Scope is the second-to-last searchTransactions argument (ahead of the
+  // resolved kind allowlist): assert the threading by name, not by position,
+  // so a future parameter reorder cannot silently drop the isolation control.
+  assert.match(src, /searchTransactions\(orgId, q, like, amount, scope, kinds\)/)
+  assert.match(src, /searchJournalEntries\(orgId, q, like, scope, kinds\)/)
+  // The callee must actually consume the scope on every candidate leg — the
+  // call-site threading above is worthless if a leg ignores it.
+  const txnBody = src.slice(
+    src.indexOf('async function searchTransactions'),
+    src.indexOf('async function searchJournalEntries'),
+  )
+  assert.match(txnBody, /scope: ReadonlySet<string> \| null/)
+  assert.ok(count(txnBody, 'documentSubsidiaryFilter') >= 5,
+    'every documents candidate leg plus the final select must carry the scope filter')
+  assert.ok(count(txnBody, 'SubsidiaryFilter') >= 7,
+    'party and result-party legs must carry their own scope filters too')
 })
 
 test('transaction hits obey the documents visibility predicate on every leg', () => {
