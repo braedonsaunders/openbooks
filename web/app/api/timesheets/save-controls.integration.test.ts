@@ -154,6 +154,40 @@ test('time cannot be pinned to a party without an active employment', async () =
   } finally { await f.close() }
 })
 
+test('a weekly save never deletes amendment offsets or their referenced originals', async () => {
+  // Amendment history is append-only: an offset points at its original by
+  // id, and deleting either side orphans the correction into phantom
+  // hours. With automatic approval the approved original would otherwise
+  // be replaceable — only the amendment link keeps it (and the offset
+  // itself) out of the save's delete set.
+  const f = await fixture(false)
+  try {
+    const originalId = randomUUID()
+    const offsetId = randomUUID()
+    const ordinaryId = randomUUID()
+    await db.execute(sql`insert into time_entries
+      (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, created_by, updated_by)
+      values (${originalId},${f.org.orgId},${f.employee},'2026-07-15','4.0000',${f.project},${f.org.items.service},'approved',true,'actual','{}'::jsonb,${f.actor},${f.actor})`)
+    await db.execute(sql`insert into time_entries
+      (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, amends_entry_id, created_by, updated_by)
+      values (${offsetId},${f.org.orgId},${f.employee},'2026-07-15','-4.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${originalId},${f.actor},${f.actor})`)
+    await db.execute(sql`insert into time_entries
+      (id, org_id, employee_party_id, worked_on, hours, project_id, item_id, status, is_billable, costing_basis, custom, created_by, updated_by)
+      values (${ordinaryId},${f.org.orgId},${f.employee},'2026-07-16','2.0000',${f.project},${f.org.items.service},'draft',true,'actual','{}'::jsonb,${f.actor},${f.actor})`)
+    const before = (await f.snapshot()).rows
+    assert.equal(before.length, 3)
+    // A grid that replaces the week's editable hours outright.
+    const response = await f.save({ rows: [{ ...f.row, hours: ['', '', '', '8', '', '', ''] }] })
+    assert.equal(response.status, 200, await response.clone().text())
+    const after = (await f.snapshot()).rows
+    const byId = new Map(after.map((row) => [row.id, row]))
+    assert.deepEqual(byId.get(originalId), before.find((row) => row.id === originalId), 'the referenced original survives byte-identical')
+    assert.deepEqual(byId.get(offsetId), before.find((row) => row.id === offsetId), 'the amendment offset survives byte-identical')
+    assert.ok(!byId.has(ordinaryId), 'the ordinary replaceable row is replaced')
+    assert.equal(after.length, 3, 'original + offset + the newly saved line')
+  } finally { await f.close() }
+})
+
 test("hours cannot be booked to another legal entity's project", async () => {
   const f = await fixture(true)
   try {
