@@ -1868,6 +1868,11 @@ export async function createRemittanceBill(
         "this remittance group includes payroll with an unknown historical filing account — reconcile its original payroll evidence before remitting",
       );
     }
+    if (found.hasEntitylessAccruals) {
+      throw new PayrollError(
+        "this remittance group includes payroll with no legal entity — attribute its pay runs to an active subsidiary before remitting",
+      );
+    }
     entityId = pickRemittanceSlice(found, null).subsidiaryId;
   }
 
@@ -1946,6 +1951,15 @@ export async function createRemittanceBill(
     if (group.hasUnknownFilingAccount) {
       throw new PayrollError(
         "this remittance group includes payroll with an unknown historical filing account — reconcile its original payroll evidence before remitting",
+      );
+    }
+    // A bill is stamped with the entity whose books credited the accruals.
+    // Entityless rows stay in the consolidated group only: billing the
+    // attributed slices while unattributed money sits in the same group
+    // would remit a partial period as if it were whole.
+    if (group.hasEntitylessAccruals) {
+      throw new PayrollError(
+        "this remittance group includes payroll with no legal entity — attribute its pay runs to an active subsidiary before remitting",
       );
     }
     const slice = pickRemittanceSlice(group, input.subsidiaryId ?? null);

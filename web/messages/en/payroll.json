@@ -1077,6 +1077,7 @@
     "empty": "No committed pay runs with remittable amounts in this period.",
     "unassigned": "No remittance vendor assigned",
     "assignVendor": "Assign a vendor on the components",
+    "attributeEntity": "Attribute its pay runs to a subsidiary before remitting",
     "context": "Gross payroll {gross} · {employees, plural, one {# employee} other {# employees}} in the period",
     "withheld": "Withheld",
     "employer": "Employer",

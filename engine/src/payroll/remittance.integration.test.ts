@@ -73,10 +73,14 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
 
 async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
-  input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string },
+  input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string; subsidiaryId?: string | null },
 ): Promise<void> {
   const { org, actorId, componentId, liabilityAccountId, scheduleId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
+  // An explicit null subsidiary seeds a run document with no legal entity:
+  // its accruals stay in the consolidated group only (hasEntitylessAccruals)
+  // and no bill may be raised until they are attributed.
+  const runSubsidiaryId = input.subsidiaryId === undefined ? org.subsidiaryId : input.subsidiaryId;
   const documentId = randomUUID();
   const stubId = randomUUID();
   const lineId = randomUUID();
@@ -92,7 +96,7 @@ async function addCommittedRemittanceAccrual(
        updated_by)
     values
       (${documentId}, ${org.orgId}, 'pay_run', ${`REM-${documentId.slice(0, 8)}`},
-       ${org.subsidiaryId}, ${input.payDate}, ${input.payDate}, ${org.periodId},
+       ${runSubsidiaryId}, ${input.payDate}, ${input.payDate}, ${org.periodId},
        'CAD', 'draft', 'Remittance race source', ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into pay_runs
@@ -857,6 +861,55 @@ test(
         }),
         /already exists/,
       );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a group with unattributed payroll refuses billing until it is attributed",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-15", amount: "10.00",
+      });
+      // A run document with no subsidiary: its accrual stays in the
+      // consolidated group only, alongside the attributed slice above.
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-20", amount: "5.00", subsidiaryId: null,
+      });
+      const groups = await payrollRemittanceSummary(fixture.org.orgId, {
+        from: "2026-01-01", to: "2026-01-31",
+      });
+      const group = groups.find((candidate) => candidate.partyId === fixture.org.vendorId)!;
+      assert.equal(group.hasEntitylessAccruals, true);
+      assert.equal(group.slices.length, 1);
+      // Neither the auto-resolved call nor the named-slice call may bill a
+      // partial period as if it were whole.
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        }),
+        /no legal entity/,
+      );
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+          subsidiaryId: fixture.org.subsidiaryId,
+        }),
+        /no legal entity/,
+      );
+      const bills = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from documents
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
+           and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
+           and status <> 'voided'
+      `)).rows[0]!;
+      assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
     }
