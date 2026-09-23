@@ -577,6 +577,125 @@ test("dispatch gate: block refuses by name, warn records a warned event", { skip
   });
 });
 
+test("dispatch gate resolves the employment effective on the assignment date", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    // One party, two sequential employments: A answers 2020–2023, B from 2023 on.
+    const partyId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${partyId}, ${h.org.orgId}, 'person', 'Sequential Hand', true, '{}'::jsonb)
+    `);
+    const seedEmployment = async (from: string, to: string | null): Promise<string> => {
+      const employmentId = randomUUID();
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${h.org.orgId}, ${partyId}, ${h.org.subsidiaryId}, 1)
+      `);
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+        values (${h.org.orgId}, ${employmentId}, 1, 'active', ${from}::date, ${to}::date, now())
+      `);
+      return employmentId;
+    };
+    const employmentA = await seedEmployment("2020-01-01", "2023-01-01");
+    const employmentB = await seedEmployment("2023-01-01", null);
+    const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
+    const projectId = await seedProject(h.org.orgId, "Sequential Tower");
+    const resourceId = await seedResource(h.org.orgId, projectId, partyId, "Sequential Hand");
+    await setRequirement(db, {
+      orgId: h.org.orgId, actorId: h.adminId, subjectKind: "project", subjectId: projectId, typeId, severity: "block",
+      requiredFrom: "2020-01-01",
+    });
+    // Only A holds a verified in-force credential.
+    const q = await recordQualification(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: employmentA,
+      typeId, issuedOn: "2021-06-01", expiresOn: "2030-01-01",
+    });
+    await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
+    // On a 2022 date the gate answers for A (pass); on a 2024 date for B
+    // (blocked, missing). Gating the newest row regardless of date — the
+    // old behavior — blocks both.
+    const past = await gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId, on: "2022-06-01" });
+    assert.equal(past.gated, true);
+    assert.equal(past.employmentId, employmentA);
+    assert.equal(past.verdict.ok, true);
+    const present = await gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId, on: "2024-06-01" });
+    assert.equal(present.gated, true);
+    assert.equal(present.employmentId, employmentB);
+    assert.equal(present.verdict.ok, false);
+  });
+});
+
+test("dispatch gate refuses ambiguous employments and wrong-entity rows by name", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    // One root subsidiary per org (subsidiaries_org_root): the extra
+    // entities hang under it as children.
+    const otherSubsidiary = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${otherSubsidiary}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+    `);
+    const partyId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${partyId}, ${h.org.orgId}, 'person', 'Dual Hand', true, '{}'::jsonb)
+    `);
+    const seedEmployment = async (subsidiaryId: string): Promise<string> => {
+      const employmentId = randomUUID();
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${employmentId}, ${h.org.orgId}, ${partyId}, ${subsidiaryId}, 1)
+      `);
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
+        values (${h.org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
+      `);
+      return employmentId;
+    };
+    const homeEmployment1 = await seedEmployment(h.org.subsidiaryId);
+    const homeEmployment2 = await seedEmployment(h.org.subsidiaryId);
+    const westEmployment = await seedEmployment(otherSubsidiary);
+    void homeEmployment1;
+    void homeEmployment2;
+    // A project owned by the home entity sees two effective rows there:
+    // ambiguity refuses rather than gating either row silently.
+    const homeProject = await seedProject(h.org.orgId, "Home Tower");
+    await db.execute(sql`update projects set subsidiary_id = ${h.org.subsidiaryId} where id = ${homeProject}`);
+    const homeResource = await seedResource(h.org.orgId, homeProject, partyId, "Dual Hand");
+    await assert.rejects(
+      gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: homeResource, on: "2024-06-01" }),
+      /resolves to 2 employments/,
+    );
+    // A project owned by the west entity gates exactly the west row.
+    const westProject = await seedProject(h.org.orgId, "West Tower");
+    await db.execute(sql`update projects set subsidiary_id = ${otherSubsidiary} where id = ${westProject}`);
+    const westResource = await seedResource(h.org.orgId, westProject, partyId, "Dual Hand");
+    const west = await gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: westResource, on: "2024-06-01" });
+    assert.equal(west.employmentId, westEmployment);
+    // A project owned by an entity where the party holds NOTHING refuses
+    // with the entity named, instead of gating a foreign row.
+    const nowhereSubsidiary = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${nowhereSubsidiary}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'North Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+    `);
+    const nowhereProject = await seedProject(h.org.orgId, "Nowhere Tower");
+    await db.execute(sql`update projects set subsidiary_id = ${nowhereSubsidiary} where id = ${nowhereProject}`);
+    const nowhereResource = await seedResource(h.org.orgId, nowhereProject, partyId, "Dual Hand");
+    await assert.rejects(
+      gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: nowhereResource, on: "2024-06-01" }),
+      /no employment in the project's legal entity/,
+    );
+    // A project with no entity sees all three rows: still ambiguous.
+    const plainProject = await seedProject(h.org.orgId, "Plain Tower");
+    const plainResource = await seedResource(h.org.orgId, plainProject, partyId, "Dual Hand");
+    await assert.rejects(
+      gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: plainResource, on: "2024-06-01" }),
+      /resolves to 3 employments/,
+    );
+  });
+});
+
 test("dispatch gate: feature-off never calls the gate, resourceless rows pass through", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Bypass Hand");

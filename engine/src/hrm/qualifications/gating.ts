@@ -346,13 +346,59 @@ export async function gateScheduleAssignment(
   }
   if (!resource.party_id) return { ...passThrough, resourceName: resource.name };
   const on = input.on ? requireDate(input.on, "on") : await businessToday(orgId);
-  const employment = (await exec.execute<{ id: string }>(sql`
-    select id::text as id from worker_employments
-     where org_id = ${orgId}::uuid and worker_party_id = ${resource.party_id}::uuid
-     order by created_at desc limit 1
-  `)).rows[0];
-  if (!employment) return { ...passThrough, resourceName: resource.name };
   const projectId = resource.project_id;
+  // The project's legal entity, where the project names one: dispatch
+  // gates the employment IN that entity, never a same person's row
+  // elsewhere. A dangling project reference refuses instead of gating
+  // a phantom subject with zero requirements (which always passes).
+  let projectSubsidiaryId: string | null = null;
+  if (projectId) {
+    const project = (await exec.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id::text as subsidiary_id from projects
+       where org_id = ${orgId}::uuid and id = ${projectId}::uuid
+    `)).rows[0];
+    if (!project) {
+      throw new HrmQualificationError(
+        `The schedule resource "${resource.name}" names a project that is not visible in this organization — refresh the board and assign again.`,
+      );
+    }
+    projectSubsidiaryId = project.subsidiary_id;
+  }
+  // A party can hold several employments (no unique party key, and
+  // effective-dated versions): gate the ONE effective on the assignment
+  // date — in the project's legal entity where applicable. Zero
+  // effective rows means no person to gate (as before); several means
+  // the gate cannot know which record's credentials answer, so it
+  // refuses by name instead of silently gating the newest row.
+  const effective = (await exec.execute<{ id: string; employer_subsidiary_id: string }>(sql`
+    select e.id::text as id, e.employer_subsidiary_id::text as employer_subsidiary_id
+      from worker_employments e
+     where e.org_id = ${orgId}::uuid
+       and e.worker_party_id = ${resource.party_id}::uuid
+       and exists (
+         select 1 from worker_employment_versions v
+          where v.org_id = e.org_id and v.employment_id = e.id
+            and v.recorded_until is null
+            and v.effective_from <= ${on}::date
+            and (v.effective_to is null or v.effective_to > ${on}::date)
+       )
+  `)).rows;
+  if (effective.length === 0) return { ...passThrough, resourceName: resource.name };
+  let candidates = effective;
+  if (projectSubsidiaryId) {
+    candidates = effective.filter((e) => e.employer_subsidiary_id === projectSubsidiaryId);
+    if (candidates.length === 0) {
+      throw new HrmQualificationError(
+        `Resource "${resource.name}" holds no employment in the project's legal entity — assign a resource employed there, or record the worker's employment in that entity first, then assign again.`,
+      );
+    }
+  }
+  if (candidates.length > 1) {
+    throw new HrmQualificationError(
+      `Resource "${resource.name}" resolves to ${candidates.length} employments effective on ${on} — close or transfer the duplicates so exactly one employment answers for that date, then assign again.`,
+    );
+  }
+  const employment = candidates[0]!;
   if (!projectId) return { ...passThrough, employmentId: employment.id, resourceName: resource.name };
   if (input.gate) {
     const verdict = await input.gate(exec, {
