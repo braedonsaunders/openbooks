@@ -1424,6 +1424,24 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "IF NOT EXISTS and its backfill NULL-guarded. Reapply, not restamp: the revision "
       + "adds real schema the old state lacks.",
   },
+  {
+    filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
+    from: "65164ea1ba89df3dde63064a76bf931f3704ca0c8c802368247858d26d2f2c37",
+    to: "5589a8b5b31dfcabd8ccd74ce4d5d6eeca95b141844b6282bfdda4b6ce45f62b",
+    strategy: "reapply",
+    reason:
+      "corrective revision U1 (payroll-remittance shard): legacy markers are "
+      + "unconstrained jsonb, and the backfill's shape regexes admit values the casts "
+      + "reject (an impossible calendar date, a 36-dash non-uuid), aborting the whole "
+      + "upgrade with a bare conversion error. The revision adds a marker precheck "
+      + "that refuses first, naming each bill and field, and makes every statement "
+      + "idempotent against the picked revision (IF NOT EXISTS DDL, a guarded "
+      + "constraint add, DROP-then-CREATE trigger and policy, an anti-joined "
+      + "backfill). A database recorded at 65164ea1 that re-runs the current body "
+      + "converges idempotently; a database whose 0296 failed on a malformed marker "
+      + "retries against the named precheck. Reapply, not restamp: the revision "
+      + "adds a real guard the old state lacks.",
+  },
 ];
 
 async function executeTrackedMigration(
