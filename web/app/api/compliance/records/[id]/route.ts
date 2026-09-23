@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { getAuthz, can } from '@/lib/authz'
+import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -125,7 +125,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     let savedRevision = expectedRevision
     const outcome = await db.transaction(async (tx) => {
       const locked = (await tx.execute<Record<string, unknown>>(sql`
-        select id, status, party_id, requirement_id, supersedes_id, revision, verified_revision,
+        select id, status, party_id, project_id, requirement_id, supersedes_id, revision, verified_revision,
                created_by, effective_from, expires_on,
                coverage_amount, aggregate_amount, coverage_currency, additional_insured,
                waiver_of_subrogation, primary_noncontributory, issuer_name, policy_number
@@ -134,6 +134,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       `))
       const record = locked.rows[0]
       if (!record) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      // Subsidiary fence runs before every lifecycle and concurrency check:
+      // a hidden record reads as 404 no matter which revision or action the
+      // caller names, so the refusal never oracles what it cannot see.
+      const fencedParty = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${record['party_id']}
+      `)).rows[0]
+      if (!fencedParty) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      const fencedPartyDenied = guardSubsidiaryScope(authz, fencedParty.subsidiaryId, { orgWideNull: true })
+      if (fencedPartyDenied) return fencedPartyDenied
+      if (record['project_id'] !== null && record['project_id'] !== undefined) {
+        const fencedProject = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+          select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${record['project_id']}
+        `)).rows[0]
+        if (!fencedProject) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        const fencedProjectDenied = guardSubsidiaryScope(authz, fencedProject.subsidiaryId, { orgWideNull: true })
+        if (fencedProjectDenied) return fencedProjectDenied
+      }
       if (record.status === 'superseded') {
         return NextResponse.json({ error: 'a superseded certificate is history and cannot be changed' }, { status: 422 })
       }
