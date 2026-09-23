@@ -25,8 +25,12 @@ registerHooks({
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__complianceRecordBoundState;
-          return { user: { orgId: s.orgId, id: s.actorId } };
+          return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
         }
+        // Subsidiary fencing is covered by the dedicated scope tests with a
+        // restricted fence; this double stays unrestricted so the bounds
+        // tests keep testing bounds.
+        export function guardSubsidiaryScope() { return null };
       `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);

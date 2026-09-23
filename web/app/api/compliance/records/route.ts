@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -112,6 +112,23 @@ export async function POST(req: Request) {
   // malformed id with a named 400 before any write is attempted.
   if (body.projectId !== undefined && body.projectId !== null && body.projectId !== '' && !isUuid(body.projectId)) {
     return NextResponse.json({ error: 'projectId must be a valid project id' }, { status: 400 })
+  }
+  // Subsidiary fence: evidence cannot be filed for a vendor — or under a
+  // project — the caller cannot see. Missing and hidden both read as 404,
+  // so the refusal never oracles which ids exist elsewhere.
+  const partyScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
+  `)).rows[0]
+  if (!partyScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const partyDenied = guardSubsidiaryScope(gate, partyScope.subsidiaryId, { orgWideNull: true })
+  if (partyDenied) return partyDenied
+  if (body.projectId !== undefined && body.projectId !== null && body.projectId !== '') {
+    const projectScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
+    `)).rows[0]
+    if (!projectScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const projectDenied = guardSubsidiaryScope(gate, projectScope.subsidiaryId, { orgWideNull: true })
+    if (projectDenied) return projectDenied
   }
   // A renewal names the certificate it replaces. Name a certificate that is
   // not this vendor's, not this requirement's, or already history, and the
