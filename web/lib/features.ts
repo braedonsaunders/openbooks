@@ -5,7 +5,11 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 import { dataDependentFeatureDefault } from '@openbooks/engine/src/organization/feature-defaults.ts'
+import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
+// One source defines the fence identity: the engine module below. This
+// switchboard re-exports its key so every importer keeps working.
+export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
 /** Load the org's feature state (raw overrides; combine with featureEnabled). */
 export async function orgFeatureState(orgId: string, executor: SqlExecutor = db): Promise<FeatureState> {
@@ -393,25 +397,16 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
 // applied. Transaction-scoped like every advisory lock in this codebase.
 
 /**
- * Stable fence identity for one org's feature switchboard. Engine creators
- * take the same lock through `acquireOrgFeatureGateLock` in
- * `engine/src/organization/org-feature-lock.ts`, which must hash this
- * identical string — a key-parity test in the construction route fence
- * suite guards the equality.
- */
-export function featureGateLockKey(orgId: string): string {
-  return `openbooks:feature-gate:${orgId}`
-}
-
-/**
  * Acquire the org's feature-gate fence. The lock is transaction-scoped, so it
  * MUST be taken on the writer's transaction connection: inside
  * `withOrgTransaction` the default `db` routes to the pinned transaction,
  * otherwise pass that transaction's executor explicitly (on a pooled
  * autocommit connection the lock would release instantly and fence nothing).
+ * This is the web-shaped alias (org first, pool default) over the single
+ * engine implementation, so the disable path and every creator hash one key.
  */
 export async function acquireFeatureGateLock(orgId: string, runner: SqlExecutor = db): Promise<void> {
-  await runner.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
+  await acquireOrgFeatureGateLock(runner, orgId)
 }
 
 /** Whether a single feature is hard-blocked from being disabled (PUT-route guard). */
