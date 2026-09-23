@@ -811,6 +811,38 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
   }
 });
 
+test("derived average rate counts one quote per date when both directions quote the same day", { skip: !DB }, async () => {
+  // Consolidation-level cover for the period-average dedupe: two direct
+  // EUR→CAD observations plus the reciprocal CAD→EUR quote on Jul 20. The
+  // persisted average_rate must be (0.64 + 0.68) / 2 = 0.66 — not the
+  // triple-counted (0.64 + 0.68 + 0.68) / 3 = 0.6666666667.
+  const org = await createScratchOrg();
+  try {
+    const eurSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values
+        (${eurSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Euro Co', 'EUR', 'DE', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values
+        (${org.orgId}, 'EUR', 'CAD', '2026-07-10', 'spot', '0.6400000000'),
+        (${org.orgId}, 'EUR', 'CAD', '2026-07-20', 'spot', '0.6800000000'),
+        (${org.orgId}, 'CAD', 'EUR', '2026-07-20', 'spot', '1.4705882353')`);
+    const written = await withOrgTransaction(org.orgId, () =>
+      deriveConsolidatedRates(org.orgId, org.periodId),
+    );
+    assert.equal(written, 1);
+    const rows = (await db.execute<{ from_currency: string; average_rate: string }>(sql`
+      select from_currency, average_rate::text as average_rate from consolidated_fx_rates
+       where org_id = ${org.orgId} and period_id = ${org.periodId}`));
+    assert.deepEqual(rows.rows, [{ from_currency: "EUR", average_rate: "0.6600000000" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("auto-elimination aggregates only the destination book's own activity", { skip: !DB }, async () => {
   // Regression (fnd_mt9f3f3d_i49xeh): with identical +100/-100 intercompany
   // activity in a primary AND a secondary book, the primary-book adjustment
