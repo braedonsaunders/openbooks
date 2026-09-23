@@ -24,7 +24,8 @@ export * from './rate-adjustment-pricing'
  * so a card and its surcharges can never disagree about which agreement is in
  * force.
  */
-export async function resolveRateAdjustments(input: {
+/** Where-and-when an adjustment lookup applies. */
+export interface RateAdjustmentScope {
   orgId: string
   projectId: string
   onDate: string
@@ -33,13 +34,24 @@ export async function resolveRateAdjustments(input: {
   departmentId?: string | null
   locationId?: string | null
   classId?: string | null
-}): Promise<ResolvedAdjustment[]> {
+}
+
+/** The card version behind a lookup, so callers can split work by the
+ * effective window each slice priced under. */
+export interface RateAdjustmentWindow {
+  versionId: string | null
+  effectiveFrom: string | null
+  effectiveTo: string | null
+  adjustments: ResolvedAdjustment[]
+}
+
+export async function resolveRateAdjustmentWindow(input: RateAdjustmentScope): Promise<RateAdjustmentWindow> {
   const context = (await db.execute<{ customer_id: string | null; starts_on: string | null; subsidiary_id: string | null }>(sql`
     select p.customer_id, p.starts_on, p.subsidiary_id
       from projects p where p.id = ${input.projectId} and p.org_id = ${input.orgId}
   `))
   const ctx = context.rows[0]
-  if (!ctx) return []
+  if (!ctx) return { versionId: null, effectiveFrom: null, effectiveTo: null, adjustments: [] }
   const projectStart = ctx.starts_on ?? input.onDate
 
   // The first candidate card that actually carries adjustments wins. A card
@@ -109,17 +121,19 @@ export async function resolveRateAdjustments(input: {
     select a.id, a.code, a.name, a.category, a.calculation, a.value::text, a.unit, a.presentation,
            a.threshold::text, a.item_id, a.applies_regular, a.applies_overtime,
            a.applies_double_time, a.sort_order,
+           a.version_id, v.effective_from::text as version_from, v.effective_to::text as version_to,
            coalesce((select jsonb_agg(jsonb_build_object(
                        'targetType', t.target_type, 'targetValueId', t.target_value_id,
                        'targetValueText', t.target_value_text))
                        from labor_rate_adjustment_targets t where t.adjustment_id = a.id and t.org_id = a.org_id), '[]'::jsonb) as targets
       from labor_rate_adjustments a
       join ranked r on r.version_id = a.version_id and r.rn = 1
+      join item_rate_versions v on v.id = r.version_id and v.org_id = ${input.orgId}
      where a.org_id = ${input.orgId} and a.is_active
      order by a.sort_order, a.code
   `))
 
-  return rows.rows.map((r) => ({
+  const adjustments = rows.rows.map((r) => ({
     id: String(r.id),
     code: String(r.code),
     name: String(r.name),
@@ -136,6 +150,17 @@ export async function resolveRateAdjustments(input: {
     sortOrder: Number(r.sort_order ?? 0),
     targets: (r.targets as AdjustmentTarget[]) ?? [],
   }))
+  const first = rows.rows[0]
+  return {
+    versionId: first ? String(first.version_id) : null,
+    effectiveFrom: (first?.version_from as string | null) ?? null,
+    effectiveTo: (first?.version_to as string | null) ?? null,
+    adjustments,
+  }
+}
+
+export async function resolveRateAdjustments(input: RateAdjustmentScope): Promise<ResolvedAdjustment[]> {
+  return (await resolveRateAdjustmentWindow(input)).adjustments
 }
 /**
  * A customer that HOLDS rate cards covering this work but has none in effect on
@@ -143,18 +168,12 @@ export async function resolveRateAdjustments(input: {
  * markup would bill as nothing and understate the invoice with no trace. A
  * customer with no cards at all simply has no terms, which is not a problem.
  */
-export async function findLapsedRateCard(input: {
-  orgId: string
-  projectId: string
-  onDate: string
-  /** A lapse is per DEPARTMENT: a customer's electrical card covering the date
-   *  says nothing about whether their mechanical card has run out. Location
-   *  and class scope the same way: a location-A card running out must lapse
-   *  A's work, never the unscoped work. */
-  departmentId?: string | null
-  locationId?: string | null
-  classId?: string | null
-}): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
+/**
+ * A lapse is per partition: a customer's electrical card covering the date
+ * says nothing about whether their mechanical card has run out, and a
+ * location-A card running out lapses A's work, never the unscoped work.
+ */
+export async function findLapsedRateCard(input: RateAdjustmentScope): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
   const r = (await db.execute<{ customer_id: string; last_effective_to: string | null }>(sql`
     with context as (
       select p.id as project_id, p.customer_id, p.starts_on, p.subsidiary_id
@@ -213,10 +232,44 @@ export async function findLapsedRateCard(input: {
               ))
        )
     ),
+    -- Successive cards share one customer: an expired August book must not
+    -- win the tie-break over the September book that actually covers the
+    -- date, or live work falsely lapses. A covering book always outranks a
+    -- non-covering one; among equals the usual precedence applies.
+    covered as (
+      select s.*,
+             exists (
+               select 1
+                 from item_rate_versions v
+                where v.rate_book_id = s.rate_book_id
+                  and v.org_id = ${input.orgId} and v.status = 'active'
+                  and (s.rate_version_id is null or v.id = s.rate_version_id)
+                  and v.effective_from <= ${input.onDate}::date
+                  and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)
+                  and exists (
+                    select 1 from labor_rate_adjustments x
+                     where x.version_id = v.id and x.org_id = v.org_id and x.is_active
+                       and x.presentation = 'separate' and x.value > 0
+                  )
+                  and (s.priority = 1
+                    or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id and vs.org_id = v.org_id)
+                    or exists (
+                      select 1 from labor_rate_version_scopes s
+                       where s.version_id = v.id and s.org_id = v.org_id
+                         and ${versionScopePredicate(input.orgId, {
+                           departmentId: input.departmentId,
+                           subsidiaryId: sql`(select subsidiary_id from context)`,
+                           locationId: input.locationId,
+                           classId: input.classId,
+                         })}
+                    ))
+             ) as covers
+        from candidates s
+    ),
     selected as (
       select *
-        from candidates
-       order by priority, dimension_specificity desc, assigned_from desc nulls last, rate_book_id
+        from covered
+       order by covers desc, priority, dimension_specificity desc, assigned_from desc nulls last, rate_book_id
        limit 1
     ),
     coverage as (
