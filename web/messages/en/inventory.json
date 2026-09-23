@@ -161,6 +161,7 @@
     "description": "Physical inventory over stock counts — snapshot, count, review, then post variances through inventory adjustments.",
     "newButton": "New count",
     "empty": "No counts yet. Open one to snapshot on-hand and start counting.",
+    "emptyViewer": "No counts yet. Counts are opened by someone with inventory posting access — ask them to open the first count.",
     "failed": "Stock count request failed",
     "created": "Count opened",
     "creating": "Opening…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "Line {line}: choose a stock location.",
     "noStockLocations": "This location has no stock locations yet.",
     "manageStockLocations": "Set up stock locations",
+    "needsCosting": "{count, plural, one {# active item has} other {# active items have}} no Item Costing profile and cannot be counted yet. Add the profile on the item record.",
+    "openItems": "Open items",
+    "needsCostingNoGrant": "You need item-management access to add costing profiles.",
       "lines": "Lines to count",
       "addLine": "Add line",
       "removeLine": "Remove"

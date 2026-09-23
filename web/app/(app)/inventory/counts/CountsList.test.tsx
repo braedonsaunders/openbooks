@@ -111,6 +111,8 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     lots: [],
     canPost: true,
     canManageStockLocations: true,
+    canManageItems: true,
+    itemsExcludedCount: 0,
     createRequested: true,
     ...overrides,
   }
@@ -248,4 +250,65 @@ test('without setup permission the empty state has no setup link', async (t) => 
     null,
     'readers without setup permission must not get a setup link',
   )
+})
+
+test('excluded items name the Item Costing prerequisite with a link', async (t) => {
+  await mountCounts(
+    t,
+    baseProps({ items: [], itemsExcludedCount: 2, canManageItems: true }),
+  )
+  await tick()
+  const body = document.body.textContent ?? ''
+  assert.match(
+    body,
+    /2 active items have no Item Costing profile/,
+    'the picker must say why items are missing instead of a bare "No matches"',
+  )
+  const itemsLink = document.querySelector('a[href="/items"]')
+  assert.ok(itemsLink, 'item managers must get the items link')
+  assert.match(itemsLink.textContent ?? '', /Open items/, 'the link must name its remedy')
+})
+
+test('without item permission the costing note names the grant', async (t) => {
+  await mountCounts(
+    t,
+    baseProps({ items: [], itemsExcludedCount: 1, canManageItems: false }),
+  )
+  await tick()
+  const body = document.body.textContent ?? ''
+  assert.match(body, /1 active item has no Item Costing profile/, 'the prerequisite must still be named')
+  assert.equal(document.querySelector('a[href="/items"]'), null, 'readers without item access must not get the link')
+  assert.match(body, /item-management access/, 'the copy must name the grant needed')
+})
+
+test('no exclusions means no costing note', async (t) => {
+  await mountCounts(t, baseProps({ itemsExcludedCount: 0 }))
+  await tick()
+  const body = document.body.textContent ?? ''
+  assert.doesNotMatch(body, /Item Costing profile/, 'a fully-profiled tenant must see no prerequisite')
+})
+
+test('a viewer without posting access hears the grant in the empty state', async (t) => {
+  await mountCounts(
+    t,
+    baseProps({ canPost: false, createRequested: false }),
+  )
+  await tick()
+  const body = document.body.textContent ?? ''
+  assert.doesNotMatch(body, /Open one to snapshot/, 'viewers must not be told to open what they cannot open')
+  assert.match(
+    body,
+    /inventory posting access/,
+    'the viewer empty state must name the grant that opens counts',
+  )
+})
+
+test('a poster keeps the actionable empty state', async (t) => {
+  await mountCounts(
+    t,
+    baseProps({ canPost: true, createRequested: false }),
+  )
+  await tick()
+  const body = document.body.textContent ?? ''
+  assert.match(body, /Open one to snapshot/, 'posters keep the actionable empty copy')
 })

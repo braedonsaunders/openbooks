@@ -101,6 +101,16 @@ export default async function Inventory({
           select id, code, location_id as "locationId" from stock_locations where org_id = ${orgId} and is_active order by code`),
         db.execute<{ id: string; item_id: string; lot_number: string }>(sql`
           select id, item_id, lot_number from lots where org_id = ${orgId} order by lot_number`),
+        // Active items the count picker cannot offer: without an Item
+        // Costing profile they are excluded from every item list on this
+        // page, so the picker names the prerequisite instead of "No matches".
+        db.execute<{ excluded: number }>(sql`
+          select count(*)::int as "excluded" from items it
+           where it.org_id = ${orgId} and it.is_active
+             and not exists (
+               select 1 from item_inventory_profiles p
+                where p.item_id = it.id and p.org_id = it.org_id
+             )`),
       ])
     : null
 
@@ -192,6 +202,8 @@ export default async function Inventory({
           lots={countData[5].rows}
           canPost={canPost}
           canManageStockLocations={canSetup}
+          canManageItems={canManage}
+          itemsExcludedCount={countData[6].rows[0]?.excluded ?? 0}
           createRequested={pickString(sp.count) === 'new'}
           selectedCountId={pickString(sp.countId)}
         />

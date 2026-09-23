@@ -161,6 +161,7 @@
     "description": "Inventario físico mediante conteos — fotografía existencias, cuenta, revisa y contabiliza las diferencias como ajustes de inventario.",
     "newButton": "Nuevo conteo",
     "empty": "Aún no hay conteos. Abre uno para fotografiar existencias y empezar a contar.",
+    "emptyViewer": "Aún no hay conteos. Los conteos los abre alguien con acceso de contabilización de inventario; pídale que abra el primero.",
     "failed": "Error en la solicitud de conteo",
     "created": "Conteo abierto",
     "creating": "Abriendo…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "Línea {line}: elige una ubicación de stock.",
     "noStockLocations": "Esta ubicación aún no tiene ubicaciones de stock.",
     "manageStockLocations": "Configurar ubicaciones de stock",
+    "needsCosting": "{count, plural, one {# artículo activo no tiene} other {# artículos activos no tienen}} perfil de costeo y aún no se puede contar. Agregue el perfil en el registro del artículo.",
+    "openItems": "Abrir artículos",
+    "needsCostingNoGrant": "Necesita acceso de gestión de artículos para agregar perfiles de costeo.",
       "lines": "Líneas a contar",
       "addLine": "Añadir línea",
       "removeLine": "Quitar"
