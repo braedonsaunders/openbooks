@@ -161,6 +161,32 @@ test("two replicas racing one dunning notice send exactly one", { skip: !DB || !
     const [first, second] = await racePair("dunning", org.orgId, "2026-07-10");
     assert.equal(first.ok, true, `child 1 failed: ${first.error}`);
     assert.equal(second.ok, true, `child 2 failed: ${second.error}`);
+    // Queueing is not delivery: the race leaves exactly one claim row, still
+    // staged for the worker's verdict, and exactly one durable outbox row —
+    // still no double send.
+    const claimRows = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from dunning_log
+       where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
+    `)).rows[0]!.n;
+    assert.equal(claimRows, 1, "exactly one dunning_log claim row across both replicas");
+    const claims = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from dunning_log
+       where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
+         and status = 'staged'
+    `)).rows[0]!.n;
+    assert.equal(claims, 1, "exactly one staged claim across both replicas");
+    const deferred = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from scheduler_outbox
+       where org_id = ${org.orgId} and kind = 'flow_email' and subject_id = ${invoiceId}
+    `)).rows[0]!.n;
+    assert.equal(deferred, 1, "exactly one deferred letter across both replicas");
+    // The email worker's verdict is the only writer that settles the claim.
+    const claimId = (await db.execute<{ id: string }>(sql`
+      select id from dunning_log
+       where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
+    `)).rows[0]!.id;
+    const { markDunningClaimSent } = await import("../delivery/email-config.ts");
+    assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
     const notices = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from dunning_log
        where org_id = ${org.orgId} and document_id = ${invoiceId} and stage_id = ${stageId}
