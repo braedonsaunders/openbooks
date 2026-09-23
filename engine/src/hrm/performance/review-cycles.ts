@@ -127,6 +127,23 @@ function toCycleDTO(row: StoredCycle): CycleDTO {
   };
 }
 
+/**
+ * Cycle transitions act through the aggregate manage grant, so the cycle's
+ * declared scope must sit inside the actor's allowed subsidiary set — a
+ * legal-entity-restricted HR moves only the cycles they cover. An
+ * org-wide cycle (no subsidiary scope) needs an unrestricted HR: moving it
+ * touches every legal entity, including ones the actor cannot see.
+ */
+function assertCycleInScope(allowed: Set<string> | null, cycle: StoredCycle): void {
+  if (allowed === null) return;
+  const scope = mathRefusal("REFUSED", () => parseAppliesScope(cycle.appliesTo));
+  if (scope.employerSubsidiaryId === null || !allowed.has(scope.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      `review cycle ${cycle.id} is not visible in this organization and legal-entity scope — ask an HR administrator covering its legal entity to move it`,
+    );
+  }
+}
+
 async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string): Promise<StoredCycle> {
   const row = (await exec.execute<StoredCycle>(sql`
     select id,
@@ -569,8 +586,9 @@ export async function moveToCalibrating(args: {
   const cycleId = requireId("cycleId", args.cycleId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId);
+    assertCycleInScope(allowed, cycle);
     if (cycle.status !== "open") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -636,8 +654,9 @@ export async function closeCycle(args: {
   const cycleId = requireId("cycleId", args.cycleId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId);
+    assertCycleInScope(allowed, cycle);
     if (cycle.status !== "open" && cycle.status !== "calibrating") {
       throw new HrmPerformanceError(
         "BAD_STATE",
