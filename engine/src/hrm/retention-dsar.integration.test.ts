@@ -23,7 +23,7 @@ import {
   runRetentionTick,
   saveSchedule,
 } from "./documents/retention.ts";
-import { buildExport, downloadExport, listExports, requestExport } from "./documents/dsar.ts";
+import { buildExport, claimQueuedExport, downloadExport, listExports, requestExport } from "./documents/dsar.ts";
 
 /**
  * HR-19 retention + DSAR DB coverage (integration partition): the
@@ -427,5 +427,73 @@ test("DSAR exports paginate unbounded histories instead of truncating at 2000", 
     const payStubLines = (payload.payStubLines ?? []) as { stub_id: string }[];
     assert.equal(payStubLines.length, 510);
     assert.equal(new Set(payStubLines.map((l) => l.stub_id)).size, 510);
+  });
+});
+
+test("DSAR claims are durable: one worker wins and the loser cannot fail the export", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
+    // The first claim durably marks the row building with an owner + lease.
+    const ownerA = randomUUID();
+    const first = await claimQueuedExport(db, h.org.orgId, ownerA);
+    assert.ok(first);
+    assert.equal(first.id, requested.id);
+    assert.equal(first.claimedBy, ownerA);
+    const stored = (await db.execute<{ status: string; claimed_by: string; lease: string | null }>(sql`
+      select status, claimed_by, lease_expires_at::text as lease
+        from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(stored.status, "building");
+    assert.equal(stored.claimed_by, ownerA);
+    assert.ok(stored.lease);
+    // A second worker with a live lease gets nothing — before the durable
+    // claim it re-returned the same row and both workers built.
+    assert.equal(await claimQueuedExport(db, h.org.orgId, randomUUID()), null);
+    // An intruder that never held the claim can neither build nor fail it.
+    await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
+    const held = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(held.status, "building");
+    assert.equal(held.error, null);
+    // The owner builds to ready with no error.
+    await buildExport(h.org.orgId, requested.id, { owner: ownerA });
+    const ready = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(ready.status, "ready");
+    assert.equal(ready.error, null);
+    // A stale loser arriving after ready changes nothing: the winner's
+    // ready export is never flipped to failed.
+    await buildExport(h.org.orgId, requested.id, { owner: randomUUID() });
+    const settled = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(settled.status, "ready");
+    assert.equal(settled.error, null);
+  });
+});
+
+test("DSAR reclaims expired leases oldest-first", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
+    // A worker claims then crashes: the row sits building with a dead lease.
+    await claimQueuedExport(db, h.org.orgId, randomUUID());
+    await db.execute(sql`
+      update hrm_data_subject_exports
+         set lease_expires_at = now() - interval '1 hour'
+       where org_id = ${h.org.orgId} and id = ${requested.id}
+    `);
+    // The next drain reclaims it under a new owner and finishes the export.
+    const ownerC = randomUUID();
+    const recovered = await claimQueuedExport(db, h.org.orgId, ownerC);
+    assert.ok(recovered);
+    assert.equal(recovered.id, requested.id);
+    assert.equal(recovered.claimedBy, ownerC);
+    await buildExport(h.org.orgId, requested.id, { owner: ownerC });
+    const done = (await db.execute<{ status: string }>(sql`
+      select status from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(done.status, "ready");
   });
 });

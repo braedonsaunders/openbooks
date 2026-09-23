@@ -155,9 +155,11 @@ export async function loadDocumentsHome(
   const retentionRows = (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_retention_actions
      where org_id = ${authz.orgId}::uuid and executed_at is null`)).rows[0]
+  // Queued AND building: a claimed export is still pending from the
+  // operator's view — counting queued alone would hide in-flight builds.
   const exportRows = (await db.execute<{ count: string }>(sql`
     select count(*)::text as count from hrm_data_subject_exports
-     where org_id = ${authz.orgId}::uuid and status = 'queued'`)).rows[0]
+     where org_id = ${authz.orgId}::uuid and status in ('queued', 'building')`)).rows[0]
 
   const tiles: DocumentTile[] = [
     { iconKey: 'pen-line', accent: 'amber', label: t('documents.tiles.awaiting'), value: String(awaiting), tone: awaiting > 0 ? 'warning' : 'default' },

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
@@ -22,6 +23,10 @@ import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
  * requester ONLY, and marks the row ready. A module that throws is
  * recorded in scope as failed with its reason — the export stays
  * auditable instead of silently partial. delivered flips on download.
+ * The drain holds a durable per-export claim (status building + owner +
+ * lease, one atomic UPDATE) before building: only the claim owner may mark
+ * ready or failed, and a lapsed lease is reclaimable, so concurrent workers
+ * never build the same export twice and a loser can never fail the winner.
  */
 
 export const DSAR_MODULES = [
@@ -175,50 +180,137 @@ export async function listOwnExports(query: {
   return { exports: rows.map(toDTO), partyId };
 }
 
-/** Next queued export for the worker (one claim per call, oldest first). */
+/**
+ * Lease a worker holds on a claimed export: long enough for a zip build
+ * (gather + store + mark) with headroom, short enough that a crashed worker
+ * does not stall the queue — the next drain reclaims lapsed leases.
+ */
+export const DSAR_CLAIM_LEASE_SECONDS = 600;
+
+export interface ClaimedExport extends ExportRow {
+  claimedBy: string;
+}
+
+/**
+ * Claim the next queued export for the worker (one claim per call, oldest
+ * first). The claim is ONE atomic UPDATE to status='building' carrying a
+ * random owner token and a lease expiry — the transaction commits WITH the
+ * row marked, so a second worker can never claim the same export while the
+ * lease is live (it skips to the next queued row, or finds nothing).
+ * Expired leases ('building' past lease_expires_at, i.e. a worker that
+ * crashed mid-build) are reclaimed in requested_at order, so recovery needs
+ * no sweeper — the next drain picks them up.
+ */
 export async function claimQueuedExport(
   exec: SqlExecutor,
   orgId: string,
-): Promise<ExportRow | null> {
-  const row = (await exec.execute<ExportRow>(sql`
-    select id, party_id, requested_by, requested_at::text as requested_at, status,
-           file_id, scope, completed_at::text as completed_at, error
-      from hrm_data_subject_exports
-     where org_id = ${orgId} and status = 'queued'
-     order by requested_at
-     limit 1
-     for update skip locked
+  owner: string = randomUUID(),
+  leaseSeconds: number = DSAR_CLAIM_LEASE_SECONDS,
+): Promise<ClaimedExport | null> {
+  const row = (await exec.execute<ExportRow & { claimed_by: string }>(sql`
+    update hrm_data_subject_exports
+       set status = 'building', claimed_by = ${owner}, claimed_at = now(),
+           lease_expires_at = now() + make_interval(secs => ${leaseSeconds}),
+           updated_at = now()
+     where id = (
+       select id
+         from hrm_data_subject_exports
+        where org_id = ${orgId}
+          and (status = 'queued'
+               or (status = 'building'
+                   and lease_expires_at is not null
+                   and lease_expires_at < now()))
+        order by requested_at
+        limit 1
+        for update skip locked
+     )
+    returning id, party_id, requested_by, requested_at::text as requested_at, status,
+              file_id, scope, completed_at::text as completed_at, error, claimed_by
   `)).rows[0];
-  return row ?? null;
+  if (!row) return null;
+  return { ...row, claimedBy: row.claimed_by };
+}
+
+/**
+ * Claim one SPECIFIC export for a build (buildExport's self-claim): queued
+ * rows, expired leases, and re-entrant refreshes of the caller's own live
+ * claim. Anything else — a live claim owned by someone else, or a terminal
+ * row — matches zero and reports false, so the caller walks away instead of
+ * building over another worker's export.
+ */
+async function claimSpecificExport(
+  exec: SqlExecutor,
+  orgId: string,
+  exportId: string,
+  owner: string,
+  leaseSeconds: number = DSAR_CLAIM_LEASE_SECONDS,
+): Promise<boolean> {
+  const rows = (await exec.execute<{ n: string }>(sql`
+    update hrm_data_subject_exports
+       set status = 'building', claimed_by = ${owner}, claimed_at = now(),
+           lease_expires_at = now() + make_interval(secs => ${leaseSeconds}),
+           updated_at = now()
+     where org_id = ${orgId} and id = ${exportId}
+       and (status = 'queued'
+            or (status = 'building' and claimed_by = ${owner})
+            or (status = 'building'
+                and lease_expires_at is not null
+                and lease_expires_at < now()))
+    returning 1 as n
+  `)).rows;
+  return rows.length > 0;
 }
 
 async function failExport(
   exec: SqlExecutor,
   orgId: string,
   exportId: string,
+  owner: string,
   error: string,
 ): Promise<void> {
+  // Conditional on owning a live claim: a worker that lost the race (or an
+  // intruder naming an id it never claimed) matches zero rows and changes
+  // nothing — a ready/delivered export is NEVER overwritten here. Zero
+  // matches is the expected benign outcome on a lost race, not a dropped
+  // write: the caller only reaches this path for a build it owned, so when
+  // the row is no longer its building claim the winner's outcome stands.
   await exec.execute(sql`
     update hrm_data_subject_exports
        set status = 'failed', error = ${error}, completed_at = now(), updated_at = now()
      where org_id = ${orgId} and id = ${exportId}
+       and status = 'building' and claimed_by = ${owner}
   `);
 }
 
 /**
- * Build one queued export: gather every module, zip, store with a
+ * Build one queued export: claim it, gather every module, zip, store with a
  * requester-only grant, mark ready. Throws nothing — failure marks the
- * row failed with the reason.
+ * row failed with the reason, and ONLY when this call still owns the claim.
+ *
+ * The owner is the claim token from claimQueuedExport (the drain path), or
+ * a fresh self-claim for direct callers. A call that cannot claim — a live
+ * claim owned by another worker, or a terminal row — returns silently and
+ * never fails another worker's export.
  */
-export async function buildExport(orgId: string, exportId: string): Promise<void> {
+export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
+  const owner = opts?.owner ?? randomUUID();
+  const claimed = await withOrgTransaction(orgId, () =>
+    claimSpecificExport(db, orgId, exportId, owner),
+  );
+  if (!claimed) return;
   await withOrgTransaction(orgId, async () => {
-    const row = (await db.execute<ExportRow>(sql`
-      ${EXPORT_COLS} where org_id = ${orgId} and id = ${exportId}
+    const row = (await db.execute<ExportRow & { claimed_by: string | null }>(sql`
+      select id, party_id, requested_by, requested_at::text as requested_at, status,
+             file_id, scope, completed_at::text as completed_at, error, claimed_by
+        from hrm_data_subject_exports where org_id = ${orgId} and id = ${exportId}
     `)).rows[0];
     if (!row) {
       throw new HrmDocumentsError("NOT_FOUND", "export request is not visible in this organization");
     }
-    if (row.status !== "queued") return;
+    // The self-claim above just marked this row building under our owner;
+    // anything else here means the claim moved on without us — walk away
+    // rather than building over whoever holds it now.
+    if (row.status !== "building" || row.claimed_by !== owner) return;
     const partyId = row.party_id;
     const requesterId = row.requested_by;
     const included: { module: string; status: string; detail?: string }[] = [];
@@ -405,7 +497,6 @@ export async function buildExport(orgId: string, exportId: string): Promise<void
         });
       }
     });
-
     await gather("payroll", async () => {
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
@@ -471,22 +562,30 @@ export async function buildExport(orgId: string, exportId: string): Promise<void
       // through the download route, which re-checks subject-or-manage.
       viewerUserIds: [requesterId],
     });
+    // Owner-gated: only the claim that built this zip may mark it done.
+    // Zero matches means the claim lapsed mid-build and someone else took
+    // over (or finished) — their outcome stands, and the fail path below
+    // matches nothing either, so this attempt dissolves instead of failing
+    // the winner. The freshly stored zip is then unreferenced cabinet bytes
+    // under the export's folder rather than anyone's download — refused
+    // rather than orphaned into the wrong hands.
     const marked = (await db.execute<{ n: string }>(sql`
       update hrm_data_subject_exports
          set status = 'ready', file_id = ${fileId}, scope = ${JSON.stringify(included)}::jsonb,
              completed_at = now(), updated_at = now()
-       where org_id = ${orgId} and id = ${exportId} and status = 'queued'
+       where org_id = ${orgId} and id = ${exportId}
+         and status = 'building' and claimed_by = ${owner}
       returning 1
     `)).rows.length;
     if (marked === 0) {
       throw new HrmDocumentsError(
         "REFUSED",
-        "the export left the queue while building — the ready mark matched no row, so the zip is refused rather than orphaned",
+        "the export claim lapsed while building — the ready mark matched no row, so the zip is refused rather than orphaned",
       );
     }
   }).catch(async (e) => {
     await withOrgTransaction(orgId, async () => {
-      await failExport(db, orgId, exportId, describeExportError(e));
+      await failExport(db, orgId, exportId, owner, describeExportError(e));
     });
   });
 }
@@ -506,13 +605,17 @@ export function describeExportError(e: unknown): string {
   return parts.join(" | caused by ");
 }
 
-/** Drain the org's queue (worker duty hrm-dsar-exports, oldest first). */
+/**
+ * Drain the org's queue (worker duty hrm-dsar-exports, oldest first). Each
+ * iteration holds a durable claim before building, so N concurrent drains
+ * build N different exports — never the same one twice.
+ */
 export async function drainExportQueue(orgId: string, limit = 5): Promise<number> {
   let done = 0;
   for (let i = 0; i < limit; i++) {
     const claimed = await withOrgTransaction(orgId, () => claimQueuedExport(db, orgId));
     if (!claimed) break;
-    await buildExport(orgId, claimed.id);
+    await buildExport(orgId, claimed.id, { owner: claimed.claimedBy });
     done += 1;
   }
   return done;

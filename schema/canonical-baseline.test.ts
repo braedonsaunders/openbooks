@@ -525,6 +525,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // Same-scope leave policy windows overlapped and resolved arbitrarily;
     // storage now refuses a second active window per (org, type, scope).
     "0266_leave_policy_same_scope_overlap_guard.sql",
+    // The DSAR drain claimed with SELECT ... FOR UPDATE that committed
+    // without marking the row: two workers built one export and the loser
+    // failed the winner's ready row. Claims are now one atomic UPDATE to
+    // building with an owner token and a reclaimable lease; only the owner
+    // may mark ready or failed.
+    "0267_dsar_export_claim_lease.sql",
     // Script journal writes had no idempotency key: a write outliving its
     // run deadline could commit after the timeout was reported, and a retry
     // posted a second numbered journal. documents gains a nullable
