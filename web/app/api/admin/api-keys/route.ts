@@ -250,13 +250,29 @@ export async function POST(req: Request) {
   // Default to 120/min when unspecified; null = unlimited.
   const rateValue = rate === undefined ? 120 : rate;
 
+  // Strict type validation: only an ISO date string or an explicit null
+  // yields a value. Falsy impostors (0, false, "") must not coerce to a
+  // non-expiring (NULL) key — non-expiring is only via explicit null
+  // (omitted is kept as non-expiring for backward compatibility; new
+  // clients should send null). No expiry policy table exists yet, so an
+  // explicit null is currently allowed; a future policy may restrict it.
   let expiresAt: string | null = null;
-  if (body.expiresAt) {
+  if (body.expiresAt === undefined || body.expiresAt === null) {
+    expiresAt = null;
+  } else if (typeof body.expiresAt === "string") {
+    if (!body.expiresAt) {
+      return NextResponse.json({ error: "expiresAt must be an ISO date string or null" }, { status: 400 });
+    }
     const d = new Date(body.expiresAt);
     if (isNaN(d.getTime())) {
       return NextResponse.json({ error: "invalid expiresAt" }, { status: 400 });
     }
+    if (d.getTime() <= Date.now()) {
+      return NextResponse.json({ error: "expiresAt must be in the future" }, { status: 400 });
+    }
     expiresAt = d.toISOString();
+  } else {
+    return NextResponse.json({ error: "expiresAt must be an ISO date string or null" }, { status: 400 });
   }
 
   const gen = generateApiKey();
