@@ -9,6 +9,7 @@ import {
   getEmailQueue,
 } from "@openbooks/jobs";
 import { db } from "../platform/db.ts";
+import { loadEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   enqueueApprovalEscalation,
   enqueueFlowEmail,
@@ -592,18 +593,26 @@ async function removeQueueJobs(jobIds: Array<string | null>): Promise<void> {
 }
 
 test(
-  "a crashed flow-email send retries onto the same durable queue job",
+  "a lost enqueue acknowledgement keeps the staged refs and marks the send delivered",
   { skip: !DB || !process.env.OPENBOOKS_REDIS_URL },
   async () => {
     const org = await createScratchOrg();
     const runId = randomUUID();
     let createdJobId: string | null = null;
     try {
+      const attachmentBytes = Buffer.from("renewal-bytes");
       const payload = {
         to: ["victim@scratch.test"],
         subject: "Renewal reminder",
         html: "<p>Renewal reminder</p>",
         text: "Renewal reminder",
+        attachments: [
+          {
+            filename: "renewal.pdf",
+            content: attachmentBytes.toString("base64"),
+            contentType: "application/pdf",
+          },
+        ],
       };
       assert.ok(await enqueueFlowEmail({ orgId: org.orgId, runId, occurrenceKey: `${runId}:email:n1`, payload }));
       const rowId = (
@@ -613,46 +622,46 @@ test(
       createdJobId = expectedJobId;
       const asOf = new Date(Date.now() + 5_000);
 
-      // Attempt 1 performs the REAL Redis enqueue, then dies right there —
-      // before the success mark can commit.
-      let enqueuedBeforeCrash = "";
+      // Attempt 1 performs the REAL Redis enqueue, then loses the
+      // acknowledgement: the throw fires while the accepted job exists.
+      let enqueuedBeforeLostAck = "";
       await processDueSchedulerOutbox(asOf, 50, async (row) =>
         deliverFlowEmail(row, async (data, options) => {
-          enqueuedBeforeCrash = String(options?.jobId);
+          enqueuedBeforeLostAck = String(options?.jobId);
           await enqueueEmail(data, options);
-          throw new Error("simulated process death after queue enqueue");
+          throw new Error("simulated lost acknowledgement after queue enqueue");
         }),
       );
-      assert.equal(enqueuedBeforeCrash, expectedJobId);
-      assert.equal(await countQueueJob(expectedJobId), 1, "one durable send exists after the crash");
-      const crashedRow = (
-        await db.execute<{ status: string; attempt_count: number }>(sql`
-          select status, attempt_count from scheduler_outbox where id=${rowId}
-        `)
-      ).rows[0];
-      assert.equal(crashedRow!.status, "failed", "the crashed attempt is retryable");
-      assert.equal(crashedRow!.attempt_count, 1);
-
-      // Attempt 2 is ordinary processing of that failed row: the
-      // deterministic id makes BullMQ treat it as the SAME send.
-      const later = new Date(asOf.getTime() + 90_000);
-      let enqueuedOnRetry = "";
-      await processDueSchedulerOutbox(later, 50, async (row) =>
-        deliverFlowEmail(row, async (data, options) => {
-          enqueuedOnRetry = String(options?.jobId);
-          return enqueueEmail(data, options);
-        }),
-      );
-      assert.equal(enqueuedOnRetry, expectedJobId, "the retry derives the same job id from the row");
-
+      assert.equal(enqueuedBeforeLostAck, expectedJobId);
+      assert.equal(await countQueueJob(expectedJobId), 1, "one durable send exists after the lost acknowledgement");
+      // The settlement found the accepted job, so the row is delivered on
+      // attempt 1 — not failed for retry.
       const delivered = (
         await db.execute<{ status: string; attempt_count: number }>(sql`
           select status, attempt_count from scheduler_outbox where id=${rowId}
         `)
       ).rows[0];
       assert.equal(delivered!.status, "succeeded");
-      assert.equal(delivered!.attempt_count, 2);
-      assert.equal(await countQueueJob(expectedJobId), 1, "no duplicate send may exist on retry");
+      assert.equal(delivered!.attempt_count, 1);
+      // And the staged refs the accepted job carries are still readable —
+      // the queued worker fetches these bytes at send time instead of
+      // refusing a truncated message.
+      const queued = await getEmailQueue().getJob(expectedJobId);
+      assert.ok(queued, "the accepted job is still queued");
+      const loaded = await loadEmailAttachments(queued.data.attachments);
+      assert.deepEqual(loaded, [
+        {
+          filename: "renewal.pdf",
+          contentType: "application/pdf",
+          content: attachmentBytes.toString("base64"),
+        },
+      ]);
+
+      // A later tick has nothing to retry and mints no duplicate send.
+      const later = new Date(asOf.getTime() + 90_000);
+      const again = await processDueSchedulerOutbox(later, 50);
+      assert.deepEqual(again, { processed: 0, succeeded: 0, failed: 0, fenced: 0 });
+      assert.equal(await countQueueJob(expectedJobId), 1, "no duplicate send may exist after the lost acknowledgement");
     } finally {
       try {
         await removeQueueJobs([createdJobId]);

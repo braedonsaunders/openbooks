@@ -3,7 +3,11 @@ import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
 import { deriveEmailDeliveryKey, isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
-import { deleteStoredEmailAttachments, storeEmailAttachments } from "./email-attachments.ts";
+import { storeEmailAttachments } from "./email-attachments.ts";
+import {
+  settleStagedAttachmentsAfterEnqueueError,
+  type EmailQueuedJobProbe,
+} from "./email-enqueue-settlement.ts";
 import { getEmailQueue } from "@openbooks/jobs";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
@@ -496,6 +500,7 @@ async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
 export async function dispatchReportDeliveries(
   enqueue: (data: EnqueueEmailData, options: { jobId: string }) => Promise<unknown> = enqueueEmail,
   now = new Date(),
+  deps: { probeQueuedJob?: EmailQueuedJobProbe } = {},
 ): Promise<number> {
   // Crash-rebuild first: deliveries whose email job died after the 'enqueued'
   // mark — or after the 'sending' mark — would otherwise sit outside the
@@ -531,22 +536,36 @@ export async function dispatchReportDeliveries(
     const attachments = await storeEmailAttachments([
       { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
     ]);
+    const emailData = {
+      orgId: row.org_id,
+      to: row.recipient,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      attachments,
+      meta: { category: "report", reportRunId: row.run_id, reportDeliveryId: row.id },
+    };
     try {
-      await enqueue({
-        orgId: row.org_id,
-        to: row.recipient,
-        subject: mail.subject,
-        html: mail.html,
-        text: mail.text,
-        attachments,
-        meta: { category: "report", reportRunId: row.run_id, reportDeliveryId: row.id },
-      }, { jobId });
+      await enqueue(emailData, { jobId });
     } catch (error) {
-      // The staged bytes belong to this attempt alone: a failed handoff
-      // must delete the refs it just staged (each staged under a fresh
-      // random id), or every dispatch retry orphans another set of blobs.
-      await deleteStoredEmailAttachments(attachments);
-      throw error;
+      // A Redis/BullMQ add can accept the job and then lose its reply: the
+      // job exists while this throw fires, and deleting the staged refs
+      // unconditionally would strand the queued worker with missing blobs.
+      // The settlement keeps them when the job provably exists (or when
+      // the queue cannot be reached to check) and deletes only on provable
+      // non-acceptance; on a kept job it reports success and dispatch
+      // proceeds down the normal enqueued path below.
+      const settled = await settleStagedAttachmentsAfterEnqueueError({
+        attachments,
+        data: emailData,
+        jobId,
+        error,
+        probeQueuedJob: deps.probeQueuedJob,
+      });
+      console.warn(
+        `[reports] email enqueue for delivery ${row.id} threw after queue acceptance ` +
+        `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+      );
     }
     await db.execute(sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,

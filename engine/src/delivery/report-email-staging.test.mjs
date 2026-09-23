@@ -3,12 +3,37 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // DS1: staged attachments are orphaned when the report-delivery handoff fails.
-// dispatchReportDeliveries stages the rendered PDF under a fresh random id
-// BEFORE the Redis enqueue; the stubs below stand in for staging (no S3 in
-// unit) while recording exactly which keys stay live, and for the database
-// (a canned answer queue consumed in call order).
-globalThis.__reportEmailStageTest = { queue: [], stagedCount: 0, live: new Set(), deleted: [] }
+// DS2: the DS1 catch deleted staged refs on ANY enqueue exception — but a
+// Redis/BullMQ add can accept the job and then lose its reply, so the job
+// exists while the enqueue throws, and the queued worker later refuses the
+// missing blob. dispatchReportDeliveries stages the rendered PDF under a
+// fresh random id BEFORE the Redis enqueue; the stubs below stand in for
+// staging (no S3 in unit) while recording exactly which keys stay live, and
+// for the database (a canned answer queue consumed in call order). The
+// settlement helper itself is REAL (not stubbed): its static
+// './email-attachments.ts' import is served the same tracking stub whenever
+// the importing parent is the settlement module, and its dynamic
+// '@openbooks/jobs' import reaches the real package, so the expected job
+// identities under test are the production fanout plan, not a copy.
+globalThis.__reportEmailStageTest = { queue: [], stagedCount: 0, live: new Set(), deleted: [], recorded: new Map() }
 const state = globalThis.__reportEmailStageTest
+
+const emailAttachmentsStub = `
+    export async function storeEmailAttachments(attachments) {
+      const s = globalThis.__reportEmailStageTest;
+      return (attachments ?? []).map((a) => {
+        const key = 'staged-key-' + (s.stagedCount++);
+        s.live.add(key);
+        return { filename: a.filename, contentType: a.contentType, storageKey: key };
+      });
+    }
+    export async function deleteStoredEmailAttachments(attachments) {
+      const s = globalThis.__reportEmailStageTest;
+      for (const a of attachments ?? []) {
+        if (a.storageKey) { s.live.delete(a.storageKey); s.deleted.push(a.storageKey); }
+      }
+    }
+  `
 
 const sources = {
   'drizzle-orm': `
@@ -25,22 +50,7 @@ const sources = {
     export const isValidEmailAddress = () => true;
     export const scheduledReportEmail = () => ({ subject: 's', html: '<p>x</p>', text: 'x' });
   `,
-  './email-attachments.ts': `
-    export async function storeEmailAttachments(attachments) {
-      const s = globalThis.__reportEmailStageTest;
-      return (attachments ?? []).map((a) => {
-        const key = 'staged-key-' + (s.stagedCount++);
-        s.live.add(key);
-        return { filename: a.filename, contentType: a.contentType, storageKey: key };
-      });
-    }
-    export async function deleteStoredEmailAttachments(attachments) {
-      const s = globalThis.__reportEmailStageTest;
-      for (const a of attachments ?? []) {
-        if (a.storageKey) { s.live.delete(a.storageKey); s.deleted.push(a.storageKey); }
-      }
-    }
-  `,
+  './email-attachments.ts': emailAttachmentsStub,
   '../platform/business-date.ts': `export const businessToday = async () => '2026-01-01';`,
   '../platform/db.ts': `
     export const db = { execute: async () => globalThis.__reportEmailStageTest.queue.shift() ?? { rows: [] } };
@@ -62,7 +72,11 @@ const sources = {
 }
 
 const hooks = registerHooks({ resolve(specifier, context, next) {
-  if (context.parentURL?.endsWith('/report-delivery.ts') && sources[specifier]) {
+  const parent = context.parentURL ?? ''
+  if (specifier === './email-attachments.ts' && parent.endsWith('/email-enqueue-settlement.ts')) {
+    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(emailAttachmentsStub)}` }
+  }
+  if (parent.endsWith('/report-delivery.ts') && sources[specifier]) {
     return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(sources[specifier])}` }
   }
   return next(specifier, context)
@@ -96,20 +110,65 @@ function reset() {
   state.stagedCount = 0
   state.live.clear()
   state.deleted.length = 0
+  state.recorded.clear()
 }
 
-test('a failing queue handoff deletes every ref staged in that attempt', async () => {
+// The queue-state probe the tests inject: the fake queue's recorded jobs.
+const probeQueuedJob = async (jobId) => state.recorded.get(jobId) ?? null
+
+test('provable non-acceptance: a failed handoff with no queued job deletes every ref staged in that attempt', async () => {
   reset()
   primeDb()
   await assert.rejects(
     dispatchReportDeliveries(
       async () => { throw new Error('Redis unavailable') },
       new Date(),
+      { probeQueuedJob },
     ),
     /Redis unavailable/,
   )
   assert.equal(state.live.size, 0)
   assert.equal(state.deleted.length, 1)
+})
+
+test('lost acknowledgement: an enqueue that records the job then throws keeps the blobs for the queued worker', async () => {
+  reset()
+  primeDb()
+  const dispatched = await dispatchReportDeliveries(
+    async (data, options) => {
+      // BullMQ accepted the job, then the connection dropped before the
+      // reply came back: the job exists while this throw fires.
+      state.recorded.set(options.jobId, data)
+      throw new Error('Redis connection lost after accept')
+    },
+    new Date(),
+    { probeQueuedJob },
+  )
+  // Reported as success: dispatch proceeds down the normal enqueued path.
+  assert.equal(dispatched, 1)
+  // The blobs are kept, and the recorded job's worker can still read them:
+  // every ref the recorded job carries is still live.
+  assert.equal(state.live.size, 1)
+  assert.deepEqual(state.deleted, [])
+  const recorded = state.recorded.get('report-delivery|delivery-1|0')
+  assert.ok(recorded, 'the accepted job is the deterministic generation id')
+  assert.equal(recorded.attachments.length, 1)
+  assert.ok(state.live.has(recorded.attachments[0].storageKey))
+})
+
+test('uncheckable queue: when the queue cannot be reached the blobs are kept and the error is rethrown', async () => {
+  reset()
+  primeDb()
+  await assert.rejects(
+    dispatchReportDeliveries(
+      async () => { throw new Error('Redis unavailable') },
+      new Date(),
+      { probeQueuedJob: async () => { throw new Error('cannot reach Redis for the check') } },
+    ),
+    /Redis unavailable/,
+  )
+  assert.equal(state.live.size, 1)
+  assert.deepEqual(state.deleted, [])
 })
 
 test('a successful handoff keeps the staged refs for the worker to fetch', async () => {

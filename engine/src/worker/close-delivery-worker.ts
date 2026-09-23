@@ -8,7 +8,11 @@ import {
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
-import { deleteStoredEmailAttachments, storeEmailAttachments } from "../delivery/email-attachments.ts";
+import { storeEmailAttachments } from "../delivery/email-attachments.ts";
+import {
+  settleStagedAttachmentsAfterEnqueueError,
+  type EmailQueuedJobProbe,
+} from "../delivery/email-enqueue-settlement.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
@@ -133,6 +137,7 @@ async function loadContext(data: {
  */
 export async function processCloseDeliveryJobData(
   data: CloseDeliveryJobData,
+  deps: { probeQueuedJob?: EmailQueuedJobProbe } = {},
 ): Promise<unknown> {
       const { orgId, runId } = data;
       // Queue callbacks carry no request store; the package's tenant is the
@@ -242,25 +247,36 @@ export async function processCloseDeliveryJobData(
       // worker fetches the bytes at send time instead of Redis holding
       // report contents for days.
       const attachments = await storeEmailAttachments(files);
+      const emailData = {
+        orgId,
+        to: recipients,
+        subject,
+        html,
+        text,
+        attachments,
+        meta: { category: "close-package" },
+      };
       try {
-        await enqueueEmail(
-          {
-            orgId,
-            to: recipients,
-            subject,
-            html,
-            text,
-            attachments,
-            meta: { category: "close-package" },
-          },
-          { jobId: emailIntentKey },
-        );
+        await enqueueEmail(emailData, { jobId: emailIntentKey });
       } catch (error) {
-        // The staged bytes belong to this attempt alone: a failed handoff
-        // must delete the refs it just staged (each staged under a fresh
-        // random id), or every queue retry orphans another set of blobs.
-        await deleteStoredEmailAttachments(attachments);
-        throw error;
+        // A Redis/BullMQ add can accept the job and then lose its reply:
+        // the job exists while this throw fires, and deleting the staged
+        // refs unconditionally would strand the queued worker with missing
+        // blobs. The settlement keeps them when the job provably exists
+        // (or when the queue cannot be reached to check) and deletes only
+        // on provable non-acceptance; on a kept job it reports success and
+        // delivery proceeds down the normal recorded path below.
+        const settled = await settleStagedAttachmentsAfterEnqueueError({
+          attachments,
+          data: emailData,
+          jobId: emailIntentKey,
+          error,
+          probeQueuedJob: deps.probeQueuedJob,
+        });
+        console.warn(
+          `[close-delivery] email enqueue for package ${data.packageId} threw after queue acceptance ` +
+          `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+        );
       }
 
       await db.execute(sql`

@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
 import { normalizeEmailDeliveryInput, type EmailAttachmentPayload } from "@openbooks/emails";
-import { deleteStoredEmailAttachments, storeEmailAttachments } from "../delivery/email-attachments.ts";
+import { storeEmailAttachments } from "../delivery/email-attachments.ts";
+import {
+  settleStagedAttachmentsAfterEnqueueError,
+  type EmailQueuedJobProbe,
+} from "../delivery/email-enqueue-settlement.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,
   ensureAllocationRunOutboxRows,
@@ -223,6 +227,7 @@ async function enqueueFlowEmailJob(
 export async function deliverFlowEmail(
   row: OutboxRow,
   enqueue: FlowEmailQueueEnqueuer = enqueueFlowEmailJob,
+  deps: { probeQueuedJob?: EmailQueuedJobProbe } = {},
 ): Promise<void> {
   if (!row.org_id) throw new Error("flow email is missing its organization");
   // Validate again at the boundary: a payload that cannot be delivered as
@@ -232,29 +237,44 @@ export async function deliverFlowEmail(
   // Stage attachment bytes outside the queue payload; the worker fetches
   // them at send time instead of Redis holding file contents for days.
   const attachments = await storeEmailAttachments(delivery.attachments);
+  const emailData = {
+    orgId: row.org_id,
+    to: delivery.to,
+    subject: delivery.subject,
+    html: delivery.html,
+    text: delivery.text,
+    ...(attachments.length > 0 ? { attachments } : {}),
+    ...(delivery.meta ? { meta: delivery.meta } : {}),
+    ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
+  };
+  const jobId = flowEmailJobId(row.id);
   try {
     await enqueue(
-      {
-        orgId: row.org_id,
-        to: delivery.to,
-        subject: delivery.subject,
-        html: delivery.html,
-        text: delivery.text,
-        ...(attachments.length > 0 ? { attachments } : {}),
-        ...(delivery.meta ? { meta: delivery.meta } : {}),
-        ...(delivery.replyTo ? { replyTo: delivery.replyTo } : {}),
-      },
+      emailData,
       // One stable identity per row closes the DB/Redis crash gap: if the
       // process dies between this enqueue and the PG success mark, the
       // recovered row retries onto the same job instead of a duplicate send.
-      { jobId: flowEmailJobId(row.id) },
+      { jobId },
     );
   } catch (error) {
-    // The staged bytes belong to this attempt alone: a failed handoff must
-    // delete the refs it just staged (each staged under a fresh random id),
-    // or every one of the row's retries orphans another set of blobs.
-    await deleteStoredEmailAttachments(attachments);
-    throw error;
+    // A Redis/BullMQ add can accept the job and then lose its reply: the
+    // job exists while this throw fires, and deleting the staged refs
+    // unconditionally would strand the queued worker with missing blobs.
+    // The settlement keeps them when the job provably exists (or when the
+    // queue cannot be reached to check) and deletes only on provable
+    // non-acceptance; on a kept job it reports success and the row is
+    // marked succeeded by the caller as if the handoff had not thrown.
+    const settled = await settleStagedAttachmentsAfterEnqueueError({
+      attachments,
+      data: emailData,
+      jobId,
+      error,
+      probeQueuedJob: deps.probeQueuedJob,
+    });
+    console.warn(
+      `[scheduler] flow email enqueue for outbox row ${row.id} threw after queue acceptance ` +
+      `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
+    );
   }
 }
 
