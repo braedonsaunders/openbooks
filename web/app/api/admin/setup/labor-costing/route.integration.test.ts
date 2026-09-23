@@ -247,6 +247,39 @@ test("a restricted setup actor cannot change org-wide labor costing policy", { s
   }
 });
 
+test("restricted save-rate refuses org-wide job-title, trade, and default rates before writes", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await seed();
+  try {
+    routeState.authz = {
+      user: { orgId: f.orgId, id: f.actorId },
+      permissions: new Set(["admin.setup.manage"]),
+      allowedSubsidiaryIds: new Set([f.subsidiaryId]),
+    };
+    const beforeRates = await storedRates(f.orgId);
+    const beforeAudit = Number((await db.execute(sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+
+    for (const scope of [
+      { jobTitle: "Field technician" },
+      { tradeId: "00000000-0000-7000-8000-000000000001" },
+      {},
+    ]) {
+      const response = await POST(postRequest(saveRateBody(scope)));
+      assert.equal(response.status, 403);
+      assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    }
+
+    assert.deepEqual(await storedRates(f.orgId), beforeRates);
+    const afterAudit = Number((await db.execute(sql`
+      select count(*)::int as n from audit_log where org_id = ${f.orgId} and table_name = 'labor_cost_rates'`)).rows[0]!.n);
+    assert.equal(afterAudit, beforeAudit);
+  } finally {
+    routeState.authz = null;
+    const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
 type StoredRate = {
   id: string;
   rate: string;

@@ -13,7 +13,7 @@ import { terminateConnectionSessions } from "@openbooks/engine/src/qbd/bridge.ts
 import { nextMirrorAt } from "@openbooks/engine/src/sync/mirror-schedule.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { storageIdentityError } from "../_storage-identity";
 import {
   callerOwnedConfigRefusal,
@@ -34,6 +34,8 @@ export async function PATCH(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const orgId = gate.user.orgId;
   const { id } = await params;
 
@@ -235,6 +237,8 @@ export async function DELETE(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const orgId = gate.user.orgId;
   const { id } = await params;
   const existing = await getConnection(orgId, id).catch((e) => {

@@ -6,7 +6,7 @@ import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
-import { guardPermission } from '../../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   acceptConnectionOauthState,
@@ -29,6 +29,8 @@ export const maxDuration = 60
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const url = new URL(req.url)
 
   if (url.searchParams.get('error')) return connectionOauthBounce('denied')

@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/src/sync/connection.ts'
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { storageIdentityError } from '../../_storage-identity'
 
 export const runtime = 'nodejs'
@@ -13,6 +13,8 @@ const OWNER_ID = '{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}'
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const { id } = await params
   const connection = await getConnection(gate.user.orgId, id).catch((e) => {
     if (storageIdentityError(e)) return null

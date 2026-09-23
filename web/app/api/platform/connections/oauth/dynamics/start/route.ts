@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
 import { unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
-import { guardPermission } from '../../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   attachConnectionOauthCookie,
@@ -21,6 +21,8 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const connectionId = new URL(req.url).searchParams.get('connectionId')
   if (!connectionId) return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
 
