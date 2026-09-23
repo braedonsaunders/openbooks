@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, summarize, watchListDigests, WATCH_LIST_MIGRATIONS } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -255,6 +255,34 @@ test("malformed expectFindings and a remedy hiding in steps are refused", () => 
   assert.ok(
     validateConfig(refusalConfig([hidden])).some((problem) => problem.includes("belong in the remedies array")),
   );
+});
+
+test("every summary carries the candidate SHA and the five watch-list digests", () => {
+  assert.deepEqual(WATCH_LIST_MIGRATIONS, [
+    "0293_stock_count_line_subject_unique",
+    "0294_dunning_delivery_state_machine",
+    "0296_payroll_remittance_destination_snapshot",
+    "0299_stock_count_line_counted_nonnegative",
+    "0301_item_price_schedule_versioning",
+  ]);
+  const digests = watchListDigests();
+  assert.equal(digests.length, 5);
+  for (const entry of digests) {
+    assert.match(entry.digest, /^[0-9a-f]{8}$/, `${entry.name} must resolve to a real digest on this tree, never a placeholder`);
+  }
+  const text = summarize({
+    source: "v0.1.0-alpha.23",
+    candidate: "deadbeef",
+    dataset: "perf-1m",
+    ok: true,
+    phases: [{ name: "seed", ok: true, seconds: 1 }],
+    upgrade: null,
+    refusals: [],
+  });
+  assert.match(text, /candidate: `deadbeef`/);
+  for (const entry of digests) {
+    assert.ok(text.includes(`| ${entry.name} | ${entry.digest} |`), `summary must name ${entry.name} with its digest`);
+  }
 });
 
 test("the summary lists unexpected preflight notices by code", () => {
