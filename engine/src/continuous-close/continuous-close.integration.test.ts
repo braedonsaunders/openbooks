@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
-import { runDueContinuousCloseAgents } from "./continuous-close.ts";
+import {
+  registerContinuousCloseEnricher,
+  runContinuousCloseAgent,
+  runDueContinuousCloseAgents,
+} from "./continuous-close.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
@@ -23,6 +27,29 @@ type RunRow = {
   stats: Record<string, unknown>;
   error_code: string | null;
 };
+
+/** An enabled manual accounting policy whose model analysis is switched on. */
+async function seedManualPolicy(org: ScratchOrg): Promise<void> {
+  return withBypassContext(async () => {
+    await db.execute(sql`
+      insert into ai_agent_policies
+        (id, org_id, agent_key, enabled, automatic_runs, cadence, materiality_threshold,
+         detector_settings, analysis_settings, next_run_at)
+      values (${randomUUID()}, ${org.orgId}, 'accounting', true, false, 'daily', '1000',
+              ${JSON.stringify({})}::jsonb,
+              ${JSON.stringify({ rootCauseAnalysis: true, recommendations: true, narrative: true })}::jsonb,
+              null)
+    `);
+  });
+}
+
+async function runStatus(orgId: string, runId: string): Promise<{ status: string; stats: Record<string, unknown> }> {
+  const row = (await withBypassContext(() =>
+    db.execute<{ status: string; stats: Record<string, unknown> }>(sql`
+      select status, stats from ai_agent_runs where id = ${runId} and org_id = ${orgId}
+    `))).rows[0]!;
+  return { status: row.status, stats: row.stats };
+}
 
 /** A production-env scratch org with one enabled, due daily accounting policy. */
 async function seedDuePolicy(
@@ -216,6 +243,100 @@ test(
       const afterRetick = await scheduledRuns(org.orgId);
       assert.equal(afterRetick.length, 1,
         "an immediate re-tick adds nothing — the failure is durably accounted for");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a second scan is refused while the first run is still enriching",
+  { skip: !DB },
+  async () => {
+    // The defect: the first run flipped to 'completed' before its
+    // network-bound enrichment, so a second scan during the model call was
+    // admitted, refreshed the same fingerprints, and the first enrichment's
+    // work-item UPDATEs matched zero rows — silently discarding its
+    // analysis. The run must stay 'running' (the overlap lease) until
+    // enrichment appends and releases it.
+    const org = await withBypass(() => createScratchOrg());
+    let releaseEnricher!: () => void;
+    const enricherGate = new Promise<void>((resolve) => { releaseEnricher = resolve; });
+    const enricherEntered = new Promise<{ runId: string }>((resolve) => {
+      let calls = 0;
+      registerContinuousCloseEnricher(async (input) => {
+        calls += 1;
+        // Only the first enrichment pauses: a second admitted scan would
+        // call the enricher again, and the test must observe that admission
+        // (as a skipped refusal) instead of deadlocking on the same gate.
+        if (calls === 1) {
+          resolve({ runId: input.runId });
+          await enricherGate;
+        }
+        return { status: "completed", analyzedFindings: 0 };
+      });
+    });
+    try {
+      await seedManualPolicy(org);
+
+      const first = runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      const { runId: firstRunId } = await enricherEntered;
+
+      // The detectors committed but enrichment is paused: the lease is held.
+      assert.equal((await runStatus(org.orgId, firstRunId)).status, "running",
+        "the first run stays running while it enriches");
+
+      const second = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      assert(second.status === "skipped", "the overlapping scan is refused");
+      const secondRow = await runStatus(org.orgId, second.runId);
+      assert.equal((secondRow.stats as { reason: string }).reason, "already_running");
+      assert.equal((secondRow.stats as { activeRunId: string }).activeRunId, firstRunId,
+        "the refusal names the run still holding the lease");
+
+      releaseEnricher();
+      const completed = await first;
+      assert.equal(completed.status, "completed");
+      const finalRow = await runStatus(org.orgId, firstRunId);
+      assert.equal(finalRow.status, "completed", "the lease releases after enrichment");
+      assert.equal(
+        (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment.status,
+        "completed",
+      );
+      assert.equal(
+        (finalRow.stats as { enrichment: { status: string; analyzedFindings: number } }).enrichment.analyzedFindings,
+        0,
+        "only the enricher's own applied count is reported — nothing invented",
+      );
+    } finally {
+      registerContinuousCloseEnricher(null);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a crashed run's lease expires and is reclaimed instead of blocking scans forever",
+  { skip: !DB },
+  async () => {
+    // A process killed mid-enrichment leaves a 'running' row. The next scan
+    // must proceed once the lease is stale, and the abandoned row must be
+    // marked failed with its abandonment on the record — never left
+    // 'running' forever, never silently reused.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedManualPolicy(org);
+      const staleRunId = randomUUID();
+      await withBypassContext(() => db.execute(sql`
+        insert into ai_agent_runs (id, org_id, agent_key, trigger, status, detector_version, started_at)
+        values (${staleRunId}, ${org.orgId}, 'accounting', 'manual', 'running', 'test', now() - interval '1 hour')
+      `));
+
+      const result = await runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" });
+      assert.equal(result.status, "completed", "the scan proceeds once the stale lease expired");
+
+      const stale = await runStatus(org.orgId, staleRunId);
+      assert.equal(stale.status, "failed", "the abandoned lease is reclaimed as failed");
+      assert.equal((stale.stats as { reason: string }).reason, "abandoned_lease_reclaimed");
     } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }

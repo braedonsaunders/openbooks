@@ -225,6 +225,12 @@ export type ContinuousCloseEnrichmentResult = {
   model?: string | null;
   toolCalls?: number;
   reason?: string;
+  /**
+   * Finding analyses the model produced but that matched zero rows on write
+   * (the finding moved on under another run). Reported, never counted in
+   * `analyzedFindings`.
+   */
+  supersededFindings?: string[];
 };
 
 type ContinuousCloseEnricher = (
@@ -329,9 +335,15 @@ export async function runContinuousCloseAgent(args: {
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
     }
-    // The advisory transaction lock closes the insert race. The durable row
-    // keeps a second request from starting while the first run is outside its
-    // short detector transaction and using network-bound model tools.
+    // The advisory transaction lock closes the insert race. The run row stays
+    // 'running' from its insert until enrichment finishes AFTER this
+    // transaction commits, so the durable row — not just the short detector
+    // transaction — keeps a second request from starting while the first run
+    // is using network-bound model tools. The 15-minute window bounds a
+    // crashed run's block: detectors are statement-timeout bounded and
+    // enrichment aborts at ten minutes, so a legitimate run always finishes
+    // inside its lease, while a stale lease is reaped below and can never
+    // wedge the scheduler.
     const active = (await db.execute<{ id: string }>(sql`
       select id from ai_agent_runs
        where org_id = ${args.orgId} and agent_key = ${args.agentKey}
@@ -354,6 +366,18 @@ export async function runContinuousCloseAgent(args: {
         .returning({ id: schema.aiAgentRuns.id });
       return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
     }
+    // Reclaim leases a crashed run left behind: a 'running' row older than
+    // the overlap window can never become live again, so mark it failed with
+    // its abandonment on the record instead of leaving a permanently
+    // 'running' row in the history. This matches zero rows when nothing
+    // crashed — a conditional cleanup, not a write whose effect must show.
+    await db.execute(sql`
+      update ai_agent_runs
+         set status = 'failed', finished_at = now(), error_code = 'abandoned',
+             stats = stats || ${JSON.stringify({ reason: "abandoned_lease_reclaimed" })}::jsonb
+       where org_id = ${args.orgId} and agent_key = ${args.agentKey}
+         and status = 'running' and started_at <= now() - interval '15 minutes'
+    `);
     const global = (await db.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${args.orgId}
@@ -406,9 +430,12 @@ export async function runContinuousCloseAgent(args: {
                 and status in ('open','in_review') and last_detected_run_id is distinct from ${run!.id}
              returning id
            `)));
-      // Close out the run INSIDE the claimed transaction: completed status,
-      // measured stats, and last_run_at commit together with the cursor
-      // advance and every detection artifact above.
+      // Commit the measured stats INSIDE the claimed transaction together
+      // with the cursor advance and every detection artifact above — but
+      // leave the run 'running': the overlap guard above must stay held
+      // through the network-bound enrichment below, which runs after this
+      // transaction commits. The run flips to 'completed' only once
+      // enrichment has appended its brief.
       const runStats = {
         detected: findings.length,
         autoResolved: resolved.rows.length,
@@ -416,7 +443,7 @@ export async function runContinuousCloseAgent(args: {
         ...occurrenceStats,
       };
       await db.execute(sql`
-        update ai_agent_runs set status = 'completed', finished_at = now(), stats = ${JSON.stringify(runStats)}::jsonb
+        update ai_agent_runs set stats = ${JSON.stringify(runStats)}::jsonb
          where id = ${run!.id} and org_id = ${args.orgId}
       `);
       await db.execute(sql`
@@ -448,10 +475,11 @@ export async function runContinuousCloseAgent(args: {
 
   // Enrichment is model work that must not pin the claimed transaction while
   // it runs network-bound tools. The run itself is already durable — claim,
-  // detection artifacts, completed status, and last_run_at all committed with
-  // it — so enrichment appends its brief to stats afterwards; a crash here
-  // degrades to a completed run without a narrative instead of losing or
-  // wedging the occurrence.
+  // detection artifacts, measured stats, and last_run_at all committed with
+  // it, still 'running' so the overlap guard stays held — and enrichment
+  // appends its brief and flips the run to 'completed' afterwards. A crash
+  // here leaves a 'running' row whose lease expires and is reclaimed by the
+  // next scan instead of losing or wedging the occurrence.
   let enrichment: ContinuousCloseEnrichmentResult = {
     status: "skipped",
     analyzedFindings: 0,
@@ -482,11 +510,19 @@ export async function runContinuousCloseAgent(args: {
       };
     }
   }
-  await withOrgContext(args.orgId, () =>
-    db.execute(sql`
-      update ai_agent_runs set stats = stats || ${JSON.stringify({ enrichment })}::jsonb
-       where id = ${prepared.runId} and org_id = ${args.orgId}
+  // The completion flip is the lease release: a write that matches zero rows
+  // means this run's lease is gone (reclaimed, or never committed) and the
+  // enrichment must not be reported as applied.
+  const completed = await withOrgContext(args.orgId, () =>
+    db.execute<{ id: string }>(sql`
+      update ai_agent_runs set status = 'completed', finished_at = now(), stats = stats || ${JSON.stringify({ enrichment })}::jsonb
+       where id = ${prepared.runId} and org_id = ${args.orgId} and status = 'running'
+      returning id
     `));
+  if (!completed.rows.length) {
+    console.error(`[continuous-close] ${args.agentKey} run ${prepared.runId} completion matched zero rows`);
+    throw new Error("continuous_close_completion_lost");
+  }
   const resultStats = {
     detected: prepared.detected,
     autoResolved: prepared.autoResolved,
