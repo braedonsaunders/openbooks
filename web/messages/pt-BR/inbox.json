@@ -35,7 +35,10 @@
     "expense_report": "Despesa",
     "document_signature": "Assinatura",
     "payroll_anomaly_block": "Verificação da folha",
-    "ai_capability_review": "Revisão de IA"
+    "ai_capability_review": "Revisão de IA",
+    "notification": "Notificação",
+    "hrm_feedback_request": "Solicitação de feedback",
+    "crew_time_batch": "Horas da equipe"
   },
   "emptyTitle": "Tudo em dia",
   "emptyDescription": "Nada aguarda você no momento.",

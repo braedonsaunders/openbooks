@@ -35,7 +35,10 @@
     "expense_report": "费用",
     "document_signature": "签名",
     "payroll_anomaly_block": "薪资检查",
-    "ai_capability_review": "AI 评审"
+    "ai_capability_review": "AI 评审",
+    "notification": "通知",
+    "hrm_feedback_request": "反馈请求",
+    "crew_time_batch": "班组工时"
   },
   "emptyTitle": "全部完成",
   "emptyDescription": "当前没有等待您处理的事项。",

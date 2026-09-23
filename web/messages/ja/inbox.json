@@ -35,7 +35,10 @@
     "expense_report": "経費",
     "document_signature": "署名",
     "payroll_anomaly_block": "給与チェック",
-    "ai_capability_review": "AIレビュー"
+    "ai_capability_review": "AIレビュー",
+    "notification": "通知",
+    "hrm_feedback_request": "フィードバック依頼",
+    "crew_time_batch": "クルー作業時間"
   },
   "emptyTitle": "すべて完了",
   "emptyDescription": "今あなたを待つものはありません。",

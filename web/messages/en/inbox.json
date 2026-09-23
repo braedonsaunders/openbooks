@@ -35,7 +35,10 @@
     "expense_report": "Expense",
     "document_signature": "Signature",
     "payroll_anomaly_block": "Payroll check",
-    "ai_capability_review": "AI review"
+    "ai_capability_review": "AI review",
+    "notification": "Notification",
+    "hrm_feedback_request": "Feedback request",
+    "crew_time_batch": "Crew time"
   },
   "emptyTitle": "All clear",
   "emptyDescription": "Nothing waits on you right now.",
