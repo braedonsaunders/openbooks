@@ -545,6 +545,37 @@ test("a disabled login refuses RMDIR and every other operation class", async () 
   }, lively.resolver);
 });
 
+test("storage failures read honestly: absent stays absent, anything else is FAILURE", async () => {
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+
+      // A missing file still reads NO_SUCH_FILE (status 2).
+      const missing = await open(sftp, "no-such-file.txt", "r").then(
+        () => null,
+        (error: Error & { code?: number }) => error,
+      );
+      assert.ok(missing, "opening a missing file must fail");
+      assert.equal(missing.code, 2);
+
+      // A path that exists but is not a file must NOT read as absent: an
+      // S3 outage or disk error takes this same path, and the bank client
+      // must hear FAILURE (status 4), not "file gone".
+      await mkdir(sftp, "a-folder");
+      const notAFile = await open(sftp, "a-folder", "r").then(
+        () => null,
+        (error: Error & { code?: number }) => error,
+      );
+      assert.ok(notAFile, "opening a folder for read must fail");
+      assert.equal(notAFile.code, 4);
+      assert.match(notAFile.message, /open failed/);
+    } finally {
+      client.end();
+    }
+  });
+});
+
 test("revoke ends only the revoked server's live sessions", async () => {
   const serverA: SftpServerConfig = { ...config, id: "server-a", username: "login-a" };
   const serverB: SftpServerConfig = { ...config, id: "server-b", username: "login-b" };

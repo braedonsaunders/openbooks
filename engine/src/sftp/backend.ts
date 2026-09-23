@@ -145,7 +145,14 @@ export function localBackend(rootDir: string): SftpBackend {
     },
     async stat(p) {
       if (cleanPath(p) === "/") return { isDir: true, size: 0, mtimeMs: Date.now() };
-      const st = await fs.stat(abs(p)).catch(() => null);
+      const st = await fs.stat(abs(p)).catch((e: unknown) => {
+        // Only genuine absence reads null. Anything else (EACCES, EIO, …)
+        // throws so the daemon maps it honestly — permission or FAILURE —
+        // instead of reporting the path "absent" during an outage.
+        const code = (e as { code?: string })?.code;
+        if (code === "ENOENT" || code === "ENOTDIR") return null;
+        throw e;
+      });
       if (!st) return null;
       return { isDir: st.isDirectory(), size: st.size, mtimeMs: st.mtimeMs };
     },
