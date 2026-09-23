@@ -13,8 +13,8 @@ import { purgeCabinetBytes } from "./cabinet.ts";
  *
  * At completion (signed/acknowledged) applyCompletionRetention computes
  * retain_until from the active schedule for the document's category and
- * STORES it with the rule id — later schedule edits never reinterpret a
- * completed document. The daily runRetentionTick (worker duty
+ * STORES it with the rule id AND the governing action — later schedule
+ * edits never reinterpret a completed document. The daily runRetentionTick (worker duty
  * hrm-retention-tick) expires past-due sends, flags documents at
  * retain_until (retention_flagged event + open action row), and executes
  * the action once retain_until plus the org's declared grace days has
@@ -243,9 +243,14 @@ export async function applyCompletionRetention(
   const computed = (await exec.execute<{ until: string }>(sql`
     select (${anchor}::date + (${schedule.retain_years} || ' years')::interval)::date::text as until
   `)).rows[0]!.until;
+  // The completion snapshot freezes the GOVERNING action alongside the
+  // date: later schedule edits (anonymize → delete) govern only documents
+  // that complete after the edit — never historical documents, whose tick
+  // copies this frozen value instead of the schedule's live one.
   const touched = (await exec.execute<{ n: string }>(sql`
     update hrm_documents
        set retain_until = ${computed}::date, retention_rule_id = ${schedule.id},
+           retention_action = ${schedule.action},
            updated_at = now(), updated_by = coalesce(${actorId}, updated_by)
      where org_id = ${orgId} and id = ${documentId} and retain_until is null
     returning 1
@@ -321,8 +326,15 @@ export async function runRetentionTick(orgId: string, today: string): Promise<Re
     // re-flag after delete/anonymize); an open row means flagged and
     // waiting out grace or held. Without this, every tick would open a
     // fresh row on an already-executed document.
+    // The flagged action is the document's FROZEN completion snapshot
+    // (d.retention_action), never the schedule's live value: editing a
+    // schedule after completion must not re-govern historical documents.
+    // The coalesce covers only rows snapshotted before the freeze column
+    // existed that the backfill could not reach (no rule to inherit from);
+    // every governed row carries its frozen action.
     const due = (await db.execute<{ id: string; schedule_id: string; action: string }>(sql`
-      select d.id, d.retention_rule_id as schedule_id, s.action
+      select d.id, d.retention_rule_id as schedule_id,
+             coalesce(d.retention_action, s.action) as action
         from hrm_documents d
         join hrm_retention_schedules s on s.id = d.retention_rule_id
        where d.org_id = ${orgId} and d.retain_until is not null
