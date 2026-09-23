@@ -13,6 +13,7 @@ import {
 } from "../agents/continuous-close-config.ts";
 import { AGENT_PACKS } from "../agents/registry.ts";
 import type { AgentFinding, AgentFindingProposal } from "../agents/types.ts";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
 export {
   CONTINUOUS_CLOSE_AGENT_KEYS,
@@ -299,13 +300,46 @@ export async function runContinuousCloseAgent(args: {
     | { kind: "unclaimed" };
 
   const prepared = await withOrg(args.orgId, async (): Promise<PreparedRun> => {
+    const occurrence = args.scheduledOccurrence;
+    const scheduledFor = occurrence ? occurrence.claimedNextRunAt.toISOString() : null;
+    const occurrenceStats = scheduledFor === null ? {} : { scheduled_for: scheduledFor };
+    // Fenced recheck of the authoritative continuousClose switch INSIDE the
+    // write transaction, BEFORE the occurrence claim and before any run row
+    // or detection artifact. The scheduler's due-SELECT and the HTTP
+    // preflights can both observe the feature ON while Company Settings
+    // disables it before this transaction starts; without this recheck the
+    // scan would create findings and advance its cadence while disabled, and
+    // direct engine callers would bypass the switch entirely. The advisory
+    // fence serializes this scan against a concurrent disable's flag write,
+    // so the gate answer cannot go stale between this check and the writes
+    // below. A disabled feature refuses by name: a manual scan throws, while
+    // a scheduled occurrence records one skipped row (the occurrence itself
+    // is NOT claimed, so the cadence slot survives for re-enable).
+    await acquireOrgFeatureGateLock(db, args.orgId);
+    if (!(await lockAndCheckOrgFeature(db, args.orgId, "continuousClose"))) {
+      if (occurrence) {
+        const [skipped] = await db
+          .insert(schema.aiAgentRuns)
+          .values({
+            orgId: args.orgId,
+            agentKey: args.agentKey,
+            trigger: args.trigger,
+            status: "skipped",
+            detectorVersion: CONTINUOUS_CLOSE_DETECTOR_VERSION,
+            initiatedBy: args.initiatedBy ?? null,
+            finishedAt: new Date(),
+            stats: { reason: "feature_disabled", ...occurrenceStats },
+          })
+          .returning({ id: schema.aiAgentRuns.id });
+        return { kind: "terminal", result: { runId: skipped!.id, agentKey: args.agentKey, status: "skipped", detected: 0, autoResolved: 0 } };
+      }
+      throw new Error("feature_disabled");
+    }
     // Claim the occurrence BEFORE anything else in this transaction. A racing
     // tick blocks on this row lock and, when the winner commits, re-evaluates
     // the WHERE against the advanced value and claims zero rows — exactly one
     // scheduler execution per occurrence, no skip-noise rows from the loser.
-    let scheduledFor: string | null = null;
-    if (args.scheduledOccurrence) {
-      const occurrence = args.scheduledOccurrence;
+    if (occurrence) {
       const claim = (await db.execute<{ id: string }>(sql`
         update ai_agent_policies set next_run_at = ${occurrence.nextRunAt}, updated_at = now()
          where id = ${occurrence.policyId} and org_id = ${args.orgId}
@@ -313,9 +347,7 @@ export async function runContinuousCloseAgent(args: {
         returning id
       `));
       if (!claim.rows.length) return { kind: "unclaimed" }; // another tick owns it
-      scheduledFor = occurrence.claimedNextRunAt.toISOString();
     }
-    const occurrenceStats = scheduledFor === null ? {} : { scheduled_for: scheduledFor };
     const lock = (await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${`${args.orgId}:${args.agentKey}`}, 0)) as acquired
     `));

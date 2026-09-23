@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
 import {
+  nextContinuousCloseRunAt,
   registerContinuousCloseEnricher,
   runContinuousCloseAgent,
   runDueContinuousCloseAgents,
@@ -309,6 +310,110 @@ test(
       );
     } finally {
       registerContinuousCloseEnricher(null);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+async function setContinuousCloseFeature(orgId: string, enabled: boolean): Promise<void> {
+  return withBypassContext(async () => {
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,continuousClose}', ${JSON.stringify(enabled)}::jsonb)
+       where id = ${orgId}
+    `);
+  });
+}
+
+async function workItemCount(orgId: string): Promise<number> {
+  return Number((await withBypassContext(() =>
+    db.execute<{ n: string }>(sql`select count(*) as n from ai_work_items where org_id = ${orgId}`))).rows[0]!.n);
+}
+
+test(
+  "a disable between preflight and scan stops a scheduled occurrence cold",
+  { skip: !DB },
+  async () => {
+    // The defect: the scheduler's due-SELECT and the HTTP preflights check
+    // features.continuousClose, but the scan transaction never rechecked it —
+    // a disable landing in between still created findings and advanced the
+    // cadence. The scan must recheck under the feature-gate fence before any
+    // run or artifact write: the scheduled occurrence is skipped with its
+    // reason on the record, and neither findings nor the cursor move.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const fireAt = new Date(Date.now() - 60_000);
+      const policyId = await seedDuePolicy(org, { fireAt });
+      const cursorBefore = await policyCursor(org.orgId);
+
+      // Preflight observes what the scheduler saw: due, and the feature on.
+      assert.ok(cursorBefore.nextRunAt && cursorBefore.nextRunAt <= new Date(), "the occurrence is due");
+      // Company Settings disables the feature before the scan starts.
+      await setContinuousCloseFeature(org.orgId, false);
+
+      // Invoke the scan with the observed occurrence — exactly what the
+      // scheduler tick would do with its pre-claim snapshot.
+      const now = new Date();
+      const outcome = await runContinuousCloseAgent({
+        orgId: org.orgId,
+        agentKey: "accounting",
+        trigger: "scheduler",
+        scheduledOccurrence: {
+          policyId,
+          claimedNextRunAt: fireAt,
+          nextRunAt: nextContinuousCloseRunAt("daily", now),
+        },
+      });
+      assert(outcome.status !== "claimed_elsewhere", "the occurrence was not lost to a phantom claim");
+      if (outcome.status === "skipped") {
+        const row = await runStatus(org.orgId, outcome.runId);
+        assert.equal((row.stats as { reason: string }).reason, "feature_disabled",
+          "the skip records why");
+        assert.equal((row.stats as { scheduled_for: string }).scheduled_for, fireAt.toISOString(),
+          "even the refusal keeps the occurrence's scheduled-for timestamp");
+      } else {
+        assert.fail(`a disabled feature must not execute a scan, got ${outcome.status}`);
+      }
+
+      assert.equal(await workItemCount(org.orgId), 0, "no findings while disabled");
+      const cursorAfter = await policyCursor(org.orgId);
+      assert.equal(cursorAfter.nextRunAt?.toISOString(), cursorBefore.nextRunAt?.toISOString(),
+        "the cadence slot survives for re-enable");
+      assert.equal(cursorAfter.lastRunAt, null, "no last-run stamp without a scan");
+      const executed = (await scheduledRuns(org.orgId)).filter((run) => run.status !== "skipped");
+      assert.equal(executed.length, 0, "no scan executed while disabled");
+
+      // Re-enable: the preserved occurrence fires exactly once.
+      await setContinuousCloseFeature(org.orgId, true);
+      await runDueContinuousCloseAgents(new Date());
+      const resumed = (await scheduledRuns(org.orgId)).filter((run) => run.status === "completed");
+      assert.equal(resumed.length, 1, "the preserved occurrence fires after re-enable");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a manual scan with the feature off refuses by name and writes nothing",
+  { skip: !DB },
+  async () => {
+    // Direct engine callers bypass every HTTP preflight, so the in-scan
+    // recheck is their only gate: it must throw naming the refusal instead
+    // of committing a hidden scan.
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      await seedManualPolicy(org);
+      await setContinuousCloseFeature(org.orgId, false);
+
+      await assert.rejects(
+        runContinuousCloseAgent({ orgId: org.orgId, agentKey: "accounting", trigger: "manual" }),
+        /feature_disabled/,
+        "the refusal names the disabled feature",
+      );
+      assert.equal((await runs(org.orgId)).length, 0, "a refused scan writes no run row");
+      assert.equal(await workItemCount(org.orgId), 0, "a refused scan writes no findings");
+    } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },

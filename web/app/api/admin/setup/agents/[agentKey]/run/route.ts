@@ -19,7 +19,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ag
   let result
   try {
     result = await runSetupAgentNow(gate.user.orgId, gate.user.id, agentKey)
-  } catch {
+  } catch (error) {
+    // A disable landing after the preflight refuses by name; only a genuinely
+    // unknown key is an invalid agent. Collapsing both into invalid_agent
+    // would tell the operator the pack does not exist when the switch is off.
+    if ((error as Error).message === 'feature_disabled') {
+      return NextResponse.json({ error: 'feature_disabled' }, { status: 409 })
+    }
     return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
   }
   if (result.status === 'claimed_elsewhere') return NextResponse.json(result, { status: 409 })
