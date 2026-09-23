@@ -100,8 +100,13 @@ test("loaders serve the unsaved drawer only to permitted roles, draft by default
   const payments = src(PAYMENTS_SECTION);
   assert.match(
     payments,
-    /pickString\(sp\.paymentNew\) === '1' && canManage/,
-    "payments loader must gate ?paymentNew=1 on the manage grant",
+    /pickString\(sp\.paymentNew\) === '1' && canCreate/,
+    "payments loader must gate ?paymentNew=1 on the creation grant",
+  );
+  assert.match(
+    payments,
+    /emptyAction=\{canCreate \? <NewPaymentButton/,
+    "payments New button must share the same creation flag as the drawer",
   );
   assert.match(payments, /status: 'draft'/, "payments loader must default the unsaved record to draft");
   assert.match(payments, /document_number: null/, "payments loader must not allocate a document number on open");
