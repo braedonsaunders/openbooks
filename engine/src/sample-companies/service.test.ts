@@ -46,7 +46,9 @@ test("generated sample templates require durable oracle evidence", () => {
 });
 
 test("sample generation resumes only recognized transient database failures", () => {
-  assert.match(service, /runSimulatorThroughTransientDatabaseFailures\(provisioned\.runDir\)/);
+  // Production always drives the simulator through the transient-failure
+  // resumption; tests inject a stub through the simulateTemplate seam.
+  assert.match(service, /simulateTemplate \?\? runSimulatorThroughTransientDatabaseFailures/);
   assert.match(service, /query read timeout/);
   assert.match(service, /attempt >= maximumAttempts/);
   assert.match(service, /if \(!isTransientDatabaseFailure\(error\)/);
@@ -91,7 +93,7 @@ test("a partial company resumes from its recorded stage instead of cloning again
   assert.match(create, /findPartialSampleCompany/);
   assert.match(create, /resumePartialSampleCompany/);
   assert.match(create, /deletePartialSampleOrg/);
-  assert.match(create, /stampClonedSampleCompany/);
+  assert.match(create, /sampleCompanyBirthMarker/);
 });
 
 test("simulated T&M invoices use the canonical approval lifecycle", () => {

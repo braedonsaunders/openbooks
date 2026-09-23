@@ -12,14 +12,16 @@ import {
 } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
+import { wipeSimOrg } from "../sim/world.ts";
 import { reconcileDocumentSequences } from "../records/numbering.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 import {
   SampleCompanyError,
+  SampleCompanyPreconditionError,
   runProvisioningStage,
 } from "./provisioning-failures.ts";
 
-export { SampleCompanyError } from "./provisioning-failures.ts";
+export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioning-failures.ts";
 export {
   SampleCompanyProvisioningError,
   sampleCompanyStageMessage,
@@ -484,14 +486,18 @@ interface PartialSampleCompany {
   stage: string;
   /** Provenance for the resume; empty when the record cannot be resumed. */
   templateOrgId: string;
+  /** The clone's own completion status; null when its sandbox row is gone. */
+  sandboxStatus: string | null;
 }
 
 /**
- * Find the oldest resumable partial company for this member and industry:
- * a clone that committed but never reached ready. A partial may still be
+ * Find the oldest partial company for this member and industry: a
+ * birth-marked clone that never reached ready. A partial may still be
  * env_kind 'sandbox' (finalize never committed) or 'preview' (finalize
  * committed, numbering or access pending). Completed companies and
- * pre-marker rows never match.
+ * pre-marker rows never match. The caller resumes only clones the clone
+ * engine itself marked ready; anything else may hold half-copied rows and
+ * is compensated instead.
  */
 async function findPartialSampleCompany(
   memberUserId: string,
@@ -503,11 +509,14 @@ async function findPartialSampleCompany(
       name: string;
       stage: string | null;
       templateOrgId: string | null;
+      sandboxStatus: string | null;
     }>(sql`
       select o.id, o.name,
              o.settings->'sampleCompany'->>'provisioningStage' as stage,
-             o.settings->'sampleCompany'->>'templateOrgId' as "templateOrgId"
+             o.settings->'sampleCompany'->>'templateOrgId' as "templateOrgId",
+             s.status as "sandboxStatus"
         from orgs o
+        left join sandboxes s on s.org_id = o.id
        where o.env_kind in ('preview', 'sandbox')
          and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
          and o.settings->'sampleCompany'->>'industryKey' = ${industryKey}
@@ -523,45 +532,39 @@ async function findPartialSampleCompany(
       name: row.name,
       stage: row.stage ?? "unknown",
       templateOrgId: row.templateOrgId ?? "",
+      sandboxStatus: row.sandboxStatus,
     };
   });
 }
 
 /**
- * Stamp the cloned marker immediately after createSandbox commits, together
- * with the ownership and provenance the resume lookup keys on. A write that
- * matches zero rows is a failure, not a success: the clone was just
- * committed, so zero rows means it disappeared under us.
+ * Build the birth marker recorded atomically with the clone's org row (and
+ * preserved across the clone's settings overwrite via the createSandbox
+ * settings overlay): ownership and provenance the resume lookup keys on,
+ * plus the initial 'cloned' stage. SC-RESUME-b: stamping in a separate
+ * transaction after the clone returned left a crash/cancel gap with an
+ * unattributable sandbox; birth-marking closes it.
  */
-async function stampClonedSampleCompany(args: {
-  sandboxOrgId: string;
+function sampleCompanyBirthMarker(args: {
   industryKey: string;
   profileId: string;
   memberUserId: string;
   sourceOrgId: string;
   templateOrgId: string;
-}): Promise<void> {
-  const marker = {
-    version: 1,
-    industryKey: args.industryKey,
-    profileId: args.profileId,
-    ownerUserId: args.memberUserId,
-    requestedFromOrgId: args.sourceOrgId,
-    templateOrgId: args.templateOrgId,
-    createdAt: new Date().toISOString(),
-    immutableSyntheticSource: true,
-    provisioningStage: "cloned",
+}): Record<string, unknown> {
+  return {
+    sampleCompany: {
+      version: 1,
+      industryKey: args.industryKey,
+      profileId: args.profileId,
+      ownerUserId: args.memberUserId,
+      requestedFromOrgId: args.sourceOrgId,
+      templateOrgId: args.templateOrgId,
+      createdAt: new Date().toISOString(),
+      immutableSyntheticSource: true,
+      provisioningStage: "cloned",
+    },
   };
-  const stamped = (await withBypassContext(() => db.execute(sql`
-    update orgs
-       set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('sampleCompany',
-             coalesce(settings->'sampleCompany', '{}'::jsonb) || ${JSON.stringify(marker)}::jsonb),
-           updated_at = now()
-     where id = ${args.sandboxOrgId}
-  `)) as unknown as { rowCount?: number | null });
-  if (stamped.rowCount !== 1) {
-    throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
-  }
 }
 
 /** Flip the provisioning marker after a stage whose own writes committed. */
@@ -612,6 +615,15 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
     }
     const sandboxRows = (await db.execute<{ id: string }>(sql`
       select id from sandboxes where org_id = ${orgId}`)).rows;
+    if (sandboxRows.length === 0) {
+      // The clone died between its first two statements (or suffered outside
+      // interference). Refuse rather than guess: blind-deleting an org row
+      // whose children cannot be proven absent risks orphaning rows, and the
+      // member lock means no concurrent provisioning can be waiting on it.
+      throw new SampleCompanyError(
+        `refusing to delete partial sample company ${orgId}: it has no sandbox row`,
+      );
+    }
     if (sandboxRows.length !== 1) {
       throw new SampleCompanyError(
         `refusing to delete partial sample company ${orgId}: expected exactly one sandbox row, found ${sandboxRows.length}`,
@@ -671,28 +683,168 @@ function generationWindow(now = new Date()): { startDate: string; endDate: strin
   return { startDate: start.toISOString().slice(0, 10), endDate };
 }
 
-async function generateTemplate(profileId: string): Promise<TemplateRow> {
+/**
+ * Deterministic seed for every sample-template simulation. The seed is part
+ * of the attempt identity the sweep converges on: one profile, one seed, so
+ * at most one unregistered attempt org can ever exist per profile.
+ */
+const SAMPLE_TEMPLATE_SEED = "openbooks-sample-v1";
+
+/**
+ * Step seams for generateTemplate. The simulator driver and the attempt wipe
+ * are injectable for tests; production always runs the real autopilot and
+ * the sim-org deletion path.
+ */
+export interface SampleCompanyTemplateDeps {
+  simulateTemplate?: (runDir: string) => Promise<Awaited<ReturnType<typeof autopilotRunToEnd>>>;
+  wipeTemplateAttempt?: (orgId: string) => Promise<void>;
+}
+
+/**
+ * Durably mark a template attempt org immediately after provisioning, so a
+ * simulator, oracle, or coverage failure later cannot strand an anonymous
+ * org: the next generation finds this marker and either adopts the org (it
+ * passed the oracle and registered) or removes it before provisioning.
+ */
+async function stampTemplateAttempt(orgId: string, profileId: string): Promise<void> {
+  const attempt = {
+    version: 1,
+    profileId,
+    seed: SAMPLE_TEMPLATE_SEED,
+    stage: "provisioned",
+    attemptedAt: new Date().toISOString(),
+  };
+  const stamped = (await withBypassContext(() => db.execute(sql`
+    update orgs
+       set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('sampleTemplateAttempt',
+             coalesce(settings->'sampleTemplateAttempt', '{}'::jsonb) || ${JSON.stringify(attempt)}::jsonb),
+           updated_at = now()
+     where id = ${orgId}
+  `)) as unknown as { rowCount?: number | null });
+  if (stamped.rowCount !== 1) {
+    throw new SampleCompanyError("sample template attempt disappeared during provisioning");
+  }
+}
+
+/** Drop the attempt marker once the template registers — it has converged. */
+async function clearTemplateAttempt(orgId: string): Promise<void> {
+  const cleared = (await withBypassContext(() => db.execute(sql`
+    update orgs
+       set settings = settings - 'sampleTemplateAttempt',
+           updated_at = now()
+     where id = ${orgId}
+       and settings ? 'sampleTemplateAttempt'
+  `)) as unknown as { rowCount?: number | null });
+  if (cleared.rowCount !== 1) {
+    throw new SampleCompanyError("sample template attempt disappeared during provisioning");
+  }
+}
+
+/**
+ * Attempts that never registered and can never be adopted (no passing
+ * oracle): remove each through the sim-org deletion path before provisioning
+ * so retries never accumulate a second org. When the environment refuses the
+ * wipe, refuse BEFORE provisioning rather than strand another org — the
+ * error names the attempt and its remedy and passes the stage wrapper
+ * untouched as a known 409 refusal.
+ */
+async function sweepStaleTemplateAttempts(
+  profileId: string,
+  wipe: (orgId: string) => Promise<void>,
+): Promise<void> {
+  const stale = await withBypassContext(async () => {
+    const result = (await db.execute<{ id: string }>(sql`
+      select id from orgs
+       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}
+         and settings->'sampleTemplateAttempt'->>'seed' = ${SAMPLE_TEMPLATE_SEED}
+         and coalesce(settings->'sampleTemplateOracle'->>'status', '') <> 'passed'
+         and coalesce(settings->'sampleTemplate'->>'enabled', 'false') <> 'true'
+       order by created_at asc
+    `));
+    return result.rows;
+  });
+  const stuck: string[] = [];
+  for (const attempt of stale) {
+    try {
+      await wipe(attempt.id);
+    } catch (error) {
+      console.error(`[sample-company] could not remove stale template attempt ${attempt.id}`, error);
+      stuck.push(attempt.id);
+    }
+  }
+  if (stuck.length > 0) {
+    throw new SampleCompanyPreconditionError(
+      `sample template preparation for profile "${profileId}" found an incomplete previous attempt ` +
+      `(org ${stuck.join(", ")}) that could not be removed automatically; ` +
+      `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${stuck[0]}\`, then retry`,
+    );
+  }
+}
+
+/**
+ * Compensate a failed template attempt: wipe it so the failure leaves
+ * nothing behind, then let the caller rethrow the original failure. When
+ * the wipe itself is refused, throw the stranded org and its remedy instead
+ * — provisioning again would only strand a second org.
+ */
+async function compensateTemplateAttempt(
+  profileId: string,
+  orgId: string,
+  wipe: (orgId: string) => Promise<void>,
+  cause: unknown,
+): Promise<void> {
+  try {
+    await wipe(orgId);
+  } catch (error) {
+    console.error(`[sample-company] could not remove failed template attempt ${orgId}`, error);
+    throw new SampleCompanyPreconditionError(
+      `sample template preparation for profile "${profileId}" left an incomplete attempt ` +
+      `(org ${orgId}) that could not be removed automatically; ` +
+      `remove the SIM-tagged attempt org with \`npm run sim -- reset-org ${orgId}\`, then retry`,
+      { cause },
+    );
+  }
+}
+
+export async function generateTemplate(
+  profileId: string,
+  deps: SampleCompanyTemplateDeps = {},
+): Promise<TemplateRow> {
+  const simulate = deps.simulateTemplate ?? runSimulatorThroughTransientDatabaseFailures;
+  const wipe = deps.wipeTemplateAttempt ?? wipeSimOrg;
+  // Converge first, under the caller's profile-wide lock: a previous attempt
+  // that never registered must be gone before a fresh org is provisioned.
+  await sweepStaleTemplateAttempts(profileId, wipe);
   const runsRoot = mkdtempSync(join(tmpdir(), "openbooks-sample-template-"));
   try {
     const window = generationWindow();
     const provisioned = await provisionRun({
       profileId,
-      seed: "openbooks-sample-v1",
+      seed: SAMPLE_TEMPLATE_SEED,
       startDate: window.startDate,
       endDate: window.endDate,
       runsRoot,
     });
-    const manifest = await runSimulatorThroughTransientDatabaseFailures(provisioned.runDir);
-    if (manifest.status !== "completed" || manifest.defects.length > 0) {
-      throw new SampleCompanyError(`sample template ${profileId} did not pass its simulator oracle`);
+    await stampTemplateAttempt(provisioned.orgId, profileId);
+    try {
+      const manifest = await simulate(provisioned.runDir);
+      if (manifest.status !== "completed" || manifest.defects.length > 0) {
+        throw new SampleCompanyError(`sample template ${profileId} did not pass its simulator oracle`);
+      }
+      await markSimulationOraclePassed(provisioned.orgId, profileId);
+      const generated = await templateRowForOrg(provisioned.orgId);
+      if (!generated) {
+        throw new SampleCompanyError(`sample template ${profileId} did not meet the minimum data coverage`);
+      }
+      assertTemplateCoverage(generated);
+      await clearTemplateAttempt(provisioned.orgId);
+      return generated;
+    } catch (error) {
+      // The wipe either succeeds (rethrow the original failure) or throws
+      // the stranded org and its remedy — never a second stranded org.
+      await compensateTemplateAttempt(profileId, provisioned.orgId, wipe, error);
+      throw error;
     }
-    await markSimulationOraclePassed(provisioned.orgId, profileId);
-    const generated = await templateRowForOrg(provisioned.orgId);
-    if (!generated) {
-      throw new SampleCompanyError(`sample template ${profileId} did not meet the minimum data coverage`);
-    }
-    assertTemplateCoverage(generated);
-    return generated;
   } finally {
     // This exact path is created by mkdtemp above and contains only ephemeral
     // simulator manifests/checkpoints. The accounting tenant remains in Postgres.
@@ -766,7 +918,7 @@ async function markSimulationOraclePassed(orgId: string, profileId: string): Pro
         version: 1,
         profileId,
         status: "passed",
-        seed: "openbooks-sample-v1",
+        seed: SAMPLE_TEMPLATE_SEED,
         verifiedAt: new Date().toISOString(),
       };
       await tx.execute(sql`
@@ -1153,12 +1305,18 @@ export async function createSampleCompany(
 
     // SC-RESUME: a previous attempt may have committed the clone but failed
     // before the company was ready. Resume it from its recorded stage — a
-    // retry that cloned again would strand a second company. A record that
-    // cannot be resumed (unrecognized stage) is compensated through the
-    // product's own sandbox deletion path before re-provisioning.
+    // retry that cloned again would strand a second company. Resume only a
+    // clone the clone engine itself marked ready: anything else (an
+    // interrupted clone, an unrecognized stage) may hold half-copied rows,
+    // never granted access, and is compensated through the product's own
+    // sandbox deletion path before re-provisioning.
     const partial = await findPartialSampleCompany(input.memberUserId, input.industryKey);
     if (partial) {
-      if (isSampleCompanyOrgStage(partial.stage) && partial.templateOrgId) {
+      if (
+        partial.sandboxStatus === "ready" &&
+        isSampleCompanyOrgStage(partial.stage) &&
+        partial.templateOrgId
+      ) {
         await resumePartialSampleCompany({
           partial,
           input,
@@ -1185,19 +1343,21 @@ export async function createSampleCompany(
           tier: "full",
           masked: false,
           createdBy: null,
+          // SC-RESUME-b: ownership and stage travel inside the clone (birth
+          // marker, preserved across its settings overwrite), so no
+          // crash/cancel gap after the clone returns can leave an
+          // unattributable sandbox. This marker is what the next retry
+          // resumes from.
+          settingsOverlay: sampleCompanyBirthMarker({
+            industryKey: input.industryKey,
+            profileId: profile.profileId,
+            memberUserId: input.memberUserId,
+            sourceOrgId: input.sourceOrgId,
+            templateOrgId: prepared.templateOrgId,
+          }),
         }),
       ),
     );
-    // Record the clone durably before any later stage can fail: this marker
-    // is what the next retry resumes from.
-    await stampClonedSampleCompany({
-      sandboxOrgId: cloned.sandboxOrgId,
-      industryKey: input.industryKey,
-      profileId: profile.profileId,
-      memberUserId: input.memberUserId,
-      sourceOrgId: input.sourceOrgId,
-      templateOrgId: prepared.templateOrgId,
-    });
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
     if (winnerBeforeFinalize) {

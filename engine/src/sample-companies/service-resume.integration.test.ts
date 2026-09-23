@@ -4,11 +4,18 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
   createSampleCompany,
+  generateTemplate,
+  SampleCompanyPreconditionError,
   SampleCompanyProvisioningError,
   sampleCompanyStageMessage,
 } from "./service.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { db, withBypass, withBypassContext } from "../platform/db.ts";
+import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { loadRun } from "../sim/runner.ts";
+import type { RunManifest } from "../sim/manifest.ts";
+import { SIM_ORG_PREFIX } from "../sim/db-guard.ts";
+import { wipeSimOrg } from "../sim/world.ts";
+import { createScriptJournal } from "../ledger/journal-writes.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -265,6 +272,275 @@ test(
         allocateDocumentNumber(db, resumed.orgId, "customer_invoice", "INV-"),
       );
       assert.match(next, /^INV-0*8$/, `next invoice must follow INV-0007, got ${next}`);
+    } finally {
+      await dropFixture(fixture);
+    }
+  },
+);
+
+test(
+  "a forced simulator failure wipes the attempt org: retry leaves none behind",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedFixture();
+    try {
+      await assert.rejects(
+        createSampleCompany(fixture.input, {
+          prepareTemplate: async (industryKey: string) => {
+            // The failure happens inside template generation; the service
+            // stages it and the attempt must already be wiped when it does.
+            const template = await generateTemplate("general-business", {
+              simulateTemplate: async () => {
+                throw new Error("simulated simulator outage");
+              },
+            });
+            return {
+              industryKey,
+              profileId: "general-business",
+              templateOrgId: template.id,
+              templateName: template.name,
+              generated: true,
+              coverage: {
+                documents: template.documents,
+                postedEntries: template.postedEntries,
+                parties: template.parties,
+                periods: template.periods,
+                adminRoles: template.adminRoles,
+              },
+            };
+          },
+        }),
+        (error: unknown) => {
+          // Staged with the fixed template message — and the message is
+          // true because the attempt was wiped before it was reported.
+          assert.ok(error instanceof SampleCompanyProvisioningError);
+          assert.equal(
+            (error as SampleCompanyProvisioningError).stage,
+            "template",
+          );
+          assert.equal(error.message, sampleCompanyStageMessage("template"));
+          assert.match(error.message, /Nothing was created; you can retry/);
+          return true;
+        },
+      );
+      assert.deepEqual(await templateAttemptOrgs("general-business"), []);
+      assert.deepEqual(await simProfileOrgs("general-business"), []);
+    } finally {
+      await dropFixture(fixture);
+    }
+  },
+);
+
+test(
+  "a successful retry after a simulator failure leaves exactly one template org",
+  { skip: !DB },
+  async () => {
+    // A stale attempt from an earlier crashed generation must be swept
+    // before provisioning, so the retry converges on exactly one org.
+    const staleId = await seedStaleTemplateAttempt("general-business");
+    try {
+      const template = await generateTemplate("general-business", {
+        simulateTemplate: fakeSuccessfulSimulate,
+      });
+      assert.ok(template.id);
+
+      const remaining = await simProfileOrgs("general-business");
+      assert.deepEqual(
+        remaining.map((row) => row.id).sort(),
+        [template.id].sort(),
+        "the sweep must remove the stale attempt and the retry must provision exactly one org",
+      );
+      assert.ok(
+        !(await hasTemplateAttemptMarker(template.id)),
+        "the attempt marker must clear once the template converges",
+      );
+      assert.equal(await templateOracleStatus(template.id), "passed");
+      assert.ok(staleId !== template.id);
+    } finally {
+      for (const row of await simProfileOrgs("general-business")) {
+        await withBypass(() => wipeSimOrg(row.id));
+      }
+    }
+  },
+);
+
+test(
+  "a template attempt that cannot be wiped blocks before a second org is created",
+  { skip: !DB },
+  async () => {
+    const staleId = await seedStaleTemplateAttempt("general-business");
+    try {
+      await assert.rejects(
+        generateTemplate("general-business", {
+          simulateTemplate: fakeSuccessfulSimulate,
+          wipeTemplateAttempt: async () => {
+            throw new Error("simulated environment refusal");
+          },
+        }),
+        (error: unknown) => {
+          // The blocked refusal is NOT staged: its specific message names
+          // the stranded org and the remedy that clears it.
+          assert.ok(error instanceof SampleCompanyPreconditionError);
+          assert.match(String((error as Error).message), new RegExp(staleId));
+          assert.match(
+            String((error as Error).message),
+            /npm run sim -- reset-org/,
+          );
+          return true;
+        },
+      );
+      // Nothing new was provisioned beside the stuck attempt.
+      assert.deepEqual(
+        (await simProfileOrgs("general-business")).map((row) => row.id),
+        [staleId],
+      );
+    } finally {
+      await withBypass(() => wipeSimOrg(staleId));
+    }
+  },
+);
+
+async function templateAttemptOrgs(profileId: string): Promise<Array<{ id: string }>> {
+  return withBypassContext(async () => {
+    const result = await db.execute<{ id: string }>(sql`
+      select id from orgs
+       where settings->'sampleTemplateAttempt'->>'profileId' = ${profileId}`);
+    return result.rows;
+  });
+}
+
+async function simProfileOrgs(profileId: string): Promise<Array<{ id: string }>> {
+  return withBypassContext(async () => {
+    const result = await db.execute<{ id: string }>(sql`
+      select id from orgs where settings->>'simProfile' = ${profileId}`);
+    return result.rows;
+  });
+}
+
+async function hasTemplateAttemptMarker(orgId: string): Promise<boolean> {
+  return withBypassContext(async () => {
+    const result = await db.execute<{ marked: boolean }>(sql`
+      select (settings ? 'sampleTemplateAttempt') as marked from orgs where id = ${orgId}`);
+    return result.rows[0]?.marked ?? false;
+  });
+}
+
+async function templateOracleStatus(orgId: string): Promise<string | null> {
+  return withBypassContext(async () => {
+    const result = await db.execute<{ status: string | null }>(sql`
+      select settings->'sampleTemplateOracle'->>'status' as status
+        from orgs where id = ${orgId}`);
+    return result.rows[0]?.status ?? null;
+  });
+}
+
+/** A crashed generation's footprint: marked attempt, no oracle, no data. */
+async function seedStaleTemplateAttempt(profileId: string): Promise<string> {
+  const orgId = randomUUID();
+  await withBypass(() =>
+    db.execute(sql`
+      insert into orgs (id, name, base_currency, country, settings, env_kind)
+      values (${orgId}, ${`${SIM_ORG_PREFIX}stale attempt`}, 'USD', 'US',
+              ${JSON.stringify({
+                simHarness: true,
+                simProfile: profileId,
+                sampleTemplateAttempt: {
+                  version: 1,
+                  profileId,
+                  seed: "openbooks-sample-v1",
+                  stage: "provisioned",
+                  attemptedAt: new Date().toISOString(),
+                },
+              })}::jsonb, 'production')`),
+  );
+  return orgId;
+}
+
+/**
+ * Stand-in for the simulator day loop: it seeds the minimum coverage the
+ * template verifier requires (8 documents, 4 posted entries) through the
+ * product journal API, then reports a clean completed run. The test proves
+ * the attempt state machine around the driver, not the driver itself.
+ */
+async function fakeSuccessfulSimulate(runDir: string): Promise<RunManifest> {
+  const { manifest, world } = loadRun(runDir);
+  for (let i = 1; i <= 8; i++) {
+    await withBypass(() =>
+      db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, document_date, currency, status)
+        values (${randomUUID()}, ${world.orgId}, 'customer_invoice', ${`SIM-000${i}`}, ${manifest.startDate}, ${world.currency}, 'draft')`),
+    );
+  }
+  for (let i = 0; i < 4; i++) {
+    await withOrgContext(world.orgId, () =>
+      createScriptJournal(
+        world.orgId,
+        world.actors.controller,
+        {
+          documentDate: manifest.startDate,
+          memo: `Resume coverage ${i}`,
+          lines: [
+            { accountId: world.accounts.bank!, amount: 100 },
+            { accountId: world.accounts.ar!, amount: -100 },
+          ],
+        },
+        { post: true },
+      ),
+    );
+  }
+  return { ...manifest, status: "completed", defects: [] };
+}
+
+test(
+  "an interrupted clone is compensated, never resumed; retry provisions exactly one company",
+  { skip: !DB },
+  async () => {
+    const fixture = await seedFixture();
+    try {
+      const first = await createSampleCompany(fixture.input, stubTemplate(fixture));
+      assert.equal(await orgStage(first.orgId), "ready");
+
+      // Simulate a clone that copied rows but never reported back: the
+      // birth marker says 'cloned', the clone engine never marked it ready,
+      // and no access was ever granted. The data may be half-copied, so the
+      // retry must delete it and provision fresh — never resume it.
+      await withBypass(() =>
+        db.execute(sql`
+          update orgs
+             set settings = jsonb_set(settings, '{sampleCompany,provisioningStage}', '"cloned"', true)
+           where id = ${first.orgId}`),
+      );
+      await withBypass(() =>
+        db.execute(sql`
+          delete from user_org_access
+           where org_id = ${first.orgId} and member_user_id = ${fixture.memberUserId}`),
+      );
+      await withBypass(() =>
+        db.execute(sql`
+          update sandboxes set status = 'provisioning', updated_at = now()
+           where org_id = ${first.orgId}`),
+      );
+
+      const second = await createSampleCompany(fixture.input, stubTemplate(fixture));
+      assert.notEqual(
+        second.orgId,
+        first.orgId,
+        "the interrupted clone must be replaced, not resumed",
+      );
+      fixture.createdOrgIds.push(second.orgId);
+
+      const after = await sampleOrgsFor(fixture.memberUserId);
+      assert.equal(after.length, 1, "compensation must leave exactly one company");
+      assert.equal(after[0]!.id, second.orgId);
+      assert.equal(after[0]!.stage, "ready");
+      assert.equal(after[0]!.hasAccess, true);
+
+      const leftover = await withBypassContext(async () => {
+        const result = await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from orgs where id = ${first.orgId}`);
+        return result.rows[0]!.n;
+      });
+      assert.equal(leftover, 0, "the interrupted clone must actually be gone");
     } finally {
       await dropFixture(fixture);
     }

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   SAMPLE_COMPANY_STAGE_CODES,
   SampleCompanyError,
+  SampleCompanyPreconditionError,
   SampleCompanyProvisioningError,
   runProvisioningStage,
   sampleCompanyStageMessage,
@@ -98,6 +99,26 @@ test("a clone-stage database failure becomes the named clone refusal without SQL
         SQL_LADEN_DB_ERROR,
         "the full cause must stay available server-side",
       );
+      return true;
+    },
+  );
+});
+
+test("a precondition refusal keeps its specific message past the stage wrapper", async () => {
+  // A blocked template sweep names the stranded org and its remedy — the
+  // fixed per-stage string would hide both, so it must pass through with
+  // its message intact (the API returns it as a 409 known refusal).
+  const blocked = new SampleCompanyPreconditionError(
+    'sample template preparation found an incomplete previous attempt (org abc) that could not be removed automatically; remove it, then retry',
+  );
+  await assert.rejects(
+    runProvisioningStage("template", async () => {
+      throw blocked;
+    }),
+    (error: unknown) => {
+      assert.equal(error, blocked);
+      assert.ok(error instanceof SampleCompanyError);
+      assert.match((error as Error).message, /org abc/);
       return true;
     },
   );
