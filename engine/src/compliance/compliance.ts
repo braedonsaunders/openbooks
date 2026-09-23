@@ -130,8 +130,32 @@ export type WaiverRecord = {
   projectId: string | null;
   effectiveFrom: string;
   expiresOn: string;
+  /**
+   * When the exception was revoked (timestamptz serialized as ISO). A revoked
+   * exception stays effective for as-of dates strictly before the revocation
+   * date and is inert on/after it, so history is evaluated as it stood —
+   * revoking today must not rewrite what was covered last month.
+   */
   revokedAt: string | null;
 };
+
+/**
+ * Is this exception in force on `asOf` (ISO yyyy-mm-dd)? The window end is
+ * the earlier of expiry and revocation: a revocation takes effect on its own
+ * calendar date (fail closed — the revoked day itself is not covered).
+ */
+export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "revokedAt">, asOf: string): boolean {
+  if (daysBetween(w.effectiveFrom, asOf) < 0) return false;
+  if (daysBetween(asOf, w.expiresOn) < 0) return false;
+  if (w.revokedAt !== null && (w.revokedAt as unknown) !== undefined) {
+    // pg returns timestamptz as a Date, unit callers pass ISO strings —
+    // normalize both to the calendar date before comparing.
+    const raw = w.revokedAt as unknown as string | Date;
+    const revokedDate = (raw instanceof Date ? raw.toISOString() : String(raw)).slice(0, 10);
+    if (daysBetween(asOf, revokedDate) <= 0) return false;
+  }
+  return true;
+}
 
 export interface RequirementFinding {
   requirementId: string;
@@ -315,13 +339,14 @@ export function evaluateRequirement(args: {
     }
   }
 
+  // A revoked exception still covers as-of dates before its revocation, so
+  // the finding reads the way the control read on that date — revoking an
+  // exception narrows its window, it does not erase it.
   const waiver = args.waivers.find(
     (w) =>
       w.requirementId === policy.id &&
       inScope(w) &&
-      w.revokedAt === null &&
-      daysBetween(w.effectiveFrom, asOf) >= 0 &&
-      daysBetween(asOf, w.expiresOn) >= 0,
+      waiverInForceOn(w, asOf),
   );
 
   const failing = FAILING_STATES.has(best.state);
@@ -593,12 +618,14 @@ export async function loadVendorComplianceInputs(
              verified_at as "verifiedAt"
         from compliance_records
        where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`),
+    // Revoked rows load too: the evaluator dates them by revoked_at, so an
+    // as-of read sees the exception exactly while it was in force.
     runner.execute<WaiverRecord>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              revoked_at as "revokedAt"
         from compliance_waivers
-       where org_id = ${orgId} and party_id = ${partyId} and revoked_at is null`),
+       where org_id = ${orgId} and party_id = ${partyId}`),
     runner.execute<LienWaiverEvidence>(sql`
       select id, waiver_number as "waiverNumber", status, direction,
              project_id as "projectId", through_date as "throughDate",
