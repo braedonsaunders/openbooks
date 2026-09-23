@@ -157,30 +157,36 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
         continue;
       }
       const schedule = scheduleForType(row.renewal_lead_days, orgSchedule);
-      if (!schedule.includes(daysLeft)) continue;
-      // The UNIQUE(qualification_id, lead_days) is the idempotency key:
-      // a re-run hits the conflict arm and changes nothing — and the
-      // notification below fires only on a fresh insert.
-      const alertId = (await tx.execute<{ id: string }>(sql`
-        insert into hrm_qualification_alerts
-          (org_id, qualification_id, lead_days, due_on, channel, created_by)
-        values (${orgId}::uuid, ${row.qualification_id}::uuid, ${daysLeft},
-                ${row.expires_on}::date, 'inbox', null)
-        on conflict (qualification_id, lead_days) do nothing
-        returning id
-      `)).rows[0]?.id;
-      if (!alertId) continue;
-      alertsWritten += 1;
-      await tx.execute(sql`
-        update hrm_qualification_alerts set sent_at = now()
-         where id = ${alertId}::uuid and org_id = ${orgId}::uuid
-      `);
-      notificationsWritten += await notifyHolders(
-        tx, orgId, row,
-        `Qualification expiring — ${row.type_name}`,
-        `${row.type_name} expires ${row.expires_on} (${daysLeft} days). Renew it before gated work is refused.`,
-        "/hrm/qualifications",
-      );
+      // Threshold crossing, not exact-day matching: a missed run must not
+      // permanently skip a warning. Each crossed threshold gets its own
+      // alert row, and the UNIQUE(qualification_id, lead_days) below is
+      // the idempotency key — catch-up inserts each crossed threshold
+      // exactly once (justified: a re-run hits the conflict arm and
+      // changes nothing), and the notification fires only on a fresh
+      // insert, so a second run is silent.
+      for (const threshold of schedule) {
+        if (daysLeft > threshold) continue;
+        const alertId = (await tx.execute<{ id: string }>(sql`
+          insert into hrm_qualification_alerts
+            (org_id, qualification_id, lead_days, due_on, channel, created_by)
+          values (${orgId}::uuid, ${row.qualification_id}::uuid, ${threshold},
+                  ${row.expires_on}::date, 'inbox', null)
+          on conflict (qualification_id, lead_days) do nothing
+          returning id
+        `)).rows[0]?.id;
+        if (!alertId) continue;
+        alertsWritten += 1;
+        await tx.execute(sql`
+          update hrm_qualification_alerts set sent_at = now()
+           where id = ${alertId}::uuid and org_id = ${orgId}::uuid
+        `);
+        notificationsWritten += await notifyHolders(
+          tx, orgId, row,
+          `Qualification expiring — ${row.type_name}`,
+          `${row.type_name} expires ${row.expires_on} (${daysLeft} days). Renew it before gated work is refused.`,
+          "/hrm/qualifications",
+        );
+      }
     }
     void now;
     return { orgId, alertsWritten, notificationsWritten, expiredNoticed };
