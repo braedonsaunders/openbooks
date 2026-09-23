@@ -1,0 +1,163 @@
+[
+  {
+    "path": "engine/src/agents/collections.ts",
+    "fn": "classifyCollectionSeverity",
+    "test": "",
+    "arg": "now.getUTCFullYear()",
+    "reason": "year is the wall-clock now (args.now defaults to new Date() in production); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/agents/collections.ts",
+    "fn": "qualifiesForCreditHold",
+    "test": "",
+    "arg": "now.getUTCFullYear()",
+    "reason": "year is the wall-clock now (args.now defaults to new Date() in production); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/agents/measure.ts",
+    "fn": "dateAgeDays",
+    "test": "",
+    "arg": "now.getUTCFullYear()",
+    "reason": "year is the wall-clock now (defaults to new Date() in production); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/backup/backup.ts",
+    "fn": "at",
+    "test": "",
+    "arg": "from.getUTCFullYear()",
+    "reason": "from defaults to new Date() and the sole production caller (worker/backup-scheduler.ts) passes new Date(); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/fx/providers.ts",
+    "fn": "computeNextSyncAt",
+    "test": "",
+    "arg": "now.getUTCFullYear()",
+    "reason": "year is the wall-clock now (defaults to new Date() in production); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/sample-companies/service.ts",
+    "fn": "generationWindow",
+    "test": "",
+    "arg": "now.getUTCFullYear()",
+    "reason": "year is the wall-clock now (defaults to new Date() in production); a live clock cannot be below year 100"
+  },
+  {
+    "path": "engine/src/allocations/allocation-rerun-approval.integration.test.ts",
+    "fn": "seedTodayPeriod",
+    "test": "",
+    "arg": "y",
+    "reason": "test-only local-time month length; y derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/ledger/posting-effects-idempotency.integration.test.ts",
+    "fn": "ensureRecognitionPeriods",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fixture months; year derives from the 2026 literal (2026 + Math.floor(month / 12))"
+  },
+  {
+    "path": "engine/src/payments/acceptance.integration.test.ts",
+    "fn": "seedAcceptance",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/acceptance.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "payment link settles a signed webhook into an applied receipt with a surcharge leg",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/refund-first.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "a refund arriving before its success parks, settles, and notes exactly once",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/refund-first.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "a post-consumption refund redelivery never re-arms its marker",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payments/webhook-out-of-order.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "a succeeded event arriving after its refund still settles instead of stranding",
+    "arg": "year",
+    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "engine/src/payroll/canada/cra/remittance.test.ts",
+    "fn": "(top-level)",
+    "test": "the declared CRA timetable matches the legacy function across three years",
+    "arg": "year",
+    "reason": "test-only month ends; year iterates the literals [2026, 2027, 2028]"
+  },
+  {
+    "path": "engine/src/payroll/remittance-due-dates.test.ts",
+    "fn": "(top-level)",
+    "test": "every due date lands on a business day",
+    "arg": "year",
+    "reason": "test-only month ends; year iterates the literals [2026, 2027, 2028]"
+  },
+  {
+    "path": "engine/src/payroll/schedule-periods.test.ts",
+    "fn": "(top-level)",
+    "test": "every other day of the month derives a schedule",
+    "arg": "Number(month.slice(0, 4))",
+    "reason": "test-only month lengths; month iterates the literals 2026-01, 2026-02, 2026-04, 2028-02"
+  },
+  {
+    "path": "engine/src/projects/retainage-replay-lock.integration.test.ts",
+    "fn": "nextDay",
+    "test": "",
+    "arg": "y!",
+    "reason": "test-only date stepper; input is the scratch org's contemporary business date, never below year 100"
+  },
+  {
+    "path": "engine/src/property/billing-provenance.integration.test.ts",
+    "fn": "seedPropertyFixture",
+    "test": "",
+    "arg": "month === 12 ? 2027 : 2026",
+    "reason": "test-only fixture months; both branches are literals >= 100 (months iterated are 4, 5, 6, 8, 9, 10)"
+  },
+  {
+    "path": "web/lib/application/document-lifecycle-kinds.integration.test.ts",
+    "fn": "openCurrentMonth",
+    "test": "",
+    "arg": "today.getUTCFullYear()",
+    "reason": "test-only current-month opener; today is new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "web/lib/application/documents-subsidiary-scope.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "a restricted actor cannot re-home a correction into an out-of-scope subsidiary",
+    "arg": "today.getUTCFullYear()",
+    "reason": "test-only current-month opener; today is new Date() wall-clock, never below year 100"
+  },
+  {
+    "path": "web/lib/cash/bank-register-transfers.integration.test.ts",
+    "fn": "seedPeriod",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fixture months; every caller passes the literal 2026"
+  },
+  {
+    "path": "web/lib/cash/gl-history-average.integration.test.ts",
+    "fn": "seedPeriod",
+    "test": "",
+    "arg": "year",
+    "reason": "test-only fixture months; every caller passes the literal 2026"
+  },
+  {
+    "path": "web/lib/module-home/accounting-book-scope.integration.test.ts",
+    "fn": "(top-level)",
+    "test": "accounting journal tiles read the primary book only",
+    "arg": "year",
+    "reason": "test-only month end; year derives from the org's contemporary businessToday, never below year 100"
+  }
+]
