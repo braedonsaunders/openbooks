@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
+import type { PoolClient } from "pg";
 import { businessToday } from "../platform/business-date.ts";
-import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, env, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money/money.ts";
 import { runUserSql } from "../platform/sqlapi.ts";
 
@@ -59,6 +60,122 @@ async function all<T extends Record<string, unknown> = Record<string, unknown>>(
 }
 
 /** Run the non-destructive fixture verification for one org. */
+/**
+ * The runtime role the probe assumes when the harness login bypasses RLS.
+ * Parsed from OPENBOOKS_RUNTIME_DB_URL the same way bootstrap parses it
+ * (invalid role names are refused, never interpolated).
+ */
+function runtimeProbeRole(): string {
+  const raw = env.OPENBOOKS_RUNTIME_DB_URL?.trim();
+  if (!raw) throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL is not set, so no RLS-subject role can be assumed");
+  let username: string;
+  try {
+    username = decodeURIComponent(new URL(raw).username);
+  } catch {
+    throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL is not a valid URL");
+  }
+  if (!/^[a-z_][a-z0-9_]{0,62}$/.test(username)) {
+    throw new Error("rls probe refused: OPENBOOKS_RUNTIME_DB_URL carries no usable runtime role name");
+  }
+  return username;
+}
+
+export interface TableIsolationProbe {
+  /** A non-bypassing role read the table (false when none could be assumed). */
+  established: boolean;
+  /** The foreign id was invisible through the base table. */
+  tableHidden: boolean;
+  /** Own-org documents visible in the same scope (non-vacuity witness). */
+  ownDocs: number;
+  /** Empty on success; the named reason otherwise (and on role switch). */
+  detail: string;
+}
+
+/**
+ * The base-table half of the rls-org-isolation probe, on ONE pool client in
+ * this org's scope inside a READ ONLY transaction. PostgreSQL does not apply
+ * RLS (FORCE included) to a superuser or BYPASSRLS login — the CI and
+ * rehearsal harness logins — so reading through the pool as-is sees every
+ * row and the probe would fail for the wrong reason (or, worse, a policy
+ * regression could hide behind the bypass). When the login bypasses, assume
+ * the runtime role first with SET LOCAL ROLE and re-check; when no
+ * non-bypassing role can be established the probe reports unestablished
+ * rather than passing vacuously or false-positiving.
+ */
+export async function probeTableIsolation(orgId: string, foreignId: string): Promise<TableIsolationProbe> {
+  const refused = (detail: string): TableIsolationProbe => ({
+    established: false,
+    tableHidden: false,
+    ownDocs: 0,
+    detail,
+  });
+  return withOrgContext(orgId, async () => {
+    let client: PoolClient | null = null;
+    try {
+      client = await pool.connect();
+      await client.query("begin read only");
+      await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [
+        orgId,
+      ]);
+      const login = (
+        await client.query(
+          "select current_user as login, coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass",
+        )
+      ).rows[0] as { login: string; bypass: boolean };
+      let switchNote = "";
+      if (login.bypass) {
+        let role: string;
+        try {
+          role = runtimeProbeRole();
+        } catch (error) {
+          await client.query("rollback");
+          return refused(
+            `probe connection bypasses RLS as ${login.login} and ${(error instanceof Error ? error.message : String(error)).toLowerCase()}`,
+          );
+        }
+        try {
+          await client.query(`set local role "${role}"`);
+        } catch (error) {
+          await client.query("rollback");
+          return refused(
+            `probe connection bypasses RLS as ${login.login} and could not assume runtime role ${role}: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        const after = (
+          await client.query(
+            "select current_user as login, coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass",
+          )
+        ).rows[0] as { login: string; bypass: boolean };
+        if (after.bypass) {
+          await client.query("rollback");
+          return refused(
+            `probe connection bypasses RLS and no runtime role could be assumed (still bypassing as ${after.login} after assuming ${role})`,
+          );
+        }
+        switchNote = ` [table half assumed runtime role ${role}; harness login ${login.login} bypasses RLS]`;
+      }
+      const seen = await client.query("select id from documents where id = $1", [foreignId]);
+      const own = await client.query("select count(*)::int as n from documents where org_id = $1", [orgId]);
+      await client.query("commit");
+      return {
+        established: true,
+        tableHidden: (seen.rowCount ?? 0) === 0,
+        ownDocs: (own.rows[0] as { n: number }).n,
+        detail: switchNote,
+      };
+    } catch (error) {
+      try {
+        await client?.query("rollback");
+      } catch {
+        // The connection is already broken; release discards it.
+      }
+      throw error;
+    } finally {
+      client?.release();
+    }
+  });
+}
+
 export async function runScenario(
   orgId: string,
   opts: { at: string; gitSha?: string | null; runId?: string | null } = { at: "" },
@@ -645,10 +762,7 @@ export async function runScenario(
     if (!foreign) {
       rlsDetail += "; no foreign-org rows anywhere on this cluster — live probe vacuous, catalog-only";
     } else {
-      const seenDirect = await withOrgContext(orgId, async () => {
-        const r = await db.execute(sql`select id from documents where id = ${foreign.id}`);
-        return r.rows;
-      });
+      const tableProbe = await probeTableIsolation(orgId, foreign.id);
       // The governed view scopes by its own temp-table tenant context, which
       // the app-pool scope above does not establish — reading the view there
       // returns empty with or without isolation, a vacuous proof. Read it the
@@ -664,14 +778,13 @@ export async function runScenario(
         `select id from documents where id = '${foreign.id}'`,
         { orgId },
       );
-      const own = await withOrgContext(orgId, async () => {
-        const r = await db.execute<{ n: string }>(sql`
-          select count(*) n from documents where org_id = ${orgId}`);
-        return Number(r.rows[0]!.n);
-      });
-      rlsOk = seenDirect.length === 0 && seenView.rowCount === 0;
-      rlsDetail += `; foreign doc invisible via table=${seenDirect.length === 0} view=${seenView.rowCount === 0}, own docs visible=${own}`;
-      if (own === 0) rlsDetail += " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
+      rlsOk = tableProbe.established && tableProbe.tableHidden && seenView.rowCount === 0;
+      rlsDetail += tableProbe.established
+        ? `; foreign doc invisible via table=${tableProbe.tableHidden} view=${seenView.rowCount === 0}, own docs visible=${tableProbe.ownDocs}${tableProbe.detail}`
+        : `; ${tableProbe.detail}`;
+      if (tableProbe.established && tableProbe.ownDocs === 0) {
+        rlsDetail += " (empty org — own-visibility half of the probe not provable here; see the committed RLS red-test)";
+      }
     }
   }
   checks.push({ name: "rls-org-isolation", ok: rlsOk, detail: rlsDetail });
