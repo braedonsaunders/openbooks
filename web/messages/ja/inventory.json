@@ -210,6 +210,10 @@
       "selectStockLocation": "保管場所を選択…",
       "selectLot": "ロット（管理対象のみ）…",
       "missingFields": "ロケーション、子会社、日付、明細を1件以上指定してください。",
+    "lineMissingItem": "行{line}: 品目を選択してください。",
+    "lineMissingStockLocation": "行{line}: 保管場所を選択してください。",
+    "noStockLocations": "このロケーションにはまだ保管場所がありません。",
+    "manageStockLocations": "保管場所を設定する",
       "lines": "カウント対象明細",
       "addLine": "明細を追加",
       "removeLine": "削除"

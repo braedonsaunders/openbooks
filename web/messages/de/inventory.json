@@ -210,6 +210,10 @@
       "selectStockLocation": "Lagerort wählen…",
       "selectLot": "Charge (falls geführt)…",
       "missingFields": "Wähle Standort, Gesellschaft, Datum und mindestens eine Zeile.",
+    "lineMissingItem": "Zeile {line}: Artikel wählen.",
+    "lineMissingStockLocation": "Zeile {line}: Lagerort wählen.",
+    "noStockLocations": "Dieser Standort hat noch keine Lagerorte.",
+    "manageStockLocations": "Lagerorte einrichten",
       "lines": "Zu zählende Zeilen",
       "addLine": "Zeile hinzufügen",
       "removeLine": "Entfernen"

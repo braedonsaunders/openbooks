@@ -210,6 +210,10 @@
       "selectStockLocation": "Elige ubicación de stock…",
       "selectLot": "Lote (si se gestiona)…",
       "missingFields": "Elige ubicación, filial, fecha y al menos una línea.",
+    "lineMissingItem": "Línea {line}: elige un artículo.",
+    "lineMissingStockLocation": "Línea {line}: elige una ubicación de stock.",
+    "noStockLocations": "Esta ubicación aún no tiene ubicaciones de stock.",
+    "manageStockLocations": "Configurar ubicaciones de stock",
       "lines": "Líneas a contar",
       "addLine": "Añadir línea",
       "removeLine": "Quitar"

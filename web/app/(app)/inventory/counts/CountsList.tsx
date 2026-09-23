@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -68,6 +69,7 @@ export function CountsList({
   stockLocations,
   lots,
   canPost,
+  canManageStockLocations,
   createRequested = false,
   selectedCountId,
 }: {
@@ -77,9 +79,10 @@ export function CountsList({
   locations: { id: string; name: string | null }[]
   subsidiaries: { id: string; name: string | null }[]
   items: { id: string; code: string | null; name: string | null }[]
-  stockLocations: { id: string; code: string | null }[]
+  stockLocations: { id: string; code: string | null; locationId: string }[]
   lots: { id: string; item_id: string; lot_number: string }[]
   canPost: boolean
+  canManageStockLocations: boolean
   createRequested?: boolean
   selectedCountId?: string
 }) {
@@ -237,7 +240,8 @@ export function CountsList({
           locationOptions={locationOptions}
           subsidiaryOptions={subsidiaryOptions}
           itemOptions={itemOptions}
-          stockLocationOptions={stockLocationOptions}
+          stockLocations={stockLocations}
+          canManageStockLocations={canManageStockLocations}
           lots={lots}
           onClose={() => {
             setCreateOpen(false)
@@ -282,14 +286,16 @@ function CreateCountDrawer({
   locationOptions,
   subsidiaryOptions,
   itemOptions,
-  stockLocationOptions,
+  stockLocations,
+  canManageStockLocations,
   lots,
   onClose,
 }: {
   locationOptions: { value: string; label: string }[]
   subsidiaryOptions: { value: string; label: string }[]
   itemOptions: { value: string; label: string }[]
-  stockLocationOptions: { value: string; label: string }[]
+  stockLocations: { id: string; code: string | null; locationId: string }[]
+  canManageStockLocations: boolean
   lots: { id: string; item_id: string; lot_number: string }[]
   onClose: () => void
 }) {
@@ -305,11 +311,26 @@ function CreateCountDrawer({
   ])
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
+  // Per-row refusals stay pinned to the row that caused them; fully empty
+  // rows are inert filler and are reported by the form-level refusal instead.
+  const [lineErrors, setLineErrors] = useState<Record<number, string>>({})
 
   async function submit() {
-    const clean = lines.filter((l) => l.itemId && l.stockLocationId)
-    if (!locationId || !subsidiaryId || !date || clean.length === 0) {
-      toast.error(t('counts.create.missingFields'))
+    const errors: Record<number, string> = {}
+    lines.forEach((l, i) => {
+      if (!l.itemId && !l.stockLocationId && !l.lotId) return
+      if (!l.itemId) errors[i] = t('counts.create.lineMissingItem', { line: i + 1 })
+      else if (!l.stockLocationId) errors[i] = t('counts.create.lineMissingStockLocation', { line: i + 1 })
+    })
+    const filled = lines.filter((l) => l.itemId && l.stockLocationId)
+    setLineErrors(errors)
+    if (!locationId || !subsidiaryId || !date || filled.length === 0 || Object.keys(errors).length > 0) {
+      const detail =
+        Object.keys(errors).length > 0
+          ? Object.values(errors).join(' ')
+          : t('counts.create.missingFields')
+      setPostError(detail)
+      toast.error(detail)
       return
     }
     setBusy(true)
@@ -321,7 +342,7 @@ function CreateCountDrawer({
         subsidiaryId,
         date,
         memo: memo || undefined,
-        lines: clean.map((l) => ({
+        lines: filled.map((l) => ({
           itemId: l.itemId,
           stockLocationId: l.stockLocationId,
           lotId: l.lotId || undefined,
@@ -366,7 +387,19 @@ function CreateCountDrawer({
             </Label>
             <SearchSelect
               value={locationId}
-              onChange={setLocationId}
+              onChange={(v) => {
+                setLocationId(v)
+                // Drop line stock locations that live under another business
+                // location instead of posting against a stale picker value.
+                setLines((prev) =>
+                  prev.map((p) =>
+                    p.stockLocationId &&
+                    !stockLocations.some((s) => s.id === p.stockLocationId && s.locationId === v)
+                      ? { ...p, stockLocationId: '' }
+                      : p,
+                  ),
+                )
+              }}
               options={locationOptions}
               placeholder={t('counts.create.selectLocation')}
               sheetTitle={t('counts.create.location')}
@@ -403,28 +436,69 @@ function CreateCountDrawer({
             const lotOptions = lots
               .filter((lot) => lot.item_id === line.itemId)
               .map((lot) => ({ value: lot.id, label: lot.lot_number }))
+            // Stock locations belong to a business location: only the ones
+            // under the chosen count location are offered on each line.
+            const visibleStockLocations = locationId
+              ? stockLocations.filter((s) => s.locationId === locationId)
+              : stockLocations
+            const lineStockOptions = visibleStockLocations.map((s) => ({ value: s.id, label: s.code ?? s.id }))
+            const rowError = lineErrors[i]
+            const clearRowError = () =>
+              setLineErrors((prev) => {
+                if (!(i in prev)) return prev
+                const next = { ...prev }
+                delete next[i]
+                return next
+              })
             return (
               <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <div className="space-y-1">
                 <SearchSelect
                   value={line.itemId}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    clearRowError()
                     setLines((prev) => prev.map((p, j) => (j === i ? { ...p, itemId: v, lotId: '' } : p)))
-                  }
+                  }}
                   options={itemOptions}
                   placeholder={t('counts.create.selectItem')}
                   sheetTitle={t('counts.columns.item')}
                   ariaLabel={t('counts.columns.item')}
                 />
+                </div>
+                <div className="space-y-1">
+                <Label>
+                  {t('counts.columns.stockLocation')} <span className="text-red-500">*</span>
+                </Label>
                 <SearchSelect
                   value={line.stockLocationId}
-                  onChange={(v) =>
+                  onChange={(v) => {
+                    clearRowError()
                     setLines((prev) => prev.map((p, j) => (j === i ? { ...p, stockLocationId: v } : p)))
-                  }
-                  options={stockLocationOptions}
+                  }}
+                  options={lineStockOptions}
                   placeholder={t('counts.create.selectStockLocation')}
                   sheetTitle={t('counts.columns.stockLocation')}
                   ariaLabel={t('counts.columns.stockLocation')}
                 />
+                {rowError ? (
+                  <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                    {rowError}
+                  </p>
+                ) : null}
+                {locationId && visibleStockLocations.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    {t('counts.create.noStockLocations')}{' '}
+                    {canManageStockLocations ? (
+                      <Link
+                        className="underline"
+                        href="/inventory?inventoryView=locations"
+                      >
+                        {t('counts.create.manageStockLocations')}
+                      </Link>
+                    ) : null}
+                  </p>
+                ) : null}
+                </div>
                 <SearchSelect
                   value={line.lotId}
                   onChange={(v) => setLines((prev) => prev.map((p, j) => (j === i ? { ...p, lotId: v } : p)))}

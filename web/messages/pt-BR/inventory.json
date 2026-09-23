@@ -210,6 +210,10 @@
       "selectStockLocation": "Escolha o local de estoque…",
       "selectLot": "Lote (quando rastreado)…",
       "missingFields": "Escolha local, subsidiária, data e pelo menos uma linha.",
+    "lineMissingItem": "Linha {line}: escolha um item.",
+    "lineMissingStockLocation": "Linha {line}: escolha um local de estoque.",
+    "noStockLocations": "Este local ainda não tem locais de estoque.",
+    "manageStockLocations": "Configurar locais de estoque",
       "lines": "Linhas a contar",
       "addLine": "Adicionar linha",
       "removeLine": "Remover"

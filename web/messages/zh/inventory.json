@@ -210,6 +210,10 @@
       "selectStockLocation": "选择库位…",
       "selectLot": "批次（如管理）…",
       "missingFields": "请选择地点、子公司、日期并至少添加一行。",
+    "lineMissingItem": "第{line}行：请选择物料。",
+    "lineMissingStockLocation": "第{line}行：请选择库位。",
+    "noStockLocations": "此地点尚无库位。",
+    "manageStockLocations": "设置库位",
       "lines": "待盘点行",
       "addLine": "添加行",
       "removeLine": "移除"
