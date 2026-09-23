@@ -6,7 +6,7 @@
     "search": "Buscar orçamentos…",
     "new": "Novo orçamento",
     "emptyTitle": "Nenhum orçamento ainda",
-    "emptyDescription": "Crie um rascunho persistido e comece a inserir metas de contas por período.",
+    "emptyDescription": "Crie um orçamento e comece a inserir metas de contas por período.",
     "statusFilter": "Status",
     "kindFilter": "Tipo",
     "yearFilter": "Ano fiscal",
@@ -40,7 +40,11 @@
     "blank": "Orçamento em branco",
     "sourceOption": "{name} · AF{year}",
     "creating": "Criando…",
-    "failed": "Não foi possível criar o rascunho de orçamento."
+    "failed": "Não foi possível criar o rascunho de orçamento.",
+    "save": "Salvar orçamento",
+    "nameRequired": "Dê um nome ao orçamento antes de salvar.",
+    "invalidAmount": "“{account}” tem um valor que não é um número válido — corrija-o antes de salvar.",
+    "unsavedHint": "Ainda não salvo — nada é armazenado até você salvar."
   },
   "workspace": {
     "back": "Orçamentos",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "Adicione pelo menos uma linha orçamentária diferente de zero antes de enviar para aprovação.",
     "actionFailed": "A ação do orçamento falhou.",
     "revisionConflict": "Este orçamento foi alterado em outro lugar. Recarregue para continuar.",
-    "selfApprovalForbidden": "Você não pode aprovar um orçamento que você enviou. Peça a outro aprovador que decida."
+    "selfApprovalForbidden": "Você não pode aprovar um orçamento que você enviou. Peça a outro aprovador que decida.",
+    "created": "Rascunho de orçamento criado."
   },
   "import": {
     "button": "Importar",

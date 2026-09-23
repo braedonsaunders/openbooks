@@ -160,11 +160,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/budgets/NewBudgetButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/close/StartCloseButton.tsx",
     "fn": "start",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

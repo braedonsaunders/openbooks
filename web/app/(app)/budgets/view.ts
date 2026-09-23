@@ -14,7 +14,7 @@ import {
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { loadBudgetBooksAndYears, loadBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
+import { loadBudgetBooksAndYears, loadBudgetWorkspace, loadUnsavedBudgetWorkspace, type BudgetDimensions, type BudgetWorkspace } from '../../../lib/budgets'
 import type { BudgetDrawer } from './BudgetDrawer'
 
 /**
@@ -42,6 +42,7 @@ export interface BudgetsData {
   description: string
   currentParams: Record<string, string | string[] | undefined>
   canManage: boolean
+  canCreate: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
 }
 
@@ -68,12 +69,26 @@ export async function loadBudgets(
     classId: dimension('budgetClass'),
   }
   const { books, years } = await loadBudgetBooksAndYears(orgId)
-  const [sources, workspace] = await Promise.all([
-    budgetId && isUuid(budgetId) ? db.execute(sql`
+  // Unsaved-create (?budgetNew=1): the drawer opens over an in-memory
+  // workspace — zero writes on open, zero on Cancel, one explicit Save. The
+  // button and the drawer share this flag, so neither is ever offered
+  // without the other. A book and at least one fiscal year must exist to
+  // start a budget; the workspace loader and the Save endpoint re-validate
+  // the resolved book/year with named refusals.
+  const canCreate = canManage && books.length > 0 && years.length > 0
+  const creating = pickString(sp.budgetNew) === '1' && canCreate && !budgetId
+  const [sources, workspace, unsaved] = await Promise.all([
+    ((budgetId && isUuid(budgetId)) || creating) ? db.execute(sql`
       select id, name, fiscal_year from budget_scenarios
        where org_id = ${orgId} and status <> 'archived' order by updated_at desc limit 50
     `) as Promise<{ rows: { id: string; name: string; fiscal_year: number }[] }> : Promise.resolve({ rows: [] }),
     budgetId && isUuid(budgetId) ? loadBudgetWorkspace(budgetId, orgId, {
+      q: budgetList.q,
+      page: budgetList.page,
+      perPage: budgetList.perPage,
+      dims,
+    }) : Promise.resolve(null),
+    creating ? loadUnsavedBudgetWorkspace(orgId, {
       q: budgetList.q,
       page: budgetList.page,
       perPage: budgetList.perPage,
@@ -99,24 +114,31 @@ export async function loadBudgets(
   // Remount key: switching scenarios, revisions, or dimensional slices must
   // reset the drawer's client state, and a widget at a fixed position would
   // otherwise be reused.
-  const drawerPayload: BudgetDrawerProps | null = workspace
+  const openWorkspace = workspace ?? unsaved
+  const drawerPayload: BudgetDrawerProps | null = openWorkspace
     ? {
-        initial: workspace as BudgetWorkspace,
+        initial: openWorkspace as BudgetWorkspace,
         currentParams: sp,
         dims,
         closeHref,
         books,
         years,
         sources: sources.rows,
-        newlyCreated: pickString(sp.budgetNew) === '1',
+        newlyCreated: unsaved ? true : pickString(sp.budgetNew) === '1',
+        createMode: unsaved ? true : undefined,
         canManage,
-        canApprove: can(authz, 'budgets.approve'),
-        canExport: can(authz, 'data.export'),
+        canApprove: unsaved ? false : can(authz, 'budgets.approve'),
+        canExport: unsaved ? false : can(authz, 'data.export'),
       }
     : null
-  const drawer: BudgetsData['drawer'] = workspace && drawerPayload
+  const persistedKey = workspace
+    ? `${workspace.scenario.id}-${workspace.scenario.revision}-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`
+    : ''
+  const drawer: BudgetsData['drawer'] = openWorkspace && drawerPayload
     ? {
-        remountKey: `${workspace.scenario.id}-${workspace.scenario.revision}-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`,
+        remountKey: unsaved
+          ? `new-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`
+          : persistedKey,
         ...drawerPayload,
       }
     : null
@@ -126,6 +148,7 @@ export async function loadBudgets(
     description: t('list.description'),
     currentParams: sp,
     canManage,
+    canCreate,
     drawer,
   }
 }
@@ -144,10 +167,10 @@ export function budgetsSpec(data: BudgetsData): PageSpec {
       pageHeader({
         title: f('title'),
         description: f('description'),
-        // The native page passes `actions` only for a manager (undefined
-        // otherwise, so no actions wrapper renders at all); the conditional
-        // widget is the spec's equivalent.
-        actions: [widget(newBudget.widget, newBudget.props, f('canManage'))],
+        // The New affordance needs the creation grant plus a book and a
+        // fiscal year to start from — the same flag the ?budgetNew=1 drawer
+        // shares, so neither is ever offered without the other.
+        actions: [widget(newBudget.widget, newBudget.props, f('canCreate'))],
       }),
     ],
     body: [
@@ -159,7 +182,7 @@ export function budgetsSpec(data: BudgetsData): PageSpec {
         recordType: 'budget_scenario',
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'budget-drawer', props: { drawer: data.drawer } } : null,
-        emptyAction: data.canManage ? newBudget : null,
+        emptyAction: data.canCreate ? newBudget : null,
       }),
     ],
   })

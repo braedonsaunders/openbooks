@@ -37,6 +37,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid_source_scenario_id' }, { status: 422 })
   }
   const sourceScenarioId = typeof body.sourceScenarioId === 'string' ? body.sourceScenarioId : null
+  if (body.description !== undefined && typeof body.description !== 'string') {
+    return NextResponse.json({ error: 'invalid_description' }, { status: 422 })
+  }
+  const description = typeof body.description === 'string' ? body.description.trim().slice(0, 2000) : null
 
   const today = await businessToday(user.orgId)
   const defaults = (await db.execute<{ book_id: string | null; fiscal_year: number | null }>(sql`
@@ -87,8 +91,8 @@ export async function POST(req: Request) {
 
       const inserted = (await tx.execute<{ id: string; revision: number }>(sql`
         insert into budget_scenarios
-          (org_id, book_id, fiscal_year, name, kind, status, created_by, updated_by)
-        values (${user.orgId}, ${bookId}, ${fiscalYear}, ${name}, ${kind}, 'draft', ${user.id}, ${user.id})
+          (org_id, book_id, fiscal_year, name, description, kind, status, created_by, updated_by)
+        values (${user.orgId}, ${bookId}, ${fiscalYear}, ${name}, ${description}, ${kind}, 'draft', ${user.id}, ${user.id})
         returning id, revision
       `))
       const scenario = inserted.rows[0]!
@@ -120,7 +124,7 @@ export async function POST(req: Request) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'budget_scenarios', ${scenario.id}, 'insert',
-          ${JSON.stringify({ name, fiscalYear, bookId, kind, sourceScenarioId })}::jsonb, ${user.id})
+          ${JSON.stringify({ name, description, fiscalYear, bookId, kind, sourceScenarioId })}::jsonb, ${user.id})
       `)
       return scenario
     })

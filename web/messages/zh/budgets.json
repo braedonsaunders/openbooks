@@ -6,7 +6,7 @@
     "search": "搜索预算…",
     "new": "新建预算",
     "emptyTitle": "尚无预算",
-    "emptyDescription": "创建持久化草稿，开始按期间录入科目目标。",
+    "emptyDescription": "创建预算，开始按期间录入科目目标。",
     "statusFilter": "状态",
     "kindFilter": "类型",
     "yearFilter": "会计年度",
@@ -40,7 +40,11 @@
     "blank": "空白预算",
     "sourceOption": "{name} · FY{year}",
     "creating": "创建中…",
-    "failed": "无法创建预算草稿。"
+    "failed": "无法创建预算草稿。",
+    "save": "保存预算",
+    "nameRequired": "请在保存前为预算命名。",
+    "invalidAmount": "“{account}”的金额不是有效数字 — 请在保存前修正。",
+    "unsavedHint": "尚未保存 — 保存之前不会存储任何内容。"
   },
   "workspace": {
     "back": "预算",
@@ -118,7 +122,8 @@
     "budgetRequiresLines": "在提交审批之前，请至少添加一个非零预算行。",
     "actionFailed": "预算操作失败。",
     "revisionConflict": "此预算已在别处更改。请重新加载以继续。",
-    "selfApprovalForbidden": "您不能批准自己提交的预算。请让其他审批人进行裁决。"
+    "selfApprovalForbidden": "您不能批准自己提交的预算。请让其他审批人进行裁决。",
+    "created": "预算草稿已创建。"
   },
   "import": {
     "button": "导入",
