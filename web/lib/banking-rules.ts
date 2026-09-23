@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
@@ -404,10 +404,16 @@ export async function createCategorizingJournal(
   ])
 
   const deps = await controlDeps(orgId)
-  const submission = await submitAndReleaseIfUngated('journal', doc!.id, userId)
-  if (submission.flowError) {
-    throw new Error(`approval could not be routed: ${submission.flowError}`)
-  }
+  // The submission runs in this transaction so a refused routing throws
+  // inside it: without the wrapper the submission's own transaction would
+  // commit its before_submit script effects before the error propagates.
+  const submission = await withOrgTransaction(orgId, async () => {
+    const inner = await submitAndReleaseIfUngated('journal', doc!.id, userId)
+    if (inner.flowError) {
+      throw new Error(`approval could not be routed: ${inner.flowError}`)
+    }
+    return inner
+  })
   if (submission.gated) {
     throw new Error(
       'the categorizing journal was submitted for approval; match it after approval',

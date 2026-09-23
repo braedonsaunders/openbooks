@@ -12,6 +12,7 @@ import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
+import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 
 export const runtime = 'nodejs'
 
@@ -116,8 +117,12 @@ export async function POST(req: Request) {
           documentId,
           authz.user.id,
         )
+        // A refused routing throws: answering 422 from inside this
+        // transaction would commit the submission's script effects alongside
+        // the refusal. The catch below answers the same 422 after the
+        // rollback — including the draft allocation save above.
         if (submission.flowError) {
-          return { kind: 'flow_error' as const, error: submission.flowError }
+          throw new ApprovalRoutingError(submission.flowError)
         }
         if (submission.gated) {
           return { kind: 'pending' as const, requestId: submission.runId }
@@ -137,12 +142,6 @@ export async function POST(req: Request) {
     if (outcome.kind === 'not_found') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
-    if (outcome.kind === 'flow_error') {
-      return NextResponse.json(
-        { error: `approval could not be routed: ${outcome.error}` },
-        { status: 422 },
-      )
-    }
     if (outcome.kind === 'pending') {
       return NextResponse.json(
         { ok: true, pendingApproval: true, requestId: outcome.requestId },
@@ -161,6 +160,11 @@ export async function POST(req: Request) {
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
       return NextResponse.json({ error: e.message }, { status: 409 })
+    }
+    // A refused approval routing already rolled back; its message names the
+    // failed flow, so it keeps it with the same 422.
+    if (e instanceof ApprovalRoutingError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
     }
     return paymentErrorResponse(e)
   }

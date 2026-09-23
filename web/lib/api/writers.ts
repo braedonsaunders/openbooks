@@ -20,6 +20,7 @@ import {
   type FormSection,
 } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
+import { ApprovalRoutingError } from "../approval-routing-error";
 import { nextDocumentNumber } from "../bills.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
@@ -1090,13 +1091,16 @@ async function runDocumentLifecycle(
        where id = ${id} and org_id = ${user.orgId}
     `);
     if (status.rows[0]?.status === "draft") {
-      const submission = await submitAndReleaseIfUngated(kind, id, user.id);
-      if (submission.flowError) {
-        return err(
-          422,
-          `approval could not be routed: ${submission.flowError}`,
-        );
-      }
+      // The submission runs in this transaction so a refused routing throws
+      // inside it: without the wrapper the submission's own transaction
+      // would commit its before_submit script effects before the 422.
+      const submission = await withOrgTransaction(user.orgId, async () => {
+        const inner = await submitAndReleaseIfUngated(kind, id, user.id);
+        if (inner.flowError) {
+          throw new ApprovalRoutingError(inner.flowError);
+        }
+        return inner;
+      });
       if (submission.gated) {
         return {
           status: 202,
@@ -1117,10 +1121,13 @@ async function runDocumentLifecycle(
     }
     return null;
   } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts) are
-    // request-state failures, not server defects.
+    // Posting refusals (kernel rules or unconfigured org control accounts)
+    // and refused approval routings (already rolled back) are request-state
+    // failures, not server defects.
     const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+      e instanceof PostingError ||
+      e instanceof ControlAccountsIncompleteError ||
+      e instanceof ApprovalRoutingError
         ? 422
         : 500;
     return {

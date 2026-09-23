@@ -13,6 +13,7 @@ import {
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { partylessControlLines } from '../../../../lib/journal-warnings'
+import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 
 export const runtime = 'nodejs'
 
@@ -57,8 +58,12 @@ export async function POST(req: Request) {
               documentId,
               gate.user.id,
             )
+            // A refused routing throws: answering 422 from inside this
+            // transaction would commit the submission's script effects
+            // alongside the refusal. The catch below answers the same 422
+            // after the rollback.
             if (submission.flowError) {
-              return { kind: 'flow_error' as const, error: submission.flowError }
+              throw new ApprovalRoutingError(submission.flowError)
             }
             if (submission.gated) {
               return { kind: 'pending' as const, requestId: submission.runId }
@@ -92,12 +97,6 @@ export async function POST(req: Request) {
         if (outcome.kind === 'scope_denied') {
           return outcome.response
         }
-        if (outcome.kind === 'flow_error') {
-          return NextResponse.json(
-            { error: `approval could not be routed: ${outcome.error}` },
-            { status: 422 },
-          )
-        }
         if (outcome.kind === 'pending') {
           return NextResponse.json(
             { ok: true, pendingApproval: true, requestId: outcome.requestId },
@@ -117,10 +116,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
   } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts) are
-    // request-state failures, not server defects.
+    // Posting refusals (kernel rules or unconfigured org control accounts)
+    // and refused approval routings (already rolled back) are request-state
+    // failures, not server defects.
     const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError
+      e instanceof PostingError ||
+      e instanceof ControlAccountsIncompleteError ||
+      e instanceof ApprovalRoutingError
         ? 422
         : 500
     return NextResponse.json({ error: (e as Error).message }, { status })

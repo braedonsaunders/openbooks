@@ -9,6 +9,7 @@ import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib
 import { isUuid } from '../../../../lib/list-params'
 import { controlDeps } from "../../../../../engine/src/ledger/document-service.ts";
 import { DOC_KINDS, createPermission, postPermission } from "../../../../lib/document-kinds.ts";
+import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
 
@@ -102,6 +103,14 @@ export async function POST(req: Request) {
           return { kind: 'invalid_status' as const, status: current ?? 'missing' }
         }
         const result = await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
+        // A refused routing throws: the submission already wrote its
+        // before_submit script effects and ran its on_submit automation, and
+        // answering 422 from inside this transaction would commit them
+        // alongside the refusal. The catch below answers the same 422 after
+        // the rollback.
+        if (result.flowError) {
+          throw new ApprovalRoutingError(result.flowError)
+        }
         // A backup-required project invoice is approved only with its
         // substantiation packet. The gate sits after release so a gated
         // submission still reaches its approver (posting gates it again);
@@ -133,13 +142,8 @@ export async function POST(req: Request) {
       if (submission.gated) {
         return NextResponse.json({ ok: true, requestId: submission.runId })
       }
-      if (submission.flowError) {
-        // An approval flow matched but errored — fail closed, never auto-approve.
-        return NextResponse.json(
-          { error: `approval could not be routed: ${submission.flowError}` },
-          { status: 422 },
-        )
-      }
+      // A refused routing throws inside the transaction above (fail closed,
+      // never auto-approve), so reaching here means the release succeeded.
       return NextResponse.json({ ok: true, requestId: null, autoApproved: submission.autoApproved })
     }
     // Posting a draft submits it first, so the same evidence rule applies —
@@ -161,8 +165,10 @@ export async function POST(req: Request) {
       const previousStatus = current.status
       if (previousStatus === 'draft') {
         const submission = await submitAndReleaseIfUngated(current.kind, doc.id, user.id)
+        // Same rollback as the submit branch: a refused routing must not
+        // commit its script effects alongside the 422.
         if (submission.flowError) {
-          return { kind: 'flow_error' as const, error: submission.flowError }
+          throw new ApprovalRoutingError(submission.flowError)
         }
         if (submission.gated) {
           await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -195,12 +201,6 @@ export async function POST(req: Request) {
     if (outcome.kind === 'not_found') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
-    if (outcome.kind === 'flow_error') {
-      return NextResponse.json(
-        { error: `approval could not be routed: ${outcome.error}` },
-        { status: 422 },
-      )
-    }
     if (outcome.kind === 'pending') {
       return NextResponse.json(
         { ok: true, pendingApproval: true, requestId: outcome.requestId },
@@ -222,6 +222,11 @@ export async function POST(req: Request) {
     // or internal ids to the user (F-t06-002 pasted a raw INSERT into the
     // page). The detail stays in the server log; the client renders its own
     // localized fallback and pins it beside the record.
+    // A refused approval routing already rolled back inside the transaction;
+    // its message names the failed flow and the remedy, so it keeps it.
+    if (e instanceof ApprovalRoutingError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
     const failure = toActionFailure(e)
     if (failure.status === 500) {
       console.error('documents/actions failed', { action, documentId: body.documentId, error: e })

@@ -15,6 +15,7 @@ import { DocumentEditError, requireDocumentEditRevision } from "../../../../../e
 import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 
 export const runtime = 'nodejs'
 
@@ -167,14 +168,18 @@ export async function POST(req: Request) {
         if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const { runId, flowError, autoApproved } =
-          await submitAndReleaseIfUngated('expense_report', body.documentId, user.id)
-        if (flowError) {
-          return NextResponse.json(
-            { error: `approval could not be routed: ${flowError}` },
-            { status: 422 },
-          )
-        }
+        const documentId: string = body.documentId
+        // The submission runs in this transaction so a refused routing throws
+        // inside it: without the wrapper the submission's own transaction
+        // would commit its before_submit script effects before the 422.
+        // The catch below answers the same 422 after the rollback.
+        const { runId, autoApproved } = await withOrgTransaction(user.orgId, async () => {
+          const submission = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
+          if (submission.flowError) {
+            throw new ApprovalRoutingError(submission.flowError)
+          }
+          return submission
+        })
         return NextResponse.json({ ok: true, requestId: runId, autoApproved })
       }
       case 'post': {
@@ -233,7 +238,8 @@ export async function POST(req: Request) {
       e instanceof PostingError ||
       e instanceof ControlAccountsIncompleteError ||
       e instanceof SubmitError ||
-      e instanceof ExpenseValidationError
+      e instanceof ExpenseValidationError ||
+      e instanceof ApprovalRoutingError
         ? 422
         : e instanceof DocumentEditError
           ? e.status
