@@ -12,15 +12,31 @@
 -- (overlap refusal stands) and surface nothing. Zero U1 rows means the
 -- coverage backfill cannot hit a generic cast error.
 --
--- U2 (NOTICE): read-only mirror of g24's exact-reconciliation repair scope.
--- A live structured-marker bill gains coverage only when its recorded party
--- equals the marker party AND its non-zero lines per (account, net) equal
--- the committed window/party/filing/entity accrual groups per (liability,
--- net with credits negated) in both directions. Bills failing either check
--- get no coverage rows and keep the fail-closed overlap refusal. Accrual
--- matching is snapshot-based here; the pack-aware resolution lands with the
--- U4 revision. app-recorded coverage rows (created_by NOT NULL) cannot be
--- referenced: the coverage table is created by 0296 itself, so on every
+-- U4 (NOTICE): read-only mirror of g24's pack-aware reconciliation (final
+-- bytes a24896ea in 99247664, which supersedes the U2 line-matching
+-- predicate; REFUSE unchanged from U1, and the party check, multiset
+-- account check, app-row scoping, voided cleanup and 50-capped NOTICE are
+-- unchanged from U2). A live structured-marker bill gains coverage only
+-- when its recorded party equals the marker party AND its non-zero lines
+-- per (account, net) equal the committed window/party/filing/entity
+-- accrual groups per (liability, net with credits negated) in both
+-- directions. Each candidate line resolves through the same order the
+-- bill-creation path uses: a region-scoped settings key on (component
+-- country, systemKey, stub province) first (an unconfigured region
+-- resolves NULL and never falls through), then the frozen line snapshot,
+-- then the pack default settings key — from the frozen 0296-era map (AU
+-- payg_withholding; CA income_tax/cpp/cpp2/ei/qpip/hsf plus QC-region
+-- cpp/cpp2/qpip/hsf; IE ie_paye/prsi/usc), only non-empty string settings
+-- values counting, text compare both sides. The snapshot column
+-- (pay_stub_lines.remittance_party_id) is added BY 0296, so no preflight
+-- may reference it: the preflight reads the component's CURRENT vendor
+-- instead, which is exactly what the migration's snapshot backfill stamps
+-- (SET remittance_party_id = c.remittance_party_id over committed runs and
+-- in-scope kinds where the component vendor is NOT NULL). Same rows, same
+-- values — the proxy is exact on every pre-0296 install.
+-- Bills failing either check get no coverage rows and keep the fail-closed
+-- overlap refusal. app-recorded coverage rows (created_by NOT NULL) cannot
+-- be referenced: the coverage table is created by 0296 itself, so on every
 -- install where this preflight runs it does not exist yet and the exclusion
 -- is vacuous (reapply installs from pre-release 0296 builds are dev-only;
 -- already-covered bills may be listed — check created_by before acting).
@@ -81,13 +97,44 @@ scoped AS (
    WHERE from_date IS NOT NULL AND to_date IS NOT NULL AND party_id IS NOT NULL
      AND filing_ok
 ),
+pack_default_vendor AS (
+  -- 0296-era pack-declared vendor settings keys (non-null only), frozen:
+  -- copied verbatim from the U4 migration (a24896ea), parity-pinned there
+  -- against engine/src/payroll/packs.ts statutoryRemittanceDeclaration.
+  SELECT * FROM (VALUES
+    ('AU', 'payg_withholding', 'atoRemittancePartyId'),
+    ('CA', 'income_tax', 'craRemittancePartyId'),
+    ('CA', 'cpp', 'craRemittancePartyId'),
+    ('CA', 'cpp2', 'craRemittancePartyId'),
+    ('CA', 'ei', 'craRemittancePartyId'),
+    ('CA', 'qpip', 'craRemittancePartyId'),
+    ('CA', 'hsf', 'craRemittancePartyId'),
+    ('IE', 'ie_paye', 'revenueRemittancePartyId'),
+    ('IE', 'prsi', 'revenueRemittancePartyId'),
+    ('IE', 'usc', 'revenueRemittancePartyId')
+  ) AS t(country, system_key, settings_key)
+),
+pack_regional_vendor AS (
+  -- Copied verbatim from the U4 migration (a24896ea).
+  SELECT * FROM (VALUES
+    ('CA', 'cpp', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'cpp2', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'qpip', 'QC', 'rqRemittancePartyId'),
+    ('CA', 'hsf', 'QC', 'rqRemittancePartyId')
+  ) AS t(country, system_key, province, settings_key)
+),
+org_payroll_settings AS (
+  SELECT o.id AS org_id, (o.settings -> 'payroll') AS payroll
+    FROM public.orgs o
+),
 scoped_lines AS (
-  -- The snapshot column (pay_stub_lines.remittance_party_id) is added BY
-  -- 0296, so no preflight may reference it: pre-migration it does not
-  -- exist. Scope on the component's CURRENT vendor instead, which is
-  -- exactly what the backfill copies into the snapshot
-  -- (SET remittance_party_id = c.remittance_party_id ... AND
-  -- c.remittance_party_id IS NOT NULL).
+  -- Pack-aware line attribution (U4), all three branches in migration
+  -- order: a region-scoped key first (an unconfigured region resolves NULL
+  -- and never falls through), then the frozen snapshot, then the pack
+  -- default. Only non-empty string settings values count. The snapshot
+  -- branch reads the component's current vendor as proxy for the column
+  -- 0296 adds (see header). The resolved text belongs iff it IS NOT
+  -- DISTINCT FROM the marker party.
   SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
          l.liability_account_id AS acct,
          CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
@@ -96,10 +143,24 @@ scoped_lines AS (
     JOIN public.pay_components c ON c.org_id = l.org_id AND c.id = l.component_id
     JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
     JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+    JOIN org_payroll_settings ops ON ops.org_id = s.org_id
+    LEFT JOIN pack_regional_vendor rv
+      ON rv.country = c.country AND rv.system_key = c.system_key AND rv.province = st.province
+    LEFT JOIN pack_default_vendor dv
+      ON dv.country = c.country AND dv.system_key = c.system_key
    WHERE r.run_status = 'committed'
      AND l.kind IN ('deduction', 'employer_contribution', 'credit')
      AND st.pay_date BETWEEN s.from_date AND s.to_date
-     AND c.remittance_party_id IS NOT DISTINCT FROM s.party_id
+     AND (CASE
+            WHEN rv.settings_key IS NOT NULL THEN
+              CASE WHEN jsonb_typeof(ops.payroll -> rv.settings_key) = 'string'
+                   THEN NULLIF(ops.payroll ->> rv.settings_key, '') ELSE NULL END
+            WHEN c.remittance_party_id IS NOT NULL THEN c.remittance_party_id::text
+            WHEN dv.settings_key IS NOT NULL THEN
+              CASE WHEN jsonb_typeof(ops.payroll -> dv.settings_key) = 'string'
+                   THEN NULLIF(ops.payroll ->> dv.settings_key, '') ELSE NULL END
+            ELSE NULL
+          END) IS NOT DISTINCT FROM s.party_id::text
      AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
      AND EXISTS (
        SELECT 1 FROM public.documents d
