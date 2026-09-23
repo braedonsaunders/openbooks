@@ -19,6 +19,9 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { loadOrRefuse } from '../../../lib/load-or-refuse'
+import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
+import type { MePaySection } from '../../../lib/hrm/ai-rails'
 import { loadMeOverview, type MeOverviewData } from '../../../lib/hrm/self-service'
 
 /**
@@ -241,15 +244,39 @@ export function meSpec(data: MeOverviewData): PageSpec {
   })
 }
 
+/**
+ * Empty pay section for the refusal path: the payslip panel hides on
+ * hasPay while the refusal block carries the message.
+ */
+const EMPTY_PAY_SECTION: MePaySection = {
+  hasPay: false,
+  payTitle: '',
+  payStubs: [],
+  payColumns: { payDate: '', gross: '', netPay: '' },
+  payEmpty: '',
+  payExplain: null,
+}
+
 export async function loadMePage(sp?: Record<string, string | undefined>): Promise<MeOverviewData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.self.read')
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   const overview = await loadMeOverview(authz)
-  // HR-21: own payslips with the Explain drawer (?explain=<stubId>).
+  // HR-21: own payslips with the Explain drawer (?explain=<stubId>). The
+  // stubs resolve through the same person link, so an unlinked login
+  // refuses here too — convert only NO_LINK to the refusal state through
+  // the shared mechanism (same as the clock); everything else still
+  // throws. A refusal the overview already carries wins: it names the
+  // same condition from the same link.
+  const t = await getTranslations('hrm')
   const { loadMePaySection } = await import('../../../lib/hrm/ai-rails')
-  return { ...overview, ...await loadMePaySection(authz, sp?.explain) }
+  const pay = await loadOrRefuse(() => loadMePaySection(authz, sp?.explain), {
+    refusals: [{ error: SelfServiceError, code: 'NO_LINK' }],
+    title: t('me.refusedTitle'),
+  })
+  if (pay.ok) return { ...overview, ...pay.data }
+  return { ...overview, ...EMPTY_PAY_SECTION, refusal: overview.refusal ?? pay.refusal }
 }
 
 export async function meTitle(): Promise<string> {
