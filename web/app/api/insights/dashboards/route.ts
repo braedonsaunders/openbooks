@@ -7,7 +7,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
 import { auditSetupChange } from '../../../../lib/setup/audit'
-import { normalizeAllowedRoles, normalizeLayout, strOrNull } from '../_lib'
+import { layoutCardsVisible, normalizeAllowedRoles, normalizeLayout, strOrNull } from '../_lib'
 
 export const runtime = 'nodejs'
 
@@ -20,6 +20,18 @@ const createDashboardBodySchema = z.looseObject({
 
 function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
+}
+
+/**
+ * A layout naming a missing or foreign card. Thrown inside the create
+ * transaction so the refusal rolls back the whole unit (no row, no audit
+ * event) and caught below into the same 422 PATCH returns.
+ */
+class DashboardCardRefusal extends Error {
+  constructor() {
+    super('Layout references an unavailable card')
+    this.name = 'DashboardCardRefusal'
+  }
 }
 
 /**
@@ -73,7 +85,9 @@ export async function POST(req: Request) {
   }
   const match = { name, description, layout, allowed_roles: allowedRoles }
 
-  const outcome = await db.transaction(async (tx) => {
+  let outcome: 'fresh' | 'replay' | 'conflict'
+  try {
+    outcome = await db.transaction(async (tx) => {
     const claim = await claimIdempotentCreate(tx, {
       orgId: user.orgId,
       table: 'insight_dashboards',
@@ -86,6 +100,12 @@ export async function POST(req: Request) {
         key: requestId,
         match,
       })
+    }
+    // Transactional and equivalent to PATCH: a layout naming a missing or
+    // foreign card is refused inside this same transaction, before any
+    // insert, so the refusal commits nothing — no row, no audit event.
+    if (!(await layoutCardsVisible(tx, gate, layout))) {
+      throw new DashboardCardRefusal()
     }
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into insight_dashboards
@@ -119,7 +139,11 @@ export async function POST(req: Request) {
       tx,
     )
     return 'fresh' as const
-  })
+    })
+  } catch (e) {
+    if (e instanceof DashboardCardRefusal) return bad(e.message)
+    throw e
+  }
   if (outcome === 'conflict') {
     return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
   }

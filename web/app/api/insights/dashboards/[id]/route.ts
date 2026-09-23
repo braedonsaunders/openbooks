@@ -1,4 +1,3 @@
-import { insightVisibilitySql } from '@/lib/insight-access'
 import { mutateInsight } from '@/lib/insight-mutations'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
@@ -7,6 +6,7 @@ import { z } from 'zod'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import {
+  layoutCardsVisible,
   loadDashboard,
   normalizeAllowedRoles,
   normalizeLayout,
@@ -162,14 +162,8 @@ export async function PATCH(
         if (!locked) throw new DashboardRevisionError(404, 'not found')
         assertDashboardRevision(expectedRevision, locked.updatedAt)
 
-        if (layout !== undefined && layout.length > 0) {
-          const ids = [...new Set(layout.map((widget) => widget.cardId))]
-          const cards = await tx.execute<{ id: string }>(sql`
-          select id from insight_cards where id = any(${`{${ids.join(',')}}`}::uuid[])
-            and ${insightVisibilitySql(gate)}
-        `)
-          if (cards.rows.length !== ids.length)
-            return bad('Layout references an unavailable card')
+        if (layout !== undefined && !(await layoutCardsVisible(tx, gate, layout))) {
+          return bad('Layout references an unavailable card')
         }
 
         const updated = await tx.execute(sql`

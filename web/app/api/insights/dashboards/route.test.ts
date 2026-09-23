@@ -108,6 +108,10 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       export async function loadDashboard() { return state.dashboard }
+      // Neither PATCH case in this suite sends a layout, so admission here is
+      // unobserved; the refusal itself is covered by create.test.ts and the
+      // route-cards integration test against the real visibility predicate.
+      export async function layoutCardsVisible() { return true }
       export function normalizeLayout(value) { return Array.isArray(value) ? value : [] }
       export function normalizeAllowedRoles(value) { return value }
       export function strOrNull(value) { return typeof value === 'string' && value.trim() ? value.trim() : null }
