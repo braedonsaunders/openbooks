@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -33,6 +33,11 @@ export function ReverseLandedVoucherAction() {
 
   const [open, setOpen] = useState(false)
   const [vouchers, setVouchers] = useState<VoucherOpt[]>([])
+  const [total, setTotal] = useState(0)
+  const [cursor, setCursor] = useState<string | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const queryRef = useRef('')
   const [voucherId, setVoucherId] = useState('')
   const [date, setDate] = useState(today)
   const [reason, setReason] = useState('')
@@ -45,20 +50,70 @@ export function ReverseLandedVoucherAction() {
     label: `${v.documentNumber ?? v.id} · ${v.voucherDate ?? ''} · ${v.amount ?? ''}`.trim(),
   }))
 
+  // The picker reads posted vouchers from the server — filtered, searched,
+  // and paged there, never truncated client-side. With 50 newer reversed
+  // vouchers, an older still-posted one arrives on a later page instead of
+  // vanishing from the only reversal picker.
+  async function fetchVouchers(nextQuery: string, nextCursor: string | null, append: boolean): Promise<void> {
+    const params = new URLSearchParams({ view: 'landed', status: 'posted', limit: '50' })
+    if (nextQuery.trim()) params.set('q', nextQuery.trim())
+    if (nextCursor) params.set('cursor', nextCursor)
+    const res = await fetch(`/api/inventory/advanced?${params.toString()}`)
+    if (!res.ok) {
+      throw new Error(await readApiErrorMessage(res, t('advanced.landed.reverse.loadFailed')))
+    }
+    const data = await res.json()
+    const page = ((data.vouchers ?? []) as VoucherOpt[]).filter((v) => v.status === 'posted')
+    setVouchers((prev) => (append ? [...prev, ...page] : page))
+    setTotal(typeof data.totalCount === 'number' ? data.totalCount : page.length)
+    setCursor(typeof data.nextCursor === 'string' ? data.nextCursor : null)
+  }
+
   async function openDialog() {
     setOpen(true)
     setSubmitError(null)
     setDate(today)
+    queryRef.current = ''
+    setVouchers([])
+    setCursor(null)
     try {
-      const res = await fetch('/api/inventory/advanced?view=landed')
-      if (!res.ok) {
-        throw new Error(await readApiErrorMessage(res, t('advanced.landed.reverse.loadFailed')))
-      }
-      const data = await res.json()
-      setVouchers(((data.vouchers ?? []) as VoucherOpt[]).filter((v) => v.status === 'posted'))
+      await fetchVouchers('', null, false)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : t('advanced.landed.reverse.loadFailed'))
     }
+  }
+
+  function searchVouchers(next: string) {
+    // SearchSelect re-announces '' every time its menu opens; only a real
+    // query change refetches page one from the server.
+    if (queryRef.current === next) return
+    queryRef.current = next
+    setSearching(true)
+    setSubmitError(null)
+    void (async () => {
+      try {
+        await fetchVouchers(next, null, false)
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : t('advanced.landed.reverse.loadFailed'))
+      } finally {
+        setSearching(false)
+      }
+    })()
+  }
+
+  function loadMore() {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    setSubmitError(null)
+    void (async () => {
+      try {
+        await fetchVouchers(queryRef.current, cursor, true)
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : t('advanced.landed.reverse.loadFailed'))
+      } finally {
+        setLoadingMore(false)
+      }
+    })()
   }
 
   function touchKey() {
@@ -140,9 +195,19 @@ export function ReverseLandedVoucherAction() {
               placeholder={t('advanced.landed.reverse.selectVoucher')}
               sheetTitle={t('advanced.landed.reverse.voucher')}
               ariaLabel={t('advanced.landed.reverse.voucher')}
+              remote
+              loading={searching}
+              onSearchChange={searchVouchers}
             />
-            {vouchers.length === 0 && !submitError ? (
+            {vouchers.length === 0 && !submitError && !searching ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('advanced.landed.reverse.nonePosted')}</p>
+            ) : null}
+            {cursor ? (
+              <div className="flex justify-center py-1">
+                <Button variant="secondary" size="sm" disabled={loadingMore} onClick={loadMore}>
+                  {loadingMore ? t('counts.list.loadingMore') : t('counts.list.showMore', { loaded: vouchers.length, total })}
+                </Button>
+              </div>
             ) : null}
           </div>
           <div className={field}>

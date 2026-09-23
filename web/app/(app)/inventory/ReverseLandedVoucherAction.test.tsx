@@ -29,6 +29,31 @@ test('the reversal dialog only offers posted vouchers and carries reason plus da
   assert.match(actionSource, /reason\.trim\(\)\.length < 5/)
 })
 
+// IN10: with 50 newer (even all reversed) vouchers, an older still-posted
+// one vanished from the only reversal picker — the list was newest-50-only
+// with the posted filter applied client-side. The picker must ask the
+// server for posted vouchers and page past the first slice.
+test('the reversal picker pages posted vouchers from the server instead of truncating', () => {
+  // Server-side posted filter, never a client-only slice.
+  assert.match(actionSource, /status: 'posted'/)
+  assert.match(actionSource, /view: 'landed'/)
+  // Cursor paging with a total, so older vouchers arrive on later pages.
+  assert.match(actionSource, /nextCursor/)
+  assert.match(actionSource, /counts\.list\.showMore/)
+  assert.match(actionSource, /cursor/)
+  // Server search through the picker's remote lookup.
+  assert.match(actionSource, /remote/)
+  assert.match(actionSource, /onSearchChange/)
+  assert.match(actionSource, /params\.set\('q'/)
+})
+
+test('every locale key the reversal picker asks for exists in English', () => {
+  const counts = messages.counts as Record<string, Record<string, string>>
+  for (const key of ['showMore', 'loadingMore']) {
+    assert.equal(typeof counts.list![key], 'string', `counts.list.${key}`)
+  }
+})
+
 test('every locale key the reversal dialog asks for exists in English', () => {
   const advanced = messages.advanced as Record<string, Record<string, unknown>>
   assert.ok(advanced.landed, 'advanced.landed exists in English')
