@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { serializeLedgerDecimal } from "./ledger-decimal";
@@ -28,8 +29,8 @@ export async function GET(req: Request) {
   const party = url.searchParams.get("party");
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
-  if ((!account && !party) || !from || !to) {
-    return NextResponse.json({ error: "account or party, plus from/to required" }, { status: 400 });
+  if ((!account && !party) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    return NextResponse.json({ error: "account or party, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
   }
   if ((account && !isUuid(account)) || (party && !isUuid(party))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
