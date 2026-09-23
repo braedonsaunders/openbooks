@@ -66,7 +66,13 @@ test('the loader and workspace wire the subsidiary picker and shape hint (F-t06-
     /disabled=\{!externalRef \|\| \(needsSubsidiaryChoice && !subsidiaryId\)\}/,
     'multi-entity orgs must pick the posting entity before the draft exists',
   )
-  assert.match(sections, /\{strings\.payloadShapeHint\}/, 'the workspace must render the hint')
+  // The Stripe payload hint renders for Stripe and the generic hint for every
+  // other provider (UX-18); both branches must stay wired.
+  assert.match(
+    sections,
+    /provider === 'stripe' \? strings\.payloadShapeHint : strings\.genericPayloadHint/,
+    'the workspace must render the provider-specific payload hint',
+  )
   assert.match(
     sections,
     /return \{ ok: false, error: typeof message === 'string' && message \? message : null \}/,
