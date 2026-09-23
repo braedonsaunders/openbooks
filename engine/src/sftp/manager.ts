@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
 import { assertSftpStorageReady } from "./backend.ts";
@@ -126,6 +127,23 @@ function sessionRevFor(row: Pick<ServerRow, "updated_at" | "password_encrypted" 
 }
 const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix, sessionRev: sessionRevFor(row) });
 
+/**
+ * The owning org's Bank Feeds gate for one SFTP login — the house
+ * authoritative check, so the daemon agrees with the Features page, the
+ * setup routes, and the import scan (which fences the same flag). A login
+ * whose org has Bank Feeds off authenticates nothing and keeps nothing:
+ * turning the feature off revokes the credential the way a disable does,
+ * without touching the row, its data, or its audit history.
+ *
+ * Explicitly bypass-scoped like the login lookup itself: the daemon runs
+ * with no tenant scope, and RLS denies unscoped reads by default — without
+ * this boundary the org row would read as missing and EVERY login would
+ * refuse, feature on or not.
+ */
+async function bankFeedsEnabled(orgId: string): Promise<boolean> {
+  return withBypassContext(() => lockAndCheckOrgFeature(db, orgId, "bankFeeds"));
+}
+
 type SessionRow = Pick<ServerRow, "id" | "orgId" | "username" | "password_encrypted" | "authorized_keys" | "updated_at"> & { is_active: boolean };
 
 /** The live row for a held session, by stable id — no is_active filter: the fence must SEE a disabled row to name it. */
@@ -178,7 +196,12 @@ export const dbResolver: SftpResolver = {
   // connection even for a bad signature the daemon is about to reject.
   async password(username, password) {
     const row = await loadServer(username);
-    if (!row?.password_encrypted) return null;
+    if (!row) return null;
+    if (!(await bankFeedsEnabled(row.orgId))) {
+      console.warn(`[sftp] refusing login for '${username}': org feature 'bankFeeds' is off`);
+      return null;
+    }
+    if (!row.password_encrypted) return null;
     let expected: string;
     try { expected = decryptSecret(row.password_encrypted); } catch { return null; }
     if (!constantTimeEqual(password, expected)) return null;
@@ -186,7 +209,12 @@ export const dbResolver: SftpResolver = {
   },
   async publicKey(username, keyAlgo, keyData) {
     const row = await loadServer(username);
-    if (!row?.authorized_keys) return null;
+    if (!row) return null;
+    if (!(await bankFeedsEnabled(row.orgId))) {
+      console.warn(`[sftp] refusing login for '${username}': org feature 'bankFeeds' is off`);
+      return null;
+    }
+    if (!row.authorized_keys) return null;
     // Match the presented key against any authorized OpenSSH public key line.
     for (const line of row.authorized_keys.split("\n")) {
       const trimmed = line.trim();
@@ -205,9 +233,10 @@ export const dbResolver: SftpResolver = {
   },
   /**
    * The daemon's per-operation liveness fence: a held session stays usable
-   * only while its row still exists, is active, and carries the exact
-   * credential/state version captured at authentication. Every refusal names
-   * its remedy.
+   * only while its row still exists, is active, carries the exact
+   * credential/state version captured at authentication, and sits in an org
+   * with Bank Feeds on (feature-off counts as revocation — data is kept,
+   * only access ends). Every refusal names its remedy.
    */
   async checkSession(config): Promise<SessionLiveness> {
     const row = await loadSessionRow(config.id, config.orgId);
@@ -216,6 +245,9 @@ export const dbResolver: SftpResolver = {
     }
     if (!row.is_active) {
       return { alive: false, reason: `sftp login '${config.username}' is disabled — ask your administrator to re-enable it, then reconnect` };
+    }
+    if (!(await bankFeedsEnabled(config.orgId))) {
+      return { alive: false, reason: `sftp login '${config.username}' is unavailable: bank feeds is turned off for this organization — turn Bank Feeds back on under Company Settings → Features, then reconnect` };
     }
     if (sessionRevFor(row) !== config.sessionRev) {
       return { alive: false, reason: `sftp login '${config.username}' credentials changed — reconnect with the current password or key` };

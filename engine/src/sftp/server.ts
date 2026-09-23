@@ -74,11 +74,12 @@ export interface SftpResolver {
   loginSucceeded?(config: SftpServerConfig): Promise<void>;
   /**
    * Re-validate a live session's config against the current authority
-   * (is_active, credential version). Absent means every session stays alive —
-   * fixed-config tests and resolvers with no revocation source. Production's
-   * DB resolver implements it; the daemon calls it before EVERY SFTP
-   * operation, so a disable or rotation takes effect on the session's next
-   * request no matter which process serves the daemon.
+   * (is_active, credential version, owning-org Bank Feeds feature). Absent
+   * means every session stays alive — fixed-config tests and resolvers with
+   * no revocation source. Production's DB resolver implements it; the daemon
+   * calls it before EVERY SFTP operation, so a disable, rotation, or
+   * feature-off takes effect on the session's next request no matter which
+   * process serves the daemon.
    */
   checkSession?(config: SftpServerConfig): Promise<SessionLiveness>;
 }
