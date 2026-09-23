@@ -21,6 +21,29 @@ test("inherently-deductible categories normalize positive inputs to the DTA side
   assert.equal(toDeductibleSide(revenue).difference, "50000");
 });
 
+test("negative loss benefits and valuation allowances refuse by field name instead of mis-measuring", () => {
+  const base = {
+    pretaxBookIncome: "1000000",
+    enactedRatePercent: "26.5",
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    differences: [],
+  };
+  // A negative loss benefit would INCREASE taxable income when subtracted.
+  assert.throws(
+    () => buildProvision({ ...base, lossCarryforwardUsed: "-500" }),
+    /lossCarryforwardUsed cannot be negative/,
+  );
+  // A negative allowance would otherwise be silently stored as zero.
+  assert.throws(
+    () => buildProvision({ ...base, valuationAllowance: "-500" }),
+    /valuationAllowance cannot be negative/,
+  );
+  // Zero stays measurable.
+  assert.equal(buildProvision(base).totalExpense, "265000.0000");
+});
+
 test("framework changes recognition language, not math (ASC 740 vs IAS 12)", () => {
   const base = {
     pretaxBookIncome: "1000000",
