@@ -157,6 +157,7 @@ async function seedSourceEntry(
   actorId: string,
   amount: string,
   departmentId?: string | null,
+  subsidiaryId?: string | null,
 ): Promise<string> {
   const entryId = await postProjectGlEntry({
     orgId: org.orgId,
@@ -165,7 +166,7 @@ async function seedSourceEntry(
     entryNumber: `SEED-${randomUUID()}`,
     postingDate: org.date,
     memo: "Allocation source pool",
-    subsidiaryId: org.subsidiaryId,
+    subsidiaryId: subsidiaryId ?? org.subsidiaryId,
     currency: "CAD",
     lines: [
       { accountId: org.accounts.adjustment, amount, departmentId: departmentId ?? null },
@@ -1135,6 +1136,55 @@ test(
       const kept = (await db.execute<{ status: string }>(sql`
         select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`)).rows[0];
       assert.equal(kept?.status, "previewed");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+test(
+  "S5: a B-only rule pinned to A is refused; pinned to B it sweeps B",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const subB = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await seedSourceEntry(org, actorId, "100.0000", null, org.subsidiaryId);
+      await seedSourceEntry(org, actorId, "250.0000", null, subB);
+      const dept = await seedDepartment(org.orgId, "Shared Dept");
+      const { ruleId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        dimensionFilters: { subsidiaryIds: [subB] },
+        targets: [{ departmentId: dept, fixedPercent: "100.0000", label: "Dept" }],
+      });
+      const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`)).rows[0]?.count ?? 0);
+      const before = await runCount();
+      // Pinned to A under a B-only rule: the pin/filter intersection is
+      // empty, so refuse by name instead of allocating A's books.
+      await assert.rejects(
+        () => previewAllocationRun({
+          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId, actorId, trigger: "manual",
+        }),
+        (error: unknown) =>
+          error instanceof AllocationRunError &&
+          /does not cover subsidiary/.test(error.message) &&
+          error.message.includes(org.subsidiaryId),
+      );
+      assert.equal(await runCount(), before);
+      // Pinned to B the same rule sweeps exactly B's pool.
+      const pinned = await previewAllocationRun({
+        orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
+        subsidiaryId: subB, actorId, trigger: "manual",
+      });
+      assert.equal(pinned.sourceTotal, "250.0000");
+      assert.ok(pinned.computation.sources.every((source) => source.subsidiaryId === subB));
     } finally {
       await dropScratchOrg(org.orgId);
     }
