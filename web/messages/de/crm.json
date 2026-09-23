@@ -142,6 +142,8 @@
     "emptyDescription": "Erstellen Sie eine Verkaufschance, um mit dem Aufbau der Pipeline zu beginnen.",
     "undatedOnly": "Nur undatierte",
     "showAll": "Alle anzeigen",
+    "noTrackedAccounts": "Nur erfasste Kunden sind wählbar. Öffnen Sie den Kunden unter Geschäftspartner und wählen Sie in der Registerkarte Beziehung „Nachverfolgung starten“.",
+    "openParties": "Geschäftspartner öffnen",
     "lines": "Produkte und Leistungen",
     "addLine": "Position hinzufügen",
     "totalCost": "Gesamtkosten",

@@ -161,6 +161,10 @@ export async function loadParties(
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
+  // The drawer itself guards each deep-link against its visibility
+  // predicate (relationship needs the CRM read grant on a customer), so a
+  // stale ?partyTab=relationship can never strand the drawer on a missing
+  // panel — same contract as ?partyTab=compliance.
   const partyTab: PartyTab =
     requestedPartyTab === 'transactions' ||
     requestedPartyTab === 'activities' ||
@@ -168,6 +172,7 @@ export async function loadParties(
     requestedPartyTab === 'addresses' ||
     requestedPartyTab === 'accounting' ||
     requestedPartyTab === 'compliance' ||
+    requestedPartyTab === 'relationship' ||
     requestedPartyTab === 'wages'
       ? requestedPartyTab
       : 'overview'

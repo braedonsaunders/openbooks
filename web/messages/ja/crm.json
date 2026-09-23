@@ -142,6 +142,8 @@
     "emptyDescription": "商談を作成してパイプラインの構築を開始します。",
     "undatedOnly": "日付未設定のみ",
     "showAll": "すべて表示",
+    "noTrackedAccounts": "追跡中の顧客のみ選択できます。取引先で顧客を開き、「関係」タブで「追跡を開始」を選択してください。",
+    "openParties": "取引先を開く",
     "lines": "製品とサービス",
     "addLine": "明細を追加",
     "totalCost": "総原価",

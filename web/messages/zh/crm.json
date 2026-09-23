@@ -142,6 +142,8 @@
     "emptyDescription": "创建商机以开始搭建销售管道。",
     "undatedOnly": "仅未定日期",
     "showAll": "显示全部",
+    "noTrackedAccounts": "只能选择已跟踪的客户。请在往来单位中打开该客户，然后在其“关系”选项卡中选择“开始跟踪”。",
+    "openParties": "打开往来单位",
     "lines": "产品和服务",
     "addLine": "添加明细行",
     "totalCost": "总成本",

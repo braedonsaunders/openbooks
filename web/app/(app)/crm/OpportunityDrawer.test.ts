@@ -99,3 +99,55 @@ test('save-first estimate reason is translated in every locale', async () => {
     'Save this opportunity first — estimates convert the saved customer and lines.',
   )
 })
+
+/**
+ * OM-03: the Account picker lists only relationship profiles, so a customer
+ * without Start tracking is unfindable with no explanation. The empty
+ * picker must name the profile prerequisite with a route to Parties, while
+ * the loader keeps the active-profile filter. The parties loader admits the
+ * relationship deep-link (the drawer guards its own visibility predicate,
+ * so a stale link can never strand it on a missing panel).
+ */
+test('empty account picker names the tracking prerequisite with a parties route', () => {
+  assert.match(source, /hint=\{accounts\.length===0\?t\('opportunities\.noTrackedAccounts'\):undefined\}/)
+  assert.match(source, /hintAction=\{accounts\.length===0\?\{href:'\/parties',label:t\('opportunities\.openParties'\)\}:undefined\}/)
+  const opportunitiesView = readFileSync(new URL('./opportunities/view.ts', import.meta.url), 'utf8')
+  assert.match(
+    opportunitiesView,
+    /from crm_account_profiles cp join parties/,
+    'the account options keep the relationship-profile filter',
+  )
+  const partiesView = readFileSync(new URL('../parties/view.ts', import.meta.url), 'utf8')
+  assert.match(partiesView, /requestedPartyTab === 'relationship'/)
+})
+
+test('tracking prerequisite copy is translated in every locale', async () => {
+  for (const locale of LOCALES) {
+    const messages = (await import(`../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
+    const t = createTranslator({ locale, namespace: 'crm', messages: messages as never } as never) as unknown as (
+      lookup: string,
+    ) => string
+    for (const key of ['opportunities.noTrackedAccounts', 'opportunities.openParties']) {
+      let rendered: string
+      try {
+        rendered = t(key)
+      } catch (error) {
+        assert.fail(`${key} misses in the ${locale} catalog: ${String(error)}`)
+      }
+      const leaf = key.split('.').pop()!
+      assert.ok(
+        typeof rendered === 'string' && rendered.length > 0 && !rendered.includes(leaf),
+        `${key} must render translated text in ${locale}, got ${JSON.stringify(rendered)}`,
+      )
+    }
+  }
+  const en = (await import('../../../messages/en/index.ts')).default as Record<string, unknown>
+  const enT = createTranslator({ locale: 'en', namespace: 'crm', messages: en as never } as never) as unknown as (
+    lookup: string,
+  ) => string
+  assert.equal(
+    enT('opportunities.noTrackedAccounts'),
+    'Only tracked customers can be chosen. Open the customer in Parties, then choose Start tracking in its Relationship tab.',
+  )
+  assert.equal(enT('opportunities.openParties'), 'Open Parties')
+})
