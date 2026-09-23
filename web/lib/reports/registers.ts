@@ -318,7 +318,7 @@ export async function partnerStatement(
       from parties p
      where p.id = ${partyId} and p.org_id = ${orgId}${partySubsidiaryFilter}
   `))
-  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId)
+  const aging = await agingDetail(opts.side, opts.to, opts.dims, orgId, { bookId: opts.bookId })
   const agingTotals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   for (const row of aging.rows) {
     if (row.partyId !== partyId) continue
