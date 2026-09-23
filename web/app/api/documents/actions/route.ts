@@ -102,6 +102,16 @@ export async function POST(req: Request) {
           return { kind: 'invalid_status' as const, status: current ?? 'missing' }
         }
         const result = await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
+        // A backup-required project invoice is approved only with its
+        // substantiation packet. The gate sits after release so a gated
+        // submission still reaches its approver (posting gates it again);
+        // refusing here rolls the auto-release back with the transaction.
+        // Dynamically imported: the packet assembler pulls PDF rendering
+        // this route must not load.
+        if (!result.gated && !result.flowError && doc.kind === 'customer_invoice') {
+          const { requireInvoiceBackup } = await import('../../../../lib/invoice-backup')
+          await requireInvoiceBackup(user.orgId, doc.id)
+        }
         // The audit trail reads audit_log, and neither the auto-release nor a
         // gated submission evidences the document row there (human approvals
         // evidence through their own gate decisions), so the route records
@@ -167,6 +177,14 @@ export async function POST(req: Request) {
                  (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true })}::jsonb, ${user.id})`)
       } else if (previousStatus !== 'approved') {
         return { kind: 'invalid_status' as const, status: previousStatus }
+      }
+      // Issue gate after the status resolution so a mis-stated document meets
+      // its own refusal first: posting a draft auto-submits it, and an
+      // approved invoice may have lost its packet since. Dynamically imported:
+      // the packet assembler pulls PDF rendering this route must not load.
+      if (current.kind === 'customer_invoice') {
+        const { requireInvoiceBackup } = await import('../../../../lib/invoice-backup')
+        await requireInvoiceBackup(user.orgId, doc.id)
       }
       const entryId = await postDocument(doc.id, await controlDeps(user.orgId), {
         deferEffects: true,

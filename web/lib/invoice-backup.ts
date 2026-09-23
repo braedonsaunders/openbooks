@@ -505,6 +505,42 @@ export async function assembleInvoiceBackup(
   return { fileId: persisted.next.id, pageCount, manifest }
 }
 
+/**
+ * Refusal when a customer invoice born from a backup-required billing request
+ * is submitted or posted with no stored packet. The packet is the
+ * substantiation the approver required; issuing the invoice without it would
+ * strand the requirement unenforced. Generate it from the billing request
+ * (POST /api/billing-requests/:id/backup), then submit again.
+ */
+export class InvoiceBackupRequiredError extends Error {
+  readonly code = 'invoice_backup_required' as const
+  constructor() {
+    super('This invoice requires a backup packet before it can be issued — generate it from its billing request, then submit again')
+  }
+}
+
+/**
+ * Fail closed at every lifecycle point that issues a customer invoice: when
+ * the invoice's billing request requires backup, a stored packet must exist.
+ * Invoices with no billing request (manual AR) pass untouched.
+ */
+export async function requireInvoiceBackup(
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const missing = (await db.execute<{ id: string }>(sql`
+    select br.id from billing_requests br
+     where br.org_id = ${orgId}
+       and br.invoice_document_id = ${documentId}
+       and br.backup_required
+       and not exists (
+         select 1 from invoice_backups ib
+          where ib.org_id = ${orgId} and ib.document_id = ${documentId}
+       )
+  `)).rows[0]
+  if (missing) throw new InvoiceBackupRequiredError()
+}
+
 /** The stored backup (file id + bytes) for an invoice, if assembled. */
 export async function loadInvoiceBackup(orgId: string, documentId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<{ fileId: string; filename: string; bytes: Buffer } | null> {
   const r = (await db.execute<{ file_id: string; name: string; can_read: boolean }>(sql`

@@ -86,8 +86,12 @@ function voidPermission(kind: string): string {
 }
 
 export function domainFailure(error: unknown): never {
+  // The backup gate's error class lives in invoice-backup next to the packet
+  // assembler (which pulls PDF rendering no lifecycle caller may load
+  // statically), so it is matched by its stable code, not by instanceof.
   if (
-    error instanceof DocumentVoidError
+    (error instanceof Error && (error as { code?: unknown }).code === 'invoice_backup_required')
+    || error instanceof DocumentVoidError
     || error instanceof DocumentEditError
     || error instanceof PostingError
     || error instanceof ControlAccountsIncompleteError
@@ -140,6 +144,16 @@ export async function advanceDocumentLifecycle(
             };
           }
           currentStatus = "approved";
+        }
+        // A backup-required project invoice is issued only with its
+        // substantiation packet. The check sits after the draft resolution so
+        // a gated or mis-stated document meets its own refusal first, and it
+        // covers submit, post-from-draft, and post-from-approved alike.
+        // Dynamically imported: the packet assembler pulls PDF rendering that
+        // every other lifecycle caller must not pay for.
+        if (header.kind === "customer_invoice") {
+          const { requireInvoiceBackup } = await import("../invoice-backup");
+          await requireInvoiceBackup(context.authz.user.orgId, input.documentId);
         }
         if (input.action === "submit") {
           if (currentStatus !== "approved") {
