@@ -14,14 +14,16 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { LeaveError } from "./leave-errors.ts";
 import {
-  accrualEarned,
+  accrualEarnedAcrossSegments,
   addHours,
   carryoverApplied,
   subHours,
   timeBalance,
   selectPolicy,
   type AccrualRule,
+  type AccrualSegment,
   type CarryoverRule,
+  type PolicyCandidate,
 } from "./leave-math.ts";
 
 /**
@@ -76,14 +78,45 @@ export async function applicablePolicy(
      where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
   `)).rows;
-  const candidates = rows.map((row) => ({
+  const picked = selectPolicy(rows.map(policyToCandidate), scope, onDate);
+  return rows.find((row) => row.id === picked?.id) ?? null;
+}
+
+/** Every active policy of a type whose window touches [from, to], oldest first. */
+export async function policiesInRange(
+  exec: SqlExecutor,
+  orgId: string,
+  leaveTypeId: string,
+  from: string,
+  to: string,
+): Promise<PolicyRow[]> {
+  const rows = (await exec.execute<PolicyRow>(sql`
+    select id, leave_type_id, applies_to, accrual_rule, carryover_rule,
+           minimum_notice_days, effective_from::text as effective_from,
+           effective_to::text as effective_to, is_active
+      from hrm_leave_policies
+     where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
+       and effective_from <= ${to} and (effective_to is null or effective_to >= ${from})
+     order by effective_from, id
+  `)).rows;
+  return rows;
+}
+
+/** Scope + window pins of a policy row for the pure precedence sort. */
+export function policyToCandidate(row: PolicyRow): PolicyCandidate {
+  return {
     id: row.id,
     employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
     departmentId: (row.applies_to?.department_id as string | null) ?? null,
     effectiveFrom: String(row.effective_from).slice(0, 10),
-  }));
-  const picked = selectPolicy(candidates, scope, onDate);
-  return rows.find((row) => row.id === picked?.id) ?? null;
+    effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
+  };
+}
+
+/** The policy row behind a resolved candidate, for carryover-rule reads. */
+export function policyById(rows: readonly PolicyRow[], id: string | null | undefined): PolicyRow | null {
+  if (!id) return null;
+  return rows.find((row) => row.id === id) ?? null;
 }
 
 /** Net absence hours (reversals net out) for an employment, type, and window. */
@@ -105,7 +138,14 @@ export async function absenceHoursInWindow(
   return total;
 }
 
-async function employmentScope(
+/**
+ * The policy scope of an employment on a date: the subsidiary pin from the
+ * employment row and the department pin from the primary assignment
+ * effective that day. Every leave path (balance, file, submit, approve,
+ * notice) resolves scope through this function, so the gate and the display
+ * can never disagree about which policies cover the worker.
+ */
+export async function policyScopeForEmployment(
   exec: SqlExecutor,
   orgId: string,
   employmentId: string,
@@ -157,7 +197,7 @@ export async function timeBalanceAsOf(
   leaveTypeId: string,
   asOf: string,
 ): Promise<TimeBalance> {
-  const scope = await employmentScope(exec, orgId, employmentId, asOf);
+  const scope = await policyScopeForEmployment(exec, orgId, employmentId, asOf);
   const policy = await applicablePolicy(exec, orgId, leaveTypeId, scope, asOf);
   if (!policy) {
     return { kind: "time", policyId: null, earned: null, carried: "0", taken: "0", balance: null, unlimited: false };
@@ -168,21 +208,36 @@ export async function timeBalanceAsOf(
     const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
     return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true };
   }
+  // Accrual is earned per policy segment over its effective window: a
+  // mid-year successor earns the old rate before the switch and the new
+  // rate after, never the current rule backdated to January.
   const yearStart = accrualYearOf(asOf);
-  const earned = accrualEarned(accrual, yearStart, asOf);
+  const segments = await policiesInRange(exec, orgId, leaveTypeId, yearStart, asOf);
+  const earned = accrualEarnedAcrossSegments(toSegments(segments), yearStart, asOf);
   const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
-  // Prior-year unused feeds carryover only when the policy already covered
-  // the prior year; otherwise there is no prior entitlement to carry.
+  // Carryover is earned under the policies in force for the prior year and
+  // carried under the rule holding the year boundary — never under the
+  // current policy reaching back.
   const priorYear = Number(yearStart.slice(0, 4)) - 1;
   const priorStart = `${priorYear}-01-01`;
   const priorEnd = `${priorYear}-12-31`;
   let carried = "0";
-  if (String(policy.effective_from).slice(0, 10) <= priorStart) {
-    const priorEarned = accrualEarned(accrual, priorStart, priorEnd);
+  const priorSegments = await policiesInRange(exec, orgId, leaveTypeId, priorStart, priorEnd);
+  if (priorSegments.length > 0) {
+    const priorEarned = accrualEarnedAcrossSegments(toSegments(priorSegments), priorStart, priorEnd);
     if (priorEarned !== null) {
       const priorTaken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, priorStart, priorEnd);
       const unused = subHours(priorEarned, priorTaken);
-      carried = carryoverApplied(policy.carryover_rule as CarryoverRule, unused.startsWith("-") ? "0" : unused, yearStart, asOf);
+      const boundary = selectPolicy(priorSegments.map(policyToCandidate), scope, priorEnd);
+      const boundaryRow = policyById(priorSegments, boundary?.id);
+      if (boundaryRow) {
+        carried = carryoverApplied(
+          boundaryRow.carryover_rule as CarryoverRule,
+          unused.startsWith("-") ? "0" : unused,
+          yearStart,
+          asOf,
+        );
+      }
     }
   }
   return {
@@ -192,8 +247,18 @@ export async function timeBalanceAsOf(
     carried,
     taken,
     balance: timeBalance({ earned, carried, taken }),
-    unlimited: false,
+    // Null earned means an in-year unlimited segment made the total
+    // unbounded — the honest label is unlimited, not a priced number.
+    unlimited: earned === null,
   };
+}
+
+function toSegments(rows: readonly PolicyRow[]): AccrualSegment[] {
+  return rows.map((row) => ({
+    rule: row.accrual_rule as AccrualRule,
+    from: String(row.effective_from).slice(0, 10),
+    to: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
+  }));
 }
 
 export interface ValueBalanceEntry {
