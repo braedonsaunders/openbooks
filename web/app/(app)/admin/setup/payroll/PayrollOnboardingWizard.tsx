@@ -143,6 +143,12 @@ export function PayrollOnboardingWizard(props: {
   const [periodsPerYear, setPeriodsPerYear] = useState(String(FREQUENCY_PERIODS.biweekly))
   const [anchorPeriodEnd, setAnchorPeriodEnd] = useState('')
   const [createdSchedule, setCreatedSchedule] = useState<{ id: string; name: string } | null>(null)
+  // Stable idempotency key for the one pay-schedule create attempt (the
+  // generic SetupDrawer's pattern): minted once and preserved across Next-
+  // click retries, so retrying an ambiguous failure replays the same create
+  // instead of minting a duplicate schedule. The generic setup API refuses
+  // the create outright without a UUID key.
+  const scheduleRequestId = useRef<string | null>(null)
   const [vendorChoices, setVendorChoices] = useState<Record<string, string>>({})
   const [eftFallbackToCheque, setEftFallbackToCheque] = useState(true)
 
@@ -264,9 +270,10 @@ export function PayrollOnboardingWizard(props: {
       if (multiEntity && !scheduleSubsidiaryId) {
         throw new Error(t('schedule.subsidiaryRequired'))
       }
+      if (!scheduleRequestId.current) scheduleRequestId.current = crypto.randomUUID()
       const res = await fetch('/api/admin/setup/pay-schedules', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': scheduleRequestId.current },
         body: JSON.stringify({
           name: scheduleName.trim(),
           frequency,
