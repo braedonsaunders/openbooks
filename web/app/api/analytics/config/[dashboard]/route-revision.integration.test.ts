@@ -182,6 +182,40 @@ test(
 );
 
 test(
+  "a successful update writes one audit row with actor, before, and after",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const f = await seed();
+    const res = await PUT(
+      putRequest({ expectedRevision: 0, values: { ...DEFAULTS, duplicateDays: 21 } }),
+      params(),
+    );
+    assert.equal(res.status, 200);
+
+    const audits = await db.execute<{
+      actor: string;
+      action: string;
+      changes: {
+        before: { analytics: Record<string, unknown> };
+        after: { analytics: Record<string, unknown> };
+      };
+    }>(sql`
+      select actor_id as actor, action, changes from audit_log
+       where org_id = ${f.orgId} and table_name = 'orgs' and row_id = ${f.orgId}
+       order by id desc limit 5
+    `);
+    assert.equal(audits.rows.length, 1, "exactly one audit row covers the update");
+    const audit = audits.rows[0]!;
+    assert.equal(audit.actor, f.actorId);
+    assert.equal(audit.action, "update");
+    assert.deepEqual(audit.changes.before.analytics[DASHBOARD], {});
+    assert.equal(audit.changes.before.analytics[`${DASHBOARD}Revision`], 0);
+    assert.deepEqual(audit.changes.after.analytics[DASHBOARD], { ...DEFAULTS, duplicateDays: 21 });
+    assert.equal(audit.changes.after.analytics[`${DASHBOARD}Revision`], 1);
+  },
+);
+
+test(
   "a missing revision is a 409 naming the remedy, never a blind overwrite",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {

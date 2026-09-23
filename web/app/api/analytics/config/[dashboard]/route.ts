@@ -236,9 +236,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
     throw error;
   }
 
-  // Lock and compare in the same transaction as the replacement. Concurrent
-  // editors serialize on the org row, but serialization alone would still let
-  // the second writer silently discard the first — the 409 forces a re-read.
+  // Lock the current overrides, compare, and commit the replacement together
+  // with complete before/after audit evidence. Concurrent editors serialize
+  // on the org row, but serialization alone would still let the second writer
+  // silently discard the first — the 409 forces a re-read.
   const outcome = await db.transaction(async (tx) => {
     const existing = await tx.execute<{ cfg: unknown; rev: number }>(sql`
       select settings -> 'analytics' -> ${dashboard} as cfg,
@@ -254,8 +255,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
         values: mergeConfig(dashboard as AnalyticsDashboard, existing.rows[0].cfg ?? null),
       };
     }
+    const rawBefore = existing.rows[0].cfg;
+    const before = rawBefore && typeof rawBefore === "object" ? rawBefore : {};
     const nextRevision = currentRevision + 1;
-    await tx.execute(sql`
+    const updated = await tx.execute(sql`
       update orgs
       set settings = jsonb_set(
         jsonb_set(
@@ -263,6 +266,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
           array['analytics', ${dashboard}], ${JSON.stringify(cleaned)}::jsonb, true),
         array['analytics', ${revisionKey(dashboard)}], ${JSON.stringify(nextRevision)}::jsonb, true)
       where id = ${gate.user.orgId}
+    `);
+    // A write that matches zero rows is a failure, not a save: under RLS an
+    // unscoped UPDATE silently matches nothing and reports success.
+    if ((updated.rowCount ?? 0) !== 1) return { kind: "unwritten" as const };
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
+        ${JSON.stringify({
+          before: { analytics: { [dashboard]: before, [revisionKey(dashboard)]: currentRevision } },
+          after: { analytics: { [dashboard]: cleaned, [revisionKey(dashboard)]: nextRevision } },
+        })}::jsonb,
+        ${gate.user.id}
+      )
     `);
     return { kind: "ok" as const, revision: nextRevision };
   });
@@ -273,6 +290,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
   if (outcome.kind === "conflict") {
     return NextResponse.json(
       { error: revisionConflict(dashboard), revision: outcome.revision, values: outcome.values },
+      { status: 409 },
+    );
+  }
+  if (outcome.kind === "unwritten") {
+    return NextResponse.json(
+      { error: `the ${dashboard} configuration was not saved — reload and retry` },
       { status: 409 },
     );
   }
