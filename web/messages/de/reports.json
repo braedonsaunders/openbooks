@@ -2181,6 +2181,7 @@
   "statements": {
     "title": "Kontoauszug",
     "opening": "Anfangssaldo",
+    "agingAsOf": "Altersstruktur zum {date}",
     "closing": "Endsaldo"
   },
   "detail": {

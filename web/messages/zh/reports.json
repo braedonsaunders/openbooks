@@ -2181,6 +2181,7 @@
   "statements": {
     "title": "科目对账单",
     "opening": "期初余额",
+    "agingAsOf": "截至 {date} 的账龄",
     "closing": "期末余额"
   },
   "detail": {

@@ -101,6 +101,7 @@ export const REPORTING_WIDGETS = {
   'aging-strip': (props) => (
     <AgingStrip
       cells={(props.cells as ComponentProps<typeof AgingStrip>['cells']) ?? []}
+      asOfLabel={str(props, 'asOfLabel') ?? ''}
       totalLabel={str(props, 'totalLabel') ?? ''}
       total={str(props, 'total') ?? ''}
       totalDrill={props.totalDrill as ComponentProps<typeof AgingStrip>['totalDrill']}

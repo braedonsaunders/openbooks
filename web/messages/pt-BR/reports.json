@@ -2181,6 +2181,7 @@
   "statements": {
     "title": "Extrato de Conta",
     "opening": "Saldo inicial",
+    "agingAsOf": "Antiguidade em {date}",
     "closing": "Saldo final"
   },
   "detail": {
