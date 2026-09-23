@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, cmp, mulRate, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
@@ -188,13 +189,10 @@ export async function recordPayRunPayment(input: {
     const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
 
     const paidOn = input.paidOn ?? run.pay_date!;
-    const period = (await tx.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${orgId} and is_adjustment = false
-         and starts_on <= ${paidOn} and ends_on >= ${paidOn}
-       limit 1
-    `));
-    if (!period.rows[0]) throw new PayrollError(`no accounting period covers ${paidOn}`);
+    // Ordinary posting: shared covering-period resolver (default calendar,
+    // regular periods, deterministic).
+    const period = await resolveCoveringPeriod(tx, orgId, paidOn);
+    if (!period) throw new PayrollError(`no accounting period covers ${paidOn}`);
 
     const originSubId = run.subsidiary_id;
     const runCurrency = run.currency;
@@ -284,7 +282,7 @@ export async function recordPayRunPayment(input: {
                                    period_id, memo, status, origin, source_document_id,
                                    created_by, updated_by)
       values (${orgId}, ${run.book_id}, ${run.subsidiary_id}, ${entryNumber}, ${paidOn},
-              ${period.rows[0].id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
+              ${period.id}, ${`Net pay ${run.document_number}`}, 'draft', 'payroll',
               ${documentId}, ${actorId}, ${actorId})
       returning id
     `));

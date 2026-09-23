@@ -295,7 +295,11 @@ async function mixedCurrencyAccruals(
   const filingAccount = sql`s.filing_account_id`;
   // Stubs whose pay date falls in no regular accounting period can be
   // neither translated nor summed: refusing names the date and why, instead
-  // of silently dropping their money from the accruals below.
+  // of silently dropping their money from the accruals below. The coverage
+  // guard and the per-row lateral joins below carry the default-calendar
+  // join inline (set-based form of the shared covering-period resolver:
+  // same predicate, same deterministic ordering), because a row-wise
+  // helper call cannot serve a grouped query.
   const dateless = (await executor.execute<{ pay_date: string; currency: string }>(sql`
     select s.pay_date::text as pay_date, s.currency_code as currency
       from pay_stubs s
@@ -305,6 +309,8 @@ async function mixedCurrencyAccruals(
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
        and not exists (
          select 1 from accounting_periods p
+          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+            and fc.is_default and fc.is_active
           where p.org_id = ${orgId} and not p.is_adjustment
             and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
        )
@@ -339,6 +345,8 @@ async function mixedCurrencyAccruals(
       join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
       join lateral (
         select p.id, p.ends_on from accounting_periods p
+          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+            and fc.is_default and fc.is_active
          where p.org_id = ${orgId} and not p.is_adjustment
            and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
          order by p.starts_on, p.ends_on, p.id limit 1
@@ -364,6 +372,8 @@ async function mixedCurrencyAccruals(
       join documents source_document on source_document.id = r.document_id and source_document.org_id = r.org_id
       join lateral (
         select p.id, p.ends_on from accounting_periods p
+          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+            and fc.is_default and fc.is_active
          where p.org_id = ${orgId} and not p.is_adjustment
            and p.starts_on <= s.pay_date and p.ends_on >= s.pay_date
          order by p.starts_on, p.ends_on, p.id limit 1

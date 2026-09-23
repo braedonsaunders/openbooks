@@ -13,6 +13,7 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 export class PropertyManagementError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -111,11 +112,11 @@ interface LateFeeRow extends Record<string, unknown> {
 interface DepositContextRow extends Record<string, unknown> {
   tenant_id: string; subsidiary_id: string; location_id: string | null; currency: string; base_currency: string;
   deposit_liability_account_id: string | null; default_bank_account_id: string | null;
-  book_id: string | null; period_id: string | null;
+  book_id: string | null;
 }
 interface DepositReversalRow extends Record<string, unknown> {
   kind: string; amount: string; lease_id: string; reversal_of_id: string | null; already_reversed: boolean;
-  currency: string; base_currency: string; book_id: string; subsidiary_id: string; period_id: string | null;
+  currency: string; base_currency: string; book_id: string; subsidiary_id: string;
   journal_entry_id: string; bank_account_id: string | null; offset_account_id: string | null;
 }
 interface CamPoolDbRow extends Record<string, unknown> {
@@ -1263,15 +1264,17 @@ export async function levelLeaseRentStraightLine(
         throw new PropertyManagementError(`Property for lease ${lease.leaseNumber} has no rent income account`);
       }
 
-      const ctx = (await db.execute<{ book_id: string | null; period_id: string | null }>(sql`
-        select (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share) as book_id,
-               (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
-                  and starts_on <= ${asOf} and ends_on >= ${asOf} limit 1) as period_id
+      // The levelling accrual is an ordinary posting: the period resolves
+      // through the shared covering-period resolver (default calendar,
+      // regular periods, deterministic).
+      const levelPeriod = await resolveCoveringPeriod(db, orgId, asOf);
+      if (!levelPeriod) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
+      const levelPeriodId: string = levelPeriod.id;
+      const ctx = (await db.execute<{ book_id: string | null }>(sql`
+        select (select id from accounting_books where org_id = ${orgId} and is_primary and is_active and posts_gl limit 1 for share) as book_id
       `));
       if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No active primary posting book");
-      if (!ctx.rows[0]?.period_id) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
       const levelBookId: string = ctx.rows[0].book_id;
-      const levelPeriodId: string = ctx.rows[0].period_id;
       // Direct journal writes bypass the document posting path, so the GL
       // close fence that guards documents never sees this accrual: refuse a
       // closed target period here instead of tripping the storage guard.
@@ -1321,7 +1324,7 @@ export async function levelLeaseRentStraightLine(
       const entry = (await db.execute<{ id: string }>(sql`
         insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
         values(${orgId},${ctx.rows[0].book_id},${lease.subsidiaryId},
-               ${`SLR-${lease.leaseNumber}-${asOf}-${crypto.randomUUID().slice(0, 8)}`},${asOf},${ctx.rows[0].period_id},
+               ${`SLR-${lease.leaseNumber}-${asOf}-${crypto.randomUUID().slice(0, 8)}`},${asOf},${levelPeriodId},
                ${memo},'draft','lease',
                ${JSON.stringify({ propertyManagement: { levellingLeaseId: lease.id, asOf } })}::jsonb,
                ${actorId},${actorId}) returning id`));
@@ -1527,13 +1530,17 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       throw new PropertyManagementError("Property management feature is disabled");
     }
     await tx.execute(sql`select id from subsidiaries where org_id=${input.orgId} order by id for share`);
+    // Deposit journals are ordinary postings: the period resolves through
+    // the shared covering-period resolver (default calendar, regular
+    // periods, deterministic) before the lease lock is taken.
+    const depositPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn);
+    if (!depositPeriod) throw new PropertyManagementError("An open GL period is required");
+    const depositPeriodId: string = depositPeriod.id;
     // The lease lock serializes balance-changing deposit activity. Journal,
     // application, and append-only subledger evidence commit as one unit.
     const ctx = (await tx.execute<DepositContextRow>(sql`
       select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
-        (select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share) as book_id,
-        (select id from accounting_periods where org_id=l.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
-          order by starts_on desc limit 1) as period_id
+        (select id from accounting_books where org_id=l.org_id and is_primary and is_active and posts_gl order by id limit 1 for share) as book_id
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
       join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       where l.org_id=${input.orgId} and l.id=${input.leaseId}
@@ -1550,14 +1557,12 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
       throw new PropertyManagementError("Security-deposit journals require the property currency to match the subsidiary functional currency");
     }
     if (!row.book_id) throw new PropertyManagementError("An active primary posting book is required");
-    if (!row.period_id) throw new PropertyManagementError("An open GL period is required");
     // One period gate: the shared GL check replaces the raw
     // period_module_is_closed finder predicate. Recording a deposit is new
     // local activity, not historical replay, so source-owned imported
     // locks refuse exactly like user locks.
     try {
       const depositBookId: string = row.book_id;
-      const depositPeriodId: string = row.period_id;
       await assertPeriodModulesOpen(tx, {
         orgId: input.orgId,
         periodId: depositPeriodId,
@@ -1644,7 +1649,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
 
     const entryNumber = `DEP-${occurredOn}-${input.leaseId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
     const entry = (await tx.execute<{ id: string }>(sql`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
-      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${row.period_id},
+      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${depositPeriodId},
         ${input.memo ?? `Security deposit ${input.kind}`},'draft','manual',${JSON.stringify({ propertyManagement: { leaseId: input.leaseId, kind: input.kind } })}::jsonb,
         ${input.actorId},${input.actorId}) returning id`));
     const entryId = entry.rows[0]!.id;
@@ -1691,11 +1696,15 @@ export async function reverseSecurityDepositTransaction(input: {
        for update of l
     `);
     if (!lease.rows[0]) throw new PropertyManagementError("Deposit transaction not found");
+    // Reversals are ordinary corrections: the period resolves through the
+    // shared covering-period resolver (default calendar, regular periods,
+    // deterministic) before the transaction lock is taken.
+    const reversalPeriod = await resolveCoveringPeriod(tx, input.orgId, occurredOn);
+    if (!reversalPeriod) throw new PropertyManagementError("An open GL period is required for the reversal date");
+    const reversalPeriodId: string = reversalPeriod.id;
     const context = (await tx.execute<DepositReversalRow>(sql`
       select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
-        exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed,
-        (select id from accounting_periods where org_id=t.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
-          order by starts_on desc limit 1) as period_id
+        exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed
       from security_deposit_transactions t
       join property_leases l on l.id=t.lease_id and l.org_id=t.org_id
       join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
@@ -1706,13 +1715,11 @@ export async function reverseSecurityDepositTransaction(input: {
     const row = context.rows[0];
     if (!row) throw new PropertyManagementError("Deposit transaction not found");
     if (row.reversal_of_id || row.already_reversed) throw new PropertyManagementError("Deposit transaction is already a reversal or has already been reversed");
-    if (!row.period_id) throw new PropertyManagementError("An open GL period is required for the reversal date");
     // One period gate: the shared GL check replaces the raw
     // period_module_is_closed finder predicate. A reversal is new local
     // activity, not historical replay, so source-owned imported locks
     // refuse exactly like user locks.
     try {
-      const reversalPeriodId: string = row.period_id;
       await assertPeriodModulesOpen(tx, {
         orgId: input.orgId,
         periodId: reversalPeriodId,
@@ -1734,7 +1741,7 @@ export async function reverseSecurityDepositTransaction(input: {
     const entryNumber = `DEP-REV-${occurredOn}-${input.transactionId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
     const entry = (await tx.execute<{ id: string }>(sql`
       insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,custom,created_by,updated_by)
-      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${row.period_id},${`Deposit reversal: ${reason}`},'draft','manual',${row.journal_entry_id},
+      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${reversalPeriodId},${`Deposit reversal: ${reason}`},'draft','manual',${row.journal_entry_id},
         ${JSON.stringify({ propertyManagement: { leaseId: row.lease_id, reversalOfId: input.transactionId, kind } })}::jsonb,${input.actorId},${input.actorId}) returning id
     `));
     const entryId = entry.rows[0]!.id;

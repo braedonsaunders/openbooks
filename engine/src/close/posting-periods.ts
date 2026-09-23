@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule, NON_POSTING_DOCUMENT_KINDS } from "./period-policy.ts";
+import { resolveCoveringPeriod } from "./period-resolution.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**
@@ -11,9 +12,9 @@ import { uuidArray } from "../organization/subsidiaries.ts";
  * (`posting_date ?? document_date`) at post time, so an unassigned approved
  * document posts fine — but the close checklist cannot attest attribution it
  * cannot see. This action makes the derivation explicit ahead of posting:
- * each candidate resolves to the non-adjustment accounting period covering
- * its effective date, exactly as `resolvePostingPeriod` would, except an
- * ambiguous calendar overlap refuses instead of picking an arbitrary row.
+ * each candidate resolves through the shared covering-period resolver
+ * (default calendar, regular periods, deterministic under overlaps),
+ * exactly as `resolvePostingPeriod` would at post time.
  * A candidate whose period is closed for its kind's close module on the
  * target book is refused, never force-assigned. Preview first, commit after;
  * both run against the same derivation so the preview is the commit.
@@ -123,13 +124,11 @@ async function resolveCandidate(
       blockReason: error instanceof Error ? error.message : String(error),
     };
   }
-  const periods = (await runner.execute<{ id: string; name: string }>(sql`
-    select id, name from accounting_periods
-     where org_id = ${orgId}
-       and starts_on <= ${row.effective_date}
-       and ends_on >= ${row.effective_date}
-       and is_adjustment = false`)).rows;
-  if (periods.length === 0) {
+  // Through the shared covering-period resolver: the default calendar wins
+  // and overlaps resolve deterministically, so assignment no longer blocks
+  // on "multiple periods cover" when a second calendar overlaps the date.
+  const period = await resolveCoveringPeriod(runner, orgId, row.effective_date);
+  if (!period) {
     return {
       ...base,
       periodId: null,
@@ -138,16 +137,6 @@ async function resolveCandidate(
       blockReason: `no accounting period covers ${row.effective_date}`,
     };
   }
-  if (periods.length > 1) {
-    return {
-      ...base,
-      periodId: null,
-      periodName: null,
-      blocked: true,
-      blockReason: `multiple accounting periods cover ${row.effective_date}; assign manually`,
-    };
-  }
-  const period = periods[0]!;
   try {
     await assertPeriodModulesOpen(runner, {
       orgId,

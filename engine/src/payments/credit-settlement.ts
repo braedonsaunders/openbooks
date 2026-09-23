@@ -4,6 +4,7 @@ import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { CreditApplicationConflictError, PaymentError } from "./payment-errors.ts";
 import { paymentBookId } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
@@ -276,12 +277,9 @@ export async function applyStandaloneCredits(
 
     // A settlement dated into a closed period would silently move an aged
     // balance behind a lock the close already signed off on.
-    const period = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${orgId} and is_adjustment = false
-         and starts_on <= ${input.appliedOn} and ends_on >= ${input.appliedOn}
-       limit 1
-    `)).rows[0];
+    // Ordinary posting gate: shared covering-period resolver (default
+    // calendar, regular periods, deterministic).
+    const period = await resolveCoveringPeriod(db, orgId, input.appliedOn);
     if (!period) {
       throw new PaymentError(
         `no accounting period covers ${input.appliedOn}; open the period from Accounting → Periods or settle on a date inside an existing period`,
@@ -474,12 +472,7 @@ export async function unapplyCreditSettlement(
 
     // Reopening a balance behind a closed period is the same event as settling
     // into one, and is gated the same way.
-    const period = (await db.execute<{ id: string }>(sql`
-      select id from accounting_periods
-       where org_id = ${orgId} and is_adjustment = false
-         and starts_on <= ${application.applied_on} and ends_on >= ${application.applied_on}
-       limit 1
-    `)).rows[0];
+    const period = await resolveCoveringPeriod(db, orgId, application.applied_on);
     if (!period) {
       throw new PaymentError(
         `no accounting period covers this settlement's date ${application.applied_on}; it cannot be released until that period exists`,

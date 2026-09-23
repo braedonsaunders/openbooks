@@ -309,6 +309,7 @@
     "payroll": {
       "description": "Payroll: runs, readiness, remittances, filings, entitlements, year-end, bank files, statutory country packs.",
       "dependsOn": [
+        "close",
         "flows",
         "money",
         "organization",

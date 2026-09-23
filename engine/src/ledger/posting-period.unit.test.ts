@@ -36,9 +36,28 @@ test("explicit posting period is scoped to the organization and the posting date
   explicit.done();
   const dated = scripted([[{ id: "regular" }]]);
   assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), { id: "regular" });
+  // Date-derived resolution goes through the shared covering-period
+  // resolver: org-scoped, date-windowed, restricted to the default active
+  // calendar's regular periods, deterministic under overlaps.
   assert.deepEqual(dated.calls[0]!.params, ["org-a", args.postingDate, args.postingDate]);
-  assert.match(dated.calls[0]!.sql, /is_adjustment = false/);
+  assert.match(dated.calls[0]!.sql, /fc\.is_default and fc\.is_active/);
+  assert.match(dated.calls[0]!.sql, /not p\.is_adjustment/);
+  assert.match(dated.calls[0]!.sql, /order by p\.starts_on, p\.ends_on, p\.id/);
   dated.done();
+});
+
+test("an explicit adjustment period overrides without a date-window check", async () => {
+  // Adjustments re-date activity by nature (economic date on the posting,
+  // close bucket on the period), so the imported-document window check
+  // applies to regular overrides only. The scripted row carries
+  // is_adjustment like the real select.
+  const adj = scripted([[{ id: "adj-13", is_adjustment: true }]]);
+  assert.deepEqual(
+    await resolvePostingPeriod(adj.runner, document("adj-13"), "2026-06-30"),
+    { id: "adj-13" },
+  );
+  assert.match(adj.calls[0]!.sql, /is_adjustment or \(starts_on/);
+  adj.done();
 });
 
 test("missing override and uncovered date refuse with the applicable remedy context", async () => {

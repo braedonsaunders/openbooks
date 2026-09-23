@@ -7,6 +7,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, mul, neg, sum, isZero } from "../money/money.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
 /**
  * Project GL recognition — the accounting-correct layer on top of the billing
@@ -165,15 +166,11 @@ export async function postProjectGlEntryWithinTransaction(
     throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
   }
   const currency = opts.currency ?? functionalCurrency;
-  const per = (await tx.execute<{ id: string }>(sql`
-    select period.id
-      from accounting_periods period
-     where period.org_id = ${orgId} and period.is_adjustment = false
-       and period.starts_on <= ${postingDate}
-       and period.ends_on >= ${postingDate}
-     limit 1`));
-  const periodId = per.rows[0]?.id;
-  if (!periodId) throw new Error(`no accounting period covers ${postingDate}`);
+  // Project journals are ordinary postings: the shared covering-period
+  // resolver (default calendar, regular periods, deterministic).
+  const covering = await resolveCoveringPeriod(tx, orgId, postingDate);
+  if (!covering) throw new Error(`no accounting period covers ${postingDate}`);
+  const periodId = covering.id;
   // One period gate: the shared GL check replaces the raw
   // period_module_is_closed predicate. Project journals are new activity,
   // not historical replay, so source-owned imported locks refuse exactly
@@ -347,16 +344,9 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (h.status !== "posted") {
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
-  const period = (await tx.execute<{ id: string }>(sql`
-    select accounting_period.id
-      from accounting_periods accounting_period
-     where accounting_period.org_id = ${orgId}
-       and not accounting_period.is_adjustment
-       and accounting_period.starts_on <= ${reversalDate}
-       and accounting_period.ends_on >= ${reversalDate}
-     limit 1
-  `));
-  if (!period.rows[0]) {
+  // Reversals are ordinary corrections: shared covering-period resolver.
+  const period = await resolveCoveringPeriod(tx, orgId, reversalDate);
+  if (!period) {
     throw new Error(`no accounting period covers ${reversalDate}`);
   }
   // One period gate: the shared GL check replaces the raw
@@ -366,7 +356,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   try {
     await assertPeriodModulesOpen(tx, {
       orgId,
-      periodId: period.rows[0].id,
+      periodId: period.id,
       bookId: h.book_id,
       subsidiaryIds: [h.subsidiary_id],
       modules: ["gl"],
@@ -383,7 +373,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   const rev = (await tx.execute<{ id: string }>(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
-    values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${reversalDate}, ${period.rows[0].id},
+    values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${reversalDate}, ${period.id},
             ${`Reversal of ${h.entry_number} — ${reason}`}, 'draft', ${h.origin}, ${entryId}, ${actorId}, ${actorId})
     returning id`)).rows[0]!;
   // Preserve the exact original FX and dimensional evidence. Losing location

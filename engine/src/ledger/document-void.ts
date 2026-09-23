@@ -4,6 +4,7 @@ import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { documentRevisionCounterSql, isDocumentRevisionToken } from "../records/revision.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
+import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { emitStatusChange, runRecordFlows } from "../flows/run.ts";
@@ -758,16 +759,13 @@ export async function completeRequestedDocumentVoid(
           throw new DocumentVoidError("the source journal entry is not posted");
         }
         const reversalDate = String(doc.void_reversal_date);
-        const period = (await tx.execute<{ id: string }>(sql`
-          select id
-            from accounting_periods
-           where org_id = ${orgId}
-             and starts_on <= ${reversalDate}
-             and ends_on >= ${reversalDate}
-           order by is_adjustment, starts_on
-           limit 1
-        `));
-        if (!period.rows[0]) {
+        // Reversals are ordinary corrections, so the reversal period resolves
+        // through the shared covering-period resolver (default calendar,
+        // regular periods only): a void can no longer land in an adjustment
+        // period by date. An adjustment-period reversal names its period
+        // explicitly through the document override instead.
+        const period = await resolveCoveringPeriod(tx, orgId, reversalDate);
+        if (!period) {
           throw new DocumentVoidError(
             `no accounting period covers ${reversalDate} — generate the period covering that date, then void again`,
             422,
@@ -782,7 +780,7 @@ export async function completeRequestedDocumentVoid(
         try {
           await assertPeriodModulesOpen(tx, {
             orgId,
-            periodId: period.rows[0].id,
+            periodId: period.id,
             bookId: String(entry.book_id),
             subsidiaryIds: subsidiaries.rows.map((row) => row.subsidiary_id),
             modules: [closeModuleForDocument(String(doc.kind))],
@@ -846,7 +844,7 @@ export async function completeRequestedDocumentVoid(
                 `${String(source.entry_number)}-${suffix}`,
               ),
               postingDate: reversalDate,
-              periodId: period.rows[0]!.id,
+              periodId: period.id,
               memo: `Reversal: ${String(doc.void_reason)}`,
               status: "draft",
               sourceDocumentId: documentId,
@@ -903,7 +901,7 @@ export async function completeRequestedDocumentVoid(
           try {
             await assertPeriodModulesOpen(tx, {
               orgId,
-              periodId: period.rows[0]!.id,
+              periodId: period.id,
               bookId: linked.book_id,
               subsidiaryIds: linkedSubs.rows.map((row) => row.subsidiary_id),
               modules: [closeModuleForDocument(String(doc.kind))],
