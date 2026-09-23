@@ -16,8 +16,9 @@ interface PreviewState {
   sampleCalls: unknown[][]
   valueCalls: unknown[][]
   renderCalls: number
+  renderError: unknown
 }
-const state: PreviewState = { granted: new Set(), allowedSubsidiaryIds: null, sampleCalls: [], valueCalls: [], renderCalls: 0 }
+const state: PreviewState = { granted: new Set(), allowedSubsidiaryIds: null, sampleCalls: [], valueCalls: [], renderCalls: 0, renderError: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -40,6 +41,20 @@ const mockSources = new Map<string, string>([
     `
       export function compileTemplateHtml(source) { return { sanitizedSource: source, compiledHtml: source } }
       export function sanitizeTokenizedFragment(fragment) { return fragment }
+      // Faithful mirror of the real RendererUnavailableError contract (name,
+      // executablePath, message naming the path and the remedy): the route
+      // under test maps it through the REAL lib/api/pdf-renderer, so the
+      // mock must produce the refusal the real pool would throw.
+      export class RendererUnavailableError extends Error {
+        constructor(executablePath) {
+          super(executablePath
+            ? \`PDF renderer is unavailable: Chromium was not found at \${executablePath}. Install Chromium on the app server or set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.\`
+            : 'PDF renderer is unavailable: no Chromium executable is configured.')
+          this.name = 'RendererUnavailableError'
+          this.executablePath = executablePath
+        }
+      }
+      export function pdfRendererStatus() { return { available: true, executablePath: '/usr/bin/chromium', message: 'available' } }
     `,
   ],
   [
@@ -64,7 +79,11 @@ const mockSources = new Map<string, string>([
     'render',
     `
       const state = globalThis[Symbol.for('openbooks.pdf-template-preview-route-test')]
-      export async function mergeAndPrintPdf() { state.renderCalls += 1; return Buffer.from('%PDF-1.4 test') }
+      export async function mergeAndPrintPdf() {
+        state.renderCalls += 1
+        if (state.renderError) throw state.renderError
+        return Buffer.from('%PDF-1.4 test')
+      }
     `,
   ],
   [
@@ -117,6 +136,12 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?pdf-template-preview-route-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
+// The mock's refusal class, captured while the hooks are still active: the
+// 503 test throws the same shape the real pool throws, mapped through the
+// REAL lib/api/pdf-renderer.
+const { RendererUnavailableError: MockRendererUnavailableError } = (await import(mockUrl('pdf'))) as {
+  RendererUnavailableError: new (executablePath: string) => Error
+}
 hooks.deregister()
 
 function reset(): void {
@@ -125,6 +150,7 @@ function reset(): void {
   state.sampleCalls = []
   state.valueCalls = []
   state.renderCalls = 0
+  state.renderError = null
 }
 
 function preview(recordType: string): Promise<Response> {
@@ -187,4 +213,28 @@ test('an unrestricted designer with read authority previews the org-wide latest 
   assert.equal(response.status, 200)
   assert.deepEqual(state.sampleCalls, [['customer_invoice', 'org-1', null]])
   assert.deepEqual(state.valueCalls, [['00000000-0000-4000-8000-00000000c001', null]])
+})
+
+test('a renderer outage answers 503 with the named refusal, not a generic 500', async () => {
+  reset()
+  state.granted = new Set(['admin.customization.manage', 'ar.read'])
+  state.renderError = new MockRendererUnavailableError('/usr/bin/chromium')
+
+  const response = await preview('customer_invoice')
+
+  assert.equal(response.status, 503)
+  const body = (await response.json()) as { error: string }
+  assert.ok(body.error.includes('/usr/bin/chromium'), 'the refusal names the path it tried')
+  assert.ok(body.error.includes('PUPPETEER_EXECUTABLE_PATH'), 'the refusal names the remedy')
+})
+
+test('a non-renderer render failure still answers the generic 500', async () => {
+  reset()
+  state.granted = new Set(['admin.customization.manage', 'ar.read'])
+  state.renderError = new Error('chromium crashed mid-print')
+
+  const response = await preview('customer_invoice')
+
+  assert.equal(response.status, 500)
+  assert.deepEqual(await response.json(), { error: 'request failed; retry, and contact support if it persists' })
 })

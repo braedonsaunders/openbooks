@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { can, guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../../lib/list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/catalog'
@@ -121,6 +122,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
     return NextResponse.json({ error: e instanceof Error ? e.message : 'send failed' }, { status: 422 })
   }
 }

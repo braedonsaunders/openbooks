@@ -6,6 +6,7 @@ import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'
 import { isUuid } from '../../../../../../lib/list-params'
+import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import { mergedRunStubsPdf } from '../../../../../../lib/payroll-outputs'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 
@@ -46,6 +47,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (error instanceof PayrollError) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
+    const rendererRefusal = rendererUnavailableResponse(error)
+    if (rendererRefusal) return rendererRefusal
     throw error
   }
 }

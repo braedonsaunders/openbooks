@@ -35,6 +35,8 @@
     "previewHint": "Généré par le moteur exact qui imprime le document réel, fusionné avec votre enregistrement le plus récent.",
     "refreshPreview": "Actualiser l'aperçu",
     "previewFailed": "Échec de l'aperçu",
+    "rendererUnavailableTitle": "Moteur de rendu PDF indisponible",
+    "rendererUnavailableHint": "L’aperçu ne peut pas être généré tant que le moteur de rendu PDF du serveur n’est pas réparé. Demandez à votre administrateur d’installer Chromium ou de définir PUPPETEER_EXECUTABLE_PATH, puis actualisez l’aperçu.",
     "deleteConfirm": "Supprimer ce modèle ? Les enregistrements utiliseront le design par défaut.",
     "blockContent": "Contenu",
     "blockFields": "Champs de l'enregistrement",

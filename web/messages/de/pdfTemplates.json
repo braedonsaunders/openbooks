@@ -35,6 +35,8 @@
     "previewHint": "Gerendert von genau der Engine, die das echte Dokument druckt, zusammengeführt mit Ihrem neuesten Datensatz.",
     "refreshPreview": "Vorschau aktualisieren",
     "previewFailed": "Vorschau fehlgeschlagen",
+    "rendererUnavailableTitle": "PDF-Renderer nicht verfügbar",
+    "rendererUnavailableHint": "Die Vorschau kann erst gerendert werden, wenn der PDF-Renderer des Servers repariert ist. Bitten Sie Ihren Administrator, Chromium zu installieren oder PUPPETEER_EXECUTABLE_PATH zu setzen, und aktualisieren Sie dann die Vorschau.",
     "deleteConfirm": "Diese Vorlage löschen? Datensätze fallen auf das Standarddesign zurück.",
     "blockContent": "Inhalt",
     "blockFields": "Datensatzfelder",

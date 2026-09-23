@@ -7,6 +7,7 @@ import {
   InformationReturnError,
   stampRecipientCopiesPrinted,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
@@ -122,10 +123,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     currency: filing.currency,
   }))
 
-  const pdf =
-    forms.length === 1
-      ? await renderInformationReturnPdf(forms[0]!)
-      : await renderInformationReturnBatchPdf(forms)
+  let pdf: Buffer
+  try {
+    pdf =
+      forms.length === 1
+        ? await renderInformationReturnPdf(forms[0]!)
+        : await renderInformationReturnBatchPdf(forms)
+  } catch (e) {
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
+    throw e
+  }
 
   // Furnishing is stamped through the engine's one owned write to recipients —
   // the only mutation a frozen filing still accepts, because handing over a

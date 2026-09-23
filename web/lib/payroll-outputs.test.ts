@@ -63,6 +63,7 @@ const state = {
   } as { id: string; provenance: { templateId: string; revision: number; contentHash: string } } | null,
   encryptionPasswords: [] as string[],
   encryptionError: null as Error | null,
+  renderError: null as unknown,
   renderedPdf: plainPdfFixture,
   encryptedFixture: encryptedPdfFixture.toString('base64'),
 }
@@ -113,6 +114,17 @@ const mockSources = new Map<string, string>([
         return crypto.verifyPdfEncryption(pdf)
       }
 
+      // Faithful mirror of the real RendererUnavailableError contract (name,
+      // executablePath, message naming the path and the remedy): the sender
+      // maps it through instanceof in this same module graph.
+      export class RendererUnavailableError extends Error {
+        constructor(executablePath) {
+          super('PDF renderer is unavailable: Chromium was not found at ' + executablePath + '. Install Chromium on the app server or set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.')
+          this.name = 'RendererUnavailableError'
+          this.executablePath = executablePath
+        }
+      }
+
       export function renderPasswordExpression(expression, catalog, values) {
         return harness.renderPasswordExpression(expression, catalog, values)
       }
@@ -146,6 +158,7 @@ const mockSources = new Map<string, string>([
     `
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
       export async function mergeAndPrintPdf() {
+        if (harness.state.renderError) throw harness.state.renderError
         return Buffer.from(harness.state.renderedPdf)
       }
     `,
@@ -257,6 +270,10 @@ const {
   isProtectedPayrollRecordType,
   sendRecordPdfEmail,
 } = await import(protectedSenderUrl) as typeof import('./pdf-templates/send.ts')
+// The mock's refusal class, captured while the hooks are still active.
+const { RendererUnavailableError: MockRendererUnavailableError } = (await import('@openbooks/pdf')) as {
+  RendererUnavailableError: new (executablePath: string) => Error
+}
 hooks.deregister()
 
 function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string }): void {
@@ -275,6 +292,7 @@ function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string 
   }
   state.encryptionPasswords.length = 0
   state.encryptionError = null
+  state.renderError = null
   state.renderedPdf = plainPdfFixture
   state.encryptedFixture = encryptedPdfFixture.toString('base64')
 }
@@ -464,6 +482,22 @@ test('an encryption failure is recorded and never reported as a successful send'
   assert.deepEqual(result.failed, [{ name: 'Jordan Sparks', error: 'qpdf unavailable' }])
   assert.equal(state.deliveryCalls.length, 0)
   assert.deepEqual(state.encryptionPasswords, ['EMP42'])
+})
+
+test('a renderer outage flags the batch and names the outage per stub', async () => {
+  reset([stub(), stub({ id: 'stub-2', name: 'Alex Ray' })], { enabled: true, expression: '{employeeNumber|upper}' })
+  state.renderError = new MockRendererUnavailableError('/usr/bin/chromium')
+
+  const result = await emailRunStubs('org-1', 'run-1')
+
+  assert.equal(result.sent, 0)
+  assert.equal(result.rendererOutage, true)
+  assert.equal(result.failed.length, 2)
+  for (const failure of result.failed) {
+    assert.ok(failure.error.includes('/usr/bin/chromium'), 'each entry names the path it tried')
+    assert.ok(failure.error.includes('PUPPETEER_EXECUTABLE_PATH'), 'each entry names the remedy')
+  }
+  assert.equal(state.deliveryCalls.length, 0)
 })
 
 const outputsSource = readFileSync(new URL('./payroll-outputs.ts', import.meta.url), 'utf8')

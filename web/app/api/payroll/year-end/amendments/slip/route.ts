@@ -4,6 +4,7 @@ import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import { filingCorrectionSlip } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import { payrollYearRefusal } from '../../../../../../lib/payroll-year'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { payrollSlipFacsimile } from '../../../../../../lib/payroll-slip-facsimile'
@@ -71,6 +72,8 @@ export async function GET(req: Request) {
   } catch (e) {
     if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
     throw e
   }
 }

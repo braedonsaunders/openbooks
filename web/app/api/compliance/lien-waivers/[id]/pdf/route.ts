@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardLienWaiverFeature, lienWaiverPrintData, loadLienWaiverPrintSource } from '@/lib/compliance'
 import { renderLienWaiverPdf } from '@/lib/lien-waiver-pdf'
@@ -47,7 +48,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     filename = w.waiverNumber
   }
 
-  const pdf = await renderLienWaiverPdf(data, orgName)
+  let pdf: Buffer
+  try {
+    pdf = await renderLienWaiverPdf(data, orgName)
+  } catch (e) {
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
+    throw e
+  }
 
   const body = new Uint8Array(pdf)
   return new NextResponse(body, {

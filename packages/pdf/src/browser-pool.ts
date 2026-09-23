@@ -3,6 +3,8 @@
 // secret-scrubbed child environment, single-flight launch, and a capped,
 // always-closed page semaphore.
 
+import { existsSync } from 'node:fs'
+import { delimiter, isAbsolute, join } from 'node:path'
 import puppeteer, {
   type Browser,
   type LaunchOptions,
@@ -11,13 +13,46 @@ import puppeteer, {
 import { isAllowedPdfRequest } from './template'
 
 /**
+ * The PDF renderer (headless Chromium) cannot start. The message names the
+ * executable path the pool tried and the remedy — install Chromium or set
+ * PUPPETEER_EXECUTABLE_PATH — because a missing renderer is an operator
+ * precondition, never a tenant fault, and answering it as a generic 500
+ * leaves the operator retrying a preview that can never succeed.
+ */
+export class RendererUnavailableError extends Error {
+  readonly executablePath: string | null
+  constructor(executablePath: string | null) {
+    super(rendererUnavailableMessage(executablePath))
+    this.name = 'RendererUnavailableError'
+    this.executablePath = executablePath
+  }
+}
+
+function rendererRemedy(): string {
+  return 'Install Chromium on the app server or set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.'
+}
+
+function rendererUnavailableMessage(executablePath: string | null): string {
+  const where = executablePath
+    ? `Chromium was not found at ${executablePath}.`
+    : `No Chromium executable is configured for this platform (${process.platform}).`
+  return `PDF renderer is unavailable: ${where} ${rendererRemedy()}`
+}
+
+/**
  * Cap on concurrent print pages. Each page is a full renderer holding a
  * parsed 16 MiB-scale document; unbounded pages under burst load OOM the
  * container (and every page shares the one browser's IO threads).
  */
 const MAX_CONCURRENT_PDF_PAGES = 4
 
-function resolveExecutable(): string {
+/**
+ * The Chromium executable the pool would launch, or null when no executable
+ * is configured for this platform. Null is a distinct outcome from "a path
+ * that is missing on disk": the former needs configuration, the latter needs
+ * installation, and the refusal names which.
+ */
+export function rendererExecutablePath(): string | null {
   const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH
   if (fromEnv) return fromEnv
 
@@ -30,9 +65,42 @@ function resolveExecutable(): string {
   if (process.platform === 'darwin') {
     return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   }
-  throw new Error(
-    'Set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.',
-  )
+  return null
+}
+
+function resolveExecutable(): string {
+  const resolved = rendererExecutablePath()
+  if (resolved === null) throw new RendererUnavailableError(null)
+  return resolved
+}
+
+/** Readiness for status surfaces: is the configured executable present? */
+export interface PdfRendererStatus {
+  available: boolean
+  executablePath: string | null
+  message: string
+}
+
+/**
+ * Renderer readiness without launching a browser. A launch probe would start
+ * a persistent pooled browser from a status check, so readiness reports the
+ * deployment precondition — the configured executable is present — while a
+ * genuine launch failure still surfaces as RendererUnavailableError at
+ * render time. A bare command (resolved through PATH) is looked up in PATH;
+ * anything else must be an absolute path on disk.
+ */
+export function pdfRendererStatus(): PdfRendererStatus {
+  const executablePath = rendererExecutablePath()
+  if (executablePath === null) {
+    return { available: false, executablePath, message: new RendererUnavailableError(null).message }
+  }
+  const present = isAbsolute(executablePath)
+    ? existsSync(executablePath)
+    : (process.env.PATH ?? '').split(delimiter).some((dir) => dir && existsSync(join(dir, executablePath)))
+  if (!present) {
+    return { available: false, executablePath, message: new RendererUnavailableError(executablePath).message }
+  }
+  return { available: true, executablePath, message: `PDF renderer is available at ${executablePath}.` }
 }
 
 /**
@@ -88,24 +156,56 @@ function looksLikeSandboxFailure(error: unknown): boolean {
   return /sandbox|namespace|zygote|setuid|permission denied|operation not permitted/i.test(message)
 }
 
+/**
+ * A launch failure caused by a missing Chromium executable. Puppeteer reports
+ * it as "Browser was not found at the configured executablePath (…)"; a
+ * raw spawn reports ENOENT naming the path. Either shape becomes the typed
+ * refusal naming the path and the remedy — never a generic launch error the
+ * routes would answer as an unexpected 500. Checked BEFORE the sandbox
+ * classification: a missing binary is not a sandbox problem and must not be
+ * retried with --no-sandbox.
+ */
+function looksLikeMissingExecutable(error: unknown, executablePath: string): boolean {
+  if (error instanceof RendererUnavailableError) return true
+  const message = error instanceof Error
+    ? `${error.message} ${String((error as { stderr?: unknown }).stderr ?? '')} ${String((error as { cause?: unknown }).cause ?? '')}`
+    : String(error)
+  if (/was not found at the configured executablePath/i.test(message)) return true
+  const code = (error as { code?: unknown }).code
+  if ((code === 'ENOENT' || /ENOENT/i.test(message)) && message.includes(executablePath)) return true
+  return false
+}
+
 async function launchSandboxed(launcher: PdfBrowserLauncher): Promise<Browser> {
+  const executablePath = resolveExecutable()
   const baseOptions = {
-    executablePath: resolveExecutable(),
+    executablePath,
     headless: true,
     env: scrubRendererEnv(),
   } as const
   if (process.env.OPENBOOKS_CHROMIUM_NO_SANDBOX === '1') {
-    return launcher({ ...baseOptions, args: chromiumArgs(true) })
+    try {
+      return await launcher({ ...baseOptions, args: chromiumArgs(true) })
+    } catch (error) {
+      if (looksLikeMissingExecutable(error, executablePath)) throw new RendererUnavailableError(executablePath)
+      throw error
+    }
   }
   try {
     return await launcher({ ...baseOptions, args: chromiumArgs(false) })
   } catch (error) {
+    if (looksLikeMissingExecutable(error, executablePath)) throw new RendererUnavailableError(executablePath)
     if (!looksLikeSandboxFailure(error)) throw error
     console.warn(
       '[pdf] Chromium sandbox unavailable (user namespaces blocked by the container runtime?) — ' +
         `retrying with --no-sandbox. Cause: ${error instanceof Error ? error.message : String(error)}`.slice(0, 300),
     )
-    return launcher({ ...baseOptions, args: chromiumArgs(true) })
+    try {
+      return await launcher({ ...baseOptions, args: chromiumArgs(true) })
+    } catch (retryError) {
+      if (looksLikeMissingExecutable(retryError, executablePath)) throw new RendererUnavailableError(executablePath)
+      throw retryError
+    }
   }
 }
 

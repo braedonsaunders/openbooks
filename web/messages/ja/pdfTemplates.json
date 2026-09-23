@@ -35,6 +35,8 @@
     "previewHint": "実際の書類を印刷するエンジンそのものでレンダリングし、最新のレコードと差し込んでいます。",
     "refreshPreview": "プレビューを更新",
     "previewFailed": "プレビューに失敗しました",
+    "rendererUnavailableTitle": "PDFレンダラーが利用できません",
+    "rendererUnavailableHint": "サーバーのPDFレンダラーが修復されるまでプレビューを生成できません。管理者にChromiumのインストールまたはPUPPETEER_EXECUTABLE_PATHの設定を依頼し、プレビューを更新してください。",
     "deleteConfirm": "このテンプレートを削除しますか?レコードは既定のデザインにフォールバックします。",
     "blockContent": "コンテンツ",
     "blockFields": "レコードフィールド",

@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { withReportBookColumn } from '../../../../../../lib/report-book-label'
 import { reportBookSelection } from '../../../../../../lib/report-books'
 import { guardPermission } from '../../../../../../lib/authz'
+import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -129,6 +130,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
 
     return emitData(resolved.data)
   } catch (err) {
+    const rendererRefusal = rendererUnavailableResponse(err)
+    if (rendererRefusal) return rendererRefusal
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Statement failed' }, { status: 422 })
   }
 }

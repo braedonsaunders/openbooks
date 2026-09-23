@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
+import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
 import { isUuid } from '../../../../../lib/list-params'
 import { pdfResponse, safeName } from '../../../../../lib/export'
 import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, type BackupType } from '../../../../../lib/invoice-backup'
@@ -42,6 +43,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (e instanceof InvoiceBackupImmutableError) return NextResponse.json({ error: e.message }, { status: 422 })
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
     return NextResponse.json({ error: (e as Error).message }, { status: 500 })
   }
 }
