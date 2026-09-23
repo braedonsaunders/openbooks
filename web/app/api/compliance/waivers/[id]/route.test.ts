@@ -100,6 +100,10 @@ const mockSources = new Map<string, string>([
         if (permission !== 'compliance.waive') throw new Error('unexpected permission: ' + permission)
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
+      // Subsidiary fencing for the approve transition is covered by the
+      // dedicated scope tests with a restricted fence; this double stays
+      // unrestricted so the revocation tests keep testing revocation.
+      export function guardSubsidiaryScope() { return null }
     `,
   ],
   [

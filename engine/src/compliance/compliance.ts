@@ -130,6 +130,12 @@ export type WaiverRecord = {
   projectId: string | null;
   effectiveFrom: string;
   expiresOn: string;
+  /**
+   * When the exception was approved (timestamptz instant). A requested but
+   * never approved exception is pending and covers nothing — null is not
+   * in force, never "approved long ago".
+   */
+  approvedAt: string | null;
   /** When the exception was revoked (timestamptz instant; null when live). */
   revokedAt: string | null;
   /**
@@ -156,13 +162,16 @@ export function revocationLocalDate(revokedAt: string | Date, timeZone: string):
 }
 
 /**
- * Is this exception in force on `asOf` (ISO yyyy-mm-dd)? The window end is
- * the earlier of expiry and revocation: a revocation takes effect on its own
- * org-local calendar date (fail closed — the revoked day itself is not
- * covered). `revokedOn` carries that date; when it is absent (pure unit
- * callers that only set the instant) the UTC date of the instant applies.
+ * Is this exception in force on `asOf` (ISO yyyy-mm-dd)? Only an approved
+ * exception can be in force — a pending request (approvedAt null) covers
+ * nothing. The window end is the earlier of expiry and revocation: a
+ * revocation takes effect on its own org-local calendar date (fail closed —
+ * the revoked day itself is not covered). `revokedOn` carries that date;
+ * when it is absent (pure unit callers that only set the instant) the UTC
+ * date of the instant applies.
  */
-export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "revokedAt" | "revokedOn">, asOf: string): boolean {
+export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "approvedAt" | "revokedAt" | "revokedOn">, asOf: string): boolean {
+  if (w.approvedAt === null || (w.approvedAt as unknown) === undefined) return false;
   if (daysBetween(w.effectiveFrom, asOf) < 0) return false;
   if (daysBetween(asOf, w.expiresOn) < 0) return false;
   const local = "revokedOn" in w ? w.revokedOn : null;
@@ -643,11 +652,12 @@ export async function loadVendorComplianceInputs(
        where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`),
     // Revoked rows load too: the evaluator dates them by the revocation's
     // org-local date, so an as-of read sees the exception exactly while it
-    // was in force.
+    // was in force. Pending requests (never approved) load too but the
+    // evaluator never honours them — requesting is not granting.
     runner.execute<WaiverRow>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
-             revoked_at as "revokedAt"
+             approved_at as "approvedAt", revoked_at as "revokedAt"
         from compliance_waivers
        where org_id = ${orgId} and party_id = ${partyId}`),
     runner.execute<LienWaiverEvidence>(sql`

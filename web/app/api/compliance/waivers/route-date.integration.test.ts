@@ -89,7 +89,7 @@ test("waiver creation refuses a non-calendar end date without writing", { skip: 
   }
 });
 
-test("waiver creation still grants a calendar-dated exception", { skip: !DB }, async () => {
+test("waiver creation still files a calendar-dated exception request", { skip: !DB }, async () => {
   const { org, partyId, requirementId } = await fixture();
   try {
     const response = await post({
@@ -99,7 +99,10 @@ test("waiver creation still grants a calendar-dated exception", { skip: !DB }, a
       effectiveFrom: "2026-01-05",
       expiresOn: "2026-02-27",
     });
-    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    const json = (await response.json().catch(() => null)) as { status?: string } | null;
+    assert.equal(response.status, 200, JSON.stringify(json));
+    // Requesting is not granting: the request files as pending.
+    assert.equal(json?.status, "pending_approval");
     assert.equal(await waiverCount(org.orgId), 1);
   } finally {
     await dropScratchOrg(org.orgId);

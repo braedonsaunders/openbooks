@@ -221,10 +221,12 @@ export async function loadComplianceMatrix(args: {
     `),
     // Revoked rows load too: the shared evaluator dates them by the
     // revocation's org-local date, so an as-of read sees each exception
-    // exactly while it was in force.
+    // exactly while it was in force. Pending requests load too but are
+    // never honoured — requesting is not granting.
     db.execute(sql`
       select cw.party_id as "partyId", cw.id, cw.requirement_id as "requirementId", cw.project_id as "projectId",
-             cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn", cw.revoked_at as "revokedAt"
+             cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn",
+             cw.approved_at as "approvedAt", cw.revoked_at as "revokedAt"
         from compliance_waivers cw
         left join projects pr on pr.id = cw.project_id and pr.org_id = cw.org_id
        where cw.org_id = ${args.orgId}
@@ -385,8 +387,10 @@ export type ExceptionRow = {
   reason: string
   effectiveFrom: string
   expiresOn: string
+  /** Pending requests are listed so approvers can see them; they are not in force. */
+  status: 'pending_approval' | 'approved'
   approvedByName: string | null
-  approvedAt: string
+  approvedAt: string | null
 }
 
 export async function loadVendorWaivers(
@@ -399,6 +403,7 @@ export async function loadVendorWaivers(
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as "projectName",
            w.reason, w.effective_from as "effectiveFrom", w.expires_on as "expiresOn",
+           case when w.approved_at is null then 'pending_approval' else 'approved' end as "status",
            u.name as "approvedByName", w.approved_at as "approvedAt"
       from compliance_waivers w
       join parties party on party.id = w.party_id and party.org_id = w.org_id
