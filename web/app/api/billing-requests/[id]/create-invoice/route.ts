@@ -20,16 +20,24 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     // A backup-required request leaves the draft with its packet already
     // assembled, so the download link works and the later issue gate finds
     // its evidence. Assembly runs after the invoice transaction commits —
-    // never rendered inside it — and a failure here stays retryable: the
-    // draft stands, and issuing refuses until the packet exists.
+    // never rendered inside it — and a failure is reported explicitly in
+    // the response (never swallowed): the draft stands, the project tab
+    // pins the failure to the request row, and issuing refuses until the
+    // packet exists.
+    let backup: { status: 'generated' | 'not_required' | 'failed'; error?: string } =
+      result.backupRequired ? { status: 'generated' } : { status: 'not_required' }
     if (result.backupRequired) {
       try {
         await assembleInvoiceBackup(gate.user.orgId, gate.user.id, result.id, result.backupType as BackupType, gate.allowedSubsidiaryIds)
       } catch (e) {
         console.error('billing backup auto-assemble failed', { requestId: id, invoiceId: result.id, error: e })
+        backup = {
+          status: 'failed',
+          error: 'The backup packet could not be generated — generate it from the billing request, then submit the invoice',
+        }
       }
     }
-    return NextResponse.json({ documentId: result.id, documentNumber: result.documentNumber })
+    return NextResponse.json({ documentId: result.id, documentNumber: result.documentNumber, backup })
   } catch (e) {
     if (e instanceof BillingError && e.message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (e instanceof BillingError && e.message === 'Inventory is disabled') {
