@@ -23,7 +23,11 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
+import {
+  importFieldTickets,
+  parseTicketTsv,
+} from "./field-ticket-import.ts";
 import { resolveTargetOrg } from "./target-org.ts";
 
 const args = new Map(
@@ -68,20 +72,9 @@ async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
   throw last;
 }
 
-interface Ticket {
-  sourceId: string; number: string; jobRef: string; empRef: string; customerRef: string;
-  begin: string; end: string; billed: boolean; final: boolean; approval: string;
-  foremanRef: string; po: string | null; description: string | null;
-}
 interface Row { ticketId: string; empRef: string; itemRef: string; hours: { day: number; kind: string; h: number }[] }
 
-const parseTickets = (): Ticket[] =>
-  readFileSync(HEADERS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]!))
-    .map((c) => ({
-      sourceId: c[0]!, number: c[1]!, jobRef: c[2]!, empRef: c[3]!, customerRef: c[4]!,
-      begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9]!,
-      foremanRef: c[10]!, po: c[11] === "NULL" ? null : c[11]!, description: (c[12] ?? "").trim() || null,
-    }));
+const parseTickets = () => parseTicketTsv(readFileSync(HEADERS, "utf8"));
 
 const parseRows = (): Row[] =>
   readFileSync(ROWS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 25 && /^\d+$/.test(c[0]!))
@@ -102,87 +95,16 @@ const parseRows = (): Row[] =>
 
   const tickets = parseTickets();
   const rows = parseRows();
-  const byTicket = new Map<string, Row[]>();
-  for (const r of rows) { const l = byTicket.get(r.ticketId) ?? []; l.push(r); byTicket.set(r.ticketId, l); }
   console.log(`export: ${tickets.length} tickets, ${rows.length} crew rows, ${rows.reduce((t, r) => t + r.hours.length, 0)} day/type hour cells`);
 
-  const map = async (table: string) => {
-    const r = (await retry(() => db.execute(sql.raw(
-      `select custom->>'nsId' k, id from "${table}" where org_id = '${ORG}' and custom->>'nsId' is not null`))));
-    return new Map<string, string>((r.rows).map((x) => [String(x.k), String(x.id)]));
-  };
-  const projects = await map("projects");
-  const parties = await map("parties");
-  const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`)))).rows[0]?.id;
-  const org = ((await retry(() => db.execute(sql`
-    select base_currency from orgs where id = ${ORG}
-  `)))).rows[0] as { base_currency?: string } | undefined;
-  const baseCurrency = org?.base_currency?.trim();
-  if (!baseCurrency) throw new Error("target organization has no base currency");
-
-  // Preload the tickets already landed so a resumed run costs one query, not one per ticket.
-  const existingTickets = new Map<string, string>(
-    ((await retry(() => db.execute<{ n: string; id: string }>(sql`
-      select document_number n, id from documents where org_id = ${ORG} and kind = 'field_ticket'`)))).rows
-      .map((x): [string, string] => [String(x.n), String(x.id)]),
+  // Identity and all writes live in the import core: a same-number ticket
+  // from another source refuses by name instead of attaching to the old
+  // document, and every write re-checks identity under lock.
+  const result = await retry(() =>
+    importFieldTickets({ orgId: ORG, sourceSystem: SOURCE_SYSTEM!, tickets, apply: APPLY }),
   );
-  let created = 0, nativeCreated = 0, noProject = 0, existing = 0;
-  for (const t of tickets) {
-    const projectId = projects.get(t.jobRef) ?? null;
-    if (!projectId) { noProject++; continue; }
-    if (!APPLY) continue;
-
-    let ticketDocId: string | undefined = existingTickets.get(t.number);
-    if (ticketDocId) existing++;
-    else {
-      const sourceMetadata = {
-        source: {
-          system: SOURCE_SYSTEM,
-          externalId: t.sourceId,
-          number: t.number,
-          jobRef: t.jobRef,
-          empRef: t.empRef,
-          foremanRef: t.foremanRef,
-          periodBegin: t.begin,
-          periodEnd: t.end,
-          billed: t.billed,
-          finalTicket: t.final,
-          approval: t.approval,
-        },
-      };
-      ticketDocId = await retry(() => withOrg(ORG, async () => {
-        const ins = (await db.execute<{ id: string }>(sql`
-          insert into documents (org_id, kind, document_number, party_id, project_id, document_date, currency,
-                                 status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
-          values (${ORG}, 'field_ticket', ${t.number}, ${parties.get(t.customerRef) ?? null}, ${projectId},
-                  ${t.end}, ${baseCurrency}, ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
-                  '0', '0', '0', ${t.po}, ${actor},
-                  ${JSON.stringify(sourceMetadata)}::jsonb)
-          returning id`));
-        await db.execute(sql`
-          insert into field_tickets
-            (document_id, org_id, period, period_start, period_end,
-             foreman_party_id, created_by, updated_by)
-          values (${ins.rows[0]!.id}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
-                  ${parties.get(t.foremanRef) ?? null}, ${actor}, ${actor})
-        `);
-        return String(ins.rows[0]!.id);
-      }));
-      existingTickets.set(t.number, ticketDocId!);
-      created++;
-    }
-
-    const native = await retry(() => db.execute(sql`
-      insert into field_tickets
-        (document_id, org_id, period, period_start, period_end,
-         foreman_party_id, created_by, updated_by)
-      values (${ticketDocId}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
-              ${parties.get(t.foremanRef) ?? null}, ${actor}, ${actor})
-      on conflict (document_id) do nothing
-      returning document_id
-    `));
-    nativeCreated += native.rows.length;
-  }
+  const { created, nativeCreated, existing } = result;
+  const noProject = result.unmapped.length;
   const report = {
     mode: APPLY ? "apply" : "plan",
     source: {
