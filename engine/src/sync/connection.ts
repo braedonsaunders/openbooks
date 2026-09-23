@@ -65,6 +65,23 @@ export interface SourceTypeManifest {
   };
 }
 
+/**
+ * QuickBooks Desktop editions the Intuit Web Connector supports, declared
+ * once on the manifest. Intuit's Web Connector get-started documentation
+ * states QBWC 2.2.0.34 and newer work only with US editions, Canadian
+ * editions (2015 or later) and UK editions (2015 or later) — AU/NZ editions
+ * are not supported by any current Web Connector. The region select, the
+ * .qwc route and setup validation all read this list, so no branch hardcodes
+ * a region and AU/NZ can never be offered a working-looking path.
+ */
+export const QBD_WEB_CONNECTOR_REGIONS = ["US", "CA", "UK"] as const;
+
+const QBD_REGION_LABELS: Record<(typeof QBD_WEB_CONNECTOR_REGIONS)[number], string> = {
+  US: "United States",
+  CA: "Canada",
+  UK: "United Kingdom",
+};
+
 export const SOURCE_TYPES: SourceTypeManifest[] = [
   {
     source: "netsuite",
@@ -147,13 +164,8 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
         label: "QuickBooks region",
         kind: "select",
         required: true,
-        options: [
-          { value: "US", label: "United States" },
-          { value: "CA", label: "Canada" },
-          { value: "UK", label: "United Kingdom" },
-          { value: "AU", label: "Australia" },
-          { value: "NZ", label: "New Zealand" },
-        ],
+        options: QBD_WEB_CONNECTOR_REGIONS.map((value) => ({ value, label: QBD_REGION_LABELS[value] })),
+        help: "QuickBooks Desktop AU/NZ editions are not supported by the Intuit Web Connector (US, Canada and UK only).",
       },
       { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies", required: true },
       { key: "companyFile", label: "Company file path (optional)", placeholder: "C:\\Quickbooks Data\\Company.QBW", help: "Leave blank to use whichever company is open when Web Connector runs." },
@@ -267,6 +279,15 @@ export function validateSourceConfig(
   config: Record<string, unknown>,
   opts?: { today?: string },
 ): string | null {
+  // Truthful refusal before the generic option check below: an AU/NZ (or any
+  // other unsupported) region must hear that the Intuit Web Connector does
+  // not support it, not a bare "invalid value".
+  if (manifest.source === "qbd") {
+    const region = String(config.region ?? "").trim().toUpperCase();
+    if (region && !(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {
+      return `QuickBooks Desktop ${region} editions are not supported by the Intuit Web Connector (supported regions: ${QBD_WEB_CONNECTOR_REGIONS.join(", ")})`;
+    }
+  }
   for (const field of manifest.configFields) {
     const value = String(config[field.key] ?? "").trim();
     if (field.required && !value) return `${field.label} is required`;

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
-import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
+import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/src/sync/connection.ts'
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { storageIdentityError } from '../../_storage-identity'
@@ -20,6 +20,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   })
   if (!connection) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (connection.source !== 'qbd') return NextResponse.json({ error: 'not a QuickBooks Desktop connection' }, { status: 400 })
+  const region = String((connection.config as { region?: unknown } | null)?.region ?? '').trim().toUpperCase()
+  if (!(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {
+    return NextResponse.json({ error: `QuickBooks Desktop ${region || 'unknown'} editions are not supported by the Intuit Web Connector (supported regions: ${QBD_WEB_CONNECTOR_REGIONS.join(', ')}) — no Web Connector file was generated` }, { status: 400 })
+  }
 
   const origin = appBaseUrl()
   if (!origin.startsWith('https://') && !/^http:\/\/(localhost|127\.0\.0\.1)(:|$)/.test(origin)) {
