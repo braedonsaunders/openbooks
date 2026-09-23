@@ -83,6 +83,19 @@ export function isSftpTempName(p: string): boolean {
   return base.startsWith(".") && base.includes(SFTP_TEMP_WRITE_MARKER);
 }
 
+/**
+ * A directory refused because it still holds objects. Carries the virtual
+ * path (never a server absolute path) so the refusal names the folder for
+ * the operator; the daemon maps it to the SFTP failure status rather than a
+ * misleading NO_SUCH_FILE or a phantom success.
+ */
+export class SftpDirectoryNotEmptyError extends Error {
+  constructor(virtualPath: string) {
+    super(`sftp folder '${cleanPath(virtualPath)}' is not empty — move or delete its contents before removing it`);
+    this.name = "SftpDirectoryNotEmptyError";
+  }
+}
+
 // --------------------------------------------------------------------------
 // Local filesystem backend
 // --------------------------------------------------------------------------
@@ -156,7 +169,14 @@ export function localBackend(rootDir: string): SftpBackend {
       await fs.mkdir(abs(p), { recursive: true });
     },
     async rmdir(p) {
-      await fs.rmdir(abs(p));
+      try {
+        await fs.rmdir(abs(p));
+      } catch (e) {
+        // ENOTEMPTY names the server absolute path; refuse with the virtual
+        // path instead, through the same named error the S3 backend throws.
+        if ((e as { code?: string }).code === "ENOTEMPTY") throw new SftpDirectoryNotEmptyError(p);
+        throw e;
+      }
     },
     async rename(from, to) {
       const dest = abs(to);
@@ -271,7 +291,15 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       await client().send(new PutObjectCommand({ Bucket: bucket, Key: dirKey(p), Body: Buffer.alloc(0) }));
     },
     async rmdir(p) {
-      await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: dirKey(p) }));
+      // S3 has no directories: deleting only the zero-byte folder marker
+      // would report success while the folder's statements still import.
+      // Match fs.rmdir — refuse a non-empty prefix by name, and delete the
+      // marker only when nothing sits under it.
+      const marker = dirKey(p);
+      const listed = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix: marker, MaxKeys: 2 }));
+      const hasChild = (listed.Contents ?? []).some((o) => o.Key !== marker);
+      if (hasChild) throw new SftpDirectoryNotEmptyError(p);
+      await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: marker }));
     },
     async rename(from, to) {
       await client().send(new CopyObjectCommand({ Bucket: bucket, CopySource: encodeS3CopySource(bucket, key(from)), Key: key(to) }));
