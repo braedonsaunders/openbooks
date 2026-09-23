@@ -1,6 +1,6 @@
 import 'server-only'
 import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-scope'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
@@ -177,14 +177,82 @@ export async function calculateForecast(scope: ForecastScope) {
    * opportunity remain attributable to its team.
    */
   const teamScopeFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
+  const teamScopedDocument = sql`
+    exists (
+      select 1
+        from crm_opportunity_documents od
+        join forecast_scope fo on fo.id = od.opportunity_id
+      where od.org_id = ${scope.orgId}
+         and od.document_id = d.id
+    )`
+  /**
+   * Closed is a net-revenue basis, not a tax-inclusive takings total:
+   * invoices contribute their subtotal (tax excluded) and posted customer
+   * credits against the same revenue subtract theirs. A credit follows its
+   * revenue — the invoice it settles (through a live application) or the
+   * opportunity it is linked to — so an unrelated credit never reduces
+   * another owner's or team's figure. The credit side of an application is
+   * the from-side by engine convention, but either endpoint counts as
+   * linkage: direction is a posting detail, attribution is not.
+   * Declared before the team/owner filters that interpolate it: both build
+   * their SQL eagerly whenever their scope key is set, so a later
+   * declaration would throw a temporal-dead-zone ReferenceError on exactly
+   * the scoped calls the filters exist for.
+   */
+  const creditAppliesToScopedInvoice = (invoiceScope: SQL) => sql`
+    exists (
+      select 1
+        from applications a
+        join journal_lines fl on fl.id = a.from_line_id and fl.org_id = a.org_id
+        join journal_entries fe on fe.id = fl.entry_id and fe.org_id = a.org_id
+        join journal_lines tl on tl.id = a.to_line_id and tl.org_id = a.org_id
+        join journal_entries te on te.id = tl.entry_id and te.org_id = a.org_id
+        join documents inv on inv.org_id = d.org_id
+          and inv.kind = 'customer_invoice'
+          and inv.id <> d.id
+          and (inv.id = te.source_document_id or inv.id = fe.source_document_id)
+      where a.org_id = d.org_id
+        and a.unapplied_at is null
+        and (fe.source_document_id = d.id or te.source_document_id = d.id)
+        and ${invoiceScope}
+    )`
   const teamActualsFilter = scope.salesTeamId ? sql`
-         and exists (
-           select 1
-             from crm_opportunity_documents od
-             join forecast_scope fo on fo.id = od.opportunity_id
+    and (
+      (d.kind = 'customer_invoice' and ${teamScopedDocument})
+      or (d.kind = 'customer_credit' and (
+        ${teamScopedDocument}
+        or ${creditAppliesToScopedInvoice(sql`
+          exists (
+            select 1
+              from crm_opportunity_documents od
+              join forecast_scope fo on fo.id = od.opportunity_id
+            where od.org_id = inv.org_id
+               and od.document_id = inv.id
+          )`)}
+      ))
+    )` : sql``
+  const ownerActualsFilter = scope.ownerUserId ? sql`
+    and (
+      (d.kind = 'customer_invoice' and exists (
+        select 1 from crm_account_profiles cp
+         where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId}
+      )) or (d.kind = 'customer_credit' and (
+        exists (
+          select 1 from crm_account_profiles cp
+           where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId}
+        ) or exists (
+          select 1
+            from crm_opportunity_documents od
+            join crm_opportunities o on o.id = od.opportunity_id and o.org_id = od.org_id
            where od.org_id = ${scope.orgId}
-              and od.document_id = d.id
-         )` : sql``
+             and od.document_id = d.id
+             and o.owner_user_id = ${scope.ownerUserId}
+        ) or ${creditAppliesToScopedInvoice(sql`exists (
+          select 1 from crm_account_profiles cp
+           where cp.org_id = inv.org_id and cp.party_id = inv.party_id and cp.owner_user_id = ${scope.ownerUserId}
+        )`)}
+      ))
+    )` : sql``
   const rows = (await db.execute<ForecastRow>(sql`
     with forecast_scope as (
       select o.id
@@ -201,12 +269,12 @@ export async function calculateForecast(scope: ForecastScope) {
          and o.expected_close_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${ownerFilter}
     ), actuals as (
-      select d.currency, coalesce(sum(d.total), 0)::numeric(19,4) as closed_amount
+      select d.currency, coalesce(sum(case when d.kind = 'customer_invoice' then d.subtotal else -d.subtotal end), 0)::numeric(19,4) as closed_amount
         from documents d
-       where d.org_id = ${scope.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit') and d.status = 'posted'
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope.allowedSubsidiaryIds == null ? null : new Set(scope.allowedSubsidiaryIds))}
          and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
-         ${scope.ownerUserId ? sql`and exists (select 1 from crm_account_profiles cp where cp.org_id = ${scope.orgId} and cp.party_id = d.party_id and cp.owner_user_id = ${scope.ownerUserId})` : sql``}
+         ${ownerActualsFilter}
          ${teamActualsFilter}
        group by d.currency
     ), currencies as (

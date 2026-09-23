@@ -20,6 +20,16 @@ test('team-only forecast reuses one team opportunity boundary for pipeline and a
   assert.match(actuals, /join forecast_scope fo on fo\.id = od\.opportunity_id/)
 })
 
+test('the credit-attribution helper is declared before the filters that interpolate it', () => {
+  // Both filters build their SQL eagerly when their scope key is set, so a
+  // helper declared after them throws a temporal-dead-zone ReferenceError on
+  // exactly the scoped calls it exists for (seen as a 500 on team snapshots).
+  const helperAt = forecast.indexOf('const creditAppliesToScopedInvoice')
+  assert.ok(helperAt !== -1, 'expected the credit-attribution helper to exist')
+  assert.ok(helperAt < forecast.indexOf('const teamActualsFilter'), 'helper must precede the team filter')
+  assert.ok(helperAt < forecast.indexOf('const ownerActualsFilter'), 'helper must precede the owner filter')
+})
+
 test('no-team forecast leaves the shared team boundary unrestricted', () => {
   assert.match(
     forecast,
@@ -41,8 +51,8 @@ test('cross-team actuals require a document link to an opportunity in the select
 
 test('unrestricted/admin forecasts retain organization and currency boundaries', () => {
   assert.match(forecast, /where o\.org_id = \$\{scope\.orgId\}/)
-  assert.match(actuals, /where d\.org_id = \$\{scope\.orgId\} and d\.kind = 'customer_invoice'/)
-  assert.match(actuals, /coalesce\(sum\(d\.total\), 0\)::numeric\(19,4\) as closed_amount/)
+  assert.match(actuals, /where d\.org_id = \$\{scope\.orgId\} and d\.kind in \('customer_invoice', 'customer_credit'\)/)
+  assert.match(actuals, /coalesce\(sum\(case when d\.kind = 'customer_invoice' then d\.subtotal else -d\.subtotal end\), 0\)::numeric\(19,4\) as closed_amount/)
   assert.match(actuals, /group by d\.currency/)
   assert.match(forecast, /left join actuals a on a\.currency = c\.currency/)
   assert.match(forecast, /coalesce\(sum\(o\.projected_amount\)[\s\S]*\)::text as pipeline_amount/)
