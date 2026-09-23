@@ -2459,6 +2459,16 @@
         "singularTitle": "Process template step",
         "description": "One ordered step of a process template with its owner, due offset and evidence rule."
       },
+      "hrm-pipeline-templates": {
+        "title": "Pipeline templates",
+        "singularTitle": "Pipeline template",
+        "description": "The org's hiring funnels: named stage orders that requisitions open onto. Deactivation preserves history; a template that opened requisitions is never deleted."
+      },
+      "hrm-pipeline-stages": {
+        "title": "Pipeline stages",
+        "singularTitle": "Pipeline stage",
+        "description": "One ordered stage of a pipeline template: screening, interview, assessment, offer, hired, or rejected."
+      },
       "hrm-review-templates": {
         "title": "Review templates",
         "singularTitle": "Review template",

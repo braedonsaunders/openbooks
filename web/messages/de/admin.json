@@ -2527,6 +2527,16 @@
         "singularTitle": "Prozessvorlagen-Schritt",
         "description": "Ein geordneter Schritt einer Prozessvorlage mit Verantwortlichem, Fälligkeitsversatz und Nachweisregel."
       },
+      "hrm-pipeline-templates": {
+        "title": "Pipeline-Vorlagen",
+        "singularTitle": "Pipeline-Vorlage",
+        "description": "Die Einstellungs-Trichter der Organisation: benannte Stufenfolgen, auf die Anfragen eröffnet werden. Eine Deaktivierung bewahrt die Historie; eine Vorlage, die Anfragen eröffnet hat, wird nie gelöscht."
+      },
+      "hrm-pipeline-stages": {
+        "title": "Pipeline-Stufen",
+        "singularTitle": "Pipeline-Stufe",
+        "description": "Eine geordnete Stufe einer Pipeline-Vorlage: Sichtung, Interview, Assessment, Angebot, eingestellt oder abgelehnt."
+      },
       "hrm-review-templates": {
         "title": "Beurteilungsvorlagen",
         "singularTitle": "Beurteilungsvorlage",

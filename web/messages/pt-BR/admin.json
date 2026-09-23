@@ -2459,6 +2459,16 @@
         "singularTitle": "Etapa de modelo de processo",
         "description": "Uma etapa ordenada de um modelo de processo com responsável, prazo e regra de evidência."
       },
+      "hrm-pipeline-templates": {
+        "title": "Modelos de funil",
+        "singularTitle": "Modelo de funil",
+        "description": "Os funis de contratação da organização: ordens de etapas nomeadas sobre as quais as requisições são abertas. A desativação preserva o histórico; um modelo que abriu requisições nunca é excluído."
+      },
+      "hrm-pipeline-stages": {
+        "title": "Etapas do funil",
+        "singularTitle": "Etapa do funil",
+        "description": "Uma etapa ordenada de um modelo: triagem, entrevista, avaliação, oferta, contratado ou recusado."
+      },
       "hrm-review-templates": {
         "title": "Modelos de avaliação",
         "singularTitle": "Modelo de avaliação",
