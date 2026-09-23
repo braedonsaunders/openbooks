@@ -265,6 +265,15 @@ async function planMerge(
   if (!survivor || !duplicate) {
     throw new ProjectMergeError("both projects must exist in this organization");
   }
+  // The merge rewrites project_id on every reference while each row keeps
+  // its own subsidiary, so merging across subsidiaries would silently fold
+  // one legal entity's postings, budgets, and billings into another's.
+  // Refuse with the remedy: set both projects to the same subsidiary first.
+  if (survivor.subsidiary_id !== duplicate.subsidiary_id) {
+    throw new ProjectMergeError(
+      "cannot merge projects from different subsidiaries; set both projects to the same subsidiary first",
+    );
+  }
   const prior = mergedInto(duplicate.custom);
   if (prior) {
     if (prior === survivorId) return { survivor, duplicate, moved: [], customRefs: [], alreadyMerged: true };
