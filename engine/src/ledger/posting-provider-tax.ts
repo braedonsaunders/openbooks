@@ -14,6 +14,49 @@ export function providerTaxDocumentKind(kind: string): boolean {
     kind === "vendor_bill" || kind === "vendor_credit";
 }
 
+/** Frozen destination jurisdiction stamped on the document at posting (0265). */
+export interface ShipToSnapshot {
+  country: string | null;
+  region: string | null;
+}
+
+/** Nexus-relevant sales: the only kinds that carry a ship-to snapshot. */
+const SHIP_TO_SNAPSHOT_KINDS: ReadonlySet<string> = new Set([
+  "customer_invoice",
+  "customer_credit",
+]);
+
+/**
+ * Freeze the sale's destination jurisdiction at posting (0265): the
+ * jurisdiction the US nexus ledger attributes the sale to, forever.
+ *
+ * Provider-quote evidence wins — it is the destination the tax was actually
+ * computed for, minted from the address on file when the draft was quoted —
+ * read line by line in posting order, first evidence wins (the ledger's read
+ * order, so stamp and reader agree when lines disagree). Without quotes
+ * (manual rates) the party's default shipping address AS OF POSTING is the
+ * best evidence available. Anything else resolves to null and the sale stays
+ * unattributed: a live address read later would retroactively move historical
+ * sales across states when the address changes, which is the defect this
+ * stamp exists to end.
+ */
+export async function resolveShipToSnapshot(
+  doc: Doc,
+  lines: DocLine[],
+): Promise<ShipToSnapshot | null> {
+  if (!SHIP_TO_SNAPSHOT_KINDS.has(doc.kind) || !doc.partyId) return null;
+  const ordered = [...lines].sort((a, b) => a.lineNumber - b.lineNumber);
+  for (const line of ordered) {
+    const quote = await readTaxQuoteForDocumentLine(doc.orgId, line.id);
+    const country = quote?.shipTo.country ?? null;
+    const region = quote?.shipTo.region ?? null;
+    if (country != null || region != null) return { country, region };
+  }
+  const address = await defaultPartyAddress(doc.orgId, doc.partyId, true);
+  if (address.country == null && address.region == null) return null;
+  return { country: address.country ?? null, region: address.region ?? null };
+}
+
 function addressFromRow(row: Record<string, unknown> | undefined): Address {
   return {
     line1: row?.line1 == null ? null : String(row.line1),

@@ -22,7 +22,7 @@ import { validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
 import { assertFinalKernelBalance, assertCreditMemoDirection } from "./posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
-import { resolveProviderTaxPlans } from "./posting-provider-tax.ts";
+import { resolveProviderTaxPlans, resolveShipToSnapshot } from "./posting-provider-tax.ts";
 import { applySubsidiaries } from "./posting-subsidiaries.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
@@ -527,6 +527,15 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   ]);
   assertFinalKernelBalance([...subApplied.lines, ...scriptLines]);
 
+  // -- ship-to destination snapshot (0265) ------------------------------------
+  // Freeze the sale's destination jurisdiction from the EFFECTIVE document
+  // (post-scripts/flows party) so the nexus ledger attributes the sale to
+  // where it was taxed/posted, forever. Migration replay stamps nothing:
+  // live addresses are not posting-time evidence for history.
+  const shipToSnapshot = deps.migration
+    ? null
+    : await resolveShipToSnapshot(effectiveDoc, postingLines);
+
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
-  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate };
+  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot };
 }

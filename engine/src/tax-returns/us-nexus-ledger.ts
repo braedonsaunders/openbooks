@@ -107,12 +107,16 @@ async function resolveEntityScope(
 /**
  * Aggregate US sales by destination state and evaluate economic nexus.
  *
- * Destination is taken from the customer's default US shipping address (the
- * ship-to state drives sales-tax nexus). Sales = posted customer invoices net of
- * credit memos over the window, converted to the working currency; the
- * transaction count is invoices only. Sales to customers with no (or an unknown)
- * shipping country cannot be placed and are returned separately, while known
- * non-US destinations are outside this US ledger.
+ * Destination is the jurisdiction the sale was taxed/posted with, frozen on
+ * the document at posting (0265 ship-to snapshot; the ship-to state drives
+ * sales-tax nexus), falling back to the first line's provider-quote evidence
+ * for rows posted before the stamp existed. The live address book is NEVER
+ * consulted: attributing history to the customer's CURRENT address moved
+ * prior sales across states whenever an address changed. Sales = posted
+ * customer invoices net of credit memos over the window, converted to the
+ * working currency; the transaction count is invoices only. Sales with no
+ * captured destination cannot be placed and are returned separately with
+ * their count, while known non-US destinations are outside this US ledger.
  *
  * The working currency is USD for the org-wide ledger (thresholds apply
  * directly, byte-identical to the historical behaviour). A filing-entity ledger
@@ -128,7 +132,7 @@ export interface UsNexusResult {
   /** The filing entity measured, or null for the org-wide ledger. */
   subsidiaryIds: string[] | null
   states: NexusEvaluation[]
-  /** Posted US sales that could not be attributed to a state (no ship-to on file). */
+  /** Posted US sales that could not be attributed to a state (no captured destination). */
   unattributed: { salesUsd: string; txnCount: number }
   /** Threshold-translation evidence; null when thresholds applied directly (USD). */
   translation: UsNexusTranslation | null
@@ -158,7 +162,8 @@ export async function computeUsNexusStatus(
     is_invoice: number
     as_of: string
   }>(sql`
-    select case when upper(trim(coalesce(a.country, ''))) = 'US' then coalesce(a.region, '') else '' end as state,
+    select case when upper(trim(coalesce(d.ship_to_country, q.country, ''))) = 'US'
+                then coalesce(d.ship_to_region, q.region, '') else '' end as state,
            d.currency,
            d.fx_rate::text as fx_rate,
            o.base_currency,
@@ -167,32 +172,35 @@ export async function computeUsNexusStatus(
            coalesce(d.posting_date, d.document_date)::text as as_of
       from documents d
       join orgs o on o.id = d.org_id
+      -- Quote evidence for rows posted before the ship-to stamp existed
+      -- (0265): the destination the line's tax was actually computed for,
+      -- first line wins — the same read order the backfill and the posting
+      -- stamp use, so all three agree when lines disagree.
       left join lateral (
-        select a.id, a.region, a.country
-          from addresses a
-         where a.org_id = d.org_id
-           and a.party_id = d.party_id
-           and a.is_default_shipping
-         order by
-           case when upper(trim(coalesce(a.country, ''))) = 'US' then 0
-                when nullif(trim(a.country), '') is null then 1
-                else 2 end,
-           a.id
+        select q.ship_to->>'country' as country, q.ship_to->>'region' as region
+          from document_lines dl
+          join tax_rate_quotes q
+            on q.org_id = dl.org_id
+           and q.document_line_id = dl.id
+         where dl.org_id = d.org_id
+           and dl.document_id = d.id
+         order by dl.line_number, dl.id
          limit 1
-      ) a on true
+      ) q on true
      where d.org_id = ${orgId}
        and d.kind in ('customer_invoice', 'customer_credit')
        and d.status = 'posted'
        and coalesce(d.posting_date, d.document_date) between ${from} and ${to}
        ${subsidiaryScopeFilter(allowedSubsidiaryIds)}
        ${entityFilter}
-       -- Foreign destinations are outside US nexus. Keep missing/unknown
-       -- country rows unattributed, but never treat a known non-US address as
-       -- an unplaceable US sale.
+       -- Foreign destinations are outside US nexus. A document whose frozen
+       -- destination is unknown stays unattributed with its count, but a
+       -- known non-US destination is never treated as an unplaceable US sale
+       -- — and nothing here reads the live address book, so editing an
+       -- address can never move already-posted sales across states.
        and (
-         a.id is null
-         or nullif(trim(a.country), '') is null
-         or upper(trim(a.country)) = 'US'
+         nullif(trim(coalesce(d.ship_to_country, q.country, '')), '') is null
+         or upper(trim(coalesce(d.ship_to_country, q.country, ''))) = 'US'
        )
   `))
 
