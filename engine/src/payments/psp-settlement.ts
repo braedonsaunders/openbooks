@@ -838,6 +838,87 @@ export interface ImportAccounts {
   subsidiaryId: string;
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function sameStoredImport(
+  row: {
+    currency: string;
+    gross_amount: string;
+    fee_amount: string;
+    refund_amount: string;
+    dispute_amount: string;
+    adjustment_amount: string;
+    net_amount: string;
+    fx_amount: string;
+    settlement_date: string;
+    bank_account_id: string | null;
+    fee_account_id: string | null;
+    dispute_account_id: string | null;
+    fx_account_id: string | null;
+    clearing_account_id: string | null;
+    subsidiary_id: string | null;
+    source_payload: unknown;
+    line_count: number;
+    memo: string | null;
+  },
+  lines: Array<{
+    line_number: number;
+    kind: string;
+    external_ref: string | null;
+    description: string | null;
+    amount: string;
+    currency: string | null;
+    meta: unknown;
+  }>,
+  parsed: ParsedSettlement,
+  accounts: Partial<ImportAccounts>,
+  currency: string,
+  totals: ReturnType<typeof summarizeSettlement>,
+  subsidiaryId: string | null,
+): boolean {
+  const sameAmount = (stored: string, expected: string) => toUnits(stored) === toUnits(expected);
+  if (
+    row.currency !== currency
+    || !sameAmount(row.gross_amount, totals.grossAmount)
+    || !sameAmount(row.fee_amount, totals.feeAmount)
+    || !sameAmount(row.refund_amount, totals.refundAmount)
+    || !sameAmount(row.dispute_amount, totals.disputeAmount)
+    || !sameAmount(row.adjustment_amount, totals.adjustmentAmount)
+    || !sameAmount(row.net_amount, totals.netAmount)
+    || !sameAmount(row.fx_amount, totals.fxAmount)
+    || row.settlement_date !== parsed.settlementDate
+    || row.bank_account_id !== (accounts.bankAccountId ?? null)
+    || row.fee_account_id !== (accounts.feeAccountId ?? null)
+    || row.dispute_account_id !== (accounts.disputeAccountId ?? null)
+    || row.fx_account_id !== (accounts.fxAccountId ?? null)
+    || row.clearing_account_id !== (accounts.clearingAccountId ?? null)
+    || row.subsidiary_id !== subsidiaryId
+    || stableJson(row.source_payload) !== stableJson(parsed.raw ?? null)
+    || row.line_count !== parsed.lines.length
+    || row.memo !== (parsed.memo ?? null)
+    || lines.length !== parsed.lines.length
+  ) return false;
+
+  return parsed.lines.every((line, index) => {
+    const stored = lines[index];
+    return stored !== undefined
+      && stored.line_number === index + 1
+      && stored.kind === line.kind
+      && stored.external_ref === (line.externalRef ?? null)
+      && stored.description === (line.description ?? null)
+      && sameAmount(stored.amount, line.amount)
+      && stored.currency === (line.currency ?? null)
+      && stableJson(stored.meta) === stableJson(line.meta ?? {});
+  });
+}
+
 /**
  * Persist a draft batch + lines (idempotent). Does not post GL.
  */
@@ -957,7 +1038,6 @@ export async function importSettlementBatch(
     if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
       throw new ScopeNotFoundError();
     }
-    if (row.status === "posted") return { batchId: row.id, created: false };
     if (row.status === "void") {
       throw new PspSettlementError(
         "a voided provider settlement reference cannot be reused",
@@ -965,34 +1045,55 @@ export async function importSettlementBatch(
     }
     const batchId = row.id;
     if (!created) {
-      await db.execute(sql`
-        delete from psp_settlement_lines
+      const stored = (await db.execute<{
+        currency: string;
+        gross_amount: string;
+        fee_amount: string;
+        refund_amount: string;
+        dispute_amount: string;
+        adjustment_amount: string;
+        net_amount: string;
+        fx_amount: string;
+        settlement_date: string;
+        bank_account_id: string | null;
+        fee_account_id: string | null;
+        dispute_account_id: string | null;
+        fx_account_id: string | null;
+        clearing_account_id: string | null;
+        subsidiary_id: string | null;
+        source_payload: unknown;
+        line_count: number;
+        memo: string | null;
+      }>(sql`
+        select currency, gross_amount::text, fee_amount::text,
+               refund_amount::text, dispute_amount::text, adjustment_amount::text,
+               net_amount::text, fx_amount::text, settlement_date::text,
+               bank_account_id, fee_account_id, dispute_account_id, fx_account_id,
+               clearing_account_id, subsidiary_id, source_payload, line_count, memo
+          from psp_settlement_batches
+         where id = ${batchId} and org_id = ${orgId}
+      `)).rows[0];
+      const storedLines = (await db.execute<{
+        line_number: number;
+        kind: string;
+        external_ref: string | null;
+        description: string | null;
+        amount: string;
+        currency: string | null;
+        meta: unknown;
+      }>(sql`
+        select line_number, kind, external_ref, description, amount::text, currency, meta
+          from psp_settlement_lines
          where batch_id = ${batchId} and org_id = ${orgId}
-      `);
+         order by line_number
+      `)).rows;
+      if (!stored || !sameStoredImport(stored, storedLines, parsed, accounts, currency, totals, subsidiaryId)) {
+        throw new PspSettlementError(
+          "provider settlement reference already has different evidence; use the persisted batch, then reverse it or record a separate adjustment",
+        );
+      }
+      return { batchId, created: false };
     }
-    await db.execute(sql`
-      update psp_settlement_batches set
-        currency = ${currency},
-        gross_amount = ${totals.grossAmount},
-        fee_amount = ${totals.feeAmount},
-        refund_amount = ${totals.refundAmount},
-        dispute_amount = ${totals.disputeAmount},
-        adjustment_amount = ${totals.adjustmentAmount},
-        net_amount = ${totals.netAmount},
-        fx_amount = ${totals.fxAmount},
-        settlement_date = ${parsed.settlementDate},
-        bank_account_id = coalesce(${accounts.bankAccountId ?? null}, bank_account_id),
-        fee_account_id = coalesce(${accounts.feeAccountId ?? null}, fee_account_id),
-        dispute_account_id = coalesce(${accounts.disputeAccountId ?? null}, dispute_account_id),
-        fx_account_id = coalesce(${accounts.fxAccountId ?? null}, fx_account_id),
-        clearing_account_id = coalesce(${accounts.clearingAccountId ?? null}, clearing_account_id),
-        subsidiary_id = coalesce(${subsidiaryId}, subsidiary_id),
-        source_payload = ${parsed.raw ? JSON.stringify(parsed.raw) : null}::jsonb,
-        line_count = ${parsed.lines.length},
-        memo = ${parsed.memo ?? null},
-        updated_at = now(), updated_by = ${actorId}
-       where id = ${batchId} and org_id = ${orgId}
-    `);
     await insertLines(orgId, batchId, parsed.lines, actorId);
     return { batchId, created };
   });

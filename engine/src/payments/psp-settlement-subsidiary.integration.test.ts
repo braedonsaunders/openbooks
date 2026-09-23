@@ -25,8 +25,8 @@ import {
  *  - posting names exactly what is missing (never present accounts);
  *  - an absent subsidiary resolves to the org root exactly like every other
  *    document (posting.ts: docSubId ?? root);
- *  - a stranded draft is repaired by re-importing the same provider
- *    reference with the missing details (the import path fills them in);
+ *  - re-importing a reference with changed evidence refuses instead of
+ *    rewriting its saved draft or moving it between subsidiaries;
  *  - import itself refuses malformed, foreign, and inactive subsidiaries
  *    instead of persisting them to detonate at posting.
  */
@@ -64,7 +64,7 @@ async function batchState(orgId: string, batchId: string) {
 }
 
 test(
-  "post names only the missing subsidiary and re-import repairs the draft (F-t06-004)",
+  "post names the missing subsidiary and import refuses to replace saved draft evidence",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -100,24 +100,17 @@ test(
       );
       assert.equal((await batchState(org.orgId, batchId)).status, "draft");
 
-      // Repair: re-importing the same provider reference with the missing
-      // subsidiary fills the draft in place (coalesce update path).
-      await importSettlementBatch(org.orgId, actor, stripeParsed(externalRef, org.date), {
-        ...accounts,
-        subsidiaryId: secondSub,
-      });
-      const { entryId } = await postSettlementBatch(org.orgId, batchId, actor, null);
-      assert.ok(entryId);
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, stripeParsed(externalRef, org.date), {
+          ...accounts,
+          subsidiaryId: secondSub,
+        }),
+        /already has different evidence/,
+      );
       const after = await batchState(org.orgId, batchId);
-      assert.equal(after.status, "posted");
-      assert.equal(after.journalEntryId, entryId);
-      assert.equal(after.subsidiaryId, secondSub);
-      const lines = (await db.execute<{ count: number }>(sql`
-        select count(*)::int as count from journal_lines
-         where entry_id = ${entryId} and org_id = ${org.orgId}
-           and subsidiary_id = ${secondSub}
-      `)).rows[0]!;
-      assert.ok(lines.count > 0);
+      assert.equal(after.status, "draft");
+      assert.equal(after.journalEntryId, null);
+      assert.equal(after.subsidiaryId, null);
     } finally {
       await dropScratchOrg(org.orgId);
     }

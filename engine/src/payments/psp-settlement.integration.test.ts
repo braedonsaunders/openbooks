@@ -197,13 +197,18 @@ test(
         reimport instanceof PspSettlementError,
         "empty replacement payload fails before touching posted evidence",
       );
-      const postedRetry = await importSettlementBatch(
-        org.orgId,
-        actor,
-        { ...parsed, memo: "must not replace posted evidence" },
-        accounts,
-      );
+      const postedRetry = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.deepEqual(postedRetry, { batchId, created: false });
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, {
+          ...parsed,
+          lines: parsed.lines.map((line, index) => index === 0
+            ? { ...line, amount: "999.0000", description: "corrected provider line" }
+            : line),
+        }, accounts),
+        /already has different evidence/,
+        "a posted reference cannot be replaced by a corrected provider payload",
+      );
 
       const reversals = await Promise.all([
         reverseSettlementBatch(org.orgId, batchId, actor, {
@@ -792,6 +797,17 @@ test(
       // Replay is idempotent: same batch, same evidence, no duplicate lines.
       const replay = await importSettlementBatch(org.orgId, actor, parsed, accounts);
       assert.deepEqual(replay, { batchId: first.batchId, created: false });
+
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, {
+          ...parsed,
+          lines: parsed.lines.map((line, index) => index === 0
+            ? { ...line, amount: "91.0000" }
+            : line),
+        }, accounts),
+        /already has different evidence/,
+        "draft evidence is immutable for a repeated provider reference",
+      );
       assert.equal(
         (
           await db.execute<{ n: number }>(sql`
