@@ -136,14 +136,41 @@ for (const method of ["POST", "PATCH"] as const) {
         values(${org.orgId},'Original','before_submit','function main(ctx) {}',false) returning id`)).rows[0]!;
       // A slow request body allows a feature revocation after the initial
       // API guard. The eventual database write must observe that revocation.
+      const payload = { id: original.id, name: "Changed", triggerPoint: "before_submit", source: "function main(ctx) {}" };
       const request = new Request("http://audit.local/api/admin/scripts", { method,
-        body: JSON.stringify({ id: original.id, name: "Changed", triggerPoint: "before_submit", source: "function main(ctx) {}" }),
+        body: JSON.stringify(payload),
       });
-      const json = request.json.bind(request);
-      request.json = async () => {
-        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,scripts}','false') where id=${org.orgId}`);
-        return json();
-      };
+      // The route parses through the shared JSON boundary, which streams
+      // request.body directly and never calls request.json() — so the
+      // mid-parse revocation rides the stream's first read, still after the
+      // route's initial API guard. The bytes are re-encoded from the same
+      // payload; the original stream is never consumed.
+      //
+      // highWaterMark 0 is load-bearing: a default stream fires pull
+      // spontaneously on construction, so the revocation would commit before
+      // the initial guard runs and the test would pin the entry refusal
+      // instead of the in-transaction recheck. With a zero watermark pull
+      // fires only on the parse read, and the read awaits it — so the
+      // revocation always lands between the entry guard and the locked
+      // recheck.
+      const rawBytes = new TextEncoder().encode(JSON.stringify(payload));
+      let armed = true;
+      Object.defineProperty(request, "body", {
+        configurable: true,
+        value: new ReadableStream(
+          {
+            async pull(controller) {
+              if (armed) {
+                armed = false;
+                await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,scripts}','false') where id=${org.orgId}`);
+              }
+              controller.enqueue(rawBytes);
+              controller.close();
+            },
+          },
+          { highWaterMark: 0 },
+        ),
+      });
       const response = await withOrgContext(org.orgId, () => (method === "POST" ? POST : PATCH)(request));
       assert.equal(response.status, 404);
       assert.deepEqual((await db.execute(sql`select name from user_scripts where org_id=${org.orgId}`)).rows, [{ name: "Original" }]);
