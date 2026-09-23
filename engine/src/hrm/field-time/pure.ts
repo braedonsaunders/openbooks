@@ -134,6 +134,43 @@ export function insidePolygon(point: LatLng, polygon: LatLng[]): boolean {
 
 export type ClockKind = "clock_in" | "clock_out" | "break_start" | "break_end" | "switch";
 
+const KIND_LABELS: Record<ClockKind, string> = {
+  clock_in: "clock-in",
+  clock_out: "clock-out",
+  break_start: "break start",
+  break_end: "break end",
+  switch: "project switch",
+};
+
+/**
+ * Chronology guard: any event recorded against an open pair must be
+ * strictly after the open clock-in. A clock-out before its clock-in
+ * would otherwise insert, compute a zero/negative segment, post no
+ * entry, and still mark the pair paired — the shift vanishing behind a
+ * success response. Offline and out-of-order replays hit the same
+ * refusal by name, never a silent pair.
+ */
+export function validateEventChronology(
+  kind: ClockKind,
+  openOccurredAtMs: number,
+  eventOccurredAtMs: number,
+): void {
+  for (const [name, value] of [["open clock-in", openOccurredAtMs], ["event", eventOccurredAtMs]] as const) {
+    if (!Number.isFinite(value)) {
+      throw new FieldTimeError(
+        "invalid_occurred_at",
+        `The ${name} time is not a valid instant — retry with the device time as ISO`,
+      );
+    }
+  }
+  if (eventOccurredAtMs <= openOccurredAtMs) {
+    throw new FieldTimeError(
+      "event_before_open",
+      `The ${KIND_LABELS[kind]} at ${new Date(eventOccurredAtMs).toISOString()} is not after the open clock-in at ${new Date(openOccurredAtMs).toISOString()} — check the device clock and retry with a time after the clock-in`,
+    );
+  }
+}
+
 /**
  * Validate the next clock action against the worker's open state.
  * clockedIn: whether an open pair exists; onBreak: whether a break is open.

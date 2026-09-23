@@ -28,6 +28,7 @@ import {
   netShiftMs,
   roundHours,
   validateClockSequence,
+  validateEventChronology,
   type ClockKind,
   type LatLng,
 } from "./pure.ts";
@@ -334,6 +335,15 @@ async function pairAndPostEntries(input: {
       entryIds.push(inserted.id);
     }
   }
+  if (entryIds.length === 0) {
+    // A pair with no entry is a vanished shift: the close stays refused
+    // (the transaction rolls back) and the clock-in stays open, instead
+    // of marking paired around nothing and reporting success.
+    throw new FieldTimeError(
+      "no_payable_time",
+      `The shift from ${input.open.occurred_at} to ${input.closeOccurredAt} nets to zero hours after breaks and rounding — no entry was posted and the clock-in stays open; review the times in Timesheets and clock out again`,
+    );
+  }
   // Close the pair on both rows.
   await db.execute(sql`
     update time_clock_events set status = 'paired', pair_id = ${pairId}, updated_at = now()
@@ -430,6 +440,11 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     const current = autoClosedPairId ? await openPair(input.orgId, input.employeePartyId) : open;
     const onBreak = current ? await breakOpen(input.orgId, input.employeePartyId, current.id) : false;
     validateClockSequence(input.kind, { clockedIn: !!current, onBreak });
+    if (current) {
+      // Chronology is judged before anything mutates: a close at or
+      // before the open instant never inserts, never pairs.
+      validateEventChronology(input.kind, Date.parse(current.occurred_at), occurredMs);
+    }
 
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);

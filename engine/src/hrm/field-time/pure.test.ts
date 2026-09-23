@@ -7,6 +7,7 @@ import {
   netShiftMs,
   roundHours,
   validateClockSequence,
+  validateEventChronology,
   validateStages,
 } from "./pure.ts";
 import { FieldTimeError } from "./errors.ts";
@@ -117,6 +118,26 @@ describe("clock sequencing", () => {
     validateClockSequence("break_start", { clockedIn: true, onBreak: false });
     validateClockSequence("break_end", { clockedIn: true, onBreak: true });
     validateClockSequence("clock_out", { clockedIn: true, onBreak: false });
+  });
+});
+
+describe("event chronology", () => {
+  const open = Date.parse("2026-09-14T11:00:00.000Z");
+  it("a clock-out before its clock-in refuses by name", () => {
+    const msg = refuses(() => validateEventChronology("clock_out", open, Date.parse("2026-09-14T10:30:00.000Z")));
+    assert.match(msg, /clock-out.*not after the open clock-in/);
+  });
+  it("a close at the same instant as the open refuses", () => {
+    refuses(() => validateEventChronology("switch", open, open));
+  });
+  it("break and switch events before the open refuse", () => {
+    refuses(() => validateEventChronology("break_start", open, open - 1));
+    refuses(() => validateEventChronology("switch", open, open - 60_000));
+  });
+  it("a close after the open passes", () => {
+    validateEventChronology("clock_out", open, open + 1);
+    validateEventChronology("switch", open, open + 3_600_000);
+    validateEventChronology("break_end", open, open + 1_800_000);
   });
 });
 
