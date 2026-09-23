@@ -137,7 +137,10 @@ export function Logo({ animated, draw, intro, className, ...rest }: LogoProps) {
   const mode: Mode = intro ? 'intro' : draw ? 'draw' : animated ? 'loop' : 'static'
   return (
     <svg
-      viewBox="0 0 238 56"
+      // 260 wide: the wordmark starts at x=64 in 34px bold, and "openbooks"
+      // runs ~175-190 units depending on which system font the stack lands
+      // on. At 238 the final "s" clipped (the logo read "openbook").
+      viewBox="0 0 260 56"
       role="img"
       aria-label="openbooks"
       className={cn('h-8 w-auto', INK_CLASS, className)}
