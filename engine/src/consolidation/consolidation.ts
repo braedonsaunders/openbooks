@@ -1017,6 +1017,7 @@ export async function runAutoElimination(
   entryId: string | null;
   lineCount: number;
   assetEntryIds?: string[];
+  status: "eliminated" | "no_elimination_required";
 }> {
   // One elimination run per tenant/period at a time. Every read that decides
   // what to reverse or create happens on ONE REPEATABLE READ snapshot inside
@@ -1045,6 +1046,7 @@ async function runAutoEliminationIn(
   entryId: string | null;
   lineCount: number;
   assetEntryIds?: string[];
+  status: "eliminated" | "no_elimination_required";
 }> {
   if (!userId)
     throw new ConsolidationError(
@@ -1131,10 +1133,18 @@ async function runAutoEliminationIn(
         )
       ).rows[0]!.count
     : 0;
+  // An asset-transfer-only period posts no elimination entry: entryId stays
+  // null with an explicit no_elimination_required state, and the transfer
+  // journals are reported under assetEntryIds only. Falling back to the last
+  // asset entry as entryId would present an asset-transfer journal as "the
+  // elimination entry" to the close route and UI.
   const finishElimination = (entryId: string | null, lineCount: number) => ({
-    entryId: entryId ?? assetEntryIds.at(-1) ?? null,
+    entryId,
     lineCount: lineCount + assetLineCount,
     ...(assetEntryIds.length ? { assetEntryIds } : {}),
+    status: (entryId ? "eliminated" : "no_elimination_required") as
+      | "eliminated"
+      | "no_elimination_required",
   });
 
   // Source scope = the destination book: only primary-book entries feed the
@@ -1384,6 +1394,7 @@ export async function runCombinedConsolidation(
     entryId: string | null;
     lineCount: number;
     assetEntryIds?: string[];
+    status: "eliminated" | "no_elimination_required";
   };
 }> {
   return withOwnershipSourceTransaction(orgId, async (tx) => ({

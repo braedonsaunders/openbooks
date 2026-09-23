@@ -8,11 +8,17 @@ import { refreshCloseRun } from "../close/run-automation.ts";
 import { setPeriodLockState } from "../close/period-locks.ts";
 import { startCloseRun } from "../close/run-start.ts";
 import { ConsolidationError, deriveConsolidatedRates, runAutoElimination, runCombinedConsolidation, runOwnershipConsolidation } from "./consolidation.ts";
+import { consolidateAssetTransfers } from "./asset-transfers.ts";
 import { db, pool, withOrgTransaction } from "../platform/db.ts";
 import { reverseProjectGlEntry } from "../projects/recognition.ts";
+import { buildSchedule, runDepreciation } from "../assets/depreciation.ts";
+import { applyAssetChange, proposeAssetChange } from "../assets/asset-changes.ts";
+import { submitFinancialChange } from "../flows/financial-changes-adapter.ts";
+import { decideGate } from "../flows/gates.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
+  seedApprovalFlow,
   seedFlowActors,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -2268,4 +2274,137 @@ test("rate derivation without a spot rate refuses typed rates-missing (F-t06-026
     assert.ok(err instanceof ConsolidationError);
     assert.equal(err.code, "rates-missing");
   } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("an asset-transfer-only period reports a null elimination entry with transfers listed separately", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    const adminId = actors.adminId;
+    const submitterId = actors.submitterId;
+    await db.execute(sql`
+      insert into user_permission_overrides(org_id,user_id,permission,effect)
+      values (${org.orgId},${submitterId},'assets.manage','grant')
+    `);
+    const calendar = (await db.execute<{ id: string }>(sql`
+      select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}
+    `)).rows[0]!.id;
+    for (const [month, last] of [["08", "31"], ["09", "30"]] as const) {
+      await db.execute(sql`
+        insert into accounting_periods(id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,custom)
+        values (${randomUUID()},${org.orgId},${calendar},2026,${Number(month)},${`2026-${month}`},${`2026-${month}-01`},${`2026-${month}-${last}`},false,'{}'::jsonb)
+      `);
+    }
+    const buyerId = randomUUID();
+    const elimId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${buyerId},${org.orgId},${org.subsidiaryId},'Buyer','CAD','CA','{}'::jsonb,false,true,'{}'::jsonb),
+             (${elimId},${org.orgId},${org.subsidiaryId},'Elimination','CAD','CA','{}'::jsonb,true,true,'{}'::jsonb)
+    `);
+    const dueFrom = randomUUID();
+    const dueTo = randomUUID();
+    for (const [id, number, type] of [[dueFrom, "1998", "asset_current_other"], [dueTo, "2998", "liability_current_other"]] as const) {
+      await db.execute(sql`
+        insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+        values (${id},${org.orgId},${number},${number},${type},false,true,true,false,'[]'::jsonb,'{}'::jsonb,true)
+      `);
+    }
+    await db.execute(sql`
+      insert into intercompany_pairs(org_id,from_subsidiary_id,to_subsidiary_id,due_from_account_id,due_to_account_id)
+      values (${org.orgId},${org.subsidiaryId},${buyerId},${dueFrom},${dueTo})
+    `);
+    const categoryId = randomUUID();
+    const assetId = randomUUID();
+    await db.execute(sql`
+      insert into asset_categories(id,org_id,name,asset_account_id,accumulated_depreciation_account_id,depreciation_expense_account_id,gain_loss_account_id,default_method,default_life_months,default_convention)
+      values (${categoryId},${org.orgId},'Component test',${org.accounts.invAsset},${org.accounts.clearing},${org.accounts.adjustment},${org.accounts.adjustment},'straight_line',3,'full_month')
+    `);
+    await db.execute(sql`
+      insert into fixed_assets(id,org_id,subsidiary_id,category_id,asset_number,name,status,acquired_on,in_service_on,acquisition_cost,salvage_value,useful_life_months)
+      values (${assetId},${org.orgId},${org.subsidiaryId},${categoryId},${`AST-${assetId}`},'Component asset','in_service','2026-07-01','2026-07-01',3000,0,3)
+    `);
+    await buildSchedule(assetId, org.orgId, submitterId, org.bookId);
+    const july = await runDepreciation(org.orgId, "2026-07-31", submitterId, assetId);
+    assert.equal(july.posted, 1);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "financial_change",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+      preventSelfApproval: false,
+    });
+    const changeId = await proposeAssetChange(org.orgId, assetId, submitterId, {
+      operation: "intercompany_transfer",
+      effectiveOn: "2026-08-01",
+      reason: "Move equipment to the buying subsidiary",
+      assessment: "Group retains original cost; internal profit creates a deductible temporary difference",
+      idempotencyKey: randomUUID(),
+      portion: { percent: "100" },
+      proceeds: "2400",
+      proceedsAccountId: dueFrom,
+      transfer: {
+        subsidiaryId: buyerId,
+        categoryId,
+        assetNumber: "RECEIVED-1",
+        name: "Received equipment",
+        buyerAmount: "2400",
+        buyerSalvage: "0",
+        lifeMonths: 2,
+        payableAccountId: dueTo,
+        eliminationSubsidiaryId: elimId,
+        sellerToGroupRate: "1",
+        buyerToGroupRate: "1",
+        sellerToBuyerRate: "1",
+        ctaAccountId: org.accounts.fxGainLoss,
+        groupAssetAccountId: org.accounts.invAsset,
+        groupAccumulatedAccountId: org.accounts.clearing,
+        groupDepreciationAccountId: org.accounts.adjustment,
+        groupGainLossAccountId: org.accounts.recognized,
+        taxRatePercent: "25",
+        deferredTaxAccountId: org.accounts.deferred,
+        taxExpenseAccountId: org.accounts.fxGainLoss,
+        exchangeRateEvidence: "Both legal entities use CAD; transaction and historical rates are one",
+        groupAssessment: "Group retains original cost and remaining two-month service",
+      },
+    });
+    await submitFinancialChange(org.orgId, changeId, submitterId);
+    const gate = (await db.execute<{ id: string }>(sql`
+      select id from flow_gates where org_id=${org.orgId} and subject_id=${changeId} and status='pending'
+    `)).rows[0]!;
+    await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: "approved" });
+    const applied = await applyAssetChange(org.orgId, changeId, submitterId);
+    assert.equal((applied.entryIds as string[]).length, 2);
+    const received = String(applied.receivingAssetId);
+    const periods = (await db.execute<{ name: string; id: string }>(sql`
+      select name, id from accounting_periods where org_id=${org.orgId} and name in ('2026-08','2026-09')
+    `));
+    const august = periods.rows.find((row) => row.name === "2026-08")!.id;
+    const september = periods.rows.find((row) => row.name === "2026-09")!.id;
+    const augustAssets = await db.transaction((tx) =>
+      consolidateAssetTransfers(tx, org.orgId, august, adminId),
+    );
+    assert.equal(augustAssets.length, 1);
+    // September carries no transfer legs — only the received asset's
+    // depreciation and its group-basis true-up — so elimination has no
+    // intercompany activity while the asset phase still posts.
+    const septemberDep = await runDepreciation(org.orgId, "2026-09-30", submitterId, received);
+    assert.deepEqual(septemberDep.problems, []);
+    // The elimination run consolidates September's asset true-up itself.
+    const elimination = await runAutoElimination(org.orgId, september, adminId);
+    assert.equal(elimination.entryId, null);
+    assert.equal(elimination.status, "no_elimination_required");
+    assert.equal(elimination.assetEntryIds?.length, 1);
+    const assetJournal = await db.execute<{ id: string; origin: string }>(sql`
+      select id, origin from journal_entries
+       where org_id=${org.orgId} and period_id=${september} and id=${elimination.assetEntryIds![0]}
+    `);
+    assert.equal(assetJournal.rows[0]?.origin, "translation");
+    const intercompany = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id=${org.orgId} and period_id=${september} and origin='intercompany'
+    `);
+    assert.equal(intercompany.rows[0]!.n, 0, "no elimination journal exists to open");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
