@@ -69,6 +69,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         `))
         if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
       }
+      // Book and fiscal year pin the plan to one ledger and one period set:
+      // reinterpreting existing lines against a different book (or year)
+      // silently reprices the whole plan, so either change refuses with lines
+      // present. The scenario trigger enforces the same rule for writers that
+      // bypass this route.
+      if (nextBookId !== before.book_id && before.has_lines) {
+        throw new BudgetMutationError('budget_scope_has_lines', 409)
+      }
       if (nextFiscalYear !== Number(before.fiscal_year)) {
         if (before.has_lines) throw new BudgetMutationError('budget_scope_has_lines', 409)
         const validYear = (await tx.execute(sql`

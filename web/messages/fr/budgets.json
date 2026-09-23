@@ -74,6 +74,7 @@
     "locked": "Cette version est verrouillée. Copiez-la pour créer une nouvelle révision modifiable.",
     "dimensions": {
       "title": "Tranche dimensionnelle",
+      "subsidiary": "Filiale",
       "department": "Service",
       "project": "Projet",
       "location": "Emplacement",

@@ -39,7 +39,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const lines = (await db.execute<BudgetExportRow>(sql`
     select a.number, a.name as account_name, p.name as period,
            s.name as subsidiary,
-           d.code as department, pr.code as project, loc.code as location, c.code as class,
+           -- Dimensions export as code with a name fallback: a bare code
+           -- column emits blank for NULL codes, and the import reads blank as
+           -- "no dimension" — silently re-homing the line. Either form
+           -- resolves on import, so the round-trip is exact.
+           coalesce(d.code, d.name) as department,
+           coalesce(pr.code, pr.name) as project,
+           coalesce(loc.code, loc.name) as location,
+           coalesce(c.code, c.name) as class,
            (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
       from budget_lines bl
       join accounts a on a.id = bl.account_id and a.org_id = bl.org_id

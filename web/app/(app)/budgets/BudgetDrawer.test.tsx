@@ -97,7 +97,8 @@ function workspace() {
     page: 1,
     perPage: 50,
     sliceTotal: "0.0000",
-    dimensions: { departments: [], projects: [], locations: [], classes: [] },
+    effectiveSubsidiaryId: "00000000-0000-4000-8000-000000000001",
+    dimensions: { subsidiaries: [], departments: [], projects: [], locations: [], classes: [] },
   };
 }
 
@@ -117,7 +118,7 @@ async function mountDrawer(overrides?: { status?: string; canApprove?: boolean }
           <BudgetDrawer
             initial={initial as never}
             currentParams={{}}
-            dims={{ departmentId: null, projectId: null, locationId: null, classId: null }}
+            dims={{ subsidiaryId: null, departmentId: null, projectId: null, locationId: null, classId: null }}
             closeHref="/budgets"
             books={[]}
             years={[2026]}

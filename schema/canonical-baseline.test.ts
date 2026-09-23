@@ -530,6 +530,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // posted a second numbered journal. documents gains a nullable
     // idempotency_key with a partial unique index (org_id, key).
     "0268_script_journal_idempotency_key.sql",
+    // Budget lines planned the P&L but admitted balance-sheet accounts, read
+    // any fiscal calendar while the worksheet reads the default, and let the
+    // book change under existing lines: this pins the line guard to P&L
+    // accounts on the default calendar and the scenario guard to book/year
+    // stability once lines exist.
+    "0272_budget_pnl_calendar_scope.sql",
     // The shared posting-period resolver reads the org's active default
     // fiscal calendar; backfill one for every org whose calendars carry
     // none, refusing ambiguous orgs by id instead of guessing.

@@ -19,9 +19,9 @@ const { restoreFailedBudgetCells } = await import('../app/(app)/budgets/BudgetDr
 const drawerSource = readFileSync(new URL('../app/(app)/budgets/BudgetDrawer.tsx', import.meta.url), 'utf8')
 
 test('failed budget saves do not restore a cell superseded while the request was pending', () => {
-  const key = 'account-1|period-1'
-  const stale = { accountId: 'account-1', periodId: 'period-1', amount: '10.0000' }
-  const latest = { accountId: 'account-1', periodId: 'period-1', amount: '20.0000' }
+  const key = 'account-1|period-1|sub-1'
+  const stale = { accountId: 'account-1', periodId: 'period-1', subsidiaryId: 'sub-1', amount: '10.0000' }
+  const latest = { accountId: 'account-1', periodId: 'period-1', subsidiaryId: 'sub-1', amount: '20.0000' }
 
   assert.deepEqual(
     restoreFailedBudgetCells([{ key, cell: stale, version: 1 }], new Map([[key, 2]])),

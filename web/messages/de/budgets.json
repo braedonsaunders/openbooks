@@ -74,6 +74,7 @@
     "locked": "Diese Version ist gesperrt. Kopieren Sie sie, um eine neue bearbeitbare Überarbeitung zu erstellen.",
     "dimensions": {
       "title": "Dimensionsausschnitt",
+      "subsidiary": "Tochtergesellschaft",
       "department": "Abteilung",
       "project": "Projekt",
       "location": "Standort",

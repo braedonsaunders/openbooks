@@ -8,12 +8,12 @@ import { uuidInput } from "./tools-shared";
 /**
  * Budget read tools for the agentic assistant. The workspace reader reuses
  * `loadBudgetWorkspace` — the exact loader the /budgets page renders — so the
- * assistant can never disagree with the screen. The page applies no
- * subsidiary scoping to planning cells, so neither does this tool; the gate
- * is the page's (`budgets.read` + the budgets feature). Scenario lifecycle
- * and variance live in `budget_vs_actual`; cell writes go through the
- * governed `update_budget_cells` application tool (draft scenarios only,
- * revision-concurrency checked).
+ * assistant can never disagree with the screen. The page scopes planning
+ * cells to one subsidiary slice (requested, else the tenant root), and so
+ * does this tool; the gate is the page's (`budgets.read` + the budgets
+ * feature). Scenario lifecycle and variance live in `budget_vs_actual`; cell
+ * writes go through the governed `update_budget_cells` application tool
+ * (draft scenarios only, revision-concurrency checked).
  */
 
 const dimInput = uuidInput.nullable().optional()
@@ -31,6 +31,8 @@ const getBudgetWorkspace: AssistantToolDef = {
     q: z.string().max(100).optional().describe("Filter accounts by number or name"),
     page: z.number().int().min(1).max(10000).optional().describe("Account page, default 1"),
     perPage: z.number().int().min(1).max(100).optional().describe("Accounts per page, default 25"),
+    subsidiaryId: uuidInput.nullable().optional()
+      .describe("Legal-entity slice, or null/omit for the tenant root"),
     departmentId: dimInput,
     projectId: dimInput,
     locationId: dimInput,
@@ -42,10 +44,11 @@ const getBudgetWorkspace: AssistantToolDef = {
     }
     const a = raw as {
       scenarioId: string; q?: string; page?: number; perPage?: number;
-      departmentId?: string | null; projectId?: string | null;
+      subsidiaryId?: string | null; departmentId?: string | null; projectId?: string | null;
       locationId?: string | null; classId?: string | null;
     };
     const dims: BudgetDimensions = {
+      subsidiaryId: a.subsidiaryId ?? null,
       departmentId: a.departmentId ?? null,
       projectId: a.projectId ?? null,
       locationId: a.locationId ?? null,
@@ -83,6 +86,11 @@ const getBudgetWorkspace: AssistantToolDef = {
         cells: workspace.lines.map((line) => ({
           accountId: line.accountId,
           periodId: line.periodId,
+          subsidiaryId: line.subsidiaryId,
+          departmentId: line.departmentId,
+          projectId: line.projectId,
+          locationId: line.locationId,
+          classId: line.classId,
           amount: line.amount,
           note: line.note,
         })),

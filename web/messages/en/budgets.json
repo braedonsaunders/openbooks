@@ -74,6 +74,7 @@
     "locked": "This version is locked. Copy it to create a new editable revision.",
     "dimensions": {
       "title": "Dimension slice",
+      "subsidiary": "Subsidiary",
       "department": "Department",
       "project": "Project",
       "location": "Location",

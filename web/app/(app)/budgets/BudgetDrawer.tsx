@@ -18,7 +18,8 @@ import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../l
 import { ReadOnlyValue } from '../../../components/read-only-value'
 
 type SaveState = 'saved' | 'dirty' | 'saving' | 'error'
-type Cell = { accountId: string; periodId: string; amount: string }
+/** Full cell identity: the legal entity rides along, never implied. */
+type Cell = { accountId: string; periodId: string; subsidiaryId: string; amount: string }
 type PendingCellSnapshot = { key: string; cell: Cell; version: number }
 
 /** Only retry a failed cell when no newer edit has superseded its snapshot. */
@@ -30,6 +31,11 @@ export function restoreFailedBudgetCells(
 }
 
 const CREDIT_NORMAL = new Set(['income', 'income_other'])
+
+/** Full value identity: account, period, and the legal entity that owns the cell. */
+function cellKey(accountId: string, periodId: string, subsidiaryId: string) {
+  return `${accountId}|${periodId}|${subsidiaryId}`
+}
 
 export function BudgetDrawer({
   initial,
@@ -84,8 +90,12 @@ export function BudgetDrawer({
   const creditAccount = useCallback((accountId: string) => CREDIT_NORMAL.has(accountType.get(accountId) ?? ''), [accountType])
   const toDisplay = useCallback((accountId: string, raw: string) => creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(raw)) : raw, [creditAccount])
   const toStorage = useCallback((accountId: string, display: string) => creditAccount(accountId) ? budgetFromUnits(-budgetToUnits(display)) : display, [creditAccount])
+  // The worksheet is one entity slice (requested subsidiary, else the tenant
+  // root): the key carries the full value identity so two subsidiaries'
+  // lines on the same account/period can never collapse into one input.
+  const sliceSubsidiaryId = dims.subsidiaryId ?? initial.effectiveSubsidiaryId ?? ''
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(
-    initial.lines.map((line) => [`${line.accountId}|${line.periodId}`, toDisplay(line.accountId, line.amount)]),
+    initial.lines.map((line) => [cellKey(line.accountId, line.periodId, line.subsidiaryId ?? ''), toDisplay(line.accountId, line.amount)]),
   ))
   const editable = canManage && scenario.status === 'draft'
 
@@ -124,12 +134,15 @@ export function BudgetDrawer({
     if (pending.length === 0) return true
     try {
       await execute(`/api/budgets/${scenario.id}/lines`, 'PATCH', {
-        cells: pending.map(({ cell }) => ({ ...cell, amount: toStorage(cell.accountId, cell.amount), ...dims })),
+        // The cell's resolved entity wins over the slice param: both name the
+        // same subsidiary, but an explicit id must never degrade to an
+        // omitted one (which the save path would re-resolve).
+        cells: pending.map(({ cell }) => ({ ...dims, ...cell, amount: toStorage(cell.accountId, cell.amount) })),
       })
       return true
     } catch {
       restoreFailedBudgetCells(pending, pendingVersionsRef.current).forEach((cell) => {
-        pendingRef.current.set(`${cell.accountId}|${cell.periodId}`, cell)
+        pendingRef.current.set(cellKey(cell.accountId, cell.periodId, cell.subsidiaryId), cell)
       })
       setSaveState('error')
       toast.error(t('workspace.saveFailed'))
@@ -137,10 +150,11 @@ export function BudgetDrawer({
     }
   }, [dims, execute, scenario.id, t, toStorage])
 
-  function queueCell(cell: Cell) {
-    const key = `${cell.accountId}|${cell.periodId}`
-    setValues((current) => ({ ...current, [key]: cell.amount }))
-    pendingRef.current.set(key, cell)
+  function queueCell(cell: Omit<Cell, 'subsidiaryId'>) {
+    const full: Cell = { ...cell, subsidiaryId: sliceSubsidiaryId }
+    const key = cellKey(full.accountId, full.periodId, full.subsidiaryId)
+    setValues((current) => ({ ...current, [key]: full.amount }))
+    pendingRef.current.set(key, full)
     pendingVersionsRef.current.set(key, (pendingVersionsRef.current.get(key) ?? 0) + 1)
     setSaveState('dirty')
     if (saveTimer.current) clearTimeout(saveTimer.current)
@@ -228,14 +242,14 @@ export function BudgetDrawer({
 
   function rowTotal(accountId: string) {
     return initial.periods.reduce((sum, period) => {
-      try { return sum + budgetToUnits(values[`${accountId}|${period.id}`] ?? '0') } catch { return sum }
+      try { return sum + budgetToUnits(values[cellKey(accountId, period.id, sliceSubsidiaryId)] ?? '0') } catch { return sum }
     }, 0n)
   }
 
   function copyMonth(accountId: string, periodId: string, forwardOnly: boolean) {
     const sourceIndex = initial.periods.findIndex((period) => period.id === periodId)
     if (sourceIndex < 0) return
-    const amount = values[`${accountId}|${periodId}`] ?? '0'
+    const amount = values[cellKey(accountId, periodId, sliceSubsidiaryId)] ?? '0'
     initial.periods.forEach((period, index) => {
       if (!forwardOnly || index >= sourceIndex) queueCell({ accountId, periodId: period.id, amount })
     })
@@ -269,7 +283,7 @@ export function BudgetDrawer({
   function upliftPage() {
     try {
       initial.accounts.forEach((account) => initial.periods.forEach((period) => {
-        const key = `${account.id}|${period.id}`
+        const key = cellKey(account.id, period.id, sliceSubsidiaryId)
         const current = values[key] ?? '0'
         if (budgetToUnits(current) !== 0n) queueCell({ accountId: account.id, periodId: period.id, amount: upliftBudgetAmount(current, uplift) })
       }))
@@ -396,7 +410,8 @@ export function BudgetDrawer({
             <div><CardTitle className="text-base">{t('workspace.dimensions.title')}</CardTitle><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('workspace.sheetDescription')}</p></div>
             <div className="text-right"><div className="text-xs text-slate-500">{t('workspace.sliceTotal')}</div><div className="font-semibold tabular-nums">{money(budgetFromUnits(sliceTotalUnits))}</div></div>
           </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+            <DimensionSelect label={t('workspace.dimensions.subsidiary')} value={sliceSubsidiaryId} options={initial.dimensions.subsidiaries} allowEmpty={false} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetSubsidiary', value)} />
             <DimensionSelect label={t('workspace.dimensions.department')} value={dims.departmentId ?? ''} options={initial.dimensions.departments} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetDepartment', value)} />
             <DimensionSelect label={t('workspace.dimensions.project')} value={dims.projectId ?? ''} options={initial.dimensions.projects} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetProject', value)} />
             <DimensionSelect label={t('workspace.dimensions.location')} value={dims.locationId ?? ''} options={initial.dimensions.locations} allLabel={t('workspace.dimensions.all')} onChange={(value) => replaceUrl('budgetLocation', value)} />
@@ -428,12 +443,12 @@ export function BudgetDrawer({
               </tr></thead>
               <tbody>{initial.accounts.length ? initial.accounts.map((account) => {
                 const annual = initial.periods.reduce((sum, period) => {
-                  try { return sum + budgetToUnits(values[`${account.id}|${period.id}`] ?? '0') } catch { return sum }
+                  try { return sum + budgetToUnits(values[cellKey(account.id, period.id, sliceSubsidiaryId)] ?? '0') } catch { return sum }
                 }, 0n)
                 return <tr key={account.id} className="border-t border-slate-100 dark:border-slate-800/70">
                   <td className="sticky left-0 z-10 border-r border-slate-200 bg-white px-3 py-1.5 dark:border-slate-800 dark:bg-slate-900"><span className="font-mono text-xs text-slate-500">{account.number}</span><span className="ml-2 font-medium">{account.name}</span></td>
                   {viewMode === 'monthly' ? initial.periods.map((period) => {
-                    const key = `${account.id}|${period.id}`
+                    const key = cellKey(account.id, period.id, sliceSubsidiaryId)
                     return <td key={period.id} className="px-2 py-1.5 text-right tabular-nums" onContextMenu={(event) => openCellMenu(event, account.id, period.id)}>{editable ? <Input className="h-8 min-w-24 text-right tabular-nums" inputMode="decimal" value={values[key] ?? ''} onChange={(event) => queueCell({ accountId: account.id, periodId: period.id, amount: event.target.value })} onBlur={() => void flushCells()} aria-label={`${account.name} ${period.name}`} /> : money(values[key] ?? '0')}</td>
                   }) : null}
                   <td className="border-l border-slate-200 px-2 py-1.5 text-right font-medium tabular-nums dark:border-slate-800" onContextMenu={(event) => openCellMenu(event, account.id)}>{editable ? <div className="flex items-center justify-end gap-1"><Input key={annual.toString()} className="h-8 min-w-28 text-right font-medium tabular-nums" inputMode="decimal" defaultValue={budgetFromUnits(annual)} onBlur={(event) => spreadRow(account.id, event.target.value)} aria-label={`${account.name} ${t('workspace.annualTotal')}`} /><Button variant="ghost" size="sm" className="h-8 w-8 p-0" aria-label={t('workspace.rowActions', { account: account.name })} onClick={(event) => openRowMenu(event.currentTarget, account.id)}><MoreHorizontal size={15} /></Button></div> : money(budgetFromUnits(annual))}</td>
@@ -452,8 +467,8 @@ export function BudgetDrawer({
   </>
 }
 
-function DimensionSelect({ label, value, options, allLabel, onChange }: { label: string; value: string; options: { id: string; code: string | null; name: string }[]; allLabel: string; onChange: (value: string) => void }) {
-  return <label className="space-y-1 text-xs font-medium text-slate-500 dark:text-slate-400"><span>{label}</span><Select className="h-8" value={value} onChange={(event) => onChange(event.target.value)}><option value="">{allLabel}</option>{options.map((option) => <option key={option.id} value={option.id}>{option.code ? `${option.code} · ` : ''}{option.name}</option>)}</Select></label>
+function DimensionSelect({ label, value, options, allLabel, allowEmpty = true, onChange }: { label: string; value: string; options: { id: string; code: string | null; name: string }[]; allLabel: string; allowEmpty?: boolean; onChange: (value: string) => void }) {
+  return <label className="space-y-1 text-xs font-medium text-slate-500 dark:text-slate-400"><span>{label}</span><Select className="h-8" value={value} onChange={(event) => onChange(event.target.value)}>{allowEmpty ? <option value="">{allLabel}</option> : null}{options.map((option) => <option key={option.id} value={option.id}>{option.code ? `${option.code} · ` : ''}{option.name}</option>)}</Select></label>
 }
 
 function BudgetMoreActions({ scenario, canManage, canApprove, canExport, busy, onAction, onDelete }: { scenario: BudgetWorkspace['scenario']; canManage: boolean; canApprove: boolean; canExport: boolean; busy: boolean; onAction: (action: string) => Promise<void>; onDelete: () => Promise<void> }) {

@@ -74,6 +74,7 @@
     "locked": "このバージョンはロックされています。編集可能な新しい版を作成するにはコピーしてください。",
     "dimensions": {
       "title": "分析軸スライス",
+      "subsidiary": "子会社",
       "department": "部門",
       "project": "プロジェクト",
       "location": "拠点",

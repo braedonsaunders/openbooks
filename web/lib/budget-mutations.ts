@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import type { BudgetDimensions } from './budgets'
+import { PNL_TYPES } from './account-types'
 import { canonicalDecimal } from './exact-decimal'
 
 export type BudgetCellInput = BudgetDimensions & {
@@ -123,19 +124,27 @@ export async function saveBudgetCells(input: {
     const accountIds = normalized.map((cell) => cell.accountId)
     const periodIds = normalized.map((cell) => cell.periodId)
     const [accounts, periods] = (await Promise.all([
-      tx.execute<{ id: string }>(sql`
-        select id from accounts
+      tx.execute<{ id: string; number: string | null; name: string; type: string }>(sql`
+        select id, number, name, type from accounts
          where org_id = ${input.orgId} and id = any(${uuidArray(accountIds)}::uuid[])
            and is_active and not is_summary
       `),
       tx.execute<{ id: string }>(sql`
-        select id from accounting_periods
-         where org_id = ${input.orgId} and id = any(${uuidArray(periodIds)}::uuid[])
-           and fiscal_year = ${scenario.fiscal_year} and not is_adjustment
+        select p.id from accounting_periods p
+          join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+         where p.org_id = ${input.orgId} and p.id = any(${uuidArray(periodIds)}::uuid[])
+           and p.fiscal_year = ${scenario.fiscal_year} and not p.is_adjustment and fc.is_default
       `),
     ]))
     if (new Set(accounts.rows.map((row) => row.id)).size !== new Set(accountIds).size) {
       throw new BudgetMutationError('invalid_account')
+    }
+    // Budgets cover the P&L only: a balance-sheet account refuses by name
+    // instead of landing in a line the worksheet hides but the totals count.
+    const nonPnl = accounts.rows.filter((row) => !PNL_TYPES.includes(row.type))
+    if (nonPnl.length > 0) {
+      const names = nonPnl.map((row) => (row.number ? `${row.name} (${row.number})` : row.name)).join(', ')
+      throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${names}`)
     }
     if (new Set(periods.rows.map((row) => row.id)).size !== new Set(periodIds).size) {
       throw new BudgetMutationError('invalid_period')
