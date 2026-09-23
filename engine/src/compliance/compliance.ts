@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessTimeZone, businessToday, formatInZone } from "../platform/business-date.ts";
 import { add, cmp, neg } from "../money/money.ts";
 
 /**
@@ -130,26 +130,49 @@ export type WaiverRecord = {
   projectId: string | null;
   effectiveFrom: string;
   expiresOn: string;
-  /**
-   * When the exception was revoked (timestamptz serialized as ISO). A revoked
-   * exception stays effective for as-of dates strictly before the revocation
-   * date and is inert on/after it, so history is evaluated as it stood —
-   * revoking today must not rewrite what was covered last month.
-   */
+  /** When the exception was revoked (timestamptz instant; null when live). */
   revokedAt: string | null;
+  /**
+   * The revocation's calendar date in the org's business timezone
+   * (see businessToday), resolved once where the rows load. A revoked
+   * exception stays effective for as-of dates strictly before this date and
+   * is inert on/after it, so history is evaluated as it stood — revoking
+   * today must not rewrite what was covered last month. Null when live.
+   */
+  revokedOn: string | null;
 };
+
+/** A waiver row as the database returns it, before the business date is resolved. */
+type WaiverRow = Omit<WaiverRecord, "revokedOn">;
+
+/**
+ * Resolve a revocation instant to the org-local calendar date the control
+ * evaluates against. Pure: the timezone was read once by the loader from the
+ * same key businessToday uses, so evaluators never disagree with "today".
+ */
+export function revocationLocalDate(revokedAt: string | Date, timeZone: string): string {
+  const instant = revokedAt instanceof Date ? revokedAt : new Date(revokedAt);
+  return formatInZone(instant, timeZone);
+}
 
 /**
  * Is this exception in force on `asOf` (ISO yyyy-mm-dd)? The window end is
  * the earlier of expiry and revocation: a revocation takes effect on its own
- * calendar date (fail closed — the revoked day itself is not covered).
+ * org-local calendar date (fail closed — the revoked day itself is not
+ * covered). `revokedOn` carries that date; when it is absent (pure unit
+ * callers that only set the instant) the UTC date of the instant applies.
  */
-export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "revokedAt">, asOf: string): boolean {
+export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "revokedAt" | "revokedOn">, asOf: string): boolean {
   if (daysBetween(w.effectiveFrom, asOf) < 0) return false;
   if (daysBetween(asOf, w.expiresOn) < 0) return false;
+  const local = "revokedOn" in w ? w.revokedOn : null;
+  if (local !== null && local !== undefined) {
+    if (daysBetween(asOf, local) <= 0) return false;
+    return true;
+  }
   if (w.revokedAt !== null && (w.revokedAt as unknown) !== undefined) {
-    // pg returns timestamptz as a Date, unit callers pass ISO strings —
-    // normalize both to the calendar date before comparing.
+    // No org-local date supplied: fall back to the instant's UTC date.
+    // pg returns timestamptz as a Date, unit callers pass ISO strings.
     const raw = w.revokedAt as unknown as string | Date;
     const revokedDate = (raw instanceof Date ? raw.toISOString() : String(raw)).slice(0, 10);
     if (daysBetween(asOf, revokedDate) <= 0) return false;
@@ -599,7 +622,7 @@ export async function loadVendorComplianceInputs(
   partyId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<VendorComplianceInputs> {
-  const [role, records, waivers, lienWaivers] = (await Promise.all([
+  const [role, records, waivers, lienWaivers, timeZone] = (await Promise.all([
     runner.execute<{ classId: string | null; lienWaiverEnforcement: LienWaiverEnforcement }>(sql`
       select vr.compliance_class_id as "classId",
              coalesce(cc.lien_waiver_enforcement, 'none') as "lienWaiverEnforcement"
@@ -618,9 +641,10 @@ export async function loadVendorComplianceInputs(
              verified_at as "verifiedAt"
         from compliance_records
        where org_id = ${orgId} and party_id = ${partyId} and status <> 'superseded'`),
-    // Revoked rows load too: the evaluator dates them by revoked_at, so an
-    // as-of read sees the exception exactly while it was in force.
-    runner.execute<WaiverRecord>(sql`
+    // Revoked rows load too: the evaluator dates them by the revocation's
+    // org-local date, so an as-of read sees the exception exactly while it
+    // was in force.
+    runner.execute<WaiverRow>(sql`
       select id, requirement_id as "requirementId", project_id as "projectId",
              effective_from as "effectiveFrom", expires_on as "expiresOn",
              revoked_at as "revokedAt"
@@ -633,12 +657,22 @@ export async function loadVendorComplianceInputs(
         from lien_waivers
        where org_id = ${orgId} and party_id = ${partyId} and direction = 'received'
          and status = 'signed'`),
+    businessTimeZone(orgId),
   ]));
   return {
     classId: role.rows[0]?.classId ?? null,
     lienWaiverEnforcement: role.rows[0]?.lienWaiverEnforcement ?? "none",
     records: records.rows,
-    waivers: waivers.rows,
+    waivers: waivers.rows.map((row) => {
+      const revokedAt = row.revokedAt as unknown as string | Date | null;
+      return {
+        ...row,
+        revokedOn:
+          revokedAt === null || revokedAt === undefined
+            ? null
+            : revocationLocalDate(revokedAt, timeZone),
+      };
+    }),
     lienWaivers: lienWaivers.rows,
   };
 }
