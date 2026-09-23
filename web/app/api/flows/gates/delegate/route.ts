@@ -33,7 +33,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    await delegateGate(body.gateId, authz.user.id, body.toUserId)
+    // The route 404s out-of-scope gates above; the engine re-checks the
+    // same boundary inside the decision so a concurrent edit cannot race it.
+    await delegateGate(
+      body.gateId,
+      authz.user.id,
+      body.toUserId,
+      authz.allowedSubsidiaryIds == null ? authz.allowedSubsidiaryIds : new Set(authz.allowedSubsidiaryIds),
+    )
     return NextResponse.json({ ok: true })
   } catch (e) {
     return gateErrorResponse(e)

@@ -4,6 +4,7 @@ import {
   InboxError,
 } from "@openbooks/engine/src/inbox/index.ts";
 import { getAuthz } from "../../../../lib/authz";
+import { inboxContext } from "../../../../lib/inbox-context";
 import { parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
 
@@ -31,6 +32,10 @@ function errorOf(error: unknown): { status: number; message: string } {
  * action through the source's native service. Unknown or invisible items
  * are 404 (never 403 — existence must not leak); refusals carry the
  * service's message intact so the toast can show it.
+ *
+ * The context carries the session's union scope (roles, subsidiary
+ * boundary) — the same scope the inbox list renders — so deciding by id
+ * cannot approve an out-of-scope gate a restricted actor guessed or kept.
  */
 export async function POST(req: Request) {
   const authz = await getAuthz();
@@ -40,7 +45,7 @@ export async function POST(req: Request) {
   const body = parsedBody.data;
   try {
     await actOnInboxItem(
-      { orgId: authz.user.orgId, actorId: authz.user.id, asOf: new Date().toISOString() },
+      await inboxContext(authz),
       body.itemId,
       body.actionKey,
       body.reason,

@@ -1142,11 +1142,21 @@ export async function worklistGateKindCounts(
  * assignee or an org admin. The hand-off is recorded in a STRUCTURED column
  * (delegated_from_user_id) — not a free-text comment marker — so the audit
  * survives the decision and can't be forged by typing into a comment.
+ *
+ * Callers that carry an Authz subsidiary scope pass it: a restricted actor
+ * must not hand off a gate outside their legal-entity boundary by id, any
+ * more than they may decide it. Absent scope means no boundary to enforce.
  */
-export async function delegateGate(gateId: string, fromUserId: string, toUserId: string): Promise<void> {
+export async function delegateGate(
+  gateId: string,
+  fromUserId: string,
+  toUserId: string,
+  allowedSubsidiaryIds?: GateSubsidiaryScope,
+): Promise<void> {
   const gate = await loadGate(gateId);
   if (!gate) throw new GateError("approval not found");
   if (gate.status !== "pending") throw new GateError("only a pending approval can be delegated");
+  await assertGateSubsidiaryScope(gate, allowedSubsidiaryIds);
   const roles = await userRoleKeys(gate.orgId, fromUserId);
   if (!(gate.assigneeUserId === fromUserId || roles.has(GATE_ADMIN_ROLE))) {
     throw new GateError("only the assignee or an admin can delegate this approval");
