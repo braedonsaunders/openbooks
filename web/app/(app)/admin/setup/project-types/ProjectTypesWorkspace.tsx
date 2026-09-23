@@ -372,7 +372,7 @@ export function ProjectTypesWorkspace({
                 </div>
               ) : null}
               <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as unknown as "contract_field" | "billable_value" | "not_to_exceed" | "cost_plus" } })} />
-              {fp.totalPrice.method === 'cost_plus' ? <div className="space-y-1.5"><Label>{t('defaultMarkupPercent')}</Label><Input type="number" min="0" step="0.01" value={fp.totalPrice.defaultMarkupPercent ?? ''} onChange={(e) => setFp({ totalPrice: { ...fp.totalPrice, defaultMarkupPercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div> : null}
+              {fp.totalPrice.method === 'cost_plus' ? <div className="space-y-1.5"><Label>{t('defaultMarkupPercent')}</Label><Input type="number" min="0" step="0.01" value={fp.totalPrice.defaultMarkupPercent ?? ''} onChange={(e) => setFp({ totalPrice: { ...fp.totalPrice, defaultMarkupPercent: e.target.value === '' ? undefined : e.target.value } })} /></div> : null}
               <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as unknown as "price_minus_invoiced" | "unbilled_billable" } })} />
               <EnumField label={t('timeRateMethod')} value={fp.billableValue.timeRate} options={TIME_RATE_METHODS} onChange={(v) => setFp({ billableValue: { ...fp.billableValue, timeRate: v as FinancialProfile['billableValue']['timeRate'] } })} />
               <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-teal-600" checked={fp.billableValue.includeUnbilledTime} onChange={(e) => setFp({ billableValue: { ...fp.billableValue, includeUnbilledTime: e.target.checked } })} />{t('includeUnbilledTime')}</label>
@@ -387,16 +387,16 @@ export function ProjectTypesWorkspace({
                   overhead: {
                     ...fp.overhead,
                     method,
-                    ...(method === 'percent_of_labor' ? { ratePercent: fp.overhead.ratePercent ?? 0 } : {}),
-                    ...(method === 'per_labor_hour' ? { ratePerHour: fp.overhead.ratePerHour ?? 0 } : {}),
+                    ...(method === 'percent_of_labor' ? { ratePercent: fp.overhead.ratePercent ?? '0' } : {}),
+                    ...(method === 'per_labor_hour' ? { ratePerHour: fp.overhead.ratePerHour ?? '0' } : {}),
                     ...(method === 'rate_engine' ? { rateEngine: fp.overhead.rateEngine ?? ENGINE_DEFAULT } : {}),
                   },
                 })
               }} />
               {fp.overhead.method === 'percent_of_labor' ? (
-                <div className="space-y-1.5"><Label>{t('overheadRatePercent')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePercent ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
+                <div className="space-y-1.5"><Label>{t('overheadRatePercent')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePercent ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePercent: e.target.value === '' ? undefined : e.target.value } })} /></div>
               ) : fp.overhead.method === 'per_labor_hour' ? (
-                <div className="space-y-1.5"><Label>{t('overheadRatePerHour')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePerHour ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePerHour: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
+                <div className="space-y-1.5"><Label>{t('overheadRatePerHour')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePerHour ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePerHour: e.target.value === '' ? undefined : e.target.value } })} /></div>
               ) : fp.overhead.method === 'posted_gl_account_group' ? (
                 <EnumField label={t('overheadDimension')} value={fp.overhead.accountGroup?.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, accountGroup: { dimension: v } } })} />
               ) : <div />}

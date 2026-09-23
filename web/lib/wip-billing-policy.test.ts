@@ -55,9 +55,9 @@ test('WIP pricing resolves the financial profile effective on each source date',
 test('Cost-Plus WIP applies project markup and configured statistical overhead', () => {
   const configured = profile({
     billableValue: { ...profile().billableValue, timeRate: 'cost_times_markup' },
-    overhead: { method: 'percent_of_labor', ratePercent: 12.5 },
+    overhead: { method: 'percent_of_labor', ratePercent: '12.5' },
     totalCost: { components: ['labor_cost', 'overhead'] },
-    totalPrice: { method: 'cost_plus', defaultMarkupPercent: 15 },
+    totalPrice: { method: 'cost_plus', defaultMarkupPercent: '15' },
   })
   const priced = priceWipSource(configured, source, '0')
   assert.equal(priced.billAmount, '230.0000')

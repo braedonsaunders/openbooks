@@ -14,7 +14,7 @@ test("trusted numeric policy defaults canonicalize while submitted numeric amoun
   assert.doesNotThrow(() => assertValidProjectFinancialProfile(canonical));
 
   const submittedNumber = structuredClone(canonical);
-  submittedNumber.totalPrice.defaultMarkupPercent = 15;
+  (submittedNumber.totalPrice as { defaultMarkupPercent?: unknown }).defaultMarkupPercent = 15;
   assert.throws(
     () => assertValidProjectFinancialProfile(submittedNumber),
     /totalPrice\.defaultMarkupPercent must be a finite non-negative decimal string/,
