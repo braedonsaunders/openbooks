@@ -1,6 +1,6 @@
 import ssh2 from "ssh2";
 import type { Connection } from "ssh2";
-import { backendFor, cleanPath, isSftpTempName, SftpDirectoryNotEmptyError, type SftpBackend } from "./backend.ts";
+import { backendFor, cleanPath, isProtectedSftpPath, isSftpTempName, SftpDirectoryNotEmptyError, type SftpBackend } from "./backend.ts";
 
 const { Server, utils } = ssh2;
 const { STATUS_CODE, OPEN_MODE } = utils.sftp;
@@ -26,6 +26,14 @@ export interface SftpServerConfig {
   backend: string; // 's3' | 'local'
   bucket: string | null;
   rootPrefix: string;
+  /**
+   * Backend-relative folders published by the system (payment outbound
+   * folders) that this login may read but never mutate. Populated by the
+   * resolver from the server's own configured payment folders — never
+   * hardcoded — so a bank credential cannot overwrite, truncate, rename,
+   * or delete an approved bank file while delivery evidence describes it.
+   */
+  readOnlyDirs?: string[];
 }
 
 export interface SftpResolver {
@@ -183,14 +191,26 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
         session.on("sftp", (acceptSftp) => {
           const sftp = acceptSftp();
           const backend = backendFor(config!);
+          const readOnlyDirs = config!.readOnlyDirs;
           const files = new Map<string, OpenFile>();
           const dirs = new Map<string, OpenDir>();
           let handleSeq = 0;
           const newHandle = () => Buffer.from(String(++handleSeq));
 
           const fail = (reqid: number, e: unknown) => {
-            const msg = (e as { name?: string })?.name;
-            sftp.status(reqid, msg === "path escapes root" ? STATUS_CODE.PERMISSION_DENIED : STATUS_CODE.NO_SUCH_FILE);
+            const msg = `${(e as { name?: string })?.name ?? ""} ${(e as { message?: string })?.message ?? ""}`;
+            sftp.status(reqid, /path escapes root|permission denied/i.test(msg) ? STATUS_CODE.PERMISSION_DENIED : STATUS_CODE.NO_SUCH_FILE);
+          };
+          // A mutation of a system-published payment path is refused with
+          // PERMISSION_DENIED — never executed, and never disguised as
+          // NO_SUCH_FILE. Reads and stat stay allowed.
+          const isPublished = (p: string) => isProtectedSftpPath(readOnlyDirs, p);
+          const denyPublished = (reqid: number, p: string): boolean => {
+            if (isPublished(p)) {
+              sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED);
+              return true;
+            }
+            return false;
           };
 
           // In-memory bytes held by this session's open files. Every refusal
@@ -249,7 +269,15 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             // both directions report the temp pattern as absent.
             if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
             if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
+            // Published bank files are read-only over SFTP: any open that
+            // could create, truncate, overwrite, or append is refused before
+            // a handle exists. The app publishes through its own backend,
+            // never through a session, so no legitimate flow opens these
+            // paths for writing.
             const writing = !!(flags & (OPEN_MODE.WRITE | OPEN_MODE.CREAT | OPEN_MODE.TRUNC));
+            if (writing || (flags & OPEN_MODE.APPEND)) {
+              if (denyPublished(reqid, filename)) return;
+            }
             const h = newHandle();
             // A file that already exceeds the per-file cap is refused BEFORE
             // it is read into the session: stat first, read only when it fits.
@@ -365,6 +393,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           const wrap = (op: (p: string) => Promise<void>) => async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              if (denyPublished(reqid, p)) return;
               await op(p); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e); }
           };
@@ -373,6 +402,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           sftp.on("RMDIR", async (reqid, p) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              if (denyPublished(reqid, p)) return;
               await backend.rmdir(p);
               sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) {
@@ -385,6 +415,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           sftp.on("RENAME", async (reqid, from, to) => {
             try {
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
               await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e); }
           });
@@ -396,16 +427,18 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // ignored. OP_UNSUPPORTED names the refusal; a future
           // implementation must apply attributes atomically through the
           // backend (especially size/truncate) before answering OK.
-          // Attribute mutation is not implemented and SftpBackend exposes no
-          // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
-          // of answering OK: an OK for a no-op tells a partner its
-          // SETSTAT(size=0) cleared a mistaken upload while the original
-          // bytes still post, and makes chmod/mtime look accepted while
-          // ignored. OP_UNSUPPORTED names the refusal; a future
-          // implementation must apply attributes atomically through the
-          // backend (especially size/truncate) before answering OK.
-          sftp.on("SETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead"));
-          sftp.on("FSETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead"));
+          // A system-published payment path refuses first with
+          // PERMISSION_DENIED, so the published artifact's protection does
+          // not depend on which refusal the generic path carries.
+          sftp.on("SETSTAT", (reqid, p) => {
+            if (denyPublished(reqid, p)) return;
+            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
+          });
+          sftp.on("FSETSTAT", (reqid, handle) => {
+            const f = files.get(handle.toString());
+            if (f && denyPublished(reqid, f.path)) return;
+            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
+          });
         });
       });
     });

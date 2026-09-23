@@ -321,10 +321,16 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   // transient commit failure; if the record still fails, the file is parked
   // as delivery_uncertain — published but unconfirmed, re-delivery blocked,
   // operator-visible — and the throw says exactly that.
+  // The delivery evidence carries the approved artifact's hash alongside the
+  // path: anyone fetching the published file later (the bank, an operator, a
+  // verifier) can prove the bytes are still the approved ones. Computed over
+  // exactly the bytes published below — the same content the artifact row's
+  // content_hash was built from.
+  const sha256 = createHash("sha256").update(file.content).digest("hex");
   let recordError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef, claimToken: claim.token, response: { path } });
+      await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef, claimToken: claim.token, response: { path, sha256 } });
       return { filename: file.filename, path };
     } catch (error) {
       recordError = error;

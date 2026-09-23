@@ -231,19 +231,25 @@ test("a successful delivery publishes under the claim and records delivered", { 
     assert.equal(res.path, `outbound/${res.filename}`);
     const onDisk = readFileSync(join(scratchDataDir, "sftp", fixture.rootPrefix, res.path));
     const file = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ id: string; status: string }>(sql`
-        select id, status from payment_files where payment_run_id = ${fixture.runId} and org_id = ${fixture.orgId}
+      (await db.execute<{ id: string; status: string; content_hash: string }>(sql`
+        select id, status, content_hash from payment_files where payment_run_id = ${fixture.runId} and org_id = ${fixture.orgId}
       `)).rows[0]!,
     );
     assert.equal(file.status, "delivered");
     assert.deepEqual(onDisk.subarray(0, 9).toString("utf8"), "reference");
     const delivery = await withOrgContext(fixture.orgId, async () =>
-      (await db.execute<{ status: string; target_ref: string }>(sql`
-        select status, target_ref from payment_file_deliveries where payment_file_id = ${file.id}
+      (await db.execute<{ status: string; target_ref: string; response: { path?: string; sha256?: string } | null }>(sql`
+        select status, target_ref, response from payment_file_deliveries where payment_file_id = ${file.id}
       `)).rows[0]!,
     );
     assert.equal(delivery.status, "delivered");
     assert.equal(delivery.target_ref, `${fixture.serverId}:${res.path}`);
+    // The delivery evidence carries the approved artifact's hash: the bank
+    // (or an operator) can prove the published bytes are still approved.
+    assert.equal(delivery.response?.path, res.path);
+    const { createHash } = await import("node:crypto");
+    assert.equal(delivery.response?.sha256, createHash("sha256").update(onDisk).digest("hex"));
+    assert.equal(delivery.response?.sha256, file.content_hash, "the evidence hash is the approved artifact's hash");
     const run = await withOrgContext(fixture.orgId, async () =>
       (await db.execute<{ status: string }>(sql`select status from payment_runs where id = ${fixture.runId}`)).rows[0]!,
     );

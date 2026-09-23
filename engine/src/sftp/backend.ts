@@ -96,6 +96,27 @@ export class SftpDirectoryNotEmptyError extends Error {
   }
 }
 
+/**
+ * Whether a session path falls under a system-published, read-only payment
+ * folder. Both the path and every protected folder are normalized with
+ * cleanPath before comparison, so `outbound` covers `outbound/file.csv` and
+ * any dot-segment or slash spelling of it — but never the server root
+ * itself (a protected entry resolving to `/` is ignored, not escalated).
+ * Backend-agnostic: the SFTP daemon enforces this for every backend, and the
+ * folders come from the login's own configuration, never a hardcoded list.
+ */
+export function isProtectedSftpPath(protectedDirs: readonly string[] | undefined, p: string): boolean {
+  if (!protectedDirs?.length) return false;
+  const cp = cleanPath(p);
+  for (const dir of protectedDirs) {
+    if (typeof dir !== "string") continue;
+    const clean = cleanPath(dir);
+    if (clean === "/") continue;
+    if (cp === clean || cp.startsWith(clean + "/")) return true;
+  }
+  return false;
+}
+
 // --------------------------------------------------------------------------
 // Local filesystem backend
 // --------------------------------------------------------------------------

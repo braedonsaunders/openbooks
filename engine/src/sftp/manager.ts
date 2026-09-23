@@ -112,6 +112,32 @@ async function touch(row: { id: string; orgId: string; username: string }) {
 }
 const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
 
+/**
+ * The payment folders this login must treat as read-only, resolved from the
+ * server's own configured bank profiles plus the product default outbound
+ * folder (the publish target when a profile names none). Read-only: loading
+ * it performs no writes, so matchers stay side-effect free. Entries that
+ * cannot be publish targets (dot segments, escapes) are skipped — the
+ * publish path itself would refuse them.
+ */
+async function loadProtectedDirs(row: ServerRow): Promise<string[]> {
+  const folders = await withOrgContext(row.orgId, async () => {
+    const r = await db.execute<{ folder: string }>(sql`
+      select distinct coalesce(nullif(btrim(sftp_folder), ''), 'outbound') as folder
+        from payment_bank_profiles where sftp_server_id = ${row.id} and org_id = ${row.orgId}
+    `);
+    return r.rows;
+  });
+  const dirs = new Set<string>(["outbound"]);
+  for (const f of folders) {
+    const folder = f.folder.trim().replace(/^\/+|\/+$/g, "");
+    if (!folder || folder.includes("\\") || folder.includes("%")) continue;
+    if (folder.split("/").some((part) => part === "" || part === "." || part === "..")) continue;
+    dirs.add(folder);
+  }
+  return [...dirs];
+}
+
 export const dbResolver: SftpResolver = {
   // Side-effect free: both matchers only establish that the credential is
   // authorized and return the login's config. Recording last_connected_at
@@ -126,7 +152,7 @@ export const dbResolver: SftpResolver = {
     let expected: string;
     try { expected = decryptSecret(row.password_encrypted); } catch { return null; }
     if (!constantTimeEqual(password, expected)) return null;
-    return asConfig(row);
+    return { ...asConfig(row), readOnlyDirs: await loadProtectedDirs(row) };
   },
   async publicKey(username, keyAlgo, keyData) {
     const row = await loadServer(username);
@@ -139,7 +165,7 @@ export const dbResolver: SftpResolver = {
       if (parsed instanceof Error) continue;
       const pub = parsed as { type: string; getPublicSSH(): Buffer };
       if (pub.type === keyAlgo && pub.getPublicSSH().equals(keyData)) {
-        return asConfig(row);
+        return { ...asConfig(row), readOnlyDirs: await loadProtectedDirs(row) };
       }
     }
     return null;
