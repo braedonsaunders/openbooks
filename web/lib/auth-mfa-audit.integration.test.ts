@@ -63,7 +63,7 @@ const previousSecret = process.env.SESSION_SECRET;
         });
         const invoke = () => action === "mfa_enabled" ? auth.confirmMfaSetup(userId, sessionId, totpCode(secret)!.code)
           : action === "mfa_disabled" ? auth.disableMfa(userId, password, previousCodes[0]!, sessionId, { networkAddress: "127.0.0.1", userAgent: "audit regression" })
-          : auth.rotateRecoveryCodes(userId, password, previousCodes[0]!, { networkAddress: "127.0.0.1", userAgent: "audit regression" });
+          : auth.rotateRecoveryCodes(userId, sessionId, password, previousCodes[0]!, { networkAddress: "127.0.0.1", userAgent: "audit regression" });
         if (failAudit) {
           await assert.rejects(invoke, (error: unknown) => {
             const cause = error instanceof Error ? (error as Error & { cause?: unknown }).cause : null;
@@ -77,7 +77,14 @@ const previousSecret = process.env.SESSION_SECRET;
         } else {
           const result = await invoke();
           assert.ok(result);
-          const codes = Array.isArray(result) ? result : [];
+          // confirmMfaSetup resolves to the code list; the security-change
+          // calls resolve to outcome objects carrying the list (rotation) or
+          // nothing (disable, whose audit expectation is zero codes after).
+          const codes = Array.isArray(result) ? result
+            : "recoveryCodes" in (result as unknown as Record<string, unknown>)
+              ? (result as unknown as { recoveryCodes: string[] }).recoveryCodes
+              : [];
+          if (!Array.isArray(result)) assert.deepEqual((result as { ok: boolean }).ok, true);
           // Verification reads run in the scratch org's scope.
           await withOrgContext(org.orgId, async () => {
             const audits = (await db.execute<{ actor_id: string; org_id: string; at: string; changes: unknown }>(sql`

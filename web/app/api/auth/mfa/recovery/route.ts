@@ -15,12 +15,18 @@ export async function POST(request: NextRequest) {
   if (typeof body?.password !== "string" || typeof body.code !== "string") {
     return NextResponse.json({ error: "password and code required" }, { status: 400 });
   }
-  const recoveryCodes = await rotateRecoveryCodes(
+  const result = await rotateRecoveryCodes(
     user.homeUserId,
+    user.sessionId,
     body.password,
     body.code,
     authRequestContext(request),
   );
-  if (!recoveryCodes) return NextResponse.json({ error: "invalid code" }, { status: 401 });
-  return NextResponse.json({ ok: true, recoveryCodes }, { headers: { "Cache-Control": "no-store" } });
+  if (!result.ok) {
+    if (result.reason === "caller_session_revoked") {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: "invalid code" }, { status: 401 });
+  }
+  return NextResponse.json({ ok: true, recoveryCodes: result.recoveryCodes }, { headers: { "Cache-Control": "no-store" } });
 }

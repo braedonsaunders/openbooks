@@ -926,17 +926,59 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
   return consumed ? { ...consumed, recoveryCodesBefore: recoveryCodeHashes.length } : null;
 }
 
+/**
+ * Failure modes for an authenticated MFA security change (factor disable,
+ * recovery-code rotation). Wrong passwords and wrong MFA codes share one
+ * refusal so neither oracle reveals the other; throttles carry a retry
+ * delay; a caller session that died mid-request is refused outright.
+ */
+export type MfaSecurityChangeFailure =
+  | { ok: false; reason: "invalid_credentials" }
+  | { ok: false; reason: "rate_limited"; retryAfter: number }
+  | { ok: false; reason: "locked"; retryAfter: number }
+  | { ok: false; reason: "caller_session_revoked" };
+
+type MfaSecurityReauthSuccess = {
+  lastUsedStep: number | null;
+  recoveryCodeHashes: string[];
+  recoveryCodesBefore: number;
+};
+
+type MfaSecurityReauthResult =
+  | { ok: true; verified: MfaSecurityReauthSuccess }
+  | MfaSecurityChangeFailure;
+
+/**
+ * The caller's session, locked and confirmed live (known, unrevoked,
+ * unexpired) in the surrounding transaction. Privileged mutations must hold
+ * this lock in the same transaction that performs them: the cookie check in
+ * the route runs earlier, so without this a session revoked after that check
+ * could still authorize a factor disable, a recovery rotation, or a session
+ * revocation. Uses the live clock (not the transaction start time) so a
+ * session that expired mid-request is refused too.
+ */
+async function lockLiveCallerSession(userId: string, sessionId: string): Promise<boolean> {
+  const row = (await db.execute<{ id: string }>(sql`
+    select id from auth_sessions
+     where id = ${sessionId} and user_id = ${userId}
+       and revoked_at is null and expires_at > clock_timestamp()
+     for update
+  `)).rows[0];
+  return !!row;
+}
+
 async function reauthenticateMfaSecurityChange(
   userId: string,
+  sessionId: string,
   password: string,
   suppliedCode: string,
   context: AuthRequestContext,
-) {
+): Promise<MfaSecurityReauthResult> {
   const identityResult = (await db.execute<{ email: string }>(sql`
     select email from users where id = ${userId} and is_active
   `));
   const email = normalizeLoginEmail(identityResult.rows[0]?.email ?? "");
-  if (!email) return null;
+  if (!email) return { ok: false, reason: "invalid_credentials" };
   const emailHash = privacyHash("email", email)!;
   const { networkHash, userAgentHash } = contextHashes(context);
   await acquireAuthLocks(emailHash, networkHash);
@@ -945,29 +987,37 @@ async function reauthenticateMfaSecurityChange(
       from users where id = ${userId} and is_active for update
   `));
   const user = userResult.rows[0];
-  if (!user || normalizeLoginEmail(user.email) !== email) return null;
+  if (!user || normalizeLoginEmail(user.email) !== email) return { ok: false, reason: "invalid_credentials" };
+  // Fail fast on a dead caller session, before burning scrypt or touching
+  // lockout counters. Callers re-check under lock immediately before the
+  // privileged mutation, in this same transaction.
+  if (!(await lockLiveCallerSession(userId, sessionId))) {
+    return { ok: false, reason: "caller_session_revoked" };
+  }
   const state = await ensureLoginState(emailHash, userId);
   const counts = await recentAttemptCounts(emailHash, networkHash, userId);
   const limit = attemptRateLimit(counts, true);
   if (limit.limited) {
     await recordLoginEvent({ userId, emailHash, outcome: "rate_limited", authMethod: "password", networkHash, userAgentHash });
-    return null;
+    // Unlike anonymous login there is no enumeration risk: the caller already
+    // holds a live session, so throttling is reported with its retry delay.
+    return { ok: false, reason: "rate_limited", retryAfter: limit.retryAfter };
   }
   if (state.lockedUntil && state.lockedUntil.getTime() > Date.now()) {
     await recordLoginEvent({ userId, emailHash, outcome: "locked", authMethod: "password", networkHash, userAgentHash });
-    return null;
+    return { ok: false, reason: "locked", retryAfter: retryAfterSeconds(state.lockedUntil) };
   }
   const passwordVerification: Awaited<ReturnType<typeof verifyPassword>> = password.length > 0 && password.length <= 1024
     ? await verifyPassword(password, user.passwordHash)
     : { valid: false, needsRehash: false };
-  if (passwordVerification.capacityLimited) return null;
+  if (passwordVerification.capacityLimited) return { ok: false, reason: "invalid_credentials" };
   const verified = passwordVerification.valid
     ? await verifyEnabledMfaFactor(userId, suppliedCode)
     : null;
   if (!verified) {
     await registerFailure(emailHash, state, userId);
     await recordLoginEvent({ userId, emailHash, outcome: "mfa_failure", authMethod: "password", networkHash, userAgentHash });
-    return null;
+    return { ok: false, reason: "invalid_credentials" };
   }
   await upgradePasswordHashIfNeeded(
     userId,
@@ -977,8 +1027,10 @@ async function reauthenticateMfaSecurityChange(
   );
   await resetFailures(emailHash, userId);
   await recordLoginEvent({ userId, emailHash, outcome: "success", authMethod: "password", networkHash, userAgentHash });
-  return verified;
+  return { ok: true, verified };
 }
+
+export type DisableMfaResult = { ok: true } | MfaSecurityChangeFailure;
 
 export async function disableMfa(
   userId: string,
@@ -986,43 +1038,60 @@ export async function disableMfa(
   suppliedCode: string,
   keepSessionId: string,
   context: AuthRequestContext,
-): Promise<boolean> {
+): Promise<DisableMfaResult> {
   return withBypass(async () => {
-    const verified = await reauthenticateMfaSecurityChange(userId, password, suppliedCode, context);
-    if (!verified) return false;
+    const reauth = await reauthenticateMfaSecurityChange(userId, keepSessionId, password, suppliedCode, context);
+    if (!reauth.ok) return reauth;
+    // Authoritative check: the caller session may have been revoked while
+    // reauthentication held this transaction. The mutation below runs only
+    // while this lock is held, in this same transaction.
+    if (!(await lockLiveCallerSession(userId, keepSessionId))) {
+      return { ok: false, reason: "caller_session_revoked" } as const;
+    }
     await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId}`);
     await db.execute(sql`
       update auth_sessions set revoked_at = now(), revocation_reason = 'mfa_disabled'
        where user_id = ${userId} and id <> ${keepSessionId} and revoked_at is null
     `);
     await auditMfaChange(userId, "mfa_disabled",
-      { mfaEnabled: true, recoveryCodesRemaining: verified.recoveryCodesBefore },
+      { mfaEnabled: true, recoveryCodesRemaining: reauth.verified.recoveryCodesBefore },
       { mfaEnabled: false, recoveryCodesRemaining: 0 });
-    return true;
+    return { ok: true } as const;
   });
 }
 
+export type RotateRecoveryCodesResult =
+  | { ok: true; recoveryCodes: string[] }
+  | MfaSecurityChangeFailure;
+
 export async function rotateRecoveryCodes(
   userId: string,
+  sessionId: string,
   password: string,
   suppliedCode: string,
   context: AuthRequestContext,
-): Promise<string[] | null> {
+): Promise<RotateRecoveryCodesResult> {
   return withBypass(async () => {
-    const verified = await reauthenticateMfaSecurityChange(userId, password, suppliedCode, context);
-    if (!verified) return null;
+    const reauth = await reauthenticateMfaSecurityChange(userId, sessionId, password, suppliedCode, context);
+    if (!reauth.ok) return reauth;
+    // Authoritative check: the caller session may have been revoked while
+    // reauthentication held this transaction. The mutation below runs only
+    // while this lock is held, in this same transaction.
+    if (!(await lockLiveCallerSession(userId, sessionId))) {
+      return { ok: false, reason: "caller_session_revoked" } as const;
+    }
     const recoveryCodes = generateRecoveryCodes();
     const hashes = recoveryCodes.map((code) => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
     await db.execute(sql`
       update auth_mfa_factors
-         set last_used_step = ${verified.lastUsedStep},
+         set last_used_step = ${reauth.verified.lastUsedStep},
              recovery_code_hashes = ${JSON.stringify(hashes)}::jsonb, updated_at = now()
       where user_id = ${userId}
     `);
     await auditMfaChange(userId, "mfa_recovery_rotated",
-      { mfaEnabled: true, recoveryCodesRemaining: verified.recoveryCodesBefore },
+      { mfaEnabled: true, recoveryCodesRemaining: reauth.verified.recoveryCodesBefore },
       { mfaEnabled: true, recoveryCodesRemaining: recoveryCodes.length });
-    return recoveryCodes;
+    return { ok: true, recoveryCodes } as const;
   });
 }
 

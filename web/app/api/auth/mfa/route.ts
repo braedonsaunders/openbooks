@@ -70,13 +70,18 @@ export async function DELETE(request: NextRequest) {
   if (typeof body?.password !== "string" || typeof body.code !== "string") {
     return NextResponse.json({ error: "password and code required" }, { status: 400 });
   }
-  const disabled = await disableMfa(
+  const result = await disableMfa(
     user.homeUserId,
     body.password,
     body.code,
     user.sessionId,
     authRequestContext(request),
   );
-  if (!disabled) return NextResponse.json({ error: "invalid credentials" }, { status: 401 });
+  if (!result.ok) {
+    if (result.reason === "caller_session_revoked") {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+    return NextResponse.json({ error: "invalid credentials" }, { status: 401 });
+  }
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
