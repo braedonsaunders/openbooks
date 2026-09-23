@@ -153,15 +153,23 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   // search must never surface records their lists would hide.
   const scope = authz.allowedSubsidiaryIds
 
+  // One shared kind allowlist for the documents legs AND the journal exact
+  // arm: an exact JE number for a subledger posting resolves only when the
+  // caller holds the posting document's own module permission.
+  const visibleKinds =
+    transactionKinds.length > 0 || canJournals
+      ? visibleTransactionKinds(orgId, transactionKinds)
+      : Promise.resolve([] as string[])
+
   const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
     canContacts ? searchContacts(orgId, q, like, scope) : empty(),
     transactionKinds.length
-      ? searchTransactions(orgId, q, like, num, transactionKinds, scope)
+      ? visibleKinds.then((kinds) => searchTransactions(orgId, q, like, num, scope, kinds))
       : empty(),
     canAccounts ? searchAccounts(orgId, q, like, scope) : empty(),
     canItems ? searchItems(orgId, q, like) : empty(),
     canProjects ? searchProjects(orgId, q, like, scope) : empty(),
-    canJournals ? searchJournalEntries(orgId, q, like, scope) : empty(),
+    canJournals ? visibleKinds.then((kinds) => searchJournalEntries(orgId, q, like, scope, kinds)) : empty(),
   ])
 
   // Numeric queries most likely want a transaction; else contacts lead.
@@ -235,13 +243,41 @@ async function searchContacts(
   }))
 }
 
+/**
+ * The caller's POSITIVE kind allowlist: module permissions intersected with
+ * domain feature gates (`DOC_KIND_FEATURE`, mirrored by disabledDocKinds)
+ * and navigation-only gates (a module switch like Banking hides search/nav
+ * while generic document APIs stay live). Shared by the documents legs and
+ * the journal exact arm, so an exact JE number for a subledger posting
+ * resolves only inside the posting module's own gate.
+ */
+async function visibleTransactionKinds(orgId: string, allowedKinds: string[]): Promise<string[]> {
+  const navigationFeatures = [...new Set(allowedKinds.flatMap((kind) => {
+    const feature = transactionNavigationOnlyFeature(kind)
+    return feature ? [feature] : []
+  }))]
+  const [hiddenKinds, navigationFeatureStates] = await Promise.all([
+    disabledDocKinds(orgId),
+    Promise.all(navigationFeatures.map(async (feature) => (
+      [feature, await isFeatureEnabled(orgId, feature)] as const
+    ))),
+  ])
+  const hiddenKindSet = new Set(hiddenKinds)
+  const navigationFeatureEnabled = new Map(navigationFeatureStates)
+  return allowedKinds.filter((kind) => {
+    if (hiddenKindSet.has(kind)) return false
+    const feature = transactionNavigationOnlyFeature(kind)
+    return !feature || navigationFeatureEnabled.get(feature) === true
+  })
+}
+
 async function searchTransactions(
   orgId: string,
   q: string,
   like: string,
   num: number | null,
-  allowedKinds: string[],
   scope: ReadonlySet<string> | null,
+  visibleKinds: string[],
 ): Promise<SearchHit[]> {
   // Amounts live on document_lines (documents.total is often 0). A numeric query
   // matches any transaction that HAS a line of that amount (±sign), and every
@@ -256,29 +292,9 @@ async function searchTransactions(
   // RLS a numeric predicate can never become a btree index condition — an
   // (org_id, amount) index cannot help any tenant-scoped query.
   //
-  // Visibility is a POSITIVE kind allowlist derived from the caller's module
-  // permissions, intersected with domain feature gates (`DOC_KIND_FEATURE`,
-  // mirrored by disabledDocKinds) and navigation-only gates (a module switch
-  // like Banking hides search/nav while generic document APIs stay live).
-  // Every candidate leg and the final sensitive-field read repeat the same
-  // allowlist — a shared CTE alone would leak across module boundaries.
-  const navigationFeatures = [...new Set(allowedKinds.flatMap((kind) => {
-    const feature = transactionNavigationOnlyFeature(kind)
-    return feature ? [feature] : []
-  }))]
-  const [hiddenKinds, navigationFeatureStates] = await Promise.all([
-    disabledDocKinds(orgId),
-    Promise.all(navigationFeatures.map(async (feature) => (
-      [feature, await isFeatureEnabled(orgId, feature)] as const
-    ))),
-  ])
-  const hiddenKindSet = new Set(hiddenKinds)
-  const navigationFeatureEnabled = new Map(navigationFeatureStates)
-  const visibleKinds = allowedKinds.filter((kind) => {
-    if (hiddenKindSet.has(kind)) return false
-    const feature = transactionNavigationOnlyFeature(kind)
-    return !feature || navigationFeatureEnabled.get(feature) === true
-  })
+  // Visibility is the shared POSITIVE kind allowlist: every candidate leg
+  // and the final sensitive-field read repeat the same allowlist — a shared
+  // CTE alone would leak across module boundaries.
   if (visibleKinds.length === 0) return []
   const visibleKindFilter = sql`and d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
   // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
@@ -368,25 +384,38 @@ type SearchJournalEntryRow = {
  * all — the documents legs can never surface them. Fuzzy matching stays
  * scoped exactly like the journal list (journal/pay_run backed entries
  * plus GL-native origins; entries posted from other subledgers stay
- * discoverable through their document). But an exact entry number always
- * resolves its entry — a dashboard-visible JE number must never search
- * total zero — so equality bypasses the origin/link scope the way the
- * documents exactLeg does. The org + subsidiary doorway still applies.
- * Hits link through the entry compatibility redirect (/journal/[id]),
- * which lands document-backed entries in their drawer and native ones in
- * the ledger flyout.
+ * discoverable through their document). An exact entry number resolves its
+ * entry — a dashboard-visible JE number must never search total zero —
+ * but NEVER past the posting module's own gate: a linked entry resolves
+ * only when its link scope (journal/pay_run, like the fuzzy leg) or the
+ * linked document's kind in the caller's shared allowlist permits it, so a
+ * gl.read-only caller cannot pull AP/other subledger memos by number.
+ * Unlinked entries resolve under the journal gate alone (no owning module
+ * exists to gate them through). The org + subsidiary doorway applies on
+ * every arm. Hits link through the entry compatibility redirect
+ * (/journal/[id]), which lands document-backed entries in their drawer and
+ * native ones in the ledger flyout.
  */
 async function searchJournalEntries(
   orgId: string,
   q: string,
   like: string,
   scope: ReadonlySet<string> | null,
+  visibleKinds: string[],
 ): Promise<SearchHit[]> {
   // Subsidiary visibility is the canonical journal predicate — an entry is
   // visible when a LINE is visible (journalScopeWhere, shared with the
   // journal list) — never the header's subsidiary alone. A header in scope
   // whose lines are all out of scope must not disclose its memo here.
   const visibility = journalScopeWhere(orgId, scope)
+  // The linked-document gate for the exact arm: the posting document must
+  // be one the caller could open themselves — same kind allowlist and the
+  // same document subsidiary fence the documents legs enforce.
+  const linkedKindGate =
+    visibleKinds.length === 0
+      ? sql`and false`
+      : sql`and d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
+  const linkedDocSubsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)
   // UNION forbids expression ORDER BY, so the merged legs sit in a
   // subquery and the exact-first ordering applies outside it.
   const r = (await db.execute<SearchJournalEntryRow>(sql`
@@ -405,6 +434,14 @@ async function searchJournalEntries(
          from journal_entries e
         where ${visibility}
           and e.entry_number = ${q}
+          and (not exists (select 1 from documents d
+                            where d.posted_entry_id = e.id and d.org_id = e.org_id)
+               or exists (select 1 from documents d
+                           where d.posted_entry_id = e.id and d.org_id = e.org_id
+                             and d.kind in ('journal', 'pay_run'))
+               or exists (select 1 from documents d
+                           where d.posted_entry_id = e.id and d.org_id = e.org_id
+                             ${linkedDocSubsidiaryFilter} ${linkedKindGate}))
         limit 5)
     ) u
      order by (u.entry_number = ${q}) desc, similarity(u.entry_number, ${q}) desc, u.created_at desc

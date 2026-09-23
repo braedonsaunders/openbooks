@@ -72,6 +72,10 @@ function authzFor(orgId: string): Authz {
   return { user, permissions: new Set(["gl.read", "payments.read", "ap.pay"]), allowedSubsidiaryIds: null };
 }
 
+function glReadOnlyAuthzFor(orgId: string): Authz {
+  return { ...authzFor(orgId), permissions: new Set(["gl.read"]) };
+}
+
 test("exact JE number resolves an unlinked non-native entry", { skip }, async () => {
   const org = await seed();
   try {
@@ -93,6 +97,30 @@ test("exact JE number resolves a subledger-posted entry first", { skip }, async 
     const txn = found.groups.find((group) => group.type === "transaction")!;
     assert.ok(txn, "transaction group present");
     assert.equal(txn.hits[0]!.title, "Journal JE-91772283", "exact entry tops the merged group");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// fnd_muddg674: the exact JE-number arm bypassed the posting module's own
+// gate — a gl.read-only caller who guessed a subledger JE number read its
+// memo despite holding no permission on the posting module. The exact arm
+// now carries the same per-kind allowlist as the documents legs.
+test("exact JE number hides a subledger posting from a gl.read-only caller", async () => {
+  const org = await seed();
+  try {
+    const hidden = await withOrgContext(org.orgId, () => globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-91772283"));
+    assert.equal(hidden.total, 0, "vendor-payment posting resolves nothing without its module permission");
+    assert.ok(
+      !JSON.stringify(hidden).includes("vendor payment posting"),
+      "the subledger memo must not leak by number",
+    );
+    // Boundary pinned deliberately: an entry with NO posting document has
+    // no owning module to gate through, so it still resolves under the
+    // journal gate alone.
+    const orphan = await withOrgContext(org.orgId, () => globalSearch(glReadOnlyAuthzFor(org.orgId), "JE-90000001"));
+    assert.ok(orphan.total >= 1, "orphaned entry still resolves under the journal gate");
+    assert.equal(orphan.groups[0]!.hits[0]!.title, "Journal JE-90000001", "exact entry orders first");
   } finally {
     await dropScratchOrg(org.orgId);
   }

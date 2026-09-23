@@ -732,6 +732,30 @@ test('journal entries stay gated by the journal read permission', async () => {
   )
 })
 
+test('exact JE arm gates subledger-linked entries by the linked document kind', async () => {
+  reset({ entries: [JE_POSTED] })
+  const response = await globalSearch(authz('gl.read'), 'JE-26188661')
+  assert.ok(transactionHitIds(response).includes('je-posted'))
+
+  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
+  assert.ok(entriesQuery, 'entries must be queried')
+  assert.match(
+    entriesQuery.text,
+    /not exists \(select 1 from documents d/,
+    'unlinked entries resolve under the journal gate alone',
+  )
+  assert.match(
+    entriesQuery.text,
+    /d\.kind in \('journal', 'pay_run'\)/,
+    'journal/pay_run link scope matches the fuzzy leg',
+  )
+  // A linked subledger posting resolves only inside the posting module's
+  // own gate: the caller's full kind allowlist rides the exact arm.
+  for (const kind of kindsForPermission('gl.read')) {
+    assert.ok(entriesQuery.values.includes(kind), `exact arm binds the caller's kind ${kind}`)
+  }
+})
+
 test('journal entries keep the canonical line-visibility subsidiary rule', async () => {
   const deniedEntry: JournalEntryFixture = {
     ...JE_POSTED,
