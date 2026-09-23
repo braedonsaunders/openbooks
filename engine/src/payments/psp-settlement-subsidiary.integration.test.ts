@@ -9,6 +9,7 @@ import {
   postSettlementBatch,
   PspSettlementError,
 } from "./psp-settlement.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -199,6 +200,74 @@ test(
         ),
         /is inactive/,
       );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a scoped PSP retry cannot replace a draft owned by another subsidiary",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const subsidiaryB = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, name, base_currency, country, parent_id, tax_ids, is_elimination, is_active, custom)
+        values (${subsidiaryB}, ${org.orgId}, 'Second Co', 'CAD', 'CA', ${org.subsidiaryId}, '{}'::jsonb, false, true, '{}'::jsonb)
+      `);
+      const externalRef = `payout-cross-subsidiary-${org.orgId}`;
+      const original = stripeParsed(externalRef, org.date);
+      const accounts = {
+        bankAccountId: org.accounts.bank,
+        feeAccountId: org.accounts.freight,
+        clearingAccountId: org.accounts.clearing,
+        subsidiaryId: subsidiaryB,
+      };
+      const { batchId } = await importSettlementBatch(org.orgId, actor, original, accounts);
+      const before = (await db.execute<{
+        subsidiaryId: string | null;
+        grossAmount: string;
+        memo: string | null;
+        sourcePayload: Record<string, unknown> | null;
+      }>(sql`
+        select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
+               memo, source_payload as "sourcePayload"
+          from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
+      `)).rows[0]!;
+      const beforeLines = (await db.execute(sql`
+        select line_number, kind, external_ref, description, amount::text as amount, currency, meta
+          from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
+         order by line_number
+      `)).rows;
+      const changed = {
+        ...original,
+        memo: "replacement from subsidiary A",
+        lines: [{ ...original.lines[0]!, amount: "9999.0000", description: "replacement line" }],
+      };
+
+      await assert.rejects(
+        importSettlementBatch(org.orgId, actor, changed, {
+          ...accounts,
+          subsidiaryId: org.subsidiaryId,
+        }, new Set([org.subsidiaryId])),
+        (error) => error instanceof ScopeNotFoundError,
+      );
+
+      const after = (await db.execute(sql`
+        select subsidiary_id as "subsidiaryId", gross_amount::text as "grossAmount",
+               memo, source_payload as "sourcePayload"
+          from psp_settlement_batches where id = ${batchId} and org_id = ${org.orgId}
+      `)).rows[0];
+      const afterLines = (await db.execute(sql`
+        select line_number, kind, external_ref, description, amount::text as amount, currency, meta
+          from psp_settlement_lines where batch_id = ${batchId} and org_id = ${org.orgId}
+         order by line_number
+      `)).rows;
+      assert.deepEqual(after, before);
+      assert.deepEqual(afterLines, beforeLines);
     } finally {
       await dropScratchOrg(org.orgId);
     }

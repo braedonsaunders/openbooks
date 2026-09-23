@@ -846,6 +846,7 @@ export async function importSettlementBatch(
   actorId: string | null,
   parsed: ParsedSettlement,
   accounts: Partial<ImportAccounts>,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<{ batchId: string; created: boolean }> {
   if (!parsed.externalRef.trim()) {
     throw new PspSettlementError("provider settlement reference is required");
@@ -916,6 +917,9 @@ export async function importSettlementBatch(
       throw new PspSettlementError(`subsidiary "${sub.name}" is inactive`);
     }
   }
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) {
+    throw new ScopeNotFoundError();
+  }
   const totals = summarizeSettlement(parsed.lines);
   return withOrg(orgId, async () => {
     const proposedId = randomUUID();
@@ -939,8 +943,8 @@ export async function importSettlementBatch(
       returning id
     `));
     const created = inserted.rows.length === 1;
-    const current = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status
+    const current = (await db.execute<{ id: string; status: string; subsidiary_id: string | null }>(sql`
+      select id, status, subsidiary_id
         from psp_settlement_batches
        where org_id = ${orgId}
          and provider = ${parsed.provider}
@@ -950,6 +954,9 @@ export async function importSettlementBatch(
     const row = current.rows[0];
     if (!row)
       throw new PspSettlementError("settlement batch could not be locked");
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiary_id)) {
+      throw new ScopeNotFoundError();
+    }
     if (row.status === "posted") return { batchId: row.id, created: false };
     if (row.status === "void") {
       throw new PspSettlementError(

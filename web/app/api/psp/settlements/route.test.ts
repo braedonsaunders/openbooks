@@ -179,8 +179,8 @@ const mockSources = new Map<string, string>([
         state.domainCalls.push({ action: 'saveConfig', orgId, userId, input })
       }
 
-      export async function importSettlementBatch(orgId, userId, parsed, accounts) {
-        state.domainCalls.push({ action: 'import', orgId, userId, input: { parsed, accounts } })
+      export async function importSettlementBatch(orgId, userId, parsed, accounts, allowedSubsidiaryIds) {
+        state.domainCalls.push({ action: 'import', orgId, userId, input: { parsed, accounts, allowedSubsidiaryIds } })
         return { batchId: '00000000-0000-4000-8000-0000000000b1', created: true }
       }
 
@@ -433,6 +433,7 @@ test("restricted import dispatches an in-scope subsidiary", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual((routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts.subsidiaryId, "sub-a");
+  assert.deepEqual((routeState.domainCalls[0]?.input as { allowedSubsidiaryIds: Set<string> }).allowedSubsidiaryIds, new Set(["sub-a"]));
 });
 
 for (const action of ["post", "reverse"] as const) {
