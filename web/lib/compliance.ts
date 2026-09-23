@@ -18,6 +18,7 @@ import {
   type WaiverRecord
 } from '@openbooks/engine/src/compliance/compliance.ts'
 import { businessTimeZone, businessToday, formatInZone } from '@openbooks/engine/src/platform/business-date.ts'
+import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
 import { addMoney, ZERO_MONEY } from './cash/core'
 import { openItems } from './cash/open-items'
 import { featureRequiredHref } from './gate-targets'
@@ -531,27 +532,22 @@ export function legacyLienWaiverFilename(waiverNumber: string): string {
 }
 
 /**
- * STUB for the shared upgrade_legacy_provenance read (m74, forward migration
- * 0326). Until that helper lands, legacy state is the derived check alone — a
- * waiver executed before the freeze cannot gain a snapshot except through the
- * sign transition, which stamps one, so the derived set is exactly the rows
- * 0326 will record. The replacement body is one line:
- *
- *   import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
- *   return isLegacyProvenance(db, _orgId, 'lien_waivers', row.id,
- *     { fallback: isLegacyExecutedLienWaiver(row) })
- *
- * Table-presence OR the derived fallback is the fail-closed direction: a
- * missed legacy row would silently present live rows as the executed release.
- * Callers use this seam — never the table, never the derived check — so the
- * swap is one function body. Reads key off row presence, never note text (the
- * 0292 note wording is P1B-pinned and stays rewordable).
+ * Legacy state for an executed lien waiver: membership in the shared
+ * upgrade_legacy_provenance registry (0326 records every waiver executed
+ * before the 0292 snapshot freeze) OR the derived check. The OR is the
+ * fail-closed direction — a missed legacy row would silently present live
+ * rows as the executed release — and the derived check also covers the
+ * window before 0326 applies. Reads key off row presence, never note text
+ * (the 0292 note wording stays rewordable). Callers use this seam, never the
+ * table or the derived check directly.
  */
 export async function isLienWaiverLegacyUnverified(
-  _orgId: string,
+  orgId: string,
   row: { id: string; status: string; signedAt: string | null; hasExecutedSnapshot: boolean },
 ): Promise<boolean> {
-  return isLegacyExecutedLienWaiver(row)
+  const derived = isLegacyExecutedLienWaiver(row)
+  if (derived) return true
+  return isLegacyProvenance(db, orgId, 'lien_waivers', row.id, { fallback: derived })
 }
 
 export type LienWaiverRow = {
