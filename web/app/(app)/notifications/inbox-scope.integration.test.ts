@@ -192,14 +192,19 @@ test("mark-read touches only the caller's own rows", { skip: !DB }, async () => 
       bob: await seedNotification(orgB.orgId, bob, "bob patchable"),
     }));
 
-    // Mallory names Alice's row and Bob's row: both stay unread.
+    // Mallory names Alice's row and Bob's row: 404 with the named error,
+    // and the ownership check runs before any write, so both stay unread.
     state.authz = authzFor(orgA.orgId, mallory, "Patch Mallory");
     const forbidden = await withOrgContext(orgA.orgId, () =>
       PATCH(patchRequest({ ids: [ids.alice, ids.bob] })),
     );
-    assert.equal(forbidden.status, 200);
+    assert.equal(forbidden.status, 404);
+    assert.deepEqual(await forbidden.json(), {
+      error: "some notifications are not yours — they may belong to someone else or no longer exist",
+    });
     assert.equal(await withBypass(() => readAt(ids.alice)), null);
     assert.equal(await withBypass(() => readAt(ids.bob)), null);
+    assert.equal(await withBypass(() => readAt(ids.mallory)), null);
 
     // Alice marks her own row: read. Mallory's row is untouched.
     state.authz = authzFor(orgA.orgId, alice, "Patch Alice");
