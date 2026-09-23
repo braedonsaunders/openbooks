@@ -50,7 +50,7 @@ registerInboxAdapter(aiCapabilityReviewAdapter);
 
 export { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
 export { markNotificationsRead, writeNotification, type NotificationWrite } from "./adapters/notification.ts";
-export type { InboxAdapter } from "./registry.ts";
+export type { InboxAdapter, InboxPage } from "./registry.ts";
 export type {
   InboxActionDef,
   InboxActionStyle,

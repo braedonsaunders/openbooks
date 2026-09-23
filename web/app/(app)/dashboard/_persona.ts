@@ -3,7 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
+import { countInbox, listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { findEmploymentsByParty } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { loadApprovalPerson, loadTeamEmploymentIdsForManager } from '@openbooks/engine/src/hrm/authorization.ts'
@@ -162,8 +162,11 @@ export async function loadPersonaMetrics(
     if (need('inboxTasksTop')) out.inboxTasksTop = tasks.slice(0, 5).map(toPersonaItem)
     if (need('inboxApprovalsTop')) out.inboxApprovalsTop = approvals.slice(0, 5).map(toPersonaItem)
     if (need('inboxCount')) {
-      const unread = await listInbox(ctx, { kinds: ['notification'], cache })
-      out.inboxCount = approvals.length + unread.length
+      // The badge counts through count(), never through a rendered window:
+      // the notice list reads newest-first through its bounded default, so
+      // a list length would undercount past the window.
+      const unread = await countInbox(ctx, { kinds: ['notification'], cache })
+      out.inboxCount = approvals.length + unread
     }
   }
 

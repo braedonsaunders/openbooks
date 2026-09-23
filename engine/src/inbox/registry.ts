@@ -13,10 +13,26 @@
 import type { InboxItem, InboxKind, InboxListContext } from "./types.ts";
 import { compareInboxItems } from "./types.ts";
 
+/**
+ * A read window for one source. Applies per source (not to the merged
+ * list): single-kind reads page exactly; multi-kind reads bound each leg.
+ * Absent means the source's bounded default window — never the whole table.
+ */
+export interface InboxPage {
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
 export interface InboxAdapter {
   readonly kind: InboxKind;
   /** Fail-closed reads: only rows the actor may already see. */
-  list(ctx: InboxListContext): Promise<InboxItem[]>;
+  list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]>;
+  /**
+   * The badge count without materializing rows. Absent means the list
+   * length — sources whose list is windowed must implement this, or the
+   * badge undercounts past the window.
+   */
+  count?(ctx: InboxListContext): Promise<number>;
   /**
    * Complete the action through the source's native service. Throws the
    * service's own refusal (reason missing, stale item, invisible item)
@@ -63,7 +79,7 @@ function adapterFor(kind: string): InboxAdapter | null {
  */
 export async function listInbox(
   ctx: InboxListContext,
-  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]> },
+  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage },
 ): Promise<InboxItem[]> {
   const kinds = opts?.kinds ?? inboxAdapterKinds();
   const out: InboxItem[] = [];
@@ -74,6 +90,15 @@ export async function listInbox(
     const cached = opts?.cache?.get(cacheKey);
     if (cached) {
       out.push(...cached);
+      continue;
+    }
+    // A paged read is a window, not the working list: it bypasses the
+    // cache and is never reused for acting. Acting re-resolves the acted
+    // id through the same bounded window the list renders (unpaged means
+    // the source default, not the whole table), so an item outside the
+    // window 404s with a reload instead of deciding blind.
+    if (opts?.page) {
+      out.push(...(await adapter.list(ctx, opts.page)));
       continue;
     }
     const items = await adapter.list(ctx);
@@ -87,7 +112,29 @@ export async function countInbox(
   ctx: InboxListContext,
   opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]> },
 ): Promise<number> {
-  return (await listInbox(ctx, opts)).length;
+  const kinds = opts?.kinds ?? inboxAdapterKinds();
+  let total = 0;
+  for (const kind of kinds) {
+    const adapter = adapterFor(kind);
+    if (!adapter) continue;
+    const cacheKey = `${ctx.orgId}:${ctx.actorId}:${kind}`;
+    const cached = opts?.cache?.get(cacheKey);
+    if (cached) {
+      total += cached.length;
+      continue;
+    }
+    // A real count never materializes rows: sources with a list window
+    // report their full pending count, so the badge stops undercounting
+    // past the window. Sources without one fall back to the list length.
+    if (adapter.count) {
+      total += await adapter.count(ctx);
+      continue;
+    }
+    const items = await adapter.list(ctx);
+    opts?.cache?.set(cacheKey, items);
+    total += items.length;
+  }
+  return total;
 }
 
 /**

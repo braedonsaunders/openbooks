@@ -17,7 +17,7 @@
 
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
-import type { InboxAdapter } from "../registry.ts";
+import type { InboxAdapter, InboxPage } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
 
@@ -88,15 +88,45 @@ type NoticeRow = {
   created_at: string;
 };
 
+/**
+ * Clamp a caller-supplied window to integers the database can take.
+ * Paging stays total: absurd input pages to a small sane window rather
+ * than erroring the whole inbox read. No window means the bounded
+ * default: every rendering caller reads newest-first through the same
+ * cap, and nobody materializes an unbounded list by accident.
+ */
+const DEFAULT_WINDOW = 100;
+const MAX_WINDOW = 500;
+
+function clampWindow(page: InboxPage | undefined): { limit: number; offset: number } {
+  const rawLimit = page?.limit;
+  const rawOffset = page?.offset;
+  const limit =
+    rawLimit === undefined || rawLimit === null || !Number.isFinite(Number(rawLimit))
+      ? DEFAULT_WINDOW
+      : Math.min(MAX_WINDOW, Math.max(1, Math.floor(Number(rawLimit))));
+  const offset =
+    rawOffset === undefined || rawOffset === null || !Number.isFinite(Number(rawOffset))
+      ? 0
+      : Math.max(0, Math.floor(Number(rawOffset)));
+  return { limit, offset };
+}
+
 export const notificationAdapter: InboxAdapter = {
   kind: "notification",
-  async list(ctx: InboxListContext): Promise<InboxItem[]> {
+  async list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]> {
+    // Newest first through the bounded window (default 100): the bell,
+    // widgets, and the merged list render from here, callers that need
+    // more page explicitly, and the badge counts through count() — never
+    // through the list length.
+    const { limit, offset } = clampWindow(page);
     const rows = (await db.execute<NoticeRow>(sql`
       select id::text as id, kind, title, body, href, created_at::text as created_at
         from notifications
        where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
        order by created_at desc
-       limit 30
+       limit ${limit}
+       ${offset === 0 ? sql`` : sql`offset ${offset}`}
     `)).rows;
     return rows.map((row) => ({
       id: inboxItemId("notification", row.id),
@@ -110,6 +140,14 @@ export const notificationAdapter: InboxAdapter = {
       actions: [{ key: "mark-read", label: "Mark read", style: "secondary" as const, needsReason: false }],
       source: { kind: "notification", id: row.id },
     }));
+  },
+  async count(ctx: InboxListContext): Promise<number> {
+    const row = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n
+        from notifications
+       where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
+    `)).rows[0];
+    return row?.n ?? 0;
   },
   async act(ctx, sourceId, actionKey): Promise<void> {
     if (actionKey !== "mark-read") {

@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import {
   __testResetInboxAdapters,
   actOnInboxItem,
+  countInbox,
   InboxError,
   listInbox,
 } from "./registry.ts";
@@ -190,6 +191,63 @@ describe("inbox act", () => {
         assert.ok(error instanceof InboxError && error.code === "NOT_FOUND");
         return true;
       });
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+});
+
+describe("inbox count and paging", () => {
+  it("countInbox prefers the adapter count over the list length", async () => {
+    // A windowed source reports its full pending count: the badge must not
+    // undercount past the list window.
+    const adapter: InboxAdapter = {
+      ...fakeAdapter([
+        item({ id: "flows_approval:g1", actions: [] }),
+      ]),
+      async count() {
+        return 41;
+      },
+    };
+    __testResetInboxAdapters([adapter]);
+    try {
+      assert.equal(await countInbox(CTX), 41);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("countInbox falls back to the list length without an adapter count", async () => {
+    const items = [
+      item({ id: "flows_approval:g1", actions: [] }),
+      item({ id: "flows_approval:g2", actions: [] }),
+    ];
+    __testResetInboxAdapters([fakeAdapter(items)]);
+    try {
+      assert.equal(await countInbox(CTX), 2);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("listInbox forwards the read window to the adapter", async () => {
+    const seen: Array<{ limit?: number; offset?: number } | undefined> = [];
+    const adapter: InboxAdapter = {
+      kind: "flows_approval",
+      async list(_ctx, page) {
+        seen.push(page);
+        return [];
+      },
+      async act() {},
+    };
+    __testResetInboxAdapters([adapter]);
+    try {
+      await listInbox(CTX, { page: { limit: 10, offset: 20 } });
+      assert.deepEqual(seen, [{ limit: 10, offset: 20 }]);
+      // Unpaged reads pass no window, so acting keeps re-resolving the
+      // full working list.
+      await listInbox(CTX);
+      assert.deepEqual(seen, [{ limit: 10, offset: 20 }, undefined]);
     } finally {
       __testResetInboxAdapters([]);
     }
