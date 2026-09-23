@@ -9,7 +9,11 @@ Object.assign(globalThis,{__backupPrecisionCapture:capture});
 registerHooks({resolve(specifier,context,next){
   if(specifier==='server-only') return {shortCircuit:true,url:'data:text/javascript,export {}'};
   if(context.parentURL?.endsWith('/web/lib/invoice-backup.ts')) {
-    if(specifier==='@openbooks/pdf') return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent('export async function renderHtmlDocumentPdf(input){globalThis.__backupPrecisionCapture.html=input.bodyHtml;throw new Error("captured timesheet HTML")}')};
+    // Thin re-export-plus-override of the real @openbooks/pdf surface, so the
+    // next export added to the package cannot break this double's link again.
+    // Importing the real index never launches Chromium — the browser pool only
+    // launches on first render — so the stub stays hermetic.
+    if(specifier==='@openbooks/pdf') return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent(`export * from '${root}packages/pdf/src/index.ts';export async function renderHtmlDocumentPdf(input){globalThis.__backupPrecisionCapture.html=input.bodyHtml;throw new Error("captured timesheet HTML")}`)};
     if(specifier==='./pdf-templates/store') return {shortCircuit:true,url:'data:text/javascript,export async function resolvePdfTemplate(){return null}'};
     if(specifier==='./money-server') return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent(`import {createMoneyFormatter} from '${root}web/lib/money-format.ts';export async function getMoneyFormatter(_org,currency){return createMoneyFormatter('en-CA',currency)}`)};
   }

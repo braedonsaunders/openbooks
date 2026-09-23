@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { pathToFileURL } from 'node:url'
 import { PDFDocument } from 'pdf-lib'
 import { renderPasswordExpression } from '../../packages/pdf/src/password-expression.ts'
 import { PDF_RECORD_TYPE_BY_KEY } from './pdf-templates/catalog.ts'
@@ -85,6 +86,12 @@ const harness = {
 
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = harness
 
+// Absolute file URL of the real @openbooks/pdf surface, interpolated into the
+// mock below. A bare or relative specifier cannot be used there: the mock
+// module's base is the opaque `mock:` URL, so only an absolute URL reaches
+// the real file without being re-intercepted by these same hooks.
+const pdfIndexUrl = pathToFileURL(`${process.cwd()}/packages/pdf/src/index.ts`).href
+
 const mockSources = new Map<string, string>([
   ['mock:server-only', 'export {}'],
   [
@@ -98,9 +105,16 @@ const mockSources = new Map<string, string>([
   // Only encryptPdf itself is stubbed (returning genuine encrypted bytes);
   // certification delegates to the real qpdf-backed verifier, so the send
   // path runs against real ciphertext AND the independent check guarding it.
+  // A thin re-export-plus-override of the real @openbooks/pdf surface: the
+  // star carries every name this double does not stub — notably the REAL
+  // RendererUnavailableError, instead of the hand-written mirror it replaces,
+  // so the next export added to the package cannot break this double's link
+  // again. Importing the real index never launches Chromium.
   [
     'mock:openbooks-pdf',
     `
+      export * from '${pdfIndexUrl}'
+      export { RendererUnavailableError } from '${pdfIndexUrl}'
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
 
       export async function encryptPdf(pdf, options) {
@@ -112,17 +126,6 @@ const mockSources = new Map<string, string>([
       export async function verifyPdfEncryption(pdf) {
         const crypto = await import(harness.pdfCryptoModuleUrl)
         return crypto.verifyPdfEncryption(pdf)
-      }
-
-      // Faithful mirror of the real RendererUnavailableError contract (name,
-      // executablePath, message naming the path and the remedy): the sender
-      // maps it through instanceof in this same module graph.
-      export class RendererUnavailableError extends Error {
-        constructor(executablePath) {
-          super('PDF renderer is unavailable: Chromium was not found at ' + executablePath + '. Install Chromium on the app server or set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.')
-          this.name = 'RendererUnavailableError'
-          this.executablePath = executablePath
-        }
       }
 
       export function renderPasswordExpression(expression, catalog, values) {

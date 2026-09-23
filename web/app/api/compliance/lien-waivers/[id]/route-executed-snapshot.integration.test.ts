@@ -33,8 +33,15 @@ registerHooks({
         export function guardSubsidiaryScope() { return null }
       `);
     // Never launch Chromium: echo the release HTML the printer would render.
+    // A thin re-export-plus-override of the real @openbooks/pdf surface: the
+    // star carries every name this double does not stub (notably
+    // RendererUnavailableError, which lib/api/pdf-renderer imports), so the
+    // next export added to the package cannot break this double's link again.
+    // Importing the real index never launches Chromium — the browser pool
+    // only launches on first render — so the stub stays hermetic.
     if (specifier === "@openbooks/pdf")
       return virtual(`
+        export * from '${root}packages/pdf/src/index.ts';
         export async function renderHtmlDocumentPdf(args) {
           globalThis.__lienExecutedHtml.html = args.bodyHtml;
           return Buffer.from("MOCK-EXECUTED-PDF");

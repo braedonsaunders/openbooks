@@ -19,9 +19,16 @@ Object.assign(globalThis, { __billingBackupGenerateStubPdf: null as Buffer | nul
 // Flipped by the failure test to make the renderer throw, proving the
 // failure path end to end.
 Object.assign(globalThis, { __billingBackupFailRender: false })
+// Thin re-export-plus-override of the real @openbooks/pdf surface: every name
+// this double does not stub (notably RendererUnavailableError, which
+// lib/api/pdf-renderer imports) resolves to the real implementation, so the
+// next export added to the package cannot break this double's link again.
+// Importing the real index never launches Chromium — the browser pool only
+// launches on first render — so the stub stays hermetic.
 const pdfStub = {
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent([
+    `export * from '${root}packages/pdf/src/index.ts'`,
     'export async function renderHtmlDocumentPdf() { if (globalThis.__billingBackupFailRender) throw new Error("renderer unavailable"); return globalThis.__billingBackupGenerateStubPdf }',
     'export function compileTemplateHtml(sourceHtml) { return { compiledHtml: sourceHtml } }',
     'export function renderTemplate(tpl) { return tpl }',

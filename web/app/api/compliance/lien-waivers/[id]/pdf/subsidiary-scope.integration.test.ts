@@ -31,9 +31,15 @@ const hooks = registerHooks({
     ) {
       return virtual('export async function currentUser(){ return globalThis.__lwPdfScopeUser.user }')
     }
-    // Authz proof, not a render proof: never launch Chromium in this suite.
+    // Authz proof, not a render proof: never launch Chromium in this suite. A
+    // thin re-export-plus-override of the real @openbooks/pdf surface: the
+    // star carries every name this double does not stub (notably
+    // RendererUnavailableError, which lib/api/pdf-renderer imports), so the
+    // next export added to the package cannot break this double's link again.
+    // Importing the real index never launches Chromium — the browser pool
+    // only launches on first render — so the stub stays hermetic.
     if (specifier === '@openbooks/pdf') {
-      return virtual('export async function renderHtmlDocumentPdf(){ return Buffer.from("MOCK-WAIVER-PDF") }')
+      return virtual(`export * from '${root}packages/pdf/src/index.ts'; export async function renderHtmlDocumentPdf(){ return Buffer.from("MOCK-WAIVER-PDF") }`)
     }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)

@@ -40,6 +40,11 @@ const mockSources = new Map<string, string>([
   [
     'pdf',
     `
+      // Thin re-export-plus-override of the real @openbooks/pdf surface: a
+      // future export added to the package rides the star instead of breaking
+      // this double's link. Importing the real index never launches Chromium.
+      export * from '../../../../../packages/pdf/src/index.ts'
+      export { RendererUnavailableError } from '../../../../../packages/pdf/src/index.ts'
       export function compileTemplateHtml(source) { return { sanitizedSource: source, compiledHtml: source } }
       export function sanitizeTokenizedFragment(fragment) { return fragment }
     `,
