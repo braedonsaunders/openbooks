@@ -346,7 +346,30 @@ export async function gateScheduleAssignment(
   }
   if (!resource.party_id) return { ...passThrough, resourceName: resource.name };
   const on = input.on ? requireDate(input.on, "on") : await businessToday(orgId);
-  const projectId = resource.project_id;
+  // The assignment answers for the TASK's project, not the resource's:
+  // shared-pool resources (project_id null) would otherwise pass through
+  // ungated. A resource scoped to a different project than the task is a
+  // cross-project assignment and refuses; a task outside this org refuses
+  // instead of gating a phantom subject with zero requirements.
+  let projectId: string | null = resource.project_id;
+  if (input.taskId !== undefined) {
+    const taskId = requireId(input.taskId, "taskId");
+    const task = (await exec.execute<{ project_id: string }>(sql`
+      select project_id::text as project_id from project_tasks
+       where org_id = ${orgId}::uuid and id = ${taskId}::uuid
+    `)).rows[0];
+    if (!task) {
+      throw new HrmQualificationError(
+        "The schedule task was not found in this organization — refresh the board and try again.",
+      );
+    }
+    if (resource.project_id && resource.project_id !== task.project_id) {
+      throw new HrmQualificationError(
+        `Resource "${resource.name}" belongs to another project and cannot be assigned here — pick a resource from this project or the shared pool, then assign again.`,
+      );
+    }
+    projectId = task.project_id;
+  }
   // The project's legal entity, where the project names one: dispatch
   // gates the employment IN that entity, never a same person's row
   // elsewhere. A dangling project reference refuses instead of gating
