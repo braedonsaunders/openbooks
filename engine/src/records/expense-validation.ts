@@ -2,6 +2,19 @@ import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 
 /**
+ * An expense-report submission/posting refusal: the report names no employee,
+ * names a non-employee, has no corporate card for funded lines, or names
+ * another tenant's card. Callers map this to a 4xx — a request-state failure,
+ * never a server defect. (This lives in records rather than reusing
+ * flows' SubmitError because records may not import flows under
+ * engine/src/modules.json; both map to 422 at the API boundary, and the
+ * posting kernel wraps it into PostingError.)
+ */
+export class ExpenseValidationError extends Error {
+  readonly name = "ExpenseValidationError";
+}
+
+/**
  * Settlement coherence for an expense report (0171): company-paid and personal
  * lines are funded by the report's corporate card, so they require one — and
  * the card must belong to this org (the documents FK is global, so without an
@@ -21,7 +34,7 @@ export async function assertExpenseSettlement(
      limit 1`);
   if (!funded.rows[0]) return;
   if (!document.paymentCardId) {
-    throw new Error("company-paid and personal expense lines require a corporate card on the report");
+    throw new ExpenseValidationError("company-paid and personal expense lines require a corporate card on the report");
   }
   // No is_active gate: deactivating a card must not brick an in-flight report
   // (data entry already restricts the picker to active cards; the cardRule
@@ -30,7 +43,7 @@ export async function assertExpenseSettlement(
     select id from payment_cards
      where org_id = ${document.orgId} and id = ${document.paymentCardId}`);
   if (!card.rows[0]) {
-    throw new Error("the report's corporate card was not found in this organization");
+    throw new ExpenseValidationError("the report's corporate card was not found in this organization");
   }
 }
 
@@ -43,7 +56,7 @@ export async function assertExpenseEmployee(
   document: { kind: string; orgId: string; partyId: string | null },
 ): Promise<void> {
   if (document.kind !== "expense_report") return;
-  if (!document.partyId) throw new Error("an expense report requires an employee before submission or posting");
+  if (!document.partyId) throw new ExpenseValidationError("an expense report requires an employee before submission or posting");
   const employee = await runner.execute<{ id: string }>(sql`
     select p.id from parties p
      where p.org_id = ${document.orgId} and p.id = ${document.partyId}
@@ -53,6 +66,6 @@ export async function assertExpenseEmployee(
        )
   `);
   if (!employee.rows[0]) {
-    throw new Error("an expense report requires an employee in this organization before submission or posting");
+    throw new ExpenseValidationError("an expense report requires an employee in this organization before submission or posting");
   }
 }

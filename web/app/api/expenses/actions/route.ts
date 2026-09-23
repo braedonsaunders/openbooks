@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { ExpenseValidationError } from '@openbooks/engine/src/records/expense-validation.ts'
 import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
@@ -229,7 +230,10 @@ export async function POST(req: Request) {
     // on a report that already left draft) are request-state failures, not
     // server defects. Revision-fence refusals carry their own status.
     const status =
-      e instanceof PostingError || e instanceof ControlAccountsIncompleteError || e instanceof SubmitError
+      e instanceof PostingError ||
+      e instanceof ControlAccountsIncompleteError ||
+      e instanceof SubmitError ||
+      e instanceof ExpenseValidationError
         ? 422
         : e instanceof DocumentEditError
           ? e.status

@@ -88,6 +88,24 @@ async function setup(): Promise<{ orgId: string; employeeId: string; date: strin
   return { orgId: org.orgId, employeeId, date: org.date, subsidiaryId: org.subsidiaryId, periodId: org.periodId, bookId: org.bookId, accounts: org.accounts, cleanup }
 }
 
+test('submitting a report with no employee fails with 422, not 500', async () => {
+  const { orgId, date, subsidiaryId, cleanup } = await setup()
+  try {
+    const documentId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+        values (${documentId}, ${orgId}, 'expense_report', 'draft', 'EXP-NOEMP-1', ${date}, ${subsidiaryId},
+                'CAD', '10', '0', '10', '{}'::jsonb)`)
+    })
+    const response = await post({ action: 'submit', documentId })
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(response.json)}`)
+    assert.match(String((response.json as { error?: string }).error ?? ''), /employee/i)
+  } finally {
+    await cleanup()
+  }
+})
+
 test('submitting a correction with an open linked void fails with 422, not 500', async () => {
   const { orgId, employeeId, date, subsidiaryId, periodId, bookId, accounts, cleanup } = await setup()
   try {
