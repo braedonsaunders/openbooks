@@ -3,11 +3,12 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// Bill of materials replacement race (web/app/api/inventory/bom/route.ts).
+// Bill of materials replacement races (web/app/api/inventory/bom/route.ts).
 // ROW EXCLUSIVE table locks do not conflict with each other, so two PUTs on
 // an empty BOM used to both read version null and union into a recipe nobody
-// wrote. Only the session gate is mocked — the database and the version
-// check are real.
+// wrote; and the feature gate was a pre-transaction read, so a disable racing
+// the save still replaced the recipe. Only the session gate is mocked — the
+// database, the version check, and the feature fence are all real.
 const stateKey = Symbol.for("openbooks.bom-route-concurrency-test");
 interface RouteState {
   authz: {
@@ -52,7 +53,7 @@ const routeUrl = "./route.ts?bom-route-concurrency-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -138,3 +139,60 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", { s
   }
 });
 
+test("a committed Inventory disable refuses the BOM save with nothing written", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "BOM Fence Admin", "admin");
+    authenticate(org.orgId, actorId);
+    await emptyBom(org.orgId, org.items.assembly);
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"inventory":false}'::jsonb)
+       where id = ${org.orgId}`);
+
+    const res = await PUT(putRequest(recipe(org.items.assembly, org.items.component)));
+    assert.equal(res.status, 404);
+    assert.deepEqual(await bomRows(org.orgId, org.items.assembly), [], "the refused save stores no recipe");
+    assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), [], "the refused save audits nothing");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a BOM save waits for an in-flight Inventory disable, then refuses it", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const writer = await pool.connect();
+  let pending: Promise<{ status: number }> | undefined;
+  try {
+    const actorId = await createScratchUser(org.orgId, "BOM Fence Race Admin", "admin");
+    authenticate(org.orgId, actorId);
+    await emptyBom(org.orgId, org.items.assembly);
+
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls','on',true)");
+    await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"inventory\":false}'::jsonb) where id=$1", [org.orgId]);
+    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
+
+    pending = PUT(putRequest(recipe(org.items.assembly, org.items.component)))
+      .then(async (res) => ({ status: res.status }));
+
+    let blocked = false;
+    for (let attempt = 0; attempt < 400; attempt++) {
+      const row = (await pool.query<{ blocked: boolean }>(
+        "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked", [pid])).rows[0]!;
+      if (row.blocked) { blocked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+    assert.ok(blocked, "the save must wait for authoritative feature ownership instead of racing past the disable");
+    await writer.query("commit");
+
+    const result = await pending;
+    assert.equal(result.status, 404, "the disable that won the race refuses the save");
+    assert.deepEqual(await bomRows(org.orgId, org.items.assembly), [], "the refused save stores no recipe");
+    assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), [], "the refused save audits nothing");
+  } finally {
+    await writer.query("rollback").catch(() => {});
+    writer.release();
+    await pending?.catch(() => {});
+    await dropScratchOrg(org.orgId);
+  }
+});
