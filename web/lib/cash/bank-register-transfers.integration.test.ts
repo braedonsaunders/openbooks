@@ -50,10 +50,11 @@ async function seedJournal(
 }
 
 /**
- * An internal transfer between two selected banks is one debit and one
- * credit inside the viewed set: it nets to zero instead of counting the
- * outflow leg as spending. A transfer to an out-of-scope account keeps its
- * leg — cash really left the viewed set.
+ * Transfers net per entry over the in-scope bank legs: a plain internal
+ * transfer nets to zero instead of counting the outflow leg as spending,
+ * while a fee-bearing one (bank A -100, bank B +95) counts only the 5 that
+ * left the viewed set. A transfer to an out-of-scope account keeps its leg
+ * — cash really left the viewed set.
  */
 test("bank register nets internal transfers between selected banks", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg());
@@ -74,6 +75,17 @@ test("bank register nets internal transfers between selected banks", { skip: !pr
         transferId,
       );
       await db.execute(sql`update documents set posted_entry_id = ${transferEntry} where id = ${transferId}`);
+      // A fee-bearing transfer: bank A -100, bank B +95, fee expense +5.
+      // Only the 5 that left the selected banks counts as outflow.
+      const feeId = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,subtotal,tax_total,total)
+        values (${feeId},${org.orgId},'transfer','approved','TRANSFER-2',${org.subsidiaryId},${org.date},'CAD','1',100,0,100)`);
+      const feeEntry = await seedJournal(
+        org, org.date, org.periodId,
+        [[org.accounts.bank, "-100"], [secondBank, "95"], [org.accounts.adjustment, "5"]],
+        feeId,
+      );
+      await db.execute(sql`update documents set posted_entry_id = ${feeEntry} where id = ${feeId}`);
     });
     await withOrgContext(org.orgId, async () => {
       const category = await categoryWeekly(
@@ -83,13 +95,16 @@ test("bank register nets internal transfers between selected banks", { skip: !pr
         ["2026-07-19", "2026-07-26", "2026-08-02", "2026-08-09", "2026-08-16", "2026-08-23", "2026-08-30", "2026-09-06"],
         { arWeekly: {}, apWeekly: {}, cashStart: "0.0000" },
       );
-      // 1200 over 12 weeks (the April leg only establishes old books); the
-      // 500 transfer nets to zero instead of forecasting as spending.
+      // 1200 + the 5 fee remainder over 12 weeks (the April leg only
+      // establishes old books); the plain 500 transfer nets to zero instead
+      // of forecasting as spending.
       assert.equal(category.meta.weeksUsed, 12);
-      assert.equal(category.meta.rawAverage, "100.0000");
-      assert.deepEqual(category.weekly, ["100.0000", "100.0000", "100.0000", "100.0000", "100.0000", "100.0000", "100.0000", "100.0000"]);
-      assert.equal(category.total, "800.0000");
-      assert.ok(category.breakdown.every((row) => !row.name.includes("TRANSFER-1")), "the internal transfer leaves no register row");
+      assert.equal(category.meta.rawAverage, "100.4167");
+      assert.deepEqual(category.weekly, ["100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167", "100.4167"]);
+      assert.equal(category.total, "803.3336");
+      assert.ok(category.breakdown.every((row) => !row.name.includes("TRANSFER-1")), "the plain transfer leaves no register row");
+      const feeRow = category.breakdown.find((row) => row.name.includes("TRANSFER-2"));
+      assert.equal(feeRow?.amount, "5.0000", "the fee remainder keeps its register row");
     });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

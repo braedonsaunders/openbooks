@@ -1211,9 +1211,23 @@ export async function categoryWeekly(
       ? sql` and (${sql.join(keywords.map((k) => sql`coalesce(d.memo, e.memo, '') ilike ${"%" + k + "%"}`), sql` or `)})`
       : sql``;
     const r = (await db.execute<CashRegisterLineRow>(sql`
+      -- Transfers net PER ENTRY over the in-scope bank legs: a plain move
+      -- between two selected banks nets to zero, a fee-bearing one (bank A
+      -- -100, bank B +95, fee expense +5) counts only the negative remainder
+      -- (-100 + 95 = -5, so 5 of outflow), and a transfer to an out-of-scope
+      -- account keeps its full leg — cash really left the viewed set. This
+      -- assumes one outflow leg per transfer entry, which is how transfers
+      -- post (one debit, one credit, plus any fee legs).
       select e.posting_date::text as day, coalesce(d.kind, 'journal') as kind,
              d.document_number as doc_number, coalesce(p.display_name, '') as party,
-             coalesce(d.memo, e.memo, '') as memo, -l.amount as amount
+             coalesce(d.memo, e.memo, '') as memo,
+             case when coalesce(d.kind, 'journal') = 'transfer'
+               then greatest(-((
+                 select coalesce(sum(l2.amount), 0) from journal_lines l2
+                  where l2.entry_id = l.entry_id and l2.org_id = l.org_id
+                    and l2.account_id in (${ids})
+               )), 0)
+               else -l.amount end as amount
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         and e.book_id = ${statementBookExpr(orgId)}
@@ -1222,21 +1236,6 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
-        -- An internal transfer between two selected banks is one debit and
-        -- one credit inside the viewed set: counting only its negative leg
-        -- reports the move as spending. Skip the outflow leg when the same
-        -- entry carries an in-scope positive leg, netting the move to zero.
-        -- A transfer to an out-of-scope account keeps its leg: cash really
-        -- left the viewed set.
-        and not (
-          coalesce(d.kind, 'journal') = 'transfer'
-          and exists (
-            select 1 from journal_lines l2
-             where l2.entry_id = l.entry_id and l2.org_id = l.org_id
-               and l2.account_id in (${ids})
-               and l2.amount > 0
-          )
-        )
     `));
     // Same data-start rule as the GL path (see historyWindowDivisor),
     // measured in this strategy's own read scope: bank legs matching its
