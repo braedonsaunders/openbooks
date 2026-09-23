@@ -11,6 +11,7 @@ import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCo
 import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments/rail-cnab240-bb.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
+import { formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 
 /**
@@ -1650,6 +1651,15 @@ export interface PayRunBankFileBuildInput {
   fundsDate: string;
   /** File creation instant. Explicit so a golden test is reproducible. */
   createdAt: Date;
+  /**
+   * The org's IANA business time zone, resolved once by the caller (the
+   * artifact flow reads it from the org's settings). Every date label in the
+   * file is this zone's civil rendering of the inputs: the creation instant
+   * is converted to a civil day once per builder below, and the pay date is
+   * already a civil day. Without an explicit zone the labels would read the
+   * server's local clock — the same run emitting different bytes per host.
+   */
+  timeZone: string;
 }
 
 /** Everything the renderer needs, read from the database exactly once. */
@@ -1699,9 +1709,34 @@ export interface PayRunBankFileResult {
   contentBytes: Buffer | null;
 }
 
-/** Local date (YYYY-MM-DD) → Date at local midnight, matching the AP writers. */
-function localDate(iso: string): Date {
-  return new Date(`${iso}T00:00:00`);
+/**
+ * The creation instant's civil day in the org's zone — the boundary
+ * conversion every rail's date labels derive from. Computed once per builder
+ * call from the explicit input zone, never from the server's local clock.
+ */
+function creationDay(input: PayRunBankFileBuildInput): string {
+  try {
+    return formatInZone(input.createdAt, input.timeZone);
+  } catch {
+    throw new PayrollError(
+      `payroll bank file refuses this run: org time zone "${input.timeZone}" is not a valid IANA time zone`,
+    );
+  }
+}
+
+/**
+ * The creation instant's zoned `YYYY-MM-DDTHH:MM:SS` stamp for rails that
+ * carry wall-clock time (NACHA HHMM, CNAB HHMMSS, SEPA CreDtTm) — same
+ * boundary conversion as creationDay, with the zone's wall time attached.
+ */
+function creationStamp(input: PayRunBankFileBuildInput): string {
+  try {
+    return formatTimestampInZone(input.createdAt, input.timeZone);
+  } catch {
+    throw new PayrollError(
+      `payroll bank file refuses this run: org time zone "${input.timeZone}" is not a valid IANA time zone`,
+    );
+  }
 }
 
 /**
@@ -1863,7 +1898,9 @@ function buildCpa005Payroll(
   if (input.fileCreationNumber == null) {
     throw new PayrollError("CPA-005 requires an allocated file creation number");
   }
-  const fundsDate = localDate(input.fundsDate);
+  // The pay date is already a civil day — passed through, never rebuilt as a
+  // host-local midnight.
+  const fundsDate = input.fundsDate;
   const payments: Cpa005Payment[] = credits.map((credit) => ({
     // Cents via money.ts bigint units — never a float division.
     amountCents: toUnits(credit.amount) / 100n,
@@ -1879,15 +1916,9 @@ function buildCpa005Payroll(
   return buildCpa005File({
     settings,
     fileCreationNumber: input.fileCreationNumber,
-    fileCreationDate: input.createdAt,
+    fileCreationDate: creationDay(input),
     payments,
   });
-}
-
-/** Local datetime `YYYY-MM-DDTHH:mm:ss`, matching the AP SEPA writer's `${today}T00:00:00` shape. */
-function localDateTime(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
 /**
@@ -1909,7 +1940,9 @@ function buildSepaPayroll(
   return buildSepaFile({
     settings,
     messageId: input.messageId,
-    creationDateTime: localDateTime(input.createdAt),
+    // The creation stamp renders in the org's zone — never the server's
+    // local clock, which dated the same instant differently per host.
+    creationDateTime: creationStamp(input),
     executionDate: input.fundsDate,
     payments: credits.map((credit) => {
       if (!credit.iban) {
@@ -1966,8 +1999,9 @@ function buildCemtexPayroll(
   return buildCemtexFile({
     settings,
     // The release date: the day the money must be in employees' accounts —
-    // the run's pay date, the same date the other rails settle on.
-    processingDate: localDate(input.fundsDate),
+    // the run's pay date, the same date the other rails settle on. Already a
+    // civil day; never rebuilt as a host-local midnight.
+    processingDate: input.fundsDate,
     payments,
   });
 }
@@ -2014,9 +2048,12 @@ function buildBacsPayroll(
     // The processing date: the day the money must be in employees' accounts
     // — the run's pay date, the same date the other rails settle on. It must
     // be a valid Bacs processing day from the bank calendar, which is not
-    // transcribed here: an invalid day is the bank's loud rejection.
-    processingDate: localDate(input.fundsDate),
-    creationDate: input.createdAt,
+    // transcribed here: an invalid day is the bank's loud rejection. Already
+    // a civil day; never rebuilt as a host-local midnight.
+    processingDate: input.fundsDate,
+    // The creation instant's civil day in the org's zone — never the
+    // server-local day, which differs per host near midnight.
+    creationDate: creationDay(input),
     volSerial: input.bacsVolSerial,
     fileNumber: input.bacsFileNumber,
     payments,
@@ -2072,8 +2109,9 @@ function buildZenginPayroll(
   return buildZenginFile({
     settings,
     // The transfer date: the day the salary must move — the run's pay date,
-    // the same date the other rails settle on (emitted as MMDD).
-    transferDate: localDate(input.fundsDate),
+    // the same date the other rails settle on (emitted as MMDD). Already a
+    // civil day; never rebuilt as a host-local midnight.
+    transferDate: input.fundsDate,
     payments,
   });
 }
@@ -2121,10 +2159,12 @@ function buildCnab240Payroll(
   return buildCnab240BbFile({
     settings,
     nsa: input.cnabNsa,
-    creationDate: input.createdAt,
+    // The generation stamp in the org's zone — never the server-local clock.
+    creationDateTime: creationStamp(input),
     // The payment date: the day the money must be in employees' accounts —
-    // the run's pay date, the same date the other rails settle on.
-    paymentDate: localDate(input.fundsDate),
+    // the run's pay date, the same date the other rails settle on. Already a
+    // civil day; never rebuilt as a host-local midnight.
+    paymentDate: input.fundsDate,
     payments,
   });
 }
@@ -2149,8 +2189,12 @@ function buildNachaPayroll(
   }));
   return buildNachaFile({
     settings,
-    effectiveDate: localDate(input.fundsDate),
-    creationDate: input.createdAt,
+    // The effective date is the run's pay date — already a civil day, never
+    // rebuilt as a host-local midnight.
+    effectiveDate: input.fundsDate,
+    // The creation stamp in the org's zone — never the server-local clock,
+    // which dated the same instant differently per host.
+    creationDateTime: creationStamp(input),
     fileIdModifier: input.fileIdModifier,
     entries,
   });

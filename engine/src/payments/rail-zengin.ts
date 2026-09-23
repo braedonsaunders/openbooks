@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { parseIsoDate } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -251,8 +252,12 @@ export interface ZenginPayment {
 
 export interface ZenginRun {
   settings: ZenginSettings;
-  /** The salary transfer date (振込指定日): emitted as MMDD. */
-  transferDate: Date;
+  /**
+   * The salary transfer date (振込指定日): emitted as MMDD, as an explicit
+   * civil day (YYYY-MM-DD) in the org's business time zone — a string, never
+   * an instant, so the 取組日 bytes cannot shift with the server's zone.
+   */
+  transferDate: string;
   /** Detail payments — all salary transfers (種別コード 11, 給与振込). */
   payments: ZenginPayment[];
 }
@@ -406,12 +411,20 @@ export function buildZenginFile(run: ZenginRun): string {
     }
     return value;
   };
-  // Transfer date MMDD: the 規定 carries month and day only.
-  const mmdd = (d: Date): string => {
-    if (Number.isNaN(d.getTime())) throw new PaymentError("Zengin transfer date is not a calendar date");
-    const m = d.getMonth() + 1;
-    const day = d.getDate();
-    return `${String(m).padStart(2, "0")}${String(day).padStart(2, "0")}`;
+  // Transfer date MMDD from an already-zoned civil day (YYYY-MM-DD): UTC
+  // accessors on the parsed date read the same parts on every host. Local
+  // getMonth/getDate here would reintroduce server-zone bytes.
+  const mmdd = (iso: string): string => {
+    let month: string;
+    let day: string;
+    try {
+      const parsed = parseIsoDate(iso);
+      month = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+      day = String(parsed.getUTCDate()).padStart(2, "0");
+    } catch {
+      throw new PaymentError(`Zengin transfer date "${iso}" is not a valid YYYY-MM-DD civil day`);
+    }
+    return `${month}${day}`;
   };
 
   const transferDay = mmdd(run.transferDate);

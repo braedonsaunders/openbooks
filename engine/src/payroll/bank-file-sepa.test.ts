@@ -89,7 +89,8 @@ const renderSepa = (inputs = sepaInputs(), originator = SEPA_ORIGINATOR) =>
     // EndToEndId, rather than a hardcoded message id.
     messageId: "PBF-000007",
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /* ------------------------------------------------------------------ */
@@ -314,7 +315,8 @@ test("SEPA requires an allocated message identification — never a default", ()
         format: "sepa",
         originator: SEPA_ORIGINATOR,
         fundsDate: "2026-08-21",
-        createdAt: new Date(2026, 7, 14),
+        createdAt: new Date("2026-08-14T00:00:00Z"),
+        timeZone: "UTC",
       }),
     (error: Error) => error instanceof PayrollError && /allocated message identification/.test(error.message),
   );

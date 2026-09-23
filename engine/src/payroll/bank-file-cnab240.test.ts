@@ -127,7 +127,8 @@ const renderCnab = (inputs = cnabInputs(), originator = CNAB_ORIGINATOR) =>
     cnabNsa: "000007",
     // The payment date backs Segmento A 94–101 (DDMMAAAA).
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /* ------------------------------------------------------------------ */
@@ -296,8 +297,8 @@ test("the manual's Segmento A positions reproduce through the shared builder", (
   const mine = buildCnab240BbFile({
     settings: CNAB_ORIGINATOR.cnab240bb!,
     nsa: "000001",
-    creationDate: new Date(2026, 7, 14, 9, 30, 0),
-    paymentDate: new Date(2026, 7, 21, 0, 0, 0),
+    creationDateTime: "2026-08-14T09:30:00",
+    paymentDate: "2026-08-21",
     payments: [{
       amountCents: 150050n,
       bancoFavorecido: "341",
@@ -348,8 +349,8 @@ test("payroll's CNAB 240 output equals the shared AP builder's output for the sa
   const viaSharedBuilder = buildCnab240BbFile({
     settings: CNAB_ORIGINATOR.cnab240bb!,
     nsa: "000007",
-    creationDate: new Date(2026, 7, 14, 9, 30, 0),
-    paymentDate: new Date(2026, 7, 21, 0, 0, 0),
+    creationDateTime: "2026-08-14T09:30:00",
+    paymentDate: "2026-08-21",
     payments: [
       {
         amountCents: 250000n,
@@ -545,7 +546,8 @@ test("a CNAB profile cannot render another format — the mismatch names cnab240
           originator: CNAB_ORIGINATOR,
           messageId: "PBF-000007",
           fundsDate: "2026-08-21",
-          createdAt: new Date(2026, 7, 14, 9, 30, 0),
+          createdAt: new Date("2026-08-14T09:30:00Z"),
+          timeZone: "UTC",
         },
       ),
     (error: Error) => error instanceof PayrollError && /originates cnab240, not sepa/.test(error.message),
@@ -561,7 +563,8 @@ test("CNAB 240 requires its allocated NSA — never re-derived", () => {
         format: "cnab240",
         originator: CNAB_ORIGINATOR,
         fundsDate: "2026-08-21",
-        createdAt: new Date(2026, 7, 14, 9, 30, 0),
+        createdAt: new Date("2026-08-14T09:30:00Z"),
+        timeZone: "UTC",
       }),
     (error: Error) => error instanceof PayrollError && /allocated NSA/.test(error.message),
   );

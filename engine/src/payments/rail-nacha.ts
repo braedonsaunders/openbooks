@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import { formatInZone, formatTimeInZone } from "../platform/business-date.ts";
+import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
 
 export interface NachaSettings {
@@ -117,17 +117,22 @@ export function nachaFileIdModifierForRunNumber(runNumber: string): string {
 /** Build a NACHA ACH credit file (94-char records, blocked to 10). */
 export function buildNachaFile(opts: {
   settings: NachaSettings;
-  effectiveDate: Date;
-  creationDate: Date;
-  fileIdModifier?: string;
   /**
-   * IANA zone the CREATION stamp renders in (the org's zone, resolved by the
-   * caller). Without it the stamp reads the server's local clock — the same
-   * instant renders different headers on servers in different zones, which
-   * defeats byte-identical re-downloads and the bank's duplicate detection.
-   * The effective date is a zone-free calendar day and always renders as-is.
+   * Batch effective date as an explicit civil day (YYYY-MM-DD) in the org's
+   * business time zone — a string, never an instant, so the batch header
+   * cannot shift with the server's local zone.
    */
-  timeZone?: string;
+  effectiveDate: string;
+  /**
+   * File creation stamp as a zoned timestamp `YYYY-MM-DDTHH:MM:SS` in the
+   * org's business time zone, rendered once by the caller — the same shape
+   * SEPA's creationDateTime already carries. The previous instant-plus-
+   * optional-zone shape rendered the server's local clock whenever the caller
+   * omitted the zone, defeating byte-identical re-downloads and the bank's
+   * duplicate detection.
+   */
+  creationDateTime: string;
+  fileIdModifier?: string;
   entries: NachaEntry[];
 }): string {
   const s = opts.settings;
@@ -142,22 +147,40 @@ export function buildNachaFile(opts: {
   }
   const sec = s.entryClassCode ?? "CCD";
   const odfi8 = s.odfiRouting.slice(0, 8);
-  const yymmdd = (d: Date) => `${String(d.getFullYear() % 100).padStart(2, "0")}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
-
-  // The creation stamp is an instant, so it renders in the caller's explicit
-  // zone; the server's local clock must never leak into bank bytes.
-  let creationYymmdd = yymmdd(opts.creationDate);
-  let creationHhmm = hhmm(opts.creationDate);
-  if (opts.timeZone != null) {
+  // Both date labels arrive already zoned as strings — sliced, never read off
+  // a Date, so no host clock leaks into bank bytes.
+  const yymmdd = (iso: string, what: string): string => {
     try {
-      const zonedDay = formatInZone(opts.creationDate, opts.timeZone);
-      creationYymmdd = zonedDay.slice(2, 4) + zonedDay.slice(5, 7) + zonedDay.slice(8, 10);
-      creationHhmm = formatTimeInZone(opts.creationDate, opts.timeZone);
+      const parsed = parseIsoDate(iso);
+      const p = (n: number) => String(n).padStart(2, "0");
+      return `${p(parsed.getUTCFullYear() % 100)}${p(parsed.getUTCMonth() + 1)}${p(parsed.getUTCDate())}`;
     } catch {
-      throw new PaymentError(`NACHA creation time zone "${opts.timeZone}" is not a valid IANA time zone`);
+      throw new PaymentError(`NACHA ${what} "${iso}" is not a valid YYYY-MM-DD civil day`);
     }
-  }
+  };
+  const stampParts = (stamp: string): { yymmdd: string; hhmm: string } => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(stamp);
+    if (!match) {
+      throw new PaymentError(
+        `NACHA file creation stamp "${stamp}" is not a valid YYYY-MM-DDTHH:MM:SS zoned timestamp`,
+      );
+    }
+    try {
+      parseIsoDate(`${match[1]}-${match[2]}-${match[3]}`);
+    } catch {
+      throw new PaymentError(
+        `NACHA file creation stamp "${stamp}" is not a valid YYYY-MM-DDTHH:MM:SS zoned timestamp`,
+      );
+    }
+    return {
+      yymmdd: `${match[1]!.slice(2)}${match[2]}${match[3]}`,
+      hhmm: `${match[4]}${match[5]}`,
+    };
+  };
+
+  const creation = stampParts(opts.creationDateTime);
+  const creationYymmdd = creation.yymmdd;
+  const creationHhmm = creation.hhmm;
 
   const rows: string[] = [];
   // 1 — File Header
@@ -169,7 +192,7 @@ export function buildNachaFile(opts: {
   // 5 — Batch Header (220 = credits only)
   rows.push(
     "5" + "220" + nachaField(s.companyName, 16) + nachaField("", 20) + nachaField(s.companyId, 10) + sec +
-    nachaField(s.entryDescription ?? "PAYMENT", 10) + nachaField("", 6) + yymmdd(opts.effectiveDate) + nachaField("", 3) +
+    nachaField(s.entryDescription ?? "PAYMENT", 10) + nachaField("", 6) + yymmdd(opts.effectiveDate, "effective date") + nachaField("", 3) +
     "1" + odfi8 + nachaField("0000001", 7, "r", "0"),
   );
   // 6 — Entry Details

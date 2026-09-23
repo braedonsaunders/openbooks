@@ -122,7 +122,7 @@ const renderCpa005 = (inputs = cpa005Inputs(), originator = CPA005_ORIGINATOR) =
     // A record AND in every trace number, rather than a hardcoded first file.
     fileCreationNumber: 7,
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14),
+    createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
   });
 
 /**
@@ -270,7 +270,7 @@ test("a trace-number component that cannot be proven refuses the whole file", ()
       renderPayRunBankFile(cpa005Inputs(), {
         orgId: "org", documentId: "doc", format: "cpa005",
         originator: CPA005_ORIGINATOR, fundsDate: "2026-08-21",
-        createdAt: new Date(2026, 7, 14),
+        createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
       }),
     /allocated file creation number/,
   );
@@ -330,9 +330,11 @@ const renderNacha = (inputs = nachaInputs(), originator = NACHA_ORIGINATOR) =>
     originator,
     fileIdModifier: "A",
     fundsDate: "2026-08-21",
-    // Local-time construction keeps the golden independent of the test box's
-    // timezone: the writer reads local Y/M/D and H:M.
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    // The instant is an explicit UTC instant and the zone is explicit: the
+    // writer renders the org zone's civil labels, so the golden holds on a
+    // test box in any host time zone.
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /**
@@ -474,7 +476,7 @@ test("a profile that originates one format cannot render the other", () => {
         {
           orgId: "org", documentId: "doc", format: "cpa005",
           originator: NACHA_ORIGINATOR,
-          fileCreationNumber: 1, fundsDate: "2026-08-21", createdAt: new Date(2026, 7, 14),
+          fileCreationNumber: 1, fundsDate: "2026-08-21", createdAt: new Date("2026-08-14T00:00:00Z"), timeZone: "UTC",
         },
       ),
     /originates nacha, not cpa005/,

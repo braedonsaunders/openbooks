@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { parseIsoDate } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -230,10 +231,19 @@ export interface Cnab240BbRun {
    * the caller from its number sequence — stored, never re-derived.
    */
   nsa: string;
-  /** File generation instant (header data/hora de geração): explicit so goldens are reproducible. */
-  creationDate: Date;
-  /** The payment date (Segmento A data do pagamento): the run's pay date. */
-  paymentDate: Date;
+  /**
+   * File generation stamp (header data/hora de geração) as a zoned timestamp
+   * `YYYY-MM-DDTHH:MM:SS` in the org's business time zone, rendered once by
+   * the caller — the same shape SEPA's creationDateTime already carries.
+   * A Date instant plus toTimeString() here rendered the server's local clock,
+   * so the same run emitted different header bytes per host zone.
+   */
+  creationDateTime: string;
+  /**
+   * The payment date (Segmento A data do pagamento): the run's pay date, as
+   * an explicit civil day (YYYY-MM-DD) in the org's business time zone.
+   */
+  paymentDate: string;
   /** Detail payments — split by destination into forma-01 / forma-41 lotes below. */
   payments: Cnab240BbPayment[];
 }
@@ -370,9 +380,41 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     if (value <= 0n) throw new PaymentError("payment amounts must be positive");
     return digits(value, len, what);
   };
-  const ddmmaaaa = (d: Date): string => {
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${p(d.getDate())}${p(d.getMonth() + 1)}${d.getFullYear()}`;
+  // DDMMYYYY from an already-zoned civil day (YYYY-MM-DD): UTC accessors on
+  // the parsed date read the same parts on every host. Local
+  // getDate/getMonth/getFullYear here would reintroduce server-zone bytes.
+  const ddmmaaaa = (iso: string, what: string): string => {
+    let day: string;
+    let month: string;
+    let year: number;
+    try {
+      const parsed = parseIsoDate(iso);
+      const p = (n: number) => String(n).padStart(2, "0");
+      day = p(parsed.getUTCDate());
+      month = p(parsed.getUTCMonth() + 1);
+      year = parsed.getUTCFullYear();
+    } catch {
+      throw new PaymentError(`CNAB 240 ${what} "${iso}" is not a valid YYYY-MM-DD civil day`);
+    }
+    return `${day}${month}${year}`;
+  };
+  // HHMMSS from an already-zoned `YYYY-MM-DDTHH:MM:SS` stamp — sliced, never
+  // read off a Date, so no host clock leaks into the header.
+  const hhmmss = (stamp: string): string => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(stamp);
+    if (!match) {
+      throw new PaymentError(
+        `CNAB 240 file generation stamp "${stamp}" is not a valid YYYY-MM-DDTHH:MM:SS zoned timestamp`,
+      );
+    }
+    try {
+      parseIsoDate(`${match[1]}-${match[2]}-${match[3]}`);
+    } catch {
+      throw new PaymentError(
+        `CNAB 240 file generation stamp "${stamp}" is not a valid YYYY-MM-DDTHH:MM:SS zoned timestamp`,
+      );
+    }
+    return `${match[4]}${match[5]}${match[6]}`;
   };
   const agencia = (value: string, what: string): string => {
     const normal = normalizeAgencia(value);
@@ -422,8 +464,8 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
     text("BANCO DO BRASIL", 30, "bank name") + // 103–132 nome do banco
     " ".repeat(10) + // 133–142 uso exclusivo FEBRABAN
     "1" + // 143 remessa
-    ddmmaaaa(run.creationDate) + // 144–151 data de geração
-    run.creationDate.toTimeString().slice(0, 8).replace(/:/g, "") + // 152–157 hora de geração HHMMSS
+    ddmmaaaa(run.creationDateTime.slice(0, 10), "file generation date") + // 144–151 data de geração
+    hhmmss(run.creationDateTime) + // 152–157 hora de geração HHMMSS
     run.nsa + // 158–163 NSA
     digits(s.versaoLayoutArquivo, 3, "arquivo layout version") + // 164–166 versão do layout
     "00000" + // 167–171 densidade
@@ -524,7 +566,7 @@ export function buildCnab240BbFile(run: Cnab240BbRun): string {
         (p.dac == null || p.dac === "" ? " " : dv(p.dac, "favorecido DAC")) + // 43 DAC: blank for BB accounts (3); second DV carried verbatim for TED
         text(p.favorecidoNome, 30, "favorecido name") + // 44–73 nome do favorecido
         text(p.seuNumero, 20, "seu número", true) + // 74–93 seu número (G064): blank acceptable per (2)
-        ddmmaaaa(run.paymentDate) + // 94–101 data do pagamento
+        ddmmaaaa(run.paymentDate, "payment date") + // 94–101 data do pagamento
         "BRL" + // 102–104 tipo da moeda: (2) kills the SISPAG-'009' reading for this variant
         "0".repeat(15) + // 105–119 quantidade da moeda: zeros for reais (1)(2)(3)
         centavos(p.amountCents, 15, "payment amount") + // 120–134 valor (13+2)

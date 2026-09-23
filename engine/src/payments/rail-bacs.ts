@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { addCalendarDays, parseIsoDate } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -121,10 +122,20 @@ export interface BacsPayment {
 
 export interface BacsRun {
   settings: BacsSettings;
-  /** The Bacs processing date (the run's pay date): UHL1 positions 5–10. */
-  processingDate: Date;
-  /** File creation instant (HDR1 creation date): explicit so goldens are reproducible. */
-  creationDate: Date;
+  /**
+   * The Bacs processing date (the run's pay date): UHL1 positions 5–10, as an
+   * explicit civil day (YYYY-MM-DD) in the org's business time zone. A string,
+   * never an instant: reading getFullYear/getMonth/getDate off a Date renders
+   * the server's local day, so the same run emits different creation-day
+   * bytes on servers in different zones.
+   */
+  processingDate: string;
+  /**
+   * File creation day (HDR1 creation date): the creation instant's civil day
+   * in the org's business time zone, converted once by the caller — explicit
+   * so goldens are reproducible and byte-identical across host time zones.
+   */
+  creationDate: string;
   /**
    * VOL1 serial, 6 chars, pre-allocated by the caller from its number
    * sequence — Bacs validates serials against duplicates (held 3 months), so
@@ -252,25 +263,39 @@ export function buildBacsFile(run: BacsRun): string {
     return normal;
   };
   // Bacs date: bYYDDD — blank + 2-digit year + Julian day ((1) §4.9).
-  const yyddd = (d: Date): string => {
-    const start = Date.UTC(d.getFullYear(), 0, 1);
+  // The input is an already-zoned civil day (YYYY-MM-DD): UTC accessors on
+  // the parsed date read the same calendar parts on every host. A local
+  // getFullYear/getMonth/getDate here would reintroduce the server-zone
+  // dependence this interface was changed to remove.
+  const yyddd = (iso: string, what: string): string => {
+    let year: number;
+    let month: number;
+    let dayOfMonth: number;
+    try {
+      const parsed = parseIsoDate(iso);
+      year = parsed.getUTCFullYear();
+      month = parsed.getUTCMonth() + 1;
+      dayOfMonth = parsed.getUTCDate();
+    } catch {
+      throw new PaymentError(`Bacs ${what} "${iso}" is not a valid YYYY-MM-DD civil day`);
+    }
+    const start = Date.UTC(year, 0, 1);
     const day =
-      Math.floor((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - start) / 86_400_000) + 1;
-    return ` ${String(d.getFullYear() % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
+      Math.floor((Date.UTC(year, month - 1, dayOfMonth) - start) / 86_400_000) + 1;
+    return ` ${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
   };
 
   const originSort = sort(s.originatingSortCode, "originating sort code");
   const originAccount = account(s.originatingAccount, "originating account");
   const userName = text(s.serviceUserName, 18, "service user name");
-  const creation = yyddd(run.creationDate);
-  const processing = yyddd(run.processingDate);
+  const creation = yyddd(run.creationDate, "creation date");
+  const processing = yyddd(run.processingDate, "processing date");
   // Expiry: "the earliest date at which [the] file may be overwritten" ((2)
   // HDR1 field 10) must be LATER than the processing day; the exact value is
-  // free, so processing + 7 days, deterministically. A regeneration carries a
-  // new serial and new dates, never a re-derived identity.
-  const expiryDate = new Date(run.processingDate);
-  expiryDate.setDate(expiryDate.getDate() + 7);
-  const expiry = yyddd(expiryDate);
+  // free, so processing + 7 days, deterministically, on the civil-day grid
+  // (addCalendarDays, never setDate on a host-local midnight). A regeneration
+  // carries a new serial and new dates, never a re-derived identity.
+  const expiry = yyddd(addCalendarDays(run.processingDate, 7), "processing date");
 
   // -- VOL1: volume header (80) -------------------------------------------
   // (2): VOL1 | 1 | serial 5–10 | blank 11 | blanks 12–31 | blanks 32–37

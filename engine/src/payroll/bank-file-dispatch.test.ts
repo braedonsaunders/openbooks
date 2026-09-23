@@ -144,7 +144,7 @@ const originatorFor = (
     ...settings,
   }) as PayrollOriginatorConfig;
 
-const CREATED_AT = new Date(2026, 7, 14, 9, 30, 0);
+const CREATED_AT = new Date("2026-08-14T09:30:00Z");
 
 /* ------------------------------------------------------------------ */
 /* Each declared format renders through its OWN builder                */
@@ -156,7 +156,7 @@ test("cpa005 renders 1464-character CPA records through the CPA builder", () => 
     {
       orgId: "org", documentId: "doc", format: "cpa005",
       originator: originatorFor("cpa005", { cpa005: CPA005_SETTINGS }),
-      fileCreationNumber: 7, fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fileCreationNumber: 7, fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -173,7 +173,7 @@ test("nacha renders 94-character ACH records through the NACHA builder", () => {
     {
       orgId: "org", documentId: "doc", format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
-      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -193,7 +193,7 @@ test("sepa renders pain.001 XML through the SEPA builder", () => {
     {
       orgId: "org", documentId: "doc", format: "sepa",
       originator: originatorFor("sepa", { sepa: SEPA_SETTINGS }),
-      messageId: "PBF-000007", fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      messageId: "PBF-000007", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   assert.match(result.content, /pain\.001/);
@@ -210,7 +210,7 @@ test("cemtex renders 120-character records through the Cemtex builder", () => {
     {
       orgId: "org", documentId: "doc", format: "cemtex",
       originator: originatorFor("cemtex", { cemtex: CEMTEX_SETTINGS }),
-      fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -231,7 +231,7 @@ test("bacs renders Standard 18 records through the Bacs builder", () => {
       orgId: "org", documentId: "doc", format: "bacs",
       originator: originatorFor("bacs", { bacs: BACS_SETTINGS }),
       bacsVolSerial: "000007", bacsFileNumber: "007",
-      fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -254,7 +254,7 @@ test("zengin renders 120-character 給与振込 records through the Zengin build
     {
       orgId: "org", documentId: "doc", format: "zengin",
       originator: originatorFor("zengin", { zengin: ZENGIN_SETTINGS }),
-      fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -284,7 +284,7 @@ test("cnab240 renders 240-character records through the CNAB 240 BB builder", ()
     {
       orgId: "org", documentId: "doc", format: "cnab240",
       originator: originatorFor("cnab240", { cnab240bb: CNAB240_SETTINGS }),
-      cnabNsa: "000007", fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      cnabNsa: "000007", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   const records = result.content.split(/\r?\n/).filter((line) => line.length > 0);
@@ -376,7 +376,7 @@ test("each format's arm runs its own builder, proved by cross-wired originators"
         renderPayRunBankFile(inputs, {
           orgId: "org", documentId: "doc", format, originator,
           fileCreationNumber: 7, fileIdModifier: "A", messageId: "PBF-000007",
-          fundsDate: "2026-08-21", createdAt: CREATED_AT,
+          fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
         }),
       message,
       `${format} did not reach its own builder`,
@@ -419,7 +419,7 @@ test("render refuses an unknown format by its own name, never as NACHA", () => {
     () =>
       renderPayRunBankFile({ ...SINGLE, format }, {
         orgId: "org", documentId: "doc", format, originator,
-        fundsDate: "2026-08-21", createdAt: CREATED_AT,
+        fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
       }),
     (error: unknown) => {
       const message = (error as Error).message;
@@ -436,7 +436,7 @@ test("the trailer reader refuses an unknown format by name, even fed well-formed
     {
       orgId: "org", documentId: "doc", format: "nacha",
       originator: originatorFor("nacha", { nacha: NACHA_SETTINGS }),
-      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT,
+      fileIdModifier: "A", fundsDate: "2026-08-21", createdAt: CREATED_AT, timeZone: "UTC",
     },
   );
   // Sanity: those bytes really are a readable NACHA file-control trailer.

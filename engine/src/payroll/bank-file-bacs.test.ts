@@ -111,7 +111,8 @@ const renderBacs = (inputs = bacsInputs(), originator = BACS_ORIGINATOR) =>
     bacsFileNumber: "007",
     // The processing date: the run's pay date backs the UHL1 bYYDDD date.
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /* ------------------------------------------------------------------ */
@@ -243,8 +244,8 @@ test("the independent worked example matches at every data offset", () => {
       originatingAccount: "11223344",
       serviceUserName: "ORIGINATOR",
     },
-    processingDate: new Date("2026-08-21T00:00:00"),
-    creationDate: new Date(2026, 7, 14, 9, 30, 0),
+    processingDate: "2026-08-21",
+    creationDate: "2026-08-14",
     volSerial: "000001",
     fileNumber: "001",
     payments: [{
@@ -277,8 +278,8 @@ test("payroll's Bacs output equals the shared AP builder's output for the same i
   // forks its own Standard 18 writer, this diverges.
   const viaSharedBuilder = buildBacsFile({
     settings: BACS_ORIGINATOR.bacs!,
-    processingDate: new Date("2026-08-21T00:00:00"),
-    creationDate: new Date(2026, 7, 14, 9, 30, 0),
+    processingDate: "2026-08-21",
+    creationDate: "2026-08-14",
     volSerial: "000007",
     fileNumber: "007",
     payments: [
@@ -377,7 +378,8 @@ test("a Bacs profile cannot render another format — the mismatch names bacs", 
           originator: BACS_ORIGINATOR,
           messageId: "PBF-000007",
           fundsDate: "2026-08-21",
-          createdAt: new Date(2026, 7, 14, 9, 30, 0),
+          createdAt: new Date("2026-08-14T09:30:00Z"),
+          timeZone: "UTC",
         },
       ),
     (error: Error) => error instanceof PayrollError && /originates bacs, not sepa/.test(error.message),
@@ -391,7 +393,8 @@ test("Bacs requires its allocated serial and file number — never re-derived", 
     format: "bacs" as const,
     originator: BACS_ORIGINATOR,
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   };
   assert.throws(
     () => renderPayRunBankFile(bacsInputs(), { ...base, bacsFileNumber: "007" }),

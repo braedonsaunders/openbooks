@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { parseIsoDate } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -134,8 +135,13 @@ export interface CemtexPayment {
 
 export interface CemtexRun {
   settings: CemtexSettings;
-  /** Date the transactions are released to all financial institutions. */
-  processingDate: Date;
+  /**
+   * Date the transactions are released to all financial institutions, as an
+   * explicit civil day (YYYY-MM-DD) in the org's business time zone — a
+   * string, never an instant, so the release-date bytes cannot shift with
+   * the server's local zone.
+   */
+  processingDate: string;
   /** Detail payments — all credits (transaction code 53, Pay). */
   payments: CemtexPayment[];
 }
@@ -221,9 +227,23 @@ export function buildCemtexFile(run: CemtexRun): string {
     }
     return normal.padStart(9, " ");
   };
-  const ddmmyy = (d: Date): string => {
-    const p = (n: number) => String(n).padStart(2, "0");
-    return `${p(d.getDate())}${p(d.getMonth() + 1)}${p(d.getFullYear() % 100)}`;
+  // Release date DDMMYY from an already-zoned civil day (YYYY-MM-DD): UTC
+  // accessors on the parsed date read the same parts on every host. Local
+  // getDate/getMonth/getFullYear here would reintroduce server-zone bytes.
+  const ddmmyy = (iso: string): string => {
+    let day: string;
+    let month: string;
+    let year: string;
+    try {
+      const parsed = parseIsoDate(iso);
+      const p = (n: number) => String(n).padStart(2, "0");
+      day = p(parsed.getUTCDate());
+      month = p(parsed.getUTCMonth() + 1);
+      year = p(parsed.getUTCFullYear() % 100);
+    } catch {
+      throw new PaymentError(`Cemtex release date "${iso}" is not a valid YYYY-MM-DD civil day`);
+    }
+    return `${day}${month}${year}`;
   };
 
   // -- 0: descriptive ---------------------------------------------------

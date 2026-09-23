@@ -125,7 +125,8 @@ const renderZengin = (inputs = zenginInputs(), originator = ZENGIN_ORIGINATOR) =
     originator,
     // The transfer date: the run's pay date backs the header 取組日 MMDD.
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /* ------------------------------------------------------------------ */
@@ -226,7 +227,7 @@ test("the golden header transfer date is the run's pay date as MMDD", () => {
 test("the published byte positions match at every data offset", () => {
   const file = buildZenginFile({
     settings: ZENGIN_ORIGINATOR.zengin!,
-    transferDate: new Date("2026-12-10T00:00:00"),
+    transferDate: "2026-12-10",
     payments: [{
       amountYen: 380233n,
       bankCode: "0005",
@@ -333,7 +334,7 @@ test("payroll's Zengin output equals the shared AP builder's output for the same
   // forks its own Zengin writer, this diverges.
   const viaSharedBuilder = buildZenginFile({
     settings: ZENGIN_ORIGINATOR.zengin!,
-    transferDate: new Date("2026-08-21T00:00:00"),
+    transferDate: "2026-08-21",
     payments: [
       {
         amountYen: 250000n,
@@ -484,7 +485,8 @@ test("a Zengin profile cannot render another format — the mismatch names zengi
           originator: ZENGIN_ORIGINATOR,
           messageId: "PBF-000007",
           fundsDate: "2026-08-21",
-          createdAt: new Date(2026, 7, 14, 9, 30, 0),
+          createdAt: new Date("2026-08-14T09:30:00Z"),
+          timeZone: "UTC",
         },
       ),
     (error: Error) => error instanceof PayrollError && /originates zengin, not sepa/.test(error.message),
@@ -534,7 +536,7 @@ test("a run past the 200,000-record transmission cap is refused, never silently 
     () =>
       buildZenginFile({
         settings: ZENGIN_ORIGINATOR.zengin!,
-        transferDate: new Date("2026-08-21T00:00:00"),
+        transferDate: "2026-08-21",
         payments,
       }),
     (error: Error) => error instanceof PaymentError && /at most 200,000/.test(error.message),

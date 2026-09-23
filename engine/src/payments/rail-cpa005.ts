@@ -1,12 +1,16 @@
 import { PaymentError } from "./payment-errors.ts";
-import { formatInZone } from "../platform/business-date.ts";
+import { parseIsoDate } from "../platform/business-date.ts";
 import { type EftSettings } from "./rail-settings.ts";
 
 export interface Cpa005Payment {
   /** Amount in cents (positive integer, max 10 digits). */
   amountCents: bigint;
-  /** Date funds are to be made available (payment date). */
-  fundsDate: Date;
+  /**
+   * Date funds are to be made available (payment date), as an explicit civil
+   * day (YYYY-MM-DD) in the org's business time zone — a string, never an
+   * instant, so the funds-available bytes cannot shift with the server zone.
+   */
+  fundsDate: string;
   /** Payee routing: 3-digit institution + 5-digit transit. */
   institution: string;
   transit: string;
@@ -22,13 +26,13 @@ export interface Cpa005Run {
   settings: EftSettings;
   /** 1–9999, unique per file transmitted to the institution. */
   fileCreationNumber: number;
-  fileCreationDate: Date;
   /**
-   * IANA zone the A-record creation date renders in (the org's zone,
-   * resolved by the caller). Without it the stamp reads the server's local
-   * clock, so the same instant renders different bytes per server zone.
+   * A-record creation day as an explicit civil day (YYYY-MM-DD): the creation
+   * instant's civil day in the org's business time zone, converted once by
+   * the caller. The previous instant-plus-optional-zone shape rendered the
+   * server's local day whenever the caller omitted the zone.
    */
-  timeZone?: string;
+  fileCreationDate: string;
   payments: Cpa005Payment[];
 }
 
@@ -48,9 +52,19 @@ function num(value: bigint | number, len: number): string {
   return s.padStart(len, "0");
 }
 
-/** CPA date format: 0YYDDD (leading zero, 2-digit year, julian day of year). */
-function julian(d: Date): string {
-  return julianFromParts(d.getFullYear(), d.getMonth() + 1, d.getDate());
+/**
+ * CPA date format: 0YYDDD (leading zero, 2-digit year, julian day of year)
+ * from an already-zoned civil day (YYYY-MM-DD). UTC accessors on the parsed
+ * date read the same parts on every host; local getFullYear/getMonth/getDate
+ * here would reintroduce server-zone bytes.
+ */
+function julian(iso: string, what: string): string {
+  try {
+    const parsed = parseIsoDate(iso);
+    return julianFromParts(parsed.getUTCFullYear(), parsed.getUTCMonth() + 1, parsed.getUTCDate());
+  } catch {
+    throw new PaymentError(`CPA-005 ${what} "${iso}" is not a valid YYYY-MM-DD civil day`);
+  }
 }
 
 /** 0YYDDD from already-zoned calendar parts — no clock reads, no zone. */
@@ -122,17 +136,9 @@ export function buildCpa005File(run: Cpa005Run): string {
   const originatorId = alpha(s.originatorId, 10);
   const fileCreationNo = num(run.fileCreationNumber, 4);
   const originControl = `${originatorId}${fileCreationNo}`; // positions 11–24
-  // The creation date is an instant: render it in the caller's explicit zone
-  // so the same file renders byte-identical bytes on any server.
-  let creationJulian = julian(run.fileCreationDate);
-  if (run.timeZone != null) {
-    try {
-      const [year, month, dayOfMonth] = formatInZone(run.fileCreationDate, run.timeZone).split("-").map(Number);
-      creationJulian = julianFromParts(year!, month!, dayOfMonth!);
-    } catch {
-      throw new PaymentError(`CPA-005 creation time zone "${run.timeZone}" is not a valid IANA time zone`);
-    }
-  }
+  // The creation day arrives already zoned (a civil-day string from the
+  // caller), so the A record renders byte-identical bytes on any server.
+  const creationJulian = julian(run.fileCreationDate, "file creation date");
   const txnType = /^\d{3}$/.test(s.transactionCode ?? "") ? s.transactionCode! : "460";
 
   let recordCount = 0;
@@ -164,7 +170,7 @@ export function buildCpa005File(run: Cpa005Run): string {
     return (
       txnType + // transaction type (3)
       num(p.amountCents, 10) + // amount in cents (10)
-      julian(p.fundsDate) + // date funds to be available (6)
+      julian(p.fundsDate, "funds date") + // date funds to be available (6)
       institutionalId(p.institution, p.transit) + // payee institutional id (9)
       alpha(p.accountNumber, 12) + // payee account number (12)
       itemTraceNumber({
