@@ -236,6 +236,9 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // 0291: a scheduled SFTP import binds to the bank account number its
   // statements carry — a real account identifier, never copied verbatim.
   { tableName: "sftp_import_schedules", columnName: "expected_external_account_id", transform: "redact" },
+  // 0292: the executed lien waiver's frozen print image carries every
+  // name, figure and signature line exactly as signed.
+  { tableName: "lien_waivers", columnName: "executed_snapshot", transform: "null_out" },
   // HR-17 begin: 1:1 agenda prose, feedback bodies, calibration
   // justifications and talent notes assess named people in free text —
   // same redact as review answers above.
