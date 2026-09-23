@@ -294,3 +294,40 @@ test("findings print with code, severity, subject, detail, and remedy", () => {
     assert.ok(text.includes(part), part);
   }
 });
+
+test("a preflight the read role may not read falls back to the connecting role, read-only", async () => {
+  // An install on an OLDER release has never granted the read role the
+  // tables a newer preflight inspects. Those grants converge only when the
+  // new bootstrap runs, which is exactly what the check runs before. The
+  // denial must not refuse the check as "drift".
+  const denied = Object.assign(new Error("permission denied for table sftp_import_schedules"), { code: "42501" });
+  let attempts = 0;
+  const { client, calls } = fakeClient((text) => {
+    if (text === "select 1") {
+      attempts += 1;
+      if (attempts === 1) throw denied;
+    }
+    return { rows: [] };
+  });
+  const result = await evaluatePreflight(client, "generated/0291_x.sql", "0291", "select 1", {
+    statementTimeoutMs: 60_000,
+    leastPrivilegeRole: "openbooks_read",
+  });
+  assert.deepEqual(result, { status: "ready", findings: [], leastPrivilege: false });
+  const texts = calls.map((call) => call.text);
+  assert.ok(texts.indexOf("rollback to savepoint preflight_least_privilege") > texts.indexOf("set local role openbooks_read"));
+  assert.equal(attempts, 2);
+  assert.equal(texts.at(-1), "rollback");
+});
+
+test("a permission denial for the connecting role itself is not swallowed", async () => {
+  const denied = Object.assign(new Error("permission denied for table payroll_secrets"), { code: "42501" });
+  const { client } = fakeClient((text) => {
+    if (text === "select 1") throw denied;
+    return { rows: [] };
+  });
+  await assert.rejects(
+    () => evaluatePreflight(client, "generated/0291_x.sql", "0291", "select 1", { statementTimeoutMs: 60_000 }),
+    /permission denied for table payroll_secrets/,
+  );
+});

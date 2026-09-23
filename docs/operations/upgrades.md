@@ -165,8 +165,14 @@ to five minutes via `OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS`, then
 `ROLLBACK`), and prints every finding with its code, severity, subject,
 detail, and remedy. It creates nothing, takes no advisory lock, and performs
 no role, seed, or RLS work, so it never disturbs a running app. Every
-statement is a `SELECT`, so it also runs under the SELECT-only
-`openbooks_read` role. It exits 1 on any `refuse` finding and 0 otherwise.
+statement is a `SELECT`, so it runs each preflight as the SELECT-only
+`openbooks_read` role where it can. An install still on an older release
+has not yet granted that role every table a newer preflight inspects (grants
+converge during the upgrade itself). A preflight denied as `openbooks_read`
+is re-run as the connecting role, still read-only and rolled back, and the
+report says least privilege was not proven. It exits 1 on any `refuse`
+finding and 0 otherwise. With `--json` it always prints one JSON result,
+including `{"error": ...}` when the check itself cannot run.
 A preflight that needs an object an earlier *pending* migration creates is
 reported as "evaluated at apply time" and runs immediately before its own
 migration during the upgrade.
