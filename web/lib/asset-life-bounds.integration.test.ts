@@ -45,7 +45,10 @@ for(const value of [0,-1,1.5,1_000_000_000,true,[12],{},'Infinity','1e9',1,'12',
    const response=await PATCH(new Request(`http://audit.local/api/assets/${assetId}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({lifeMonths:value,expectedUpdatedAt:await revision(assetId)})}),{params:Promise.resolve({id:assetId})});
    const valid=value===1||value==='12'||value===12000||value===null;
    assert.equal(response.status,valid?200:422,JSON.stringify(await response.json()));
-   assert.equal(state.builds,valid?1:0,'invalid input never starts schedule calculation');
+   // Drafts own no schedule until placed in service, so the route builds none
+   // even for valid input: the valid/invalid split is status and persistence,
+   // not whether a build started.
+   assert.equal(state.builds,0,'draft edits never start schedule calculation');
    if(!valid)assert.deepEqual(await snapshot(),before,'refusal leaves configuration and audit unchanged');
    else assert.equal((await db.execute(sql`select useful_life_months from fixed_assets where id=${assetId}`)).rows[0]!.useful_life_months,value===null?null:Number(value));
   }finally{state.gate=null;await dropScratchOrg(org.orgId)}
