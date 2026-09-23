@@ -64,6 +64,53 @@ test("strict certification binds fresh artifacts to one complete source populati
   assert.match(source, /hash changed after source capture/);
 });
 
+test("every consumed artifact is hash-bound through one shared list", () => {
+  for (const key of [
+    "sourceProjects",
+    "sourceInvoices",
+    "sourceInvoiceLines",
+    "sourceProjectGl",
+    "sourceProjectFinancials",
+    "fieldTicketHeaders",
+    "fieldTicketCrew",
+  ]) {
+    assert.match(
+      source,
+      new RegExp(`"${key}"`),
+      `${key} must belong to the single consumed-artifact list`,
+    );
+  }
+  assert.match(source, /const CONSUMED_SOURCE_ARTIFACT_KEYS = \[/);
+  assert.match(
+    source,
+    /for \(const \{ key, path, sha256 \} of consumed\)/,
+    "coherence verifies the same consumed list the comparison reads",
+  );
+  assert.match(
+    source,
+    /has no capture hash; re-run with --refresh-source/,
+    "an artifact with no capture hash refuses by name",
+  );
+  assert.match(
+    source,
+    /was captured at .* but is now missing/,
+    "a captured file that vanished reads as tampering, not absence",
+  );
+  assert.match(
+    source,
+    /All \$\{verifiedArtifacts\.length\} consumed source artifacts/,
+    "the hash-bound claim derives from the verified list",
+  );
+});
+
+test("the capture manifest records every consumed artifact", () => {
+  assert.match(
+    source,
+    /for \(const \{ key, path, sha256 \} of consumedArtifactFiles\(paths\)\)/,
+    "refresh hashes the shared consumed list, not a hand-kept subset",
+  );
+});
+
 test("invoice parity covers business identity and settlement state, not only totals", () => {
   for (const field of [
     "document_number",
