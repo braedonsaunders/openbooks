@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { SUPPORTED_CURRENCIES } from "../fx/currencies.ts";
 import { db } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import type { NetSuiteCreds } from "../connectors/netsuite.ts";
@@ -245,6 +246,22 @@ export function sourceType(source: string): SourceTypeManifest | undefined {
   return SOURCE_TYPES.find((s) => s.source === source);
 }
 
+const ISO_4217_CODES: ReadonlySet<string> = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
+
+/**
+ * The single base-currency validator for connection configs. The save path
+ * (validateSourceConfig) and the build path (buildSource) share it, so a
+ * stored value the currency picker could never write is refused in both
+ * places instead of silently defaulting downstream. Returns "missing" when
+ * no code was supplied, "invalid" when it is not a usable ISO 4217 code, and
+ * null when it is one (compared in registry form: trimmed, uppercase).
+ */
+export function refusedConnectionBaseCurrency(value: unknown): "missing" | "invalid" | null {
+  const code = typeof value === "string" ? value.trim().toUpperCase() : "";
+  if (!code) return "missing";
+  return ISO_4217_CODES.has(code) ? null : "invalid";
+}
+
 export function validateSourceConfig(
   manifest: SourceTypeManifest,
   config: Record<string, unknown>,
@@ -254,6 +271,12 @@ export function validateSourceConfig(
     const value = String(config[field.key] ?? "").trim();
     if (field.required && !value) return `${field.label} is required`;
     if (value && field.kind === "select" && field.options && !field.options.some((option) => option.value === value)) {
+      return `${field.label} has an invalid value`;
+    }
+    // Currency pickers carry optionsSource instead of static options, so the
+    // check above never applied to them: a legacy or corrupt stored code
+    // bypassed save-time validation. They share the build path's validator.
+    if (value && field.optionsSource === "currencies" && refusedConnectionBaseCurrency(value) === "invalid") {
       return `${field.label} has an invalid value`;
     }
   }
@@ -356,11 +379,21 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
   if (conn.source === "qbd") {
     const cfg = conn.config as { historyStartDate?: string; baseCurrency?: string };
     if (!cfg.historyStartDate) throw new Error("QuickBooks Desktop connection needs a history start date");
+    // A legacy or corrupt stored connection without a base currency bypasses
+    // save-time validation: refuse by name before any capture or import
+    // instead of importing a non-USD company as USD.
+    const baseState = refusedConnectionBaseCurrency(cfg.baseCurrency);
+    if (baseState === "missing") {
+      throw new Error("QuickBooks Desktop connection needs its base currency — set it on the connection before syncing");
+    }
+    if (baseState === "invalid") {
+      throw new Error(`QuickBooks Desktop connection has an invalid base currency ${JSON.stringify(String(cfg.baseCurrency))} — set it on the connection before syncing`);
+    }
     return new QbdSource({
       orgId: conn.orgId,
       connectionId: conn.id,
       historyStartDate: String(cfg.historyStartDate),
-      baseCurrency: cfg.baseCurrency ? String(cfg.baseCurrency) : undefined,
+      baseCurrency: String(cfg.baseCurrency).trim().toUpperCase(),
     });
   }
   if (conn.source === "netsuite") {

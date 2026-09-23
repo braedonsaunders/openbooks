@@ -13,7 +13,7 @@ export interface QbdSourceConfig {
   orgId: string;
   connectionId: string;
   historyStartDate: string;
-  baseCurrency?: string;
+  baseCurrency: string;
 }
 
 const ACCOUNT_TYPE: Record<string, string> = {
@@ -79,7 +79,9 @@ export class QbdSource implements MigrationSource {
   private capturedThrough: Date | null = null;
 
   constructor(private readonly config: QbdSourceConfig) {
-    this.baseCurrency = config.baseCurrency ?? "USD";
+    // No default: the constructor must never invent a currency. buildSource
+    // refuses a missing or invalid base currency before constructing.
+    this.baseCurrency = config.baseCurrency;
   }
 
   async ping(): Promise<{ ok: boolean; detail?: string }> {
