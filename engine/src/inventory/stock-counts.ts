@@ -5,9 +5,9 @@ import { add, cmp, isZero, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
-import { uuidArray } from "../organization/subsidiaries.ts";
-import { assertInventoryFeature } from "./profile-policy.ts";
-import { InventoryError, type Runner } from "./contracts.ts";
+import { loadSubsidiaryContext, uuidArray, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import { assertInventoryFeature, assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
+import { InventoryError, InventoryOwnershipError, type Runner } from "./contracts.ts";
 import { getOnHandWith, lockInventoryPosition, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
 
 /**
@@ -260,6 +260,52 @@ async function assertPeriodCovers(
   return periodId;
 }
 
+/**
+ * The warehouse side of count validity: every warehouse on the count must be
+ * ACTIVE and admit the count's legal entity — the same gate every movement
+ * passes through `assertStockLocationAdmitsSubsidiary`. Without it a draft
+ * saves against a dead or foreign warehouse and only dies later inside
+ * adjustInventory, or a zero-variance count posts against one silently.
+ * The row is locked FOR SHARE and held to the caller's commit, so a
+ * deactivation or restriction edit racing create/submit/post serializes
+ * against the validation instead of slipping past it.
+ */
+async function assertCountWarehouses(
+  tx: Runner,
+  orgId: string,
+  ctx: SubsidiaryContext,
+  subsidiaryId: string,
+  stockLocationIds: string[],
+): Promise<void> {
+  for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
+    const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
+      select code, is_active
+        from stock_locations
+       where org_id = ${orgId} and id = ${stockLocationId}
+       for share`)).rows[0];
+    if (!row) {
+      throw new InventoryError(
+        "count line stock location not found in this organization — choose an active stock location",
+      );
+    }
+    if (!row.is_active) {
+      throw new InventoryError(
+        `stock location "${row.code ?? stockLocationId}" is inactive — reactivate the warehouse, or move the count lines to an active one`,
+      );
+    }
+    try {
+      await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, stockLocationId, subsidiaryId);
+    } catch (error) {
+      if (error instanceof InventoryOwnershipError) {
+        throw new InventoryError(
+          `${error.message} — count under an admitted subsidiary, or widen the warehouse's subsidiary restriction`,
+        );
+      }
+      throw error;
+    }
+  }
+}
+
 export interface NewCountLineInput {
   itemId: string;
   stockLocationId: string;
@@ -341,6 +387,17 @@ export async function createStockCount(
       }
       seenSubjects.add(subject);
     }
+    // The warehouses must be active and admit the count's subsidiary BEFORE
+    // any draft is stored: otherwise the draft reaches review and dies in
+    // adjustInventory, or a zero-variance count posts against a dead or
+    // foreign warehouse silently.
+    await assertCountWarehouses(
+      tx,
+      orgId,
+      await loadSubsidiaryContext(tx, orgId),
+      input.subsidiaryId,
+      stockLocationIds,
+    );
     const countId = randomUUID();
     await tx.execute(sql`
       insert into stock_counts (id, org_id, location_id, subsidiary_id, status, counted_on, memo, created_by, updated_by)
@@ -540,7 +597,17 @@ export async function submitStockCountForReview(
     if (count.status !== "counting") {
       assertCountTransition(count.status, "review");
     }
-    await requireAllLinesCounted(tx, orgId, count.id);
+    const submitLines = await requireAllLinesCounted(tx, orgId, count.id);
+    // Re-validate: a warehouse deactivated or restricted after creation must
+    // refuse here with a named remedy instead of stranding the count in
+    // review (or dying later inside adjustInventory at post).
+    await assertCountWarehouses(
+      tx,
+      orgId,
+      await loadSubsidiaryContext(tx, orgId),
+      count.subsidiaryId,
+      submitLines.map((line) => line.stockLocationId),
+    );
     await transitionCount(tx, orgId, actorId, count, "review");
     return { id: count.id, status: "review" as StockCountStatus };
   });
@@ -684,6 +751,17 @@ export async function postStockCount(
       throw error;
     }
     const lines = await requireAllLinesCounted(tx, orgId, count.id);
+    // Re-validate before posting too: a restriction edited after review
+    // refuses here with a named remedy and no adjustment, instead of dying
+    // inside adjustInventory mid-post. Warehouses first, then positions —
+    // the same order everywhere, so concurrent validators cannot deadlock.
+    await assertCountWarehouses(
+      tx,
+      orgId,
+      await loadSubsidiaryContext(tx, orgId),
+      count.subsidiaryId,
+      lines.map((line) => line.stockLocationId),
+    );
     // Every movement writer (receive, issue, adjust, transfer, build)
     // serializes on the position advisory lock, so take every line position
     // in deterministic order BEFORE the drift re-read and hold the locks to
