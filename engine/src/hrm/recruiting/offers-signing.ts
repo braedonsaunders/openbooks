@@ -603,13 +603,90 @@ async function offerScopeForToken(signingToken: string): Promise<{ orgId: string
   return { orgId: row.orgId, offerId: claims.rowId };
 }
 
-/** Public offer view (sessionless): records viewed, returns the render payload. */
+/**
+ * The sealed version payload, validated into its declared shape. Unknown
+ * shapes fail closed: a version row nobody can resolve is not terms a
+ * candidate can be asked to sign.
+ */
+export interface SealedOfferTerms {
+  readonly version: number;
+  readonly templateId: string;
+  readonly templateName: string;
+  readonly selectedClauses: readonly string[];
+  readonly payload: Record<string, unknown>;
+  readonly documentHash: string;
+}
+
+function parseSealedTerms(version: number, raw: unknown): Omit<SealedOfferTerms, "documentHash"> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new RecruitingError(
+      "REFUSED",
+      "this offer's rendered terms cannot be read — ask the recruiter to re-render the letter and resend the signing link",
+    );
+  }
+  const payload = raw as Record<string, unknown>;
+  if (typeof payload.template_id !== "string" || payload.template_id.length === 0) {
+    throw new RecruitingError(
+      "REFUSED",
+      "this offer's rendered terms name no template — ask the recruiter to re-render the letter and resend the signing link",
+    );
+  }
+  const selected = Array.isArray(payload.selected_clauses)
+    ? payload.selected_clauses.filter((key): key is string => typeof key === "string")
+    : null;
+  if (selected === null) {
+    throw new RecruitingError(
+      "REFUSED",
+      "this offer's rendered terms name no clauses — ask the recruiter to re-render the letter and resend the signing link",
+    );
+  }
+  return {
+    version,
+    templateId: payload.template_id,
+    templateName: typeof payload.template_name === "string" ? payload.template_name : "",
+    selectedClauses: selected,
+    payload,
+  };
+}
+
+/**
+ * The latest sealed version of an offer: the payload the signature seals,
+ * with its hash. No version row means no terms exist to sign — fail closed
+ * rather than sealing a hash of nothing.
+ */
+export async function loadSealedOfferTerms(
+  exec: SqlExecutor,
+  orgId: string,
+  offerId: string,
+): Promise<SealedOfferTerms> {
+  const latest = (await exec.execute<{ version: number; payload: unknown }>(sql`
+    select version, payload from hrm_offer_versions
+     where org_id = ${orgId} and offer_id = ${offerId}
+     order by version desc limit 1
+  `)).rows[0];
+  if (!latest) {
+    throw new RecruitingError(
+      "REFUSED",
+      "no terms have been rendered for this offer yet — ask the recruiter to render the letter and resend the signing link instead of signing a blank offer",
+    );
+  }
+  const terms = parseSealedTerms(latest.version, latest.payload);
+  return { ...terms, documentHash: hashOfferDocument(JSON.stringify(latest.payload)) };
+}
+
+/** Public offer view (sessionless): records viewed, returns the sealed terms being signed. */
 export async function readOfferForSigning(signingToken: string): Promise<{
   readonly offerId: string;
   readonly jobTitle: string;
   readonly candidateName: string;
   readonly signatureStatus: string | null;
   readonly version: number;
+  /** The sealed version payload — the exact terms the signature seals. */
+  readonly terms: Record<string, unknown>;
+  /** The letter rendered over the sealed payload — what the candidate reads before signing. */
+  readonly letter: string;
+  /** The hash signOffer seals — the form returns it to prove what was shown. */
+  readonly documentHash: string;
 }> {
   const { orgId, offerId } = await offerScopeForToken(signingToken);
   return withOrgTransaction(orgId, async () => {
@@ -638,12 +715,40 @@ export async function readOfferForSigning(signingToken: string): Promise<{
            where org_id = ${orgId} and id = ${application.candidateId}
         `)).rows[0]
       : null;
+    const candidateName = candidate?.displayName ?? "candidate";
+    // The candidate signs exactly what is shown here: the sealed payload
+    // and the letter rendered over it. A missing version or template fails
+    // closed — signing a letter the service cannot display is refused.
+    const sealedTerms = await loadSealedOfferTerms(db, orgId, offerId);
+    const template = await loadOfferTemplate(db, orgId, sealedTerms.templateId);
+    if (!template) {
+      throw new RecruitingError(
+        "REFUSED",
+        "this offer's template is no longer available — ask the recruiter to re-render the letter and resend the signing link",
+      );
+    }
+    const letter = renderOfferDocument({
+      bodyTemplate: template.bodyTemplate,
+      clauses: template.clauses,
+      selectedClauseKeys: sealedTerms.selectedClauses,
+      data: offerRenderData({
+        jobTitle: offer.jobTitle,
+        proposedStartOn: offer.proposedStartOn,
+        compensationAmount: offer.compensationAmount,
+        compensationCurrency: offer.compensationCurrency,
+        compensationBasis: offer.compensationBasis,
+        candidateName,
+      }),
+    });
     return {
       offerId,
       jobTitle: offer.jobTitle,
-      candidateName: candidate?.displayName ?? "candidate",
+      candidateName,
       signatureStatus: full.signatureStatus === "sent" ? "viewed" : full.signatureStatus,
-      version: full.version,
+      version: sealedTerms.version,
+      terms: sealedTerms.payload,
+      letter,
+      documentHash: sealedTerms.documentHash,
     };
   });
 }
