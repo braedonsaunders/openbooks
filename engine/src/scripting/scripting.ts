@@ -1021,7 +1021,10 @@ export async function runScheduledScript(
     orgId,
     scriptId: s.id,
     targetKind: "scheduled",
-    targetId: null,
+    // The scheduler's occurrence ledger row when this run executes a claimed
+    // tick (queue or inline fallback); null for manual/ad-hoc runs, which
+    // belong to no occurrence and must never absorb one.
+    targetId: opts.occurrenceRunId ?? null,
     status: res.status,
     logs: res.logs,
     errorMessage: res.status === "ok" ? null : res.abortReason,
@@ -1205,6 +1208,13 @@ export interface ScriptRunOptions {
    * the same minute dedupe, older ones rely on deadline fencing.
    */
   idempotencyScope?: string;
+  /**
+   * The scheduler's dispatch-ledger row id for this occurrence. runScheduledScript
+   * stamps it as the run row's target_id so recovery absorbs worker evidence
+   * one-to-one by identity, never by timestamp. Only the scheduler supplies
+   * it (queue payload and inline fallback); every other caller leaves it null.
+   */
+  occurrenceRunId?: string;
 }
 
 /**

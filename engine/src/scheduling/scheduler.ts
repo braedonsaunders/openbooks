@@ -26,10 +26,13 @@ import {
  *             the ledger row records every attempt and mirrors the terminal
  *             outcome ('ok' | 'aborted' | 'error' | 'timeout').
  *   RECOVERY — each tick reconciles stale ledger rows: worker-written
- *             `script_runs` evidence closes the occurrence, a lost first
- *             dispatch is retried exactly once (status 'dispatch_retry'), and
- *             a retry that still produced no evidence is stamped as a terminal
- *             'error' loss instead of being retried forever.
+ *             `script_runs` evidence closes the occurrence one-to-one BY
+ *             IDENTITY (the run row's target_id is the occurrence ledger
+ *             row), a lost first dispatch is retried exactly once (status
+ *             'dispatch_retry'), and a retry that still produced no evidence
+ *             is stamped as a terminal 'error' loss instead of being retried
+ *             forever. An occurrence is therefore never closed by another
+ *             occurrence's execution.
  *
  * Concurrency: the UPDATE … WHERE next_run_at = $old guard inside the claim
  * CTE serializes concurrent scanners across replicas — exactly one wins each
@@ -195,7 +198,13 @@ async function dispatchScriptOccurrence(
   try {
     const { enqueueScriptRun } = await import("@openbooks/jobs");
     await enqueueScriptRun(
-      { orgId: occ.orgId, scriptId: occ.scriptId, kind: "scheduled", occurrenceKey: occ.occurrenceKey },
+      {
+        orgId: occ.orgId,
+        scriptId: occ.scriptId,
+        kind: "scheduled",
+        occurrenceKey: occ.occurrenceKey,
+        occurrenceRunId: occ.id,
+      },
       { jobId },
     );
     enqueued = true;
@@ -209,8 +218,10 @@ async function dispatchScriptOccurrence(
   try {
     const outcome = await withOrgContext(occ.orgId, () => runScheduledScript(occ.scriptId, occ.orgId, {
       // The tick's own stable identity: a recovery retry of this occurrence
-      // reuses the run's journal idempotency namespace.
+      // reuses the run's journal idempotency namespace, and the run links
+      // back to this ledger row so recovery absorbs it one-to-one.
       idempotencyScope: occ.occurrenceKey,
+      occurrenceRunId: occ.id,
     }));
     await finalizeOccurrence(
       occ.id,
@@ -282,15 +293,36 @@ export async function runDueScripts(): Promise<void> {
 export async function recoverLostScriptOccurrences(now = new Date()): Promise<void> {
   const staleBefore = new Date(now.getTime() - OCCURRENCE_STALE_MS);
 
-  // 1) A real scheduled-run row written since the claim is terminal evidence.
-  //    Only the OLDEST open occurrence of a script may absorb it, so two open
-  //    occurrences can never consume each other's evidence. The lateral join
-  //    lives inside the CTE because PostgreSQL forbids an UPDATE ... FROM item
-  //    from referencing the update target (42P10); as an ordinary FROM item
-  //    the same correlated lookup is legal, and the statement stays atomic.
+  // 1) Worker-written terminal evidence closes an occurrence one-to-one BY
+  //    IDENTITY, never by timestamp. The queue worker (and the inline
+  //    fallback) stamps the occurrence's ledger row id on its own run row,
+  //    so each execution absorbs exactly the occurrence it ran for: a stale
+  //    A-then-B pair with one execution of A closes A only, and B keeps its
+  //    retry instead of being recorded complete without ever running.
+  //    Pre-identity worker rows carry no target_id; they keep the legacy
+  //    oldest-open absorption, fenced to unattributed rows so new-shape
+  //    evidence can never be absorbed that way. Both lookups live inside
+  //    CTEs because PostgreSQL forbids an UPDATE ... FROM item from
+  //    referencing the update target (42P10); as ordinary FROM items the
+  //    same correlated lookups are legal, and the statement stays atomic.
   await withBypassContext(() =>
     db.execute(sql`
-      with evidence as (
+      with exact as (
+        select occ.id,
+               run.status,
+               run.error_message,
+               run.duration_ms
+          from script_runs occ
+          join script_runs run
+            on run.target_id = occ.id
+           and run.target_kind = 'scheduled'
+           and run.org_id = occ.org_id
+           and run.script_id = occ.script_id
+         where occ.target_kind = 'scheduled_occurrence'
+           and occ.status in ('queued', 'dispatch_retry')
+           and occ.at < ${staleBefore}
+      ),
+      legacy as (
         select occ.id,
                run.status,
                run.error_message,
@@ -302,6 +334,7 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
              where r.script_id = occ.script_id
                and r.org_id = occ.org_id
                and r.target_kind = 'scheduled'
+               and r.target_id is null
                and r.at >= occ.at
              order by r.at desc
              limit 1
@@ -310,6 +343,8 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
            and occ.status in ('queued', 'dispatch_retry')
            and occ.at < ${staleBefore}
            and not exists (
+             select 1 from exact where exact.id = occ.id)
+           and not exists (
              select 1
                from script_runs older
               where older.script_id = occ.script_id
@@ -317,6 +352,11 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
                 and older.target_kind = 'scheduled_occurrence'
                 and older.at < occ.at
                 and older.status in ('queued', 'dispatch_retry'))
+      ),
+      evidence as (
+        select * from exact
+        union all
+        select * from legacy
       )
       update script_runs occ
          set status = evidence.status,

@@ -1365,20 +1365,24 @@ test("worker-written terminal evidence closes an orphaned occurrence without a r
               ${new Date(Date.now() + 3_600_000)}, 2000, true)
     `);
     // The same crash state as above — but this time the worker DID execute:
-    // a real scheduled-run row landed after the claim committed.
+    // a real scheduled-run row landed after the claim committed, stamped
+    // with the occurrence's ledger row id (the identity recovery matches on).
+    const occurrenceId = (
+      await db.execute<{ id: string }>(sql`
+        insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+        values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
+                jsonb_build_array(jsonb_build_object(
+                  'event', 'claimed',
+                  'occurrence', ${scriptOccurrenceKey(scriptId, scheduledFor)}::text,
+                  'scheduledFor', ${scheduledFor.toISOString()}::text,
+                  'attempt', 1)),
+                ${scheduledFor})
+        returning id
+      `)
+    ).rows[0]!.id;
     await db.execute(sql`
-      insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
-      values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
-              jsonb_build_array(jsonb_build_object(
-                'event', 'claimed',
-                'occurrence', ${scriptOccurrenceKey(scriptId, scheduledFor)}::text,
-                'scheduledFor', ${scheduledFor.toISOString()}::text,
-                'attempt', 1)),
-              ${scheduledFor})
-    `);
-    await db.execute(sql`
-      insert into script_runs (org_id, script_id, target_kind, status, duration_ms, logs, at)
-      values (${org.orgId}, ${scriptId}, 'scheduled', 'ok', 120, '[{"event":"done"}]'::jsonb,
+      insert into script_runs (org_id, script_id, target_kind, target_id, status, duration_ms, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled', ${occurrenceId}, 'ok', 120, '[{"event":"done"}]'::jsonb,
               ${new Date(scheduledFor.getTime() + 5_000)})
     `);
 
@@ -1402,9 +1406,11 @@ test("worker-written terminal evidence closes an orphaned occurrence without a r
   }
 });
 
-// When multiple stale occurrences are open, worker evidence is not tied to an
-// occurrence id. Recovery therefore assigns it to the oldest open occurrence;
-// newer occurrences remain eligible for their own one-time retry.
+// Legacy shape: a worker run from before the identity link existed carries
+// no target_id, so recovery cannot tie it to an occurrence id and assigns it
+// to the oldest open occurrence; newer occurrences remain eligible for their
+// own one-time retry. New-shape runs always carry target_id and never take
+// this path (see the one-to-one test below).
 test("worker evidence closes the oldest open occurrence before a newer claim", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -1458,6 +1464,89 @@ test("worker evidence closes the oldest open occurrence before a newer claim", {
     assert.ok(newer!.logs.some((event) => event.event === "recover" && event.attempt === 2));
     assert.ok(newer!.logs.some((event) => event.event === "ran_inline" && event.attempt === 2));
     assert.equal(await countScheduledRuns(scriptId), 2, "one worker run plus one newer-occurrence retry");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+// SCHED2: worker evidence is matched one-to-one BY IDENTITY. Two claims A
+// then B exist, exactly one worker execution — for A — landed after B's
+// claim, A already closed from it, and B's own retry was lost without
+// producing evidence. Recovery must report B as a loss. The old timestamp
+// join still saw A's execution row (at >= B.at) with no older OPEN
+// occurrence left to protect B, and recorded the unexecuted tick complete.
+test("worker evidence closes only its own occurrence; a lost retry is reported, never marked ok", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = await seedDueScheduledScript(
+      org.orgId,
+      'function main(ctx) { return "one-to-one"; }',
+    );
+    const oldestAt = new Date(Date.now() - 30 * 60_000);
+    const newerAt = new Date(Date.now() - 20 * 60_000);
+    await db.execute(sql`
+      update user_scripts set next_run_at = ${new Date(Date.now() + 3_600_000)} where id = ${scriptId}
+    `);
+    const occurrenceIds = [];
+    for (const scheduledFor of [oldestAt, newerAt]) {
+      const id = (
+        await db.execute<{ id: string }>(sql`
+          insert into script_runs (org_id, script_id, target_kind, target_id, status, logs, at)
+          values (${org.orgId}, ${scriptId}, 'scheduled_occurrence', null, 'queued',
+                  jsonb_build_array(jsonb_build_object(
+                    'event', 'claimed',
+                    'occurrence', ${scriptOccurrenceKey(scriptId, scheduledFor)}::text,
+                    'scheduledFor', ${scheduledFor.toISOString()}::text,
+                    'attempt', 1)),
+                  ${scheduledFor})
+          returning id
+        `)
+      ).rows[0]!.id;
+      occurrenceIds.push(id);
+    }
+    const [oldestId, newerId] = occurrenceIds;
+    // Exactly one execution, for the OLDER occurrence — stamped with its
+    // ledger row id, landing after the newer claim was committed — and the
+    // older occurrence already closed from it.
+    await db.execute(sql`
+      insert into script_runs (org_id, script_id, target_kind, target_id, status, duration_ms, logs, at)
+      values (${org.orgId}, ${scriptId}, 'scheduled', ${oldestId}, 'ok', 120, '[{"event":"done"}]'::jsonb,
+              ${new Date(Date.now() - 10 * 60_000)})
+    `);
+    await db.execute(sql`
+      update script_runs
+         set status = 'ok',
+             logs = logs || '[{"event":"completed_on_worker"}]'::jsonb
+       where id = ${oldestId}
+    `);
+    // The newer occurrence already consumed its single retry and produced no
+    // evidence: a lost retry with no execution behind it.
+    await db.execute(sql`
+      update script_runs
+         set status = 'dispatch_retry',
+             logs = logs || '[{"event":"recover","attempt":2}]'::jsonb
+       where id = ${newerId}
+    `);
+
+    await recoverLostScriptOccurrences();
+
+    const occurrences = (
+      await db.execute<{ id: string; status: string; logs: OccurrenceEventRow[] }>(sql`
+        select id, status, logs
+          from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
+         order by at
+      `)
+    ).rows;
+    assert.equal(occurrences.length, 2);
+    const [oldest, newer] = occurrences;
+    assert.equal(oldest!.id, oldestId);
+    assert.equal(oldest!.status, "ok");
+    assert.equal(newer!.id, newerId);
+    assert.notEqual(newer!.status, "ok", "an unexecuted tick must never read complete");
+    assert.equal(newer!.status, "error", "the lost retry is stamped as a terminal loss");
+    assert.ok(!newer!.logs.some((event) => event.event === "completed_on_worker"));
+    assert.equal(await countScheduledRuns(scriptId), 1, "exactly one execution behind both rows");
   } finally {
     await dropScratchOrg(org.orgId);
   }
