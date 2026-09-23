@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, compileSubsidiaryScope, bindReportFromAsOf, compileRuleGroup } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, type ReportCustomQuery, type ReportRule } from '@openbooks/reports'
 import { getSource } from './catalog'
 import { sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -184,6 +184,44 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
   }
 }
 
+/** Adapt an insight plan to the report plan shape the shared basis helpers
+ *  read. Insight filters are a flat AND list, so they become a single AND
+ *  group; dimensions become breakouts. Only `eq`/`in` survive the mapping —
+ *  every other operator maps to the conservative `neq`, which scopes rows but
+ *  never certifies a single denomination. The shared walkers only ever read
+ *  fields (references check) and eq/in-single pins, so the mapping preserves
+ *  their exact semantics. */
+function toReportPlan(query: InsightQuery): ReportCustomQuery {
+  return {
+    entity: query.source,
+    mode: 'summarize',
+    columns: [],
+    breakouts: (query.dimensions ?? []).map((d) => ({ column: d.field })),
+    measures: [],
+    filters: {
+      combinator: 'and',
+      rules: (query.filters ?? []).map(
+        (f) =>
+          ({
+            field: f.field,
+            op: f.op === 'eq' || f.op === 'in' ? f.op : 'neq',
+            value: f.value,
+          }) as unknown as ReportRule,
+      ),
+    },
+    groupBy: null,
+  }
+}
+
+/** True when the card explicitly scopes or partitions by accounting book — a
+ *  filter or dimension on a book column. SHARES the report executor's rule
+ *  (same REPORT_BOOK_KEYS, same customQueryReferencesBook): the author's own
+ *  book scoping governs instead of the primary-book default. The web layer
+ *  uses this to decide the book allowlist; the compiler only applies it. */
+export function insightQueryReferencesBook(query: InsightQuery): boolean {
+  return customQueryReferencesBook(toReportPlan(query))
+}
+
 /** The source's authored implicit predicate (e.g. "only active tiers"), shared
  *  verbatim with the report executor: the same catalog `baseFilter` compiled by
  *  the same rule compiler, with its bind params numbered after the org id. */
@@ -236,6 +274,12 @@ export function compileInsightQuery(
   labels: InsightLabelResolver = {},
   asOf = '1970-01-01',
   allowedSubsidiaryIds: readonly string[] | null = null,
+  /** Server-owned accounting-book allowlist, resolved by the caller (the
+   *  single active primary unless the card scopes or partitions by book).
+   *  Shared compileBookScope with the report executor: null/undefined leaves
+   *  book-scoped entities unclamped, an empty array matches nothing.
+   *  Book-independent sources ignore it. */
+  allowedBookIds: readonly string[] | null | undefined = undefined,
 ): CompiledQuery {
   const source = getSource(query.source)
   if (!source)
@@ -243,9 +287,12 @@ export function compileInsightQuery(
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
   const ctx: Ctx = { source, params: [orgId], asOf }
+  const entity = REPORT_ENTITY_MAP[source.key]!
   const wheres: string[] = [`${source.orgColumn} = $1`]
-  const subsidiary = compileSubsidiaryScope(REPORT_ENTITY_MAP[source.key]!, allowedSubsidiaryIds, (value) => bind(ctx, value))
+  const subsidiary = compileSubsidiaryScope(entity, allowedSubsidiaryIds, (value) => bind(ctx, value))
   if (subsidiary) wheres.push(subsidiary)
+  const book = compileBookScope(entity, allowedBookIds, (value) => bind(ctx, value))
+  if (book) wheres.push(book)
   const base = compileBaseFilter(ctx)
   if (base) wheres.push(base)
   for (const f of query.filters ?? []) wheres.push(compileFilter(ctx, f))
