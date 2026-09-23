@@ -182,6 +182,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'grant-control-cell',
   'health-hero',
   'hrm-change-request-actions',
+  'hrm-change-request-dialog',
   // HR-20 begin: field-time islands.
   'hrm-clock-controls',
   'hrm-crew-workspace',

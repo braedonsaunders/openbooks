@@ -11,6 +11,7 @@ import {
 import { PositionDrawer } from '../../app/(app)/hrm/positions/sections'
 import { RecruitingDrawer } from '../../app/(app)/hrm/recruiting/sections'
 import { ChangeRequestRowActions, HrmVerbChip } from '../../app/(app)/hrm/change-requests/ChangeRequestRowActions'
+import { ChangeRequestDetailDialog } from '../../app/(app)/hrm/change-requests/ChangeRequestDetailDialog'
 import { ProposeChangeDialog } from '../../app/(app)/hrm/change-requests/ProposeChangeDialog'
 import { LeaveDialog } from '../../app/(app)/hrm/leave/LeaveDialog'
 // HR-14 begin: qualification islands (verbatim adapters only).
@@ -64,6 +65,18 @@ export const HRM_WIDGETS = {
       employmentId={str(props, 'employmentId') ?? ''}
       appliedChangeId={str(props, 'appliedChangeId') ?? null}
       departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestRowActions>['departmentOptions']) ?? []}
+    />
+  ),
+  /** OM-12: the request-detail drawer (?request=<id>), closing by
+   *  navigating the param away. The loader-resolved subject names the
+   *  request while the drawer's live fetch resolves; department options
+   *  feed the embedded lifecycle actions and department display labels. */
+  'hrm-change-request-dialog': (props) => (
+    <ChangeRequestDetailDialog
+      requestId={str(props, 'requestId') ?? null}
+      closeHref={str(props, 'closeHref') ?? '/hrm/change-requests'}
+      subject={(props.subject as ComponentProps<typeof ChangeRequestDetailDialog>['subject']) ?? null}
+      departmentOptions={(props.departmentOptions as ComponentProps<typeof ChangeRequestDetailDialog>['departmentOptions']) ?? []}
     />
   ),
   /** HR-16 begin: the applied event's verb chip (0227) — renders only when

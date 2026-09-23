@@ -64,6 +64,24 @@ export interface QueueRow {
   verbLabel: string | null
   /** Applied employment_changes id for Rescind/Correct (null unless applied). */
   appliedChangeId: string | null
+  /** The request-detail drawer href (?request=<id>, segment preserved). */
+  requestHref: string
+  /** The row's open link label, from the catalog. */
+  openLabel: string
+}
+
+/** Loader-resolved subject labels for the request-detail drawer, so the
+ * drawer names the subject even before its live fetch resolves. Null when
+ * the requested id is not in the visible list (a shareable deep link into
+ * another segment, or an id the viewer cannot see — the drawer's own fetch
+ * then owns the refusal). */
+export interface ChangeRequestDialogSubject {
+  employeeLabel: string
+  kindLabel: string
+  effectiveWindow: string
+  requesterLabel: string
+  submittedLabel: string
+  statusLabel: string
 }
 
 export interface QueueSegment {
@@ -113,11 +131,21 @@ export interface ChangeRequestQueueData {
   proposeButton: string
   proposeHref: string
   proposeOpen: boolean
+  /** Shared return href for the propose and request-detail dialogs: the
+   * queue route with the active segment, every dialog param navigated
+   * away. */
   dialogCloseHref: string
   proposeEmploymentLabel: string
   proposeEmploymentPlaceholder: string
   proposeEmpty: string
   proposeFailed: string
+  /** Request-detail drawer (?request=<id>): open state and id mirror the
+   * leave queue's dialog trio. dialogSubject carries the visible row's
+   * display labels when the requested id is in the list; the drawer's live
+   * fetch stays authoritative for status, payload, reason, and history. */
+  dialogOpen: boolean
+  dialogRequestId: string | null
+  dialogSubject: ChangeRequestDialogSubject | null
   /** HR-16 rehomed reason-code setup (0227): configured where changes are proposed. */
   canEditReasons: boolean
   reasonsHref: string
@@ -145,6 +173,7 @@ async function resolveQueueRows(
   visible: ServiceRow[],
   workerByEmployment: Map<string, { name: string | null; partyId: string | null }>,
   requesterByUser: Map<string, string>,
+  segment: string | undefined,
 ): Promise<QueueRow[]> {
   const appliedIds = [...new Set(visible.map((row) => row.appliedEmploymentChangeId).filter((id): id is string => id !== null))]
   const verbByChange = new Map<string, string>()
@@ -202,8 +231,19 @@ async function resolveQueueRows(
           ? t(`queue.verbs.${verbByChange.get(row.appliedEmploymentChangeId)}`)
           : null,
       appliedChangeId: status === 'applied' ? (row.appliedEmploymentChangeId ?? null) : null,
+      requestHref: detailHref(segment, row.id),
+      openLabel: t('queue.openRequest'),
     }
   })
+}
+
+/** Request-detail href: the queue route with ?request=<id>, preserving the
+ * active status segment so closing the drawer returns to the same list. */
+function detailHref(segment: string | undefined, requestId: string): string {
+  const params = new URLSearchParams()
+  if (segment) params.set('status', segment)
+  params.set('request', requestId)
+  return `/hrm/change-requests?${params.toString()}`
 }
 
 export interface QueueLabels {
@@ -317,6 +357,9 @@ export async function loadChangeRequestQueue(
   // and section render only while the feature is on and the viewer manages.
   const reasonsOn = canManage && (await isFeatureEnabled(orgId, 'hrmActionReasons'))
 
+  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
+  const dialogRequestId = typeof sp.request === 'string' && sp.request !== '' ? sp.request : null
+  const dialogCloseHref = queueHref(rawStatus, false)
   const base: Omit<ChangeRequestQueueData, 'refusal' | 'hasContent' | 'rows' | 'counts' | 'total' | 'truncated' | 'segments'> = {
     title: t('queue.title'),
     description: t('queue.description'),
@@ -346,11 +389,14 @@ export async function loadChangeRequestQueue(
     proposeButton: t('queue.proposeButton'),
     proposeHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, true),
     proposeOpen: sp.propose === '1',
-    dialogCloseHref: queueHref(typeof sp.status === 'string' ? sp.status : undefined, false),
     proposeEmploymentLabel: t('queue.proposeEmploymentLabel'),
     proposeEmploymentPlaceholder: t('queue.proposeEmploymentPlaceholder'),
     proposeEmpty: t('queue.proposeEmpty'),
     proposeFailed: t('queue.proposeFailed'),
+    dialogOpen: dialogRequestId !== null,
+    dialogRequestId,
+    dialogCloseHref,
+    dialogSubject: null,
     canEditReasons: false,
     reasonsHref: '/hrm/change-requests?reasons=1',
     reasonsLabel: t('queue.reasonsButton'),
@@ -373,7 +419,6 @@ export async function loadChangeRequestQueue(
     segments: [],
   })
 
-  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
   const resolved = resolveQueueStatus(rawStatus ?? null)
   if (!resolved.ok) {
     return refuse(t('queue.refusalTitle'), t('queue.unknownSegment', { value: rawStatus ?? '' }))
@@ -422,13 +467,31 @@ export async function loadChangeRequestQueue(
   const departments = (await db.execute<{ id: string; name: string }>(sql`
     select id::text as id, name from departments where org_id = ${orgId}::uuid and is_active order by name`)).rows
 
-  const rows: QueueRow[] = await resolveQueueRows(t, orgId, visible, workerByEmployment, requesterByUser)
+  const rows: QueueRow[] = await resolveQueueRows(t, orgId, visible, workerByEmployment, requesterByUser, rawStatus)
+
+  // The detail drawer names its subject from the visible row when the
+  // requested id is in this list; a deep link into another segment (or an
+  // id outside the viewer's scope) leaves the subject null and the drawer's
+  // own fetch owns what renders — data for a permitted request, the named
+  // refusal otherwise.
+  const active = dialogRequestId !== null ? (rows.find((row) => row.id === dialogRequestId) ?? null) : null
+  const dialogSubject: ChangeRequestDialogSubject | null = active
+    ? {
+        employeeLabel: active.employeeLabel,
+        kindLabel: active.kindLabel,
+        effectiveWindow: active.effectiveWindow,
+        requesterLabel: active.requesterLabel,
+        submittedLabel: active.submittedLabel,
+        statusLabel: active.statusLabel,
+      }
+    : null
 
   return {
     ...base,
     refusal: null,
     hasContent: true,
     rows,
+    dialogSubject,
     counts,
     total: serviceRows.length,
     truncated: serviceRows.length >= QUEUE_LIMIT,
