@@ -1530,6 +1530,23 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "constraint): the guarded DROP finds nothing and the body replays "
       + "idempotently to the same catalog.",
   },
+  {
+    filename: "generated/0299_stock_count_line_counted_nonnegative.sql",
+    from: "65a3e4fa4abaee059777ccaf198ea996c4d5b29064971d20765626a085fd0ab8",
+    to: "e0806b314fcdeee02b1393f0e96cb51656c86520d5de5cdd9dba76feea6cadb7",
+    strategy: "reapply",
+    reason:
+      "staged revision (U11) replaces the validated CHECK with ADD CONSTRAINT ... "
+      + "NOT VALID plus a guarded VALIDATE that treats an already-validated guard "
+      + "as done, and preserves pre-guard immutable history (U14): posted and "
+      + "cancelled negatives are marked is_pre_guard_legacy (the column is added "
+      + "by 0293, which runs first) and the CHECK exempts marked rows. A database "
+      + "recorded at the old digest re-runs the current body: the classify finds "
+      + "no legacy rows, the guarded DROP removes the old CHECK, and the ADD plus "
+      + "VALIDATE recreate it in staged exempting form — converging to the "
+      + "fresh-install catalog. Reapply, not restamp: the revision adds the "
+      + "exemption the old CHECK lacks.",
+  },
 ];
 
 async function executeTrackedMigration(
