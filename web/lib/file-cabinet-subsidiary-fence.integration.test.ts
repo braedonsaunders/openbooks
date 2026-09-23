@@ -12,7 +12,7 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const {
   createFile,
@@ -45,43 +45,51 @@ const { requireFileAccess, requireFolderAccess } = await import('../app/api/file
  * grant changes alike. B keeps full management of common (unscoped) files.
  */
 test('subsidiary-restricted managers cannot read or alter out-of-fence files', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypass(() => createScratchOrg())
+  // Seed only runs in the bypass scope. Every fenced assertion below runs
+  // outside it: the verbs enforce the fence through the caller's own
+  // viewer/scope, and a bypassed refusal would prove nothing.
+  const { userA, userB, subA, subB, docA, commonId, leafAId, leafRId, faId, fcId, fpId } = await withBypass(
+    async () => {
+      const userA = await createScratchUser(org.orgId, 'Keeper A', 'keeper_a')
+      const userB = await createScratchUser(org.orgId, 'Keeper B', 'keeper_b')
+      const subA = randomUUID()
+      const subB = randomUUID()
+      await db.execute(sql`
+        insert into subsidiaries
+          (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values
+          (${subA}, ${org.orgId}, ${org.subsidiaryId}, 'Fence A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
+          (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Fence B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+      `)
+      const docA = randomUUID()
+      await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+        values (${docA}, ${org.orgId}, 'customer_invoice', 'draft', 'FENCE-A-1', ${subA}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
+      const commonId = randomUUID()
+      const leafAId = randomUUID()
+      const leafRId = randomUUID()
+      await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
+        values (${commonId}, ${org.orgId}, null, 's19-fence-common', false, null, null),
+               (${leafAId}, ${org.orgId}, null, 'documents / fence-a', true, 'documents', ${docA}),
+               (${leafRId}, ${org.orgId}, null, 'documents / fence-restore', false, 'documents', ${docA})`)
+      const mkFile = async (name: string, folderId: string): Promise<string> => {
+        const fileId = randomUUID()
+        await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+          values (${fileId}, ${org.orgId}, ${folderId}, ${name}, 'text/plain', 3)`)
+        return fileId
+      }
+      // FA lives in A's leaf and is attached to A's record; FC sits in the
+      // common folder but is attached to A's record; FP is free common stock.
+      const faId = await mkFile('s19-fa.txt', leafAId)
+      const fcId = await mkFile('s19-fc.txt', commonId)
+      const fpId = await mkFile('s19-fp.txt', commonId)
+      await db.execute(sql`insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
+        values (${org.orgId}, ${faId}, 'documents', ${docA}, ${userA}),
+               (${org.orgId}, ${fcId}, 'documents', ${docA}, ${userA})`)
+      return { userA, userB, subA, subB, docA, commonId, leafAId, leafRId, faId, fcId, fpId }
+    },
+  )
   try {
-    const userA = await createScratchUser(org.orgId, 'Keeper A', 'keeper_a')
-    const userB = await createScratchUser(org.orgId, 'Keeper B', 'keeper_b')
-    const subA = randomUUID()
-    const subB = randomUUID()
-    await db.execute(sql`
-      insert into subsidiaries
-        (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-      values
-        (${subA}, ${org.orgId}, ${org.subsidiaryId}, 'Fence A', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb),
-        (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Fence B', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
-    `)
-    const docA = randomUUID()
-    await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
-      values (${docA}, ${org.orgId}, 'customer_invoice', 'draft', 'FENCE-A-1', ${subA}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
-    const commonId = randomUUID()
-    const leafAId = randomUUID()
-    const leafRId = randomUUID()
-    await db.execute(sql`insert into folders (id, org_id, parent_folder_id, name, is_system, record_table, record_id)
-      values (${commonId}, ${org.orgId}, null, 's19-fence-common', false, null, null),
-             (${leafAId}, ${org.orgId}, null, 'documents / fence-a', true, 'documents', ${docA}),
-             (${leafRId}, ${org.orgId}, null, 'documents / fence-restore', false, 'documents', ${docA})`)
-    const mkFile = async (name: string, folderId: string): Promise<string> => {
-      const fileId = randomUUID()
-      await db.execute(sql`insert into files (id, org_id, folder_id, name, content_type, size_bytes)
-        values (${fileId}, ${org.orgId}, ${folderId}, ${name}, 'text/plain', 3)`)
-      return fileId
-    }
-    // FA lives in A's leaf and is attached to A's record; FC sits in the
-    // common folder but is attached to A's record; FP is free common stock.
-    const faId = await mkFile('s19-fa.txt', leafAId)
-    const fcId = await mkFile('s19-fc.txt', commonId)
-    const fpId = await mkFile('s19-fp.txt', commonId)
-    await db.execute(sql`insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
-      values (${org.orgId}, ${faId}, 'documents', ${docA}, ${userA}),
-             (${org.orgId}, ${fcId}, 'documents', ${docA}, ${userA})`)
 
     const viewerA = { userId: userA, isAdmin: false as const, baseline: 'manager' as const, allowedSubsidiaryIds: new Set([subA]) } satisfies FileViewer
     const viewerB = { userId: userB, isAdmin: false as const, baseline: 'manager' as const, allowedSubsidiaryIds: new Set([subB]) } satisfies FileViewer
