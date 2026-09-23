@@ -23,9 +23,9 @@ import {
   loadFieldTimeSettings,
 } from "./settings.ts";
 import {
+  allocateShiftNetMs,
   insideCircle,
   insidePolygon,
-  netShiftMs,
   roundHours,
   validateClockSequence,
   validateEventChronology,
@@ -278,11 +278,20 @@ async function pairAndPostEntries(input: {
   }
   segments.push(current);
 
+  // The declared unpaid break is a shift rule, not a segment rule: it
+  // is deducted once across all segments (see allocateShiftNetMs), so
+  // a project switch mid-shift never multiplies the deduction.
+  const shiftNets = allocateShiftNetMs(
+    segments.map((s) => Math.max(0, s.toMs - s.fromMs)),
+    segments.map((s) => s.breakMs),
+    settings.unpaidBreakMinutes,
+  );
   const entryIds: string[] = [];
-  for (const segment of segments) {
+  for (let si = 0; si < segments.length; si++) {
+    const segment = segments[si]!;
     const grossMs = Math.max(0, segment.toMs - segment.fromMs);
     if (grossMs <= 0) continue;
-    const netMs = netShiftMs(grossMs, segment.breakMs, settings.unpaidBreakMinutes);
+    const netMs = shiftNets[si]!;
     const grossHours = (netMs / 3_600_000).toFixed(4);
     const rounded = roundHours(grossHours, settings.rounding);
     if (Number(rounded) <= 0) continue;
@@ -292,9 +301,10 @@ async function pairAndPostEntries(input: {
     for (const piece of splitMidnight(segment)) {
       const pieceGrossMs = Math.max(0, piece.toMs - piece.fromMs);
       if (pieceGrossMs <= 0) continue;
-      // The declared rule splits pro-rata with the midnight piece.
-      const pieceDeclaredMinutes = (settings.unpaidBreakMinutes * pieceGrossMs) / grossMs;
-      const pieceNet = netShiftMs(pieceGrossMs, piece.breakMs, pieceDeclaredMinutes);
+      // The piece inherits its share of the segment net, which already
+      // carries the once-per-shift break deduction: the declared rule
+      // is never re-applied here.
+      const pieceNet = (netMs * pieceGrossMs) / grossMs;
       const pieceHours = roundHours((pieceNet / 3_600_000).toFixed(4), settings.rounding);
       if (Number(pieceHours) <= 0) continue;
       let wageRate: string | null = null;
@@ -466,7 +476,15 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
 
     let entryIds: string[] = [];
     let pairId: string | null = null;
-    if ((input.kind === "clock_out" || input.kind === "switch") && current) {
+    // A switch re-targets the still-open pair — it records the new
+    // project refs for the next segment but never closes or posts.
+    // Closing at every switch deducted the declared break and rounded
+    // once per project instead of once per shift; the whole shift
+    // pairs and posts when the clock-out arrives.
+    if (input.kind === "switch" && current) {
+      pairId = current.id;
+    }
+    if (input.kind === "clock_out" && current) {
       pairId = current.id;
       entryIds = await pairAndPostEntries({
         orgId: input.orgId,
@@ -481,25 +499,6 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
         },
         autoClosed: false,
       });
-      if (input.kind === "switch") {
-        // The switch opens the next segment immediately.
-        const next = (await db.execute<{ id: string }>(sql`
-          insert into time_clock_events
-            (org_id, employee_party_id, kind, occurred_at, device_id, source,
-             project_id, project_task_id, cost_code_ref, geo, geo_check,
-             photo_file_id, client_event_id, status, created_by, updated_by)
-          values
-            (${input.orgId}, ${input.employeePartyId}, 'clock_in', ${input.occurredAt}::timestamptz,
-             ${input.deviceId ?? null}, ${input.source},
-             ${input.projectId ?? current.project_id}, ${input.projectTaskId ?? current.project_task_id},
-             ${input.costCodeRef ?? current.cost_code_ref},
-             ${input.geo ? JSON.stringify(input.geo) : null}::jsonb, ${geoCheck},
-             ${input.photoFileId ?? null}, gen_random_uuid(), 'recorded',
-             ${input.actorUserId}, ${input.actorUserId})
-          returning id`)).rows[0];
-        if (!next) throw new FieldTimeError("event_not_stored", "The switch follow-on clock-in was not stored — review the pair before retrying");
-        pairId = next.id;
-      }
     }
     return { eventId: inserted.id, pairId, geoCheck, autoClosedPairId, entryIds, replayed: false };
   });

@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  allocateShiftNetMs,
   checkEquipmentTolerance,
+  distributeProRata,
   insideCircle,
   insidePolygon,
   netShiftMs,
@@ -61,6 +63,41 @@ describe("break subtraction", () => {
   });
   it("an undeclared rule refuses by name", () => {
     refuses(() => netShiftMs(8 * 3_600_000, 0, -1));
+  });
+});
+
+describe("pro-rata dealing", () => {
+  it("deals the exact total with the largest remainder", () => {
+    assert.deepEqual(distributeProRata(10, [2, 1]), [7, 3]);
+    assert.deepEqual(distributeProRata(0, [5, 5]), [0, 0]);
+    assert.deepEqual(distributeProRata(7, [0, 0]), [0, 0]);
+  });
+  it("ties break to the earlier index, deterministically", () => {
+    assert.deepEqual(distributeProRata(3, [1, 1, 1]), [1, 1, 1]);
+    assert.deepEqual(distributeProRata(1, [1, 1]), [1, 0]);
+  });
+});
+
+describe("shift-level break allocation", () => {
+  const H = 3_600_000;
+  it("deducts the declared break once across segments, not per segment", () => {
+    // 08:00-16:00 with a noon project switch and a 30-minute rule:
+    // 7.5h net, dealt 3.75h + 3.75h — never 7h.
+    const nets = allocateShiftNetMs([4 * H, 4 * H], [0, 0], 30);
+    assert.deepEqual(nets, [3.75 * H, 3.75 * H]);
+  });
+  it("recorded breaks cover the declared rule shift-wide", () => {
+    // 45 recorded minutes in the first segment cover the 30-minute
+    // rule, so the second segment keeps its full 4h.
+    const nets = allocateShiftNetMs([4 * H, 4 * H], [45 * 60_000, 0], 30);
+    assert.deepEqual(nets, [3.25 * H, 4 * H]);
+  });
+  it("the nets sum to the shift-level net rule", () => {
+    const nets = allocateShiftNetMs([4 * H, 4 * H], [10 * 60_000, 0], 30);
+    assert.equal(nets.reduce((a, b) => a + b, 0), netShiftMs(8 * H, 10 * 60_000, 30));
+  });
+  it("a break longer than the shift nets to zero, never negative", () => {
+    assert.deepEqual(allocateShiftNetMs([4 * H], [0], 300), [0]);
   });
 });
 

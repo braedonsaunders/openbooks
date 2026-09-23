@@ -66,10 +66,51 @@ export function roundHours(hours: string, rule: RoundingRule): string {
 }
 
 /**
+ * Largest-remainder deal: split `total` whole units across `weights`
+ * so the shares sum to exactly `total`. Each share is floored, then
+ * the leftover units go to the largest fractional remainders with
+ * ties broken to the earlier index — deterministic for any input.
+ * Zero weights deal zero; an all-zero weight vector deals all zero.
+ */
+export function distributeProRata(total: number, weights: number[]): number[] {
+  if (!Number.isInteger(total) || total < 0) {
+    throw new FieldTimeError(
+      "invalid_break_rule",
+      `Pro-rata total ${String(total)} is not declared — split a whole non-negative number of units`,
+    );
+  }
+  for (const w of weights) {
+    if (!Number.isFinite(w) || w < 0) {
+      throw new FieldTimeError(
+        "invalid_break_rule",
+        `Pro-rata weight ${String(w)} is not declared — weights must be finite and non-negative`,
+      );
+    }
+  }
+  const out = new Array<number>(weights.length).fill(0);
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+  if (total === 0 || weightSum <= 0) return out;
+  const remainders: Array<{ index: number; rem: number }> = [];
+  let assigned = 0;
+  for (let i = 0; i < weights.length; i++) {
+    const floored = Math.floor((total * weights[i]!) / weightSum);
+    out[i] = floored;
+    assigned += floored;
+    remainders.push({ index: i, rem: (total * weights[i]!) / weightSum - floored });
+  }
+  remainders.sort((a, b) => b.rem - a.rem || a.index - b.index);
+  for (let k = 0; k < total - assigned; k++) {
+    const target = remainders[k % remainders.length]!.index;
+    out[target] = out[target]! + 1;
+  }
+  return out;
+}
+
+/**
  * Net shift milliseconds: the larger of recorded breaks and the
- * declared unpaid rule is deducted, never below zero. The clock
- * pairing path calls this per segment, so recorded breaks replace the
- * auto-deduction up to their length instead of stacking on top of it.
+ * declared unpaid rule is deducted, never below zero. Recorded breaks
+ * replace the auto-deduction up to their length instead of stacking
+ * on top of it.
  */
 export function netShiftMs(grossMs: number, recordedBreakMs: number, unpaidBreakMinutes: number): number {
   for (const [name, value] of [["gross", grossMs], ["recorded breaks", recordedBreakMs], ["unpaid rule", unpaidBreakMinutes]] as const) {
@@ -81,6 +122,56 @@ export function netShiftMs(grossMs: number, recordedBreakMs: number, unpaidBreak
     }
   }
   return Math.max(0, grossMs - Math.max(recordedBreakMs, unpaidBreakMinutes * 60_000));
+}
+
+/**
+ * Shift-level net milliseconds per segment. The declared unpaid break
+ * is deducted ONCE per shift, never once per project segment: recorded
+ * breaks stay in their own segment, and the remainder of the declared
+ * rule not already covered by recorded breaks is dealt across segments
+ * pro-rata by worked time (largest remainder, deterministic). The
+ * returned nets sum to exactly
+ * netShiftMs(totalGross, totalRecorded, unpaidBreakMinutes) — up to
+ * whole-millisecond resolution when the declared rule names a fraction
+ * of a minute.
+ */
+export function allocateShiftNetMs(
+  grossMs: number[],
+  recordedBreakMs: number[],
+  unpaidBreakMinutes: number,
+): number[] {
+  if (grossMs.length !== recordedBreakMs.length) {
+    throw new FieldTimeError(
+      "invalid_break_rule",
+      "Shift segments and their breaks do not line up — re-record the clock events so every segment carries its break time",
+    );
+  }
+  for (const [name, values] of [["gross", grossMs], ["recorded breaks", recordedBreakMs]] as const) {
+    for (const value of values) {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new FieldTimeError(
+          "invalid_break_rule",
+          `Break ${name} ${String(value)} is not declared — set unpaid break minutes to 0 or more in Timesheets setup`,
+        );
+      }
+    }
+  }
+  if (!Number.isFinite(unpaidBreakMinutes) || unpaidBreakMinutes < 0) {
+    throw new FieldTimeError(
+      "invalid_break_rule",
+      `Break unpaid rule ${String(unpaidBreakMinutes)} is not declared — set unpaid break minutes to 0 or more in Timesheets setup`,
+    );
+  }
+  const capped = recordedBreakMs.map((r, i) => Math.min(r, grossMs[i]!));
+  const bases = grossMs.map((g, i) => g - capped[i]!);
+  const totalRecorded = capped.reduce((a, b) => a + b, 0);
+  const totalBase = bases.reduce((a, b) => a + b, 0);
+  // The declared rule applies shift-wide: recorded breaks cover it
+  // first, and only the uncovered remainder is auto-deducted.
+  const residual = Math.max(0, Math.round(unpaidBreakMinutes * 60_000) - totalRecorded);
+  const deductible = Math.min(residual, totalBase);
+  const dealt = distributeProRata(deductible, bases);
+  return bases.map((b, i) => b - dealt[i]!);
 }
 
 export interface LatLng {
