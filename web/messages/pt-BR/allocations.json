@@ -596,6 +596,8 @@
     "empty": "Nenhuma linha rateada leva a este registro.",
     "viewJournal": "Abrir o lançamento",
     "loadFailed": "Não foi possível carregar a origem.",
-    "truncated": "Mostrando as primeiras {shown} de {total} linhas."
+    "pageStatus": "Linhas {from}-{to} de {total}.",
+    "previous": "Anterior",
+    "next": "Próximo"
   }
 }

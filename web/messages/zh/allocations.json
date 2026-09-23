@@ -596,6 +596,8 @@
     "empty": "没有分摊明细可追溯到该记录。",
     "viewJournal": "打开记账凭证",
     "loadFailed": "无法加载溯源。",
-    "truncated": "共 {total} 行，当前显示前 {shown} 行。"
+    "pageStatus": "第 {from}-{to} 行，共 {total} 行。",
+    "previous": "上一页",
+    "next": "下一页"
   }
 }
