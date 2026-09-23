@@ -46,23 +46,32 @@ export async function GET(req: Request) {
   const today = await businessToday(user.orgId);
 
   const [pay, partyOpen, recent] = await Promise.all([
-    // Avg days-to-pay + total paid over the trailing 12 months.
+    // Avg days-to-pay + total paid over the trailing 12 months, per distinct
+    // source payment document: one payment split across two bills is one
+    // payment, with days amount-weighted across its applications.
     (db.execute(sql`
-      select avg(pe.posting_date - be.posting_date) as avg_days,
-        coalesce(sum(ap.amount), 0) as total_paid, count(*) as payment_count
-      from applications ap
-      join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
-      join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
-      join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
-      join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
-      join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
-      where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
-        and bl.party_id = ${party}
-        and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
-        ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
+      select count(*) as payment_count, avg(t.days) as avg_days,
+        coalesce(sum(t.paid), 0) as total_paid
+      from (
+        select pe.source_document_id as pid,
+          sum(ap.amount * (pe.posting_date - be.posting_date))
+            / nullif(sum(ap.amount), 0) as days,
+          sum(ap.amount) as paid
+        from applications ap
+        join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
+        join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
+        join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
+        join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
+        join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
+        where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
+          and bl.party_id = ${party}
+          and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
+          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        group by pe.source_document_id
+      ) t
     `)),
     // Open items with days-overdue — off the shared cash-engine reader, not
     // a bespoke aggregate (F-t03-010). The old query joined reversed entries
