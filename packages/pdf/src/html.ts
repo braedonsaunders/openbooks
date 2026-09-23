@@ -17,7 +17,8 @@
 // are handed to `page.pdf`. Template-authored network URLs are never fetched
 // by the renderer.
 
-import puppeteer, { type Browser, type Page } from 'puppeteer-core'
+import { type Page } from 'puppeteer-core'
+import { sharedPdfPool } from './browser-pool'
 import { isAllowedPdfRequest, sanitizeTokenizedFragment } from './template'
 import type { PdfPaperSize } from './types'
 
@@ -26,55 +27,6 @@ export { isAllowedPdfRequest }
 export type PdfOrientation = 'portrait' | 'landscape'
 
 const HTML_BYTE_LIMIT = 16 * 1024 * 1024
-
-function resolveExecutable(): string {
-  const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH
-  if (fromEnv) return fromEnv
-
-  // Production images install Chromium at this fixed path (see Dockerfile).
-  // Keep local development deterministic too, without probing arbitrary
-  // filesystem paths that would make Next output tracing crawl the host.
-  if (process.platform === 'linux') {
-    return '/usr/bin/chromium'
-  }
-  if (process.platform === 'darwin') {
-    return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
-  }
-  throw new Error(
-    'Set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.',
-  )
-}
-
-let browserPromise: Promise<Browser> | null = null
-
-async function getBrowser(): Promise<Browser> {
-  if (browserPromise) {
-    const existing = await browserPromise.catch(() => null)
-    if (existing?.connected) return existing
-    browserPromise = null
-  }
-  browserPromise = puppeteer.launch({
-    executablePath: resolveExecutable(),
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
-  })
-  return browserPromise
-}
-
-/** New page hardened for printing: no JS, no template-controlled network. */
-async function newPdfPage(browser: Browser): Promise<Page> {
-  const page = await browser.newPage()
-  await page.setJavaScriptEnabled(false)
-  await page.setRequestInterception(true)
-  page.on('request', (request) => {
-    if (isAllowedPdfRequest(request.resourceType(), request.url())) {
-      void request.continue()
-    } else {
-      void request.abort()
-    }
-  })
-  return page
-}
 
 export type HtmlDocumentPdfInput = {
   /** Already-merged body HTML (sanitized at save, values escaped at merge). */
@@ -123,9 +75,7 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
   const footerTemplate = input.footerHtml
     ? `<div style="font-size:8px;width:100%;padding:0 ${m};color:#94a3b8;text-align:center;">${preparePdfChromeHtml(input.footerHtml)}</div>`
     : `<div></div>`
-  const browser = await getBrowser()
-  const page = await newPdfPage(browser)
-  try {
+  return sharedPdfPool().withPage(async (page: Page) => {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
       format: formatMap[input.paperSize] ?? 'Letter',
@@ -137,7 +87,5 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
       footerTemplate,
     })
     return Buffer.from(pdf)
-  } finally {
-    await page.close()
-  }
+  })
 }

@@ -57,6 +57,13 @@ ARG OPENBOOKS_VERSION=development
 # write an encrypted file, so encryption is a post-processing pass. Chromium
 # follows Debian's security suite because superseded browser builds are removed
 # from the repository; the fonts stay pinned for deterministic typography.
+# The renderer runs sandboxed by default (packages/pdf/src/browser-pool.ts)
+# even though this image runs as non-root node: Debian Chromium sandboxes via
+# unprivileged user namespaces, which needs no root. Swarm's default seccomp
+# profile denies the unshare the sandbox needs, so there the launch falls
+# back to --no-sandbox with a warning (or set OPENBOOKS_CHROMIUM_NO_SANDBOX=1
+# to skip the doomed first attempt); the child environment is scrubbed of
+# secrets either way.
 RUN apt-get update \
     # Base-image security rot: the node:24-trixie-slim digest still ships
     # util-linux 2.41-5 (CVE-2026-53615, fixed in 2.41.5-0+deb13u1) and no

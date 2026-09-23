@@ -32,6 +32,19 @@ import { join } from 'node:path'
 
 export class PdfEncryptionError extends Error {}
 
+/**
+ * Ceiling for each qpdf invocation. Encryption is a local byte-shuffle over
+ * an already-rendered buffer — seconds at most — so an unbounded wait lets
+ * one stuck child pin a delivery worker forever. Operators serving very
+ * large records can raise it; it only ever shortens a hang into a refusal,
+ * never extends a success.
+ */
+export function qpdfTimeoutMs(): number {
+  const fromEnv = Number(process.env.OPENBOOKS_QPDF_TIMEOUT_MS)
+  if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv)
+  return 60_000
+}
+
 export interface PdfEncryptionOptions {
   /** Password required to OPEN the document. */
   userPassword: string
@@ -165,24 +178,54 @@ function runQpdf(args: string[]): Promise<void> {
     // override), not a build asset. Without this annotation Turbopack treats
     // the dynamic executable as filesystem access and copies the whole
     // project into the standalone server output.
+    // Detached so the timeout can kill the whole process GROUP: qpdf is
+    // spawned through a shell when the override points at a script, and
+    // killing only the direct child leaves grandchildren holding the stdio
+    // pipes open — 'close' (which this promise awaits) then arrives when the
+    // grandchild exits, not when the child dies, and the timeout is a lie.
     const child = spawn(/* turbopackIgnore: true */ qpdfExecutable(), ['@-'], {
       stdio: ['pipe', 'ignore', 'pipe'],
+      detached: true,
     })
     let stderr = ''
+    let timedOut = false
+    const timer = setTimeout(() => {
+      // A child that already exited won its race with this timer: killing
+      // (and blaming the timeout) would turn a success into a refusal.
+      if (child.exitCode !== null || child.signalCode !== null) return
+      timedOut = true
+      try {
+        if (child.pid !== undefined) process.kill(-child.pid, 'SIGKILL')
+        else child.kill('SIGKILL')
+      } catch {
+        child.kill('SIGKILL')
+      }
+    }, qpdfTimeoutMs())
+    timer.unref?.()
+    const settle = (fn: () => void): void => {
+      clearTimeout(timer)
+      fn()
+    }
     child.stderr.setEncoding('utf8')
     child.stderr.on('data', (chunk: string) => {
       // Bounded: a runaway diagnostic stream must not grow without limit.
       if (stderr.length < 4096) stderr += chunk
     })
     child.on('error', (error) => {
-      reject(new PdfEncryptionError(
+      settle(() => reject(new PdfEncryptionError(
         `PDF encryption needs the qpdf binary (${(error as Error).message}) — install qpdf or set OPENBOOKS_QPDF_PATH`,
-      ))
+      )))
     })
     child.on('close', (code) => {
+      if (timedOut) {
+        settle(() => reject(new PdfEncryptionError(
+          `qpdf did not finish within ${qpdfTimeoutMs()} ms and was killed; refusing instead of waiting forever`,
+        )))
+        return
+      }
       // qpdf exit 3 is "completed with warnings", which still writes the file.
-      if (code === 0 || code === 3) resolve()
-      else reject(new PdfEncryptionError(`qpdf could not encrypt the document (exit ${code}): ${stderr.trim()}`))
+      if (code === 0 || code === 3) settle(resolve)
+      else settle(() => reject(new PdfEncryptionError(`qpdf could not encrypt the document (exit ${code}): ${stderr.trim()}`)))
     })
     child.stdin.on('error', () => {
       /* surfaced by the 'error'/'close' handlers above */
