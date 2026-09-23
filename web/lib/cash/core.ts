@@ -1115,9 +1115,23 @@ export async function categoryWeekly(
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
-        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}
+        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `));
+    // Same data-start rule as the GL path (see historyWindowDivisor),
+    // measured in this strategy's own read scope: bank legs matching its
+    // kind/memo filters, unbounded in time.
+    const windowStartIso = toISO(historyStart);
+    const bankStartRow = (await db.execute<{ d: string | null }>(sql`
+      select min(e.posting_date)::text as d
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+          and e.book_id = ${statementBookExpr(orgId)}
+        left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
+       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
+         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
+    `));
+    const bankStartIso = bankStartRow.rows[0]?.d ?? null;
     const weeklyHistory: Record<string, Money> = {};
     const currentWeekKey = toISO(weekStart(asOf));
     const startKey = toISO(tStart);
@@ -1138,12 +1152,11 @@ export async function categoryWeekly(
       }
     }
     let totalHistory = ZERO_MONEY;
-    let weeksCounted = 0;
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); weeksCounted++; }
+      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); }
     }
-    const divisor = weeksCounted > 0 ? weeksCounted : historyWeeks;
-    let weeklyAvg = divideMoney(totalHistory, String(divisor));
+    const divisor = historyWindowDivisor(historyWeeks, windowStartIso, bankStartIso);
+    let weeklyAvg = fullWindowWeeklyAverage(totalHistory, historyWeeks, windowStartIso, bankStartIso);
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     weekStarts.forEach((k, i) => {
       const actual = weeklyHistory[k] ?? ZERO_MONEY;
@@ -1160,7 +1173,7 @@ export async function categoryWeekly(
       method: "Bank Register History",
       bankAccounts: cat.bankAccountIds.length,
       historyWeeks,
-      rawAverage: divideMoney(totalHistory, String(divisor)),
+      rawAverage: fullWindowWeeklyAverage(totalHistory, historyWeeks, windowStartIso, bankStartIso),
       finalAverage: weeklyAvg,
       weeksUsed: divisor,
       currentWeekApplied: weeklyHistory[currentWeekKey] ?? ZERO_MONEY,
