@@ -84,7 +84,12 @@
       "error": "No se pudo preparar la empresa de ejemplo",
       "firstGeneration": "La primera copia puede tardar unos minutos mientras se genera su plantilla verificada",
       "safety": "Los datos de ejemplo se copian en un espacio de trabajo separado y claramente marcado. Nunca entran en sus libros reales, y los efectos de correo, pago, API e integración quedan desactivados.",
-      "orFile": "o importe su propio archivo"
+      "orFile": "o importe su propio archivo",
+      "createFailed": "No se pudo crear la empresa de ejemplo. No se creó nada; puede reintentarlo.",
+      "createFailedTemplate": "No se pudo crear la empresa de ejemplo: falló la preparación de la plantilla verificada. No se creó nada; puede reintentarlo.",
+      "createFailedClone": "No se pudo crear la empresa de ejemplo: falló la copia del historial contabilizado de la plantilla. No se creó nada; puede reintentarlo.",
+      "createFailedFinalize": "No se pudo crear la empresa de ejemplo: falló la finalización de la nueva empresa. No se creó nada; puede reintentarlo.",
+      "createFailedNumbering": "No se pudo crear la empresa de ejemplo: falló la conciliación de la numeración de documentos. No se creó nada; puede reintentarlo."
     },
     "loadFailed": "No se pudieron cargar los tipos de registro importables."
   },
