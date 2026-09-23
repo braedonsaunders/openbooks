@@ -78,19 +78,21 @@ test("utcDateFromParts keeps the literal year and matches Date.UTC normalization
 });
 
 test("utcDateFromParts carries out-of-range time into the date like Date.UTC", () => {
-  // Date.UTC parity for years >= 100, where both spellings are exact.
-  const cases: Array<[number, number, number, number, number, number, number]> = [
-    [2026, 0, 1, 24, 0, 0, 0],
-    [2026, 0, 1, -1, 0, 0, 0],
-    [2026, 0, 1, 0, 1440, 0, 0],
-    [2026, 0, 1, 0, 0, 0, 1500],
-    [2026, 0, 1, 25, 61, 61, 1001],
-    [2026, 11, 31, 24, 0, 0, 0],
+  // Parity with Date.UTC semantics for years >= 100, asserted against
+  // ISO-string oracles (exact and independent — never Date.UTC itself, which
+  // is the spelling under test).
+  const cases: Array<[number, number, number, number, number, number, number, string]> = [
+    [2026, 0, 1, 24, 0, 0, 0, "2026-01-02T00:00:00.000Z"],
+    [2026, 0, 1, -1, 0, 0, 0, "2025-12-31T23:00:00.000Z"],
+    [2026, 0, 1, 0, 1440, 0, 0, "2026-01-02T00:00:00.000Z"],
+    [2026, 0, 1, 0, 0, 0, 1500, "2026-01-01T00:00:01.500Z"],
+    [2026, 0, 1, 25, 61, 61, 1001, "2026-01-02T02:02:02.001Z"],
+    [2026, 11, 31, 24, 0, 0, 0, "2027-01-01T00:00:00.000Z"],
   ];
-  for (const [y, mo, d, h, mi, s, ms] of cases) {
+  for (const [y, mo, d, h, mi, s, ms, want] of cases) {
     assert.equal(
       utcDateFromParts(y, mo, d, h, mi, s, ms).getTime(),
-      Date.UTC(y, mo, d, h, mi, s, ms),
+      new Date(want).getTime(),
     );
   }
   // The same carries across the 0099/0100 boundary keep the literal year.
