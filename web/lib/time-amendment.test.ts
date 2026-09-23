@@ -9,8 +9,14 @@ const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
 
 test('a weekly save never deletes amendment offsets', () => {
   const route = source('app/api/timesheets/route.ts')
-  assert.match(route, /and amends_entry_id is null/)
-  assert.match(route, /overhead_journal_entry_id is null/)
+  // The save reconciles instead of wiping: offsets and contra-referenced
+  // rows are excluded from the replaceable set, and the delete touches
+  // only the collected replaceable ids. Behaviour is proven by the
+  // 'never deletes amendment offsets or their referenced originals'
+  // integration test in save-controls.
+  assert.match(route, /row\.amends_entry_id != null \|\| row\.has_contra\) return false/, 'offsets are not replaceable')
+  assert.match(route, /id = any\(/, 'the delete is limited to replaceable ids')
+  assert.match(route, /row\.overhead_journal_entry_id == null/, 'consumed entries stay out of the replaceable set')
 })
 
 test('the week grid keeps amendments on their own immutable line', () => {
@@ -48,7 +54,12 @@ test('reopening refuses amendment history in both link directions', () => {
 
 test('a weekly save never deletes an amendment-referenced original', () => {
   const route = source('app/api/timesheets/route.ts')
+  // Behaviour is proven by the 'never deletes amendment offsets or their
+  // referenced originals' integration test in save-controls; this pins the
+  // mechanism: the locked read detects referencing offsets and the
+  // replaceable set excludes them before the delete runs.
+  assert.match(route, /contra\.amends_entry_id = time_entries\.id/, 'the locked read detects referencing offsets')
+  const guard = route.indexOf('row.has_contra) return false')
   const del = route.indexOf('delete from time_entries')
-  const guard = route.indexOf('contra.amends_entry_id = time_entries.id')
-  assert.ok(del >= 0 && guard > del, 'the replace-in-place delete must keep referenced originals')
+  assert.ok(guard >= 0 && guard < del, 'referenced originals leave the replaceable set before the delete')
 })
