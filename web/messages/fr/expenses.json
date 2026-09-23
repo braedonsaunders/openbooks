@@ -19,6 +19,7 @@
     "reportDate": "Date de la note",
     "selectEmployeePlaceholder": "Sélectionner un employé…",
     "accountPlaceholder": "Compte…",
+    "lineMissingAccount": "Ligne {line} : sélectionnez un compte.",
     "noTax": "Sans taxe",
     "deleteTitle": "Supprimer cette note de frais?",
     "deleteDraftBody": "Cela supprime définitivement la note de frais brouillon. Cette action est irréversible.",

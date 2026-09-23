@@ -87,7 +87,7 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
-const { JournalDrawer } = await import("./JournalDrawer");
+const { JournalDrawer, isBlankJournalLine, findMissingJournalAccountLine } = await import("./JournalDrawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 const TOKEN = "2026-09-17T12:00:00.000000Z";
@@ -130,7 +130,7 @@ function snapshotBody(id: string) {
   };
 }
 
-async function mountJournal(doc: Record<string, unknown>, initialMode?: string) {
+async function mountJournal(doc: Record<string, unknown>, initialMode?: string, lines: Record<string, unknown>[] = BALANCED_LINES) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -139,7 +139,7 @@ async function mountJournal(doc: Record<string, unknown>, initialMode?: string) 
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <JournalDrawer
-            journal={{ doc, lines: BALANCED_LINES } as never}
+            journal={{ doc, lines } as never}
             parties={[]}
             accounts={[]}
             departments={[]}
@@ -316,4 +316,123 @@ test("a refused post still pins the server reason (F-t06-006 preservation)", asy
   const alert = document.querySelector('[role="alert"]');
   assert.ok(alert, "the post refusal must pin as an alert");
   assert.match(alert.textContent ?? "", /No open period/, "the alert must carry the server reason");
+});
+
+const blankJournalRow = () => ({
+  accountId: "",
+  description: "",
+  partyId: "",
+  departmentId: "",
+  projectId: "",
+  subsidiaryId: "",
+  debit: "",
+  credit: "",
+});
+
+test("only a truly blank journal row is blank", () => {
+  assert.equal(isBlankJournalLine(blankJournalRow()), true);
+  assert.equal(isBlankJournalLine({ debit: "", credit: "" }), true);
+  // An exact zero leg carries no financial meaning: it counts as empty, so
+  // a leg that is genuinely empty or zero still drops.
+  assert.equal(isBlankJournalLine({ ...blankJournalRow(), debit: "0.0000" }), true);
+  assert.equal(isBlankJournalLine({ ...blankJournalRow(), credit: "0" }), true);
+});
+
+test("any journal content makes the row non-blank — even without an account (OM-09b)", () => {
+  for (const content of [
+    { accountId: "a1", debit: "100" },
+    { debit: "100" },
+    { credit: "50" },
+    { description: "mystery leg" },
+    { partyId: "p1" },
+    { cf_note: "keep me" },
+  ]) {
+    assert.equal(isBlankJournalLine({ ...blankJournalRow(), ...content }), false, JSON.stringify(content));
+  }
+});
+
+test("the missing-account probe names the first contentful account-less journal row", () => {
+  assert.equal(findMissingJournalAccountLine([blankJournalRow()]), null);
+  assert.deepEqual(
+    findMissingJournalAccountLine([
+      { ...blankJournalRow(), accountId: "a1", debit: "100" },
+      { ...blankJournalRow(), description: "mystery leg", debit: "100" },
+      blankJournalRow(),
+    ]),
+    { index: 1, lineNumber: 2 },
+  );
+});
+
+test("a contentful account-less journal leg survives to the save payload (OM-09b guard)", () => {
+  const rows = [
+    { ...blankJournalRow(), accountId: "a1", debit: "100" },
+    { ...blankJournalRow(), description: "mystery leg", debit: "100" },
+    { ...blankJournalRow(), accountId: "a2", credit: "200" },
+    blankJournalRow(),
+  ];
+  const payload = rows.filter((r) => !isBlankJournalLine(r));
+  assert.equal(payload.length, 3);
+  assert.deepEqual(findMissingJournalAccountLine(rows)?.lineNumber, 2);
+});
+
+// A balanced journal whose second debit leg names no account: debits 200,
+// credits 200, so Save enables and the refusal path — not the balance gate —
+// is what must fire.
+const ACCOUNTLESS_LINES = [
+  { account_id: "a1", amount: "100.00", description: "leg one", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  { account_id: "", amount: "100.00", description: "mystery leg", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+  { account_id: "a2", amount: "-200.00", description: "leg three", party_id: "", department_id: "", project_id: "", subsidiary_id: "", custom: {}, extra_dims: {} },
+];
+
+test("OM-09b journal: saving with a contentful account-less leg refuses by line name and keeps the row", async (t) => {
+  freshGlobals();
+  const doc = DRAFT_DOC();
+  const writes: string[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/journals/${doc.id}` && (!init?.method || init.method === "GET")) {
+      return Response.json({
+        doc: { id: doc.id, updated_at: TOKEN, document_date: "2026-09-17", memo: "", reference_number: "" },
+        lines: ACCOUNTLESS_LINES,
+      });
+    }
+    if (url === `/api/journals/${doc.id}` && init?.method === "PATCH") {
+      writes.push(`${init.method} ${url}`);
+      return Response.json({ error: "should never be reached" }, { status: 500 });
+    }
+    if (url.includes("/api/flows/record-state")) {
+      return Response.json({
+        approvalState: { status: "none", pendingWith: [], myActions: null },
+        history: [],
+        failedRun: null,
+        canRetry: false,
+        neverSubmitted: true,
+      });
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountJournal(doc, "edit", ACCOUNTLESS_LINES);
+  t.after(unmount);
+  // The footer prices the account-less $100 leg: debits read 200, not 100.
+  assert.match(document.body.textContent ?? "", /200/, "the footer must include the account-less leg");
+  const menu = buttonsNamed("Actions")[0];
+  assert.ok(menu, "record actions must live behind the Actions menu");
+  await click(menu);
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "a balanced journal must offer an enabled Save");
+  assert.equal(save.disabled, false, "Save must enable on balanced legs so the refusal path is what fires");
+  await click(save);
+  await tick();
+  assert.deepEqual(writes, [], "no journal write may fire while a contentful leg has no account");
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the missing account must pin as an alert, not only toast");
+  assert.match(alert.textContent ?? "", /Line 2: choose an account/, "the refusal must name the grid line and the remedy");
+  const toasts = globalThis.__journalToasts ?? [];
+  assert.ok(
+    toasts.some((toast) => toast.kind === "error" && /Line 2/.test(toast.message)),
+    "the missing account must also toast with the line named",
+  );
+  // The entered leg stays in state: the footer still reads 200 debits.
+  assert.match(document.body.textContent ?? "", /200/, "the refused leg must stay in the drawer with its amount priced");
+  assert.equal(save.disabled, false, "busy must release after the refusal");
 });

@@ -19,6 +19,7 @@
     "reportDate": "Abrechnungsdatum",
     "selectEmployeePlaceholder": "Mitarbeiter auswählen…",
     "accountPlaceholder": "Konto…",
+    "lineMissingAccount": "Zeile {line}: Wählen Sie ein Konto aus.",
     "noTax": "Keine Steuer",
     "deleteTitle": "Diese Spesenabrechnung löschen?",
     "deleteDraftBody": "Dadurch wird der Entwurf der Spesenabrechnung dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",

@@ -6,7 +6,7 @@ import { sum, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "./api/idempotency";
-import { exactMoney, isoDate, nullableUuidId, uuidId } from "./api/json";
+import { exactMoney, isoDate, nullableUuidId } from "./api/json";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "./custom-fields";
 import { loadJournalDoc } from "./journals";
 import { isUuid } from "./list-params";
@@ -36,7 +36,10 @@ export class JournalCreateError extends Error {
 
 const journalLineInput = z
   .object({
-    accountId: uuidId,
+    // Blank/malformed accounts pass the boundary so createManualJournal can
+    // refuse them with the line number (a bare uuid failure names neither
+    // the line nor the remedy).
+    accountId: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -164,7 +167,23 @@ export async function createManualJournal(input: {
          and id = any(${`{${requestedSubsidiaries.join(",")}}`}::uuid[])`));
     if (owned.rows.length !== requestedSubsidiaries.length) fail("invalid subsidiary", "lines");
   }
-  const lineAccountIds = [...new Set(lines.map((line) => line.accountId))];
+  // Every submitted leg must name its account: the drawers send every
+  // contentful row (OM-09b), so an account-less row arrives here rather than
+  // vanishing client-side — name its line instead of booking without it.
+  // Malformed ids get the same line-numbered treatment the boundary's
+  // anonymous uuid failure never gave them. This runs before the ownership
+  // lookup below, whose uuid[] cast cannot take a blank.
+  const checkedAccountIds = lines.map((line, i) => {
+    const accountId = line.accountId;
+    if (typeof accountId !== "string" || accountId.trim() === "") {
+      throw new JournalCreateError(`Line ${i + 1}: an account is required`, 422);
+    }
+    if (!isUuid(accountId)) {
+      throw new JournalCreateError(`Line ${i + 1}: invalid account`, 422);
+    }
+    return accountId;
+  });
+  const lineAccountIds = [...new Set(checkedAccountIds)];
   const ownedAccounts = (await db.execute<{ id: string }>(sql`
     select id from accounts
      where org_id = ${orgId} and id = any(${`{${lineAccountIds.join(",")}}`}::uuid[])`));
@@ -215,7 +234,7 @@ export async function createManualJournal(input: {
     const lineDims = validateExtraDims(line.extraDims, segments);
     if (!lineDims.ok) fail(`Line ${i + 1}: ${lineDims.error}`, "lines");
     preparedLines.push({
-      accountId: line.accountId,
+      accountId: checkedAccountIds[i]!,
       description: line.description ?? null,
       amount: line.amount,
       partyId: line.partyId ?? null,

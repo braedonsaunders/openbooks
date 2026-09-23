@@ -19,6 +19,7 @@
     "reportDate": "Report date",
     "selectEmployeePlaceholder": "Select employee…",
     "accountPlaceholder": "Account…",
+    "lineMissingAccount": "Line {line}: choose an account.",
     "noTax": "No tax",
     "deleteTitle": "Delete this expense report?",
     "deleteDraftBody": "This permanently deletes the draft expense report. This cannot be undone.",

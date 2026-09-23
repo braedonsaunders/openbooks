@@ -72,6 +72,7 @@
     "noParty": "取引先なし",
     "partylessControlWarning": "{accounts} に取引先なしで転記されました。これらの残高は得意先・仕入先の補助簿の対象外です — エイジングの（取引先なし）行を参照してください。",
     "accountPlaceholder": "勘定…",
+    "lineMissingAccount": "明細 {line}: 勘定科目を選択してください。",
     "columns": {
       "debit": "借方",
       "credit": "貸方"

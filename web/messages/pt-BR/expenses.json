@@ -19,6 +19,7 @@
     "reportDate": "Data do relatório",
     "selectEmployeePlaceholder": "Selecionar funcionário…",
     "accountPlaceholder": "Conta…",
+    "lineMissingAccount": "Linha {line}: selecione uma conta.",
     "noTax": "Sem imposto",
     "deleteTitle": "Excluir este relatório de despesas?",
     "deleteDraftBody": "Isso exclui permanentemente o relatório de despesas rascunho. Isso não pode ser desfeito.",

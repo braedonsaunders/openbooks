@@ -19,6 +19,7 @@
     "reportDate": "精算書の日付",
     "selectEmployeePlaceholder": "従業員を選択…",
     "accountPlaceholder": "勘定…",
+    "lineMissingAccount": "明細 {line}: 勘定科目を選択してください。",
     "noTax": "税なし",
     "deleteTitle": "この経費精算書を削除しますか?",
     "deleteDraftBody": "下書きの経費精算書を完全に削除します。この操作は取り消せません。",
