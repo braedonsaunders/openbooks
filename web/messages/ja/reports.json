@@ -2071,6 +2071,9 @@
     },
     "print": "印刷",
     "printFailed": "印刷ダイアログを開けませんでした",
+    "exported": "{filename} をエクスポートしました。",
+    "exportFailed": "{format} をエクスポートできませんでした。",
+    "exporting": "{format} をエクスポート中…",
     "export": "エクスポート"
   },
   "builtIns": {

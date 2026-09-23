@@ -2071,6 +2071,9 @@
     },
     "print": "Print",
     "printFailed": "Could not open the print dialog",
+    "exported": "Exported {filename}.",
+    "exportFailed": "Could not export {format}.",
+    "exporting": "Exporting {format}…",
     "export": "Export"
   },
   "builtIns": {

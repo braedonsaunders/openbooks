@@ -2071,6 +2071,9 @@
     },
     "print": "Drucken",
     "printFailed": "Der Druckdialog konnte nicht geöffnet werden",
+    "exported": "{filename} exportiert.",
+    "exportFailed": "{format} konnte nicht exportiert werden.",
+    "exporting": "{format} wird exportiert…",
     "export": "Exportieren"
   },
   "builtIns": {

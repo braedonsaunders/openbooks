@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Download } from 'lucide-react'
 import { Button, PageHeader, Select, cn } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { downloadExportFile } from '../../../../lib/export-download'
 
 interface ResourceDescriptor {
   key: string
@@ -104,26 +105,17 @@ export function ExportClient() {
     setDone(null)
     try {
       const chosen = columns.filter((c) => selected.has(c.key)).map((c) => c.key)
-      const res = await fetch('/api/data/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resource, format, columns: chosen }),
-      })
-      if (!res.ok) throw new Error(await readApiErrorMessage(res, 'export failed'))
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      const disp = res.headers.get('Content-Disposition') ?? ''
-      const match = /filename="?([^"]+)"?/.exec(disp)
-      const filename = match?.[1] ?? `${resource}.${format}`
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      // Completion is claimed only now: the bytes arrived and the download
-      // started, with the real filename and column count.
+      // Completion is claimed only now: the bytes arrive inside the shared
+      // helper and the download starts with the real filename.
+      const filename = await downloadExportFile(
+        '/api/data/export',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resource, format, columns: chosen }),
+        },
+        { fallbackFilename: `${resource}.${format}`, failedMessage: 'export failed' },
+      )
       setDone({ filename, columns: chosen.length })
     } catch (e) {
       toast.error((e as Error).message)
