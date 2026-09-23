@@ -6,8 +6,9 @@ import test from 'node:test'
 
 // A double-clicked (or replayed) submit on an already-submitted expense
 // report must fail closed as a 4xx with a named error. The engine's
-// not-draft refusal is a plain Error, which this route's catch maps to a
-// 500 — an operator retry storm against a state that can never succeed.
+// not-draft refusal is a SubmitError, which this route's catch maps to a
+// 422 — an operator retry storm against a state that can never succeed
+// must stay a client error, never a 500.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __expenseActionsResubmitState: state })
