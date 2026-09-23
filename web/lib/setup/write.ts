@@ -1411,10 +1411,29 @@ export async function validateEntityIntegrity(
 
 
 /**
+ * Bills of materials change only through the BOM command
+ * (PUT /api/inventory/bom): a complete recipe with an expected version, a
+ * reason, and one before/after audit. Generic single-row CRUD would let one
+ * component change without a revision or reason, delete the last component,
+ * or store a zero/negative quantity the build then refuses or misprices — so
+ * every generic verb refuses here, in the preflight and in each command (the
+ * assistant/MCP tools share the commands, not the route). Bulk migration
+ * imports keep their own path in web/lib/data-io/setup-resources.ts.
+ */
+function bomCommandOnly(entity: SetupEntity): SetupWriteResult | null {
+  if (entity.key !== 'bom-components') return null
+  return {
+    status: 405,
+    body: { error: 'Bills of materials change only through the bill of materials command (PUT /api/inventory/bom), which records the revision, reason, and audit.' },
+  }
+}
+
+/**
  * The refusals every mutation applies before it reads a body or touches the
- * database: unknown/disabled entity (404), declaration-owned or shared
- * reference data (405). The route calls this before parsing so a malformed
- * body on a read-only entity still answers 405, and each command re-runs it.
+ * database: unknown/disabled entity (404), declaration-owned, command-owned,
+ * or shared reference data (405). The route calls this before parsing so a
+ * malformed body on a refused entity still answers 405, and each command
+ * re-runs it.
  */
 export async function preflightSetupWrite(
   actor: SetupActor,
@@ -1424,6 +1443,8 @@ export async function preflightSetupWrite(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, actor.orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const owned = bomCommandOnly(entity)
+  if (owned) return owned
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (method === 'delete' && entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
@@ -1482,6 +1503,8 @@ export async function createSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const owned = bomCommandOnly(entity)
+  if (owned) return owned
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   const requestId = options.requestId ?? randomUUID()
@@ -1795,6 +1818,8 @@ export async function updateSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const owned = bomCommandOnly(entity)
+  if (owned) return owned
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
   const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody)))))))
@@ -2119,6 +2144,8 @@ export async function deleteSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const owned = bomCommandOnly(entity)
+  if (owned) return owned
   if (entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (entity.key === 'accounting-books') {
