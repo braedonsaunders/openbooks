@@ -58,8 +58,10 @@ const hooks = registerHooks({
   },
 });
 
-const { POST } = (await import("./route.ts?pdf-template-design-audit-post")) as typeof import("./route.ts");
-const { PATCH, DELETE } = (await import("./[id]/route.ts?pdf-template-design-audit-id")) as typeof import("./[id]/route.ts");
+const postUrl = "./route.ts?pdf-template-design-audit-post";
+const idUrl = "./[id]/route.ts?pdf-template-design-audit-id";
+const { POST } = (await import(postUrl)) as typeof import("./route.ts");
+const { PATCH, DELETE } = (await import(idUrl)) as typeof import("./[id]/route.ts");
 hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
