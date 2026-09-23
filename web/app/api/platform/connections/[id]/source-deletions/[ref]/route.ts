@@ -5,7 +5,7 @@ import {
   SourceDeletionResolutionError,
   type SourceDeletionAction,
 } from "@openbooks/engine/src/sync/source-deletions.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../../../lib/authz";
 import { storageIdentityError } from "../../../_storage-identity";
 
 export const runtime = "nodejs";
@@ -16,6 +16,8 @@ export async function POST(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const { id, ref } = await params;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

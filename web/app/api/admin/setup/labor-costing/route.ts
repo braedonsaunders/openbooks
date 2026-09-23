@@ -380,6 +380,15 @@ export async function POST(req: Request) {
     if ([employeePartyId, jobTitle, tradeId, departmentId, subsidiaryId].filter(Boolean).length > 1) {
       return NextResponse.json({ error: 'choose exactly one wage scope' }, { status: 422 })
     }
+    // Job-title, trade, and unanchored default rates resolve across every
+    // subsidiary. A subsidiary-limited setup actor may write only rates with
+    // an employee, department, or subsidiary anchor.
+    const orgWideRate = jobTitle !== null || tradeId !== null ||
+      (employeePartyId === null && departmentId === null && subsidiaryId === null)
+    if (orgWideRate) {
+      const scopeDenied = guardUnrestrictedScope(gate)
+      if (scopeDenied) return scopeDenied
+    }
     const [employeeRef, tradeRef, departmentRef, subsidiaryRef] = await Promise.all([
       employeePartyId
         ? db.execute<{ subsidiaryId: string | null }>(sql`

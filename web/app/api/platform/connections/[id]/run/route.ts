@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { ConnectionRow } from "@openbooks/engine/src/sync/connection.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
@@ -33,6 +33,8 @@ export async function POST(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const orgId = gate.user.orgId;
   const { id } = await params;
   const conn = await db

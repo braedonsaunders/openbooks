@@ -6,6 +6,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `
+      export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
       export async function guardPermission() {
         return { user: { orgId: "org-1", id: "user-1" }, permissions: new Set(), allowedSubsidiaryIds: null }
       }
