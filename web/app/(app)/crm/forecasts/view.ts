@@ -24,7 +24,7 @@ import {
 import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
-import { calculateForecast, type ForecastRow } from '../../../../lib/crm'
+import { calculateForecast, countUndatedForecastExcluded, type ForecastRow } from '../../../../lib/crm'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { getMoneyFormatter } from '../../../../lib/money-server'
 
@@ -135,6 +135,10 @@ export interface ForecastsData {
   hasForecast: boolean
   noForecast: boolean
   currencyGroups: ForecastCurrencyGroup[]
+  hasExcludedUndated: boolean
+  excludedUndatedNote: string
+  excludedUndatedHref: string
+  excludedUndatedLinkLabel: string
   emptyForecastTitle: string
   emptyForecastDescription: string
   hasQuotas: boolean
@@ -191,11 +195,17 @@ export async function loadForecasts(
   // opposite key; owner wins for manually constructed URLs containing both.
   const salesTeamId = !ownerUserId && requestedTeam && isUuid(requestedTeam) ? requestedTeam : null
 
-  const [forecast, quotasResult, snapshotsResult, ownersResult, teamsResult] = await Promise.all([
+  const [forecast, excludedUndated, quotasResult, snapshotsResult, ownersResult, teamsResult] = await Promise.all([
     calculateForecast({
       orgId: authz.user.orgId,
       periodStart: start,
       periodEnd: end,
+      ownerUserId,
+      salesTeamId,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    }),
+    countUndatedForecastExcluded({
+      orgId: authz.user.orgId,
       ownerUserId,
       salesTeamId,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
@@ -307,6 +317,10 @@ export async function loadForecasts(
     })),
     emptyForecastTitle: t('forecasts.emptyForecastTitle'),
     emptyForecastDescription: t('forecasts.emptyForecastDescription'),
+    hasExcludedUndated: excludedUndated > 0,
+    excludedUndatedNote: t('forecasts.excludedUndated', { count: excludedUndated }),
+    excludedUndatedHref: '/crm/opportunities?view=board&undated=1',
+    excludedUndatedLinkLabel: t('forecasts.viewUndated'),
     hasQuotas: quotas.length > 0,
     noQuotas: quotas.length === 0,
     quotaRows: quotas.map((row) => ({
@@ -469,6 +483,14 @@ export function forecastsSpec(data: ForecastsData): PageSpec {
                 description: data.emptyForecastDescription,
               }),
               when: f('noForecast'),
+            },
+            {
+              ...widgetBlock('forecast-excluded-note', {
+                note: data.excludedUndatedNote,
+                href: data.excludedUndatedHref,
+                linkLabel: data.excludedUndatedLinkLabel,
+              }),
+              when: f('hasExcludedUndated'),
             },
           ],
           { labelledBy: 'forecast-summary-heading' },
