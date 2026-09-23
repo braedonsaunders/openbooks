@@ -46,6 +46,11 @@ test('later rows are numbered by position', () => {
   assert.match(result.error, /^Row 2: choose an item/)
 })
 
+test('excess precision and over-wide amounts name the row', () => {
+  assert.match((validateRateBookLines([{ ...line(), baseQuantity: '1.00005' }]) as { error: string }).error, /^Row 1: base quantities and rates must be exact numbers with no more than four decimal places/)
+  assert.match((validateRateBookLines([{ ...line(), billRate: '9999999999999999.0000' }]) as { error: string }).error, /^Row 1: rate amounts may contain at most 15 whole-number digits/)
+})
+
 test('missing units, base unit and premiums name the row', () => {
   assert.match((validateRateBookLines([{ ...line(), unitCode: '', unitName: '' }]) as { error: string }).error, /^Row 1: every rate line needs a unit code/)
   assert.match((validateRateBookLines([{ ...line(), baseUnit: '' }]) as { error: string }).error, /^Row 1: every rate line needs a base unit/)

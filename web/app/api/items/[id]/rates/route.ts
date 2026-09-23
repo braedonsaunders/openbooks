@@ -8,17 +8,13 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { parseItemRateDecimal } from '../../../../../lib/item-rate-numerics'
 
 export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const POLICIES = ['capped_ladder', 'lowest_cost'] as const
 const PRESENTATIONS = ['summary', 'rate_components'] as const
-
-/** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
-function wholeDigits(canonical: string): number {
-  return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.read', 'projects')
@@ -108,17 +104,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!code || !tier.unitName?.trim()) return NextResponse.json({ error: 'Every rate unit needs a code and name' }, { status: 422 })
     if (seen.has(code)) return NextResponse.json({ error: 'Rate unit codes must be unique' }, { status: 422 })
     seen.add(code)
-    const baseQuantity = canonicalDecimal(tier.baseQuantity, 8)
-    const costRate = canonicalDecimal(tier.costRate, 4)
-    const billRate = canonicalDecimal(tier.billRate, 4)
-    if (baseQuantity === null || costRate === null || billRate === null) {
-      return NextResponse.json({ error: 'Quantities must be positive and rates must be non-negative numbers' }, { status: 422 })
+    // Quantities and rates persist as numeric(19,4): parse through the shared
+    // helper so excess precision is refused by name instead of rounding
+    // silently in PostgreSQL.
+    const parsedQuantity = parseItemRateDecimal(tier.baseQuantity)
+    const parsedCost = parseItemRateDecimal(tier.costRate)
+    const parsedBill = parseItemRateDecimal(tier.billRate)
+    if ('error' in parsedQuantity && parsedQuantity.error === 'too-many-decimals') {
+      return NextResponse.json({ error: 'Base quantity allows at most 4 decimal places' }, { status: 422 })
     }
-    // item_rate_lines stores quantity/cost/bill as numeric(19,4): refuse
-    // whole-digit widths the column cannot hold before any write.
-    if ([baseQuantity, costRate, billRate].some((v) => wholeDigits(v) > 15)) {
-      return NextResponse.json({ error: 'Rate amounts must fit within numeric(19,4)' }, { status: 422 })
+    const amountsScale = [parsedCost, parsedBill].some((entry) => 'error' in entry && entry.error === 'too-many-decimals')
+    if (amountsScale) {
+      return NextResponse.json({ error: 'Rate amounts allow at most 4 decimal places' }, { status: 422 })
     }
+    if ('error' in parsedQuantity || 'error' in parsedCost || 'error' in parsedBill) {
+      const tooWide = [parsedQuantity, parsedCost, parsedBill].some((entry) => 'error' in entry && entry.error === 'too-wide')
+      return NextResponse.json({ error: tooWide ? 'Rate amounts must fit within numeric(19,4)' : 'Quantities must be positive and rates must be non-negative numbers' }, { status: 422 })
+    }
+    const baseQuantity = parsedQuantity.value
+    const costRate = parsedCost.value
+    const billRate = parsedBill.value
     try {
       if (cmp(baseQuantity, '0') <= 0) throw new Error()
       if (cmp(costRate, '0') < 0 || cmp(billRate, '0') < 0) throw new Error()
