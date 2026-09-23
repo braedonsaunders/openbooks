@@ -161,6 +161,7 @@
     "ratesHelp": "Salvar linhas alteradas cria uma nova versão imutável; versões anteriores permanecem disponíveis para transações históricas.",
     "item": "Artigo",
     "addItem": "Adicionar tarifa de item",
+    "confirmClearAll": "Salvar sem linhas de tarifa encerra todas as tarifas deste livro a partir da nova data de vigência. Encerrar todas as tarifas?",
     "inactive": "Inativo",
     "unchangedHelp": "A tabela não mudou; salvar atualizará somente os detalhes do livro de tarifas."
   },

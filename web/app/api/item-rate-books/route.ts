@@ -1,112 +1,18 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
-import { canonicalDecimal } from '@/lib/exact-decimal'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
+import { validateRateBookLines, type ValidRateBookLine } from '@/lib/item-rate-book-lines'
 import { isUuid } from '@/lib/list-params'
 import { saveSetupBook } from '@/lib/setup/books'
 import { resolveSetupEntity } from '@/lib/setup/write'
 
 export const runtime = 'nodejs'
 
-const POLICIES = new Set(['capped_ladder', 'lowest_cost'])
-const PRESENTATIONS = new Set(['rate_components', 'summary'])
 const INVENTORY_KINDS = new Set(['inventory', 'assembly', 'kit'])
-
-interface InputLine {
-  itemId?: unknown
-  unitCode?: unknown
-  unitName?: unknown
-  baseQuantity?: unknown
-  costRate?: unknown
-  billRate?: unknown
-  baseUnit?: unknown
-  pricingPolicy?: unknown
-  invoicePresentation?: unknown
-  timeTypeBillRates?: unknown
-}
-
-interface ValidLine {
-  itemId: string
-  unitCode: string
-  unitName: string
-  baseQuantity: string
-  costRate: string
-  billRate: string
-  baseUnit: string
-  pricingPolicy: string
-  invoicePresentation: string
-  timeTypeBillRates: Record<string, string>
-}
-
-function wholeDigits(value: string): number {
-  return value.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
-}
-
-function validateLines(input: unknown): { lines: ValidLine[] } | { error: string } {
-  if (!Array.isArray(input)) return { error: 'Rate lines must be an array.' }
-  const lines: ValidLine[] = []
-  const keys = new Set<string>()
-  const profiles = new Map<string, string>()
-  for (const raw of input as InputLine[]) {
-    const itemId = String(raw.itemId ?? '').trim()
-    const unitCode = String(raw.unitCode ?? '').trim().toLowerCase()
-    const unitName = String(raw.unitName ?? '').trim()
-    if (!itemId && !unitCode && !unitName) continue
-    if (!isUuid(itemId)) return { error: 'Choose an item for every rate line.' }
-    if (!unitCode || !unitName) return { error: 'Every rate line needs a unit code and unit name.' }
-    const key = `${itemId}:${unitCode}`
-    if (keys.has(key)) return { error: 'Each item and unit code combination may appear only once.' }
-    keys.add(key)
-
-    const baseQuantity = canonicalDecimal(String(raw.baseQuantity ?? ''), 4)
-    const costRate = canonicalDecimal(String(raw.costRate ?? ''), 4)
-    const billRate = canonicalDecimal(String(raw.billRate ?? ''), 4)
-    if (baseQuantity === null || costRate === null || billRate === null) {
-      return { error: 'Base quantities and rates must be exact numbers with no more than four decimal places.' }
-    }
-    if ([baseQuantity, costRate, billRate].some((value) => wholeDigits(value) > 15)) {
-      return { error: 'Rate amounts may contain at most 15 whole-number digits.' }
-    }
-    if (cmp(baseQuantity, '0') <= 0 || cmp(costRate, '0') < 0 || cmp(billRate, '0') < 0) {
-      return { error: 'Base quantities must be positive and rates must be non-negative.' }
-    }
-
-    const baseUnit = String(raw.baseUnit ?? '').trim().toLowerCase()
-    const pricingPolicy = String(raw.pricingPolicy ?? '')
-    const invoicePresentation = String(raw.invoicePresentation ?? '')
-    if (!baseUnit) return { error: 'Every rate line needs a base unit.' }
-    if (!POLICIES.has(pricingPolicy)) return { error: 'Choose a valid pricing policy for every rate line.' }
-    if (!PRESENTATIONS.has(invoicePresentation)) return { error: 'Choose a valid invoice presentation for every rate line.' }
-    const profile = `${baseUnit}:${pricingPolicy}:${invoicePresentation}`
-    if (profiles.has(itemId) && profiles.get(itemId) !== profile) {
-      return { error: 'All units for an item must use the same base unit, pricing policy, and invoice presentation.' }
-    }
-    profiles.set(itemId, profile)
-
-    const premiums: Record<string, string> = {}
-    if (raw.timeTypeBillRates && typeof raw.timeTypeBillRates === 'object' && !Array.isArray(raw.timeTypeBillRates)) {
-      for (const [timeTypeId, supplied] of Object.entries(raw.timeTypeBillRates as Record<string, unknown>)) {
-        if (!isUuid(timeTypeId)) return { error: 'A labor premium refers to an invalid time type.' }
-        const rate = canonicalDecimal(String(supplied), 4)
-        if (rate === null || cmp(rate, '0') < 0 || wholeDigits(rate) > 15) {
-          return { error: 'Labor premium rates must be non-negative exact numbers with no more than four decimal places.' }
-        }
-        premiums[timeTypeId] = normalizeMoney(rate)
-      }
-    }
-    lines.push({
-      itemId, unitCode, unitName, baseQuantity,
-      costRate: normalizeMoney(costRate), billRate: normalizeMoney(billRate),
-      baseUnit, pricingPolicy, invoicePresentation, timeTypeBillRates: premiums,
-    })
-  }
-  return { lines }
-}
 
 function databaseCode(error: unknown): string | undefined {
   const value = error as { code?: string; cause?: { code?: string } }
@@ -128,10 +34,17 @@ export async function POST(request: Request) {
 
   const replaceRates = body.replaceRates === true
   const effectiveFrom = String(body.effectiveFrom ?? '')
-  const validated = replaceRates ? validateLines(body.lines) : { lines: [] as ValidLine[] }
+  const validated = replaceRates ? validateRateBookLines(body.lines) : { lines: [] as ValidRateBookLine[] }
   if ('error' in validated) return NextResponse.json({ error: validated.error }, { status: 422 })
   if (replaceRates && !isIsoCalendarDate(effectiveFrom)) {
     return NextResponse.json({ error: 'Effective from must be a real calendar date in YYYY-MM-DD format.' }, { status: 422 })
+  }
+  // Activating a version with zero lines would silently wipe every rate in
+  // the book from the new date. Refuse it unless the operator explicitly
+  // confirmed clearing all rates; the check runs before the transaction, so
+  // a refusal leaves the current active version untouched.
+  if (replaceRates && validated.lines.length === 0 && body.confirmEmptyReplacement !== true) {
+    return NextResponse.json({ error: `A replacement with no rate lines would clear every rate in this book from ${effectiveFrom}. Confirm that all rates should end, then save again.` }, { status: 422 })
   }
 
   const multiCurrency = await isFeatureEnabled(gate.user.orgId, 'multiCurrency')

@@ -171,6 +171,7 @@
     "ratesHelp": "Guardar líneas modificadas crea una nueva versión inmutable; las versiones anteriores se conservan para transacciones históricas.",
     "item": "Artículo",
     "addItem": "Añadir tarifa de artículo",
+    "confirmClearAll": "Guardar sin líneas de tarifa finaliza todas las tarifas de este libro a partir de la nueva fecha de vigencia. ¿Finalizar todas las tarifas?",
     "inactive": "Inactivo",
     "unchangedHelp": "El programa no cambió; al guardar solo se actualizarán los detalles del libro de tarifas."
   },

@@ -215,6 +215,7 @@
     "ratesHelp": "Saving changed lines creates a new immutable rate version; earlier versions remain available for historical transactions.",
     "item": "Item",
     "addItem": "Add item rate",
+    "confirmClearAll": "Saving with no rate lines ends every rate in this book from the new effective date. End all rates?",
     "inactive": "Inactive",
     "unchangedHelp": "The item schedule is unchanged, so saving will update only the rate-book details."
   },
