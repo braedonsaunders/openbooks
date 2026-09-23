@@ -283,6 +283,179 @@ export function subscriptionComponentTotal(lines: Array<{ quantity: string; unit
   return total;
 }
 
+/**
+ * One lifecycle-affecting amendment projected from the amendment ledger.
+ * Values are extracted defensively from the stored request/snapshot JSON:
+ * anything unusable is reported as unknown and ignored by the resolver, so a
+ * corrupt ledger row degrades to the surrounding known state instead of
+ * refusing billing.
+ */
+export interface EffectiveLifecycleAmendment {
+  type: string;
+  effectiveOn: string;
+  /** Application order; breaks ties between amendments effective the same day. */
+  seq: number;
+  /** change_timing target; null when absent or unusable. */
+  timing: BillingTiming | null;
+  /** Term end this amendment sets: change_term carries it in the request
+   * (null clears an open end); renew/coterm carry their computed end in the
+   * after-snapshot. */
+  term: string | null;
+  termKnown: boolean;
+  /** Activation-time base from the before-snapshot; null/unknown when absent. */
+  baseTiming: BillingTiming | null;
+  baseTerm: string | null;
+  baseTermKnown: boolean;
+}
+
+/** ISO calendar day from a driver date, datetime string, or ISO string. */
+function toIsoDay(value: unknown): string | null {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return value.toISOString().slice(0, 10);
+  }
+  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const day = value.slice(0, 10);
+    const parsed = new Date(`${day}T00:00:00Z`);
+    if (!day.startsWith("0000-") && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === day) {
+      return day;
+    }
+  }
+  return null;
+}
+
+function asBillingTiming(value: unknown): BillingTiming | null {
+  return value === "advance" || value === "arrears" ? value : null;
+}
+
+function snapshotLifecycle(value: unknown): { billingTiming: unknown; termEndsOn: unknown } {
+  if (typeof value !== "object" || value === null) return { billingTiming: undefined, termEndsOn: undefined };
+  const lifecycle = (value as { lifecycle?: unknown }).lifecycle;
+  if (typeof lifecycle !== "object" || lifecycle === null) return { billingTiming: undefined, termEndsOn: undefined };
+  const record = lifecycle as Record<string, unknown>;
+  return { billingTiming: record.billingTiming, termEndsOn: record.termEndsOn };
+}
+
+function requestRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+/** Project one ledger row into resolver input; unknown fields stay unknown. */
+export function toEffectiveLifecycleAmendment(row: {
+  type: string;
+  effectiveOn: string;
+  seq: number;
+  request: unknown;
+  beforeSnapshot: unknown;
+  afterSnapshot: unknown;
+}): EffectiveLifecycleAmendment {
+  const request = requestRecord(row.request);
+  const before = snapshotLifecycle(row.beforeSnapshot);
+  const after = snapshotLifecycle(row.afterSnapshot);
+  const requestTerm = request.termEndsOn === null ? null : toIsoDay(request.termEndsOn);
+  const afterTerm = after.termEndsOn === null ? null : toIsoDay(after.termEndsOn);
+  const beforeTerm = before.termEndsOn === null ? null : toIsoDay(before.termEndsOn);
+  // Each amendment moves only what it changes: a timing row's incidental
+  // after-snapshot term (and any other type's) must not overwrite the term
+  // fold, just as a term row never moves the timing fold.
+  const movesTerm = row.type === "change_term" || row.type === "renew" || row.type === "coterm";
+  return {
+    type: row.type,
+    effectiveOn: row.effectiveOn,
+    seq: row.seq,
+    timing: row.type === "change_timing" ? asBillingTiming(request.billingTiming) : null,
+    term: !movesTerm ? null : row.type === "change_term" ? requestTerm : afterTerm,
+    termKnown: !movesTerm
+      ? false
+      : row.type === "change_term"
+        ? requestTerm !== null || request.termEndsOn === null
+        : afterTerm !== null || after.termEndsOn === null,
+    baseTiming: asBillingTiming(before.billingTiming),
+    baseTerm: beforeTerm,
+    baseTermKnown: beforeTerm !== null || before.termEndsOn === null,
+  };
+}
+
+/**
+ * Resolve the lifecycle state (billing timing + term end) in force on `asOf`
+ * from the amendment ledger. Amendments fold in effective-date order
+ * (application order breaks same-day ties), so a future-dated change never
+ * governs a bill dated before it arrives; the activation base comes from the
+ * earliest APPLIED amendment's before-snapshot, which is the pre-change
+ * state no matter what effective dates were later backdated. Pure.
+ */
+export function resolveEffectiveLifecycleState(input: {
+  asOf: string;
+  fallbackTiming: BillingTiming;
+  fallbackTermEndsOn: string | null;
+  amendments: EffectiveLifecycleAmendment[];
+}): { billingTiming: BillingTiming; termEndsOn: string | null } {
+  const ordered = input.amendments
+    .filter((amendment) => toIsoDay(amendment.effectiveOn) !== null)
+    .sort((left, right) => (
+      left.effectiveOn < right.effectiveOn ? -1 : left.effectiveOn > right.effectiveOn ? 1 : left.seq - right.seq
+    ));
+  let base: EffectiveLifecycleAmendment | null = null;
+  for (const amendment of ordered) {
+    if (!base || amendment.seq < base.seq) base = amendment;
+  }
+  let billingTiming = base?.baseTiming ?? input.fallbackTiming;
+  let termEndsOn = base?.baseTermKnown ? base.baseTerm : input.fallbackTermEndsOn;
+  for (const amendment of ordered) {
+    if (amendment.effectiveOn > input.asOf) break;
+    if (amendment.type === "change_timing" && amendment.timing) billingTiming = amendment.timing;
+    if ((amendment.type === "change_term" || amendment.type === "renew" || amendment.type === "coterm") && amendment.termKnown) {
+      termEndsOn = amendment.term;
+    }
+  }
+  return { billingTiming, termEndsOn };
+}
+
+interface AmendmentLedgerRow extends Record<string, unknown> {
+  amendmentType: string;
+  effectiveOn: string;
+  seq: number;
+  request: unknown;
+  beforeSnapshot: unknown;
+  afterSnapshot: unknown;
+}
+
+/**
+ * Billing must read lifecycle state as-of the bill date, never the row's
+ * latest intent: a change_term or change_timing dated in the future is
+ * already written to subscription_lifecycles when it is recorded, and reading
+ * that row directly would let it govern invoices dated before it arrives.
+ */
+async function effectiveLifecycleState(
+  orgId: string,
+  subscriptionId: string,
+  asOf: string,
+  fallback: { billingTiming: BillingTiming; termEndsOn: string | null },
+): Promise<{ billingTiming: BillingTiming; termEndsOn: string | null }> {
+  const ledger = await db.execute<AmendmentLedgerRow>(sql`
+    select amendment_type as "amendmentType", effective_on::text as "effectiveOn",
+           amendment_number as "seq", request, before_snapshot as "beforeSnapshot",
+           after_snapshot as "afterSnapshot"
+      from subscription_amendments
+     where org_id = ${orgId} and subscription_id = ${subscriptionId}
+       and amendment_type in ('change_timing', 'change_term', 'renew', 'coterm')
+     order by amendment_number
+  `);
+  return resolveEffectiveLifecycleState({
+    asOf,
+    fallbackTiming: fallback.billingTiming,
+    fallbackTermEndsOn: fallback.termEndsOn,
+    amendments: ledger.rows.map((row) => toEffectiveLifecycleAmendment({
+      type: row.amendmentType,
+      effectiveOn: toIsoDay(row.effectiveOn) ?? row.effectiveOn,
+      seq: row.seq,
+      request: row.request,
+      beforeSnapshot: row.beforeSnapshot,
+      afterSnapshot: row.afterSnapshot,
+    })),
+  });
+}
+
 async function ownedPlan(orgId: string, planId: string) {
   const result = (await db.execute<OwnedPlanRow>(sql`
     select id, name, description, amount, currency_code as currency, interval,
@@ -708,7 +881,11 @@ export async function prepareAdvancedSubscriptionBilling(orgId: string, subscrip
     const row = result.rows[0];
     if (!row?.billingTiming) return true;
     await assertEnabled(orgId);
-    const action = renewalAction({ billingTiming: row.billingTiming, dueOn, termEndsOn: row.termEndsOn, policy: row.renewalPolicy ?? "none" });
+    // The boundary decision uses the term and timing in force on the due
+    // date: a future-dated reduction or timing change must neither stop nor
+    // renew billing before its date arrives.
+    const effective = await effectiveLifecycleState(orgId, subscriptionId, dueOn, { billingTiming: row.billingTiming, termEndsOn: row.termEndsOn });
+    const action = renewalAction({ billingTiming: effective.billingTiming, dueOn, termEndsOn: effective.termEndsOn, policy: row.renewalPolicy ?? "none" });
     if (action === "bill") return true;
     if (action === "stop") return false;
     if (!row.termEndsOn) return true;
@@ -849,8 +1026,11 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   `));
   const row = lifecycle.rows[0];
   if (!row) return null;
+  // The period is priced under the timing in force on the bill date: a
+  // timing change dated after billOn must not rewrite this invoice.
+  const effective = await effectiveLifecycleState(orgId, subscriptionId, billOn, { billingTiming: row.billingTiming, termEndsOn: null });
   const serviceAnchor = periodStartOverride ?? row.currentPeriodStart ?? billOn;
-  const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({ billOn, serviceAnchor, billingTiming: row.billingTiming, interval: row.interval, intervalCount: row.intervalCount });
+  const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({ billOn, serviceAnchor, billingTiming: effective.billingTiming, interval: row.interval, intervalCount: row.intervalCount });
   // One fetch covers both timings: a stored window overlaps the service
   // interval exactly when it starts before the end-exclusive boundary and
   // ends on or after the start (open-ended counts as overlapping). Advance
@@ -869,7 +1049,7 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
        and (effective_to is null or effective_to >= ${periodStartsOn})
      order by sort_order, component_key
   `));
-  const lines = row.billingTiming === "advance"
+  const lines = effective.billingTiming === "advance"
     ? components.rows
       .filter((component) => component.effectiveFrom <= periodStartsOn && (component.effectiveTo === null || component.effectiveTo >= periodStartsOn))
       .map(({ description, quantity, unitPrice, incomeAccountId, itemId, taxCodeId }): AdvancedBillingLine => ({
@@ -877,5 +1057,5 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
       }))
     : arrearsLinesForInterval(periodStartsOn, periodEndsOn, components.rows);
   const total = subscriptionComponentTotal(lines);
-  return { contractRevision: row.contractRevision, billingTiming: row.billingTiming, periodStartsOn, periodEndsOn, lines, total };
+  return { contractRevision: row.contractRevision, billingTiming: effective.billingTiming, periodStartsOn, periodEndsOn, lines, total };
 }
