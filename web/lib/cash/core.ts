@@ -560,11 +560,19 @@ export async function categoryWeekly(
     let curr = new Date(tStart);
     while (curr <= tEnd) {
       const wk = toISO(weekStart(curr));
-      const currentAmount = freq === "weekly"
-        ? multiplyMoney(amount, String(getProrationFactor(curr, asOf, null, null)))
-        : amount;
-      const i = wkIndex.get(wk);
-      if (i !== undefined) weeklyExact[i] = addMoney(weeklyExact[i] ?? ZERO_MONEY, currentAmount);
+      // Weekly amounts spread across the week, so the current week prorates
+      // by business days remaining. Monthly/biweekly occurrences are discrete
+      // payment dates: one before asOf is already paid history, so it must
+      // not land in the forecast or the paid bill double-counts as future
+      // cash need.
+      const pastOccurrence = freq !== "weekly" && curr < asOf;
+      if (!pastOccurrence) {
+        const currentAmount = freq === "weekly"
+          ? multiplyMoney(amount, String(getProrationFactor(curr, asOf, null, null)))
+          : amount;
+        const i = wkIndex.get(wk);
+        if (i !== undefined) weeklyExact[i] = addMoney(weeklyExact[i] ?? ZERO_MONEY, currentAmount);
+      }
       if (freq === "monthly") curr = addMonthsUTC(curr, 1);
       else if (freq === "biweekly") curr = addDays(curr, 14);
       else curr = addDays(curr, 7);
