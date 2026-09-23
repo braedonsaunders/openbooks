@@ -5,6 +5,7 @@ import { add, cmp, isZero, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { getOnHandWith, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
 
@@ -302,16 +303,16 @@ export async function createStockCount(
     // all; lot-tracked items must name their lot.
     const itemIds = [...new Set(input.lines.map((l) => l.itemId))];
     const items = (await tx.execute<{ id: string }>(sql`
-      select it.id from items it where it.org_id = ${orgId} and it.id = any(${itemIds}::uuid[])`));
+      select it.id from items it where it.org_id = ${orgId} and it.id = any(${uuidArray(itemIds)}::uuid[])`));
     const foundItems = new Set(items.rows.map((r) => r.id));
     const profiles = (await tx.execute<{ item_id: string; tracking: string }>(sql`
       select item_id, tracking from item_inventory_profiles
-       where org_id = ${orgId} and item_id = any(${itemIds}::uuid[])`));
+       where org_id = ${orgId} and item_id = any(${uuidArray(itemIds)}::uuid[])`));
     const trackingByItem = new Map(profiles.rows.map((r) => [r.item_id, r.tracking]));
     const stockLocationIds = [...new Set(input.lines.map((l) => l.stockLocationId))];
     const stockLocations = (await tx.execute<{ id: string; location_id: string }>(sql`
       select id, location_id from stock_locations
-       where org_id = ${orgId} and id = any(${stockLocationIds}::uuid[])`));
+       where org_id = ${orgId} and id = any(${uuidArray(stockLocationIds)}::uuid[])`));
     const businessByStockLocation = new Map(stockLocations.rows.map((r) => [r.id, r.location_id]));
     const countId = randomUUID();
     await tx.execute(sql`
