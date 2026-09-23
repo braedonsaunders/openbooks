@@ -48,7 +48,15 @@
     "recognized": "Realisiert",
     "postedStatus": "Gebucht",
     "plannedStatus": "Geplant",
-    "fairValueOutOfRange": "Außerhalb der Fair-Value-Bandbreite ({low} – {high})"
+    "fairValueOutOfRange": "Außerhalb der Fair-Value-Bandbreite ({low} – {high})",
+    "legacyUnverified": "Legacy — Regelhistorie ungeprüft",
+    "reconcile": "Legacy-Regel abstimmen",
+    "reconcileTitle": "Legacy-Regelhistorie abstimmen",
+    "reconcileReason": "Nachweis, mit dem der bestehende Zeitplan geprüft wurde",
+    "reconcilePlaceholder": "Richtlinienmemo oder Unterlagen nennen, mit denen der Zeitplan geprüft wurde",
+    "reconcileConfirm": "Abstimmung erfassen",
+    "reconcileFailed": "Abstimmung fehlgeschlagen",
+    "reconciled": "Legacy-Regel für diese Verpflichtung abgestimmt"
   },
   "cancel": {
     "button": "Abgrenzung stornieren",

@@ -48,7 +48,15 @@
     "recognized": "Comptabilisé",
     "postedStatus": "Comptabilisé",
     "plannedStatus": "Prévu",
-    "fairValueOutOfRange": "Hors fourchette de juste valeur ({low} – {high})"
+    "fairValueOutOfRange": "Hors fourchette de juste valeur ({low} – {high})",
+    "legacyUnverified": "Legacy — historique de la règle non vérifié",
+    "reconcile": "Rapprocher la règle legacy",
+    "reconcileTitle": "Rapprocher l'historique de la règle legacy",
+    "reconcileReason": "Preuve à laquelle le calendrier existant a été confronté",
+    "reconcilePlaceholder": "Nommer la note de politique ou les documents auxquels le calendrier a été confronté",
+    "reconcileConfirm": "Enregistrer le rapprochement",
+    "reconcileFailed": "Le rapprochement a échoué",
+    "reconciled": "Règle legacy rapprochée pour cette obligation"
   },
   "cancel": {
     "button": "Annuler la reconnaissance",

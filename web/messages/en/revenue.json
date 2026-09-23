@@ -48,7 +48,15 @@
     "recognized": "Recognized",
     "postedStatus": "Posted",
     "plannedStatus": "Planned",
-    "fairValueOutOfRange": "Outside fair value range ({low} – {high})"
+    "fairValueOutOfRange": "Outside fair value range ({low} – {high})",
+    "legacyUnverified": "Legacy — rule history unverified",
+    "reconcile": "Reconcile legacy rule",
+    "reconcileTitle": "Reconcile legacy rule history",
+    "reconcileReason": "Evidence the existing schedule was verified against",
+    "reconcilePlaceholder": "Name the policy memo or records the schedule was checked against",
+    "reconcileConfirm": "Record reconciliation",
+    "reconcileFailed": "Reconciliation failed",
+    "reconciled": "Legacy rule reconciled for this obligation"
   },
   "cancel": {
     "button": "Cancel recognition",

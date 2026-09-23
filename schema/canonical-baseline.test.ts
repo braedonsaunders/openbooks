@@ -679,6 +679,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // inherited retention actions, posted duplicate/negative count lines),
     // which readers refuse or label by membership.
     "0326_upgrade_legacy_provenance.sql",
+    // Legacy-pinned obligations refuse destructive rebuilds until an
+    // operator reconciles them one by one (0328 carries the attestation:
+    // actor, timestamp and reason — clearing the rule would re-open
+    // obligations built under different policies).
+    "0328_obligation_legacy_reconciliation.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

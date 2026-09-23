@@ -1457,6 +1457,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "performance_obligations.description",
   "performance_obligations.fair_value_flag",
   "performance_obligations.idempotency_key",
+  "performance_obligations.legacy_reconciliation_reason",
   "performance_obligations.status",
   "period_locks.module",
   "period_locks.reason",

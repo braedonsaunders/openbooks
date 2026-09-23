@@ -48,7 +48,15 @@
     "recognized": "已确认",
     "postedStatus": "已过账",
     "plannedStatus": "计划",
-    "fairValueOutOfRange": "超出公允价值区间（{low} – {high}）"
+    "fairValueOutOfRange": "超出公允价值区间（{low} – {high}）",
+    "legacyUnverified": "遗留 — 规则历史未验证",
+    "reconcile": "核对遗留规则",
+    "reconcileTitle": "核对遗留规则历史",
+    "reconcileReason": "用于验证现有计划的依据",
+    "reconcilePlaceholder": "填写核对计划所依据的政策备忘或记录",
+    "reconcileConfirm": "记录核对",
+    "reconcileFailed": "核对失败",
+    "reconciled": "已为该义务核对遗留规则"
   },
   "cancel": {
     "button": "取消确认",

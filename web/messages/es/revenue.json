@@ -48,7 +48,15 @@
     "recognized": "Reconocido",
     "postedStatus": "Contabilizado",
     "plannedStatus": "Planeado",
-    "fairValueOutOfRange": "Fuera del rango de valor razonable ({low} – {high})"
+    "fairValueOutOfRange": "Fuera del rango de valor razonable ({low} – {high})",
+    "legacyUnverified": "Legacy — historial de la regla sin verificar",
+    "reconcile": "Conciliar regla legacy",
+    "reconcileTitle": "Conciliar el historial de la regla legacy",
+    "reconcileReason": "Evidencia con la que se verificó el calendario existente",
+    "reconcilePlaceholder": "Nombre el memorando de política o los registros con los que se verificó el calendario",
+    "reconcileConfirm": "Registrar conciliación",
+    "reconcileFailed": "La conciliación falló",
+    "reconciled": "Regla legacy conciliada para esta obligación"
   },
   "cancel": {
     "button": "Cancelar el reconocimiento",
