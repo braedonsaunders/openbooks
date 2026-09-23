@@ -205,6 +205,22 @@ function mergedInto(custom: Record<string, unknown>): string | null {
   return null;
 }
 
+/**
+ * Subsidiary scope inside the locked merge: both locked rows must sit in
+ * the caller's scope. Restricted callers fail closed on null-subsidiary
+ * projects, mirroring guardSubsidiaryScope without org-wide-null (projects
+ * carry no org-wide identity). An undefined scope means the caller passed
+ * none — the HTTP boundary always passes its allowlist; engine-internal
+ * callers without one inherit no enforcement and must be audited.
+ */
+function mergeScopeAllows(
+  scope: ReadonlySet<string> | null | undefined,
+  subsidiaryId: string | null,
+): boolean {
+  if (scope === undefined || scope === null) return true;
+  return subsidiaryId !== null && scope.has(subsidiaryId);
+}
+
 async function customProjectRefs(
   runner: SqlExecutor,
   orgId: string,
@@ -237,6 +253,7 @@ async function planMerge(
   survivorId: string,
   duplicateId: string,
   lock = false,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<{ survivor: ProjectRow; duplicate: ProjectRow; moved: MergePreview["moved"]; customRefs: MergePreview["customRefs"]; alreadyMerged: boolean }> {
   if (survivorId === duplicateId) {
     throw new ProjectMergeError("a project cannot merge into itself");
@@ -264,6 +281,15 @@ async function planMerge(
   }
   if (!survivor || !duplicate) {
     throw new ProjectMergeError("both projects must exist in this organization");
+  }
+  // The scope check runs on the locked rows, not on a pre-transaction read:
+  // a scope narrowing between the route's fast-path check and this
+  // transaction must still refuse before anything moves.
+  if (
+    !mergeScopeAllows(allowedSubsidiaryIds, survivor.subsidiary_id) ||
+    !mergeScopeAllows(allowedSubsidiaryIds, duplicate.subsidiary_id)
+  ) {
+    throw new ProjectMergeError("merge pair is outside the caller subsidiary scope");
   }
   // The merge rewrites project_id on every reference while each row keeps
   // its own subsidiary, so merging across subsidiaries would silently fold
@@ -362,9 +388,10 @@ export async function previewProjectMerge(
   orgId: string,
   survivorId: string,
   duplicateId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<MergePreview> {
   return withOrgTransaction(orgId, async () => {
-    const plan = await planMerge(db, orgId, survivorId, duplicateId);
+    const plan = await planMerge(db, orgId, survivorId, duplicateId, false, allowedSubsidiaryIds);
     return {
       survivorId,
       duplicateId,
@@ -380,14 +407,23 @@ export async function previewProjectMerge(
  * reference, child project, activity link, and project custom value moves;
  * the duplicate is deactivated with a `merged_into` pointer; one audit row
  * records the per-table counts, actor, and reason. Idempotent.
+ *
+ * When the caller passes its subsidiary allowlist it is enforced on the
+ * locked rows inside this transaction — the route's pre-check alone cannot
+ * cover a scope narrowing mid-flight.
  */
 export async function mergeProjects(
   orgId: string,
-  opts: { survivorId: string; duplicateId: string; actorId: string | null },
+  opts: {
+    survivorId: string;
+    duplicateId: string;
+    actorId: string | null;
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  },
 ): Promise<MergeResult> {
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
-      const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true);
+      const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true, opts.allowedSubsidiaryIds);
       if (plan.alreadyMerged) {
         return {
           survivorId: opts.survivorId,

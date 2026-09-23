@@ -52,8 +52,11 @@ export async function GET(req: Request) {
   const scope = await guardMergeScope(gate, survivorId, duplicateId);
   if (scope) return scope;
   try {
+    // The route's scope pre-check above is a fast-path 404; the allowlist
+    // travels into the locked merge too, so a mid-flight scope narrowing
+    // still refuses before anything moves.
     return NextResponse.json(
-      await previewProjectMerge(gate.user.orgId, survivorId, duplicateId),
+      await previewProjectMerge(gate.user.orgId, survivorId, duplicateId, gate.allowedSubsidiaryIds),
     );
   } catch (error) {
     if (error instanceof ProjectMergeError) {
@@ -87,6 +90,7 @@ export async function POST(req: Request) {
       survivorId,
       duplicateId,
       actorId: gate.user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
