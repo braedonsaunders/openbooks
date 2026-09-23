@@ -181,9 +181,15 @@ test('a stale save surfaces the server conflict instead of manufacturing a new t
     isConflict: true,
   })
 
+  // Save moved behind the re-entry guard (runExclusive): slice the guarded
+  // body, not the old `async function save()` declaration.
+  assert.ok(
+    DRAWER_SOURCE.includes('const save = runExclusive(async () => {'),
+    'save runs behind the re-entry guard so a double-click sends one write',
+  )
   const save = DRAWER_SOURCE.slice(
-    DRAWER_SOURCE.indexOf('async function save()'),
-    DRAWER_SOURCE.indexOf('function cancel()'),
+    DRAWER_SOURCE.indexOf('const save = runExclusive(async () => {'),
+    DRAWER_SOURCE.indexOf('async function confirmDiscard()'),
   )
   assert.match(save, /buildDocumentSaveRequest\([\s\S]*?documentRevision/)
   assert.match(
