@@ -6,6 +6,8 @@ import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/busi
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
+import { resolveProjectFinancials } from './project-financials'
+import { loadProjectType } from './project-type'
 import { crmActivityScope, crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
@@ -355,45 +357,44 @@ export async function loadCustomerPulse(
     }
   }
 
-  // 6. Project Rollups (projects section only, and only when enabled)
+  // 6. Project Rollups (projects section only, and only when enabled).
+  // Cost comes from the governed project financial reader — the same
+  // measures the project cockpit Financials tab renders (posted GL cost,
+  // invoiced to date, contract value per the project's type profile) — so
+  // a billed project with posted costs reports its true margin. The
+  // previous code set cost to 0 and margin to 100% without reading any cost
+  // source. Profit here is realized billing margin (invoiced minus cost),
+  // so the figures always tie: profit + cost = billed.
   let projects: CustomerPulseData['projects']
   if (sections.projects && await isFeatureEnabled(orgId, 'projects')) {
-    const projectsResult = await db.execute<{
-      total_count: number
-      active_count: number
-      total_contract: string | null
-      total_billed: string | null
-    }>(sql`
-      select count(*)::int as total_count,
-             count(*) filter (where prj.status in ('awarded', 'active'))::int as active_count,
-             sum(coalesce(prj.contract_value, 0))::text as total_contract,
-             coalesce((
-               select sum(d.total) from documents d
-                where d.org_id = ${orgId} and d.party_id = ${partyId}
-                  and d.kind = 'customer_invoice' and d.status = 'posted'
-                  and d.project_id is not null
-                  ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-             ), 0)::text as total_billed
+    const listRes = await db.execute<{ id: string; status: string }>(sql`
+      select prj.id, prj.status
         from projects prj
        where prj.org_id = ${orgId}
          and prj.customer_id = ${partyId}
          and prj.is_active
          ${subsidiaryVisibleFilter(sql`prj.subsidiary_id`, allowedSubsidiaryIds ?? null)}
     `)
-    const prjRow = projectsResult.rows[0]
-    if (prjRow) {
-      const contract = parseFloat(prjRow.total_contract ?? '0') || 0
-      const billed = parseFloat(prjRow.total_billed ?? '0') || 0
-      projects = {
-        enabled: true,
-        totalCount: prjRow.total_count ?? 0,
-        activeCount: prjRow.active_count ?? 0,
-        totalContractValue: contract,
-        totalBilled: billed,
-        totalCost: 0,
-        grossProfit: billed,
-        grossMarginPercent: billed > 0 ? 100 : null,
-      }
+    let contractTotal = 0
+    let billedTotal = 0
+    let costTotal = 0
+    for (const row of listRes.rows) {
+      const projectType = await loadProjectType(orgId, row.id)
+      const fin = await resolveProjectFinancials(orgId, row.id, projectType.financialProfile)
+      contractTotal += Number(fin.contractValue) || 0
+      billedTotal += Number(fin.measures.invoiced_to_date ?? 0) || 0
+      costTotal += Number(fin.measures.total_cost ?? 0) || 0
+    }
+    const profit = billedTotal - costTotal
+    projects = {
+      enabled: true,
+      totalCount: listRes.rows.length,
+      activeCount: listRes.rows.filter((r) => r.status === 'awarded' || r.status === 'active').length,
+      totalContractValue: contractTotal,
+      totalBilled: billedTotal,
+      totalCost: costTotal,
+      grossProfit: profit,
+      grossMarginPercent: billedTotal !== 0 ? (profit / billedTotal) * 100 : null,
     }
   }
 
