@@ -3,6 +3,8 @@
  *
  * - D6: a clock-out before its clock-in refuses by name; the pair is
  *   never marked paired around a missing entry.
+ * - D7: the declared unpaid break is deducted once per shift, never once
+ *   per project segment.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -88,6 +90,51 @@ test("a clock-out before its clock-in refuses and leaves the pair open", { skip:
          where org_id = ${org.orgId} and kind = 'clock_in'`)).rows;
       assert.equal(open.length, 1);
       assert.equal(open[0]?.status, "recorded");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a mid-shift project switch deducts the unpaid break once per shift", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const worker = randomUUID();
+    const projectA = randomUUID();
+    const projectB = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, null);
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values
+        (${projectA}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-A', 'Field job A', 'active', true, '{}'::jsonb),
+        (${projectB}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-B', 'Field job B', 'active', true, '{}'::jsonb)`);
+      // 08:00-16:00 with a noon switch and a 30-minute declared break.
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T08:00:00.000Z",
+        source: "mobile", projectId: projectA, clientEventId: randomUUID(),
+      });
+      const switched = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "switch", occurredAt: "2026-09-14T12:00:00.000Z",
+        source: "mobile", projectId: projectB, clientEventId: randomUUID(),
+      });
+      // The switch re-targets the open pair without closing or posting.
+      assert.deepEqual(switched.entryIds, []);
+      assert.ok(switched.pairId, "the switch stays on the open pair");
+      const result = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-09-14T16:00:00.000Z",
+        source: "mobile", projectId: projectB, clientEventId: randomUUID(),
+      });
+      assert.equal(result.entryIds.length, 2);
+      const rows = (await db.execute<{ hours: string; project_id: string }>(sql`
+        select hours::text as hours, project_id::text as project_id from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}
+         order by project_id`)).rows;
+      // 7.5 paid hours, dealt 3.75 + 3.75 — never 7h from a per-segment deduction.
+      assert.deepEqual(rows.map((r) => r.hours), ["3.7500", "3.7500"]);
+      assert.deepEqual(rows.map((r) => r.project_id).sort(), [projectA, projectB].sort());
     });
   } finally {
     await dropScratchOrg(org.orgId);
