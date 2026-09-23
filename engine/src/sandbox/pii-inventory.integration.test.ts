@@ -834,6 +834,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_document_templates.name",
   "hrm_document_templates.signer_roles",
   "hrm_documents.category_key",
+  "hrm_documents.retention_action",
   "hrm_documents.status",
   "hrm_documents.title",
   "hrm_documents.void_reason",
