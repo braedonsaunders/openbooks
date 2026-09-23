@@ -88,8 +88,8 @@
       "createFailed": "无法创建示例企业。未创建任何内容，您可以重试。",
       "createFailedTemplate": "无法创建示例企业：准备验证模板失败。未创建任何内容，您可以重试。",
       "createFailedClone": "无法创建示例企业：复制模板的已过账历史失败。未创建任何内容，您可以重试。",
-      "createFailedFinalize": "无法创建示例企业：完成新企业失败。未创建任何内容，您可以重试。",
-      "createFailedNumbering": "无法创建示例企业：对账单据编号失败。未创建任何内容，您可以重试。"
+      "createFailedFinalize": "无法创建示例企业：完成新企业失败。企业已创建，但其设置未完成；重试将从中断处继续。",
+      "createFailedNumbering": "无法创建示例企业：对账单据编号失败。企业已创建，但其单据编号未完成；重试将继续编号对账。"
     },
     "loadFailed": "无法加载可导入的记录类型。"
   },

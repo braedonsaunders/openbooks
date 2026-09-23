@@ -88,8 +88,8 @@
       "createFailed": "Das Beispielunternehmen konnte nicht erstellt werden. Es wurde nichts erstellt; Sie können es erneut versuchen.",
       "createFailedTemplate": "Das Beispielunternehmen konnte nicht erstellt werden: Die geprüfte Vorlage konnte nicht vorbereitet werden. Es wurde nichts erstellt; Sie können es erneut versuchen.",
       "createFailedClone": "Das Beispielunternehmen konnte nicht erstellt werden: Das Kopieren des gebuchten Verlaufs der Vorlage ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen.",
-      "createFailedFinalize": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abschluss des neuen Unternehmens ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen.",
-      "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abgleich der Belegnummerierung ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen."
+      "createFailedFinalize": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abschluss des neuen Unternehmens ist fehlgeschlagen. Das Unternehmen wurde erstellt, aber seine Einrichtung wurde nicht abgeschlossen; ein erneuter Versuch setzt die Einrichtung an der unterbrochenen Stelle fort.",
+      "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abgleich der Belegnummerierung ist fehlgeschlagen. Das Unternehmen wurde erstellt, aber seine Belegnummerierung wurde nicht abgeschlossen; ein erneuter Versuch setzt den Abgleich fort."
     },
     "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden."
   },

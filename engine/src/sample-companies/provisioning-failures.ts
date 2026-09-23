@@ -47,12 +47,33 @@ const SAMPLE_COMPANY_STAGE_PHRASES: Record<
   numbering: "reconciling document numbering failed",
 };
 
+/**
+ * What actually exists after each stage fails. Template and clone fail
+ * before any company row is committed (a failed template attempt is wiped;
+ * a failed clone never commits), so "nothing was created" is the truth.
+ * Finalize and numbering fail AFTER the clone committed, and the partial
+ * company is deliberately left resumable — the refusal must say so, or the
+ * operator reads "nothing was created" while a company with their name on
+ * it exists and their retry silently adopts it.
+ */
+const SAMPLE_COMPANY_STAGE_OUTCOMES: Record<
+  SampleCompanyProvisioningStage,
+  string
+> = {
+  template: "Nothing was created; you can retry.",
+  clone: "Nothing was created; you can retry.",
+  finalize:
+    "The company was created but its setup did not finish; retry resumes it from where it stopped.",
+  numbering:
+    "The company was created but its document numbering was not finished; retry resumes numbering.",
+};
+
 export function sampleCompanyStageMessage(
   stage: SampleCompanyProvisioningStage,
 ): string {
   return (
     `Sample company could not be created: ${SAMPLE_COMPANY_STAGE_PHRASES[stage]}. ` +
-    "Nothing was created; you can retry."
+    SAMPLE_COMPANY_STAGE_OUTCOMES[stage]
   );
 }
 

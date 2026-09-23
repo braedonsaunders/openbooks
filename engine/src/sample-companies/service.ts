@@ -27,6 +27,44 @@ export {
 } from "./provisioning-failures.ts";
 export type { SampleCompanyProvisioningStage } from "./provisioning-failures.ts";
 
+/**
+ * Durable provisioning marker (SC-RESUME). Every company cloned for a member
+ * carries its pipeline position in
+ * `orgs.settings.sampleCompany.provisioningStage`:
+ *
+ *   cloned → finalized → numbering_reconciled → ready
+ *
+ * Each stage stamps the marker in the same transaction that completes it, so
+ * a crash between stages always leaves the company resumable: the next
+ * createSampleCompany for the same member and industry resumes from the
+ * recorded stage instead of cloning a second company. Rows that predate
+ * resumable provisioning carry no marker and are treated as ready — they
+ * completed under the old flow (or are already exposed) and their position
+ * cannot be reconstructed.
+ *
+ * No schema column is needed: the marker lives in the schemaless settings
+ * document beside the existing sampleCompany metadata.
+ */
+export type SampleCompanyOrgStage =
+  | "cloned"
+  | "finalized"
+  | "numbering_reconciled"
+  | "ready";
+
+const SAMPLE_COMPANY_ORG_STAGES: readonly SampleCompanyOrgStage[] = [
+  "cloned",
+  "finalized",
+  "numbering_reconciled",
+  "ready",
+];
+
+function isSampleCompanyOrgStage(value: unknown): value is SampleCompanyOrgStage {
+  return (
+    typeof value === "string" &&
+    (SAMPLE_COMPANY_ORG_STAGES as readonly string[]).includes(value)
+  );
+}
+
 export interface SampleCompanyStatus {
   industryKey: string;
   profileId: string;
@@ -426,10 +464,166 @@ async function existingFor(memberUserId: string, industryKey: string): Promise<{
        where o.env_kind = 'preview'
          and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
          and o.settings->'sampleCompany'->>'industryKey' = ${industryKey}
+         -- SC-RESUME: success is a FULLY READY company only. A partial
+         -- company carries an explicit non-ready provisioningStage and must
+         -- never satisfy this lookup (the retry would return it as success
+         -- with unreconciled numbering). Rows without a marker predate
+         -- resumable provisioning and are treated as ready.
+         and coalesce(o.settings->'sampleCompany'->>'provisioningStage', 'ready') = 'ready'
        order by o.created_at asc
        limit 1
     `));
     return result.rows[0] ?? null;
+  });
+}
+
+interface PartialSampleCompany {
+  id: string;
+  name: string;
+  /** Raw recorded stage; the caller resumes known stages and compensates the rest. */
+  stage: string;
+  /** Provenance for the resume; empty when the record cannot be resumed. */
+  templateOrgId: string;
+}
+
+/**
+ * Find the oldest resumable partial company for this member and industry:
+ * a clone that committed but never reached ready. A partial may still be
+ * env_kind 'sandbox' (finalize never committed) or 'preview' (finalize
+ * committed, numbering or access pending). Completed companies and
+ * pre-marker rows never match.
+ */
+async function findPartialSampleCompany(
+  memberUserId: string,
+  industryKey: string,
+): Promise<PartialSampleCompany | null> {
+  return withBypassContext(async () => {
+    const result = (await db.execute<{
+      id: string;
+      name: string;
+      stage: string | null;
+      templateOrgId: string | null;
+    }>(sql`
+      select o.id, o.name,
+             o.settings->'sampleCompany'->>'provisioningStage' as stage,
+             o.settings->'sampleCompany'->>'templateOrgId' as "templateOrgId"
+        from orgs o
+       where o.env_kind in ('preview', 'sandbox')
+         and o.settings->'sampleCompany'->>'ownerUserId' = ${memberUserId}
+         and o.settings->'sampleCompany'->>'industryKey' = ${industryKey}
+         and o.settings->'sampleCompany'->>'provisioningStage' is not null
+         and o.settings->'sampleCompany'->>'provisioningStage' <> 'ready'
+       order by o.created_at asc
+       limit 1
+    `));
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      stage: row.stage ?? "unknown",
+      templateOrgId: row.templateOrgId ?? "",
+    };
+  });
+}
+
+/**
+ * Stamp the cloned marker immediately after createSandbox commits, together
+ * with the ownership and provenance the resume lookup keys on. A write that
+ * matches zero rows is a failure, not a success: the clone was just
+ * committed, so zero rows means it disappeared under us.
+ */
+async function stampClonedSampleCompany(args: {
+  sandboxOrgId: string;
+  industryKey: string;
+  profileId: string;
+  memberUserId: string;
+  sourceOrgId: string;
+  templateOrgId: string;
+}): Promise<void> {
+  const marker = {
+    version: 1,
+    industryKey: args.industryKey,
+    profileId: args.profileId,
+    ownerUserId: args.memberUserId,
+    requestedFromOrgId: args.sourceOrgId,
+    templateOrgId: args.templateOrgId,
+    createdAt: new Date().toISOString(),
+    immutableSyntheticSource: true,
+    provisioningStage: "cloned",
+  };
+  const stamped = (await withBypassContext(() => db.execute(sql`
+    update orgs
+       set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('sampleCompany',
+             coalesce(settings->'sampleCompany', '{}'::jsonb) || ${JSON.stringify(marker)}::jsonb),
+           updated_at = now()
+     where id = ${args.sandboxOrgId}
+  `)) as unknown as { rowCount?: number | null });
+  if (stamped.rowCount !== 1) {
+    throw new SampleCompanyError("cloned sample organization disappeared during provisioning");
+  }
+}
+
+/** Flip the provisioning marker after a stage whose own writes committed. */
+async function setSampleCompanyStage(orgId: string, stage: SampleCompanyOrgStage): Promise<void> {
+  const stamped = (await withBypassContext(() => db.execute(sql`
+    update orgs
+       set settings = jsonb_set(settings, '{sampleCompany,provisioningStage}', to_jsonb(${stage}::text), true),
+           updated_at = now()
+     where id = ${orgId}
+       and settings ? 'sampleCompany'
+  `)) as unknown as { rowCount?: number | null });
+  if (stamped.rowCount !== 1) {
+    throw new SampleCompanyError("sample company disappeared during provisioning");
+  }
+}
+
+/**
+ * Compensate an unresumable partial company through the product's own
+ * sandbox deletion path (the same prep dropSampleCloneOrg applies: a
+ * finalized partial is env_kind 'preview', which the sandbox wipe guard
+ * refuses, so normalize to 'sandbox' first), verifying the org row is
+ * actually gone instead of reporting an unverified delete as success.
+ * Returns 'gone' when the row already disappeared so the caller can
+ * re-provision; any other unexpected shape throws loudly — provisioning a
+ * second company over an undeleted partial would strand it.
+ */
+async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"> {
+  return withBypassContext(async () => {
+    const row = (await db.execute<{ name: string; envKind: string; isSample: boolean }>(sql`
+      select name, env_kind as "envKind",
+             ((settings ? 'sampleCompany')
+              or (settings ? 'sampleTemplatePromotion')
+              or coalesce((settings->>'simHarness')::boolean, false)) as "isSample"
+        from orgs where id = ${orgId}`)).rows[0];
+    if (!row) return "gone";
+    if (!row.isSample) {
+      throw new SampleCompanyError(
+        `refusing to delete partial sample company ${orgId}: it carries no sample-company marker`,
+      );
+    }
+    if (row.envKind !== "preview" && row.envKind !== "sandbox") {
+      throw new SampleCompanyError(
+        `refusing to delete partial sample company ${orgId}: unexpected env_kind ${JSON.stringify(row.envKind)}`,
+      );
+    }
+    if (row.envKind === "preview") {
+      await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
+    }
+    const sandboxRows = (await db.execute<{ id: string }>(sql`
+      select id from sandboxes where org_id = ${orgId}`)).rows;
+    if (sandboxRows.length !== 1) {
+      throw new SampleCompanyError(
+        `refusing to delete partial sample company ${orgId}: expected exactly one sandbox row, found ${sandboxRows.length}`,
+      );
+    }
+    await deleteSandbox(sandboxRows[0]!.id);
+    const remaining = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from orgs where id = ${orgId}`)).rows[0]!.n;
+    if (remaining !== 0) {
+      throw new SampleCompanyError(`partial sample company ${orgId} survived deletion`);
+    }
+    return "deleted";
   });
 }
 
@@ -653,13 +847,7 @@ async function markTemplate(template: TemplateRow, profileId: string): Promise<v
   });
 }
 
-async function finalizePreview(args: {
-  sandboxOrgId: string;
-  templateOrgId: string;
-  input: CreateSampleCompanyInput;
-  companyName: string;
-  profileId: string;
-}): Promise<void> {
+async function finalizePreview(args: FinalizeSampleCompanyArgs): Promise<void> {
   await withOrgTransaction(args.sandboxOrgId, async () => {
     await db.transaction(async (tx) => {
       const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
@@ -712,6 +900,10 @@ async function finalizePreview(args: {
         completedAt: new Date().toISOString(),
         completedBy: actingUserId,
       };
+      // SC-RESUME: this transaction completes the 'finalized' stage but
+      // grants NO member access. Access is granted last, by
+      // grantSampleCompanyAccess, only once numbering has reconciled — a
+      // partial company must never carry an active user_org_access row.
       settings.sampleCompany = {
         version: 1,
         industryKey: args.input.industryKey,
@@ -721,6 +913,8 @@ async function finalizePreview(args: {
         templateOrgId: args.templateOrgId,
         createdAt: new Date().toISOString(),
         immutableSyntheticSource: true,
+        provisioningStage: "finalized",
+        finalizedBy: actingUserId,
       };
 
       const sampleName = args.companyName;
@@ -736,18 +930,6 @@ async function finalizePreview(args: {
            set name = ${args.companyName}, legal_name = ${args.companyName},
                updated_at = now(), updated_by = ${actingUserId}
          where org_id = ${args.sandboxOrgId} and parent_id is null
-      `);
-      await tx.execute(sql`
-        insert into user_org_access
-          (member_user_id, org_id, acting_user_id, is_active, created_by, updated_by)
-        values (
-          ${args.input.memberUserId}, ${args.sandboxOrgId}, ${actingUserId}, true,
-          ${actingUserId}, ${actingUserId}
-        )
-        on conflict (member_user_id, org_id) do update
-          set acting_user_id = excluded.acting_user_id, is_active = true,
-              updated_at = now(), updated_by = excluded.updated_by
-        where user_org_access.org_id = ${args.sandboxOrgId}
       `);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -768,8 +950,139 @@ async function finalizePreview(args: {
   });
 }
 
+/**
+ * Grant the requesting member access to their company and flip it ready in
+ * one transaction. This is the LAST provisioning step by design: a partial
+ * company (cloned or finalized but not yet reconciled) never carries an
+ * active user_org_access row, so no user can enter it before it is ready,
+ * and existingFor (which joins active access) can never return one. The
+ * upsert keeps the grant idempotent for resumed retries.
+ */
+async function grantSampleCompanyAccess(args: {
+  sandboxOrgId: string;
+  memberUserId: string;
+}): Promise<void> {
+  await withOrgTransaction(args.sandboxOrgId, async () => {
+    await db.transaction(async (tx) => {
+      const current = (await tx.execute<{ settings: Record<string, unknown> }>(sql`
+        select settings from orgs where id = ${args.sandboxOrgId} for update
+      `));
+      const row = current.rows[0];
+      if (!row) throw new SampleCompanyError("sample company disappeared during provisioning");
+      const company = (row.settings ?? {}).sampleCompany;
+      if (!company || typeof company !== "object") {
+        throw new SampleCompanyError("sample company is missing its provisioning record");
+      }
+      const record = company as Record<string, unknown>;
+      if (record.ownerUserId !== args.memberUserId) {
+        throw new SampleCompanyError("sample company belongs to a different member");
+      }
+      const actingUserId = record.finalizedBy;
+      if (typeof actingUserId !== "string" || actingUserId.length === 0) {
+        throw new SampleCompanyError("sample company was never finalized");
+      }
+      await tx.execute(sql`
+        insert into user_org_access
+          (member_user_id, org_id, acting_user_id, is_active, created_by, updated_by)
+        values (
+          ${args.memberUserId}, ${args.sandboxOrgId}, ${actingUserId}, true,
+          ${actingUserId}, ${actingUserId}
+        )
+        on conflict (member_user_id, org_id) do update
+          set acting_user_id = excluded.acting_user_id, is_active = true,
+              updated_at = now(), updated_by = excluded.updated_by
+        where user_org_access.org_id = ${args.sandboxOrgId}
+      `);
+      const settings = { ...(row.settings ?? {}) };
+      settings.sampleCompany = { ...record, provisioningStage: "ready" };
+      const stamped = (await tx.execute(sql`
+        update orgs
+           set settings = ${JSON.stringify(settings)}::jsonb,
+               updated_at = now(), updated_by = ${actingUserId}
+         where id = ${args.sandboxOrgId}
+      `)) as unknown as { rowCount?: number | null };
+      if (stamped.rowCount !== 1) {
+        throw new SampleCompanyError("sample company disappeared during provisioning");
+      }
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (
+          ${args.sandboxOrgId}, 'orgs', ${args.sandboxOrgId}, 'update',
+          ${JSON.stringify({
+            mode: "sample_company_ready",
+            industryKey: record.industryKey,
+            profileId: record.profileId,
+            ownerUserId: args.memberUserId,
+          })}::jsonb,
+          ${actingUserId}
+        )
+      `);
+    });
+  });
+}
+
+export interface FinalizeSampleCompanyArgs {
+  sandboxOrgId: string;
+  templateOrgId: string;
+  input: CreateSampleCompanyInput;
+  companyName: string;
+  profileId: string;
+}
+
+/**
+ * Step seams for createSampleCompany. Every step is injectable for tests;
+ * production always uses the real pipeline. This is what lets a regression
+ * test force a failure after the clone (or inside numbering) and then retry
+ * through the real resume path.
+ */
+export interface SampleCompanyProvisionDeps {
+  prepareTemplate?: (industryKey: string) => Promise<PrepareSampleCompanyResult>;
+  finalizeCompany?: (args: FinalizeSampleCompanyArgs) => Promise<void>;
+  reconcileNumbering?: (orgId: string) => Promise<unknown>;
+}
+
+/**
+ * Resume a partial company from its recorded stage, running only the stages
+ * that never committed. Finalize and numbering are reported by their own
+ * stage on failure, so the refusal stays truthful across retries; the
+ * access grant is never staged — its specific errors (foreign record,
+ * missing finalize) propagate as known refusals.
+ */
+async function resumePartialSampleCompany(args: {
+  partial: PartialSampleCompany;
+  input: CreateSampleCompanyInput;
+  companyName: string;
+  profileId: string;
+  finalizeCompany: (step: FinalizeSampleCompanyArgs) => Promise<void>;
+  reconcileNumbering: (orgId: string) => Promise<unknown>;
+}): Promise<void> {
+  const stage = args.partial.stage as SampleCompanyOrgStage;
+  if (stage === "cloned") {
+    await runProvisioningStage("finalize", () =>
+      args.finalizeCompany({
+        sandboxOrgId: args.partial.id,
+        templateOrgId: args.partial.templateOrgId,
+        input: args.input,
+        companyName: args.companyName,
+        profileId: args.profileId,
+      }),
+    );
+  }
+  if (stage === "cloned" || stage === "finalized") {
+    await runProvisioningStage("numbering", () =>
+      args.reconcileNumbering(args.partial.id),
+    );
+    await setSampleCompanyStage(args.partial.id, "numbering_reconciled");
+  }
+  await grantSampleCompanyAccess({
+    sandboxOrgId: args.partial.id,
+    memberUserId: args.input.memberUserId,
+  });
+}
+
 export async function createSampleCompany(
   input: CreateSampleCompanyInput,
+  deps: SampleCompanyProvisionDeps = {},
 ): Promise<CreateSampleCompanyResult> {
   const profile = SAMPLE_COMPANY_BY_INDUSTRY.get(input.industryKey);
   if (!profile) throw new SampleCompanyError(`unknown sample-company industry: ${input.industryKey}`);
@@ -783,13 +1096,22 @@ export async function createSampleCompany(
   if (alreadyPrepared) {
     return { orgId: alreadyPrepared.id, name: alreadyPrepared.name, created: false, templateGenerated: false };
   }
+  // Step seams: every stage is injectable for tests; production always
+  // uses the real pipeline.
+  const prepareTemplate = deps.prepareTemplate
+    ?? ((industryKey: string) => prepareSampleCompanyTemplate(industryKey));
+  const finalizeCompany = deps.finalizeCompany
+    ?? ((step: FinalizeSampleCompanyArgs) => finalizePreview(step));
+  const reconcileNumbering = deps.reconcileNumbering
+    ?? ((orgId: string) =>
+      withOrgContext(orgId, () => reconcileDocumentSequences(db, orgId)));
   // Template preparation has its own profile-wide lock. Complete it before
   // taking the member lock so a burst of first-use requests cannot exhaust the
   // connection pool while holding one advisory lock and waiting for another.
   // OM-14: every unexpected failure below is reported by its pipeline stage
   // with a stable code and a fixed operator-facing message — never SQL text.
   const prepared = await runProvisioningStage("template", () =>
-    prepareSampleCompanyTemplate(input.industryKey),
+    prepareTemplate(input.industryKey),
   );
 
   const lockKey = `openbooks:sample-company:${input.memberUserId}:${input.industryKey}`;
@@ -829,6 +1151,32 @@ export async function createSampleCompany(
       return { orgId: existing.id, name: existing.name, created: false, templateGenerated: false };
     }
 
+    // SC-RESUME: a previous attempt may have committed the clone but failed
+    // before the company was ready. Resume it from its recorded stage — a
+    // retry that cloned again would strand a second company. A record that
+    // cannot be resumed (unrecognized stage) is compensated through the
+    // product's own sandbox deletion path before re-provisioning.
+    const partial = await findPartialSampleCompany(input.memberUserId, input.industryKey);
+    if (partial) {
+      if (isSampleCompanyOrgStage(partial.stage) && partial.templateOrgId) {
+        await resumePartialSampleCompany({
+          partial,
+          input,
+          companyName: profile.companyName,
+          profileId: profile.profileId,
+          finalizeCompany,
+          reconcileNumbering,
+        });
+        return {
+          orgId: partial.id,
+          name: profile.companyName,
+          created: true,
+          templateGenerated: prepared.generated,
+        };
+      }
+      await deletePartialSampleOrg(partial.id);
+    }
+
     const cloned = await runProvisioningStage("clone", () =>
       withBypassContext(() =>
         createSandbox({
@@ -840,6 +1188,16 @@ export async function createSampleCompany(
         }),
       ),
     );
+    // Record the clone durably before any later stage can fail: this marker
+    // is what the next retry resumes from.
+    await stampClonedSampleCompany({
+      sandboxOrgId: cloned.sandboxOrgId,
+      industryKey: input.industryKey,
+      profileId: profile.profileId,
+      memberUserId: input.memberUserId,
+      sourceOrgId: input.sourceOrgId,
+      templateOrgId: prepared.templateOrgId,
+    });
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
     if (winnerBeforeFinalize) {
@@ -852,7 +1210,7 @@ export async function createSampleCompany(
       };
     }
     await runProvisioningStage("finalize", () =>
-      finalizePreview({
+      finalizeCompany({
         sandboxOrgId: cloned.sandboxOrgId,
         templateOrgId: prepared.templateOrgId,
         input,
@@ -865,10 +1223,14 @@ export async function createSampleCompany(
     // number per kind even if the copy did not carry the reconciled counters.
     // Forward-only and idempotent — a no-op when the counters already lead.
     await runProvisioningStage("numbering", () =>
-      withOrgContext(cloned.sandboxOrgId, () =>
-        reconcileDocumentSequences(db, cloned.sandboxOrgId),
-      ),
+      reconcileNumbering(cloned.sandboxOrgId),
     );
+    await setSampleCompanyStage(cloned.sandboxOrgId, "numbering_reconciled");
+    // Access is granted last: only a fully reconciled company becomes ready.
+    await grantSampleCompanyAccess({
+      sandboxOrgId: cloned.sandboxOrgId,
+      memberUserId: input.memberUserId,
+    });
     if (!lockHealthy) {
       await reacquireLockIfNeeded();
       const winner = await existingFor(input.memberUserId, input.industryKey);

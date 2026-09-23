@@ -688,6 +688,53 @@ test('psp settlement import copy ships localized in every locale', () => {
   }
 })
 
+test('sample-company failure copy ships localized in every locale', () => {
+  // SC-RESUME: the provisioning API reports failures by pipeline stage and
+  // the wizard renders the matching localized copy — absent outside en the
+  // operator reads English inside an otherwise translated import screen, and
+  // (worse) a stale translation can still claim "nothing was created" while
+  // a resumable company exists. Every leaf must exist and be localized, and
+  // the late-stage leaves must not make the nothing-created claim.
+  const source = flattenCatalog('en')
+  const keys = [
+    'data.import.sample.createFailed',
+    'data.import.sample.createFailedTemplate',
+    'data.import.sample.createFailedClone',
+    'data.import.sample.createFailedFinalize',
+    'data.import.sample.createFailedNumbering',
+  ]
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+    for (const key of [
+      'data.import.sample.createFailedFinalize',
+      'data.import.sample.createFailedNumbering',
+    ]) {
+      const value = catalog.get(key) ?? ''
+      assert.ok(
+        !/nothing was created|es wurde nichts erstellt|no se creó nada|rien n[’']a été créé|何も作成されていない|nada foi criado|未创建任何内容/i.test(value),
+        `${locale} ${key} must not claim nothing was created for a resumable company`,
+      )
+    }
+  }
+  for (const key of [
+    'data.import.sample.createFailedFinalize',
+    'data.import.sample.createFailedNumbering',
+  ]) {
+    assert.doesNotMatch(
+      source.get(key) ?? '',
+      /nothing was created/i,
+      `en ${key} must not claim nothing was created for a resumable company`,
+    )
+  }
+})
+
 test('sftp unbound-schedule paused copy ships localized in every locale', () => {
   // U7: an unbound identifying schedule reads "Paused: expected account not
   // set" with a remedy hint — absent outside en it falls back to English
