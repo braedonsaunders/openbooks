@@ -104,7 +104,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(
   root + 'engine/src/testing/fixtures.ts'
 )) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { postDocument } = (await import(root + "engine/src/ledger/posting-document.ts")) as typeof import("@openbooks/engine/src/ledger/posting-document.ts");
-const { getAuthz } = await import('./authz')
+const { can, getAuthz } = await import('./authz')
 const { RunsSection } = await import('../app/(app)/payments/RunsSection')
 const { GET: listRuns } = await import('../app/api/payments/runs/route')
 const { guardPaymentRunPermission } = await import('../app/api/payments/lib')
@@ -431,6 +431,7 @@ for (const boundary of [
                 kind: 'vendor_payment',
                 basePath: '/payments',
                 canManage: false,
+                canCreate: can(authz, 'ap.pay'),
                 userRoles: [],
               })
               assert.equal(

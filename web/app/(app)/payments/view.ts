@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
+import { can, requirePermission } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
 
 /**
@@ -27,6 +27,10 @@ export interface PaymentsData {
   newRunHref: string
   onPayments: boolean
   onRuns: boolean
+  /** Header New button: the payments tab AND the creation right. The drawer
+   *  (?paymentNew=1) reads the same canCreate through its slot, so the button
+   *  is never offered without the drawer it opens. */
+  showNewPayment: boolean
   view: 'payments' | 'runs'
   tabLabels: { payments: string; runs: string }
   currentParams: Record<string, string | string[] | undefined>
@@ -35,7 +39,7 @@ export interface PaymentsData {
 export async function loadPayments(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<PaymentsData> {
-  await requirePermission('ap.pay')
+  const authz = await requirePermission('ap.pay')
   const t = await getTranslations('payments')
   const view = pickString(sp.view) === 'runs' ? 'runs' : 'payments'
 
@@ -47,6 +51,7 @@ export async function loadPayments(
     newRunHref: mergeHref('/payments', sp, { view: 'runs', newRun: '1', run: undefined }),
     onPayments: view === 'payments',
     onRuns: view === 'runs',
+    showNewPayment: view === 'payments' && can(authz, 'ap.pay'),
     view,
     tabLabels: { payments: t('page.tabs.payments'), runs: t('page.tabs.runs') },
     currentParams: sp,
@@ -67,7 +72,7 @@ export function paymentsSpec(data: PaymentsData): PageSpec {
           widget(
             'new-payment',
             { kind: 'vendor_payment', basePath: '/payments', label: data.newPaymentLabel },
-            f('onPayments'),
+            f('showNewPayment'),
           ),
           widget(
             'new-payment-run',
