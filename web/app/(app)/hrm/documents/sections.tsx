@@ -151,6 +151,17 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
           <p className="text-sm text-slate-500">{document.fileId}</p>
         </section>
       )}
+      {(document.retainUntil || document.retentionAction) && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold">{msg(labels, 'retention')}</h3>
+          <p className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
+            <span>{document.retentionAction ?? '—'}{document.retainUntil ? ` · ${document.retainUntil}` : ''}</span>
+            {document.retentionUnverified ? (
+              <Badge variant="warning">{msg(labels, 'retentionUnverified')}</Badge>
+            ) : null}
+          </p>
+        </section>
+      )}
     </div>
   )
 }

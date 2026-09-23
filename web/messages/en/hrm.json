@@ -1879,7 +1879,9 @@
       "signed": "Signed",
       "pending": "Pending",
       "viewed": "Viewed",
-      "missing": "This document is no longer available."
+      "missing": "This document is no longer available.",
+      "retention": "Retention",
+      "retentionUnverified": "Legacy — action inherited, not captured at completion"
     },
     "generate": {
       "open": "New document",
