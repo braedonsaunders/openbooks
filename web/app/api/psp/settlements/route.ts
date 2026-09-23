@@ -175,7 +175,7 @@ export async function POST(req: Request) {
           fxAccountId: body.fxAccountId,
           clearingAccountId: body.clearingAccountId,
           subsidiaryId: body.subsidiaryId,
-        });
+        }, authz.allowedSubsidiaryIds);
         return NextResponse.json({
           ...result,
           totals: summarizeSettlement(parsed.lines),
