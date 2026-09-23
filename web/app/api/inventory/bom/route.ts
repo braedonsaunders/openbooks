@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardFeaturePermission } from '@/lib/feature-gates'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -22,9 +23,13 @@ function refusal(error: string, status = 422) {
  * Replace one assembly's complete BOM as one controlled configuration write.
  * A table lock deliberately conflicts with buildAssembly's SHARE lock: a build
  * consumes either the entire prior recipe or the entire new recipe, never a
- * partially replaced component set. A per-assembly parent-row lock serializes
- * concurrent replacements (ROW EXCLUSIVE table locks do not conflict with
- * each other).
+ * partially replaced component set. The authoritative Inventory feature is
+ * re-checked inside the transaction (held to commit, so a disable racing the
+ * save orders itself against it), and a per-assembly parent-row lock
+ * serializes concurrent replacements (ROW EXCLUSIVE table locks do not
+ * conflict with each other). The fence runs before the row lock — the same
+ * orgs-then-subject order as item costing saves — so a BOM replacement and a
+ * costing save on the same item cannot deadlock each other.
  */
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'inventory')
@@ -71,13 +76,21 @@ export async function PUT(req: Request) {
   try {
     const result = await db.transaction(async (tx) => {
       await tx.execute(sql`lock table bom_components in row exclusive mode`)
+      // Fence the authoritative feature inside the transaction: a disable
+      // that commits between the route gate and this read refuses here with
+      // no recipe or audit written. The FOR SHARE row lock is held to commit,
+      // so a concurrent disable orders itself against this save either way.
+      if (!(await lockAndCheckOrgFeature(tx, gate.user.orgId, 'inventory'))) {
+        return { featureDisabled: true as const }
+      }
       // Serialize concurrent replacements on the parent item row. Two PUTs on
       // an empty BOM would otherwise both read version null and their inserts
       // would union into a recipe nobody wrote; the loser instead re-reads
       // the winner's committed version below and takes the 409 path. NO KEY
       // UPDATE stays compatible with the foreign-key checks on the inserts
-      // (same lock as item costing saves). A missing parent row locks
-      // nothing — the active-inventory check below still refuses it.
+      // (same pattern as item costing saves, fence first and row lock second).
+      // A missing parent row locks nothing — the active-inventory check below
+      // still refuses it.
       await tx.execute(sql`
         select id from items
          where id = ${assemblyItemId} and org_id = ${gate.user.orgId}
@@ -179,6 +192,9 @@ export async function PUT(req: Request) {
 
     if ('conflict' in result) {
       return refusal('This bill of materials changed after you opened it. Close the drawer, reopen it, and apply your changes to the latest revision.', 409)
+    }
+    if ('featureDisabled' in result) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     if ('invalidItems' in result) {
       return refusal('Every assembly and component must be an active inventory item in this organization.')
