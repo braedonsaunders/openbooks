@@ -768,7 +768,7 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
         (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
     await saveTaxRateProviderConfig(
       org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: "https://tax.example/hook" } },
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: {} },
       null,
     );
     const config = await readTaxRateProviderConfig(org.orgId);
@@ -849,6 +849,238 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
     assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
     assert.equal(byAccount.get(cityAccount), "-1.2500");
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones pass", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let mode = "match";
+  let provider: Server | null = null;
+  try {
+    provider = createServer(async (req, res) => {
+      const body = await bodyOf(req);
+      assert.ok(body.length > 0);
+      const bad = mode === "bad";
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.url === "/api/v2/transactions/create") {
+        res.end(JSON.stringify({
+          totalTax: 8.25,
+          code: "Q",
+          summary: [
+            { jurisdictionType: "STATE", rate: 0.07, tax: 7.0, taxName: "State" },
+            { jurisdictionType: "CITY", rate: 0.0125, tax: bad ? 1.24 : 1.25, taxName: "City" },
+          ],
+        }));
+      } else if (req.url === "/v2/taxes") {
+        res.end(JSON.stringify({
+          tax: {
+            amount_to_collect: 8.25,
+            rate: 0.0825,
+            breakdown: {
+              state_tax_collectable: 7.0,
+              state_tax_rate: 0.07,
+              county_tax_collectable: bad ? 1.24 : 1.25,
+              county_tax_rate: 0.0125,
+            },
+          },
+        }));
+      } else {
+        res.writeHead(404, { "content-type": "application/json" });
+        res.end(JSON.stringify({ error: "unknown" }));
+      }
+    });
+    const origin = await listenTaxServer(provider);
+    const address = {
+      shipFrom: { country: "US", region: "WA", postalCode: "98101" },
+      shipTo: { line1: "1 Main St", city: "Seattle", region: "WA", postalCode: "98101", country: "US" },
+    };
+
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "avalara", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, accountId: "A", licenseKey: "L" },
+      null,
+    );
+    const matched = await quoteExternalTax(org.orgId, {
+      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+    });
+    assert.equal(matched.taxAmount, "8.2500");
+    mode = "bad";
+    await assert.rejects(
+      quoteExternalTax(org.orgId, {
+        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+      }),
+      /avalara returned tax 8.2500 but its components sum to 8.2400/,
+    );
+
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "taxjar", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, apiKey: "K" },
+      null,
+    );
+    mode = "match";
+    const tjMatched = await quoteExternalTax(org.orgId, {
+      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+    });
+    assert.equal(tjMatched.taxAmount, "8.2500");
+    mode = "bad";
+    await assert.rejects(
+      quoteExternalTax(org.orgId, {
+        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+      }),
+      /taxjar returned tax 8.2500 but its components sum to 8.2400/,
+    );
+  } finally {
+    if (provider) await closeTaxServer(provider);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("headline-only custom hook quotes synthesize a mapped component, or refuse", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let hookBody: Record<string, unknown> = { taxAmount: "8.2500", externalRef: "H-1" };
+  let provider: Server | null = null;
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'CUSTOM', 'Custom hook tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    provider = createServer(async (req, res) => {
+      await bodyOf(req);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify(hookBody));
+    });
+    const origin = await listenTaxServer(provider);
+    const request = {
+      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {}, quotedOn: org.date,
+    };
+
+    // No headline mapping configured: a nonzero bare headline refuses by name.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook` } },
+      null,
+    );
+    await assert.rejects(
+      quoteExternalTax(org.orgId, request),
+      /custom tax hook returned tax 8.2500 with no components.*customHeadlineJurisdiction/,
+    );
+    // A headline key outside the mapping refuses too.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook`, customHeadlineJurisdiction: "OTHER" } },
+      null,
+    );
+    await assert.rejects(
+      quoteExternalTax(org.orgId, request),
+      /headline jurisdiction "OTHER" has no mapped tax code/,
+    );
+
+    // With the mapping, the headline synthesizes one attributed component
+    // carrying the exact implied rate — quotable, approvable, and postable.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
+      },
+      null,
+    );
+    const quote = await quoteExternalTax(org.orgId, request);
+    assert.deepEqual(quote.components, [
+      { jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" },
+    ]);
+
+    // A headline that does not divide its base evenly synthesizes an
+    // explicitly flagged zero rate rather than invented precision.
+    hookBody = { taxAmount: "1.0000", externalRef: "H-2" };
+    const inexact = await quoteExternalTax(org.orgId, { ...request, taxableAmount: "3.0000" });
+    assert.deepEqual(inexact.components, [
+      { jurisdiction: "CUSTOM", ratePercent: "0.0000", taxAmount: "1.0000", rateIsBlendedFallback: true },
+    ]);
+
+    // A zero headline with no components is genuinely nil and passes through.
+    hookBody = { taxAmount: "0.0000", externalRef: "H-3" };
+    const nil = await quoteExternalTax(org.orgId, request);
+    assert.deepEqual(nil.components, []);
+    assert.equal(nil.taxAmount, "0.0000");
+  } finally {
+    if (provider) await closeTaxServer(provider);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a synthesized headline component is booked, approved, and posted under its mapped code", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let provider: Server | null = null;
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'CUSTOM', 'Custom hook tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    provider = createServer(async (req, res) => {
+      await bodyOf(req);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ taxAmount: "8.2500", externalRef: "H-9" }));
+    });
+    const origin = await listenTaxServer(provider);
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
+      },
+      null,
+    );
+    const config = await readTaxRateProviderConfig(org.orgId);
+    // The draft path: quote (persisted with the synthesized component),
+    // then book the provider amounts under the mapped code.
+    const documentId = randomUUID();
+    const lineId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
+         currency, subtotal, tax_total, total)
+      values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'HOOK-1', ${org.customerId}, ${org.subsidiaryId}, ${org.date},
+              'CAD', '100', '8.2500', '108.2500')`);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+         tax_amount, tax_code_id, quantity, unit_price)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${codeId}, '1', '100')`);
+    const quote = await quoteExternalTax(org.orgId, {
+      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {},
+      quotedOn: org.date, documentLineId: lineId,
+    });
+    assert.equal(quote.components.length, 1);
+    const booked = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, config!.settings);
+    assert.equal(booked.length, 1);
+    assert.equal(booked[0]?.taxCodeId, codeId);
+    assert.equal(booked[0]?.taxAmount, "8.2500");
+    for (const component of booked) {
+      await db.execute(sql`
+        insert into document_line_tax_components
+          (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+           tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+           price_includes_tax, compound_on_previous, rounding_scale,
+           collected_account_id, paid_account_id, overridden)
+        values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.ratePercent},
+                ${component.taxableAmount}, ${component.taxAmount}, ${component.recoverableAmount}, ${component.nonrecoverableAmount},
+                'standard', false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    }
+    await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
+    const entryId = await postDocument(documentId, {
+      control: {
+        ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
+        taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput,
+      },
+    }, { deferEffects: true, suppressAutomation: true });
+    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text as amount from journal_lines
+       where entry_id = ${entryId} and account_id = ${org.accounts.taxOutput}`)).rows;
+    assert.deepEqual(taxLines.map((row) => row.amount), ["-8.2500"]);
+  } finally {
+    if (provider) await closeTaxServer(provider);
     await dropScratchOrg(org.orgId);
   }
 });

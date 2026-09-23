@@ -666,7 +666,16 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
   });
 }
 
-/** Wire-level custom hook quote: optional bearer API key, JSON request echo. */
+/** Wire-level custom hook quote: optional bearer API key, JSON request echo.
+
+ * Response contract: { taxAmount, components?, externalRef? }. Per-jurisdiction
+ * `components` are preferred; a bare headline-only { taxAmount } is ALSO
+ * accepted, but only a zero headline passes through as-is — a nonzero
+ * headline is synthesized into ONE explicit component attributed through
+ * settings.customHeadlineJurisdiction (which must name a mapped jurisdiction),
+ * and refused when no such mapping exists, so the quote always reconciles
+ * before approval. A headline that disagrees with its components is refused.
+ */
 export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,
   config: { url: string; apiKey?: string },
@@ -709,9 +718,79 @@ async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteReque
   return quoteViaCustomHttp(req, { url, apiKey: secrets.apiKey || undefined });
 }
 
+/**
+ * Exact 4dp percent implied by a headline over its base (headline/base*100
+ * on integer units), or null when the ratio is not exact — e.g. a hook
+ * headline that does not divide its base evenly, or a non-positive base.
+ */
+function headlineRatePercent(taxableAmount: string, taxAmount: string): string | null {
+  try {
+    const base = toUnits(normalizeMoney(taxableAmount));
+    if (base <= 0n) return null;
+    const tax = toUnits(normalizeMoney(taxAmount));
+    const scaled = tax * 1_000_000n;
+    if (scaled % base !== 0n) return null;
+    return fromUnits(scaled / base);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Headline-only custom-hook responses: the hook's contract permits a bare
+ * { taxAmount } with no components. A ZERO headline is genuinely nil and
+ * passes through; a NONZERO headline must still reconcile at quote time, so
+ * the adapter synthesizes ONE explicit component attributed through the
+ * jurisdiction mapping (settings.customHeadlineJurisdiction naming a mapped
+ * jurisdiction), which booking then posts under its mapped tax code. Without
+ * that mapping the response is refused by name — sum([]) is 0, and posting
+ * would deterministically refuse an approved document over it.
+ */
+async function synthesizeCustomHeadlineComponent(
+  orgId: string,
+  req: TaxQuoteRequest,
+  cfg: TaxRateProviderConfigRow,
+  result: TaxQuoteResult,
+): Promise<TaxQuoteResult> {
+  let headline = 0n;
+  try {
+    headline = toUnits(result.taxAmount);
+  } catch {
+    throw new TaxRateProviderError("custom tax hook returned a tax amount that is not a ledger-scale decimal");
+  }
+  if (headline === 0n) return result;
+  const key = cfg.settings.customHeadlineJurisdiction;
+  if (typeof key !== "string" || key.trim() === "") {
+    throw new TaxRateProviderError(
+      `custom tax hook returned tax ${result.taxAmount} with no components — set settings.customHeadlineJurisdiction to a mapped jurisdiction, or have the hook return per-jurisdiction components`,
+    );
+  }
+  const mapping = (await validateJurisdictionTaxCodes(orgId, cfg.settings)) ?? {};
+  if (!mapping[key.trim()]) {
+    throw new TaxRateProviderError(
+      `custom tax hook headline jurisdiction "${key.trim()}" has no mapped tax code — map it in the provider settings (settings.jurisdictionTaxCodes) before approving this document`,
+    );
+  }
+  const rate = headlineRatePercent(req.taxableAmount, result.taxAmount);
+  return {
+    ...result,
+    components: [
+      {
+        jurisdiction: key.trim(),
+        // The hook stated no rate: carry the exact implied rate when the
+        // headline divides its base, else an explicitly flagged zero — never
+        // an invented precision.
+        ratePercent: rate ?? "0.0000",
+        taxAmount: result.taxAmount,
+        ...(rate == null ? { rateIsBlendedFallback: true } : {}),
+      },
+    ],
+  };
+}
+
 /** Resolve the configured provider without mutating provider or quote rows. */
 async function resolveConfiguredTax(
-  _orgId: string,
+  orgId: string,
   req: TaxQuoteRequest,
   cfg: TaxRateProviderConfigRow,
 ): Promise<TaxQuoteResult> {
@@ -730,6 +809,9 @@ async function resolveConfiguredTax(
     }
     result = quoteFromRate(req.taxableAmount, configured, req.shipTo.region ?? req.shipTo.country ?? "LOCAL");
   }
+  if (cfg.provider === "custom_http" && result.components.length === 0) {
+    result = await synthesizeCustomHeadlineComponent(orgId, req, cfg, result);
+  }
   validateTaxQuoteResult(result, cfg.provider);
   return result;
 }
@@ -738,18 +820,28 @@ function validateTaxQuoteResult(result: TaxQuoteResult, expectedProvider: TaxRat
   if (result.provider !== expectedProvider || !Array.isArray(result.components)) {
     throw new TaxRateProviderError("provider returned an ambiguous tax quote");
   }
+  let headline = 0n;
+  let componentTotal = 0n;
   try {
-    toUnits(result.taxAmount);
+    headline = toUnits(result.taxAmount);
     for (const component of result.components) {
       if (!component || typeof component.jurisdiction !== "string" || component.jurisdiction.trim() === "") {
         throw new Error("component jurisdiction is missing");
       }
       if (toUnits(component.ratePercent) < 0n) throw new Error("component rate cannot be negative");
-      toUnits(component.taxAmount);
+      componentTotal += toUnits(component.taxAmount);
     }
   } catch (error) {
     throw new TaxRateProviderError(
       `provider returned an invalid tax quote: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  // Shared cross-foot for EVERY provider, at quote time: an inconsistent
+  // response must refuse before the draft can be approved, never survive to
+  // deterministic posting refusal on an approved, immutable document.
+  if (headline !== componentTotal) {
+    throw new TaxRateProviderError(
+      `${expectedProvider} returned tax ${result.taxAmount} but its components sum to ${fromUnits(componentTotal)}`,
     );
   }
 }
