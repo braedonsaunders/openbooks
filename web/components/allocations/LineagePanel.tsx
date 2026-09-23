@@ -23,6 +23,10 @@ interface LineageRow {
  * document, every allocated line back to its rule, driver share and amount.
  * Pass `journalHref` where the host page can open a `?txn=` drawer; without
  * it the entry renders as a compact id.
+ *
+ * Server-paginated (S3b): the drill walks every page through Previous/Next
+ * with a "Rows x–y of z" status, so a run with more lines than fit one page
+ * never strands rows past the first page behind a static notice.
  */
 export function LineagePanel({
   anchor,
@@ -35,45 +39,67 @@ export function LineagePanel({
 }) {
   const t = useTranslations('allocations.lineage')
   const [rows, setRows] = useState<LineageRow[] | null>(null)
-  const [truncated, setTruncated] = useState<{ shown: number; total: number } | null>(null)
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
+  // The anchor arrives as a fresh object on every parent render: key the
+  // drill on the built query string, so paging survives re-renders and
+  // resets only when the anchor actually changes.
+  let anchorKey: string | null = null
+  try {
+    anchorKey = buildLineageQuery(anchor)
+  } catch {
+    anchorKey = null
+  }
+  const [lastKey, setLastKey] = useState(anchorKey)
+  if (anchorKey !== lastKey) {
+    setLastKey(anchorKey)
+    setOffset(0)
+  }
+
   useEffect(() => {
+    // An invalid anchor renders the empty state below; nothing to fetch.
+    if (anchorKey === null) return
     let cancelled = false
-    Promise.resolve()
-      .then(() => buildLineageQuery(anchor, { limit: pageSize }))
-      .then(
-        (url) =>
-          fetch(url).then(async (res) => {
-            if (cancelled) return
-            if (!res.ok) {
-              setError(t('loadFailed'))
-              setRows([])
-              return
-            }
-            const body = (await res.json()) as {
-              rows: LineageRow[]
-              total: number
-              truncated: boolean
-            }
-            if (cancelled) return
-            // Server-paginated: the page is complete as returned, and a
-            // truncated drill says so instead of looking complete.
-            setRows(body.rows.slice(0, pageSize))
-            setTruncated(body.truncated ? { shown: body.rows.length, total: body.total } : null)
-          }),
-        () => {
-          if (!cancelled) setRows([])
-        },
-      )
+    fetch(buildLineageQuery(anchor, { limit: pageSize, offset })).then(
+      async (res) => {
+        if (cancelled) return
+        if (!res.ok) {
+          setError(t('loadFailed'))
+          setRows([])
+          return
+        }
+        const body = (await res.json()) as { rows: LineageRow[]; total: number }
+        if (cancelled) return
+        // Rows vanished under the page (deleted run): restart at the first
+        // page instead of stranding the drill on an empty one.
+        if (body.rows.length === 0 && body.total > 0 && offset > 0) {
+          setOffset(0)
+          return
+        }
+        setRows(body.rows)
+        setTotal(body.total)
+      },
+      () => {
+        if (!cancelled) setRows([])
+      },
+    )
     return () => {
       cancelled = true
     }
-  }, [anchor, pageSize, t])
+  }, [anchor, anchorKey, pageSize, offset, t])
 
   if (rows === null) return <p className="text-sm text-slate-500">{'…'}</p>
   if (error) return <p className="text-sm text-red-600">{error}</p>
-  if (rows.length === 0) return <p className="text-sm text-slate-500">{t('empty')}</p>
+  if (anchorKey === null || (rows.length === 0 && total === 0)) {
+    return <p className="text-sm text-slate-500">{t('empty')}</p>
+  }
+
+  const from = offset + 1
+  const to = offset + rows.length
+  const hasPrevious = offset > 0
+  const hasNext = offset + rows.length < total
 
   return (
     <div className="space-y-2">
@@ -112,10 +138,28 @@ export function LineagePanel({
           ))}
         </TableBody>
       </Table>
-      {truncated ? (
-        <p className="text-sm text-slate-500">
-          {t('truncated', { shown: truncated.shown, total: truncated.total })}
-        </p>
+      {total > pageSize ? (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-sm text-slate-500">{t('pageStatus', { from, to, total })}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={!hasPrevious}
+              onClick={() => setOffset((current) => Math.max(0, current - pageSize))}
+              className="text-sm underline disabled:text-slate-400 disabled:no-underline"
+            >
+              {t('previous')}
+            </button>
+            <button
+              type="button"
+              disabled={!hasNext}
+              onClick={() => setOffset((current) => current + pageSize)}
+              className="text-sm underline disabled:text-slate-400 disabled:no-underline"
+            >
+              {t('next')}
+            </button>
+          </div>
+        </div>
       ) : null}
     </div>
   )

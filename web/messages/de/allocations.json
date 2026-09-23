@@ -596,6 +596,8 @@
     "empty": "Keine zugeordneten Zeilen führen zu diesem Datensatz.",
     "viewJournal": "Journalbeleg öffnen",
     "loadFailed": "Herkunft konnte nicht geladen werden.",
-    "truncated": "Die ersten {shown} von {total} Zeilen werden angezeigt."
+    "pageStatus": "Zeilen {from}-{to} von {total}.",
+    "previous": "Zurück",
+    "next": "Weiter"
   }
 }

@@ -596,6 +596,8 @@
     "empty": "このレコードに遡る配賦明細がありません。",
     "viewJournal": "仕訳を開く",
     "loadFailed": "追跡を読み込めませんでした。",
-    "truncated": "{total} 件中最初の {shown} 件を表示しています。"
+    "pageStatus": "{total} 件中 {from}-{to} 件目。",
+    "previous": "前へ",
+    "next": "次へ"
   }
 }
