@@ -13,10 +13,14 @@ const period = {
   gross: Math.abs(1_000) + Math.abs(-400),
 };
 
-test("GL history net mode keeps signed activity in both forecast paths", () => {
+test("GL history net mode nets signed rows and orients once on the total", () => {
   assert.equal(period.net, 600, "forecast history series");
   assert.equal(Math.abs(period.net), 600, "source-account average");
+  // Rows stay signed through the sums (refunds offset, contras offset);
+  // the single orientation step reads the netted total.
   assert.match(coreSource, /const activity = useNet \? net : gross/);
+  assert.match(coreSource, /orientNetTotal\(\s*totalHistory,\s*netConvention\(/);
+  assert.match(coreSource, /accountTotals\.set\(label, addMoney\(accountTotals\.get\(label\) \?\? ZERO_MONEY, activity\)\)/);
 });
 
 test("GL history gross mode keeps line magnitudes in both forecast paths", () => {

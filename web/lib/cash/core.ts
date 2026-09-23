@@ -550,6 +550,82 @@ export function fullWindowWeeklyAverage(
   return divideMoney(total, String(historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso)));
 }
 
+/** Account types whose increases are debits (assets, costs). */
+const DEBIT_NORMAL_TYPES = new Set([
+  "asset_bank",
+  "asset_receivable",
+  "asset_current_other",
+  "asset_fixed",
+  "asset_other",
+  "cogs",
+  "expense",
+  "expense_other",
+  "expense_deferred",
+]);
+
+/** Account types whose increases are credits (liabilities, equity, revenue). */
+const CREDIT_NORMAL_TYPES = new Set([
+  "liability_payable",
+  "liability_card",
+  "liability_current_other",
+  "liability_long_term",
+  "equity",
+  "income",
+  "income_other",
+]);
+
+/**
+ * Resolve one normal-balance convention (+1 debit-normal, -1 credit-normal)
+ * for a category's accounts from their gross activity: the convention
+ * carrying the larger gross wins, so a contra account never outvotes its
+ * primary; an exact tie follows the first-listed account (operator control).
+ * An unmapped type refuses by name instead of guessing a sign.
+ */
+export function netConvention(
+  accounts: readonly { id: string; type: string; gross: Money }[],
+): 1 | -1 {
+  // No activity: the netted total is zero and the convention is never read.
+  if (accounts.length === 0) return 1;
+  let debitGross = ZERO_MONEY;
+  let creditGross = ZERO_MONEY;
+  for (const account of accounts) {
+    if (DEBIT_NORMAL_TYPES.has(account.type)) {
+      debitGross = addMoney(debitGross, absMoney(account.gross));
+    } else if (CREDIT_NORMAL_TYPES.has(account.type)) {
+      creditGross = addMoney(creditGross, absMoney(account.gross));
+    } else {
+      throw new Error(
+        `cash forecast net orientation meets unknown account type "${account.type}": map it to a normal balance before forecasting`,
+      );
+    }
+  }
+  if (compareMoney(debitGross, creditGross) === 0) {
+    const first = accounts[0]?.type;
+    if (first !== undefined && CREDIT_NORMAL_TYPES.has(first)) return -1;
+    return 1;
+  }
+  return compareMoney(debitGross, creditGross) > 0 ? 1 : -1;
+}
+
+/**
+ * Orient a SIGNED netted total once, by the accounts' normal-balance
+ * convention: activity on the convention's side is the forecast magnitude
+ * (debit-positive expense legs are outflow; credit-negative legs on
+ * credit-normal accounts are flipped to it). A total running against the
+ * convention (net refunds over the window) forecasts 0 — reported with a
+ * visible note, never as cash in the wrong direction.
+ */
+export function orientNetTotal(
+  total: Money,
+  convention: 1 | -1,
+): { total: Money; againstDirection: boolean } {
+  if (compareMoney(total, ZERO_MONEY) === 0) return { total: ZERO_MONEY, againstDirection: false };
+  if (compareMoney(total, ZERO_MONEY) === convention) {
+    return { total: absMoney(total), againstDirection: false };
+  }
+  return { total: ZERO_MONEY, againstDirection: true };
+}
+
 /**
  *  — places a weekly amount on its expected day of
  * week / week of month, zeroes weeks whose slot has already passed, and
@@ -721,10 +797,15 @@ export async function categoryWeekly(
     for (const x of r.rows) {
       const net = normalizeMoneyValue(String(x.net));
       const gross = normalizeMoneyValue(String(x.gross));
+      // Net mode keeps rows SIGNED through the weekly and window sums so
+      // refunds offset spend and contra accounts offset their primaries.
+      // Orientation happens once, on the netted total, below.
       const activity = useNet ? net : gross;
       weeklyHistory[x.wk] = addMoney(weeklyHistory[x.wk] ?? ZERO_MONEY, activity);
       const label = [x.number, x.name].filter(Boolean).join(" · ");
-      accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, absMoney(activity)));
+      // Signed like the forecast series, so the source rows tie to the
+      // netted total they explain.
+      accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, activity));
     }
     let totalHistory = ZERO_MONEY;
     const startKey = toISO(tStart);
@@ -734,19 +815,37 @@ export async function categoryWeekly(
     // The data start is the earliest posting in this strategy's own read
     // scope (same accounts, book, and subsidiary filter as the history
     // above — just unbounded in time), so a young org divides by its weeks
-    // of books instead of the full window.
+    // of books instead of the full window. The same query carries each
+    // account's type and gross, which net mode needs to resolve one
+    // normal-balance convention for the orientation below.
     const windowStartIso = toISO(historyStart);
-    const dataStartRow = (await db.execute<{ d: string | null }>(sql`
-      select min(e.posting_date)::text as d
+    const scopeRows = (await db.execute<{ d: string | null; id: string; type: string; gross: string }>(sql`
+      select min(e.posting_date)::text as d, a.id::text as id, a.type as type, sum(abs(l.amount)) as gross
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
           and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${orgId} and l.account_id in (${ids})${subScope(sql`l.subsidiary_id`, context.subIds)}
+       group by a.id, a.type
     `));
-    const dataStartIso = dataStartRow.rows[0]?.d ?? null;
+    const dataStartIso = scopeRows.rows.reduce<string | null>(
+      (earliest, row) => (row.d !== null && (earliest === null || row.d < earliest) ? row.d : earliest),
+      null,
+    );
     const divisor = historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso);
-    let weeklyAvg = fullWindowWeeklyAverage(useNet ? totalHistory : absMoney(totalHistory), historyWeeks, windowStartIso, dataStartIso);
+    // Convention votes come only from accounts WITH activity (a selected
+    // account that never posted must not refuse the forecast); the
+    // accountIds order breaks exact ties.
+    const voted = cat.accountIds.flatMap((id) => {
+      const row = scopeRows.rows.find((candidate) => candidate.id === id);
+      return row
+        ? [{ id, type: row.type, gross: normalizeMoneyValue(String(row.gross)) }]
+        : [];
+    });
+    const oriented = useNet
+      ? orientNetTotal(totalHistory, netConvention(voted))
+      : { total: absMoney(totalHistory), againstDirection: false };
+    let weeklyAvg = fullWindowWeeklyAverage(oriented.total, historyWeeks, windowStartIso, dataStartIso);
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     const forecastAmount = isSet(cat.expectedWeek) ? multiplyMoney(weeklyAvg, "4.345") : weeklyAvg;
     weekStarts.forEach((k, i) => {
@@ -760,13 +859,23 @@ export async function categoryWeekly(
       method: "GL Average",
       sourceTotal: absMoney(totalHistory),
       weeksUsed: divisor,
-      rawAverage: fullWindowWeeklyAverage(absMoney(totalHistory), historyWeeks, windowStartIso, dataStartIso),
+      rawAverage: fullWindowWeeklyAverage(oriented.total, historyWeeks, windowStartIso, dataStartIso),
       adjustmentPct: Math.round(adj * 100),
       finalAverage: weeklyAvg,
     };
     breakdown = [...accountTotals.entries()]
       .map(([name, amount]) => ({ name, amount, type: "Source Data" }))
       .sort((a, b) => compareMoney(b.amount, a.amount));
+    if (oriented.againstDirection) {
+      // The netted window runs against the forecast direction (net refunds
+      // in an outflow category, net spend in an inflow one): forecast 0 and
+      // say so on the card, naming the net that was set aside, rather than
+      // letting it add cash in the wrong direction.
+      const note =
+        `netted ${totalHistory} runs against the ${cat.direction} direction — forecast 0; recheck the selected accounts`;
+      logic = `${logic} · ${note}`;
+      breakdown.push({ name: note, amount: ZERO_MONEY, type: "Note" });
+    }
   } else if (cat.method === "vendor_payment_history" && (cat.partyIds?.length || cat.partyId)) {
     const vids = cat.partyIds?.length ? cat.partyIds : [cat.partyId!];
     const historyMonths = Math.max(1, Math.min(36, cat.historyMonths ?? 12));
