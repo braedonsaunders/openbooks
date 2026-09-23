@@ -4,14 +4,63 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { receiveInventory } from "./movements.ts";
+import {
+  createStockCount,
+  recordCountedQuantity,
+  startStockCount,
+} from "./stock-counts.ts";
 import { listStockCounts } from "./stock-count-queries.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 /**
- * Stock-count list regressions: cursor pagination past 500 rows (D6).
- * Subsidiary scoping (D4) and discrepant-line variance (D5) follow.
+ * Stock-count list regressions: cursor pagination past 500 rows (D6) and
+ * discrepant-line variance (D5). Subsidiary scoping (D4) follows.
  * Integration partition only (filename), against scratch orgs.
  */
+
+test("offsetting variances stay visibly discrepant; no cross-item sum is shown", async () => {
+  const org = await createScratchOrg();
+  try {
+    for (const itemId of [org.items.fifo, org.items.component]) {
+      await receiveInventory(org.orgId, null, {
+        itemId,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "4",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+    }
+    const count = await createStockCount(org.orgId, null, {
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      countedOn: org.date,
+      lines: [
+        { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
+        { itemId: org.items.component, stockLocationId: org.stockLocationId },
+      ],
+    });
+    await startStockCount(org.orgId, null, count.id);
+    const lines = (await db.execute<{ id: string; item_id: string }>(sql`
+      select id, item_id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows;
+    // −5 on one line, +5 on the other: a quantity sum would read 0.
+    for (const line of lines) {
+      await recordCountedQuantity(org.orgId, null, {
+        countId: count.id,
+        lineId: line.id,
+        countedQuantity: line.item_id === org.items.fifo ? "5" : "15",
+      });
+    }
+    const page = await listStockCounts(org.orgId, {});
+    assert.equal(page.counts.length, 1);
+    assert.equal(page.counts[0]!.discrepantLineCount, 2);
+    assert.ok(!("variance" in page.counts[0]!), "the cross-item quantity sum must be gone");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("cursor pages reach past 500 rows with total and next-page evidence", async () => {
   const org = await createScratchOrg();

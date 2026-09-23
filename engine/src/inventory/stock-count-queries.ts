@@ -30,7 +30,12 @@ export interface StockCountSummary {
   memo: string | null;
   lineCount: number;
   uncountedCount: number;
-  variance: string;
+  /**
+   * Lines with a counted quantity that differs from the snapshot. A
+   * cross-item quantity sum is never shown: one item −5 kg and another +5
+   * each would sum to 0 while both lines still disagree with the shelf.
+   */
+  discrepantLineCount: number;
 }
 
 export interface StockCountListQuery {
@@ -90,7 +95,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
     memo: string | null;
     line_count: string;
     uncounted_count: string;
-    variance: string | null;
+    discrepant_count: string;
   }>(sql`
     select c.id, c.status, c.location_id,
            (select name from locations where org_id = ${orgId} and id = c.location_id) as location_name,
@@ -99,8 +104,10 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
              where l.org_id = ${orgId} and l.stock_count_id = c.id) as line_count,
            (select count(*)::text from stock_count_lines l
              where l.org_id = ${orgId} and l.stock_count_id = c.id and l.counted_quantity is null) as uncounted_count,
-           (select sum(l.counted_quantity - l.expected_quantity)::text from stock_count_lines l
-             where l.org_id = ${orgId} and l.stock_count_id = c.id and l.counted_quantity is not null) as variance
+           (select count(*)::text from stock_count_lines l
+             where l.org_id = ${orgId} and l.stock_count_id = c.id
+               and l.counted_quantity is not null
+               and l.counted_quantity <> l.expected_quantity) as discrepant_count
       from stock_counts c
      where c.org_id = ${orgId} ${cursorScope}
      order by ${LIST_ORDER}
@@ -118,7 +125,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
       memo: row.memo,
       lineCount: Number(row.line_count),
       uncountedCount: Number(row.uncounted_count),
-      variance: row.variance ?? "0",
+      discrepantLineCount: Number(row.discrepant_count),
     })),
     totalCount: Number(total),
     nextCursor:

@@ -170,7 +170,7 @@
       "location": "Location",
       "status": "Status",
       "progress": "Counted",
-      "variance": "Variance",
+      "variance": "Discrepancies",
       "memo": "Memo",
       "item": "Item",
       "stockLocation": "Stock location",

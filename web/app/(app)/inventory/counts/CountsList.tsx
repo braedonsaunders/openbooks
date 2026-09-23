@@ -200,7 +200,7 @@ export function CountsList({
       key: 'variance',
       header: t('counts.columns.variance'),
       align: 'right',
-      cell: (r) => <span className="tabular-nums">{r.variance}</span>,
+      cell: (r) => <span className="tabular-nums">{r.discrepantLineCount}</span>,
     },
   ]
 

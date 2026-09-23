@@ -152,7 +152,7 @@
       "location": "Standort",
       "status": "Stand",
       "progress": "Gezählt",
-      "variance": "Differenz",
+      "variance": "Abweichungen",
       "memo": "Notiz",
       "item": "Artikel",
       "stockLocation": "Lagerort",
