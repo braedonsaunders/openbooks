@@ -186,6 +186,18 @@
     "proposeFailed": "Die Beschäftigungsliste konnte nicht geladen werden.",
     "draftBadge": "Aktionen",
     "openEmployee": "Personalakte öffnen",
+    "openRequest": "Öffnen",
+    "detailTitle": "Änderungsantrag",
+    "detailLoading": "Der Antrag wird geladen…",
+    "detailFailed": "Der Antrag konnte nicht geladen werden.",
+    "detailSubject": "Betreff",
+    "detailProposedChange": "Beantragte Änderung",
+    "detailHistory": "Verlauf",
+    "detailDecision": "Entscheidung",
+    "detailNoDecision": "Noch keine Entscheidung erfasst.",
+    "detailAwaitingDecision": "Entscheidung ausstehend — der Genehmigungslauf ist noch offen.",
+    "detailCreated": "Erfasst",
+    "detailApplied": "Angewendet",
     "notAvailable": "Nicht verfügbar",
     "reasonsButton": "Grundcodes",
     "verbs": {
@@ -367,7 +379,8 @@
       "filled": "Besetzte FTE",
       "vacant": "Offene FTE",
       "holder": "Inhaber",
-      "unassignedHolder": "Offen"
+      "unassignedHolder": "Offen",
+      "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}"
     },
     "holdersCount": "{count, plural, one {# Inhaber} other {# Inhaber}}",
     "empty": "Keine Positionen entsprechen diesem Filter.",
@@ -1993,6 +2006,7 @@
       "closed": "Dieses Schreiben ist geschlossen.",
       "for": "für {name}",
       "kicker": "Angebot",
+      "terms": "Bedingungen, die Sie unterzeichnen",
       "version": "Version {version}"
     }
   },

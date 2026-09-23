@@ -186,6 +186,18 @@
     "proposeFailed": "雇用リストを読み込めませんでした。",
     "draftBadge": "操作",
     "openEmployee": "従業員レコードを開く",
+    "openRequest": "開く",
+    "detailTitle": "変更申請",
+    "detailLoading": "申請を読み込んでいます…",
+    "detailFailed": "申請を読み込めませんでした。",
+    "detailSubject": "件名",
+    "detailProposedChange": "提案された変更",
+    "detailHistory": "履歴",
+    "detailDecision": "決定",
+    "detailNoDecision": "まだ決定は記録されていません。",
+    "detailAwaitingDecision": "決定待ち — 承認フローはまだ開いています。",
+    "detailCreated": "登録済み",
+    "detailApplied": "適用済み",
     "notAvailable": "利用不可",
     "reasonsButton": "理由コード",
     "verbs": {
@@ -367,7 +379,8 @@
       "filled": "充足済みFTE",
       "vacant": "欠員FTE",
       "holder": "保持者",
-      "unassignedHolder": "欠員"
+      "unassignedHolder": "欠員",
+      "holdersCount": "{count, plural, other {# 名の保持者}}"
     },
     "holdersCount": "{count, plural, other {# 名の保持者}}",
     "empty": "このフィルターに一致するポジションはありません。",
@@ -1993,6 +2006,7 @@
       "closed": "この書面は終了しています。",
       "for": "{name}さん宛",
       "kicker": "オファー",
+      "terms": "署名する条件",
       "version": "第{version}版"
     }
   },

@@ -186,6 +186,18 @@
     "proposeFailed": "雇佣列表加载失败。",
     "draftBadge": "操作",
     "openEmployee": "打开员工档案",
+    "openRequest": "打开",
+    "detailTitle": "变更申请",
+    "detailLoading": "正在加载申请…",
+    "detailFailed": "无法加载该申请。",
+    "detailSubject": "主题",
+    "detailProposedChange": "提议的变更",
+    "detailHistory": "历史记录",
+    "detailDecision": "决定",
+    "detailNoDecision": "尚无已记录的决定。",
+    "detailAwaitingDecision": "等待决定 — 审批流程仍在进行中。",
+    "detailCreated": "已登记",
+    "detailApplied": "已应用",
     "notAvailable": "不可用",
     "reasonsButton": "原因代码",
     "verbs": {
@@ -367,7 +379,8 @@
       "filled": "已填补 FTE",
       "vacant": "空缺 FTE",
       "holder": "任职者",
-      "unassignedHolder": "空缺"
+      "unassignedHolder": "空缺",
+      "holdersCount": "{count, plural, other {# 名任职者}}"
     },
     "holdersCount": "{count, plural, other {# 名任职者}}",
     "empty": "没有职位符合此筛选条件。",
@@ -1993,6 +2006,7 @@
       "closed": "此函件已关闭。",
       "for": "致{name}",
       "kicker": "录用函",
+      "terms": "您签署的条款",
       "version": "第{version}版"
     }
   },
