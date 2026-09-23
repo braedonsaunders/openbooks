@@ -35,7 +35,10 @@
     "expense_report": "Note de frais",
     "document_signature": "Signature",
     "payroll_anomaly_block": "Contrôle de paie",
-    "ai_capability_review": "Revue IA"
+    "ai_capability_review": "Revue IA",
+    "notification": "Notification",
+    "hrm_feedback_request": "Demande de rétroaction",
+    "crew_time_batch": "Temps d'équipe"
   },
   "emptyTitle": "Tout est à jour",
   "emptyDescription": "Rien ne vous attend pour le moment.",

@@ -35,7 +35,10 @@
     "expense_report": "Gasto",
     "document_signature": "Firma",
     "payroll_anomaly_block": "Control de nómina",
-    "ai_capability_review": "Revisión de IA"
+    "ai_capability_review": "Revisión de IA",
+    "notification": "Notificación",
+    "hrm_feedback_request": "Solicitud de comentarios",
+    "crew_time_batch": "Tiempo de cuadrilla"
   },
   "emptyTitle": "Todo al día",
   "emptyDescription": "Nada le espera ahora mismo.",

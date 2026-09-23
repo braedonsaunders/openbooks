@@ -35,7 +35,10 @@
     "expense_report": "Spesen",
     "document_signature": "Unterschrift",
     "payroll_anomaly_block": "Lohnprüfung",
-    "ai_capability_review": "KI-Prüfung"
+    "ai_capability_review": "KI-Prüfung",
+    "notification": "Benachrichtigung",
+    "hrm_feedback_request": "Feedback-Anfrage",
+    "crew_time_batch": "Teamzeiten"
   },
   "emptyTitle": "Alles erledigt",
   "emptyDescription": "Im Moment wartet nichts auf Sie.",
