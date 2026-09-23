@@ -11,7 +11,7 @@ import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
 // null and scheduled scripts never ran. CronExpressionParser.parse works
 // under both CJS and ESM interop.
 import { CronExpressionParser } from "cron-parser";
-import { runUserSql } from "../platform/sqlapi.ts";
+import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import { createScriptJournal, type ScriptJournalResult } from "../ledger/journal-writes.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
@@ -343,6 +343,76 @@ export const MAX_SCRIPT_QUERY_RESULT_BYTES = 4 * 1024 * 1024;
 export const SCRIPT_HOST_TIMEOUT = Symbol("script-host-timeout");
 
 /**
+ * Identifier shape for governed search names. This alone never authorizes a
+ * name — it only keeps a hostile key from breaking out of the statement the
+ * builder below assembles. Authorization is membership in the governed
+ * catalog (listSchema): the table must be an openbooks_query view and every
+ * filter key must be one of its columns.
+ */
+const SEARCH_IDENTIFIER_RE = /^[a-z_][a-z0-9_]*$/i;
+
+/** SQL literal for a filter value. Values are data, never syntax: strings
+ * are single-quoted with embedded quotes doubled, so a value can never
+ * close the literal and rewrite the statement. */
+export function searchFilterLiteral(value: unknown): string {
+  if (value === null || value === undefined) return "NULL";
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  return "'" + String(value).replace(/'/g, "''") + "'";
+}
+
+/**
+ * Build the SQL for ob.search / ob.record.load over the governed catalog.
+ * The table must already be resolved to an openbooks_query view and
+ * `columns` must be that view's column names (the host fn reads both from
+ * listSchema). Every filter key is validated against the column set and
+ * quoted as an identifier; an unknown key — including an injection shaped
+ * like `1=1 UNION SELECT ... --` — is refused BY NAME before any SQL runs.
+ * Values are embedded as literals (see searchFilterLiteral), never syntax.
+ */
+export function buildGovernedSearchSql(
+  table: string,
+  filters: unknown,
+  columns: readonly string[],
+): string {
+  if (!SEARCH_IDENTIFIER_RE.test(table)) {
+    throw new Error(`invalid table: ${table}`);
+  }
+  const allowed = new Set(columns);
+  let entries: Array<[string, unknown]> = [];
+  if (filters !== undefined && filters !== null) {
+    if (!isRecord(filters)) {
+      throw new Error(
+        `ob.search filters on ${table} must be an object of column = value pairs`,
+      );
+    }
+    entries = Object.entries(filters);
+  }
+  const clauses = entries.map(([key, value]) => {
+    if (!SEARCH_IDENTIFIER_RE.test(key) || !allowed.has(key)) {
+      throw new Error(
+        `unknown search column "${key}" on ${table} — filters must name governed columns of that view; fix the filter key and try again`,
+      );
+    }
+    return `"${key}" = ${searchFilterLiteral(value)}`;
+  });
+  const where = clauses.length > 0 ? ` where ${clauses.join(" and ")}` : "";
+  return `select * from openbooks_query."${table}"${where} limit 1000`;
+}
+
+/**
+ * Refusal when ob.search names a table outside the governed catalog, or
+ * fail-closed when the catalog itself cannot be read. Either way no
+ * search SQL runs.
+ */
+export function unknownSearchTableRefusal(table: string): string {
+  return (
+    `unknown search table "${table}" — ob.search reads only governed openbooks_query views; ` +
+    `list them with the query catalog and fix the table name`
+  );
+}
+
+/**
  * Asyncify suspends the VM while a host promise is pending, so the interrupt
  * handler cannot observe the run deadline during that wait. Race every host
  * operation against the same wall-clock deadline instead. The host promise
@@ -610,8 +680,9 @@ export async function runScript(
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
       if (!queryAllowed) {
         // A SELECT-only role still exposes now()/random() and mutable data.
-        // The host boundary covers ob.query, its load/search helpers, and the
-        // raw __query bridge, including calls made before main starts.
+        // The host boundary covers ob.query, the catalog-validated __search
+        // bridge behind the load/search helpers, and the raw __query bridge,
+        // including calls made before main starts.
         return {
           error: vm.newError(
             opts.deterministic
@@ -645,6 +716,61 @@ export async function runScript(
         return vm.newString(encoded.json);
       } catch (e) {
         return { error: vm.newError(`query failed: ${(e as Error).message}`) };
+      }
+    });
+
+    // Governed catalog search. Filter KEYS used to be spliced raw into the
+    // statement (only the table was shape-checked), so a key shaped like
+    // `1=1 UNION SELECT ... --` rewrote the WHERE clause. The builder above
+    // now validates every key against the table's governed columns and the
+    // table itself against the openbooks_query view list read live from the
+    // same catalog user queries see — an unknown key or table is refused by
+    // name and no search SQL runs. Shares the query authorization, deadline,
+    // row cap, and result cap with ob.query.
+    let searchSchema: Map<string, string[]> | undefined;
+    const searchFn = vm.newAsyncifiedFunction("__search", async (tableH, filtersH) => {
+      if (!queryAllowed) {
+        return {
+          error: vm.newError(
+            opts.deterministic
+              ? "query is not available in custom_gl_lines; use document, lines, and kernelLines supplied in ctx"
+              : `query is not available in ${ctx.trigger}`,
+          ),
+        };
+      }
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return hostTimeoutError("search");
+      const table = String(vm.dump(tableH));
+      let filters: unknown;
+      try {
+        filters = JSON.parse(String(vm.dump(filtersH)));
+      } catch {
+        return { error: vm.newError(`search: filters must be a JSON object of column = value pairs`) };
+      }
+      try {
+        const outcome = await withScriptHostDeadline(deadline, async () => {
+          queryRefusal ??= scriptQueryRefusal(ctx);
+          const refusal = await queryRefusal;
+          if (refusal) return { kind: "refused" as const, refusal };
+          searchSchema ??= new Map(
+            (await listSchema(ctx.org.id)).map((t) => [t.name, t.columns.map((c) => c.name)]),
+          );
+          const columns = searchSchema.get(table);
+          if (!columns) return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
+          const result = await runUserSql(buildGovernedSearchSql(table, filters, columns), {
+            orgId: ctx.org.id,
+            maxRows: 5_000,
+            timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
+          });
+          return { kind: "rows" as const, result };
+        });
+        if (outcome === SCRIPT_HOST_TIMEOUT) return hostTimeoutError("search");
+        if (outcome.kind === "refused") return { error: vm.newError(`search: ${outcome.refusal}`) };
+        const encoded = serializeScriptQueryResult(outcome.result.rows);
+        if (!encoded.ok) return { error: vm.newError(`search: ${encoded.refusal}`) };
+        return vm.newString(encoded.json);
+      } catch (e) {
+        return { error: vm.newError(`search failed: ${(e as Error).message}`) };
       }
     });
 
@@ -748,11 +874,13 @@ export async function runScript(
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "abort", abortFn);
     vm.setProp(obHandle, "__query", queryFn);
+    vm.setProp(obHandle, "__search", searchFn);
     vm.setProp(obHandle, "__journal_create", journalFn);
     vm.setProp(vm.global, "ob", obHandle);
     logFn.dispose();
     abortFn.dispose();
     queryFn.dispose();
+    searchFn.dispose();
     journalFn.dispose();
     obHandle.dispose();
 
@@ -774,31 +902,19 @@ export async function runScript(
           return JSON.parse(ob.__query(sqlText));
         };
 
-        function __sqlVal(v) {
-          if (v === null || v === undefined) return "NULL";
-          if (typeof v === "number") return String(v);
-          if (typeof v === "boolean") return v ? "TRUE" : "FALSE";
-          return "'" + String(v).replace(/'/g, "''") + "'";
-        }
-
+        // Table and filter keys are validated host-side against the governed
+        // catalog (openbooks_query views and their columns): names the
+        // sandbox can no longer splice into SQL itself.
         ob.record = {
           load: function(table, id) {
-            if (!/^[a-z_][a-z0-9_]*$/i.test(table)) throw new Error("invalid table: " + table);
-            var rows = ob.query("SELECT * FROM " + table + " WHERE id = " + __sqlVal(id) + " LIMIT 1");
+            if (id === undefined || id === null) return null;
+            var rows = JSON.parse(ob.__search(table, JSON.stringify({ id: id })));
             return rows[0] || null;
           }
         };
 
         ob.search = function(table, filters) {
-          if (!/^[a-z_][a-z0-9_]*$/i.test(table)) throw new Error("invalid table: " + table);
-          var q = "SELECT * FROM " + table;
-          if (filters) {
-            var clauses = [];
-            for (var k in filters) { clauses.push(k + " = " + __sqlVal(filters[k])); }
-            if (clauses.length) q += " WHERE " + clauses.join(" AND ");
-          }
-          q += " LIMIT 1000";
-          return ob.query(q);
+          return JSON.parse(ob.__search(table, JSON.stringify(filters || {})));
         };
 
         ob.journal = {

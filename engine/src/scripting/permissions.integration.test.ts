@@ -723,3 +723,63 @@ test("ob.query encodes rows under a byte cap and never JSON.stringifies the comp
   assert.match(named, new RegExp(String(MAX_SCRIPT_QUERY_RESULT_BYTES)));
   assert.doesNotMatch(named, /undefined/);
 });
+
+// ---------------------------------------------------------------------------
+// ob.search filter keys were spliced raw into SQL while only the table was
+// shape-checked: ob.search('documents', {'1=1 UNION SELECT ... --': 1})
+// rewrote the WHERE clause. Keys are now validated host-side against the
+// table's governed columns (and the table against the openbooks_query view
+// list) — an unknown key is refused by name and no search SQL runs.
+// ---------------------------------------------------------------------------
+
+const SEARCH_KEY_SCRIPT = `
+function main(ctx) {
+  const mode = (ctx.request && ctx.request.body && ctx.request.body.mode) || "valid";
+  if (mode === "injected") return ob.search("accounts", { "1=1 UNION SELECT password FROM users --": "5100" });
+  if (mode === "unknown-column") return ob.search("accounts", { password: "x" });
+  if (mode === "unknown-table") return ob.search("pg_shadow", { id: "x" });
+  return ob.search("accounts", { number: "5100" });
+}
+`;
+
+test("ob.search refuses injected and unknown filter keys by name and runs no search SQL", { skip: !DB }, async () => {
+  const seeded = await seedScriptOrg();
+  try {
+    await setQueryConsole(seeded.org.orgId, true);
+    const slug = "search-keys";
+    await db.execute(sql`
+      insert into user_scripts (id, org_id, name, trigger_point, endpoint_slug, source)
+      values (${randomUUID()}, ${seeded.org.orgId}, 'search-keys', 'endpoint', ${slug}, ${SEARCH_KEY_SCRIPT})`);
+    const analystId = await createScratchUser(seeded.org.orgId, "SearchAnalyst", "search-analyst");
+    await db.execute(sql`
+      update app_roles set permissions = '["sql.execute"]'::jsonb
+       where org_id = ${seeded.org.orgId} and key = 'search-analyst'`);
+    const caller = { id: analystId, name: "SearchAnalyst", roles: ["search-analyst"] };
+    const run = (mode: string) =>
+      runEndpointScript(slug, seeded.org.orgId, caller, { method: "POST", query: {}, body: { mode } });
+
+    // A valid key still works: the same query that would have run the
+    // injection returns the governed row instead.
+    const valid = await run("valid");
+    assert.equal(valid!.status, "ok", valid!.abortReason ?? "");
+    assert.equal((valid!.returned as { number: string }[]).length, 1);
+    assert.equal((valid!.returned as { number: string }[])[0]!.number, "5100");
+
+    // The injected key is refused by name — had it been spliced, this same
+    // call would have returned rows with status ok.
+    const injected = await run("injected");
+    assert.equal(injected!.status, "error");
+    assert.match(injected!.abortReason ?? "", /unknown search column "1=1 UNION SELECT password FROM users --"/);
+    assert.equal(injected!.returned, undefined);
+
+    const unknownColumn = await run("unknown-column");
+    assert.equal(unknownColumn!.status, "error");
+    assert.match(unknownColumn!.abortReason ?? "", /unknown search column "password" on accounts/);
+
+    const unknownTable = await run("unknown-table");
+    assert.equal(unknownTable!.status, "error");
+    assert.match(unknownTable!.abortReason ?? "", /unknown search table "pg_shadow"/);
+  } finally {
+    await dropScratchOrgReporting(seeded.org.orgId);
+  }
+});
