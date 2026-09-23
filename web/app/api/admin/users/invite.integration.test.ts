@@ -242,17 +242,41 @@ test("invite rejects a malformed address, an unknown role, and a grant above the
   }
 });
 
-test("a second invite for the same address conflicts without duplicating the user", { skip }, async () => {
+test("a second invite for the same pending address re-issues instead of conflicting", { skip }, async () => {
   const f = await seed();
   try {
-    assert.equal((await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId })).status, 200);
+    const first = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
+    assert.equal(first.status, 200);
+    const firstPayload = (await first.json()) as { userId: string };
+    // A retry for the same still-pending user resumes: same user, fresh link.
     const retry = await invite({ action: "invite", email: "New.Member@scratch.test", roleId: f.roleId });
-    assert.equal(retry.status, 409);
+    assert.equal(retry.status, 200);
+    const retryPayload = (await retry.json()) as { userId: string; emailQueued: boolean };
+    assert.equal(retryPayload.userId, firstPayload.userId);
+    assert.equal(retryPayload.emailQueued, true);
     const count = (
       await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
         where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`))
     ).rows[0]!.n;
     assert.equal(count, 1);
+    assert.equal(state.deliveries.length, 2, "the retry issued a fresh link");
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("a retry for an address owned by a real account still conflicts", { skip }, async () => {
+  const f = await seed();
+  try {
+    const first = (await (
+      await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId })
+    ).json()) as { userId: string };
+    // The mailbox owner completes signup: the address now belongs to a real
+    // account, so a further invite is a conflict, not a re-issue.
+    await withBypassContext(() => db.execute(sql`update users set password_hash = 'scrypt:activated' where id = ${first.userId}`));
+    const retry = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
+    assert.equal(retry.status, 409);
   } finally {
     state.authz = null;
     await dropScratchOrg(f.orgId);
@@ -266,12 +290,33 @@ test("concurrent invites for one address create a single user", { skip }, async 
       invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId }),
       invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId }),
     ]);
-    assert.deepEqual([first.status, second.status].sort(), [200, 409]);
+    // The loser resumes the winner's pending row instead of conflicting:
+    // one user, two issuances, the later link superseding the earlier.
+    assert.deepEqual([first.status, second.status].sort(), [200, 200]);
     const count = (
       await withOrgContext(f.orgId, () => db.execute<{ n: number }>(sql`select count(*)::int as n from users
         where org_id = ${f.orgId} and lower(email) = ${NEW_EMAIL}`))
     ).rows[0]!.n;
     assert.equal(count, 1);
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("an invite retry past the per-user cap reports 429, never 409", { skip }, async () => {
+  const f = await seed();
+  try {
+    const first = (await (
+      await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId })
+    ).json()) as { userId: string };
+    // Two resends exhaust the per-user hourly cap (three issuances total).
+    assert.equal((await invite({ action: "resend-invite", userId: first.userId })).status, 200);
+    assert.equal((await invite({ action: "resend-invite", userId: first.userId })).status, 200);
+    // The pending retry reaches the mint and is rate-capped truthfully —
+    // it must not dead-end in a duplicate-email conflict.
+    const capped = await invite({ action: "invite", email: NEW_EMAIL, roleId: f.roleId });
+    assert.equal(capped.status, 429);
   } finally {
     state.authz = null;
     await dropScratchOrg(f.orgId);

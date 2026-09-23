@@ -254,6 +254,69 @@ test("resend-invite refuses unknown, activated, and deactivated users", { skip }
   }
 });
 
+test("a repeat invite for a pending user re-issues a fresh link and supersedes the old one", { skip }, async () => {
+  const f = await seed();
+  try {
+    const first = (await (
+      await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
+    ).json()) as { userId: string; setPasswordUrl: string };
+    const retry = await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId });
+    assert.equal(retry.status, 200);
+    const payload = (await retry.json()) as {
+      ok: boolean;
+      userId: string;
+      emailQueued: boolean;
+      setPasswordUrl?: string;
+    };
+    assert.equal(payload.ok, true);
+    assert.equal(payload.userId, first.userId);
+    assert.equal(payload.emailQueued, false);
+    assert.ok(payload.setPasswordUrl && payload.setPasswordUrl !== first.setPasswordUrl);
+    // The superseded link is dead; the fresh one works.
+    assert.deepEqual(
+      await completePasswordReset(tokenFromUrl(first.setPasswordUrl), "A brand new password 1042"),
+      { ok: false, reason: "invalid_token" },
+    );
+    assert.deepEqual(
+      await completePasswordReset(tokenFromUrl(payload.setPasswordUrl!), "A brand new password 1042"),
+      { ok: true },
+    );
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("a refused re-issue never exposes a link, even with no mail transport", { skip }, async () => {
+  const f = await seed();
+  try {
+    const invited = (await (
+      await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId })
+    ).json()) as { userId: string; setPasswordUrl: string };
+    // A different administrator grants a permission this actor does not hold.
+    const highRoleId = await asBypass(async () => (
+      await db.execute<{ id: string }>(sql`insert into app_roles(org_id, key, name, is_built_in, permissions)
+        values (${f.orgId}, 'elevated', 'Elevated', false, '["gl.post"]'::jsonb) returning id`)
+    ).rows[0]!.id);
+    await asBypass(() => db.execute(sql`insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+      values (${f.orgId}, ${invited.userId}, ${highRoleId}, ${f.actorId}, ${f.actorId})`));
+    // No mail transport here, so a leaked raw link would be a takeover URL.
+    const response = await post({ action: "resend-invite", userId: invited.userId });
+    assert.equal(response.status, 403);
+    const payload = (await response.json()) as { setPasswordUrl?: string };
+    assert.equal("setPasswordUrl" in payload, false, "no takeover link is handed out");
+    assert.equal(await liveTokenCount(invited.userId), 1, "no new token was minted");
+    // The same elevation reached through a repeat invite is refused the same
+    // way: the retry resumes the pending row but the issuance gate stops it.
+    const retry = await post({ action: "invite", email: FIRST_EMAIL, roleId: f.roleId });
+    assert.equal(retry.status, 403);
+    assert.equal("setPasswordUrl" in (await retry.json()), false);
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
 test("resend-invite enforces the inviter's role ceiling", { skip }, async () => {
   const f = await seed();
   try {
