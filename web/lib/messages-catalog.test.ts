@@ -3095,7 +3095,9 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // qualification-settings), translated in all 7 locales.
   // m23_insights_autosave/F1: 4069 = 4063 plus 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
-  assert.equal(wanted.length, 4069, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // m36_ctrl_ap_release/CTRL-01: 4076 = 4069 plus 7 vendor-bill approval
+  // keys (settings.approvals.*), translated in all 7 locales.
+  assert.equal(wanted.length, 4076, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3473,8 +3475,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // m17_hrm_ui/F5-followup: 4062 + rehash for the 12 rehomed-entity keys.
   // m23_insights_autosave/F1: 4069 + rehash for the 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
-  const ADMIN_I2_SOURCE_COUNT = 4069
-  const ADMIN_I2_SOURCE_HASH = 'e7e02a2b39e8ef8c4962896bcf1d6acb8e23910f0a2ce3ab933c6914d78fbf7c'
+  // m36_ctrl_ap_release/CTRL-01: 4076 + rehash for the 7 vendor-bill
+  // approval keys (settings.approvals.*), translated in all 7 locales.
+  const ADMIN_I2_SOURCE_COUNT = 4076
+  const ADMIN_I2_SOURCE_HASH = '80d583bea7963601efb77f0ed01f4748df0de1a77a66758aa68f737b7cc6ed0f'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

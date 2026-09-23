@@ -9,6 +9,7 @@ import { CalendarClock } from 'lucide-react'
 import {
   Alert,
   AlertDescription,
+  AlertTitle,
   Button,
   Card,
   CardContent,
@@ -59,6 +60,7 @@ type Initial = {
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
   fairValueRangePolicy: 'warn' | 'off'
+  requireVendorBillApproval: boolean
   controlAccounts: ControlAccounts
 }
 
@@ -98,6 +100,7 @@ export function SettingsForm({
   currencies,
   multiSubsidiary = false,
   revenueRecognition = false,
+  vendorBillFlowConfigured,
 }: {
   initial: Initial
   accounts: AccountOption[]
@@ -108,6 +111,10 @@ export function SettingsForm({
   /** Company Settings → Features. The fair-value range policy is Revenue
    *  Recognition configuration; hide and omit it when that switch is off. */
   revenueRecognition?: boolean
+  /** Whether an enabled vendor-bill approval flow exists. The loader always
+   *  resolves this; when false the Approvals card warns that bills release
+   *  with no approver (or that submits will be refused once required). */
+  vendorBillFlowConfigured: boolean
 }) {
   const t = useTranslations('admin.settings')
   const tCommon = useTranslations('common')
@@ -154,6 +161,9 @@ export function SettingsForm({
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+      // The vendor-bill approval requirement is a plain org boolean with no
+      // feature fence — it always travels. The fair-value policy stays gated
+      // on Revenue Recognition above.
       body: JSON.stringify(revenueRecognition ? { ...rest, fairValueRangePolicy } : rest),
     })
     setSaving(false)
@@ -370,6 +380,43 @@ export function SettingsForm({
           </div>
         </CardContent>
       </Card> : null}
+
+      {/* Approvals — vendor-bill release policy */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('approvals.title')}</CardTitle>
+          <CardDescription>{t('approvals.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start gap-3">
+            <input
+              id="requireVendorBillApproval"
+              type="checkbox"
+              checked={form.requireVendorBillApproval}
+              onChange={(e) => setForm((f) => ({ ...f, requireVendorBillApproval: e.target.checked }))}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <div className="space-y-1">
+              <FieldLabel htmlFor="requireVendorBillApproval">{t('approvals.requireVendorBillApproval')}</FieldLabel>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{t('approvals.requireVendorBillApprovalHint')}</p>
+            </div>
+          </div>
+          {!vendorBillFlowConfigured ? (
+            <Alert variant="warning">
+              <AlertTitle>{t('approvals.noFlowTitle')}</AlertTitle>
+              <AlertDescription>
+                {t.rich(form.requireVendorBillApproval ? 'approvals.noFlowWarningRequired' : 'approvals.noFlowWarningAuto', {
+                  flows: (chunks) => (
+                    <Link href="/admin/flows" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                      {chunks}
+                    </Link>
+                  ),
+                })}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {/* Control accounts */}
       <Card>

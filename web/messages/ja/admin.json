@@ -737,6 +737,15 @@
       },
       "learnMore": "詳細はこちら。"
     },
+    "approvals": {
+      "title": "承認",
+      "description": "請求書（仕入）の送信後にリリースされるタイミングを管理します。",
+      "requireVendorBillApproval": "請求書（仕入）のリリース前に承認を必須にする",
+      "requireVendorBillApprovalHint": "オンの場合、請求書（仕入）は承認フロー経由でのみリリースされます。一致するフローのない請求書は送信済みのままとなり、送信者にはフローの設定またはこのオプションの無効化が案内されます。",
+      "noFlowTitle": "請求書（仕入）の承認フローがありません",
+      "noFlowWarningAuto": "請求書（仕入）の承認フローが設定されていません。<flows>フローで設定してください</flows> — 設定されるまで、送信された請求書は承認者なしで自動的にリリースされます。",
+      "noFlowWarningRequired": "請求書（仕入）の承認フローが設定されていません。<flows>フローで設定してください</flows> — 設定されるまで、請求書（仕入）の送信はすべて拒否されます。"
+    },
     "documentKinds": {
       "vendorBill": "仕入請求書",
       "customerInvoice": "請求書",

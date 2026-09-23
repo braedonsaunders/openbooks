@@ -9,6 +9,33 @@ const source = readFileSync(new URL('./SettingsForm.tsx', import.meta.url), 'utf
 // silently rejected server-side. A transient toast alone is not enough: the
 // field itself must carry the required error (the parties-display-name
 // precedent, F-t02-009), pinned where the tester can still read it.
+// CTRL-01: the vendor-bill release policy lives on Company Settings as an
+// explicit opt-in (default off), with a warning while no approval flow is
+// configured for vendor bills — the submit-time refusal names Flows/Setup as
+// the remedy, so both surfaces must exist and stay linked here.
+test('the approvals card exposes the vendor-bill requirement and the no-flow warning', () => {
+  assert.match(
+    source,
+    /requireVendorBillApproval/,
+    'the form must carry the vendor-bill approval requirement field',
+  )
+  assert.match(
+    source,
+    /type="checkbox"/,
+    'the requirement must be an explicit opt-in control, never a hidden default',
+  )
+  assert.match(
+    source,
+    /approvals\.noFlowWarning/,
+    'the card must warn while no vendor-bill approval flow is configured',
+  )
+  assert.match(
+    source,
+    /href="\/admin\/flows"/,
+    'the warning must link the Flows setup surface the refusal names',
+  )
+})
+
 test('a blank display name pins an inline required error on the field', () => {
   assert.match(
     source,

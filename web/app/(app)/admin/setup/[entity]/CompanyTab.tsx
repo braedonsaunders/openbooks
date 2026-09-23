@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
@@ -14,7 +15,7 @@ import { SettingsForm, type AccountOption } from '../../settings/SettingsForm'
 export async function CompanyTab({ orgId }: { orgId: string }) {
   const t = await getTranslations('admin.setup')
 
-  const [org, accounts, currencies, multiSubsidiary, revenueRecognition] = ((await Promise.all([
+  const [org, accounts, currencies, multiSubsidiary, revenueRecognition, vendorBillFlowConfigured] = ((await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
@@ -25,6 +26,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
     db.execute(sql`select code, name from currencies order by code`),
     subsidiaryFeatureEnabled(orgId),
     isFeatureEnabled(orgId, 'revenueRecognition'),
+    hasVendorBillApprovalFlow(orgId),
   ])))
 
   const row = org.rows[0]
@@ -61,6 +63,9 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             (settings.revenue as Record<string, unknown> | undefined)?.fairValueRangePolicy === 'off'
               ? 'off'
               : 'warn',
+          requireVendorBillApproval:
+            (settings.approvals as Record<string, unknown> | undefined)
+              ?.requireVendorBillApproval === true,
           controlAccounts: {
             ar: control.ar ?? '',
             ap: control.ap ?? '',
@@ -87,6 +92,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         currencies={currencies.rows as { code: string; name: string }[]}
         multiSubsidiary={multiSubsidiary}
         revenueRecognition={revenueRecognition}
+        vendorBillFlowConfigured={vendorBillFlowConfigured}
       />
     </div>
   )

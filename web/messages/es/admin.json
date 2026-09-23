@@ -737,6 +737,15 @@
       },
       "learnMore": "Más información."
     },
+    "approvals": {
+      "title": "Aprobaciones",
+      "description": "Controle cuándo se liberan las facturas de proveedores tras enviarlas.",
+      "requireVendorBillApproval": "Requerir aprobación antes de liberar facturas de proveedores",
+      "requireVendorBillApprovalHint": "Si está activado, una factura de proveedor solo se libera mediante un flujo de aprobación. Una factura sin un flujo coincidente queda enviada y se indica al remitente que configure un flujo o desactive esta opción.",
+      "noFlowTitle": "Sin flujo de aprobación para facturas de proveedores",
+      "noFlowWarningAuto": "No hay ningún flujo de aprobación configurado para las facturas de proveedores. <flows>Configure uno en Flujos</flows> — hasta entonces, las facturas enviadas se liberan automáticamente sin aprobador.",
+      "noFlowWarningRequired": "No hay ningún flujo de aprobación configurado para las facturas de proveedores. <flows>Configure uno en Flujos</flows> — hasta entonces, cada envío de factura de proveedor será rechazado."
+    },
     "documentKinds": {
       "vendorBill": "Factura de proveedor",
       "customerInvoice": "Factura de cliente",

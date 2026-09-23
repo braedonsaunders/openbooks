@@ -80,6 +80,9 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
           : null,
       taxFramework:
         settings.taxFramework === "ias12" ? "ias12" : "asc740",
+      requireVendorBillApproval:
+        (settings.approvals as Record<string, unknown> | undefined)
+          ?.requireVendorBillApproval === true,
     },
   } };
 }
@@ -109,6 +112,7 @@ export async function updateCompanySettings(
     defaultLocale?: unknown;
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
+    requireVendorBillApproval?: unknown;
   };
 
   // This feature probe does not contribute persisted state. Do it before the
@@ -407,6 +411,26 @@ export async function updateCompanySettings(
           fairValueRangePolicy: body.fairValueRangePolicy,
         };
         changes.fairValueRangePolicy = [curPolicy, body.fairValueRangePolicy];
+        settingsChanged = true;
+      }
+    }
+    // --- vendor-bill release policy (approvals): when on, an ungated vendor
+    // bill is refused by name instead of auto-releasing. Default OFF (absent
+    // reads as false), so existing orgs keep today's behaviour. Turning the
+    // requirement off preserves the stored value's history in audit_log and
+    // never touches already-posted documents.
+    if (body.requireVendorBillApproval !== undefined) {
+      if (typeof body.requireVendorBillApproval !== "boolean") {
+        return { status: 400, body: { error: "requireVendorBillApproval must be a boolean" } };
+      }
+      const curApprovals = (settings.approvals ?? {}) as Record<string, unknown>;
+      const curRequired = curApprovals.requireVendorBillApproval === true;
+      if (body.requireVendorBillApproval !== curRequired) {
+        nextSettings.approvals = {
+          ...curApprovals,
+          requireVendorBillApproval: body.requireVendorBillApproval,
+        };
+        changes.requireVendorBillApproval = [curRequired, body.requireVendorBillApproval];
         settingsChanged = true;
       }
     }
