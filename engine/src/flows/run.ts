@@ -130,6 +130,22 @@ async function startOrAdoptOccurrenceRun(
   return { runId: existing.id, adoptedStatus: existing.status };
 }
 
+/**
+ * Drizzle wraps driver errors; surface the whole causal chain's messages so
+ * a refusal names the cause instead of dumping the failed query. (Same
+ * technique as the scheduled runner's rootErrorMessage.)
+ */
+function rootCauseMessage(e: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = e;
+  for (let depth = 0; current instanceof Error && depth < 4; depth++) {
+    parts.push(current.message);
+    current = (current as { cause?: unknown }).cause;
+  }
+  if (current !== undefined && current != null) parts.push(String(current));
+  return parts.join(" | ") || "unknown dispatch failure";
+}
+
 /** Parse a stored jsonb graph; null (with a log) when it fails validation. */
 export function parseFlowGraph(flowId: string, graph: unknown): AutomationGraph | null {
   const parsed = automationGraphSchema.safeParse(graph);
@@ -347,7 +363,7 @@ export async function runRecordFlows(
           }
         } catch (e) {
           status = "failed";
-          const reason = e instanceof Error ? e.message : String(e);
+          const reason = rootCauseMessage(e);
           runError = reason;
           console.error(`[flows] run ${runId} (flow "${flow.name}") crashed:`, e);
           await db
@@ -367,7 +383,7 @@ export async function runRecordFlows(
     // NEVER propagate into the calling business operation — but report the
     // failure so an on_submit caller can fail closed rather than auto-approve.
     console.error(`[flows] dispatch failed (${event.kind} ${subjectKind}/${subjectId}):`, e);
-    const reason = e instanceof Error ? e.message : String(e);
+    const reason = rootCauseMessage(e);
     return { runs: [], gatesCreated: 0, failed: true, error: `flow dispatch failed: ${reason}` };
   }
 }
