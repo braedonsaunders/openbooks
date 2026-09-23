@@ -107,7 +107,7 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
   iconKey: 'scale',
   orgScoped: true,
   actorCols: true,
-  orderBy: 'effectiveFrom',
+  orderBy: 'effective_from desc',
   hasActive: false,
   columns: [
     { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels' },
