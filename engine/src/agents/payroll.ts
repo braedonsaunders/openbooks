@@ -86,6 +86,11 @@ export async function payrollFindings(
         frequency: string;
         rule: string;
         provinces: string[];
+        // The ISO currency `total` is stated in. Months in different
+        // currencies never merge (their raw units must never be added), so
+        // the currency is part of the fingerprint below.
+        currency: string;
+        translated: boolean;
         total: string;
         billed: string;
         bills: { documentNumber: string; status: string; total: string }[];
@@ -114,13 +119,18 @@ export async function payrollFindings(
             });
         const dueDate = scheduled?.dueDate ?? cra!.dueDate;
         if (dueDate > horizon) continue;
-        const fingerprint = `payroll-remittance-due:${group.partyId ?? "unassigned"}:${group.filingAccount.id ?? "none"}:${dueDate}`;
+        // One slot per stated currency: a EUR month and a GBP month for the
+        // same destination never merge into one symbol-labelled figure.
+        const fingerprint = `payroll-remittance-due:${group.partyId ?? "unassigned"}:${group.filingAccount.id ?? "none"}:${dueDate}:${group.currency}`;
         const billed = sum(
           group.existingBills.filter((bill) => bill.status !== "voided").map((bill) => bill.total),
         );
         const slot = merged.get(fingerprint);
         if (slot) {
+          // Same fingerprint means the same stated currency; a native month
+          // and a translated month for it still add as like units.
           slot.total = add(slot.total, group.total);
+          slot.translated = slot.translated || group.translated;
           slot.billed = add(slot.billed, billed);
           for (const bill of group.existingBills) {
             if (!slot.bills.some((seen) => seen.documentNumber === bill.documentNumber)) {
@@ -139,6 +149,8 @@ export async function payrollFindings(
             frequency: scheduled?.frequency ?? group.filingAccount.remitterType ?? "regular",
             rule: scheduled?.rule ?? cra!.rule,
             provinces: [...group.provinces],
+            currency: group.currency,
+            translated: group.translated,
             total: group.total,
             billed,
             bills: group.existingBills.map((bill) => ({
@@ -172,6 +184,8 @@ export async function payrollFindings(
           rule: slot.rule,
           dueDate: slot.dueDate,
           overdue,
+          currency: slot.currency,
+          translated: slot.translated,
           total: slot.total,
           billed: slot.billed,
           uncovered,
@@ -189,6 +203,8 @@ export async function payrollFindings(
               frequency: slot.frequency,
               rule: slot.rule,
               dueDate: slot.dueDate,
+              currency: slot.currency,
+              translated: slot.translated,
               total: slot.total,
               billed: slot.billed,
               uncovered,

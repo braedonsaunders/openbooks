@@ -79,10 +79,12 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
       {
         componentId: 'c1', code: 'QPIP', name: 'QPIP', kind: 'deduction',
         systemKey: 'qpip', liabilityAccountId: 'liab-1', accountLabel: '2320 · RQ payable',
-        amount: '400.0000',
+        amount: '400.0000', currency: 'CAD',
       },
     ],
     total: '400.0000',
+    currency: 'CAD',
+    translated: false,
     slices: [],
     grossPayroll: '2000.0000',
     employeeCount: 1,
@@ -108,4 +110,81 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
   assert.ok(html.includes('2026-08-17'))
   assert.ok(html.includes('Revenu Québec monthly remitter'))
   assert.equal(html.split('Due ').length - 1, 1)
+})
+
+test('a EUR-only scope under a GBP org renders euros, never pounds', () => {
+  const eurGroup: RemittanceGroup = {
+    partyId: '33333333-3333-4333-8333-333333333333',
+    partyName: 'Receiver General',
+    filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
+    hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: false,
+    regionalCalendar: null,
+    vendorKeys: [],
+    schedule: null,
+    provinces: ['LON'],
+    components: [
+      {
+        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
+        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
+        amount: '12250.00', currency: 'EUR',
+      },
+    ],
+    total: '12250.00',
+    currency: 'EUR',
+    translated: false,
+    slices: [],
+    grossPayroll: '12250.00',
+    employeeCount: 1,
+    existingBills: [],
+  }
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={{ payroll: messages }}>
+      <MoneyProvider currency="GBP">
+        <RemittancesView groups={[eurGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  // The stated currency labels the card and formats every amount: €12,250.00
+  // is a euro figure an operator can act on, not £12,250 misread as pounds.
+  assert.ok(html.includes('EUR'), 'the card names its stated currency')
+  assert.ok(html.includes('€12,250.00'), `euro amounts render as euros: ${html}`)
+  assert.ok(!html.includes('£12,250.00'), 'no amount renders as pounds')
+})
+
+test('a translated scope names the presentation currency it was translated into', () => {
+  const translatedGroup: RemittanceGroup = {
+    partyId: '44444444-4444-4444-8444-444444444444',
+    partyName: 'Receiver General',
+    filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
+    hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: false,
+    regionalCalendar: null,
+    vendorKeys: [],
+    schedule: null,
+    provinces: ['LON', 'DUB'],
+    components: [
+      {
+        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
+        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
+        amount: '21495.83', currency: 'GBP',
+      },
+    ],
+    total: '21495.83',
+    currency: 'GBP',
+    translated: true,
+    slices: [],
+    grossPayroll: '21495.83',
+    employeeCount: 2,
+    existingBills: [],
+  }
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en-GB" timeZone="UTC" messages={{ payroll: messages }}>
+      <MoneyProvider currency="GBP">
+        <RemittancesView groups={[translatedGroup]} from="2026-09-01" to="2026-09-30" canCreate={false} />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  assert.ok(html.includes('£21,495.83'))
+  assert.ok(html.includes('Translated to GBP'), 'the translated figure is labelled as translated')
 })

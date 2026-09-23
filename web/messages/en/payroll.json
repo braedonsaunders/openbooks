@@ -1087,7 +1087,8 @@
     "billCreated": "Draft bill {number} created. Review and post it in AP.",
     "dueOn": "Due {dueDate} · {authority}",
     "apNote": "Remittance bills are ordinary vendor bills:",
-    "apLink": "open AP bills"
+    "apLink": "open AP bills",
+    "translated": "Translated to {currency} at the derived consolidated rate"
   },
   "yearEnd": {
     "title": "Year-end",

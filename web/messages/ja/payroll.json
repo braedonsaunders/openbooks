@@ -1087,7 +1087,8 @@
     "billCreated": "請求書ドラフト {number} を作成しました。買掛金で確認・転記してください。",
     "dueOn": "納期限 {dueDate} · {authority}",
     "apNote": "納付請求書は通常の仕入請求書です:",
-    "apLink": "買掛請求書を開く"
+    "apLink": "買掛請求書を開く",
+    "translated": "導出連結レートで{currency}に換算済み"
   },
   "yearEnd": {
     "title": "年末調整",

@@ -1087,7 +1087,8 @@
     "billCreated": "Brouillon de facture {number} créé. Vérifiez-le et affichez-le dans les comptes fournisseurs.",
     "dueOn": "Échéance le {dueDate} · {authority}",
     "apNote": "Les factures de versement sont des factures fournisseurs ordinaires :",
-    "apLink": "ouvrir les factures fournisseurs"
+    "apLink": "ouvrir les factures fournisseurs",
+    "translated": "Converti en {currency} au taux consolidé dérivé"
   },
   "yearEnd": {
     "title": "Fin d'année",
