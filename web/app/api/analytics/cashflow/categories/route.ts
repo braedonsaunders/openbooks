@@ -151,10 +151,15 @@ export async function GET() {
   const gate = await guardPermission("reports.read");
   if (gate instanceof NextResponse) return gate;
   const r = ((await db.execute(sql`
-    select settings -> 'analytics' -> 'cashflowCategories' as cats from orgs where id = ${gate.user.orgId}
+    select settings -> 'analytics' -> 'cashflowCategories' as cats,
+           coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
+      from orgs where id = ${gate.user.orgId}
   `)));
   const raw = r.rows[0]?.cats;
-  return NextResponse.json({ categories: Array.isArray(raw) ? raw : [] });
+  return NextResponse.json({
+    categories: Array.isArray(raw) ? raw : [],
+    revision: typeof r.rows[0]?.rev === "number" ? r.rows[0].rev : 0,
+  });
 }
 
 export async function PUT(req: Request) {
@@ -162,9 +167,18 @@ export async function PUT(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { categories?: unknown[] } | null;
+  const body = (parsedBody.data) as { categories?: unknown[]; expectedRevision?: unknown } | null;
   if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
   if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
+  // Optimistic concurrency: the editor sends the revision it read, and a
+  // stale writer gets 409 instead of silently discarding the other edit.
+  if (!Number.isInteger(body.expectedRevision)) {
+    return NextResponse.json(
+      { error: "expectedRevision required", message: "Send the revision returned by GET with every replacement." },
+      { status: 400 },
+    );
+  }
+  const expectedRevision = body.expectedRevision as number;
 
   const cleaned = body.categories.map(clean);
   const invalidIndex = cleaned.findIndex((result) => !result.ok);
@@ -183,21 +197,38 @@ export async function PUT(req: Request) {
 
   // Lock the current document and commit its replacement together with complete
   // before/after audit evidence. A malformed payload returns above, before a
-  // transaction or mutation can begin, while concurrent editors serialize on
-  // the org row and never audit a stale prior state.
+  // transaction or mutation can begin. The revision is read from the locked
+  // row and the replacement refused when it moved: concurrent editors
+  // serialize on the org row, but serialization alone would still let the
+  // second writer silently discard the first — the 409 forces a re-read.
   const result = await db.transaction(async (tx) => {
     const existing = await tx.execute(sql`
-      select settings -> 'analytics' -> 'cashflowCategories' as cats
+      select settings -> 'analytics' -> 'cashflowCategories' as cats,
+             coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
         from orgs where id = ${gate.user.orgId} for update
     `);
     if (!existing.rows[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
+    const currentRevision = typeof existing.rows[0].rev === "number" ? existing.rows[0].rev : 0;
+    if (currentRevision !== expectedRevision) {
+      return NextResponse.json(
+        {
+          error: "revision conflict",
+          message: `Cashflow categories changed since revision ${expectedRevision} (now at ${currentRevision}): reload and reapply your edit.`,
+          revision: currentRevision,
+        },
+        { status: 409 },
+      );
+    }
     const rawBefore = existing.rows[0].cats;
     const before = Array.isArray(rawBefore) ? rawBefore : [];
+    const nextRevision = currentRevision + 1;
     await tx.execute(sql`
       update orgs
       set settings = jsonb_set(
-        jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-        '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true)
+        jsonb_set(
+          jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+          '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true),
+        '{analytics,cashflowCategoriesRevision}', ${JSON.stringify(nextRevision)}::jsonb, true)
       where id = ${gate.user.orgId}
     `);
     await tx.execute(sql`
@@ -211,8 +242,8 @@ export async function PUT(req: Request) {
         ${gate.user.id}
       )
     `);
-    return null;
+    return nextRevision;
   });
   if (result instanceof NextResponse) return result;
-  return NextResponse.json({ ok: true, categories });
+  return NextResponse.json({ ok: true, categories, revision: result });
 }
