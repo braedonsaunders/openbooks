@@ -206,7 +206,27 @@ export function PagedTable<T>({
             <TableRow
               key={rowKey(row, start + i)}
               className={onRowClick ? `cursor-pointer ${rowClassName?.(row) ?? ''}` : rowClassName?.(row)}
-              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onClick={
+                onRowClick
+                  ? (event) => {
+                      // Row actions live INSIDE the row: a click starting in
+                      // an interactive descendant runs only that control,
+                      // never the row-open — otherwise the opened drawer
+                      // covers the action and its refusal. Keyboard
+                      // Enter/Space on a focused control targets the control
+                      // too, so it stays single-action; plain-cell clicks
+                      // still open the row.
+                      const target = event.target as Element | null
+                      if (
+                        target?.closest?.(
+                          'button, a, input, select, textarea, label, [role="button"], [role="menuitem"], [data-row-action]',
+                        )
+                      )
+                        return
+                      onRowClick(row)
+                    }
+                  : undefined
+              }
             >
               {selection ? (
                 <TableCell>
