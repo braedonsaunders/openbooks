@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, text, integer, boolean, jsonb, uuid, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { id, orgRef, auditColumns } from "./helpers";
 
@@ -104,6 +105,12 @@ export const accountGroups = pgTable(
   (t) => [
     uniqueIndex("account_groups_org_dim_key").on(t.orgId, t.dimension, t.key),
     index("account_groups_org_dim").on(t.orgId, t.dimension),
+    // One ACTIVE catch-all per (org, dimension): a second catch-all makes
+    // every unmatched account's bucket a silent sort_order guess (0319).
+    // Inactive rows stay out so deactivated groups keep their history.
+    uniqueIndex("account_groups_one_active_catch_all")
+      .on(t.orgId, t.dimension)
+      .where(sql`${t.isCatchAll} AND ${t.isActive}`),
   ],
 );
 

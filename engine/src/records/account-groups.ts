@@ -294,7 +294,19 @@ export async function resolveAccountGroups(dimension: string, orgId?: string): P
       pins.set(p.account_id, { groupId: p.group_id, key: p.key, name: p.name, color: p.color });
     }
   }
-  const catchAll = groups.find((g) => g.isCatchAll) ?? null;
+  // Two active catch-alls in one dimension is ambiguous classification
+  // policy: every unmatched account's bucket is a guess. Migration 0319
+  // refuses that state in storage (partial unique index plus a remedy-naming
+  // trigger), so reaching it means an unmigrated database or bypassed
+  // storage — fail closed with the remedy instead of silently bucketing
+  // into whichever catch-all sorts first.
+  const catchAlls = groups.filter((g) => g.isCatchAll);
+  if (catchAlls.length > 1) {
+    throw new Error(
+      `multiple active catch-all account groups in dimension "${dimension}" (${catchAlls.map((g) => `"${g.key}"`).join(", ")}); deactivate all but the authoritative group so unmatched accounts resolve deterministically`,
+    );
+  }
+  const catchAll = catchAlls[0] ?? null;
 
   const byAccount = new Map<string, GroupRef>();
   for (const a of acctRows.rows) {

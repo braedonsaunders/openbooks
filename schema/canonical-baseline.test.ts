@@ -661,6 +661,15 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // reporting-book depreciation guard; updates, deletes and tenant writes
     // stay refused.
     "0316_clone_closed_period_authority.sql",
+    // 0306 backfills by (org, dimension, key) and cannot see a tenant's
+    // pre-existing custom-key catch-all, so that org gains a second active
+    // catch-all and the resolver silently re-buckets every unmatched
+    // account into the new Other. 0319 deactivates the unambiguous
+    // backfill-inserted duplicate (pristine default beside a custom
+    // catch-all), refuses ambiguous scopes by name instead of guessing,
+    // and then holds one active catch-all per (org, dimension) in storage
+    // for every writer including direct SQL.
+    "0319_account_group_single_active_catch_all.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
