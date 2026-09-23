@@ -63,7 +63,7 @@ are external responsibilities in that example.
 
 The reference swarm installation releases itself from a version tag. Pushing
 `v<version>` runs `publish-container.yml`: the tagged commit must already have
-a green `test` run, both architectures are built and scanned, the merged image
+a green `test` run and a passing upgrade rehearsal (below), both architectures are built and scanned, the merged image
 is attested, and then `deploy-production.yml` runs on the self-hosted runner
 that shares a network with the swarm manager. That job connects to the
 manager over ssh with a dedicated deploy key and executes
@@ -89,6 +89,60 @@ previous Dokploy compose file and env under
 `/home/<user>/openbooks-deploy-backup-<stamp>/` on the manager; restoring that
 compose file into Dokploy and redeploying is the application-tier rollback
 when no migration changed the schema.
+
+## Release gate: upgrade rehearsal
+
+Every install upgrades in place: bootstrap applies the pending migrations over
+whatever data that install holds. A release is therefore only as safe as its
+migrations are on data that earlier releases wrote. Proving that on a fresh
+database proves nothing about it. `upgrade-rehearsal.yml` is the release gate
+for it. It is deliberately NOT part of per-commit CI: it spins up every dataset
+for every supported source release, and that cost belongs to releases.
+
+Start it on the exact release-candidate commit:
+
+```bash
+git push origin "${SHA}:refs/heads/upgrade-rehearsal/${SHA:0:9}"
+```
+
+`publish-container.yml` refuses a `v*` tag whose commit has no successful
+`upgrade-verification` job, just as it refuses one without an exhaustive
+`test` run. Delete the branch once the release is out.
+
+Each cell of the matrix is one (source release, dataset) pair, as planned by
+`scripts/upgrade-rehearsal/plan.mjs` from `scripts/upgrade-rehearsal/rehearsal.json`.
+A cell runs `scripts/upgrade-rehearsal/rehearse.mjs`:
+
+1. Install the source release (its own bootstrap), then seed the dataset with
+   the source release's own tooling (simulation, sample-company templates, or
+   a seeder driving the source's engine). A real install holds data that its
+   own version wrote.
+2. Run the source release's golden harness on every seeded org, so the data is
+   proven clean before the upgrade touches it.
+3. Fingerprint the ledger with version-tolerant SQL. That covers the trial
+   balance per book, account, and currency; document totals and open balances;
+   applications; row counts; and unbalanced posted entries.
+4. Upgrade with the candidate's bootstrap and record each migration's time.
+5. Refuse unless every candidate migration is recorded as applied, a second
+   bootstrap applies nothing, the ledger fingerprint is identical, the
+   candidate's golden harness passes on every org with activity, and the
+   upgraded schema catalog equals a fresh install's.
+
+The job summary lists each cell's phases and slowest migrations. The artifact
+holds the before and after fingerprints and the catalog comparison.
+
+**Sources.** After each release, add its tag to `sources` in
+`rehearsal.json`. Drop a source only when upgrading from it stops being
+supported, and say so in the release notes.
+
+**Datasets.** Every class in `requiredDatasetClasses` must have a dataset, and
+the plan refuses otherwise. The classes are: `empty`, `small`, `perf-1m` (a
+ledger of about a million lines), `multi-entity` (multiple currencies and
+subsidiaries), `samples`, `simulation`, and `edge` (deliberately awkward
+histories). A seeder lives in `scripts/upgrade-rehearsal/seeders/<name>.ts`.
+It is copied into the source tree, runs on the source release's runtime, and
+must print `{"orgIds": [...]}` as its last JSON line. It may use only engine
+APIs present in every supported source release.
 
 ## Rollback
 

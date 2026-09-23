@@ -118,7 +118,38 @@ jobs:
             echo "Re-run test.yml on this commit via workflow_dispatch (always full), then retry." >&2
             exit 1
           fi
-          echo "Merge gate is green and EXHAUSTIVE for ${SOURCE_COMMIT} (run ${verified}).""
+          echo "Merge gate is green and EXHAUSTIVE for ${SOURCE_COMMIT} (run ${verified})."
+      - name: Require a passing upgrade rehearsal for this exact commit
+        # Every install upgrades in place: bootstrap applies the pending
+        # migrations over whatever data that install holds. upgrade-rehearsal.yml
+        # (release-only, never per-commit) upgrades each supported source
+        # release, seeded with every required dataset class, to this commit. It
+        # proves ledger parity, harness tie-outs, idempotence, and that the
+        # upgraded catalog matches a fresh install's. Its `upgrade-verification`
+        # job passes only when every cell passed. No such job on this SHA means
+        # no release.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          runs=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_COMMIT}&status=success" \
+            --jq '[.workflow_runs[] | select(.name == "upgrade-rehearsal") | .id] | join(" ")')
+          rehearsed=
+          for run in $runs; do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs" --paginate \
+                 --jq '.jobs[] | select(.name == "upgrade-verification") | .conclusion' \
+               | grep -qw success; then
+              rehearsed=$run
+              break
+            fi
+          done
+          if [ -z "$rehearsed" ]; then
+            echo "No passing 'upgrade-rehearsal' run for ${SOURCE_COMMIT}." >&2
+            echo "Start one with: git push origin \"${SOURCE_COMMIT}:refs/heads/upgrade-rehearsal/<name>\", then retry." >&2
+            exit 1
+          fi
+          echo "Upgrade rehearsal passed for ${SOURCE_COMMIT} (run ${rehearsed})."
       - name: Refuse to release a commit that is not on main
         # Checking out an explicit ref leaves HEAD detached, so the local `main`
         # branch does not exist even with full history. Materialize it, then
