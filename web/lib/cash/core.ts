@@ -512,6 +512,16 @@ const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear()
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**
+ * Weekly average over the FULL history window. Zero-activity weeks are data,
+ * not gaps: dividing only by weeks that posted rows turns one 1,200 outflow
+ * inside a 12-week window into a 1,200/week forecast instead of 100/week.
+ * Shared by the GL-history and bank-register strategies.
+ */
+export function fullWindowWeeklyAverage(total: Money, historyWeeks: number): Money {
+  return divideMoney(total, String(Math.max(1, historyWeeks)));
+}
+
+/**
  *  — places a weekly amount on its expected day of
  * week / week of month, zeroes weeks whose slot has already passed, and
  * prorates the current distributed week by business days remaining.
@@ -686,13 +696,11 @@ export async function categoryWeekly(
       accountTotals.set(label, addMoney(accountTotals.get(label) ?? ZERO_MONEY, absMoney(activity)));
     }
     let totalHistory = ZERO_MONEY;
-    let weeksCounted = 0;
     const startKey = toISO(tStart);
     for (const k of Object.keys(weeklyHistory)) {
-      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); weeksCounted++; }
+      if (k < startKey) { totalHistory = addMoney(totalHistory, weeklyHistory[k]!); }
     }
-    const divisor = weeksCounted > 0 ? weeksCounted : historyWeeks;
-    let weeklyAvg = divideMoney(useNet ? totalHistory : absMoney(totalHistory), String(divisor));
+    let weeklyAvg = fullWindowWeeklyAverage(useNet ? totalHistory : absMoney(totalHistory), historyWeeks);
     if (adj !== 0) weeklyAvg = multiplyMoney(weeklyAvg, String(1 + adj));
     const forecastAmount = isSet(cat.expectedWeek) ? multiplyMoney(weeklyAvg, "4.345") : weeklyAvg;
     weekStarts.forEach((k, i) => {
@@ -705,8 +713,8 @@ export async function categoryWeekly(
     meta = {
       method: "GL Average",
       sourceTotal: absMoney(totalHistory),
-      weeksUsed: divisor,
-      rawAverage: divideMoney(absMoney(totalHistory), String(divisor)),
+      weeksUsed: historyWeeks,
+      rawAverage: fullWindowWeeklyAverage(absMoney(totalHistory), historyWeeks),
       adjustmentPct: Math.round(adj * 100),
       finalAverage: weeklyAvg,
     };
