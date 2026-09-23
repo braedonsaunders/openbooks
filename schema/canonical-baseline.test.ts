@@ -588,6 +588,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // expiry) plus the delivering/delivery_uncertain lifecycle states, so
     // the publish happens only under a durable claim.
     "0290_payment_file_delivery_claim.sql",
+    // Scheduled SFTP imports filed every statement into the schedule's
+    // account without reading the file's own account identity: 0291 binds
+    // the expected external identifier per schedule, and mismatches (or
+    // identified files with no binding) refuse instead of misattributing.
+    "0291_sftp_import_schedule_expected_account.sql",
     // Duplicate (item, stock location, lot) lines in one cycle count each
     // posted the full variance, double-applying one physical observation.
     // Storage now refuses a second line per subject (NULLS NOT DISTINCT so

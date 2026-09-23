@@ -780,7 +780,11 @@
         "routingTitle": "导入路由 — 哪个文件夹对应哪个账户",
         "noRouting": "暂无路由 — 请在下方添加。",
         "folderPlaceholder": "文件夹",
-        "addRoute": "添加路由"
+        "addRoute": "添加路由",
+        "bindingPlaceholder": "预期账户标识",
+        "bindingUnset": "未绑定账户",
+        "bindingEdit": "设置预期账户",
+        "bindingSave": "保存"
       },
       "sftpEndpoint": {
         "title": "SFTP接收端点",

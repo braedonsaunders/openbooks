@@ -755,7 +755,11 @@
         "routingTitle": "Import routing — which folder feeds which account",
         "noRouting": "No routing yet — add one below.",
         "folderPlaceholder": "folder",
-        "addRoute": "Add route"
+        "addRoute": "Add route",
+        "bindingPlaceholder": "expected account id",
+        "bindingUnset": "no account bound",
+        "bindingEdit": "Set expected account",
+        "bindingSave": "Save"
       },
       "sftpEndpoint": {
         "title": "SFTP receiving endpoint",

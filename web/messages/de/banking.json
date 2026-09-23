@@ -780,7 +780,11 @@
         "routingTitle": "Import-Routing — welcher Ordner speist welches Konto",
         "noRouting": "Noch kein Routing — unten hinzufügen.",
         "folderPlaceholder": "Ordner",
-        "addRoute": "Route hinzufügen"
+        "addRoute": "Route hinzufügen",
+        "bindingPlaceholder": "erwartete Konto-ID",
+        "bindingUnset": "kein Konto gebunden",
+        "bindingEdit": "Erwartetes Konto festlegen",
+        "bindingSave": "Speichern"
       },
       "sftpEndpoint": {
         "title": "SFTP-Empfangsendpunkt",

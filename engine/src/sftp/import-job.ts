@@ -4,6 +4,7 @@ import {
   BANK_STATEMENT_PARSER_VERSION,
   SYSTEM_ACTOR_ID,
   importStatement,
+  normalizeExternalAccountId,
   parseOfx,
   parseCsv,
   parseCamt053,
@@ -51,12 +52,48 @@ function detectFormat(name: string, text: string): Exclude<Fmt, "auto" | "csv"> 
 }
 
 function parse(format: Exclude<Fmt, "auto">, content: StatementSourceContent, mapping: CsvMapping | null): { lines: ParsedStatementLine[]; meta: Omit<ParsedStatement, "lines"> } {
-  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
-  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance } }; }
+  // The file's account identifier rides through meta on every format that
+  // carries one; CSV has none (its meta stays empty) and relies on
+  // watch-folder isolation instead.
+  if (format === "ofx") { const p = parseOfx(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "camt053") { const p = parseCamt053(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "bai2") { const p = parseBai2(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
+  if (format === "mt940") { const p = parseMt940(content); return { lines: p.lines, meta: { currency: p.currency, statementDate: p.statementDate, closingBalance: p.closingBalance, externalAccountId: p.externalAccountId } }; }
   if (!mapping) throw new Error("CSV import needs a column mapping on the schedule");
   return { lines: parseCsv(content, mapping), meta: {} };
+}
+
+/**
+ * Account-identity gate for one watch-folder file. A same-currency
+ * statement for account B dropped in account A's folder used to become
+ * A's lines and balance evidence silently. Both directions fail closed:
+ * a mismatch against the schedule's binding refuses, and an identified
+ * file with no binding refuses too — the schedule must name its account
+ * once (Company Settings → Bank Feeds → schedule) instead of importing
+ * strangers. Files with no identifier (CSV, identifier-less exports)
+ * bypass: they rely on watch-folder isolation. Comparison is canonical
+ * (whitespace-blind, case-blind) but messages show the raw values the
+ * operator recognizes.
+ */
+export function assertScheduleAccountBinding(opts: {
+  scheduleId: string;
+  filename: string;
+  expectedExternalAccountId: string | null;
+  foundExternalAccountId?: string | null;
+}): void {
+  const found = normalizeExternalAccountId(opts.foundExternalAccountId);
+  if (!found) return;
+  const expected = normalizeExternalAccountId(opts.expectedExternalAccountId);
+  if (!expected) {
+    throw new Error(
+      `statement file ${opts.filename} identifies bank account ${opts.foundExternalAccountId} but its import schedule has no expected account configured — set the expected external account on the schedule (Company Settings → Bank Feeds) before importing identified statements`,
+    );
+  }
+  if (found !== expected) {
+    throw new Error(
+      `statement file ${opts.filename} identifies bank account ${opts.foundExternalAccountId} but its import schedule expects ${opts.expectedExternalAccountId} — move the file to the matching account's folder`,
+    );
+  }
 }
 
 /**
@@ -89,6 +126,7 @@ export interface ScheduleRun {
 }
 type ScheduleRow = {
   id: string; org_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
+  expected_external_account_id: string | null;
   backend: string; bucket: string | null; root_prefix: string;
 };
 
@@ -120,6 +158,15 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       const fmt = s.format === "auto" ? detectFormat(e.name, sourceBytes.toString("utf8")) : s.format;
       if (!fmt) throw new Error(`could not detect a statement format for ${e.name}`);
       const { lines, meta } = parse(fmt, sourceBytes, s.csv_mapping);
+      // Identity before import: a stranger file refuses here (recorded on
+      // the outcome, left in the folder) instead of becoming this
+      // account's lines and balance evidence.
+      assertScheduleAccountBinding({
+        scheduleId: s.id,
+        filename: e.name,
+        expectedExternalAccountId: s.expected_external_account_id,
+        foundExternalAccountId: meta.externalAccountId,
+      });
       const res = await importStatement(
         {
           accountId: s.account_id,
@@ -164,6 +211,7 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   const rows = await withBypassContext(() =>
     db.execute<ScheduleRow>(sql`
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping,
+           sc.expected_external_account_id,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id and sv.is_active

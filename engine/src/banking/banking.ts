@@ -48,6 +48,30 @@ export interface ParsedStatement {
   /** Balance-as-of date when the file carries one (OFX LEDGERBAL/DTASOF). */
   statementDate?: string;
   closingBalance?: string;
+  /**
+   * The file's own bank-account identifier when the format carries one
+   * (OFX ACCTID, BAI2 account record, MT940 :25:, CAMT.053 account
+   * IBAN/Id). Absent for CSV and for files whose format omits it. The
+   * scheduled SFTP import compares this against the schedule's expected
+   * identifier and refuses mismatches instead of filing one account's
+   * lines and balance evidence into another.
+   */
+  externalAccountId?: string;
+}
+
+/**
+ * Canonical form for comparing a file's account identifier against a
+ * schedule's expected binding: surrounding and inner whitespace removed
+ * (IBAN print format), uppercased (IBANs and BAI2 numbers are
+ * case-insensitive identifiers). Returns undefined for blank input so an
+ * absent identifier and an empty one compare alike. Used both when
+ * storing the binding and when comparing, so neither side can smuggle a
+ * mismatch past spacing or case.
+ */
+export function normalizeExternalAccountId(raw: string | null | undefined): string | undefined {
+  if (raw == null) return undefined;
+  const canonical = raw.replace(/\s+/g, "").toUpperCase();
+  return canonical === "" ? undefined : canonical;
 }
 
 export type StatementSource = "ofx" | "csv" | "camt053" | "bai2" | "mt940" | "feed_api" | "manual";
@@ -471,6 +495,20 @@ export function parseOfx(source: StatementSourceContent): ParsedStatement {
   });
 
   const parsed: ParsedStatement = { lines };
+  // Account identity lives in BANKACCTFROM/CCACCTFROM/INVACCTFROM sections
+  // as ACCTID. One parse produces one statement: distinct account
+  // identifiers would merge ledgers while only the last balance wins, the
+  // same quiet aggregation the BAI2 and MT940 parsers refuse.
+  const acctIds = [...body.matchAll(/<ACCTID>\s*([^<\r\n]*)/gi)]
+    .map((m) => decodeOfxEntities(m[1]!.trim()))
+    .filter((v) => v !== "");
+  const distinctAcctIds = [...new Set(acctIds)];
+  if (distinctAcctIds.length > 1) {
+    throw new BankingError(
+      `OFX file contains multiple accounts (${distinctAcctIds.join(", ")}) — import one account per file so each statement keeps its own balance and lines`,
+    );
+  }
+  if (distinctAcctIds.length === 1) parsed.externalAccountId = distinctAcctIds[0];
   const curdef = ofxValue(body, "CURDEF");
   if (curdef && /^[A-Za-z]{3}$/.test(curdef)) parsed.currency = curdef.toUpperCase();
   const ledger = body.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<AVAILBAL>|$)/i)?.[1];
@@ -720,6 +758,23 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
     lineNo++;
   }
   if (lineNo === 0) throw new BankingError("CAMT.053: no <Ntry> entries found");
+  // Account identity is the statement's <Acct> (<Id><IBAN>, else
+  // <Id><Othr><Id>). Distinct identifiers across the statement would merge
+  // ledgers while the balance evidence stays singular — refused like the
+  // other multi-account shapes.
+  const camtAccounts = new Set<string>();
+  for (const acct of xmlTags(stmt, "Acct")) {
+    const idBlock = xmlTag(acct, "Id") ?? "";
+    const iban = xmlTag(idBlock, "IBAN") ?? xmlTag(acct, "IBAN");
+    const other = iban ?? xmlTag(xmlTag(idBlock, "Othr") ?? "", "Id");
+    if (other) camtAccounts.add(other);
+  }
+  if (camtAccounts.size > 1) {
+    throw new BankingError(
+      `CAMT.053 statement contains multiple accounts (${[...camtAccounts].join(", ")}) — import one account per statement so each keeps its own balance and lines`,
+    );
+  }
+  const camtAccountId = [...camtAccounts][0];
   // closing booked balance (CLBD)
   let closingBalance: string | undefined;
   let statementDate: string | undefined;
@@ -734,7 +789,7 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
       if (m) statementDate = assertRealDate(m[1]!, m[2]!, m[3]!, "CAMT.053 balance date");
     }
   }
-  return { lines, currency, statementDate, closingBalance };
+  return { lines, currency, statementDate, closingBalance, externalAccountId: camtAccountId };
 }
 
 /**
@@ -825,7 +880,10 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
     }
   }
   if (lineNo === 0) throw new BankingError("BAI2: no type-16 transaction records found");
-  return { lines, currency, statementDate, closingBalance };
+  // Multi-account files are refused above, so the surviving identifier is
+  // the file's single account.
+  const externalAccountId = [...accountNumbers][0];
+  return { lines, currency, statementDate, closingBalance, externalAccountId };
 }
 
 /** BAI2 amounts are integer cents with no decimal point (e.g. "150000" = 1500.00). */
@@ -927,7 +985,10 @@ export function parseMt940(source: StatementSourceContent): ParsedStatement {
   }
   pushPending();
   if (lines.length === 0) throw new BankingError("MT940: no :61: statement lines found");
-  return { lines, currency, statementDate, closingBalance };
+  // Multiple :25: accounts are refused above; the surviving value (if the
+  // message carries one) is the file's single account.
+  const externalAccountId = [...messageAccounts][0];
+  return { lines, currency, statementDate, closingBalance, externalAccountId };
 }
 
 // ---------------------------------------------------------------------------

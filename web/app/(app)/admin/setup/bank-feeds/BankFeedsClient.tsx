@@ -47,6 +47,7 @@ interface SftpSchedule {
   lastRunAt: string | null;
   accountNumber: string | null;
   accountName: string | null;
+  expectedExternalAccountId: string | null;
 }
 interface Account { id: string; label: string }
 interface Daemon { enabled: boolean; port: number; host: string; fingerprint: string }
@@ -256,6 +257,48 @@ export function BankFeedsClient({
   );
 }
 
+// --- Schedule account binding (expected external account identifier) ---------
+//
+// The import refuses identified statements that do not match this binding,
+// so each route names the one bank account it accepts. CSV has no
+// identifier and relies on folder isolation instead.
+
+function ScheduleBinding({ sc, onChange }: { sc: SftpSchedule; onChange: () => void }) {
+  const t = useTranslations("banking.bankFeeds.client");
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(sc.expectedExternalAccountId ?? "");
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        title={t("sftpCard.bindingEdit")}
+        onClick={() => { setValue(sc.expectedExternalAccountId ?? ""); setEditing(true); }}
+        className="font-mono text-xs text-slate-500 underline decoration-dotted underline-offset-2 dark:text-slate-400"
+      >
+        {sc.expectedExternalAccountId ?? t("sftpCard.bindingUnset")}
+      </button>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1">
+      <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-7 w-36" />
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={async () => {
+          await fetch(`/api/banking/sftp/schedules/${sc.id}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ expectedExternalAccountId: value.trim() === "" ? null : value }),
+          });
+          setEditing(false);
+          onChange();
+        }}
+      >{t("sftpCard.bindingSave")}</Button>
+    </span>
+  );
+}
+
 // --- SFTP connection card (server + its routing) -----------------------------
 
 function SftpConnectionCard({
@@ -272,6 +315,7 @@ function SftpConnectionCard({
   const [routing, setRouting] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [folder, setFolder] = useState("inbound");
+  const [expectedAccount, setExpectedAccount] = useState("");
   const t = useTranslations("banking.bankFeeds.client");
 
   return (
@@ -306,6 +350,7 @@ function SftpConnectionCard({
                 <span className="font-mono text-xs">{sc.accountNumber}</span>
                 <span className="text-slate-500">{sc.accountName}</span>
                 <Badge variant="outline">{sc.format}</Badge>
+                <ScheduleBinding sc={sc} onChange={onChange} />
                 <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { await fetch(`/api/banking/sftp/schedules/${sc.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
               </li>
             ))}
@@ -317,8 +362,9 @@ function SftpConnectionCard({
               <Select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="h-8 max-w-xs">
                 {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
               </Select>
+              <Input value={expectedAccount} onChange={(e) => setExpectedAccount(e.target.value)} placeholder={t("sftpCard.bindingPlaceholder")} className="h-8 w-36" />
               <Button size="sm" disabled={!accountId} onClick={async () => {
-                await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto" }) });
+                await fetch("/api/banking/sftp/schedules", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sftpServerId: server.id, accountId, folder, format: "auto", expectedExternalAccountId: expectedAccount.trim() === "" ? null : expectedAccount }) });
                 onChange();
               }}>{t("sftpCard.addRoute")}</Button>
             </div>

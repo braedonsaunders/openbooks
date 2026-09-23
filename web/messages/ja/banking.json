@@ -780,7 +780,11 @@
         "routingTitle": "インポートの振り分け — どのフォルダがどの勘定に取り込まれるか",
         "noRouting": "振り分けはまだありません — 以下で追加してください。",
         "folderPlaceholder": "フォルダ",
-        "addRoute": "振り分けを追加"
+        "addRoute": "振り分けを追加",
+        "bindingPlaceholder": "想定口座ID",
+        "bindingUnset": "口座未設定",
+        "bindingEdit": "想定口座を設定",
+        "bindingSave": "保存"
       },
       "sftpEndpoint": {
         "title": "SFTP受信用エンドポイント",

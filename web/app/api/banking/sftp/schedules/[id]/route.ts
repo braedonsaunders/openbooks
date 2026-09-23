@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { runDueSftpImports } from '@openbooks/engine/src/sftp/import-job.ts'
+import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 
@@ -88,7 +89,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { action?: string; isActive?: boolean }
+  const body = (parsedBody.data) as { action?: string; isActive?: boolean; expectedExternalAccountId?: unknown }
+  // Binding update: (re)bind the one external account identifier this
+  // schedule accepts. Stored canonical; an explicit null clears the
+  // binding (identified files then refuse until it is set again).
+  if (body.action !== 'run' && 'expectedExternalAccountId' in body) {
+    if (typeof body.expectedExternalAccountId !== 'string' && body.expectedExternalAccountId !== null) {
+      return NextResponse.json({ error: 'expectedExternalAccountId must be a string or null' }, { status: 400 })
+    }
+    const bound = await db.execute<{ id: string }>(sql`
+      update sftp_import_schedules set expected_external_account_id = ${normalizeExternalAccountId(body.expectedExternalAccountId) ?? null}, updated_at = now(), updated_by = ${user.id}
+       where id = ${id} and org_id = ${user.orgId}
+      returning id
+    `)
+    if (!bound.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  }
   if (body.action === 'run') {
     // Scoped run: activate-scan just this org's schedules and report this one.
     const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`))

@@ -780,7 +780,11 @@
         "routingTitle": "Routage des imports — quel dossier alimente quel compte",
         "noRouting": "Aucun routage pour l'instant — ajoutez-en un ci-dessous.",
         "folderPlaceholder": "dossier",
-        "addRoute": "Ajouter un routage"
+        "addRoute": "Ajouter un routage",
+        "bindingPlaceholder": "identifiant de compte attendu",
+        "bindingUnset": "aucun compte lié",
+        "bindingEdit": "Définir le compte attendu",
+        "bindingSave": "Enregistrer"
       },
       "sftpEndpoint": {
         "title": "Point de terminaison SFTP de réception",
