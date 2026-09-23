@@ -2490,6 +2490,8 @@
       "frequencyWeekly": "Weekly",
       "frequencyBiweekly": "Bi-Weekly",
       "frequencyMonthly": "Monthly",
+      "anchorDate": "Anchor Date",
+      "anchorDateHelp": "A known payment date the schedule repeats from — moving the forecast date never moves it.",
       "formula": "Formula",
       "bankAccounts": "Bank Accounts",
       "memoKeywords": "Memo Keywords",

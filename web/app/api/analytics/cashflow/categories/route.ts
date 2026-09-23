@@ -104,6 +104,24 @@ function clean(raw: unknown): ForecastCategory | null {
       return null;
     }
     if (compareMoney(amount, "0.0000") <= 0) return null;
+    // The persisted payment anchor pins the monthly/biweekly phase so moving
+    // the forecast date never rephases the schedule. A writer that omits it
+    // gets today stamped (stable from then on); a malformed one refuses.
+    // The forecast also accepts legacy rows without it (they step from the
+    // horizon start, as before) so the backfill is the only migration path
+    // that needs to exist.
+    const rawAnchor = c.anchorDate;
+    if (rawAnchor === undefined || rawAnchor === null || rawAnchor === "") {
+      out.anchorDate = new Date().toISOString().slice(0, 10);
+    } else if (typeof rawAnchor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(rawAnchor) && !Number.isNaN(Date.parse(`${rawAnchor}T00:00:00Z`))) {
+      const [y, m, d] = rawAnchor.split("-").map(Number);
+      if (m! < 1 || m! > 12) return null;
+      const days = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+      if (d! < 1 || d! > days) return null;
+      out.anchorDate = rawAnchor;
+    } else {
+      return null;
+    }
     // ForecastCategory's legacy declaration still says `number`, but the
     // persisted/read model is an exact numeric(19,4) string. Keep this route
     // on the exact-money path without crossing through an unsafe float.

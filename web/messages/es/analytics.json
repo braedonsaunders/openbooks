@@ -2466,6 +2466,8 @@
       "frequency": "Frecuencia",
       "frequencyBiweekly": "Cada 2 semanas",
       "frequencyMonthly": "Mensual",
+      "anchorDate": "Fecha de anclaje",
+      "anchorDateHelp": "Una fecha de pago conocida desde la que se repite el programa: mover la fecha de previsión nunca la mueve.",
       "frequencyWeekly": "Semanal",
       "glAccounts": "Cuentas del libro mayor",
       "historyMonths": "Meses históricos",

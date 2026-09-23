@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { advanceAnchoredMonth, lastDayOfMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
@@ -180,6 +181,12 @@ export interface ForecastCategory {
   // manual_recurring
   amount?: Money;
   frequency?: "weekly" | "biweekly" | "bi_weekly" | "monthly";
+  /**
+   * Persisted payment anchor (YYYY-MM-DD): a known occurrence the monthly /
+   * biweekly schedules step from, so moving asOf never rephases them.
+   * Rows predating the anchor backfill forecast from the horizon start.
+   */
+  anchorDate?: string;
   // formula_expression
   formula?: string;
   // bank_register_history
@@ -458,6 +465,49 @@ const addMonthsUTC = (d: Date, n: number): Date => {
   if (r.getUTCDate() < day) r.setUTCDate(0);
   return r;
 };
+
+/** Strict YYYY-MM-DD anchor: a real calendar date, or null for legacy rows. */
+export function parseAnchorDate(value: unknown): string | null {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split("-").map(Number);
+  if (m! < 1 || m! > 12 || d! < 1 || d! > 31) return null;
+  if (d! > lastDayOfMonth(y!, m!)) return null;
+  const roundTrip = new Date(Date.UTC(y!, m! - 1, d!));
+  if (
+    roundTrip.getUTCFullYear() !== y! ||
+    roundTrip.getUTCMonth() !== m! - 1 ||
+    roundTrip.getUTCDate() !== d!
+  ) return null;
+  return value;
+}
+
+/**
+ * Monthly occurrence dates of an anchored schedule inside [fromIso, toIso].
+ * Forward months step through billing/cadence.ts's advanceAnchoredMonth (the
+ * shared anchored step: Jan 31 → Feb 28 → Mar 31, never drifting to Mar 28);
+ * months before the anchor month use the same module's lastDayOfMonth clamp,
+ * since advanceAnchoredMonth only steps forward.
+ */
+export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, toIso: string): string[] {
+  const [ay, amo, aday] = anchorIso.split("-").map(Number) as [number, number, number];
+  const anchorIdx = ay * 12 + amo;
+  const [fy, fmo] = fromIso.split("-").map(Number) as [number, number];
+  const [ty, tmo] = toIso.split("-").map(Number) as [number, number];
+  const pad = (n: number, w: number) => String(n).padStart(w, "0");
+  const out: string[] = [];
+  for (let m = fy * 12 + fmo - 1; m <= ty * 12 + tmo + 1; m++) {
+    let iso: string;
+    if (m === anchorIdx) iso = anchorIso;
+    else if (m > anchorIdx) iso = advanceAnchoredMonth(ay, amo, m - anchorIdx, aday);
+    else {
+      const yy = Math.floor((m - 1) / 12);
+      const mm = ((m - 1) % 12) + 1;
+      iso = `${pad(yy, 4)}-${pad(mm, 2)}-${pad(Math.min(aday, lastDayOfMonth(yy, mm)), 2)}`;
+    }
+    if (iso >= fromIso && iso <= toIso) out.push(iso);
+  }
+  return out;
+}
 const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
@@ -557,8 +607,35 @@ export async function categoryWeekly(
     const amount = absMoney(normalizeMoneyValue(cat.amount ?? ZERO_MONEY));
     const freqRaw = cat.frequency ?? "monthly";
     const freq = freqRaw === "bi_weekly" ? "biweekly" : freqRaw;
-    let curr = new Date(tStart);
-    while (curr <= tEnd) {
+    // A persisted anchor pins the phase: monthly/biweekly occurrences step
+    // from it, so moving asOf never rephases the schedule. Weekly amounts
+    // spread across the week (no phase to pin) and anchorless legacy rows
+    // keep stepping from the horizon start.
+    const anchorIso = freq === "weekly" ? null : parseAnchorDate(cat.anchorDate);
+    const occurrences: Date[] = [];
+    if (anchorIso === null) {
+      let curr = new Date(tStart);
+      while (curr <= tEnd) {
+        occurrences.push(curr);
+        if (freq === "monthly") curr = addMonthsUTC(curr, 1);
+        else if (freq === "biweekly") curr = addDays(curr, 14);
+        else curr = addDays(curr, 7);
+      }
+    } else if (freq === "biweekly") {
+      const anchor = parseISO(anchorIso);
+      const gapDays = Math.round((asOf.getTime() - anchor.getTime()) / MS_DAY);
+      let curr = addDays(anchor, Math.floor(gapDays / 14) * 14);
+      while (curr < asOf) curr = addDays(curr, 14);
+      while (curr <= tEnd) {
+        occurrences.push(curr);
+        curr = addDays(curr, 14);
+      }
+    } else {
+      for (const iso of anchoredMonthlyOccurrences(anchorIso, toISO(asOf), toISO(tEnd))) {
+        occurrences.push(parseISO(iso));
+      }
+    }
+    for (const curr of occurrences) {
       const wk = toISO(weekStart(curr));
       // Weekly amounts spread across the week, so the current week prorates
       // by business days remaining. Monthly/biweekly occurrences are discrete
@@ -573,9 +650,6 @@ export async function categoryWeekly(
         const i = wkIndex.get(wk);
         if (i !== undefined) weeklyExact[i] = addMoney(weeklyExact[i] ?? ZERO_MONEY, currentAmount);
       }
-      if (freq === "monthly") curr = addMonthsUTC(curr, 1);
-      else if (freq === "biweekly") curr = addDays(curr, 14);
-      else curr = addDays(curr, 7);
     }
     logic = `${money(amount, { maximumFractionDigits: 0 })} ${freq}`;
     meta = { method: "Manual Recurring", amount, frequency: freq };

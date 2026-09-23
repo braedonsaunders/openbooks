@@ -2466,6 +2466,8 @@
       "frequency": "Häufigkeit",
       "frequencyBiweekly": "14-tägig",
       "frequencyMonthly": "Monatlich",
+      "anchorDate": "Ankerdatum",
+      "anchorDateHelp": "Ein bekanntes Zahlungsdatum, ab dem sich der Plan wiederholt – das Verschieben des Prognosedatums verschiebt ihn nie.",
       "frequencyWeekly": "Wöchentlich",
       "glAccounts": "Hauptbuchkonten",
       "historyMonths": "Historienmonate",

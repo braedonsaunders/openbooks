@@ -162,6 +162,8 @@ function put(categories: unknown[]): Promise<Response> {
   )
 }
 
+const todayAnchor = () => new Date().toISOString().slice(0, 10)
+
 const validCategory = {
   id: 'category-rent',
   name: 'Rent',
@@ -174,6 +176,7 @@ const validCategory = {
 const expectedValidCategory = {
   ...validCategory,
   amount: '1250.0000',
+  anchorDate: todayAnchor(),
 }
 
 const fractionalCategory = {
@@ -231,8 +234,8 @@ test('replacement persists every valid row with exact money and complete audit e
     ok: true,
     categories: [
       expectedValidCategory,
-      fractionalCategory,
-      { ...cappedCategory, amount: '100000000.0000' },
+      { ...fractionalCategory, anchorDate: todayAnchor() },
+      { ...cappedCategory, amount: '100000000.0000', anchorDate: todayAnchor() },
     ],
   })
   assert.equal(state.transactions, 1)
@@ -251,4 +254,32 @@ test('replacement persists every valid row with exact money and complete audit e
   assert.match(audit, /"amount":"12\.3456"/)
   assert.match(audit, /category-capped/)
   assert.match(audit, /"amount":"100000000\.0000"/)
+})
+
+test('manual schedules keep an explicit anchor and refuse a malformed one', async () => {
+  reset()
+
+  const anchored = {
+    id: 'category-anchored',
+    name: 'Anchored rent',
+    direction: 'outflow',
+    method: 'manual_recurring',
+    amount: '1000.0000',
+    frequency: 'monthly',
+    anchorDate: '2026-08-30',
+  }
+  const kept = await put([anchored])
+  assert.equal(kept.status, 200)
+  assert.deepEqual(await kept.json(), { ok: true, categories: [anchored] })
+
+  for (const bad of ['2026-02-30', '2026-13-01', 'not-a-date', 20260830]) {
+    reset()
+    const response = await put([{ ...anchored, id: 'category-bad', anchorDate: bad }])
+    assert.equal(response.status, 400, `anchorDate ${String(bad)} must refuse`)
+    assert.deepEqual(await response.json(), {
+      error: 'invalid category at index 0',
+      message: 'Each category must include a valid name, method, and method-specific configuration.',
+    })
+    assert.equal(state.transactions, 0, 'a malformed anchor never opens a transaction')
+  }
 })
