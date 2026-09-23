@@ -1287,7 +1287,9 @@ test(
       const admin = randomUUID();
       await saveTaxRateProviderConfig(
         orgId,
-        { provider: "custom_http", isEnabled: true, settings: { quoteUrl: `${origin}/hook` } },
+        // The stub declares historical support so the fixture-dated quote
+        // below reaches the byte cap; as-of refusal is covered by its own test.
+        { provider: "custom_http", isEnabled: true, settings: { quoteUrl: `${origin}/hook`, supportsHistoricalDates: true } },
         admin,
         { allowPrivateEndpoints: true },
       );
