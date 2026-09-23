@@ -96,7 +96,7 @@ async function loadServer(username: string): Promise<ServerRow | null> {
     return r.rows[0] ?? null;
   });
 }
-async function touch(row: ServerRow) {
+async function touch(row: { id: string; orgId: string; username: string }) {
   // The session's bookkeeping runs under the row's own tenant, independent of
   // whatever ambient scope the listener inherited from its starter. Exact row
   // identity: a zero-row outcome (concurrent deactivate/delete, or RLS
@@ -113,13 +113,19 @@ async function touch(row: ServerRow) {
 const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: row.username, backend: row.backend, bucket: row.bucket, rootPrefix: row.root_prefix });
 
 export const dbResolver: SftpResolver = {
+  // Side-effect free: both matchers only establish that the credential is
+  // authorized and return the login's config. Recording last_connected_at
+  // happens in loginSucceeded, which the daemon calls only after it has
+  // ACCEPTED the session — a verified password or a verified key signature.
+  // Touching here would let anyone holding the public username and key
+  // refresh last_connected_at with an unsigned probe, and would record a
+  // connection even for a bad signature the daemon is about to reject.
   async password(username, password) {
     const row = await loadServer(username);
     if (!row?.password_encrypted) return null;
     let expected: string;
     try { expected = decryptSecret(row.password_encrypted); } catch { return null; }
     if (!constantTimeEqual(password, expected)) return null;
-    await touch(row);
     return asConfig(row);
   },
   async publicKey(username, keyAlgo, keyData) {
@@ -133,11 +139,13 @@ export const dbResolver: SftpResolver = {
       if (parsed instanceof Error) continue;
       const pub = parsed as { type: string; getPublicSSH(): Buffer };
       if (pub.type === keyAlgo && pub.getPublicSSH().equals(keyData)) {
-        await touch(row);
         return asConfig(row);
       }
     }
     return null;
+  },
+  async loginSucceeded(config) {
+    await touch({ id: config.id, orgId: config.orgId, username: config.username });
   },
 };
 
