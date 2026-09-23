@@ -114,7 +114,7 @@ test("v1CreateOrder maps the record key to the order-cycle kind", async () => {
   );
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { id: "order-1", documentNumber: "Q-1" });
-  assert.deepEqual(routeState.created, [{ kind: "quote", idempotencyKey: "key-1" }]);
+  assert.deepEqual(routeState.created, [{ kind: "quote", idempotencyKey: "key-1", subsidiaryId: null }]);
 });
 
 test("v1CreateOrder maps purchase-orders to purchase_order", async () => {
@@ -128,6 +128,23 @@ test("v1CreateOrder maps purchase-orders to purchase_order", async () => {
     "purchase-orders",
   );
   assert.equal(routeState.created[0]?.kind, "purchase_order");
+});
+
+test("v1CreateOrder forwards an explicit subsidiaryId", async () => {
+  routeState.created = [];
+  await v1CreateOrder(
+    new Request("http://openbooks.test/api/v1/purchase-orders", {
+      method: "POST",
+      headers: { "content-type": "application/json", "idempotency-key": "key-sub" },
+      body: JSON.stringify({ subsidiaryId: "11111111-1111-4111-8111-111111111111" }),
+    }),
+    "purchase-orders",
+  );
+  assert.deepEqual(routeState.created, [{
+    kind: "purchase_order",
+    idempotencyKey: "key-sub",
+    subsidiaryId: "11111111-1111-4111-8111-111111111111",
+  }]);
 });
 
 test("v1ConvertOrder refuses a missing targetKind with the allowed targets", async () => {

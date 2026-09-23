@@ -104,7 +104,7 @@ const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
 }
 
 /** Create an empty draft order document and return its id + number. */
-export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind) {
+export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind, subsidiaryId: string | null = null) {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
   const org = (await db.execute<{ base_currency: string }>(
@@ -113,9 +113,9 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
   const documentNumber = await nextDocumentNumber(orgId, cfg.kind, cfg.prefix)
   const today = await businessToday(orgId)
   const row = (await db.execute<{ id: string; document_number: string }>(sql`
-    insert into documents (org_id, kind, document_number, document_date, currency, subtotal, tax_total, total, created_by)
+    insert into documents (org_id, kind, document_number, document_date, currency, subsidiary_id, subtotal, tax_total, total, created_by)
     values (${orgId}, ${kind}, ${documentNumber}, ${today},
-            ${org.rows[0]?.base_currency ?? 'CAD'}, '0', '0', '0', ${userId})
+            ${org.rows[0]?.base_currency ?? 'CAD'}, ${subsidiaryId}, '0', '0', '0', ${userId})
     returning id, document_number
   `))
   return row.rows[0]!

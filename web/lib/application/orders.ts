@@ -9,6 +9,7 @@ import {
   type OrderKind,
 } from "../order-cycle";
 import { isFeatureEnabled } from "../features";
+import { isUuid } from "../list-params";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
@@ -47,18 +48,35 @@ function conversionFailure(error: unknown): never {
 /** Empty commercial-order draft — same writer as the New Order drawer. */
 export async function createApplicationOrder(
   context: ApplicationContext,
-  input: { kind: OrderKind; idempotencyKey: string },
+  input: { kind: OrderKind; idempotencyKey: string; subsidiaryId?: string | null },
 ): Promise<{ replayed: boolean; result: { id: string; documentNumber: string } }> {
   assertApplicationPermission(context, orderWritePermission(input.kind));
   if (!(await isFeatureEnabled(context.authz.user.orgId, "orders"))) throw notFound("order");
+  // The draft must carry a subsidiary the caller can read back: a NULL
+  // subsidiary is invisible to a restricted key's GET/list, so the 201 would
+  // name a document no read can observe. An explicit subsidiary is asserted;
+  // an omitted one is derived when the key sees exactly one subsidiary and
+  // otherwise refused closed, the same rule record creates enforce.
+  const requested = input.subsidiaryId ?? null;
+  if (requested !== null && !isUuid(requested)) {
+    throw invalidInput("subsidiaryId must be a UUID");
+  }
+  let subsidiaryId = requested;
+  if (subsidiaryId === null) {
+    const allowed = context.authz.allowedSubsidiaryIds;
+    if (allowed !== null && allowed.size === 1) {
+      subsidiaryId = [...allowed][0]!;
+    }
+  }
+  assertSubsidiaryAccess(context, subsidiaryId);
   const outcome = await executeIdempotent({
     context,
     operation: "order.create",
     idempotencyKey: input.idempotencyKey,
-    request: { kind: input.kind },
+    request: { kind: input.kind, subsidiaryId },
     execute: async () => {
       try {
-        const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind);
+        const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind, subsidiaryId);
         return { id: draft.id, documentNumber: draft.document_number };
       } catch (error) {
         if (error instanceof Error && error.message === "Orders feature is disabled") {
