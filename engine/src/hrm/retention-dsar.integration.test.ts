@@ -541,3 +541,52 @@ test("DSAR export with missing file bytes is incomplete with omission evidence",
     assert.equal(status.status, "incomplete");
   });
 });
+
+test("retention action is frozen at completion: schedule edits govern only future documents", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const tpl = await makeTemplate(h, "contract");
+    await saveSchedule({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      categoryKey: "contract",
+      retainYears: 0,
+      fromEvent: "completion",
+      action: "anonymize",
+    });
+    const docId = await completeDocument(h, tpl, "Freezable contract");
+    // The completion snapshot froze the governing action alongside the date.
+    const snap = (await db.execute<{ retention_action: string | null }>(sql`
+      select retention_action from hrm_documents where id = ${docId}
+    `)).rows[0]!;
+    assert.equal(snap.retention_action, "anonymize");
+    // The rule is then edited anonymize → delete BEFORE the tick runs.
+    const sched = (await listSchedules({ orgId: h.org.orgId, actorId: h.hrId })).find(
+      (s) => s.categoryKey === "contract",
+    )!;
+    await saveSchedule({
+      orgId: h.org.orgId,
+      actorId: h.hrId,
+      scheduleId: sched.id,
+      categoryKey: "contract",
+      retainYears: 0,
+      fromEvent: "completion",
+      action: "delete",
+    });
+    const completedOn = (await db.execute<{ d: string }>(sql`
+      select completed_at::date::text as d from hrm_documents where id = ${docId}
+    `)).rows[0]!.d;
+    const tick = await runRetentionTick(h.org.orgId, completedOn);
+    assert.equal(tick.executed, 1);
+    // Anonymized under the frozen rule — NOT deleted under the edited one.
+    const doc = (await db.execute<{ status: string; title: string; party_id: string | null }>(sql`
+      select status, title, party_id from hrm_documents where id = ${docId}
+    `)).rows[0]!;
+    assert.equal(doc.title, "Anonymized document");
+    assert.equal(doc.party_id, null);
+    assert.notEqual(doc.status, "deleted");
+    const action = (await db.execute<{ action: string }>(sql`
+      select action from hrm_retention_actions where document_id = ${docId}
+    `)).rows[0]!;
+    assert.equal(action.action, "anonymize");
+  });
+});

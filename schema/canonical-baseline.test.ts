@@ -551,6 +551,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // success. Exports now mark incomplete (never ready) with per-document
     // omission evidence in the scope manifest and export.json.
     "0273_dsar_export_incomplete_status.sql",
+    // Editing a retention schedule's action after completion re-governed
+    // historical documents (anonymize became delete). The completion
+    // snapshot now freezes the governing action the tick executes.
+    "0274_retention_action_completion_snapshot.sql",
     // The shared posting-period resolver reads the org's active default
     // fiscal calendar; backfill one for every org whose calendars carry
     // none, refusing ambiguous orgs by id instead of guessing.
