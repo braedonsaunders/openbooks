@@ -1097,13 +1097,63 @@ async function assertCurrentFilingSourceEvidence(args: {
   }
 }
 
+/**
+ * Resolve the currency a filing is denominated in: the scoped subsidiary's
+ * functional currency, or the single functional currency when every active
+ * legal filer shares one. journal_lines.amount is stored in the line's
+ * subsidiary functional currency, so summing (and thresholding) under any
+ * other label mixes unlike units — an unscoped filing across several
+ * functional currencies is refused with a scope-per-subsidiary remedy rather
+ * than translated silently: there is no declared rate basis on this boundary,
+ * and inventing one would certify numbers nobody chose. Thresholds evaluate
+ * in the resolved currency.
+ */
+export async function resolveInformationReturnCurrency(args: {
+  orgId: string;
+  subsidiaryId?: string | null;
+  runner?: Pick<typeof db, "execute">;
+}): Promise<string> {
+  const runner = args.runner ?? db;
+  if (args.subsidiaryId) {
+    const sub = (await runner.execute<{ base_currency: string }>(sql`
+      select base_currency from subsidiaries
+       where id = ${args.subsidiaryId} and org_id = ${args.orgId} and is_active`));
+    const row = sub.rows[0];
+    if (!row) throw new InformationReturnError("information return subsidiary not found", 404);
+    return row.base_currency;
+  }
+  const mixed = (await runner.execute<{ base_currency: string }>(sql`
+    select distinct base_currency from subsidiaries
+     where org_id = ${args.orgId} and is_active and not is_elimination`));
+  const currencies = mixed.rows.map((row) => row.base_currency);
+  if (currencies.length === 1) return currencies[0]!;
+  if (currencies.length === 0) {
+    // Degenerate org with no active legal filer: the org base is the only
+    // denomination available, and every amount still sums in one currency.
+    const org = (await runner.execute<{ base_currency: string }>(sql`
+      select base_currency from orgs where id = ${args.orgId}`));
+    const base = org.rows[0]?.base_currency;
+    if (!base) throw new InformationReturnError("organization has no base currency");
+    return base;
+  }
+  throw new InformationReturnError(
+    `this filing spans functional currencies (${[...currencies].sort().join(" and ")}) — open one filing per subsidiary instead of an org-wide filing that would add unlike units`,
+  );
+}
+
 /** Open (or create) this year's filing. Idempotent per year/form/entity. */
 export async function ensureFiling(args: {
   orgId: string;
   taxYear: number;
   formType: FormType;
   subsidiaryId?: string | null;
-  currency: string;
+  /**
+   * Explicit denomination override (tests, backfill). Omitted in production:
+   * the route resolves the subsidiary-functional currency through
+   * {@link resolveInformationReturnCurrency}, so the label always matches the
+   * summed units.
+   */
+  currency?: string;
   threshold?: string;
   actorId: string;
   runner?: Pick<typeof db, "execute">;
@@ -1111,6 +1161,9 @@ export async function ensureFiling(args: {
   const runner = args.runner ?? db;
   const form = formDefinitionForYear(args.formType, args.taxYear);
   const subsidiaryId = args.subsidiaryId ?? null;
+  const currency =
+    args.currency ??
+    (await resolveInformationReturnCurrency({ orgId: args.orgId, subsidiaryId, runner }));
   const existing = (await runner.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
            status, threshold, currency
@@ -1123,7 +1176,7 @@ export async function ensureFiling(args: {
     insert into information_return_filings
       (org_id, tax_year, form_type, subsidiary_id, status, threshold, currency, created_by, updated_by)
     values (${args.orgId}, ${args.taxYear}, ${args.formType}, ${subsidiaryId}, 'draft',
-            ${args.threshold ?? form.defaultThreshold}, ${args.currency}, ${args.actorId}, ${args.actorId})
+            ${args.threshold ?? form.defaultThreshold}, ${currency}, ${args.actorId}, ${args.actorId})
     returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
               status, threshold, currency
   `));

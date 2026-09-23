@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { sum } from "../money/money.ts";
+import { db } from "../platform/db.ts";
 import {
   allocatePaymentToBoxes,
   allocateProportionally,
@@ -11,7 +12,9 @@ import {
   formDefinition,
   formDefinitionForYear,
   INFORMATION_RETURN_FORMS,
+  InformationReturnError,
   recipientExceptions,
+  resolveInformationReturnCurrency,
   statutoryFilingThreshold,
   summarizeRecipient,
   type PaymentTrace,
@@ -628,4 +631,66 @@ test("every form's default box exists and box keys are unique", () => {
 
 test("an unknown form is refused rather than defaulted", () => {
   assert.throws(() => formDefinition("1099-K"), /unknown information return form/);
+});
+
+// --- filing currency -------------------------------------------------------
+
+/** Queue-backed executor: each execute answers the next canned row set. */
+function stubRunner(rowSets: Record<string, unknown>[][]) {
+  const queue = [...rowSets];
+  return {
+    execute: (async () => ({ rows: queue.shift() ?? [] })) as unknown as Pick<
+      typeof db,
+      "execute"
+    >["execute"],
+  };
+}
+
+test("a subsidiary filing resolves that subsidiary's functional currency", async () => {
+  const currency = await resolveInformationReturnCurrency({
+    orgId: "org-1",
+    subsidiaryId: "sub-eur",
+    runner: stubRunner([[{ base_currency: "EUR" }]]),
+  });
+  assert.equal(currency, "EUR");
+});
+
+test("a filing for an unknown subsidiary is refused, not root-scoped", async () => {
+  await assert.rejects(
+    resolveInformationReturnCurrency({ orgId: "org-1", subsidiaryId: "sub-nope", runner: stubRunner([[]]) }),
+    (error: unknown) => error instanceof InformationReturnError && error.status === 404,
+  );
+});
+
+test("an org-wide filing in one functional currency resolves it", async () => {
+  const currency = await resolveInformationReturnCurrency({
+    orgId: "org-1",
+    runner: stubRunner([[{ base_currency: "CAD" }]]),
+  });
+  assert.equal(currency, "CAD");
+});
+
+test("an org-wide filing across unlike currencies is refused with the per-subsidiary remedy", async () => {
+  await assert.rejects(
+    resolveInformationReturnCurrency({
+      orgId: "org-1",
+      runner: stubRunner([[{ base_currency: "USD" }, { base_currency: "EUR" }]]),
+    }),
+    (error: unknown) =>
+      error instanceof InformationReturnError &&
+      /spans functional currencies \(EUR and USD\)/.test(error.message) &&
+      /one filing per subsidiary/.test(error.message),
+  );
+});
+
+test("an org with no active filer falls back to the org base, never a guess", async () => {
+  const currency = await resolveInformationReturnCurrency({
+    orgId: "org-1",
+    runner: stubRunner([[], [{ base_currency: "USD" }]]),
+  });
+  assert.equal(currency, "USD");
+  await assert.rejects(
+    resolveInformationReturnCurrency({ orgId: "org-1", runner: stubRunner([[], []]) }),
+    /no base currency/,
+  );
 });
