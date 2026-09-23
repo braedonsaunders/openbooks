@@ -33,6 +33,14 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (pct !== null && pct !== undefined && (typeof pct !== 'number' || !Number.isFinite(pct) || pct < 0 || pct > 100)) {
     return NextResponse.json({ error: 'percentComplete must be 0–100 or null' }, { status: 422 })
   }
+  // An omitted percentComplete with a valid expected token would otherwise
+  // fall through to the write below as undefined and persist a JSON null —
+  // silently clearing an existing override and resyncing revenue on a value
+  // nobody typed. Clearing is an explicit null with intent; a missing key is
+  // a client contract error, refused before any read or write runs.
+  if (!('percentComplete' in body) || pct === undefined) {
+    return NextResponse.json({ error: 'percentComplete is required; pass null to clear the override' }, { status: 422 })
+  }
   // Mandatory compare-and-swap evidence on the single scalar being set: two
   // tabs saving absolute overrides must 409 instead of silently re-basing
   // revenue recognition on a stale number. The client sends the override
@@ -78,7 +86,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const updated = (await tx.execute<{ id: string }>(sql`
       update projects
          set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{percentCompleteOverride}',
-                                ${pct === null || pct === undefined ? sql`'null'::jsonb` : sql`to_jsonb(${pct}::numeric)`}),
+                                ${pct === null ? sql`'null'::jsonb` : sql`to_jsonb(${pct}::numeric)`}),
              updated_by = ${gate.user.id}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
