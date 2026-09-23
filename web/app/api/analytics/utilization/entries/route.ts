@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { mul, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
@@ -23,8 +24,8 @@ export async function GET(req: Request) {
   const item = url.searchParams.get("item");
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
-  if ((!employee && !item) || !from || !to) {
-    return NextResponse.json({ error: "employee or item, plus from/to required" }, { status: 400 });
+  if ((!employee && !item) || !isIsoCalendarDate(from) || !isIsoCalendarDate(to) || from > to) {
+    return NextResponse.json({ error: "employee or item, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
   }
 
   const filter = employee ? sql`t.employee_party_id = ${employee}` : sql`t.item_id = ${item}`;
