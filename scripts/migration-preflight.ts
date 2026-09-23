@@ -316,21 +316,21 @@ export async function evaluatePreflight(
   let leastPrivilege = false;
   try {
     await client.query(`set local statement_timeout = ${options.statementTimeoutMs}`);
+    await client.query("set local app.bypass_rls = 'on'");
     if (options.leastPrivilegeRole) {
       if (!/^[a-z_][a-z0-9_]{0,62}$/.test(options.leastPrivilegeRole)) {
         throw new Error(
           `[bootstrap] refusing to assume a least-privilege role with an unexpected name`,
         );
       }
-      // A failed SET ROLE aborts the whole transaction, so the attempt runs
-      // inside a savepoint: the fallback continues in a clean transaction
-      // instead of tripping "current transaction is aborted" on every
-      // statement after it.
+      // A failed statement aborts the whole transaction, so the role attempt
+      // AND the preflight under it run inside one savepoint. Rolling back to
+      // it undoes the SET ROLE as well, and the fallback continues in a clean
+      // transaction instead of tripping "current transaction is aborted".
       await client.query("savepoint preflight_least_privilege");
       try {
         await client.query(`set local role ${options.leastPrivilegeRole}`);
         leastPrivilege = true;
-        await client.query("release savepoint preflight_least_privilege");
       } catch (error) {
         await client.query("rollback to savepoint preflight_least_privilege");
         const code = (error as { code?: unknown } | null)?.code;
@@ -341,22 +341,34 @@ export async function evaluatePreflight(
         leastPrivilege = false;
       }
     }
-    await client.query("set local app.bypass_rls = 'on'");
-    let result: pg.QueryResult<Record<string, unknown>>;
-    try {
-      result = await client.query<Record<string, unknown>>(preflightSql);
-    } catch (error) {
-      if (isDeferredPreflightError(error)) {
-        const raw = error instanceof Error ? error.message : String(error);
-        return { status: "deferred", reason: raw, leastPrivilege };
+    const run = async (): Promise<PreflightEvaluation> => {
+      try {
+        const result = await client.query<Record<string, unknown>>(preflightSql);
+        return { status: "ready", findings: validateFindingRows(migration, ordinal, result.rows), leastPrivilege };
+      } catch (error) {
+        if (isDeferredPreflightError(error)) {
+          const raw = error instanceof Error ? error.message : String(error);
+          return { status: "deferred", reason: raw, leastPrivilege };
+        }
+        throw error;
       }
-      throw error;
-    }
-    return {
-      status: "ready",
-      findings: validateFindingRows(migration, ordinal, result.rows),
-      leastPrivilege,
     };
+    try {
+      return await run();
+    } catch (error) {
+      // The read role lacks a grant this preflight needs. That is expected on
+      // an install still running an OLDER release: grants for objects its
+      // version never exposed to the read role converge only when the new
+      // bootstrap runs, which is exactly what the check runs BEFORE. So a
+      // denial as the read role is not drift. The check falls back to the
+      // connecting role (still READ ONLY, still rolled back) and reports that
+      // least privilege was not proven for this preflight.
+      const code = (error as { code?: unknown } | null)?.code;
+      if (!(leastPrivilege && code === "42501")) throw error;
+      await client.query("rollback to savepoint preflight_least_privilege");
+      leastPrivilege = false;
+      return await run();
+    }
   } finally {
     await client.query("rollback").catch(() => {});
   }

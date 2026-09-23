@@ -1752,13 +1752,6 @@ async function evaluatePendingMigrations(
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const code = (error as { code?: unknown } | null)?.code;
-        if (options.leastPrivilegeRole && code === "42501") {
-          throw new Error(
-            `[bootstrap] upgrade check as ${options.leastPrivilegeRole} was denied access: ${message}; `
-              + `the install's grants have drifted — run bootstrap once to converge them, then re-run upgrade:check`,
-          );
-        }
         throw new Error(
           `[bootstrap] migration preflight ${item.filename} failed to evaluate: ${message}`,
         );
@@ -2889,7 +2882,11 @@ async function main(): Promise<void> {
     try {
       code = await runUpgradeCheckMain(json);
     } catch (error) {
-      console.error(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      // A caller asked for machine output, so it gets machine output, error
+      // included. A bare crash leaves it nothing to parse.
+      if (json) console.log(JSON.stringify({ error: message }));
       code = 1;
     } finally {
       await pool.end().catch(() => {});

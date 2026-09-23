@@ -301,14 +301,26 @@ async function appliedFilenames(dbUrl) {
  *   4. then the normal phases run.
  */
 async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }) {
-  const checkJson = async () => {
-    const stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json"], {
-      cwd: CANDIDATE,
-    });
-    return lastJsonLine("preflight", stdout);
+  // `--check` exits 1 whenever it reports a refuse finding, which is exactly
+  // what an edge-refusals dataset expects. Exit status alone therefore can't
+  // mean "failed": the JSON result can. An `error` field (the check could not
+  // run) refuses by name, and the report is written either way.
+  const checkJson = async (reportName) => {
+    let stdout;
+    try {
+      stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json"], {
+        cwd: CANDIDATE,
+      });
+    } catch (error) {
+      if (!(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string") throw error;
+      stdout = error.details.stdout;
+    }
+    const result = lastJsonLine("preflight", stdout);
+    writeFileSync(join(reportDir, reportName), `${JSON.stringify(result, null, 2)}\n`);
+    if (typeof result.error === "string") throw new PhaseRefusal("preflight", `upgrade check could not run: ${result.error}`);
+    return result;
   };
-  const first = await checkJson();
-  writeFileSync(join(reportDir, "preflight.json"), `${JSON.stringify(first, null, 2)}\n`);
+  const first = await checkJson("preflight.json");
   const summary = { expected: false, refuses: [], notices: [] };
   const expected = dataset.expectFindings ?? null;
   if (!expected) {
@@ -369,8 +381,7 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
       await client.query(sqlText);
     });
   }
-  const second = await checkJson();
-  writeFileSync(join(reportDir, "preflight-after-remedies.json"), `${JSON.stringify(second, null, 2)}\n`);
+  const second = await checkJson("preflight-after-remedies.json");
   const stillRefusing = refuseFindings(second);
   if (stillRefusing.length > 0) {
     throw new PhaseRefusal("preflight", `remedies did not clear the check: ${refuseCodes(stillRefusing).join(", ")}`);
