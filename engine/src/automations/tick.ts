@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
@@ -238,34 +238,44 @@ async function fireDateRelative(
   const matchDate = trigger.direction === "before"
     ? addDaysCivil(today, trigger.offsetDays)
     : addDaysCivil(today, -trigger.offsetDays);
-  const rows = await db.execute<{ id: string }>(sql`
-    select id from ${sql.identifier(source.table)}
-     where org_id = ${automation.orgId} and ${sql.identifier(trigger.dateField)} = ${matchDate}::date
-     limit 200
-  `);
   const outcome = { fired: 0, failed: 0, errors: [] as string[] };
   const actorId = await tickActorFor(automation);
-  for (const row of rows.rows) {
-    try {
-      const result = await executeAutomation({
-        orgId: automation.orgId,
-        actorId,
-        automationId: automation.id,
-        subjectEntity: source.entity,
-        subjectId: row.id,
-        triggerPayload: { kind: "date_relative", matchDate },
-        fingerprint: `date_relative:${matchDate}:${row.id}`,
-      });
-      // A failed subject keeps its run row but is not counted fired.
-      // The loop continues past failures so every subject is attempted
-      // and counted on its own — previously the first throw aborted the
-      // scan and discarded even the subjects that had already fired.
-      if (result.status === "failed") outcome.failed += 1;
-      else outcome.fired += 1;
-    } catch (e) {
-      outcome.failed += 1;
-      outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
+  // Keyset pages over the whole match set in id order: a fixed LIMIT with
+  // no cursor visited only the first 200 rows and starved the rest
+  // forever. Page size stays 200; the loop ends on an empty page.
+  let lastId: string | null = null;
+  for (;;) {
+    const cursor: SQL = lastId ? sql`and id > ${lastId}` : sql``;
+    const rows = await db.execute<{ id: string }>(sql`
+      select id from ${sql.identifier(source.table)}
+       where org_id = ${automation.orgId} and ${sql.identifier(trigger.dateField)} = ${matchDate}::date
+         ${cursor}
+       order by id limit 200
+    `);
+    if (rows.rows.length === 0) break;
+    for (const row of rows.rows) {
+      try {
+        const result = await executeAutomation({
+          orgId: automation.orgId,
+          actorId,
+          automationId: automation.id,
+          subjectEntity: source.entity,
+          subjectId: row.id,
+          triggerPayload: { kind: "date_relative", matchDate },
+          fingerprint: `date_relative:${matchDate}:${row.id}`,
+        });
+        // A failed subject keeps its run row but is not counted fired.
+        // The loop continues past failures so every subject is attempted
+        // and counted on its own — previously the first throw aborted the
+        // scan and discarded even the subjects that had already fired.
+        if (result.status === "failed") outcome.failed += 1;
+        else outcome.fired += 1;
+      } catch (e) {
+        outcome.failed += 1;
+        outcome.errors.push(`${source.entity} ${row.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
+    lastId = rows.rows[rows.rows.length - 1]!.id;
   }
   return outcome;
 }
