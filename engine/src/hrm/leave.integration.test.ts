@@ -1063,6 +1063,56 @@ test("a department minimum notice binds its workers at file time", { skip: !DB }
   });
 });
 
+test("concurrent approvals cannot spend one entitlement twice", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    await seedFlow(h.org.orgId, h.approverId);
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "8" },
+      effectiveFrom: "2020-01-01",
+      effectiveTo: null,
+    });
+    // Two 8-hour requests on different days against an 8-hour grant: both
+    // file and submit cleanly (nothing is spent until approval), then both
+    // approve at once. Row locks are per request, so only the entitlement
+    // lock plus the approval-time recheck can stop the double spend.
+    const first = await fileLeaveRequest({
+      orgId: h.org.orgId, actorId: h.employeeId, employmentId,
+      leaveTypeId: type.id, startsOn: "2026-09-01", endsOn: "2026-09-01", hours: "8",
+    });
+    const second = await fileLeaveRequest({
+      orgId: h.org.orgId, actorId: h.employeeId, employmentId,
+      leaveTypeId: type.id, startsOn: "2026-09-02", endsOn: "2026-09-02", hours: "8",
+    });
+    await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: first.id });
+    await submitLeaveRequest({ orgId: h.org.orgId, actorId: h.employeeId, requestId: second.id });
+    const gate1 = await gateOf(first.id);
+    const gate2 = await gateOf(second.id);
+    const outcomes = await Promise.allSettled([
+      decideGate({ gateId: gate1.id, decision: "approved", userId: h.approverId, comment: "first concurrent approval" }),
+      decideGate({ gateId: gate2.id, decision: "approved", userId: h.approverId, comment: "second concurrent approval" }),
+    ]);
+    assert.equal(outcomes.filter((o) => o.status === "fulfilled").length, 1, "exactly one concurrent approval lands");
+    assert.equal(outcomes.filter((o) => o.status === "rejected").length, 1, "the loser refuses instead of overspending");
+    const loser = outcomes.find((o) => o.status === "rejected") as PromiseRejectedResult;
+    const message = String(loser.reason?.message ?? "");
+    assert.match(message, /policy time balance is 0 hours but the request needs 8/);
+    assert.doesNotMatch(message, /23P01|exclusion|SQLSTATE/i);
+    const firstRead = await getLeaveRequest({ orgId: h.org.orgId, actorId: h.managerId, requestId: first.id });
+    const secondRead = await getLeaveRequest({ orgId: h.org.orgId, actorId: h.managerId, requestId: second.id });
+    assert.deepEqual(
+      [firstRead.status, secondRead.status].sort(),
+      ["approved", "submitted"],
+      "the winner approves, the loser stays submitted with its gate pending",
+    );
+    const taken = await timeBalanceAsOf(db, h.org.orgId, employmentId, type.id, "2026-12-31");
+    assert.equal(taken.taken, "8", "one entitlement spent once");
+    assert.equal(taken.balance, "0", "no negative balance from the lost race");
+  });
+});
+
 test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);

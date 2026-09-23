@@ -952,6 +952,24 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
     }
     const submitter = await loadApprovalPerson(db, orgId, current.created_by);
     checkApprovalIdentitySeparation({ approver, submitter, subjectWorkerPartyId: subject.workerPartyId });
+    const startsOn = String(current.starts_on).slice(0, 10);
+    if (query.outcome === "approved") {
+      // Serialize decisions against one entitlement: row locks are per
+      // request, so without this two concurrent approvals both read the
+      // pre-approval balance and both commit, spending the entitlement
+      // twice. The lock is transaction-scoped (released on commit or
+      // rollback) and the wait is bounded by the statement timeout.
+      await db.execute(
+        sql`select pg_advisory_xact_lock(hashtextextended(${"leave-balance:" + orgId + ":" + current.employment_id + ":" + current.leave_type_id}, 0))`,
+      );
+      // Re-read the balance under the lock: a decision that landed first
+      // has committed its absences (READ COMMITTED), so the loser sees the
+      // spent entitlement and refuses instead of overspending it. The
+      // request itself is excluded structurally — its absences are written
+      // after this gate, so there is nothing of its own to count.
+      const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
+      await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, String(current.hours));
+    }
     const decided = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
          set status = ${query.outcome}, decided_by = ${actorId}, decided_at = now(),
@@ -967,8 +985,14 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
       await writeApprovalEffects(db, orgId, actorId, decided, subject.workerPartyId);
     } catch (error) {
       // A concurrent approval landing first hits the storage exclusion: name
-      // the overlap instead of leaking a PG exclusion code.
-      if (typeof error === "object" && error !== null && (error as { code?: string }).code === "23P01") {
+      // the overlap instead of leaking a PG exclusion code. db.execute
+      // wraps the PG error in a DrizzleQueryError, so the code rides on
+      // cause — checking only the outer code would drop this refusal.
+      const pgCode =
+        typeof error === "object" && error !== null
+          ? ((error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code)
+          : undefined;
+      if (pgCode === "23P01") {
         throw new LeaveError(
           "REFUSED",
           "another approved request now overlaps this range — reload the calendar and file the non-overlapping days",
