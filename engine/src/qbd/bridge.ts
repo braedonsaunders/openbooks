@@ -215,9 +215,9 @@ export async function authenticateWebConnector(connectionId: string, username: s
     return { ticket: "", companyFile: "nvu" };
   }
   return withBypassContext(async () => {
-    // A successful authentication proves possession: the guessing bucket
-    // starts clean instead of carrying a stale flood count into the window.
-    await db.execute(sql`delete from auth_rate_limit_buckets where bucket_key = ${qbwcGuessBucket(connectionId)}`);
+    // No reset on success: the connector authenticates on every polling
+    // cycle, so clearing the bucket here would hand out a fresh 30 guesses
+    // per legitimate poll. Expiry is by window age only (qbwcGuessesTripped).
     await db.execute(sql`delete from qbd_sessions where expires_at < now() - interval '30 days'`);
     await db.execute(sql`
       update qbd_requests set status = 'queued', session_id = null, sent_at = null, updated_at = now()
