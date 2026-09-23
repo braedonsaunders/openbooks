@@ -388,9 +388,31 @@ export async function reverseAssemblyBuild(
        where org_id = ${orgId} and id = ${input.movementId}
        for update
     `));
-    const build = requested.rows[0];
-    if (!build || build.kind !== "assembly_build") {
+    let build = requested.rows[0];
+    if (!build || (build.kind !== "assembly_build" && build.kind !== "assembly_consume")) {
       throw new InventoryError("assembly build movement not found");
+    }
+    // Either leg of the operation addresses the whole build: the consume
+    // legs, the finished-good layer, and the journal reverse together or not
+    // at all, so a consume leg resolves to its operation's build leg first.
+    if (build.kind === "assembly_consume") {
+      if (!build.journal_entry_id) {
+        throw new InventoryError("assembly consume is missing its source journal");
+      }
+      const operationBuild = (await tx.execute<ReversibleMovement>(sql`
+        select id, org_id, subsidiary_id, item_id, kind, moved_at::text, stock_location_id, lot_id,
+               serial_id, quantity, unit_cost, total_value, journal_entry_id,
+               paired_movement_id, status
+          from inventory_movements
+         where org_id = ${orgId}
+           and journal_entry_id = ${build.journal_entry_id}
+           and kind = 'assembly_build'
+         for update
+      `));
+      if (operationBuild.rows.length !== 1) {
+        throw new InventoryError("assembly build movement not found");
+      }
+      build = operationBuild.rows[0]!;
     }
     if (!build.journal_entry_id) {
       throw new InventoryError("assembly build is missing its source journal");

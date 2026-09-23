@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { adjustInventory, issueInventory, receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
-import { buildAssembly } from "@openbooks/engine/src/inventory/assembly.ts";
+import { buildAssembly, reverseAssemblyBuild } from "@openbooks/engine/src/inventory/assembly.ts";
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
 import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
@@ -79,15 +79,23 @@ export async function POST(req: Request) {
     if (typeof body.memo !== 'string' || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
       return NextResponse.json({ error: 'reversal reason must be between 5 and 500 characters' }, { status: 422 })
     }
-    // The movement's subsidiary lives on the row, not in the request, so
-    // resolve it server-side and fence restricted callers before any unwind.
-    const source = await db.execute<{ subsidiary_id: string | null }>(
-      sql`select subsidiary_id from inventory_movements where id = ${body.movementId} and org_id = ${user.orgId}`,
+    // The movement's subsidiary and kind live on the row, not in the
+    // request, so resolve them server-side and fence restricted callers
+    // before any unwind.
+    const source = await db.execute<{ subsidiary_id: string | null; kind: string | null }>(
+      sql`select subsidiary_id, kind from inventory_movements where id = ${body.movementId} and org_id = ${user.orgId}`,
     )
     const movementSubsidiaryId = source.rows[0]?.subsidiary_id ?? null
     if (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId))) {
       return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
     }
+    // Assembly operations reverse through their own controlled reversal
+    // (consume legs, finished-good layer, and journal as one unit), never
+    // the single-movement path — which refuses them. The dispatch stays
+    // inside this items.reverse-gated, idempotency-wrapped branch, so a
+    // build reversal carries the same authority and replay contract as
+    // every other reversal.
+    const isAssemblyLeg = source.rows[0]?.kind === 'assembly_build' || source.rows[0]?.kind === 'assembly_consume'
     try {
       const { value: res, replayed } = await executeIdempotentInventoryAction(
         user.orgId,
@@ -100,12 +108,16 @@ export async function POST(req: Request) {
             reversalDate: body.date,
             reason: body.memo,
           },
-          execute: () =>
-            reverseInventoryMovement(user.orgId, user.id, {
+          execute: () => {
+            const input = {
               movementId: body.movementId!,
               reversalDate: body.date!,
               reason: body.memo!,
-            }),
+            }
+            return isAssemblyLeg
+              ? reverseAssemblyBuild(user.orgId, user.id, input)
+              : reverseInventoryMovement(user.orgId, user.id, input)
+          },
         },
       )
       return NextResponse.json({ ok: true, replayed, ...res })
