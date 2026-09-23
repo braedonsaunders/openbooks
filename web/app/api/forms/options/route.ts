@@ -2,9 +2,22 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { PARTY_PICKER_KINDS, type PartyPickerKind } from '@openbooks/forms-core'
-import { getAuthz } from '../../../../lib/authz'
+import { can, getAuthz } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
+
+/**
+ * The native read permission guarding each option source — the same gate
+ * the source's own list route applies, so this picker cannot disclose
+ * records its caller is not allowed to list.
+ */
+function requiredPermission(source: string | null, table: string | null): string | null {
+  if (source === 'parties' || table === 'parties') return 'parties.read'
+  if (source === 'gl_accounts' || table === 'accounts') return 'gl.read'
+  if (table === 'projects') return 'projects.read'
+  if (table === 'items') return 'items.read'
+  return null
+}
 
 export const runtime = 'nodejs'
 
@@ -23,6 +36,15 @@ export async function GET(req: Request) {
   const table = source === 'reference' ? url.searchParams.get('table') : null
   if (source === 'reference' && (!table || !['parties', 'projects', 'accounts', 'items'].includes(table))) {
     return NextResponse.json({ error: 'invalid reference table' }, { status: 400 })
+  }
+  // Authentication alone grants nothing: each source demands the same read
+  // permission its native list route requires.
+  const permission = requiredPermission(source, table)
+  if (permission && !can(authz, permission)) {
+    return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+  }
+  if (!permission) {
+    return NextResponse.json({ error: 'unknown source' }, { status: 400 })
   }
   if (table === 'projects') {
     const denied = await guardProjectsFeature(orgId)
