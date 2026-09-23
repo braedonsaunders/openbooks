@@ -1060,18 +1060,24 @@ export function groupRemittanceRows(input: {
       existingBills: [],
     };
     group.hasUnknownFilingAccount = group.hasUnknownFilingAccount || row.filingUnknown;
-    // Rows arrive per (component, province); provinces that resolve to the
-    // SAME destination fold back into one component line, so a bill never
-    // carries two lines for one component.
+    // Rows arrive per (component, province, historical liability account).
+    // Provinces that resolve to the SAME destination fold back together, but
+    // the fold NEVER merges two historical liability accounts: each account
+    // keeps its own line (labelled component + account) so the bill debits
+    // the account that was credited, and one account is never over-cleared
+    // while another stays payable.
+    const rowAccount = input.resolveAccount(row);
     const existing = group.components.find(
-      (component) => component.componentId === row.component_id && component.kind === row.kind,
+      (component) => component.componentId === row.component_id
+        && component.kind === row.kind
+        && component.liabilityAccountId === rowAccount,
     );
     if (existing) {
       existing.amount = add(existing.amount, row.amount);
     } else {
       group.components.push({
         componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
-        systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
+        systemKey: row.system_key, liabilityAccountId: rowAccount,
         accountLabel: null, amount: row.amount,
         // Resolved after the fold with the group's stated currency: in a
         // translated scope the consolidated amount is presentation units.
@@ -1092,15 +1098,20 @@ export function groupRemittanceRows(input: {
       const slice = slices.get(row.subsidiary_id) ?? {
         components: [], total: "0", currencies: new Set<string>(),
       };
+      // The entity slice folds by the same identity: one line per
+      // (component, historical liability account), so the bill writes one
+      // document line per credited account and each clears exactly.
       const sliceExisting = slice.components.find(
-        (component) => component.componentId === row.component_id && component.kind === row.kind,
+        (component) => component.componentId === row.component_id
+          && component.kind === row.kind
+          && component.liabilityAccountId === rowAccount,
       );
       if (sliceExisting) {
         sliceExisting.amount = add(sliceExisting.amount, row.sliceAmount);
       } else {
         slice.components.push({
           componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
-          systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
+          systemKey: row.system_key, liabilityAccountId: rowAccount,
           accountLabel: null, amount: row.sliceAmount,
           // Slice currency resolves after the fold, beside the slice total.
           currency: "",

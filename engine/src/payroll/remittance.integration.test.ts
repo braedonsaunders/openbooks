@@ -952,3 +952,188 @@ test(
     }
   },
 );
+
+test(
+  "a liability account change across runs bills each historical account separately",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const liabilityA = await account("2310", "CRA payable (old)", "liability_current");
+      const liabilityB = await account("2311", "CRA payable (new)", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
+        values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
+        on conflict do nothing`);
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
+            netPayAccountId: netPayable, cppPayableAccountId: liabilityA,
+            eiPayableAccountId: liabilityA, taxPayableAccountId: liabilityA,
+            vacationPayableAccountId: vacationPayable, wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      // Scratch orgs open July only; the second run pays in August.
+      const calendar = (await db.execute<{ id: string }>(sql`
+        select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} limit 1`)).rows[0]!.id;
+      await db.execute(sql`
+        insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on,
+                                        is_adjustment, fiscal_calendar_id)
+        values (${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calendar})`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      const stampSetup = async (liability: string) => {
+        await db.execute(sql`
+          update pay_components set remittance_party_id = ${org.vendorId},
+                 liability_account_id = ${liability}
+           where org_id = ${org.orgId} and country = 'CA'
+             and kind in ('deduction', 'employer_contribution')`);
+      };
+      await stampSetup(liabilityA);
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Liability Larry', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '104000', 'year', '2080', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+      const postRun = async (periodStart: string, periodEnd: string) => {
+        const run = await createPayRun({
+          orgId: org.orgId, actorId, payScheduleId: scheduleId, periodStart, periodEnd,
+        });
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        await db.execute(sql`update documents set status = 'approved' where id = ${run.documentId}`);
+        await postDocument(run.documentId, {
+          control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+        });
+      };
+      await postRun("2026-07-05", "2026-07-18");
+      // Setup changes between runs: August accrues to the new account.
+      await stampSetup(liabilityB);
+      await postRun("2026-08-02", "2026-08-15");
+
+      const july = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01", to: "2026-07-31",
+      });
+      const august = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-08-01", to: "2026-08-31",
+      });
+      assert.equal(july.length, 1);
+      assert.equal(august.length, 1);
+
+      // The combined window keeps one line per historical account — never
+      // one $150 line debiting the first account.
+      const combined = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01", to: "2026-08-31",
+      });
+      assert.equal(combined.length, 1);
+      const group = combined[0]!;
+      assert.equal(group.partyId, org.vendorId);
+      // Several components accrue to each historical account, so the split
+      // is asserted on per-account sums: July's total sits on A, August's on
+      // B, and no component line mixes the two.
+      const sumByAccount = new Map<string, string>();
+      for (const component of group.components) {
+        assert.ok(
+          component.liabilityAccountId === liabilityA || component.liabilityAccountId === liabilityB,
+          `component ${component.code} carries an unexpected liability account`,
+        );
+        sumByAccount.set(
+          component.liabilityAccountId!,
+          add(sumByAccount.get(component.liabilityAccountId!) ?? "0", component.amount),
+        );
+      }
+      assert.equal(sumByAccount.size, 2);
+      assert.equal(cmp(sumByAccount.get(liabilityA)!, july[0]!.total), 0);
+      assert.equal(cmp(sumByAccount.get(liabilityB)!, august[0]!.total), 0);
+
+      const bill = await createRemittanceBill(org.orgId, actorId, {
+        partyId: org.vendorId, from: "2026-07-01", to: "2026-08-31",
+      });
+      const billLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+        select account_id::text as account_id, amount::text as amount from document_lines
+         where org_id = ${org.orgId} and document_id = ${bill.documentId}`)).rows;
+      const billedByAccount = new Map<string, string>();
+      for (const line of billLines) {
+        billedByAccount.set(
+          line.account_id,
+          add(billedByAccount.get(line.account_id) ?? "0", line.amount),
+        );
+      }
+      assert.equal(billedByAccount.size, 2);
+      assert.equal(cmp(billedByAccount.get(liabilityA)!, july[0]!.total), 0);
+      assert.equal(cmp(billedByAccount.get(liabilityB)!, august[0]!.total), 0);
+
+      // After posting, each historical account is cleared exactly: actual GL
+      // balances, not bill-line echoes.
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, actorId);
+      await postDocument(bill.documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const balances = (await db.execute<{ account_id: string; balance: string }>(sql`
+        select jl.account_id::text as account_id, sum(jl.amount)::text as balance
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id
+         where jl.org_id = ${org.orgId} and je.status = 'posted'
+           and jl.account_id in (${liabilityA}, ${liabilityB})
+         group by jl.account_id`)).rows;
+      // After posting, each historical account is cleared of exactly what the
+      // bill remitted: actual GL balances, not bill-line echoes. The vacation
+      // accrual is an internal accrual — never remitted, but posted to the
+      // same liability account — so it legitimately remains payable: the
+      // balance must equal precisely that remainder, which the query below
+      // pins independently from the committed stub lines.
+      const vacationOwed = (await db.execute<{ account_id: string; owed: string }>(sql`
+        select l.liability_account_id::text as account_id, sum(l.amount)::text as owed
+          from pay_stub_lines l
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+         where l.org_id = ${org.orgId} and c.system_key = 'vacation_accrual'
+           and l.liability_account_id in (${liabilityA}, ${liabilityB})
+         group by l.liability_account_id`)).rows;
+      assert.equal(balances.length, 2);
+      assert.equal(vacationOwed.length, 2);
+      for (const row of balances) {
+        const owed = vacationOwed.find((v) => v.account_id === row.account_id)!.owed;
+        assert.notEqual(cmp(owed, "0"), 0, "the test proves a real remainder, not a vacuous zero");
+        assert.equal(
+          cmp(add(row.balance, owed), "0"),
+          0,
+          `liability account does not clear exactly: balance ${row.balance} with ${owed} still owed`,
+        );
+      }
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
