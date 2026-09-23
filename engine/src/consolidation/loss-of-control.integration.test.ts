@@ -694,6 +694,76 @@ test(
     }),
 );
 test(
+  "L4: an OCI release from a non-reserve account refuses before posting",
+  { skip: !DB },
+  async () =>
+    fixture(async (f) => {
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, {
+            oci: [
+              {
+                accountId: f.org.accounts.bank,
+                balance: "-20",
+                treatment: "profit_loss",
+                destinationAccountId: f.accounts.gain!,
+                description: "Bank balance labelled OCI",
+              },
+            ],
+          }),
+        ),
+        (e) => /must be an equity reserve account/.test(deepest(e)),
+      );
+      assert.equal(
+        (
+          await db.execute(
+            sql`select id from consolidation_control_losses where org_id=${f.org.orgId}`,
+          )
+        ).rows.length,
+        0,
+      );
+    }),
+);
+test(
+  "L4: an OCI release above the reserve refuses, a covered release proposes",
+  { skip: !DB },
+  async () =>
+    fixture(async (f) => {
+      await post(f, f.child, "2026-07-10", [
+        { accountId: f.accounts.cta!, amount: "-200" },
+        { accountId: f.org.accounts.bank, amount: "200" },
+      ]);
+      const release = (balance: string) => ({
+        accountId: f.accounts.cta!,
+        balance,
+        treatment: "profit_loss" as const,
+        destinationAccountId: f.accounts.gain!,
+        description: "CTA release",
+      });
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, { oci: [release("-500")] }),
+        ),
+        (e) => /at most the remaining reserve/.test(deepest(e)),
+      );
+      assert.ok(
+        await proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, { oci: [release("-100")] }),
+        ),
+        "a release within the ledger-backed reserve proposes",
+      );
+    }),
+);
+test(
   "L1: a proposal using another family's account refuses by name",
   { skip: !DB },
   async () =>
