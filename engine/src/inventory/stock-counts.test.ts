@@ -22,6 +22,20 @@ test("variance is counted minus expected, never float math", () => {
   assert.equal(countVariance("0.3", "0.1"), "0.2000");
 });
 
+test("variance refuses a negative counted quantity with a named InventoryError", () => {
+  // A physical count is never negative: -1 or -0.0001 must refuse at the
+  // engine boundary, never post as a negative variance. Zero stays legal.
+  for (const counted of ["-1", "-0.0001"]) {
+    assert.throws(() => countVariance(counted, "10"), (e: unknown) => {
+      assert.ok(e instanceof InventoryError);
+      assert.match((e as Error).message, /counted quantity cannot be negative/i);
+      assert.match((e as Error).message, /zero or more/i);
+      return true;
+    });
+  }
+  assert.equal(countVariance("0", "10"), "-10.0000");
+});
+
 test("variance refuses junk with a named InventoryError, not a bare Error", () => {
   assert.throws(() => countVariance("twelve", "8"), (e: unknown) => {
     assert.ok(e instanceof InventoryError);

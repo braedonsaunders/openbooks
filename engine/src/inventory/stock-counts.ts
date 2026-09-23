@@ -20,6 +20,20 @@ import { getOnHandWith, lockInventoryPosition, periodForDate, persistReceiptMone
 const parseCountQuantity = persistReceiptMoney;
 
 /**
+ * A physical count is never negative: accepting -1 would review and post a
+ * negative variance, and with allow_negative_inventory the position itself
+ * could go negative while the count reads posted. Refuse at the engine
+ * boundary (record AND variance math), with storage as the backstop (0299).
+ */
+function assertCountedNonNegative(counted: string): void {
+  if (cmp(counted, "0") < 0) {
+    throw new InventoryError(
+      "counted quantity cannot be negative — record what was physically on hand (zero or more)",
+    );
+  }
+}
+
+/**
  * Count-basis on-hand for one stock-count line: the SAME layer math as every
  * other reader (lot/serial selection included), scoped to the count's legal
  * entity and, for lot-tracked items, to the line's lot. The lifecycle
@@ -121,6 +135,7 @@ export function assertCountTransition(from: StockCountStatus, to: StockCountStat
 /** Variance is counted − expected, in exact decimal arithmetic (never floats). */
 export function countVariance(countedQuantity: string, expectedQuantity: string): string {
   const counted = parseCountQuantity(countedQuantity, "counted quantity");
+  assertCountedNonNegative(counted);
   const expected = parseCountQuantity(expectedQuantity, "expected quantity");
   return add(counted, neg(expected));
 }
@@ -472,6 +487,7 @@ export async function recordCountedQuantity(
   input: { countId: string; lineId: string; countedQuantity: string },
 ): Promise<{ lineId: string; variance: string }> {
   const counted = parseCountQuantity(input.countedQuantity, "counted quantity");
+  assertCountedNonNegative(counted);
   return db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, input.countId, true);
