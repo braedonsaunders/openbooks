@@ -122,7 +122,11 @@ export async function convertApplicationOrder(
   if (!allowed.some((target) => target.kind === input.targetKind)) {
     throw invalidInput(`Cannot convert a ${sourceKind} into ${input.targetKind}`);
   }
-  if (input.expectedUpdatedAt !== undefined && !isDocumentRevisionToken(input.expectedUpdatedAt)) {
+  // The revision fence is required, not optional: converting from a stale
+  // view must never create the downstream document. The UI route already
+  // refuses a missing token with the same 409; v1 answers invalid_input
+  // here before any idempotency claim or write.
+  if (!isDocumentRevisionToken(input.expectedUpdatedAt)) {
     throw invalidInput("expectedUpdatedAt must be the document revision token from GET");
   }
   const outcome = await executeIdempotent({
@@ -132,7 +136,7 @@ export async function convertApplicationOrder(
     request: {
       documentId: input.documentId,
       targetKind: input.targetKind,
-      expectedUpdatedAt: input.expectedUpdatedAt ?? null,
+      expectedUpdatedAt: input.expectedUpdatedAt,
       creditOverrideReason: input.creditOverrideReason ?? null,
     },
     execute: async () => {
