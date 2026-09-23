@@ -25,6 +25,7 @@ import {
 } from "./leave.ts";
 import {
   getLeaveRequest,
+  listLeaveFilingEmploymentOptions,
   listOrgLeaveRequests,
   myLeaveRequests,
   timeBalanceAsOf,
@@ -1215,5 +1216,93 @@ test("carryover is earned under the prior-year policy, not the successor", { ski
     assert.equal(june.earned, "120");
     assert.equal(june.carried, "40");
     assert.equal(june.balance, "160");
+  });
+});
+
+test("OM-11: manager on-behalf filing succeeds for a managed employment and refuses an unmanaged one", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty, from: "2020-01-01" });
+    const { employmentId: otherEmploymentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { from: "2020-01-01" });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id);
+
+    // The on-behalf picker offers the managed employment through the same
+    // grant-plus-scope predicate the filing gate enforces — the drawer can
+    // never offer an employment the filing refusal would reject.
+    const offered = await listLeaveFilingEmploymentOptions({ orgId: h.org.orgId, actorId: h.managerId });
+    const offeredIds = offered.map((option) => option.employmentId);
+    assert.ok(offeredIds.includes(employmentId), "the picker offers the managed employment");
+    const partyName = (await db.execute<{ display_name: string }>(sql`
+      select display_name from parties where id = ${workerParty} and org_id = ${h.org.orgId}
+    `)).rows[0]!.display_name;
+    const offer = offered.find((option) => option.employmentId === employmentId)!;
+    assert.ok(offer.label.startsWith(partyName), `the picker names the target employee, got ${offer.label}`);
+
+    // A filer without the manage grant cannot even list — the picker's gate
+    // is the filing gate's predicate, never a redefined check.
+    await assert.rejects(
+      listLeaveFilingEmploymentOptions({ orgId: h.org.orgId, actorId: h.employeeId }),
+      (error: unknown) => error instanceof HrmAuthorizationError && /hrm\.leave\.manage/.test(error.message),
+    );
+
+    const filed = await fileLeaveRequest({
+      orgId: h.org.orgId, actorId: h.managerId, employmentId,
+      leaveTypeId: type.id, startsOn: "2026-10-20", endsOn: "2026-10-21", hours: "8",
+      reason: "covering the ward", onBehalf: true,
+    });
+    assert.equal(filed.status, "draft");
+    // The audit records actor + target on the stored row — proof read back
+    // from storage, never from the service's own return value.
+    const stored = (await db.execute<{ employment_id: string; created_by: string; reason: string | null }>(sql`
+      select employment_id::text as employment_id, created_by::text as created_by, reason
+        from hrm_leave_requests where id = ${filed.id} and org_id = ${h.org.orgId}
+    `)).rows[0]!;
+    assert.equal(stored.employment_id, employmentId, "the request files against the target employment");
+    assert.equal(stored.created_by, h.managerId, "the request records the managing actor as filer");
+    assert.equal(stored.reason, "covering the ward");
+
+    // Self-service filing for another worker's employment still refuses by
+    // name, naming the manage remedy — the unchanged own-employment shape.
+    await assert.rejects(
+      fileLeaveRequest({
+        orgId: h.org.orgId, actorId: h.employeeId, employmentId: otherEmploymentId,
+        leaveTypeId: type.id, startsOn: "2026-10-20", endsOn: "2026-10-21", hours: "8",
+      }),
+      (error: unknown) =>
+        error instanceof HrmAuthorizationError &&
+        /only against your own employment/.test(error.message) &&
+        /hrm\.leave\.manage/.test(error.message),
+    );
+
+    // Restrict the manager to the root subsidiary: the child employment is
+    // unmanaged — absent from the picker and refused by name at filing.
+    const childSubsidiaryId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${childSubsidiaryId}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Child entity', base_currency, country
+        from subsidiaries where id = ${h.org.subsidiaryId} and org_id = ${h.org.orgId}`);
+    const { employmentId: childEmploymentId } = await seedEmployment(h.org.orgId, childSubsidiaryId, { from: "2020-01-01" });
+    await db.execute(sql`
+      update app_roles
+         set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [h.org.subsidiaryId] })}::jsonb
+       where org_id = ${h.org.orgId} and key = 'leave_manager'`);
+    const offeredAfter = await listLeaveFilingEmploymentOptions({ orgId: h.org.orgId, actorId: h.managerId });
+    const offeredAfterIds = offeredAfter.map((option) => option.employmentId);
+    assert.ok(offeredAfterIds.includes(employmentId), "the in-scope employment stays offered");
+    assert.ok(!offeredAfterIds.includes(childEmploymentId), "the out-of-scope employment leaves the picker");
+    await assert.rejects(
+      fileLeaveRequest({
+        orgId: h.org.orgId, actorId: h.managerId, employmentId: childEmploymentId,
+        leaveTypeId: type.id, startsOn: "2026-10-20", endsOn: "2026-10-21", hours: "8",
+        reason: "covering the ward", onBehalf: true,
+      }),
+      (error: unknown) => error instanceof HrmAuthorizationError && /not visible in this organization/.test(error.message),
+    );
+    const childDrafts = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_leave_requests
+       where org_id = ${h.org.orgId} and employment_id = ${childEmploymentId}
+    `)).rows[0]!.n;
+    assert.equal(childDrafts, 0, "a refused on-behalf filing leaves no rows behind");
   });
 });

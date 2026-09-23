@@ -201,6 +201,18 @@ test("POST files a draft through the real body parser", async () => {
   });
 });
 
+test("POST forwards the manager on-behalf flag to the engine", async () => {
+  reset();
+  const res = await collectionRoute!.POST(
+    jsonRequest("http://x/api/hrm/leave-requests", { ...draftBody, onBehalf: true }),
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(routeState.calls[0], {
+    fn: "file",
+    args: { orgId: "org-1", actorId: "user-1", ...draftBody, reason: "rest", onBehalf: true },
+  });
+});
+
 test("POST refuses a malformed body with 400 and never calls the service", async () => {
   reset();
   const malformed = await collectionRoute!.POST(jsonRequest("http://x/api/hrm/leave-requests", "{oops"));

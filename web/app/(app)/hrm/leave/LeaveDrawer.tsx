@@ -9,7 +9,9 @@ import { promptDialog } from '../../../../lib/prompt'
 
 /**
  * Leave filing and detail drawer. Opens blank for filing (employment, type,
- * range, hours, reason) or on a request id for detail: the request with its
+ * range, hours, reason) — or, for actors holding manageable employments, in
+ * a manager on-behalf mode naming the target employee and posting
+ * onBehalf — or on a request id for detail: the request with its
  * TIME balance and, where a payroll bank exists, its VALUE balances — each
  * labelled with its unit so the two are never conflated.
  *
@@ -201,6 +203,17 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
   const [reason, setReason] = useState('')
   const [status, setStatus] = useState<string | undefined>(undefined)
   const [saving, setSaving] = useState(false)
+  // Manager on-behalf filing: the employments the actor may manage leave
+  // for, listed through the same grant-plus-scope predicate the filing gate
+  // enforces. A self-service actor holds none, so the mode never renders
+  // for them — the capability probe, not a redefined permission check,
+  // decides.
+  const [filingFor, setFilingFor] = useState<'self' | 'onBehalf'>('self')
+  const [manageOptions, setManageOptions] = useState<{ value: string; label: string }[]>([])
+  const [manageLoaded, setManageLoaded] = useState(false)
+  const [onBehalfEmploymentId, setOnBehalfEmploymentId] = useState('')
+  const canFileOnBehalf = manageOptions.length > 0
+  const onBehalf = manageLoaded && canFileOnBehalf && filingFor === 'onBehalf'
 
   // Leave-type options ride the HRM options route with its refusals; the
   // drawer submits ids, never labels.
@@ -234,12 +247,65 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
     }
   }, [t])
 
+  // On-behalf employments ride the same options route behind the manage
+  // grant. A 403/404 is not an error here — it is the self-service shape:
+  // the actor holds no manage grant, so the mode stays hidden silently.
+  // Anything else failing surfaces, so a manager is never stranded on a
+  // silently empty picker.
+  useEffect(() => {
+    let live = true
+    fetch('/api/hrm/options?source=leave-filing-employments&limit=100', { method: 'GET' })
+      .then(async (res) => {
+        if (!live) return
+        if (!res.ok) {
+          if (res.status !== 403 && res.status !== 404) {
+            setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
+          }
+          setManageLoaded(true)
+          return
+        }
+        const payload = (await res.json().catch(() => ({}))) as {
+          options?: { id?: unknown; label?: unknown }[]
+        }
+        if (!live) return
+        const page = Array.isArray(payload.options) ? payload.options : []
+        setManageOptions(
+          page.flatMap((row) =>
+            typeof row.id === 'string' && typeof row.label === 'string'
+              ? [{ value: row.id, label: row.label }]
+              : [],
+          ),
+        )
+        setManageLoaded(true)
+      })
+      .catch(() => {
+        if (live) setManageLoaded(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [t])
+
   const save = async (): Promise<void> => {
+    if (onBehalf && !onBehalfEmploymentId) {
+      setStatus(t('leave.onBehalfEmploymentRequired'))
+      return
+    }
     setSaving(true)
     const res = await fetch('/api/hrm/leave-requests', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
+      body: onBehalf
+        ? JSON.stringify({
+            employmentId: onBehalfEmploymentId,
+            leaveTypeId,
+            startsOn,
+            endsOn,
+            hours,
+            reason: reason || null,
+            onBehalf: true,
+          })
+        : JSON.stringify({ employmentId, leaveTypeId, startsOn, endsOn, hours, reason: reason || null }),
     })
     if (!res.ok) {
       setStatus(await readApiErrorMessage(res, t('leave.fileFailed')))
@@ -252,10 +318,54 @@ function LeaveFileForm({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="space-y-3">
-      <div>
-        <Label htmlFor="leave-employment">{t('leave.fileEmploymentLabel')}</Label>
-        <Input id="leave-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)} placeholder={t('leave.fileEmploymentPlaceholder')} />
-      </div>
+      {manageLoaded && canFileOnBehalf ? (
+        <fieldset className="space-y-1">
+          <legend className="text-sm font-medium">{t('leave.onBehalfFilingForLabel')}</legend>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="leave-filing-for"
+              className="accent-teal-700"
+              checked={filingFor === 'self'}
+              onChange={() => setFilingFor('self')}
+            />
+            {t('leave.onBehalfSelfLabel')}
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="leave-filing-for"
+              className="accent-teal-700"
+              checked={filingFor === 'onBehalf'}
+              onChange={() => setFilingFor('onBehalf')}
+            />
+            {t('leave.onBehalfOtherLabel')}
+          </label>
+          <p className="text-xs text-slate-500">{t('leave.onBehalfHint')}</p>
+        </fieldset>
+      ) : null}
+      {onBehalf ? (
+        <div>
+          <Label htmlFor="leave-onbehalf-employment">{t('leave.onBehalfEmployeeLabel')}</Label>
+          <Select
+            id="leave-onbehalf-employment"
+            value={onBehalfEmploymentId}
+            onChange={(event) => setOnBehalfEmploymentId(event.target.value)}
+          >
+            <option value="">{t('leave.onBehalfEmployeePlaceholder')}</option>
+            {manageOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+      ) : (
+        <div>
+          <Label htmlFor="leave-employment">{t('leave.fileEmploymentLabel')}</Label>
+          <Input id="leave-employment" value={employmentId} onChange={(event) => setEmploymentId(event.target.value)} placeholder={t('leave.fileEmploymentPlaceholder')} />
+        </div>
+      )}
       <div>
         <Label htmlFor="leave-type">{t('leave.fileTypeLabel')}</Label>
         <Select id="leave-type" value={leaveTypeId} onChange={(event) => setLeaveTypeId(event.target.value)}>
