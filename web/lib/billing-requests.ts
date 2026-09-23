@@ -331,6 +331,7 @@ export type BillingRequestRow = {
   backupRequired: boolean;
   backupType: string;
   status: string;
+  hasBackup: boolean;
   invoiceDocumentId: string | null;
   invoiceNumber: string | null;
   invoiceStatus: string | null;
@@ -354,6 +355,11 @@ export async function listBillingRequests(
               from billing_request_field_tickets selected
              where selected.org_id = br.org_id
                and selected.billing_request_id = br.id) as "fieldTicketCount",
+           exists (
+             select 1 from invoice_backups ib
+              where ib.org_id = br.org_id
+                and ib.document_id = br.invoice_document_id
+           ) as "hasBackup",
            br.created_at as "createdAt"
       from billing_requests br
       join projects p on p.id = br.project_id and p.org_id = br.org_id

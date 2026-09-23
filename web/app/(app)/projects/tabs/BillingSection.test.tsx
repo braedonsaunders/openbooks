@@ -80,6 +80,7 @@ const REQUEST = {
   backupRequired: false,
   backupType: "none",
   status: "open",
+  hasBackup: false,
   invoiceDocumentId: null,
   invoiceNumber: null,
   invoiceStatus: null,

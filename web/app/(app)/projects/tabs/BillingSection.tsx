@@ -56,6 +56,8 @@ export interface BillingRequestClient {
   backupRequired: boolean
   backupType: string
   status: string
+  /** Whether a backup packet is stored for the request's invoice. */
+  hasBackup: boolean
   invoiceDocumentId: string | null
   invoiceNumber: string | null
   invoiceStatus: string | null
@@ -110,6 +112,11 @@ export function BillingSection({
   // attention), and busy always releases through the package's finally — a
   // slow or failed request can never wedge the buttons disabled.
   const { busy, refusal, execute, refuse } = useAppAction()
+  // A backup that fails to assemble is pinned to its request row (never a
+  // transient toast, never silent): the invoice exists but cannot be
+  // issued until the packet exists, and the row carries the remedy.
+  // Declared before the applications early-return: hooks run unconditionally.
+  const [backupFailures, setBackupFailures] = useState<Record<string, string>>({})
 
   // Seed the request-billing form from the resolved cascade defaults.
   const [invoiceType, setInvoiceType] = useState('progress')
@@ -194,7 +201,7 @@ export function BillingSection({
     // existing invoice's refusal instead of a second invoice beside it.
     await execute(
       () =>
-        fetchAction<{ documentId?: string; documentNumber?: string }>(
+        fetchAction<{ documentId?: string; documentNumber?: string; backup?: { status: string; error?: string } }>(
           `/api/billing-requests/${id}/create-invoice`,
           { method: 'POST' },
         ),
@@ -208,8 +215,42 @@ export function BillingSection({
             refuse(null, t('invoiceFailed'))
             return
           }
+          // The invoice stands but its required packet is missing: stay on
+          // the tab with the failure pinned to the row (which now offers
+          // Generate backup) instead of navigating to an unissuable draft.
+          if (data.backup?.status === 'failed') {
+            setBackupFailures((current) => ({ ...current, [id]: data.backup?.error ?? t('backupFailed') }))
+            router.refresh()
+            return
+          }
           toast.success(t('invoiceCreated', { number: data.documentNumber ?? '' }))
           router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`)
+        },
+      },
+    )
+  }
+
+  async function generateBackup(id: string) {
+    await execute(
+      async () => {
+        const result = await fetchAction(`/api/billing-requests/${id}/backup`, { method: 'POST' })
+        // A failed generation pins to the row as well as the section, so
+        // the remedy stays beside the request that needs it.
+        if (!result.ok) {
+          setBackupFailures((current) => ({ ...current, [id]: result.error.serverMessage || t('backupFailed') }))
+        }
+        return result
+      },
+      {
+        fallbackMessage: t('backupFailed'),
+        onOk: () => {
+          setBackupFailures((current) => {
+            const next = { ...current }
+            delete next[id]
+            return next
+          })
+          toast.success(t('backupGenerated'))
+          router.refresh()
         },
       },
     )
@@ -434,17 +475,28 @@ export function BillingSection({
             {
               key: 'actions', header: tCommon('labels.actions'), align: 'right',
               cell: (r) => (
-                <div className="flex items-center justify-end gap-2">
-                  {r.status === 'open' && canManage ? (
-                    <>
-                      <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
-                      <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
-                    </>
-                  ) : null}
-                  {r.status === 'invoiced' && r.backupRequired ? (
-                    <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
-                      <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
-                    </a>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center justify-end gap-2">
+                    {r.status === 'open' && canManage ? (
+                      <>
+                        <Button size="sm" onClick={() => createInvoice(r.id)} disabled={busy}>{t('createInvoice')}</Button>
+                        <Button size="sm" variant="ghost" onClick={() => cancelRequest(r.id)} disabled={busy}>{tCommon('actions.cancel')}</Button>
+                      </>
+                    ) : null}
+                    {r.status === 'invoiced' && r.backupRequired && r.hasBackup ? (
+                      <a href={`/api/billing-requests/${r.id}/backup`} target="_blank" rel="noreferrer">
+                        <Button size="sm" variant="outline">{t('downloadBackup')}</Button>
+                      </a>
+                    ) : null}
+                    {r.status === 'invoiced' && r.backupRequired && !r.hasBackup && canManage ? (
+                      <Button size="sm" variant="outline" onClick={() => generateBackup(r.id)} disabled={busy}>{t('generateBackup')}</Button>
+                    ) : null}
+                  </div>
+                  {backupFailures[r.id] ? (
+                    <p className="max-w-64 text-right text-xs text-red-700 dark:text-red-300">
+                      <span className="font-semibold">{t('backupFailed')}: </span>
+                      {backupFailures[r.id]}
+                    </p>
                   ) : null}
                 </div>
               ),
