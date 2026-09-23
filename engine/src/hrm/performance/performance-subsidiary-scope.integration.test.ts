@@ -14,6 +14,7 @@ import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import { createGoal } from "./goals.ts";
+import { getCycleDetail, getReviewDetail, listMyReviews } from "./performance-read.ts";
 import { listFeedback, writeFeedback } from "./feedback.ts";
 
 /**
@@ -345,6 +346,36 @@ test("goal creation refuses a cycle whose scope excludes the subject employment"
       title: "Ship the widget", cycleId: cycle.id,
     });
     assert.equal(goal.cycleId, cycle.id);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("subject-facing reads strip the calibration justification; HR and reviewer keep it", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const cycleId = await openScopedCycle(h);
+    const reviewId = await submitManagerReview(h, cycleId, h.a);
+    await calibrateReview({
+      orgId: h.org.orgId, actorId: h.hrFull, reviewId, calibratedRating: "4", reason: "private HR justification",
+    });
+    await shareReview({ orgId: h.org.orgId, actorId: h.a.managerUserId, reviewId });
+    // The subject sees the calibrated rating with its share note — never the reason.
+    const detail = await getCycleDetail({ orgId: h.org.orgId, actorId: h.a.userId, cycleId });
+    const subjectView = detail.reviews.find((r) => r.id === reviewId)!;
+    assert.equal(subjectView.calibratedRating, "4.0000");
+    assert.equal(subjectView.calibrationReason, null);
+    const mine = await listMyReviews({ orgId: h.org.orgId, actorId: h.a.userId });
+    assert.equal(mine.asSubject.find((r) => r.id === reviewId)?.calibrationReason, null);
+    const single = await getReviewDetail({ orgId: h.org.orgId, actorId: h.a.userId, reviewId });
+    assert.equal(single.review.calibrationReason, null);
+    // HR and the authoring reviewer keep the justification.
+    const hrView = await getReviewDetail({ orgId: h.org.orgId, actorId: h.hrFull, reviewId });
+    assert.equal(hrView.review.calibrationReason, "private HR justification");
+    const hrCycle = await getCycleDetail({ orgId: h.org.orgId, actorId: h.hrFull, cycleId });
+    assert.equal(hrCycle.reviews.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
+    const reviewerMine = await listMyReviews({ orgId: h.org.orgId, actorId: h.a.managerUserId });
+    assert.equal(reviewerMine.asReviewer.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
