@@ -12,8 +12,11 @@ import {
   firstLifecycleBillOn,
   lifecycleBillingPeriod,
   renewalAction,
+  resolveEffectiveLifecycleState,
   subscriptionComponentTotal,
+  toEffectiveLifecycleAmendment,
   type ComponentWindow,
+  type EffectiveLifecycleAmendment,
 } from "./advanced-subscriptions.ts";
 import { prorateDays } from "../money/money.ts";
 
@@ -143,6 +146,108 @@ test("arrears windowing keeps civil years 1-99 (0096 splits 14/29 and 15/29)", (
 test("arrears windowing is degenerate-safe", () => {
   assert.deepEqual(arrearsLinesForInterval("2026-02-01", "2026-02-01", [arrearsWindow({ componentKey: "fee" })]), []);
   assert.deepEqual(arrearsLinesForInterval("2026-01-01", "2026-02-01", []), []);
+});
+
+function ledgerAmendment(overrides: Partial<EffectiveLifecycleAmendment> & { type: string; effectiveOn: string }): EffectiveLifecycleAmendment {
+  return {
+    seq: 1,
+    timing: null,
+    term: null,
+    termKnown: false,
+    baseTiming: null,
+    baseTerm: null,
+    baseTermKnown: false,
+    ...overrides,
+  };
+}
+
+test("lifecycle state with no amendments is the activation state", () => {
+  assert.deepEqual(
+    resolveEffectiveLifecycleState({ asOf: "2026-06-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments: [] }),
+    { billingTiming: "advance", termEndsOn: "2027-01-01" },
+  );
+});
+
+test("a future timing change does not govern an earlier bill date", () => {
+  const amendments = [ledgerAmendment({
+    type: "change_timing",
+    effectiveOn: "2026-07-01",
+    timing: "arrears",
+    baseTiming: "advance",
+    baseTerm: "2027-01-01",
+    baseTermKnown: true,
+  })];
+  assert.equal(
+    resolveEffectiveLifecycleState({ asOf: "2026-06-01", fallbackTiming: "arrears", fallbackTermEndsOn: "2027-01-01", amendments }).billingTiming,
+    "advance",
+  );
+  assert.equal(
+    resolveEffectiveLifecycleState({ asOf: "2026-07-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments }).billingTiming,
+    "arrears",
+  );
+});
+
+test("a future term reduction does not end the term before its date", () => {
+  const amendments = [ledgerAmendment({
+    type: "change_term",
+    effectiveOn: "2026-07-01",
+    seq: 1,
+    term: "2026-06-15",
+    termKnown: true,
+    baseTiming: "advance",
+    baseTerm: "2027-01-01",
+    baseTermKnown: true,
+  })];
+  const before = resolveEffectiveLifecycleState({ asOf: "2026-06-20", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  assert.equal(before.termEndsOn, "2027-01-01");
+  assert.equal(renewalAction({ billingTiming: before.billingTiming, dueOn: "2026-06-20", termEndsOn: before.termEndsOn, policy: "manual" }), "bill");
+  const after = resolveEffectiveLifecycleState({ asOf: "2026-07-15", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  assert.equal(after.termEndsOn, "2026-06-15");
+  assert.equal(renewalAction({ billingTiming: after.billingTiming, dueOn: "2026-07-15", termEndsOn: after.termEndsOn, policy: "manual" }), "stop");
+});
+
+test("amendments fold in effective-date order with application order breaking ties", () => {
+  const amendments = [
+    ledgerAmendment({ type: "change_term", effectiveOn: "2026-09-01", seq: 2, term: "2026-12-31", termKnown: true, baseTiming: "advance", baseTerm: "2027-01-01", baseTermKnown: true }),
+    ledgerAmendment({ type: "change_term", effectiveOn: "2026-03-01", seq: 3, term: "2026-06-30", termKnown: true }),
+  ];
+  const resolved = resolveEffectiveLifecycleState({ asOf: "2026-10-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  assert.equal(resolved.termEndsOn, "2026-12-31");
+  const mid = resolveEffectiveLifecycleState({ asOf: "2026-05-01", fallbackTiming: "advance", fallbackTermEndsOn: "2027-01-01", amendments });
+  assert.equal(mid.termEndsOn, "2026-06-30");
+});
+
+test("unusable ledger rows are ignored instead of refusing billing", () => {
+  const amendments = [ledgerAmendment({ type: "change_timing", effectiveOn: "not-a-date", timing: "arrears" })];
+  assert.deepEqual(
+    resolveEffectiveLifecycleState({ asOf: "2026-08-01", fallbackTiming: "advance", fallbackTermEndsOn: null, amendments }),
+    { billingTiming: "advance", termEndsOn: null },
+  );
+});
+
+test("ledger projection reads the request and snapshots defensively", () => {
+  const projected = toEffectiveLifecycleAmendment({
+    type: "change_timing",
+    effectiveOn: "2026-07-01",
+    seq: 1,
+    request: { type: "change_timing", billingTiming: "arrears" },
+    beforeSnapshot: { lifecycle: { billingTiming: "advance", termEndsOn: "2027-01-01" } },
+    afterSnapshot: { lifecycle: { billingTiming: "arrears", termEndsOn: "2027-01-01" } },
+  });
+  assert.equal(projected.timing, "arrears");
+  assert.equal(projected.baseTiming, "advance");
+  assert.equal(projected.baseTerm, "2027-01-01");
+  assert.equal(projected.termKnown, false);
+  const corrupt = toEffectiveLifecycleAmendment({
+    type: "change_term",
+    effectiveOn: "2026-07-01",
+    seq: 2,
+    request: null,
+    beforeSnapshot: null,
+    afterSnapshot: "garbage",
+  });
+  assert.equal(corrupt.termKnown, false);
+  assert.equal(corrupt.baseTiming, null);
 });
 
 // --- scheduled renewal provenance (fnd_mt97nsbf_qvlaww) --------------------
