@@ -1121,23 +1121,48 @@ export async function listUserSessions(userId: string, currentSessionId: string)
   });
 }
 
-export async function revokeUserSession(userId: string, sessionId: string, reason = "user_revoked"): Promise<boolean> {
-  return withBypassContext(async () => {
+export type RevokeUserSessionResult =
+  | { ok: true; revoked: boolean }
+  | { ok: false; reason: "caller_session_revoked" };
+
+export async function revokeUserSession(
+  userId: string,
+  sessionId: string,
+  callerSessionId: string,
+  reason = "user_revoked",
+): Promise<RevokeUserSessionResult> {
+  // One transaction (not context-only scope): the caller liveness lock and
+  // the revocation must be atomic, or a session revoked after the route's
+  // cookie check could still revoke other sessions.
+  return withBypass(async () => {
+    if (!(await lockLiveCallerSession(userId, callerSessionId))) {
+      return { ok: false, reason: "caller_session_revoked" } as const;
+    }
     const result = await db.execute(sql`
       update auth_sessions set revoked_at = now(), revocation_reason = ${reason}
        where id = ${sessionId} and user_id = ${userId} and revoked_at is null
     `);
-    return Number((result as unknown as { rowCount?: number }).rowCount ?? 0) > 0;
+    return { ok: true, revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0) > 0 } as const;
   });
 }
 
-export async function revokeOtherUserSessions(userId: string, keepSessionId: string): Promise<number> {
-  return withBypassContext(async () => {
+export type RevokeSessionsResult =
+  | { ok: true; revoked: number }
+  | { ok: false; reason: "caller_session_revoked" };
+
+export async function revokeOtherUserSessions(userId: string, keepSessionId: string): Promise<RevokeSessionsResult> {
+  // One transaction (not context-only scope): the keeper liveness lock and
+  // the revocation must be atomic, or a session revoked after the route's
+  // cookie check could still revoke every other session and report success.
+  return withBypass(async () => {
+    if (!(await lockLiveCallerSession(userId, keepSessionId))) {
+      return { ok: false, reason: "caller_session_revoked" } as const;
+    }
     const result = await db.execute(sql`
       update auth_sessions set revoked_at = now(), revocation_reason = 'user_revoked_others'
        where user_id = ${userId} and id <> ${keepSessionId} and revoked_at is null
     `);
-    return Number((result as unknown as { rowCount?: number }).rowCount ?? 0);
+    return { ok: true, revoked: Number((result as unknown as { rowCount?: number }).rowCount ?? 0) } as const;
   });
 }
 
