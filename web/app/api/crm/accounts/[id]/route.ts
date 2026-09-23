@@ -25,6 +25,14 @@ function uuidOrNull(value: unknown): string | null | 'invalid' {
   return valueText === null ? null : isUuid(valueText) ? valueText : 'invalid'
 }
 
+// Free-text columns clear on null/'' but must actually be text: a number or
+// object would otherwise sail through textOrNull as a silent clear.
+function textOrInvalid(value: unknown): string | null | 'invalid' {
+  if (value === null) return null
+  if (typeof value !== 'string') return 'invalid'
+  return value.trim() ? value.trim() : null
+}
+
 /**
  * The relationship record for one party, plus the pickers its editor needs.
  *
@@ -130,16 +138,42 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const stage = body.lifecycleStage === undefined ? undefined : String(body.lifecycleStage) as Stage
   if (stage !== undefined && !STAGES.includes(stage)) return NextResponse.json({ error: 'invalid lifecycle stage' }, { status: 422 })
   const statusId = body.statusId === undefined ? undefined : uuidOrNull(body.statusId)
+  if (statusId === 'invalid') return NextResponse.json({ error: 'invalid statusId: expected a UUID' }, { status: 422 })
   const ownerUserId = body.ownerUserId === undefined ? undefined : uuidOrNull(body.ownerUserId)
+  if (ownerUserId === 'invalid') return NextResponse.json({ error: 'invalid ownerUserId: expected a UUID' }, { status: 422 })
   const territoryId = body.territoryId === undefined ? undefined : uuidOrNull(body.territoryId)
+  if (territoryId === 'invalid') return NextResponse.json({ error: 'invalid territoryId: expected a UUID' }, { status: 422 })
   const leadSourceId = body.leadSourceId === undefined ? undefined : uuidOrNull(body.leadSourceId)
-  if ([statusId, ownerUserId, territoryId, leadSourceId].includes('invalid')) return NextResponse.json({ error: 'invalid reference' }, { status: 422 })
+  if (leadSourceId === 'invalid') return NextResponse.json({ error: 'invalid leadSourceId: expected a UUID' }, { status: 422 })
+  // Number() coerces booleans and single-element arrays (true -> 1), so the
+  // type gate comes first: only numbers and numeric strings reach it.
+  if (body.qualificationScore !== undefined && body.qualificationScore !== null && body.qualificationScore !== ''
+    && typeof body.qualificationScore !== 'number' && typeof body.qualificationScore !== 'string') {
+    return NextResponse.json({ error: 'qualification score must be from 0 to 100' }, { status: 422 })
+  }
   const score = body.qualificationScore === undefined || body.qualificationScore === null || body.qualificationScore === ''
     ? null : Number(body.qualificationScore)
   if (score !== null && (!Number.isInteger(score) || score < 0 || score > 100)) return NextResponse.json({ error: 'qualification score must be from 0 to 100' }, { status: 422 })
+  if (body.employeeCount !== undefined && body.employeeCount !== null && body.employeeCount !== ''
+    && typeof body.employeeCount !== 'number' && typeof body.employeeCount !== 'string') {
+    return NextResponse.json({ error: 'employee count must be a whole number from 0 to 2147483647' }, { status: 422 })
+  }
   const employeeCount = body.employeeCount === undefined || body.employeeCount === null || body.employeeCount === ''
     ? null : Number(body.employeeCount)
   if (employeeCount !== null && (!Number.isInteger(employeeCount) || employeeCount < 0 || employeeCount > 2147483647)) return NextResponse.json({ error: 'employee count must be a whole number from 0 to 2147483647' }, { status: 422 })
+  // A present isActive that is not a boolean used to deactivate the account:
+  // null, "true" and 1 all compared unequal to true and wrote false.
+  const isActive = body.isActive === undefined ? undefined
+    : typeof body.isActive === 'boolean' ? body.isActive : 'invalid' as const
+  if (isActive === 'invalid') return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 422 })
+  const industry = body.industry === undefined ? undefined : textOrInvalid(body.industry)
+  if (industry === 'invalid') return NextResponse.json({ error: 'industry must be a string' }, { status: 422 })
+  const category = body.category === undefined ? undefined : textOrInvalid(body.category)
+  if (category === 'invalid') return NextResponse.json({ error: 'category must be a string' }, { status: 422 })
+  const stageReason = body.stageReason === undefined ? undefined : textOrInvalid(body.stageReason)
+  if (stageReason === 'invalid') return NextResponse.json({ error: 'stage reason must be a string' }, { status: 422 })
+  const assignmentReason = body.assignmentReason === undefined ? undefined : textOrInvalid(body.assignmentReason)
+  if (assignmentReason === 'invalid') return NextResponse.json({ error: 'assignment reason must be a string' }, { status: 422 })
   const annualRevenueRaw = body.annualRevenue === undefined || body.annualRevenue === null || body.annualRevenue === ''
     ? null
     : canonicalDecimal(body.annualRevenue, 4)
@@ -189,7 +223,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (referenceChecks.some((result) => result && !(result as unknown as { rows: unknown[] }).rows[0])) {
     return NextResponse.json({ error: 'reference belongs to another organization' }, { status: 422 })
   }
-  if (stage && ({ lead: 0, prospect: 1, customer: 2 })[stage] < ({ lead: 0, prospect: 1, customer: 2 })[row.lifecycle_stage as Stage] && !textOrNull(body.stageReason)) {
+  if (stage && ({ lead: 0, prospect: 1, customer: 2 })[stage] < ({ lead: 0, prospect: 1, customer: 2 })[row.lifecycle_stage as Stage] && !stageReason) {
     return NextResponse.json({ error: 'a reason is required to move an account backward' }, { status: 422 })
   }
 
@@ -199,9 +233,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (stage && stage !== row.lifecycle_stage) {
       const rank = { lead: 0, prospect: 1, customer: 2 }
       if (rank[stage] > rank[row.lifecycle_stage as Stage]) {
-        await promoteCrmAccount(tx, { orgId: user.orgId, partyId: id, actorId: user.id, toStage: stage, sourceKind: 'manual', reason: textOrNull(body.stageReason) })
+        await promoteCrmAccount(tx, { orgId: user.orgId, partyId: id, actorId: user.id, toStage: stage, sourceKind: 'manual', reason: stageReason ?? null })
       } else {
-        const reason = textOrNull(body.stageReason)
+        const reason = stageReason ?? null
         await tx.execute(sql`
           update crm_account_profiles set lifecycle_stage = ${stage},
                  status_id = ${statusId !== undefined ? statusId : sql`status_id`},
@@ -218,14 +252,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         owner_user_id = ${ownerUserId !== undefined ? ownerUserId : sql`owner_user_id`},
         territory_id = ${territoryId !== undefined ? territoryId : sql`territory_id`},
         lead_source_id = ${leadSourceId !== undefined ? leadSourceId : sql`lead_source_id`},
-        industry = ${body.industry !== undefined ? textOrNull(body.industry) : sql`industry`},
-        category = ${body.category !== undefined ? textOrNull(body.category) : sql`category`},
+        industry = ${industry !== undefined ? industry : sql`industry`},
+        category = ${category !== undefined ? category : sql`category`},
         annual_revenue = ${body.annualRevenue !== undefined ? annualRevenue : sql`annual_revenue`},
         employee_count = ${body.employeeCount !== undefined ? employeeCount : sql`employee_count`},
         qualification_score = ${body.qualificationScore !== undefined ? score : sql`qualification_score`},
         qualification = ${qualification !== undefined ? JSON.stringify(qualification) : sql`qualification`}::jsonb,
         next_action_at = ${body.nextActionAt !== undefined ? textOrNull(body.nextActionAt) : sql`next_action_at`},
-        is_active = ${body.isActive !== undefined ? body.isActive === true : sql`is_active`},
+        is_active = ${isActive !== undefined ? isActive : sql`is_active`},
         updated_at = now(), updated_by = ${user.id}
       where id = ${row.id} and org_id = ${user.orgId}`)
     if ((ownerUserId !== undefined && ownerUserId !== row.owner_user_id) || (territoryId !== undefined && territoryId !== row.territory_id)) {
@@ -235,12 +269,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
            source, reason, created_by, updated_by)
         values (${user.orgId}, ${row.id}, ${row.owner_user_id}, ${ownerUserId === undefined ? row.owner_user_id : ownerUserId},
                 ${row.territory_id}, ${territoryId === undefined ? row.territory_id : territoryId},
-                'manual', ${textOrNull(body.assignmentReason)}, ${user.id}, ${user.id})`)
+                'manual', ${assignmentReason ?? null}, ${user.id}, ${user.id})`)
     }
+    // The audit records the profile row actually written, re-read in this
+    // transaction — not the request body, which may name fields the write
+    // ignored and values the validators normalized.
+    const after = (await tx.execute(sql`
+      select cp.*, p.display_name, p.is_active as party_active
+        from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
+       where cp.id = ${row.id} and cp.org_id = ${user.orgId}`)).rows[0]
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'crm_account_profiles', ${row.id}, 'update',
-              ${JSON.stringify({ before: row, requested: body })}::jsonb, ${user.id})`)
+              ${JSON.stringify({ before: row, after })}::jsonb, ${user.id})`)
   })
   if (denied) return denied
   if (body.route === true) await routeCrmAccount(user.orgId, row.id, user.id)
