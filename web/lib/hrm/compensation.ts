@@ -33,6 +33,7 @@ import {
 import { CompensationError } from '@openbooks/engine/src/hrm/compensation/errors.ts'
 import { HrmAuthorizationError, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, getAuthz, type Authz } from '../authz'
+import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmRewardsViewTabs } from './workspace-tabs'
 import { isFeatureEnabled } from '../features'
@@ -201,6 +202,13 @@ export interface CompHomeData {
   equityLabel: string
   architectureTitle: string
   canSetup: boolean
+  /**
+   * OM-18: the search params the rehomed job-architecture sections read
+   * (sp.row opens the New/edit drawer in SetupEntitySection). The home
+   * page carries no other list state, so this is the section's own list
+   * params verbatim.
+   */
+  setupParams: Record<string, string | string[] | undefined>
   /**
    * Named domain/auth refusal from the gap-snapshot read (a scoped reader
    * cannot read org-wide frozen aggregates). Renders as data beside the
@@ -476,6 +484,7 @@ export async function loadCompensationHome(
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
     canSetup: can(authz, 'admin.setup.manage'),
+    setupParams: setupSectionParams(sp),
     refusal: gapRefusal,
   }
 }

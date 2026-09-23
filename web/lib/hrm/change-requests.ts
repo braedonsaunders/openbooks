@@ -10,6 +10,7 @@ import {
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
+import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { resolveQueueStatus, segmentOfServiceStatus, QUEUE_SEGMENTS } from './queue-status'
 
@@ -368,7 +369,16 @@ export async function loadChangeRequestQueue(
     segmentsLabel: t('queue.segmentsLabel'),
     allLabel: t('queue.allLabel'),
     truncatedNote: t('queue.truncatedNote', { limit: QUEUE_LIMIT }),
-    currentParams: { ...(typeof sp.status === 'string' ? { status: sp.status } : {}) },
+    // OM-18: the rehomed reason-code section reads its New/edit drawer
+    // from sp.row (SetupEntitySection), so the queue's own segment params
+    // ride beside the section's list params — dropping row renders a dead
+    // New button at ?reasons=1&row=new. Dialog params (request/propose)
+    // stay loader-owned and never leak into the section's links.
+    currentParams: {
+      ...(typeof sp.status === 'string' ? { status: sp.status } : {}),
+      ...(typeof sp.reasons === 'string' ? { reasons: sp.reasons } : {}),
+      ...setupSectionParams(sp),
+    },
     columns: {
       employee: t('queue.columns.employee'),
       kind: t('queue.columns.kind'),

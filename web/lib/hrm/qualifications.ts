@@ -19,6 +19,7 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
 import { can, type Authz } from '../authz'
+import { setupSectionParams } from '../list-params'
 
 /**
  * Qualifications page loader (HR-14): the worker qualification ledger by
@@ -381,7 +382,10 @@ export async function loadQualificationsPage(
       ...types.filter((x) => x.isActive).map((x) => ({ value: x.id, label: x.code })),
     ],
     typeFilter,
-    currentParams: baseParams({}),
+    // OM-18: the rehomed taxonomy sections read their New/edit drawer
+    // from sp.row (SetupEntitySection) — the ledger's own params ride
+    // beside the section's list params, never instead of them.
+    currentParams: { ...baseParams({}), ...setupSectionParams(sp) },
     listTitle: t('qualifications.listTitle'),
     columns: {
       worker: t('qualifications.columns.worker'),

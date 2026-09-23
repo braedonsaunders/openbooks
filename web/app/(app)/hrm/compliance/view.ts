@@ -144,8 +144,8 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                 }),
               ],
             }),
-            widgetBlock('setup-section', { entityKey: 'construction-classifications', sp: {}, basePath }),
-            widgetBlock('setup-section', { entityKey: 'construction-rate-schedules', sp: {}, basePath }),
+            widgetBlock('setup-section', { entityKey: 'construction-classifications', sp: data.currentParams, basePath }),
+            widgetBlock('setup-section', { entityKey: 'construction-rate-schedules', sp: data.currentParams, basePath }),
           ]
         : []),
       ...(data.section === 'certified'
@@ -214,8 +214,8 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                 }),
               ],
             }),
-            widgetBlock('setup-section', { entityKey: 'construction-comp-classes', sp: {}, basePath }),
-            widgetBlock('setup-section', { entityKey: 'construction-ratio-rules', sp: {}, basePath }),
+            widgetBlock('setup-section', { entityKey: 'construction-comp-classes', sp: data.currentParams, basePath }),
+            widgetBlock('setup-section', { entityKey: 'construction-ratio-rules', sp: data.currentParams, basePath }),
           ]
         : []),
       ...(data.section === 'perdiem'
@@ -257,7 +257,7 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
                 }),
               ],
             }),
-            widgetBlock('setup-section', { entityKey: 'construction-per-diem-policies', sp: {}, basePath }),
+            widgetBlock('setup-section', { entityKey: 'construction-per-diem-policies', sp: data.currentParams, basePath }),
           ]
         : []),
       widgetBlock('hrm-compliance-generate', {

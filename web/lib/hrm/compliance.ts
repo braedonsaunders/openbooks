@@ -10,6 +10,7 @@ import { listRuns, listFormats } from '@openbooks/engine/src/hrm/construction/ce
 import { listCompClasses, listCompRules } from '@openbooks/engine/src/hrm/construction/comp-classes.ts'
 import { listEntries, listPolicies } from '@openbooks/engine/src/hrm/construction/per-diem.ts'
 import { can, type Authz } from '../authz'
+import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 
 /**
@@ -151,7 +152,10 @@ export async function loadCompliancePage(
   const canManage = can(authz, 'hrm.construction.manage')
   const section = SECTIONS.includes(sp.section as ComplianceSection) ? (sp.section as ComplianceSection) : 'findings'
   const kindFilter = typeof sp.kind === 'string' && sp.kind.length > 0 ? sp.kind : null
-  const currentParams: ComplianceData['currentParams'] = { section, ...(kindFilter ? { kind: kindFilter } : {}) }
+  // OM-18: the rehomed construction sections read their New/edit drawer
+  // from sp.row (SetupEntitySection) — the workspace's own params ride
+  // beside the section's list params, never instead of them.
+  const currentParams: ComplianceData['currentParams'] = { section, ...(kindFilter ? { kind: kindFilter } : {}), ...setupSectionParams(sp) }
   const empty: ComplianceData = {
     title: t('compliance.title'),
     description: t('compliance.description'),

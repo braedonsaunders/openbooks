@@ -30,6 +30,7 @@ import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
+import { setupSectionParams } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
@@ -285,7 +286,7 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
         ...data.setupSections.map((entityKey) =>
           widgetBlock('setup-section', {
             entityKey,
-            sp: { tab: data.tab },
+            sp: data.currentParams,
             basePath: '/hrm/recruiting',
           }),
         ),
@@ -745,7 +746,10 @@ export async function loadRecruitingPage(
     segmentsLabel: t('recruiting.segmentsLabel'),
     allLabel: t('recruiting.statusAll'),
     segmentOptions: STATUSES.map((value) => ({ value, label: statusLabel(value), count: counts.get(value) ?? 0 })),
-    currentParams: { ...(status ? { status } : {}) },
+    // OM-18: the rehomed depth-tab sections read their New/edit drawer
+    // from sp.row (SetupEntitySection) — the tab and the status filter
+    // ride beside the section's list params, never instead of them.
+    currentParams: { ...(status ? { status } : {}), tab, ...setupSectionParams(sp) },
     columns: {
       number: t('recruiting.columns.number'),
       title: t('recruiting.columns.title'),

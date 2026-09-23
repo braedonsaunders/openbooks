@@ -10,6 +10,7 @@ import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
+import { setupSectionParams } from '../list-params'
 
 /**
  * HR documents home loader (0230, HR-19).
@@ -293,7 +294,10 @@ export async function loadDocumentsHome(
       label: statusLabel(value),
       count: countBy.get(value) ?? 0,
     })),
-    currentParams: { ...(status ? { status } : {}) },
+    // OM-18: the rehomed template/category/schedule sections read their
+    // New/edit drawer from sp.row (SetupEntitySection) — the register's
+    // own segment rides beside the section's list params.
+    currentParams: { ...(status ? { status } : {}), ...setupSectionParams(sp) },
     columns: {
       title: t('documents.columns.title'),
       person: t('documents.columns.person'),

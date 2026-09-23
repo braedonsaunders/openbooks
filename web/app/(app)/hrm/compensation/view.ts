@@ -112,9 +112,9 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
           }),
         ],
       }),
-      widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
-      widgetBlock('setup-section', { entityKey: 'hrm-job-levels', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
-      widgetBlock('setup-section', { entityKey: 'hrm-pay-bands', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
+      widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: data.setupParams, basePath: '/hrm/compensation' }, f('canSetup')),
+      widgetBlock('setup-section', { entityKey: 'hrm-job-levels', sp: data.setupParams, basePath: '/hrm/compensation' }, f('canSetup')),
+      widgetBlock('setup-section', { entityKey: 'hrm-pay-bands', sp: data.setupParams, basePath: '/hrm/compensation' }, f('canSetup')),
       // The create dialogs (?cycle=new / ?plan=new), mirroring the
       // change-request queue's propose/detail trio — the loader owns the
       // open state and the return href, closing navigates the param away.
