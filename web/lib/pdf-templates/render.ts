@@ -5,7 +5,7 @@ import {
   sanitizeRenderedHtml,
   sanitizeTokenizedFragment,
 } from '@openbooks/pdf'
-import type { ResolvedPdfTemplate } from './store'
+import type { PdfPrintDesign } from './store'
 
 /**
  * Merge a compiled template with record values and print it. `{{page}}` /
@@ -40,11 +40,10 @@ const UNTRUSTED_VALUES = { escapeHtml: true, allowRawValues: false } as const
 export async function mergeAndPrintPdf(
   // The renderer takes only what it prints: issuance provenance rides on
   // ResolvedPdfTemplate for the download/email/backup/flow channels to
-  // record, never through the print itself.
-  tpl: Pick<
-    ResolvedPdfTemplate,
-    'compiledHtml' | 'paperSize' | 'orientation' | 'marginMm' | 'headerHtml' | 'footerHtml'
-  >,
+  // record, never through the print itself. The parameter IS PdfPrintDesign
+  // (not a second list) so the hash and the bytes cannot disagree about
+  // what "the design" is.
+  tpl: PdfPrintDesign,
   values: Record<string, unknown>,
 ): Promise<Buffer> {
   const counters = { ...values, page: '{{page}}', pages: '{{pages}}' }
