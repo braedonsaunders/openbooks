@@ -185,3 +185,61 @@ test("a relabel-free clone still refuses post-cutoff postings (single-calendar c
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a settings change between the org read and the copy reaches the sandbox (SBOX2)", { skip: !DB }, async () => {
+  // Deterministic interleave for the create path: a trigger applies a
+  // Company Settings change when the provisional sandbox org row inserts —
+  // after create's outer config read, before runClone's snapshot. The ready
+  // sandbox must carry the snapshot's configuration, never the stale read.
+  const org = await createScratchOrg();
+  const sandboxName = `Config race ${randomUUID()}`;
+  const fault = `openbooks_sandbox_config_${randomUUID().replaceAll("-", "")}`;
+  try {
+    await postEntry(org, { number: "RACE-POSTED", date: "2026-07-15", periodId: org.periodId, status: "posted" });
+    await db.execute(sql.raw(`
+      create function "${fault}"() returns trigger language plpgsql as $fn$
+      begin
+        if new.env_kind = 'sandbox' then
+          update orgs
+             set legal_name = 'SBOX2 Updated Legal',
+                 settings = coalesce(settings, '{}'::jsonb) || '{"sbox2_probe":"updated"}'::jsonb
+           where id = '${org.orgId}';
+        end if;
+        return new;
+      end
+      $fn$`));
+    await db.execute(sql.raw(`
+      create trigger "${fault}_trg"
+        before insert on orgs
+        for each row
+        execute function "${fault}"()`));
+
+    const created = await createSandbox({
+      productionOrgId: org.orgId, name: sandboxName, tier: "full", masked: false,
+    });
+    const state = (await db.execute<{
+      status: string; name: string; legal_name: string | null; probe: string | null; entries: number;
+    }>(sql`
+      select (select status from sandboxes where id = ${created.sandboxId}) as status,
+             org.name, org.legal_name,
+             org.settings ->> 'sbox2_probe' as probe,
+             (select count(*)::int from journal_entries
+               where org_id = ${created.sandboxOrgId} and entry_number = 'RACE-POSTED') as entries
+        from orgs org
+       where org.id = ${created.sandboxOrgId}`)).rows[0]!;
+    assert.deepEqual(state, {
+      status: "ready",
+      // The sandbox keeps its own display name: only source configuration is
+      // captured, and the capture below is the snapshot's, not the stale read's.
+      name: sandboxName,
+      legal_name: "SBOX2 Updated Legal",
+      probe: "updated",
+      entries: 1,
+    });
+  } finally {
+    await db.execute(sql.raw(`drop trigger if exists "${fault}_trg" on orgs`)).catch(() => undefined);
+    await db.execute(sql.raw(`drop function if exists "${fault}"()`)).catch(() => undefined);
+    await deleteSandboxesFor(org.orgId, sandboxName).catch(() => undefined);
+    await dropScratchOrg(org.orgId);
+  }
+});
