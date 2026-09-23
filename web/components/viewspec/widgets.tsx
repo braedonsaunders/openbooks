@@ -164,6 +164,8 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}}
         drawer={slot(props.drawer)}
         emptyAction={slot(props.emptyAction)}
+        emptyTitle={str(props, 'emptyTitle')}
+        emptyDescription={str(props, 'emptyDescription')}
       />
     )
   },

@@ -134,6 +134,9 @@
     "search": "Rechercher par date, source ou compte…",
     "emptyTitle": "Aucun relevé importé",
     "emptyDescription": "Importez un relevé OFX ou CSV depuis un compte pour le voir ici.",
+    "noAccountsTitle": "Aucun compte rapprochable pour l'instant",
+    "noAccountsDescription": "Marquez vos comptes bancaires et de carte comme rapprochables dans le Plan comptable, puis importez un relevé.",
+    "noAccountsLink": "Ouvrir le Plan comptable",
     "accountLabel": "Compte",
     "accountPlaceholder": "Sélectionner un compte…"
   },

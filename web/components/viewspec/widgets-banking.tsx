@@ -154,6 +154,14 @@ export const BANKING_WIDGETS = {
       <Link href={(str(props, 'href') ?? '/banking') as never}>{str(props, 'label') ?? ''}</Link>
     </Button>
   ),
+  /** The zero-reconcilable-account empty-state action on /banking/imports: a
+   *  Button-as-child Link to the Chart of Accounts — the same setup path the
+   *  bank-feeds setup names for the same prerequisite, never a second path. */
+  'open-chart-of-accounts': (props) => (
+    <Button asChild>
+      <Link href={(str(props, 'href') ?? '/accounts') as never}>{str(props, 'label') ?? ''}</Link>
+    </Button>
+  ),
 
   /* --- bank feeds setup --------------------------------------------------------- */
   /** Five FLAT props, spread exactly as the page passed them. */

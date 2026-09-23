@@ -107,11 +107,15 @@ export async function EntityListSlot({
   sp,
   drawer,
   emptyAction,
+  emptyTitle,
+  emptyDescription,
 }: {
   recordType: string
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
+  emptyTitle?: string
+  emptyDescription?: string
 }) {
   const authz = await getAuthz()
   if (!authz) return null
@@ -141,6 +145,8 @@ export async function EntityListSlot({
       sp={sp}
       drawer={drawer}
       emptyAction={emptyAction}
+      emptyTitle={emptyTitle}
+      emptyDescription={emptyDescription}
     />
   )
 }

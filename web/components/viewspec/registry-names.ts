@@ -353,6 +353,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'no-grants-body',
   'notifications-inbox',
   'notifications-mark-all-read',
+  'open-chart-of-accounts',
   'opening-balances-grid',
   'opportunity-drawer',
   'opportunity-kanban-board',

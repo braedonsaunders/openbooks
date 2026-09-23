@@ -134,6 +134,9 @@
     "search": "按日期、来源或账户搜索…",
     "emptyTitle": "无已导入对账单",
     "emptyDescription": "从账户导入 OFX 或 CSV 对账单即可在此查看。",
+    "noAccountsTitle": "尚无可对账的账户",
+    "noAccountsDescription": "请先在科目表中将银行和卡账户标记为可对账，然后再导入对账单。",
+    "noAccountsLink": "打开科目表",
     "accountLabel": "账户",
     "accountPlaceholder": "选择账户…"
   },

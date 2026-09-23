@@ -26,6 +26,9 @@ import { mapBankFeedRows } from './sections'
  * id. The list passes no drawer; its emptyAction is the statement-import
  * picker (account select + the canonical per-account import dialog), the
  * same widget as the header CTA — one implementation serving both slots.
+ * With no reconcilable account the picker has nothing to import into, so the
+ * empty state instead names the reconcilable prerequisite and links to the
+ * Chart of Accounts, the same setup path the bank-feeds setup names.
  *
  * The feeds panel cannot be a table or a repeat: its rows are conditional
  * pairs (an error line vs nothing; a paused marker vs nothing; a last-attempt
@@ -63,6 +66,15 @@ export interface BankingImportsData {
   importAccounts: { id: string; label: string }[]
   importAccountLabel: string
   importAccountPlaceholder: string
+  /** Page-specific empty copy for the unfiltered list. Null when the viewer
+   *  cannot import at all — the generic list copy renders instead. */
+  emptyTitle: string | null
+  emptyDescription: string | null
+  /** The Chart-of-Accounts setup path, the same one the bank-feeds setup
+   *  names for the same prerequisite. Data, not a branch, the way the
+   *  reconciliations page passes its choose-account href. */
+  setupHref: string
+  setupLabel: string
 }
 
 export async function loadBankingImports(
@@ -92,6 +104,11 @@ export async function loadBankingImports(
     : []
 
   const neverLabel = t('bankFeeds.operational.never')
+  // With no reconcilable account there is nothing to import INTO: the empty
+  // state names the reconcilable prerequisite and links to the Chart of
+  // Accounts. With accounts, the unfiltered empty state keeps the
+  // "no statements imported" copy beside the import picker.
+  const needsSetup = canImport && reconAccounts.length === 0
   return {
     title: t('imports.title'),
     description: t('imports.description'),
@@ -112,6 +129,18 @@ export async function loadBankingImports(
     })),
     importAccountLabel: t('imports.accountLabel'),
     importAccountPlaceholder: t('imports.accountPlaceholder'),
+    emptyTitle: !canImport
+      ? null
+      : needsSetup
+        ? t('imports.noAccountsTitle')
+        : t('imports.emptyTitle'),
+    emptyDescription: !canImport
+      ? null
+      : needsSetup
+        ? t('imports.noAccountsDescription')
+        : t('imports.emptyDescription'),
+    setupHref: '/accounts',
+    setupLabel: t('imports.noAccountsLink'),
   }
 }
 
@@ -121,13 +150,22 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
   // One widget serves the header CTA and the empty-state action: an account
   // select carrying the bank context plus the canonical per-account import
   // dialog. The header gates on the reconcile grant; the empty state
-  // additionally needs at least one reconcilable account to import into.
+  // additionally needs at least one reconcilable account to import into —
+  // with none, the action is the Chart-of-Accounts setup link and the copy
+  // names the reconcilable prerequisite (both loader-resolved above).
   const importPicker = {
     widget: 'import-statement-picker',
     props: {
       accounts: data.importAccounts,
       selectLabel: data.importAccountLabel,
       placeholder: data.importAccountPlaceholder,
+    },
+  }
+  const setupAction = {
+    widget: 'open-chart-of-accounts',
+    props: {
+      href: data.setupHref,
+      label: data.setupLabel,
     },
   }
   return page({
@@ -158,7 +196,9 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
       widgetBlock('entity-list-view', {
         recordType: 'bank_statement',
         sp: data.currentParams,
-        emptyAction: data.canImport && data.importAccounts.length > 0 ? importPicker : null,
+        emptyTitle: data.emptyTitle,
+        emptyDescription: data.emptyDescription,
+        emptyAction: !data.canImport ? null : data.importAccounts.length > 0 ? importPicker : setupAction,
       }),
     ],
   })

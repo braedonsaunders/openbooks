@@ -28,8 +28,9 @@ export function ImportAccountPicker({
 }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? '')
   const selected = accounts.find((account) => account.id === accountId) ?? accounts[0]
-  // No reconcilable accounts: the empty-state description already says to
-  // flag accounts as reconcilable first, so render nothing here.
+  // No reconcilable accounts: render nothing. The list's empty state carries
+  // the guidance instead — it names the reconcilable prerequisite and links
+  // to the Chart of Accounts — so the picker must not invent a second one.
   if (!selected) return null
   return (
     <span className="inline-flex items-center gap-2">

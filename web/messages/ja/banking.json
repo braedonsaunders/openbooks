@@ -134,6 +134,9 @@
     "search": "日付、ソース、勘定で検索…",
     "emptyTitle": "インポートされた明細がありません",
     "emptyDescription": "勘定から OFX または CSV 明細をインポートすると、ここに表示されます。",
+    "noAccountsTitle": "消込可能な口座がまだありません",
+    "noAccountsDescription": "勘定科目表で銀行口座とカード口座を消込可能に設定してから、明細をインポートしてください。",
+    "noAccountsLink": "勘定科目表を開く",
     "accountLabel": "口座",
     "accountPlaceholder": "口座を選択…"
   },

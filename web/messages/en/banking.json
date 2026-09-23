@@ -141,6 +141,9 @@
     "search": "Search by date, source, or account…",
     "emptyTitle": "No statements imported",
     "emptyDescription": "Import an OFX or CSV statement from an account to see it here.",
+    "noAccountsTitle": "No reconcilable accounts yet",
+    "noAccountsDescription": "Flag your bank and card accounts as reconcilable in the Chart of Accounts, then import a statement.",
+    "noAccountsLink": "Open the Chart of Accounts",
     "accountLabel": "Account",
     "accountPlaceholder": "Select an account…"
   },
