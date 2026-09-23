@@ -81,6 +81,9 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
         opportunities={opportunities}
         canManage={canManage}
         drawerSlot={drawerSlot}
+        undatedOnly={props.undatedOnly === true}
+        undatedLabel={str(props, 'undatedLabel') ?? ''}
+        showAllLabel={str(props, 'showAllLabel') ?? ''}
       />
     )
   },

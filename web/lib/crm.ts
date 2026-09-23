@@ -226,3 +226,31 @@ export async function calculateForecast(scope: ForecastScope) {
   `))
   return rows.rows
 }
+
+/**
+ * Open, forecast-eligible opportunities the rollup above cannot see: no
+ * expected close date means no period membership, so they contribute $0
+ * without a trace. The population mirrors `opportunity_base` exactly
+ * (active, not closed, not omitted) plus the same owner/team/subsidiary
+ * scope — the count names what the KPIs silently left out.
+ */
+export async function countUndatedForecastExcluded(scope: {
+  orgId: string
+  ownerUserId?: string | null
+  salesTeamId?: string | null
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
+}): Promise<number> {
+  const ownerFilter = scope.ownerUserId ? sql`and o.owner_user_id = ${scope.ownerUserId}` : sql``
+  const teamFilter = scope.salesTeamId ? sql`and o.sales_team_id = ${scope.salesTeamId}` : sql``
+  const rows = await db.execute<{ count: string }>(sql`
+    select count(*)::text as count
+      from crm_opportunities o
+      join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+     where o.org_id = ${scope.orgId} and o.is_active
+       and not s.is_closed and o.forecast_category <> 'omitted'
+       and o.expected_close_date is null
+       ${ownerFilter}
+       ${teamFilter}${crmOpportunityScope(scope.allowedSubsidiaryIds)}
+  `)
+  return Number(rows.rows[0]?.count ?? 0)
+}

@@ -19,7 +19,7 @@ import { CrmNewButton } from '../../app/(app)/crm/CrmNewButton'
 import { OpportunityDrawer } from '../../app/(app)/crm/OpportunityDrawer'
 import { OpportunityViewSwitcher } from '../../app/(app)/crm/OpportunityKanban'
 import { ActivityDrawer } from '../../app/(app)/crm/ActivityDrawer'
-import { ForecastKpiGroup, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
+import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyAction, ForecastSnapshotAction } from '../../app/(app)/crm/forecasts/sections'
 import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
 import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
 import { DocumentDrawer } from '../document-drawer'
@@ -208,6 +208,13 @@ export const RECORDS_WIDGETS = {
     <ForecastKpiGroup
       currency={str(props, 'currency') ?? ''}
       items={(props.items as ComponentProps<typeof ForecastKpiGroup>['items']) ?? []}
+    />
+  ),
+  'forecast-excluded-note': (props) => (
+    <ForecastExcludedNote
+      note={str(props, 'note') ?? ''}
+      href={str(props, 'href') ?? ''}
+      linkLabel={str(props, 'linkLabel') ?? ''}
     />
   ),
 

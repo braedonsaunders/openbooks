@@ -110,11 +110,18 @@ export function OpportunityKanbanBoard({
   opportunities,
   canManage,
   drawerSlot,
+  undatedOnly = false,
+  undatedLabel = '',
+  showAllLabel = '',
 }: {
   statuses: KanbanStatus[]
   opportunities: KanbanOpportunity[]
   canManage: boolean
   drawerSlot?: React.ReactNode
+  /** Server-side `undated=1` filter from the forecast exclusion note. */
+  undatedOnly?: boolean
+  undatedLabel?: string
+  showAllLabel?: string
 }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
@@ -219,6 +226,14 @@ export function OpportunityKanbanBoard({
 
   return (
     <div className="space-y-4">
+      {undatedOnly ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{undatedLabel}</Badge>
+          <Button variant="ghost" size="sm" onClick={() => router.push('/crm/opportunities?view=board')}>
+            {showAllLabel}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full max-w-sm">
           <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />

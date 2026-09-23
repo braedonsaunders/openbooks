@@ -47,6 +47,9 @@ export interface OpportunitiesData {
   board: {
     statuses: KanbanStatus[]
     opportunities: KanbanOpportunity[]
+    undatedOnly: boolean
+    undatedLabel: string
+    showAllLabel: string
   } | null
 }
 
@@ -58,6 +61,9 @@ export async function loadOpportunities(
   const t = await getTranslations('crm')
   const openId = pickString(sp.opportunity)
   const viewMode: 'board' | 'list' = pickString(sp.view) === 'board' ? 'board' : 'list'
+  // Forecast exclusion note links here with `undated=1`: the pipeline the
+  // weighted forecast cannot see is exactly the undated population.
+  const undatedOnly = pickString(sp.undated) === '1'
 
   let board: OpportunitiesData['board'] = null
   if (viewMode === 'board') {
@@ -121,6 +127,7 @@ export async function loadOpportunities(
           left join users u on u.id = o.owner_user_id
           left join crm_sales_teams st on st.id = o.sales_team_id and st.org_id = o.org_id
          where o.org_id = ${authz.user.orgId} and o.is_active${crmOpportunityScope(authz.allowedSubsidiaryIds)}
+           ${undatedOnly ? sql`and o.expected_close_date is null` : sql``}
          order by o.expected_close_date nulls last, o.created_at desc
          limit 500`),
     ])
@@ -170,6 +177,9 @@ export async function loadOpportunities(
     board = {
       statuses: kanbanStatuses,
       opportunities: kanbanOpportunities,
+      undatedOnly,
+      undatedLabel: t('opportunities.undatedOnly'),
+      showAllLabel: t('opportunities.showAll'),
     }
   }
 
@@ -284,6 +294,9 @@ export function opportunitiesSpec(data: OpportunitiesData): PageSpec {
         ? widgetBlock('opportunity-kanban-board', {
             statuses: data.board!.statuses,
             opportunities: data.board!.opportunities,
+            undatedOnly: data.board!.undatedOnly,
+            undatedLabel: data.board!.undatedLabel,
+            showAllLabel: data.board!.showAllLabel,
             canManage: data.canManage,
             drawer: data.drawer
               ? [{ widget: 'opportunity-drawer', props: { drawer: data.drawer } }]

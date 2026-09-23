@@ -64,6 +64,23 @@ export function ForecastKpiGroup({ currency, items }: { currency: string; items:
   )
 }
 
+/**
+ * Names the open opportunities the weighted forecast cannot see: without an
+ * expected close date an opportunity has no period membership and prices at
+ * $0. The link opens the pipeline filtered to exactly those records so the
+ * missing date can be set where it belongs.
+ */
+export function ForecastExcludedNote({ note, href, linkLabel }: { note: string; href: string; linkLabel: string }) {
+  return (
+    <p className="text-xs text-slate-500 dark:text-slate-400">
+      {note}{' '}
+      <Link href={href as never} className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300">
+        {linkLabel}
+      </Link>
+    </p>
+  )
+}
+
 export function ForecastFilters({
   fromKey,
   toKey,

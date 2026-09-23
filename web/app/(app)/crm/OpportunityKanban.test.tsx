@@ -127,3 +127,66 @@ test("a deal due on the business day is not flagged overdue; yesterday is", asyn
   assert.equal(overdue.length, 1, `exactly the past-due deal flags overdue, got ${overdue.map((el) => el.textContent)}`);
   assert.match(overdue[0]!.textContent ?? "", /2026-09-16/);
 });
+
+// UX-03: the forecast exclusion note links to the board with `undated=1`.
+// The filtered board must name the filter and offer the way back; the
+// unfiltered board must not carry the chip.
+test("undated-only board names the filter with a show-all route", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BusinessDateProvider today="2026-09-17">
+          <OpportunityKanbanBoard
+            statuses={[STATUS]}
+            opportunities={[opp("dated", "2026-09-20")]}
+            canManage={false}
+            undatedOnly
+            undatedLabel="Undated only"
+            showAllLabel="Show all"
+          />
+        </BusinessDateProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  assert.ok(host.textContent?.includes("Undated only"), "the filter chip must render");
+  assert.ok(host.textContent?.includes("Show all"), "the clear route must render");
+});
+
+test("unfiltered board carries no undated chip", async (t) => {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BusinessDateProvider today="2026-09-17">
+          <OpportunityKanbanBoard
+            statuses={[STATUS]}
+            opportunities={[opp("dated", "2026-09-20")]}
+            canManage={false}
+          />
+        </BusinessDateProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  assert.ok(!host.textContent?.includes("Show all"), "no chip without the undated filter");
+});

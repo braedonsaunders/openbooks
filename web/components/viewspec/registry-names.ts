@@ -171,6 +171,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'flow-row-actions',
   'folder-drawer',
   'folder-tree',
+  'forecast-excluded-note',
   'forecast-filters',
   'forecast-kpi-group',
   'forecast-snapshot-button',
