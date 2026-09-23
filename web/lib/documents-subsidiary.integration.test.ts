@@ -150,3 +150,49 @@ test("applyDocumentEdit refuses line accounts from another organization", { skip
     await withBypassContext(() => dropScratchOrg(foreign.orgId));
   }
 });
+
+test("applyDocumentEdit refuses to attach a project while Projects is disabled", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { actor, id, project } = await withBypassContext(async () => {
+      const actor = await createScratchUser(org.orgId, "Project gate keeper", "project_gate_keeper");
+      const id = randomUUID();
+      const project = randomUUID();
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,subtotal,tax_total,total,created_by)
+        values (${id},${org.orgId},'vendor_bill','draft','PROJ-GATE-1',${org.subsidiaryId},${org.vendorId},${org.date},'CAD','0','0','0',${actor})`);
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+        values (${project},${org.orgId},${org.subsidiaryId},'PROJ-GATE','Gate project',${org.customerId},'active',true,'{}'::jsonb)`);
+      return { actor, id, project };
+    });
+    await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','false'::jsonb) where id = ${org.orgId}`));
+    const current = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
+    assert.ok(current);
+    await assert.rejects(
+      withOrgContext(org.orgId, () => applyDocumentEdit(
+        id,
+        current,
+        { projectId: project, expectedUpdatedAt: current.updatedAt },
+        { orgId: org.orgId, userId: actor, source: "api" },
+      )),
+      (error: unknown) => error instanceof DocumentEditError && error.status === 422 && /Projects feature is disabled/.test(error.message),
+    );
+    const after = await withOrgContext(org.orgId, async () => await db.execute<{ project_id: string | null }>(sql`
+      select project_id from documents where id = ${id} and org_id = ${org.orgId}`));
+    assert.equal(after.rows[0]?.project_id, null, "the refused edit attaches no project");
+    // Gate on: the same edit attaches the project.
+    await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings,'{features,projects}','true'::jsonb) where id = ${org.orgId}`));
+    const reloaded = await withOrgContext(org.orgId, () => loadDocumentEditCurrent(id, org.orgId));
+    assert.ok(reloaded);
+    await withOrgContext(org.orgId, () => applyDocumentEdit(
+      id,
+      reloaded,
+      { projectId: project, expectedUpdatedAt: reloaded.updatedAt },
+      { orgId: org.orgId, userId: actor, source: "api" },
+    ));
+    const attached = await withOrgContext(org.orgId, async () => await db.execute<{ project_id: string | null }>(sql`
+      select project_id from documents where id = ${id} and org_id = ${org.orgId}`));
+    assert.equal(attached.rows[0]?.project_id, project);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});

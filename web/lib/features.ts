@@ -5,7 +5,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
 import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 import { dataDependentFeatureDefault } from '@openbooks/engine/src/organization/feature-defaults.ts'
-import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 // One source defines the fence identity: the engine module below. This
 // switchboard re-exports its key so every importer keeps working.
@@ -407,6 +407,27 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
  */
 export async function acquireFeatureGateLock(orgId: string, runner: SqlExecutor = db): Promise<void> {
   await acquireOrgFeatureGateLock(runner, orgId)
+}
+
+/**
+ * One shared fenced Projects recheck for writers that attach project-linked
+ * records outside the Projects domain's own creators: generic document
+ * edits that set a header project, timesheet saves and time amendments that
+ * insert project-carrying lines, and field-ticket crew/line writes on a
+ * project ticket. Takes the per-org feature-gate fence (serializing against
+ * the disable path's blocker checks, which count exactly these rows) and
+ * rechecks the flag under a shared org-row lock (serializing against the
+ * disable's exclusive flag write). Returns false when the gate is off; the
+ * caller refuses with its own domain error so every surface keeps its
+ * status contract. Call it inside the write transaction, on the writer's
+ * runner, before the first project-linked insert — never a copy per route.
+ */
+export async function checkProjectsWriteEnabled(
+  orgId: string,
+  runner: SqlExecutor = db,
+): Promise<boolean> {
+  await acquireFeatureGateLock(orgId, runner)
+  return lockAndCheckOrgFeature(runner, orgId, 'projects')
 }
 
 /** Whether a single feature is hard-blocked from being disabled (PUT-route guard). */
