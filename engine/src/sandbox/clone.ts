@@ -223,6 +223,16 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // via 'amend') must stand down while we insert already-posted rows.
     await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+    // Clone authority (OM-13): replaying posted history into target periods
+    // that are already closed there is refused by the closed-period guards
+    // even under the flags above. This transaction-local flag — set ONLY
+    // here, inside runClone's own maintenance transaction — lets those
+    // guards admit INSERTs of posted/reversed rows (see
+    // openbooks_clone_authority()). UPDATE and DELETE of posted history stay
+    // blocked, and the flag is inert outside this transaction: the authority
+    // also requires the migration/amend flags above plus RLS bypass, which a
+    // tenant transaction never holds.
+    await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
     for (const t of selected) {
       const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking);
       if (!stmt) continue;
@@ -240,6 +250,23 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // stale values left by a refresh before applying the new source snapshot.
     await db.execute(sql`select openbooks_gl_activity_rebuild(${opts.sandboxOrgId})`);
     await db.execute(sql`select openbooks_party_payment_stats_rebuild(${opts.sandboxOrgId})`);
+    // Evidence for the clone authority asserted above (OM-13): one audit row
+    // in the target org recording the provenance and scope of this copy, so
+    // closed-period history carried under openbooks.clone is attributable.
+    // audit_log is never copied (catalog EXCLUDE), so this insert cannot
+    // collide with the bulk copy; it commits or rolls back with the clone.
+    await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${opts.sandboxOrgId}, 'orgs', ${opts.sandboxOrgId}, 'insert',
+        ${JSON.stringify({
+          mode: "sandbox_clone_authority",
+          productionOrgId: opts.productionOrgId,
+          tier: opts.tier,
+          masked: opts.masked,
+          tablesCopied: perTable.length,
+          rowsCopied,
+          authority: "openbooks.clone",
+          scope: "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
+        })}::jsonb, null)`);
   }, { isolationLevel: "REPEATABLE READ" });
 
   return { tablesCopied: perTable.length, rowsCopied, perTable };

@@ -160,4 +160,6 @@ test("jl_guard source contract pins every inherited check", { skip: !DB }, async
   assert.match(body, /lines of a % journal entry are immutable/, "posted-immutability branch");
   assert.match(body, /journal-line reconciliation evidence is append-only/, "evidence append-only rule");
   assert.match(body, /source_cleared_date/, "source-cleared evidence rule");
+  assert.match(body, /openbooks_clone_authority/, "clone-authority exception (OM-13)");
+  assert.match(body, /Branch: clone-authority-insert/, "clone-authority branch marker");
 });
