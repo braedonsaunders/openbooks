@@ -414,6 +414,7 @@
       "description": "Sample company generators.",
       "dependsOn": [
         "platform",
+        "records",
         "sandbox",
         "sim"
       ]
@@ -481,6 +482,7 @@
         "projects",
         "provisioning",
         "receivables",
+        "records",
         "reports",
         "revenue",
         "tax-returns",
