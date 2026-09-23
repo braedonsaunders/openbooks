@@ -30,6 +30,7 @@
     "accountColumn": "Income account",
     "accountPlaceholder": "Account…",
     "currencyMismatch": "{account} only accepts {allowed} postings, not {actual}",
+    "lineMissingAccount": "Line {line}: choose an account.",
     "noTax": "No tax",
     "taxAmountColumn": "Tax amt",
     "selectCustomerPlaceholder": "Select customer…",

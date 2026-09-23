@@ -30,6 +30,7 @@
     "accountColumn": "Conta de receita",
     "accountPlaceholder": "Conta…",
     "currencyMismatch": "{account} só aceita lançamentos em {allowed}, não em {actual}",
+    "lineMissingAccount": "Linha {line}: selecione uma conta.",
     "noTax": "Sem imposto",
     "taxAmountColumn": "Val. imposto",
     "selectCustomerPlaceholder": "Selecionar cliente…",

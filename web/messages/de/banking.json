@@ -454,6 +454,7 @@
     "accountColumn": "Konto",
     "accountPlaceholder": "Konto…",
     "currencyMismatch": "{account} akzeptiert nur {allowed}-Buchungen, nicht {actual}",
+    "lineMissingAccount": "Zeile {line}: Wählen Sie ein Konto aus.",
     "noTax": "Keine Steuer",
     "taxAmountColumn": "Steuerbetr.",
     "selectVendorPlaceholder": "Lieferant auswählen…",

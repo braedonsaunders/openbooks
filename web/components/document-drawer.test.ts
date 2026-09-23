@@ -6,7 +6,9 @@ import {
   computeDocumentDrawerTotals,
   distributionFieldsOf,
   findCurrencyMismatchedAccount,
-  isPricedDrawerLine,
+  findMissingAccountLine,
+  hasDrawerLineAccount,
+  isBlankDrawerLine,
   lineAmountFromQtyPrice,
   readDocumentActionResult,
 } from './document-drawer'
@@ -20,17 +22,104 @@ const row = (accountId: string, amount: string) => ({
   taxAmount: '',
 })
 
-test('priced-line detection keeps signed amounts and drops only blank placeholder rows', () => {
-  assert.equal(isPricedDrawerLine(row('a', '100')), true)
-  // A restocking fee netted inside a credit memo, a discount line inside an
-  // invoice: the server passes signed lines to computeBillTotals untouched,
-  // so the drawer must send them instead of silently dropping the row.
-  assert.equal(isPricedDrawerLine(row('a', '-20')), true)
-  // A zero memo line books as zero — it must ride along, not vanish.
-  assert.equal(isPricedDrawerLine(row('a', '0')), true)
-  assert.equal(isPricedDrawerLine(row('a', '')), false)
-  assert.equal(isPricedDrawerLine(row('a', '   ')), false)
-  assert.equal(isPricedDrawerLine(row('', '100')), false)
+// A grid row exactly as the drawer seeds it: every cell blank.
+const blankGridRow = () => ({
+  lineId: '',
+  clientKey: 'seed',
+  accountId: '',
+  itemId: '',
+  description: '',
+  quantity: '',
+  unit: '',
+  unitPrice: '',
+  costRate: '',
+  billRate: '',
+  billAmount: '',
+  isBillable: false,
+  departmentId: '',
+  projectId: '',
+  locationId: '',
+  classId: '',
+  stockLocationId: '',
+  returnSourceMovementId: '',
+  taxProfileId: '',
+  amount: '',
+  taxInputAmount: '',
+  taxOverridden: false,
+  taxAmount: '',
+  distributionGroupId: '',
+  distributionRuleId: '',
+  distributionRuleName: '',
+  distributionVersionId: '',
+  distributionLocked: false,
+  distributionKey: '',
+})
+
+test('only a truly blank placeholder row is blank', () => {
+  assert.equal(isBlankDrawerLine(blankGridRow()), true)
+  assert.equal(isBlankDrawerLine(row('', '')), true)
+  // An account alone is content: it rides to the server, which refuses the
+  // missing amount by line name.
+  assert.equal(isBlankDrawerLine(row('a', '   ')), false)
+  // Whitespace-only cells are untouched cells, not content.
+  assert.equal(isBlankDrawerLine({ ...blankGridRow(), description: '   ' }), true)
+})
+
+test('any user-entered content makes the row non-blank — even without an account (OM-09)', () => {
+  // Sara's vanished line: item + qty/price + derived amount, account empty.
+  assert.equal(
+    isBlankDrawerLine({ ...blankGridRow(), itemId: 'OPS-W01', quantity: '2', unitPrice: '100', amount: '200.0000' }),
+    false,
+  )
+  // Every content column alone suffices: each of these used to vanish from
+  // the footer and the save payload when the account was empty.
+  for (const content of [
+    { accountId: 'a' },
+    { itemId: 'OPS-W01' },
+    { description: 'field work' },
+    { quantity: '2' },
+    { unitPrice: '100' },
+    { amount: '200.0000' },
+    { taxProfileId: 'code:vat' },
+    { departmentId: 'd1' },
+    { cf_note: 'keep me' },
+  ]) {
+    assert.equal(isBlankDrawerLine({ ...blankGridRow(), ...content }), false, JSON.stringify(content))
+  }
+  // Signed and zero amounts with an account still ride, as before.
+  assert.equal(isBlankDrawerLine(row('a', '100')), false)
+  assert.equal(isBlankDrawerLine(row('a', '-20')), false)
+  assert.equal(isBlankDrawerLine(row('a', '0')), false)
+})
+
+test('the missing-account probe names the first contentful account-less grid row', () => {
+  assert.equal(findMissingAccountLine([blankGridRow()]), null)
+  assert.equal(findMissingAccountLine([row('a', '100'), blankGridRow()]), null)
+  // OM-09 shape: booked line 1, Sara's account-less line 2, trailing blank.
+  const missing = findMissingAccountLine([
+    row('a', '1480'),
+    { ...blankGridRow(), itemId: 'OPS-W01', quantity: '2', unitPrice: '100', amount: '200.0000' },
+    blankGridRow(),
+  ])
+  assert.deepEqual(missing, { index: 1, lineNumber: 2 })
+  assert.equal(hasDrawerLineAccount({ accountId: '' }), false)
+  assert.equal(hasDrawerLineAccount({ accountId: 'a' }), true)
+})
+
+test('a contentful account-less row survives to the save payload, where the server names it (OM-09 guard)', () => {
+  // The save payload keeps every non-blank row. If anyone reintroduces an
+  // account-gated drop here, this row vanishes before any line-named
+  // refusal can reach it — exactly the production defect.
+  const rows = [
+    row('a', '1480'),
+    { ...blankGridRow(), itemId: 'OPS-W01', quantity: '2', unitPrice: '100', amount: '200.0000' },
+    blankGridRow(),
+  ]
+  const payload = rows.filter((r) => !isBlankDrawerLine(r))
+  assert.equal(payload.length, 2)
+  assert.equal((payload[1] as { amount: string }).amount, '200.0000')
+  // …and the client names its grid line before any write fires.
+  assert.deepEqual(findMissingAccountLine(rows)?.lineNumber, 2)
 })
 
 test('distribution columns map tolerantly: a line without them is simply ungrouped', () => {
@@ -71,14 +160,21 @@ test('the reviewed footer total is the booked total: save keeps every row the fo
     row('a', '-20'),
     row('a', '0'),
     row('a', ''),
+    // OM-09: a contentful row missing its account is priced in the footer
+    // instead of silently excluded — the save refuses it by line name, so
+    // the operator sees the $50 and fixes the line rather than losing it.
     row('', '50'),
   ]
   const reviewed = computeDocumentDrawerTotals(rows, new Map(), false)
-  assert.equal(reviewed.total, '80.0000')
+  assert.equal(reviewed.total, '130.0000')
   // Totals over exactly the rows the save payload keeps must match the
   // reviewed footer — otherwise the drawer books something other than what
   // the operator reviewed.
-  const booked = computeDocumentDrawerTotals(rows.filter(isPricedDrawerLine), new Map(), false)
+  const booked = computeDocumentDrawerTotals(
+    rows.filter((r) => !isBlankDrawerLine(r)),
+    new Map(),
+    false,
+  )
   assert.equal(booked.total, reviewed.total)
 })
 

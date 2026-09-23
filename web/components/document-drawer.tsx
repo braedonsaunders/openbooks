@@ -645,17 +645,78 @@ function positiveAmount(value: unknown): boolean {
   try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
 }
 
+/** A single grid cell carries user content when it is anything but blank. */
+function isBlankDrawerCell(value: unknown): boolean {
+  if (value === '' || value == null || value === false) return true
+  if (typeof value === 'string') return value.trim() === ''
+  return false
+}
+
 /**
- * Rows that carry a booking, shared by the footer and the save payload so the
- * reviewed total is always the booked total. An account plus any entered
- * amount rides: the server passes signed and zero lines to computeBillTotals
- * untouched (see validateEditableDocumentLines), rejecting only a missing
- * account or a malformed amount with a line-named error. Dropping a signed
- * row here used to book something other than the reviewed footer — silent
- * data loss on a financial document. Only blank placeholder rows are dropped.
+ * The only rows the footer and the save payload may drop: truly blank
+ * placeholder rows with no user-entered content in ANY field. Every other
+ * row rides to the server, where validateEditableDocumentLines names the
+ * line and refuses what cannot book (a missing account, a malformed
+ * amount). Dropping a contentful row here used to book something other
+ * than the reviewed footer — a $200 invoice line vanished while the save
+ * reported success (OM-09). Missing keys count as blank so partial test
+ * rows behave like an untouched grid row.
  */
-export function isPricedDrawerLine(row: { accountId: string; amount: string }): boolean {
-  return Boolean(row.accountId) && String(row.amount ?? '').trim() !== ''
+export function isBlankDrawerLine(row: Record<string, unknown>): boolean {
+  for (const key of [
+    'accountId',
+    'itemId',
+    'description',
+    'quantity',
+    'unit',
+    'unitPrice',
+    'costRate',
+    'billRate',
+    'billAmount',
+    'departmentId',
+    'projectId',
+    'locationId',
+    'classId',
+    'stockLocationId',
+    'returnSourceMovementId',
+    'taxProfileId',
+    'amount',
+    'taxInputAmount',
+    'taxAmount',
+    'distributionGroupId',
+    'distributionRuleId',
+    'distributionRuleName',
+    'distributionVersionId',
+    'distributionKey',
+  ]) {
+    if (!isBlankDrawerCell(row[key])) return false
+  }
+  if (row.isBillable === true || row.taxOverridden === true || row.distributionLocked === true) return false
+  for (const [key, value] of Object.entries(row)) {
+    if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankDrawerCell(value)) return false
+  }
+  return true
+}
+
+/** Rows that name an account — the only rows allocation candidates can key off. */
+export function hasDrawerLineAccount(row: Record<string, unknown>): boolean {
+  return String(row.accountId ?? '').trim() !== ''
+}
+
+/**
+ * First grid row carrying user content but no account. The line number is
+ * the visible grid position (index + 1): blank placeholders are normally
+ * trailing, so this is also the number the server refusal will cite for
+ * the same row. Null when every contentful row names an account.
+ */
+export function findMissingAccountLine(
+  rows: readonly Record<string, unknown>[],
+): { index: number; lineNumber: number } | null {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    if (!isBlankDrawerLine(row) && !hasDrawerLineAccount(row)) return { index: i, lineNumber: i + 1 }
+  }
+  return null
 }
 
 const LINE_DECIMAL_RE = /^[-+]?(\d+(\.\d*)?|\.\d+)$/
@@ -793,8 +854,12 @@ export function computeDocumentDrawerTotals(
   taxByProfile: ReadonlyMap<string, TaxComponentConfig[]>,
   hasTax: boolean,
 ): DocumentDrawerTotals {
+  // Every contentful row prices here — including one missing its account,
+  // which the save refuses by line name instead of silently excluding. Only
+  // blank placeholders (which carry no amount) are skipped, so the reviewed
+  // footer can never hide a typed figure from the operator.
   const lineTotals = rows
-    .filter((row) => isPricedDrawerLine(row))
+    .filter((row) => !isBlankDrawerLine(row))
     .map((row) => {
       const amount = String(row.amount)
       const taxConfig = taxByProfile.get(row.taxProfileId) ?? []
@@ -1170,12 +1235,16 @@ export function DocumentDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distEditable, config.kind, documentDate, subsidiaryId, allocationsEntryEnabled])
 
-  // Per-line candidates for priced ungrouped rows, fetched lazily and
-  // cached by coordinate so typing in one row never storms the route.
+  // Per-line candidates for account-named ungrouped rows, fetched lazily
+  // and cached by coordinate so typing in one row never storms the route.
+  // Candidates key off the account, not the amount: an amount-less row that
+  // already names its account stays eligible (the amount rides the
+  // signature only for change detection). Account-less rows are skipped —
+  // the save names their line and refuses — never fetched with a blank key.
   const distLineSignature =
     distOn && distEditable
       ? rows
-          .filter((r) => isPricedDrawerLine(r) && groupIdOf(r) === null)
+          .filter((r) => hasDrawerLineAccount(r) && groupIdOf(r) === null)
           .map((r) => `${distCoordKey(r)}@${r.amount}`)
           .sort()
           .join('|')
@@ -1185,7 +1254,7 @@ export function DocumentDrawer({
     const timer = setTimeout(() => {
       const missing = new Map<string, LineRow>()
       for (const row of rows) {
-        if (!isPricedDrawerLine(row) || groupIdOf(row) !== null) continue
+        if (!hasDrawerLineAccount(row) || groupIdOf(row) !== null) continue
         const key = distCoordKey(row)
         if (distLineMap.has(key) || distLineFailed.has(key) || distInflight.current.has(key)) continue
         if (!missing.has(key)) missing.set(key, row)
@@ -1243,7 +1312,7 @@ export function DocumentDrawer({
       const staged = new Map<string, string>()
       const missing = new Map<string, LineRow>()
       for (const row of rows) {
-        if (!isPricedDrawerLine(row) || groupIdOf(row) !== null || row.distributionKey) continue
+        if (!hasDrawerLineAccount(row) || groupIdOf(row) !== null || row.distributionKey) continue
         const key = distCoordKey(row)
         const cached = distLineMap.get(key)?.filter((rule) => rule.applyPolicy === 'automatic')
         if (cached && cached.length > 0) {
@@ -1281,7 +1350,7 @@ export function DocumentDrawer({
       if (staged.size > 0) {
         setRows((prev) =>
           prev.map((r) => {
-            if (!isPricedDrawerLine(r) || groupIdOf(r) !== null || r.distributionKey) return r
+            if (!hasDrawerLineAccount(r) || groupIdOf(r) !== null || r.distributionKey) return r
             const key = staged.get(distCoordKey(r))
             return key ? { ...r, distributionKey: key } : r
           }),
@@ -1404,7 +1473,7 @@ export function DocumentDrawer({
         const found = distSuggest(row)
         return found ? { ruleName: found.ruleName } : null
       },
-      splittable: (row: LineRow) => isPricedDrawerLine(row) && groupIdOf(row) === null,
+      splittable: (row: LineRow) => hasDrawerLineAccount(row) && groupIdOf(row) === null,
     }
     return {
       groups,
@@ -1578,8 +1647,12 @@ export function DocumentDrawer({
       ...(config.kind === 'project_charge'
         ? {}
         : {
+            // Every contentful row rides — including one missing its
+            // account — so the server names the line and refuses instead
+            // of the drawer silently booking a smaller total (OM-09).
+            // Only blank placeholders are dropped.
             lines: rows
-              .filter((r) => isPricedDrawerLine(r))
+              .filter((r) => !isBlankDrawerLine(r))
               .map((r) => ({
                 // Server provenance match needs the identity; native custom
                 // is never sent (the server re-attaches its locked rows).
@@ -1750,6 +1823,16 @@ export function DocumentDrawer({
     // A currency-mismatched form can never post (the ledger refuses it), so
     // refuse the save up front with the account named (F-t06-002).
     if (blockCurrencyMismatch()) {
+      setSaveState('error')
+      return
+    }
+    // A contentful row without an account can never book either: the
+    // server names the line and refuses. Refuse up front with the grid
+    // line named and keep every entered row in place — dropping the row
+    // here used to book a total the operator never reviewed (OM-09).
+    const missingAccount = findMissingAccountLine(rows)
+    if (missingAccount) {
+      refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
       setSaveState('error')
       return
     }

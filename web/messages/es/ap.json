@@ -33,6 +33,7 @@
     "accountColumn": "Cuenta",
     "accountPlaceholder": "Cuenta…",
     "currencyMismatch": "{account} solo acepta movimientos en {allowed}, no en {actual}",
+    "lineMissingAccount": "Línea {line}: seleccione una cuenta.",
     "noTax": "Sin impuesto",
     "taxAmountColumn": "Impuesto",
     "selectVendorPlaceholder": "Seleccionar proveedor…",
