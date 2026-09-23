@@ -47,6 +47,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       exitId: id,
+      expectedRevision: body.expectedRevision,
+      ...(body.reason !== undefined ? { reason: body.reason } : {}),
       ...(body.reasonKind ? { reasonKind: body.reasonKind } : {}),
       ...(body.isVoluntary !== undefined ? { isVoluntary: body.isVoluntary } : {}),
       ...(body.isRegrettable !== undefined ? { isRegrettable: body.isRegrettable } : {}),

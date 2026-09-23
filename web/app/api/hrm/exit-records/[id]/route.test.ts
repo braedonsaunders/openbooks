@@ -168,16 +168,33 @@ if (isVitest) {
     ]);
   });
 
-  test("correction forwards only the supplied fields", async () => {
+  test("correction forwards the revision with only the supplied fields", async () => {
     reset();
-    const response = await itemRoute!.PATCH(patchRequest({ wouldRehire: true, notes: "missed" }), params);
+    const response = await itemRoute!.PATCH(
+      patchRequest({ expectedRevision: 3, wouldRehire: true, notes: "missed" }),
+      params,
+    );
     assert.equal(response.status, 200);
     assert.deepEqual(routeState.calls, [
       {
         fn: "update",
-        args: { orgId: "org-1", actorId: "user-1", exitId: EXIT_ID, wouldRehire: true, notes: "missed" },
+        args: {
+          orgId: "org-1",
+          actorId: "user-1",
+          exitId: EXIT_ID,
+          expectedRevision: 3,
+          wouldRehire: true,
+          notes: "missed",
+        },
       },
     ]);
+  });
+
+  test("a correction without the read revision never reaches the service", async () => {
+    reset();
+    const response = await itemRoute!.PATCH(patchRequest({ notes: "missed" }), params);
+    assert.equal(response.status, 400);
+    assert.deepEqual(routeState.calls, []);
   });
 
   test("corrections refuse hostile payloads at the real boundary", async () => {
@@ -200,7 +217,10 @@ if (isVitest) {
     reset();
     const refusal = new Error("exit interview needs both the held date and the interviewer");
     routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(patchRequest({ interviewHeldOn: "2026-07-01" }), params);
+    const response = await itemRoute!.PATCH(
+      patchRequest({ expectedRevision: 1, interviewHeldOn: "2026-07-01" }),
+      params,
+    );
     assert.equal(response.status, 409);
     assert.equal(routeState.mapped[0]!.error, refusal);
   });

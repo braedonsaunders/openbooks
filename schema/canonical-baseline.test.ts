@@ -563,6 +563,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // concurrent edits silently lost one writer's changes. equipment_units
     // gains the revision counter the PATCH fence compares under lock.
     "0278_equipment_unit_revision.sql",
+    // Exit corrections rewrote the row with no revision and no audit
+    // event: concurrent corrections lost one silently (0281 adds the
+    // required revision plus the append-only correction evidence table).
+    "0281_hrm_exit_record_revision_and_audit.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

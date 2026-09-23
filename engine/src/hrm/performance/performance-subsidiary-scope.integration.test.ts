@@ -469,6 +469,10 @@ test("a restricted HR reads only the exit records they cover", { skip: !DB }, as
       (await listExitRecords({ orgId: h.org.orgId, actorId: h.hrB })).map((e) => e.id),
       [exitB.id],
     );
+    // Listed rows carry the revision the correction path requires.
+    for (const row of await listExitRecords({ orgId: h.org.orgId, actorId: h.hrFull })) {
+      assert.equal(row.revision, 1);
+    }
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
@@ -628,20 +632,51 @@ test("the termination link must be this employment's own termination", { skip: !
   }
 });
 
-test("corrections clear explicit nulls while omitted fields keep their value", { skip: !DB }, async () => {
+test("corrections clear explicit nulls, require the read revision, and append audit events", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {
-    const leaver = await mkLeaver(h, "leaver-nc", h.org.subsidiaryId);
+    const leaver = await mkLeaver(h, "leaver", h.org.subsidiaryId);
     const exit = await recordExit({
       orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaver.employmentId,
       reasonKind: "resignation", isVoluntary: true, notes: "Left for growth", destination: "Competition",
     });
+    assert.equal(exit.revision, 1);
     // An explicit null clears; an omitted field keeps its value.
     const cleared = await updateExitRecord({
-      orgId: h.org.orgId, actorId: h.hrFull, exitId: exit.id, notes: null,
+      orgId: h.org.orgId, actorId: h.hrFull, exitId: exit.id, expectedRevision: exit.revision,
+      notes: null, reason: "notes were speculation",
     });
     assert.equal(cleared.notes, null);
     assert.equal(cleared.destination, "Competition");
+    assert.equal(cleared.revision, 2);
+    // A stale revision refuses instead of overwriting.
+    await assert.rejects(
+      updateExitRecord({
+        orgId: h.org.orgId, actorId: h.hrFull, exitId: exit.id, expectedRevision: exit.revision,
+        destination: "Elsewhere",
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "BAD_STATE");
+        assert.match(e.message, /at revision 2, not 1 — re-read it/);
+        return true;
+      },
+    );
+    // The audit trail holds the recording plus the correction, with
+    // actor, before/after images, and the correction reason.
+    const events = (await db.execute<{
+      kind: string; actor: string | null; reason: string | null; before: unknown; after: unknown;
+    }>(sql`
+      select kind, actor_user_id::text as actor, reason,
+             before_snapshot as before, after_snapshot as after
+        from hrm_exit_record_events
+       where org_id = ${h.org.orgId} and exit_record_id = ${exit.id}
+       order by recorded_at`)).rows;
+    assert.deepEqual(events.map((e) => e.kind), ["recorded", "corrected"]);
+    assert.equal(events[1]!.actor, h.hrFull);
+    assert.equal(events[1]!.reason, "notes were speculation");
+    assert.equal((events[1]!.before as { notes: string }).notes, "Left for growth");
+    assert.equal((events[1]!.after as { notes: null }).notes, null);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
