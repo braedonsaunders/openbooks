@@ -112,7 +112,7 @@ test("drawers cancel with zero writes and save with one idempotent POST", () => 
 
   const project = src(PROJECT_DRAWER);
   assert.match(project, /if \(createMode\) \{\n\s*router\.push\(returnHref as never\)/);
-  assert.match(project, /fetch\('\/api\/projects', \{\n\s*method: 'POST',/);
+  assert.match(project, /fetchAction(?:<[^<>]*>)?\('\/api\/projects', \{\n\s*method: 'POST',/);
   assert.match(project, /'Idempotency-Key': requestIdRef\.current/);
 });
 
