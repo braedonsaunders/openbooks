@@ -1453,7 +1453,9 @@ function duplicateConflict(entityKey: string): { status: 409; body: { error: str
 function overlapConflict(entityKey: string): { status: 409; body: { error: string; code: 'overlap' } } {
   const error = entityKey === 'income-tax-rates'
     ? 'An active rate already covers this jurisdiction for this period.'
-    : 'This period overlaps an existing record.'
+    : entityKey === 'leave-policies'
+      ? 'Another policy already covers this leave type and scope for these dates — close its window or deactivate it before saving.'
+      : 'This period overlaps an existing record.'
   return { status: 409, body: { error, code: 'overlap' } }
 }
 
