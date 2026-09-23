@@ -107,18 +107,41 @@ const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
 export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind, subsidiaryId: string | null = null) {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
-  const org = (await db.execute<{ base_currency: string }>(
+  const org = (await db.execute<{ base_currency: string | null }>(
     sql`select base_currency from orgs where id = ${orgId}`,
   ))
+  // The order currency is the org's base currency — never invented. A
+  // missing org row (or an unconfigured base currency) refuses by name
+  // instead of silently booking foreign-currency intent as CAD, the same
+  // rule the canonical order create enforces.
+  const baseCurrency = org.rows[0]?.base_currency
+  if (!baseCurrency) {
+    throw new OrderDraftError('this organization has no base currency configured — set one before creating orders')
+  }
   const documentNumber = await nextDocumentNumber(orgId, cfg.kind, cfg.prefix)
   const today = await businessToday(orgId)
   const row = (await db.execute<{ id: string; document_number: string }>(sql`
     insert into documents (org_id, kind, document_number, document_date, currency, subsidiary_id, subtotal, tax_total, total, created_by)
     values (${orgId}, ${kind}, ${documentNumber}, ${today},
-            ${org.rows[0]?.base_currency ?? 'CAD'}, ${subsidiaryId}, '0', '0', '0', ${userId})
+            ${baseCurrency}, ${subsidiaryId}, '0', '0', '0', ${userId})
     returning id, document_number
   `))
   return row.rows[0]!
+}
+
+/**
+ * Refusal from the instant-into-draft factory: the draft cannot be minted
+ * (missing base currency, disabled feature). Draft routes map this to the
+ * 422 the operator acts on; it must never surface as a storage failure.
+ */
+export class OrderDraftError extends Error {
+  constructor(
+    message: string,
+    readonly status = 422,
+  ) {
+    super(message)
+    this.name = 'OrderDraftError'
+  }
 }
 
 export class ConversionError extends Error {
