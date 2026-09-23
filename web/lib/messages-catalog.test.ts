@@ -1946,7 +1946,7 @@ test('ar collections copy ships translated in every locale', () => {
   ])
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => key.startsWith('ar.collections.'))
-  assert.equal(wanted.length, 104, 'ar.collections source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 106, 'ar.collections source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)

@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "Wiederkehrende Pläne, Abonnementtarife und Mahnstufen werden hier konfiguriert. Die Liste überfälliger Rechnungen finden Sie unter Forderungen.",
+    "worklistCta": "Liste überfälliger Rechnungen öffnen",
     "tabs": {
       "recurring": "Wiederkehrende Rechnungen",
       "subscriptions": "Abonnements",

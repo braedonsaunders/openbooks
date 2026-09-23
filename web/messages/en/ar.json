@@ -175,6 +175,8 @@
     }
   },
   "collections": {
+    "pageDescription": "Recurring schedules, subscription plans, and dunning ladders live here. The overdue chase list lives in Accounts Receivable.",
+    "worklistCta": "Open the collections worklist",
     "tabs": {
       "recurring": "Recurring invoices",
       "subscriptions": "Subscriptions",
