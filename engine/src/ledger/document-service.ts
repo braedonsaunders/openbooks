@@ -80,7 +80,7 @@ export async function loadDocumentEditCurrent(
   const result = await db.execute<DocumentEditCurrent>(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate",
-           custom,
+           custom, subsidiary_id as "subsidiaryId",
            ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
       from documents
      where id = ${id} and org_id = ${orgId}

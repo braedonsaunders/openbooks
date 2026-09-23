@@ -112,4 +112,6 @@ export type DocumentEditCurrent = {
   documentDate: string
   updatedAt: string
   custom?: Record<string, unknown>
+  /** Owning legal entity; present on rows loaded after the provider-tax fix. */
+  subsidiaryId?: string | null
 };

@@ -314,10 +314,26 @@ export type PreparedDocumentTotals = Awaited<ReturnType<typeof computeBillTotals
  * from an HTTP payload. Provider failures become request-state errors while no
  * document or dependent rows exist yet.
  */
+function documentTaxProviderAddresses(custom: Record<string, unknown> | undefined): {
+  shipFrom?: Record<string, string | null>
+  shipTo?: Record<string, string | null>
+} | null {
+  if (!custom) return null
+  const raw = custom.taxProviderAddresses as Record<string, unknown> | undefined
+  if (raw == null) return null
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new DocumentEditError(422, 'document tax location override must be an object with shipFrom/shipTo addresses')
+  }
+  return {
+    ...(raw.shipFrom == null ? {} : { shipFrom: raw.shipFrom as Record<string, string | null> }),
+    ...(raw.shipTo == null ? {} : { shipTo: raw.shipTo as Record<string, string | null> }),
+  }
+}
+
 export async function precomputeDocumentTotalsForCreate(
   orgId: string,
   kind: string,
-  body: Pick<DocumentEditInput, 'lines' | 'currency' | 'documentDate' | 'partyId'>,
+  body: Pick<DocumentEditInput, 'lines' | 'currency' | 'documentDate' | 'partyId' | 'subsidiaryId' | 'custom'>,
 ): Promise<PreparedDocumentTotals | null> {
   if (!body.lines) return null
   let currency = body.currency
@@ -340,6 +356,8 @@ export async function precomputeDocumentTotalsForCreate(
         currency,
         documentDate,
         partyId: body.partyId,
+        subsidiaryId: body.subsidiaryId,
+        taxProviderAddresses: documentTaxProviderAddresses(body.custom),
       },
     )
   } catch (error) {
@@ -1308,6 +1326,8 @@ export async function applyDocumentEdit(
               select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
             documentDate: body.documentDate ?? current.documentDate,
             partyId: body.partyId !== undefined ? body.partyId : current.partyId,
+            subsidiaryId: body.subsidiaryId !== undefined ? body.subsidiaryId : current.subsidiaryId,
+            taxProviderAddresses: documentTaxProviderAddresses(headerCustom ?? current.custom),
           },
         )
       } catch (error) {
@@ -2096,6 +2116,8 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
         currency: seedCurrency,
         documentDate: effectiveBody.documentDate,
         partyId: effectiveBody.partyId,
+        subsidiaryId: effectiveBody.subsidiaryId,
+        custom: effectiveBody.custom,
       })
     : null
 
@@ -2142,7 +2164,7 @@ export async function createDocument(input: DocumentCreateInput): Promise<Docume
     const current = (await tx.execute<DocumentEditCurrent>(sql`
       select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
              document_date as "documentDate",
-             custom,
+             custom, subsidiary_id as "subsidiaryId",
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
         from documents
        where id = ${key} and org_id = ${orgId}
