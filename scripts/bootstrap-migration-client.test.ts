@@ -183,6 +183,78 @@ test("the splitter does not mistake a cast or a placeholder for a dollar quote",
   assert.equal(statements.length, 2);
 });
 
+test("the sanitizer keeps nested comments, escaped quotes and tagged dollar bodies intact", () => {
+  const preserved = [
+    "/* outer /* nested SET lock_timeout = 0; */ still comment */\nselect 1;",
+    "SELECT 'it''s SET lock_timeout = 0;';",
+    "DO $body$\nBEGIN\n  PERFORM 'SET lock_timeout = 0;';\nEND;\n$body$;",
+    "select $$SET lock_timeout = 0;$$;",
+    "SELECT 1::$regclass;",
+    'SELECT "SET lock_timeout = 0";',
+  ];
+  for (const body of preserved) {
+    assert.equal(sanitizeMigrationContent(body), body, `must preserve: ${body.slice(0, 60)}`);
+  }
+});
+
+test("the sanitizer strips TO/=/RESET forms with or without a semicolon, any case", () => {
+  const cases: Array<[string, string]> = [
+    ["SET lock_timeout TO 0", ""],
+    ["RESET lock_timeout", ""],
+    ["SeT LoCaL lOcK_TiMeOuT To 0;", ""],
+    ["SET\n  lock_timeout\n  =\n  0;", ""],
+    ["select 1; SET lock_timeout = 0; select 2;", "select 1;  select 2;"],
+    ["$tag$SET lock_timeout = 0;$tag$ SET lock_timeout = 0;", "$tag$SET lock_timeout = 0;$tag$ "],
+  ];
+  for (const [input, expected] of cases) {
+    assert.equal(sanitizeMigrationContent(input), expected, `must strip: ${input.slice(0, 60)}`);
+  }
+});
+
+test("sanitize and split stay linear on the real baseline and a 5 MB synthetic body (perf regression)", () => {
+  const baseline = readFileSync(join(generatedDir, "0001_baseline.sql"), "utf8");
+  assert.ok(baseline.length > 1_000_000, "expected the real multi-megabyte baseline");
+  let started = performance.now();
+  const clean = sanitizeMigrationContent(baseline);
+  const sanitizeMs = performance.now() - started;
+  assert.ok(sanitizeMs < 2_000, `sanitize took ${sanitizeMs.toFixed(0)}ms on ${(baseline.length / 1e6).toFixed(1)} MB`);
+  started = performance.now();
+  const statements = splitSqlStatements(baseline);
+  const splitMs = performance.now() - started;
+  assert.ok(splitMs < 2_000, `split took ${splitMs.toFixed(0)}ms on ${(baseline.length / 1e6).toFixed(1)} MB`);
+  assert.ok(statements.length > 0);
+  assert.doesNotMatch(clean, /^\s*set\s+(?:(?:session|local)\s+)?lock_timeout/m);
+
+  // Synthetic 5 MB body mixing prose, dollar bodies, quoted escapes and real
+  // SET statements, so the bound covers every scanner state, not just DDL.
+  const chunk = [
+    "select 1; -- SET lock_timeout = 0 is prose, not a GUC assignment",
+    "DO $$ BEGIN RAISE NOTICE 'SET lock_timeout = 0;'; END; $$;",
+    "SELECT 'it''s quoted';",
+    "SET lock_timeout = 0;",
+    "/* block /* nested SET lock_timeout = 0; */ comment */",
+  ].join("\n") + "\n";
+  const synthetic = chunk.repeat(Math.ceil((5 * 1024 * 1024) / chunk.length));
+  assert.ok(synthetic.length >= 5 * 1024 * 1024, "expected a >= 5 MB synthetic body");
+  started = performance.now();
+  const cleanSynthetic = sanitizeMigrationContent(synthetic);
+  const syntheticSanitizeMs = performance.now() - started;
+  assert.ok(
+    syntheticSanitizeMs < 2_000,
+    `sanitize took ${syntheticSanitizeMs.toFixed(0)}ms on ${(synthetic.length / 1e6).toFixed(1)} MB synthetic`,
+  );
+  started = performance.now();
+  splitSqlStatements(synthetic);
+  const syntheticSplitMs = performance.now() - started;
+  assert.ok(
+    syntheticSplitMs < 2_000,
+    `split took ${syntheticSplitMs.toFixed(0)}ms on ${(synthetic.length / 1e6).toFixed(1)} MB synthetic`,
+  );
+  assert.ok(cleanSynthetic.includes("-- SET lock_timeout = 0 is prose"));
+  assert.ok(cleanSynthetic.includes("RAISE NOTICE 'SET lock_timeout = 0;'"));
+  assert.doesNotMatch(cleanSynthetic, /^SET lock_timeout = 0;$/m);
+});
+
 test("the real 0251 header is neutralized exactly where the runner would run it", () => {
   const content = readFileSync(
     join(generatedDir, "0251_payment_link_token_at_rest.sql"),

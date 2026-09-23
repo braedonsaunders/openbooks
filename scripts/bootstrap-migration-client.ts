@@ -165,7 +165,13 @@ export function migrationRunsWithoutTransaction(content: string): boolean {
  * those statements removed (any value — the runner is authoritative).
  */
 export function sanitizeMigrationContent(content: string): string {
-  const pattern = /set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*[^\n;]*;?|reset\s+lock_timeout\s*;?/gi;
+  // Sticky (`y`): the match must start exactly at `i`. The previous global
+  // pattern searched the whole remaining suffix on every code character and
+  // only kept matches at `i`, which is quadratic on large baselines.
+  const pattern = /set(?:\s+(?:session|local))?\s+lock_timeout\s*(?:=|to\b)\s*[^\n;]*;?|reset\s+lock_timeout\s*;?/giy;
+  // Sticky dollar-quote opener: matches the tag exactly at `i` without
+  // copying the remaining suffix via content.slice(i) on every `$`.
+  const tagPattern = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y;
   let out = "";
   let i = 0;
   let state: "code" | "line" | "block" | "squote" | "dquote" = "code";
@@ -213,7 +219,8 @@ export function sanitizeMigrationContent(content: string): string {
         continue;
       }
       if (ch === "$") {
-        const tag = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(content.slice(i))?.[0];
+        tagPattern.lastIndex = i;
+        const tag = tagPattern.exec(content)?.[0];
         if (tag) {
           dollarTag = tag;
           out += tag;
@@ -306,6 +313,9 @@ export function splitSqlStatements(content: string): string[] {
   let blockDepth = 0;
   let dollarTag: string | null = null;
   const n = content.length;
+  // Sticky dollar-quote opener: matches the tag exactly at `i` without
+  // copying the remaining suffix via content.slice(i) on every `$`.
+  const tagPattern = /\$[A-Za-z_][A-Za-z0-9_]*\$|\$\$/y;
   const flush = (): void => {
     if (hasCode) statements.push(current);
     current = "";
@@ -355,7 +365,8 @@ export function splitSqlStatements(content: string): string[] {
         continue;
       }
       if (ch === "$") {
-        const tag = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/.exec(content.slice(i))?.[0];
+        tagPattern.lastIndex = i;
+        const tag = tagPattern.exec(content)?.[0];
         if (tag) {
           hasCode = true;
           dollarTag = tag;
