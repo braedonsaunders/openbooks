@@ -870,6 +870,9 @@ test("alert scan enumerates orgs past RLS: a constrained caller still scans", { 
 test("alert scan catches up crossed thresholds instead of skipping them", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Catchup Hand");
+    // The holder needs a login for the notice; link the scratch admin to
+    // the holder party so exactly one holder user exists.
+    await db.execute(sql`update users set party_id = ${worker.partyId} where id = ${h.adminId}`);
     const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
     const today = await businessToday(h.org.orgId);
     // Seven days out with the default 30/14/7/1 schedule: the 30- and
@@ -890,10 +893,38 @@ test("alert scan catches up crossed thresholds instead of skipping them", { skip
       .map((a) => a.leadDays)
       .sort((a, b) => a - b);
     assert.deepEqual(leads, [7, 14, 30]);
+    // One notice per qualification per scan, fanned out to each holder
+    // user exactly once — not one notice per crossed threshold. Exactly
+    // one holder login exists, so one notice means exactly one row.
+    const holderUsers = Number((await db.execute<{ n: string }>(sql`
+      select count(*) as n from users where org_id = ${h.org.orgId} and party_id = ${worker.partyId}
+    `)).rows[0]!.n);
+    assert.ok(holderUsers >= 1);
+    const notices = async (): Promise<number> => Number((await db.execute<{ n: string }>(sql`
+      select count(*) as n from notifications
+       where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
+    `)).rows[0]!.n);
+    assert.equal(await notices(), holderUsers);
+    assert.equal(mine.notificationsWritten, holderUsers);
     // A re-run is silent: every crossed threshold was already sent.
     const second = await runQualificationAlertScan(new Date());
     assert.equal(second.find((s) => s.orgId === h.org.orgId)?.alertsWritten, 0);
     assert.equal(second.find((s) => s.orgId === h.org.orgId)?.notificationsWritten, 0);
+    assert.equal(await notices(), holderUsers);
+    // The 1-day threshold fires exactly once when it is crossed: move
+    // expiry to tomorrow and scan again.
+    await db.execute(sql`
+      update hrm_worker_qualifications set expires_on = ${addDays(today, 1)}::date
+       where id = ${q.id}::uuid
+    `);
+    const third = await runQualificationAlertScan(new Date());
+    assert.equal(third.find((s) => s.orgId === h.org.orgId)?.alertsWritten, 1);
+    const leadsAfter = (await listAlerts(db, { orgId: h.org.orgId, actorId: h.adminId }))
+      .filter((a) => a.qualificationId === q.id)
+      .map((a) => a.leadDays)
+      .sort((a, b) => a - b);
+    assert.deepEqual(leadsAfter, [1, 7, 14, 30]);
+    assert.equal(await notices(), holderUsers * 2);
   });
 });
 

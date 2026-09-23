@@ -162,8 +162,11 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
       // alert row, and the UNIQUE(qualification_id, lead_days) below is
       // the idempotency key — catch-up inserts each crossed threshold
       // exactly once (justified: a re-run hits the conflict arm and
-      // changes nothing), and the notification fires only on a fresh
-      // insert, so a second run is silent.
+      // changes nothing). The holders are notified ONCE per qualification
+      // per scan, for the most urgent freshly-crossed threshold: the
+      // other fresh rows are still recorded and marked sent, but one
+      // catch-up scan must not fan out one notice per crossed threshold.
+      const freshAlertIds: string[] = [];
       for (const threshold of schedule) {
         if (daysLeft > threshold) continue;
         const alertId = (await tx.execute<{ id: string }>(sql`
@@ -176,9 +179,13 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
         `)).rows[0]?.id;
         if (!alertId) continue;
         alertsWritten += 1;
+        freshAlertIds.push(alertId);
+      }
+      if (freshAlertIds.length > 0) {
         await tx.execute(sql`
           update hrm_qualification_alerts set sent_at = now()
-           where id = ${alertId}::uuid and org_id = ${orgId}::uuid
+           where id in (select jsonb_array_elements_text(${JSON.stringify(freshAlertIds)}::jsonb)::uuid)
+             and org_id = ${orgId}::uuid
         `);
         notificationsWritten += await notifyHolders(
           tx, orgId, row,
