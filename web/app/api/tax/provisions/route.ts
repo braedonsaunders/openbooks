@@ -187,6 +187,7 @@ export async function POST(req: Request) {
         ...(presentationCurrency !== undefined ? { presentationCurrency } : {}),
       },
       gate.user.id,
+      gate.allowedSubsidiaryIds,
     );
     return NextResponse.json({ runId }, { status: 201 });
   } catch (e) {
