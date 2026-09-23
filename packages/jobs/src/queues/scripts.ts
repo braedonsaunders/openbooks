@@ -23,6 +23,12 @@ export type ScriptJobData = {
    * on jobs enqueued before the key existed.
    */
   occurrenceKey?: string
+  /**
+   * The scheduler's dispatch-ledger row id for this occurrence. The worker
+   * stamps it on its own script_runs row so recovery matches evidence
+   * one-to-one by identity, never by timestamp.
+   */
+  occurrenceRunId?: string
 }
 
 let scriptsQueue: Queue<ScriptJobData> | undefined

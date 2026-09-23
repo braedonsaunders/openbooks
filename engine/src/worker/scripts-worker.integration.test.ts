@@ -89,6 +89,46 @@ test("the same occurrence run twice across a clock gap posts exactly one journal
   }
 });
 
+test("the worker links its run row to the occurrence ledger row", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = await seedPostingScript(org.orgId, org.date);
+    const occurrenceRunId = randomUUID();
+    const outcome = await processScriptJobData({
+      orgId: org.orgId,
+      scriptId,
+      kind: "scheduled",
+      occurrenceKey: scriptOccurrenceKey(scriptId, new Date(Date.now() - 30 * 60_000)),
+      occurrenceRunId,
+    });
+    assert.equal(outcome.status, "ok", `run errored: ${outcome.abortReason}`);
+    const run = (
+      await db.execute<{ targetId: string | null }>(sql`
+        select target_id as "targetId" from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled'
+      `)
+    ).rows[0];
+    assert.equal(run?.targetId, occurrenceRunId, "recovery matches evidence on this identity");
+
+    // Manual runs belong to no occurrence and must never absorb one.
+    const manual = await processScriptJobData({
+      orgId: org.orgId,
+      scriptId,
+      kind: "scheduled",
+    });
+    assert.equal(manual.status, "ok", `manual run errored: ${manual.abortReason}`);
+    const unattributed = (
+      await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled' and target_id is null
+      `)
+    ).rows[0]!.n;
+    assert.equal(unattributed, 1, "exactly the manual run stays unattributed");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("two different occurrences still post two journals", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

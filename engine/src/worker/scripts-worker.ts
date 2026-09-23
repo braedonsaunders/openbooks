@@ -21,6 +21,8 @@ import { runBulkScript, runScheduledScript, type ScriptOutcome } from "../script
  * payload, but their BullMQ job id IS the scheduler-minted occurrence key
  * (attempt 1) or that key with a `:rN` retry suffix — adopt it when it is
  * recognizably one, otherwise fall back to the run's minute bucket.
+ * The payload's occurrenceRunId is forwarded alongside, linking the run row
+ * to its dispatch-ledger row for one-to-one recovery (SCHED2).
  */
 export function scheduledScopeFromJob(
   kind: ScriptJobData["kind"],
@@ -50,6 +52,7 @@ export async function processScriptJobData(
         : runScheduledScript(d.scriptId, d.orgId, {
             actorId: d.actorId ?? null,
             idempotencyScope: scheduledScopeFromJob(d.kind, d, jobMeta?.jobId),
+            occurrenceRunId: d.occurrenceRunId,
           }),
   );
   return outcome;
