@@ -1,10 +1,17 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { parseFormSchema } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
+import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { getLatestVersion, getTemplateByKey } from '../../_lib'
+
+/** Short content identity for audit evidence (schema bodies live on their rows). */
+function schemaHash(schema: unknown): string {
+  return createHash('sha256').update(JSON.stringify(schema)).digest('hex')
+}
 
 export const runtime = 'nodejs'
 
@@ -82,12 +89,13 @@ export async function PUT(req: Request, { params }: Params) {
       // observes the published row instead of overwriting the snapshot.
       // The preflight lookup above is not authoritative — re-check inside.
       const locked = await tx.execute(sql`
-        select id
+        select id, key, name, category, description, status, kind, allowed_roles
           from form_templates
          where id = ${template.id} and org_id = ${user.orgId}
          for update
       `)
-      if (locked.rows.length === 0) return { kind: 'not-found' as const }
+      const beforeTemplate = locked.rows[0] as Record<string, unknown> | undefined
+      if (!beforeTemplate) return { kind: 'not-found' as const }
 
       if (hasMetadataChanges) {
         const name = body.name?.trim() || template.name
@@ -100,6 +108,15 @@ export async function PUT(req: Request, { params }: Params) {
             : Array.isArray(body.allowedRoles) && body.allowedRoles.length > 0
               ? body.allowedRoles.map((r) => String(r)).slice(0, 20)
               : null
+        const afterTemplate = {
+          ...beforeTemplate,
+          name,
+          category: body.category === undefined ? template.category : body.category?.trim() || null,
+          description:
+            body.description === undefined ? template.description : body.description?.trim() || null,
+          kind,
+          allowed_roles: allowedRoles,
+        }
         await tx.execute(sql`
           update form_templates
              set name = ${name},
@@ -110,21 +127,34 @@ export async function PUT(req: Request, { params }: Params) {
                  updated_at = now(), updated_by = ${user.id}
            where id = ${template.id} and org_id = ${user.orgId}
         `)
+        await auditSetupChange(
+          {
+            orgId: user.orgId,
+            table: 'form_templates',
+            rowId: template.id,
+            action: 'update',
+            changes: { before: beforeTemplate, after: afterTemplate },
+            actorId: user.id,
+          },
+          tx,
+        )
       }
 
       if (parsedSchema) {
         // Locked: a concurrent publish either committed before this lock
         // (observed here as published) or waits behind it.
         const latestResult = await tx.execute(sql`
-          select id, version, published_at
+          select id, version, schema, published_at
             from form_template_versions
            where org_id = ${user.orgId} and template_id = ${template.id}
            order by version desc limit 1
            for update
         `)
         const latest = latestResult.rows[0] as
-          | { id: string; version: number; published_at: string | null }
+          | { id: string; version: number; schema: unknown; published_at: string | null }
           | undefined
+        const beforeSchemaHash = latest ? schemaHash(latest.schema) : null
+        const afterSchema = JSON.stringify(parsedSchema.data)
         if (latest && !latest.published_at) {
           // Editable draft — update in place, predicated on still-draft so
           // a publish that committed between the lock and this write cannot
@@ -132,7 +162,7 @@ export async function PUT(req: Request, { params }: Params) {
           // goes to a new draft version instead.
           const stamped = await tx.execute(sql`
             update form_template_versions
-               set schema = ${JSON.stringify(parsedSchema.data)}::jsonb,
+               set schema = ${afterSchema}::jsonb,
                    updated_at = now(), updated_by = ${user.id}
              where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
              returning version
@@ -140,23 +170,66 @@ export async function PUT(req: Request, { params }: Params) {
           const kept = (stamped.rows[0] as { version: number } | undefined)?.version
           if (kept !== undefined) {
             savedVersion = kept
+            await auditSetupChange(
+              {
+                orgId: user.orgId,
+                table: 'form_template_versions',
+                rowId: latest.id,
+                action: 'update',
+                changes: {
+                  version: kept,
+                  before: { schemaHash: beforeSchemaHash },
+                  after: { schemaHash: schemaHash(parsedSchema.data) },
+                },
+                actorId: user.id,
+              },
+              tx,
+            )
           } else {
             const next = latest.version + 1
-            await tx.execute(sql`
+            const spawned = await tx.execute(sql`
               insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
               values (${user.orgId}, ${template.id}, ${next},
-                      ${JSON.stringify(parsedSchema.data)}::jsonb, ${user.id}, ${user.id})
+                      ${afterSchema}::jsonb, ${user.id}, ${user.id})
+              returning id
             `)
+            await auditSetupChange(
+              {
+                orgId: user.orgId,
+                table: 'form_template_versions',
+                rowId: (spawned.rows[0] as { id: string }).id,
+                action: 'insert',
+                changes: { version: next, after: { schemaHash: schemaHash(parsedSchema.data) } },
+                actorId: user.id,
+              },
+              tx,
+            )
             savedVersion = next
           }
         } else {
           // Latest is published (immutable) or missing — spawn the next draft.
           const next = (latest?.version ?? 0) + 1
-          await tx.execute(sql`
+          const spawned = await tx.execute(sql`
             insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
             values (${user.orgId}, ${template.id}, ${next},
-                    ${JSON.stringify(parsedSchema.data)}::jsonb, ${user.id}, ${user.id})
+                    ${afterSchema}::jsonb, ${user.id}, ${user.id})
+            returning id
           `)
+          await auditSetupChange(
+            {
+              orgId: user.orgId,
+              table: 'form_template_versions',
+              rowId: (spawned.rows[0] as { id: string }).id,
+              action: 'insert',
+              changes: {
+                version: next,
+                before: latest ? { version: latest.version, schemaHash: beforeSchemaHash } : null,
+                after: { schemaHash: schemaHash(parsedSchema.data) },
+              },
+              actorId: user.id,
+            },
+            tx,
+          )
           savedVersion = next
         }
       }
@@ -180,10 +253,40 @@ export async function DELETE(_req: Request, { params }: Params) {
   const template = await getTemplateByKey(user.orgId, key)
   if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  await db.execute(sql`
-    update form_templates
-       set status = 'archived', updated_at = now(), updated_by = ${user.id}
-     where id = ${template.id} and org_id = ${user.orgId}
-  `)
+  const outcome = await db.transaction(async (tx) => {
+    const locked = await tx.execute(sql`
+      select id, key, name, category, description, status, kind, allowed_roles
+        from form_templates
+       where id = ${template.id} and org_id = ${user.orgId}
+       for update
+    `)
+    const before = locked.rows[0] as Record<string, unknown> | undefined
+    if (!before) return { kind: 'not-found' as const }
+    // Archiving is idempotent: a second request observes the archived row
+    // and succeeds without writing a duplicate audit event.
+    if (before.status === 'archived') return { kind: 'ok' as const }
+    const archived = await tx.execute(sql`
+      update form_templates
+         set status = 'archived', updated_at = now(), updated_by = ${user.id}
+       where id = ${template.id} and org_id = ${user.orgId} and status <> 'archived'
+       returning id
+    `)
+    if (archived.rows.length === 0) return { kind: 'not-found' as const }
+    await auditSetupChange(
+      {
+        orgId: user.orgId,
+        table: 'form_templates',
+        rowId: template.id,
+        action: 'update',
+        changes: { before, after: { ...before, status: 'archived' } },
+        actorId: user.id,
+      },
+      tx,
+    )
+    return { kind: 'ok' as const }
+  })
+  if (outcome.kind === 'not-found') {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   return NextResponse.json({ ok: true })
 }
