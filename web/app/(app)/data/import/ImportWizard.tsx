@@ -149,7 +149,8 @@ export function ImportWizard() {
     if (!selectedSample) return
     setSampleBusy(true)
     // A retry starts clean, but the chosen company and profile stay selected
-    // below: nothing was created by the failed attempt, so retry is safe.
+    // below: a failed attempt either created nothing (template/clone) or left
+    // a resumable company the server continues from, so retry is safe.
     setSampleError(null)
     let orgId = selectedSample.existingOrgId
     try {

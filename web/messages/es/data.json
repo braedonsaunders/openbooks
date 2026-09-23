@@ -88,8 +88,8 @@
       "createFailed": "No se pudo crear la empresa de ejemplo. No se creó nada; puede reintentarlo.",
       "createFailedTemplate": "No se pudo crear la empresa de ejemplo: falló la preparación de la plantilla verificada. No se creó nada; puede reintentarlo.",
       "createFailedClone": "No se pudo crear la empresa de ejemplo: falló la copia del historial contabilizado de la plantilla. No se creó nada; puede reintentarlo.",
-      "createFailedFinalize": "No se pudo crear la empresa de ejemplo: falló la finalización de la nueva empresa. No se creó nada; puede reintentarlo.",
-      "createFailedNumbering": "No se pudo crear la empresa de ejemplo: falló la conciliación de la numeración de documentos. No se creó nada; puede reintentarlo."
+      "createFailedFinalize": "No se pudo crear la empresa de ejemplo: falló la finalización de la nueva empresa. La empresa se creó, pero su configuración no terminó; reinténtelo para continuar donde se detuvo.",
+      "createFailedNumbering": "No se pudo crear la empresa de ejemplo: falló la conciliación de la numeración de documentos. La empresa se creó, pero su numeración no terminó; reinténtelo para continuar con la numeración."
     },
     "loadFailed": "No se pudieron cargar los tipos de registro importables."
   },

@@ -88,8 +88,8 @@
       "createFailed": "La société exemple n’a pas pu être créée. Rien n’a été créé ; vous pouvez réessayer.",
       "createFailedTemplate": "La société exemple n’a pas pu être créée : la préparation du modèle vérifié a échoué. Rien n’a été créé ; vous pouvez réessayer.",
       "createFailedClone": "La société exemple n’a pas pu être créée : la copie de l’historique comptabilisé du modèle a échoué. Rien n’a été créé ; vous pouvez réessayer.",
-      "createFailedFinalize": "La société exemple n’a pas pu être créée : la finalisation de la nouvelle société a échoué. Rien n’a été créé ; vous pouvez réessayer.",
-      "createFailedNumbering": "La société exemple n’a pas pu être créée : le rapprochement de la numérotation des documents a échoué. Rien n’a été créé ; vous pouvez réessayer."
+      "createFailedFinalize": "La société exemple n’a pas pu être créée : la finalisation de la nouvelle société a échoué. La société a été créée mais sa configuration n’est pas terminée ; réessayez pour reprendre où elle s’est arrêtée.",
+      "createFailedNumbering": "La société exemple n’a pas pu être créée : le rapprochement de la numérotation des documents a échoué. La société a été créée mais sa numérotation n’est pas terminée ; réessayez pour reprendre la numérotation."
     },
     "loadFailed": "Impossible de charger les types d'enregistrement importables."
   },

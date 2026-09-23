@@ -89,8 +89,8 @@
       "createFailed": "Sample company could not be created. Nothing was created; you can retry.",
       "createFailedTemplate": "Sample company could not be created: preparing the verified template failed. Nothing was created; you can retry.",
       "createFailedClone": "Sample company could not be created: copying the template's posted history failed. Nothing was created; you can retry.",
-      "createFailedFinalize": "Sample company could not be created: finalizing the new company failed. Nothing was created; you can retry.",
-      "createFailedNumbering": "Sample company could not be created: reconciling document numbering failed. Nothing was created; you can retry."
+      "createFailedFinalize": "Sample company could not be created: finalizing the new company failed. The company was created but its setup did not finish; retry resumes it from where it stopped.",
+      "createFailedNumbering": "Sample company could not be created: reconciling document numbering failed. The company was created but its document numbering was not finished; retry resumes numbering."
     }
   },
   "history": {

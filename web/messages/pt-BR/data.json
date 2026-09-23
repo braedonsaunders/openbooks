@@ -88,8 +88,8 @@
       "createFailed": "Não foi possível criar a empresa de exemplo. Nada foi criado; você pode tentar novamente.",
       "createFailedTemplate": "Não foi possível criar a empresa de exemplo: a preparação do modelo verificado falhou. Nada foi criado; você pode tentar novamente.",
       "createFailedClone": "Não foi possível criar a empresa de exemplo: a cópia do histórico contabilizado do modelo falhou. Nada foi criado; você pode tentar novamente.",
-      "createFailedFinalize": "Não foi possível criar a empresa de exemplo: a finalização da nova empresa falhou. Nada foi criado; você pode tentar novamente.",
-      "createFailedNumbering": "Não foi possível criar a empresa de exemplo: a conciliação da numeração de documentos falhou. Nada foi criado; você pode tentar novamente."
+      "createFailedFinalize": "Não foi possível criar a empresa de exemplo: a finalização da nova empresa falhou. A empresa foi criada, mas sua configuração não terminou; tente novamente para continuar de onde parou.",
+      "createFailedNumbering": "Não foi possível criar a empresa de exemplo: a conciliação da numeração de documentos falhou. A empresa foi criada, mas sua numeração não terminou; tente novamente para continuar a numeração."
     },
     "loadFailed": "Não foi possível carregar os tipos de registro importáveis."
   },

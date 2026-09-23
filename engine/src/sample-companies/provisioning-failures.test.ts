@@ -36,9 +36,30 @@ test("every stage has a stable code and an operator-facing retry message", () =>
   for (const stage of STAGES) {
     const message = sampleCompanyStageMessage(stage);
     assert.match(message, /^Sample company could not be created: /);
-    assert.match(message, /Nothing was created; you can retry\./);
   }
   assert.match(sampleCompanyStageMessage("clone"), /copying the template's posted history failed/);
+});
+
+// SC-RESUME: the refusal must describe what actually exists. Template and
+// clone fail before any company commits, so "nothing was created" is true.
+// Finalize and numbering fail after the clone committed and leave a
+// resumable company — claiming nothing was created strands it.
+test("early-stage refusals report nothing created, late-stage refusals report a resumable company", () => {
+  for (const stage of ["template", "clone"] as const) {
+    assert.match(sampleCompanyStageMessage(stage), /Nothing was created; you can retry\./);
+    assert.doesNotMatch(sampleCompanyStageMessage(stage), /was created but/);
+  }
+  assert.match(
+    sampleCompanyStageMessage("finalize"),
+    /The company was created but its setup did not finish; retry resumes it from where it stopped\./,
+  );
+  assert.match(
+    sampleCompanyStageMessage("numbering"),
+    /The company was created but its document numbering was not finished; retry resumes numbering\./,
+  );
+  for (const stage of ["finalize", "numbering"] as const) {
+    assert.doesNotMatch(sampleCompanyStageMessage(stage), /Nothing was created/);
+  }
 });
 
 test("runProvisioningStage passes successful results through untouched", async () => {

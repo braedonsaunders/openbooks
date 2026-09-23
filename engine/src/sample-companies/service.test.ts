@@ -73,6 +73,27 @@ test("a lost member lock converges on the first completed preview", () => {
   assert.match(create, /sample company member lock could not be held through registration/);
 });
 
+test("finalize never grants member access; the ready step grants it last", () => {
+  // SC-RESUME: a partial company must never carry an active user_org_access
+  // row — access flips ready only after numbering reconciles. The statement
+  // shapes (not the bare table name, which prose also mentions) are what a
+  // future edit could reintroduce.
+  const finalize = functionSource("finalizePreview", "async function grantSampleCompanyAccess");
+  assert.doesNotMatch(finalize, /into user_org_access/i);
+  assert.doesNotMatch(finalize, /update\s+user_org_access/i);
+  const grant = functionSource("grantSampleCompanyAccess", "export async function createSampleCompany");
+  assert.match(grant, /into user_org_access/i);
+  assert.match(grant, /provisioningStage: "ready"/);
+});
+
+test("a partial company resumes from its recorded stage instead of cloning again", () => {
+  const create = service.slice(service.indexOf("export async function createSampleCompany"));
+  assert.match(create, /findPartialSampleCompany/);
+  assert.match(create, /resumePartialSampleCompany/);
+  assert.match(create, /deletePartialSampleOrg/);
+  assert.match(create, /stampClonedSampleCompany/);
+});
+
 test("simulated T&M invoices use the canonical approval lifecycle", () => {
   assert.match(timeAndMaterials, /await postDraftDocument\(world, docId\)/);
   assert.doesNotMatch(timeAndMaterials, /await postDocument\(docId/);
