@@ -112,10 +112,24 @@ function parseJson(text: string): ParsedFile {
   try {
     parsed = JSON.parse(text)
   } catch {
-    return { headers: [], rows: [], truncated: false }
+    throw new ImportParseError(
+      'the file is not valid JSON — check for trailing commas or a truncated upload before importing',
+    )
   }
   const arr = Array.isArray(parsed) ? parsed : [parsed]
-  const rows = arr.filter((r) => r && typeof r === 'object' && !Array.isArray(r)) as Record<string, unknown>[]
+  // A filtered-out row is a dropped row: nulls, nested arrays and scalars
+  // have no columns to map, so importing them as "zero rows" would report
+  // success while silently losing data. Refuse naming the first bad entry.
+  const rows: Record<string, unknown>[] = []
+  for (let i = 0; i < arr.length; i++) {
+    const entry = arr[i]
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new ImportParseError(
+        `entry ${i + 1} is not an object — a JSON import must be an object or an array of objects, one object per row`,
+      )
+    }
+    rows.push(entry as Record<string, unknown>)
+  }
   const headers: string[] = []
   const seen = new Set<string>()
   for (const r of rows) {

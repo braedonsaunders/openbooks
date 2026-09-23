@@ -133,6 +133,34 @@ test('CSV parsing marks small files as complete', async () => {
   assert.equal(parsed.truncated, false)
 })
 
+test('JSON parsing refuses malformed input instead of returning an empty success', async () => {
+  await assert.rejects(() => parseImportFile('json', { text: '{"a": 1,' }), /not valid JSON/)
+  await assert.rejects(() => parseImportFile('json', { text: '' }), /not valid JSON/)
+})
+
+test('JSON parsing refuses non-object entries naming the first bad index', async () => {
+  await assert.rejects(
+    () => parseImportFile('json', { text: JSON.stringify([{ a: 1 }, null, { a: 3 }]) }),
+    /entry 2 is not an object/,
+  )
+  await assert.rejects(
+    () => parseImportFile('json', { text: JSON.stringify([{ a: 1 }, [1, 2]]) }),
+    /entry 2 is not an object/,
+  )
+  await assert.rejects(() => parseImportFile('json', { text: '"just a string"' }), /entry 1 is not an object/)
+  await assert.rejects(() => parseImportFile('json', { text: '42' }), /entry 1 is not an object/)
+})
+
+test('JSON parsing still accepts an object and an array of objects', async () => {
+  const single = await parseImportFile('json', { text: JSON.stringify({ a: 1, b: 'x' }) })
+  assert.deepEqual(single.headers, ['a', 'b'])
+  assert.equal(single.rows.length, 1)
+  const many = await parseImportFile('json', { text: JSON.stringify([{ a: 1 }, { a: 2, c: 3 }]) })
+  assert.deepEqual(many.headers, ['a', 'c'])
+  assert.equal(many.rows.length, 2)
+  assert.equal(many.truncated, false)
+})
+
 test('XLSX parsing retains array-formula child provenance for numeric and string results', async () => {
   const parsed = await parseImportFile('xlsx', { base64: await arrayFormulaWorkbook() })
 
