@@ -236,6 +236,34 @@ test("invalid lease inputs are refused as LeaseError with no rows written", { sk
   }
 });
 
+test("creation derives the classification term from the schedule, ignoring a misstated claim", async () => {
+  // A 60-month lease declaring 1 month with a 72-month economic life is
+  // 83% of life: finance. Classifying on the declared month would persist
+  // operating instead.
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const { leaseId, classification } = await createLeaseAgreement(org.orgId, null, {
+      subsidiaryId: org.subsidiaryId,
+      leaseNumber: "L-DERIVED-TERM",
+      commencementOn: "2026-07-01",
+      termPeriods: 60,
+      paymentFrequency: "monthly",
+      paymentAmount: "100",
+      annualDiscountRatePercent: "6",
+      classificationInputs: { leaseTermMonths: 1, economicLifeMonths: 72 },
+      accounts,
+    });
+    assert.equal(classification.model, "finance");
+    assert.deepEqual(classification.criteria, ["term-major-part-of-life"]);
+    const stored = (await db.execute<{ inputs: { leaseTermMonths: number } }>(sql`
+      select classification_inputs as inputs from lease_agreements where id = ${leaseId} and org_id = ${org.orgId}`)).rows[0]!;
+    assert.equal(stored.inputs.leaseTermMonths, 60);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("commencement refuses a legacy huge exempt term with no rows written", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

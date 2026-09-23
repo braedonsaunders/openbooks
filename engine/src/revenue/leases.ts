@@ -823,20 +823,32 @@ export async function createLeaseAgreement(
       throw new LeaseError(
         "the low-value recognition exemption is an IFRS election; US GAAP leases must use the normal model or qualify for the short-term election",
       );
-    const classificationInputs = input.classificationInputs ?? {};
-    const classification = classifyLease(classificationInputs, framework);
 
     // Fail closed on measurement inputs before touching the database: without
     // these, impossible terms/payments/rates/dates fall through to raw storage
     // errors (check-constraint violations, invalid date syntax) instead of a
     // domain LeaseError, and unbounded terms hang commencement (PV summation,
     // apportion weights, and schedule rows all scale with the period count).
-    // The term gate is shared with commencement (legacy stored terms).
+    // The term gate is shared with commencement (legacy stored terms) and
+    // runs before classification because the schedule's term feeds it.
     const frequencyMonths = assertLeaseTermWithinHorizon(
       input.termPeriods,
       input.paymentFrequency,
     );
     assertLeaseCommencementOn(input.commencementOn);
+    // The lease term is a fact of the agreed schedule, not a claim of the
+    // caller: derive it from the contractual periods (mirroring the change
+    // path, which overwrites the same field) so a misstated month count
+    // cannot misclassify the lease — e.g. a 60-month lease declaring 1
+    // month persisting as operating instead of finance. Malformed caller
+    // input still fails closed first: derivation corrects a wrong but
+    // well-formed term, it does not launder junk.
+    assertClassificationInputs(input.classificationInputs ?? {});
+    const classificationInputs = {
+      ...input.classificationInputs,
+      leaseTermMonths: input.termPeriods * frequencyMonths,
+    };
+    const classification = classifyLease(classificationInputs, framework);
 
     if (input.exemption === "short_term") {
       const months = input.termPeriods * frequencyMonths;
