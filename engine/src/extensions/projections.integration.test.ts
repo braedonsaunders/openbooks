@@ -7,6 +7,7 @@ import { db, env, withBypassContext } from '../platform/db.ts';
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
 import { installTestExtension, disableTestExtension } from '../testing/extension-packages.ts';
 import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from './projections.ts';
+import { defaultNavConfig } from '../navigation/nav-registry.ts';
 
 const permissions = ['admin.customization.manage', 'admin.setup.manage', 'admin.roles.manage'];
 const contributions = [
@@ -96,6 +97,28 @@ test('a disabled extension releases its navigation href; re-enabling refuses whi
       await assert.rejects(() => setAppStatus(org.orgId, actorId, 'first-extension', 'installed'), /already has an owner/);
       atHref = await navItemsAt(org.orgId, '/module-sample');
       assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, 'second-extension');
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+});
+
+test('retired hidden links do not count toward the 256-item navigation cap', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
+    try {
+      const config = defaultNavConfig();
+      const group = config.groups.find((entry) => entry.id === 'insights')!;
+      for (let i = 0; i < 300; i++) group.items.push({ kind: 'link', href: `/retired-${i}`, label: `Retired ${i}`, extensionKey: 'retired-ext', hidden: true });
+      await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
+        values (${org.orgId}, ${JSON.stringify(config)}::jsonb, ${actorId}, ${actorId})
+        on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now()`);
+      // 300+ stored rows but only a handful visible: a new install still succeeds.
+      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'fresh-extension', name: 'Fresh', version: '1.0.0', permissions: ['admin.customization.manage'], contributions: [{ kind: 'nav', href: '/module-fresh', label: 'Fresh', group: 'insights' }] } });
+      const stored = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${org.orgId}`)).rows[0]!.config;
+      const items = stored.groups.flatMap((entry) => entry.items);
+      assert.equal(items.filter((item) => item.href === '/module-fresh' && !item.hidden).length, 1);
+      assert.equal(items.filter((item) => item.hidden).length, 300);
     } finally { await dropScratchOrg(org.orgId); }
   });
 });
