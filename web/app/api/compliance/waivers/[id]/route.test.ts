@@ -54,6 +54,13 @@ const mockSources = new Map<string, string>([
         const text = sqlText(query)
         state.calls.push({ kind, text })
 
+        // Subsidiary-fence pre-read: the unrestricted double resolves the
+        // waiver to a visible subject; the restricted fence is covered by
+        // the dedicated scope tests.
+        if (text.includes('from compliance_waivers')) {
+          if (!state.waiverAvailable) return { rows: [] }
+          return { rows: [{ partySubsidiaryId: 'org-sub', projectSubsidiaryId: 'org-sub' }] }
+        }
         if (text.includes('update compliance_waivers')) {
           if (!state.waiverAvailable || state.revoked) return { rows: [] }
           state.pending.push(text)
@@ -170,7 +177,11 @@ test('revocation and its audit evidence commit in one transaction', async () => 
 
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { id: WAIVER_ID })
-  assert.equal(routeState.calls.every((call) => call.kind === 'tx-execute'), true)
+  const writes = routeState.calls.filter(
+    (call) => call.text.includes('update compliance_waivers') || call.text.includes('insert into audit_log'),
+  )
+  assert.equal(writes.length, 2)
+  assert.equal(writes.every((call) => call.kind === 'tx-execute'), true)
   assert.deepEqual(routeState.committed.map((text) => text.includes('update compliance_waivers') ? 'update' : 'audit'), [
     'update',
     'audit',
@@ -184,8 +195,8 @@ test('an audit failure rolls back the waiver revocation', async () => {
 
   await assert.rejects(() => revoke(), /forced audit failure/)
 
-  assert.equal(routeState.calls.length, 2, 'both writes were attempted inside the transaction')
-  assert.equal(routeState.calls.every((call) => call.kind === 'tx-execute'), true)
+  // The fence pre-read plus both writes inside the transaction.
+  assert.equal(routeState.calls.length, 3, 'the fence read ran, then both writes were attempted inside the transaction')
   assert.equal(routeState.committed.length, 0, 'the waiver update did not commit without evidence')
   assert.equal(routeState.revoked, false, 'the waiver remains active after the failed transaction')
 })
@@ -198,6 +209,7 @@ test('an already-revoked waiver does not append another audit event', async () =
 
   assert.equal(response.status, 404)
   assert.deepEqual(await response.json(), { error: 'not found or already revoked' })
-  assert.equal(routeState.calls.length, 1)
+  // The fence pre-read ran, then the refused revocation; no audit followed.
+  assert.equal(routeState.calls.length, 2)
   assert.equal(routeState.committed.length, 0)
 })
