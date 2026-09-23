@@ -1919,11 +1919,30 @@
     "exportsEmpty": "Aucun export demandé.",
     "exportsColumns": {
       "requested": "Demandé",
-      "status": "Statut"
+      "status": "Statut",
+      "detail": "Détail"
     },
     "requestExport": "Exporter mes données",
     "requestExportDone": "Votre export est en file — il apparaît ci-dessous une fois prêt.",
-    "download": "Télécharger"
+    "download": "Télécharger",
+    "status": {
+      "queued": "En file d’attente",
+      "building": "En préparation",
+      "ready": "Prêt",
+      "incomplete": "Incomplet",
+      "delivered": "Livré",
+      "failed": "Échoué",
+      "draft": "Brouillon",
+      "sent": "Envoyé",
+      "viewed": "Lu",
+      "partially_signed": "Partiellement signé",
+      "signed": "Signé",
+      "acknowledged": "Accusé",
+      "declined": "Refusé",
+      "voided": "Annulé",
+      "expired": "Expiré",
+      "deleted": "Supprimé"
+    }
   },
   "meSurveys": {
     "title": "Enquêtes ouvertes",

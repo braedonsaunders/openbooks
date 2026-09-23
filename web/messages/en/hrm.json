@@ -1977,11 +1977,30 @@
     "exportsEmpty": "No exports requested yet.",
     "exportsColumns": {
       "requested": "Requested",
-      "status": "Status"
+      "status": "Status",
+      "detail": "Detail"
     },
     "requestExport": "Export my data",
     "requestExportDone": "Your export is queued — it appears below once ready.",
-    "download": "Download"
+    "download": "Download",
+    "status": {
+      "queued": "Queued",
+      "building": "Building",
+      "ready": "Ready",
+      "incomplete": "Incomplete",
+      "delivered": "Delivered",
+      "failed": "Failed",
+      "draft": "Draft",
+      "sent": "Sent",
+      "viewed": "Viewed",
+      "partially_signed": "Partially signed",
+      "signed": "Signed",
+      "acknowledged": "Acknowledged",
+      "declined": "Declined",
+      "voided": "Voided",
+      "expired": "Expired",
+      "deleted": "Deleted"
+    }
   },
   "meSurveys": {
     "title": "Open surveys",

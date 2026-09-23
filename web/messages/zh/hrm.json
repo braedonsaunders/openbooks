@@ -1919,11 +1919,30 @@
     "exportsEmpty": "尚未申请导出。",
     "exportsColumns": {
       "requested": "申请时间",
-      "status": "状态"
+      "status": "状态",
+      "detail": "详情"
     },
     "requestExport": "导出我的数据",
     "requestExportDone": "您的导出已排队——就绪后会显示在下方。",
-    "download": "下载"
+    "download": "下载",
+    "status": {
+      "queued": "排队中",
+      "building": "生成中",
+      "ready": "就绪",
+      "incomplete": "不完整",
+      "delivered": "已投递",
+      "failed": "失败",
+      "draft": "草稿",
+      "sent": "已发送",
+      "viewed": "已查看",
+      "partially_signed": "部分签署",
+      "signed": "已签署",
+      "acknowledged": "已确认",
+      "declined": "已拒绝",
+      "voided": "已作废",
+      "expired": "已过期",
+      "deleted": "已删除"
+    }
   },
   "meSurveys": {
     "title": "待填调查",

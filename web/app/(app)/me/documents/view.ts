@@ -81,6 +81,7 @@ export function meDocumentsSpec(data: MeDocumentsPageData): PageSpec {
               columns: [
                 column(data.exportColumns.requested, text(item('requested'))),
                 column(data.exportColumns.status, text(item('statusLabel'))),
+                column(data.exportColumns.detail, text(item('incompleteDetail'), { fallback: '—' })),
                 column('', widgetCell('hrm-me-export-download', {
                   downloadable: item('downloadable'),
                   href: item('downloadHref'),

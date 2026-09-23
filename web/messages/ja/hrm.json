@@ -1919,11 +1919,30 @@
     "exportsEmpty": "開示請求はまだありません。",
     "exportsColumns": {
       "requested": "請求日",
-      "status": "ステータス"
+      "status": "ステータス",
+      "detail": "詳細"
     },
     "requestExport": "自分のデータを開示請求",
     "requestExportDone": "開示請求を受け付けました — 準備ができたら下に表示されます。",
-    "download": "ダウンロード"
+    "download": "ダウンロード",
+    "status": {
+      "queued": "待機中",
+      "building": "作成中",
+      "ready": "準備完了",
+      "incomplete": "不完全",
+      "delivered": "送付済み",
+      "failed": "失敗",
+      "draft": "下書き",
+      "sent": "送信済み",
+      "viewed": "既読",
+      "partially_signed": "一部署名済み",
+      "signed": "署名済み",
+      "acknowledged": "確認済み",
+      "declined": "辞退",
+      "voided": "無効",
+      "expired": "期限切れ",
+      "deleted": "削除済み"
+    }
   },
   "meSurveys": {
     "title": "未回答の調査",
