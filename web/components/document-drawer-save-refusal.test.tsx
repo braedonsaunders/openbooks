@@ -202,6 +202,72 @@ function freshGlobals() {
   globalThis.__confirmVerdict = true;
 }
 
+// OM-09: the invoice as Sara left it — one booked line and her added line
+// (OPS-W01 x2 @100, account empty, amount derived to 200.0000).
+async function mountInvoiceWithAccountlessLine() {
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const doc = {
+    id: randomUUID(),
+    kind: "customer_invoice",
+    status: "draft",
+    document_number: "INV-00002",
+    currency: "USD",
+    updated_at: "2026-09-17T12:00:00.000000Z",
+    document_date: "2026-09-17",
+    subtotal: "1480.00",
+    tax_total: "0.00",
+    total: "1480.00",
+  };
+  const lines = [
+    { id: randomUUID(), account_id: "income-acct", item_id: null, description: "booked", quantity: "1", unit_price: "1480", amount: "1480.0000" },
+    { id: "", account_id: "", item_id: "OPS-W01", description: "field work", quantity: "2", unit_price: "100", amount: "200.0000" },
+  ];
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <DocumentDrawer
+            payload={{ doc, lines }}
+            config={DOC_KINDS["customer_invoice"]!}
+            basePath="/ar/invoices"
+            parties={[]}
+            accounts={[]}
+            taxCodes={[]}
+            taxGroups={[]}
+            cards={[]}
+            bankAccounts={[]}
+            departments={[]}
+            projects={[]}
+            locations={[]}
+            classes={[]}
+            items={[]}
+            subsidiaries={[]}
+            headerDefs={[]}
+            lineDefs={[]}
+            segments={SEGMENTS}
+            canCreate
+            canPost
+            layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [] } as never}
+          />
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  return {
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    },
+  };
+}
+
 test("a refused save pins the typed reason, not only a toast (F-t03-002)", async (t) => {
   freshGlobals();
   const restoreFetch = scriptFetch((url, init) => {
@@ -246,4 +312,43 @@ test("a dead network on save pins the fallback and releases Save", async (t) => 
     "the transport failure must toast as an error",
   );
   assert.equal(save.disabled, false, "busy must release after a transport failure so the user can retry");
+});
+
+test("OM-09: saving with a contentful account-less line refuses by line name and keeps the row", async (t) => {
+  freshGlobals();
+  const writes: string[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.startsWith("/api/documents/") && init?.method && init.method !== "GET") {
+      writes.push(`${init.method} ${url}`);
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountInvoiceWithAccountlessLine();
+  t.after(unmount);
+  const edit = buttonsNamed("Edit")[0];
+  assert.ok(edit, "a draft invoice must offer Edit");
+  await click(edit);
+  // The footer prices the account-less $200 line instead of hiding it: the
+  // operator reviews 1,680, not the booked 1,480.
+  const digits = (document.body.textContent ?? "").replace(/[^0-9]/g, " ");
+  assert.match(digits, /1\s*680/, "the footer must include the account-less line's amount");
+  const save = buttonsNamed("Save")[0];
+  assert.ok(save, "edit mode must offer Save");
+  await click(save);
+  await tick();
+  assert.deepEqual(writes, [], "no document write may fire while a contentful line has no account");
+  const alert = document.querySelector('[role="alert"]');
+  assert.ok(alert, "the missing account must pin as an alert, not only toast");
+  assert.match(alert.textContent ?? "", /Line 2: choose an account/, "the refusal must name the grid line and the remedy");
+  const toasts = globalThis.__drawerToasts ?? [];
+  assert.ok(
+    toasts.some((toast) => toast.kind === "error" && /Line 2/.test(toast.message)),
+    "the missing account must also toast with the line named",
+  );
+  // The entered row stays in state: the footer still shows 1,680, so the
+  // $200 line is neither booked nor lost.
+  const after = (document.body.textContent ?? "").replace(/[^0-9]/g, " ");
+  assert.match(after, /1\s*680/, "the refused row must stay in the drawer with its amount priced");
+  assert.equal(save.disabled, false, "busy must release after the refusal");
 });

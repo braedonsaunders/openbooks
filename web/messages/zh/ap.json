@@ -33,6 +33,7 @@
     "accountColumn": "科目",
     "accountPlaceholder": "科目…",
     "currencyMismatch": "{account}仅接受{allowed}记账，不接受{actual}",
+    "lineMissingAccount": "第 {line} 行：请选择科目。",
     "noTax": "无税",
     "taxAmountColumn": "税额",
     "selectVendorPlaceholder": "选择供应商…",
