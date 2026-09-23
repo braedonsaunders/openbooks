@@ -293,13 +293,14 @@ export class XeroSource implements MigrationSource {
       }
     }
 
-    // Applications: every Payment settles its invoice; credit-note Allocations
-    // settle theirs. Pull FULL graphs (the reconciler is delta-safe).
-    // Every link amount is denominated in the INVOICE's currency (per Xero's
-    // single-currency documents: Payment.Amount and Allocation.Amount are
-    // capped by the invoice outstanding, so they price in the invoice's
-    // currency). Build an invoice → { currency, rate } map with one
-    // un-windowed pull so links against out-of-window invoices stay stated.
+    // Applications: every Payment settles its invoice or credit note;
+    // credit-note Allocations settle theirs. Pull FULL graphs (the reconciler
+    // is delta-safe). Every link amount is denominated in the SETTLED
+    // document's currency (per Xero's single-currency documents:
+    // Payment.Amount and Allocation.Amount are capped by the target
+    // outstanding, so they price in the target's currency). Build target →
+    // { currency, rate } maps with one un-windowed pull each so links against
+    // out-of-window documents stay stated.
     const invMeta = await this.client.listAll<XeroDoc>("Invoices", "Invoices");
     const invFx = new Map<string, { currency: string; rate: string | null }>();
     for (const v of invMeta) {
@@ -310,6 +311,20 @@ export class XeroSource implements MigrationSource {
         });
       }
     }
+    const credits = await this.client.listAll<
+      XeroDoc & { Allocations?: { Amount?: number; Invoice?: { InvoiceID?: string } }[] }
+    >("CreditNotes", "CreditNotes");
+    // A refund settles its credit note the same way a receipt settles its
+    // invoice — without this link the credit stays open in the subledger.
+    const cnFx = new Map<string, { currency: string; rate: string | null }>();
+    for (const c of credits) {
+      if (c.CreditNoteID && c.CurrencyCode) {
+        cnFx.set(c.CreditNoteID, {
+          currency: c.CurrencyCode,
+          rate: typeof c.CurrencyRate === "number" && c.CurrencyRate > 0 ? String(c.CurrencyRate) : null,
+        });
+      }
+    }
     const pays = await this.client.listAll<XeroDoc & { Amount?: number; CurrencyRate?: number }>("Payments", "Payments");
     for (const p of pays) {
       // Xero payment legs are unsigned magnitudes on both sides of the books:
@@ -317,28 +332,44 @@ export class XeroSource implements MigrationSource {
       // `xero_accounting.yaml`, components/schemas/Payment) defines `Amount`
       // as "The amount of the payment. Must be less than or equal to the
       // outstanding amount owing on the invoice", with a PaymentType enum
-      // covering ACCRECPAYMENT (sales invoices) and ACCPAYPAYMENT (bills).
+      // covering ACCRECPAYMENT (sales invoices) and ACCPAYPAYMENT (bills) —
+      // and the ARCREDITPAYMENT/APCREDITPAYMENT families for refunds, whose
+      // Amount is likewise capped by the credit outstanding.
       // Normalize defensively with abs(); only zero/missing legs are skipped.
       const magnitude = Math.abs(p.Amount ?? 0);
-      if ((p.Status ?? "") === "DELETED" || !p.Invoice?.InvoiceID || !(magnitude > 0)) continue;
-      const inv = invFx.get(p.Invoice.InvoiceID);
+      if ((p.Status ?? "") === "DELETED" || !(magnitude > 0)) continue;
+      // One payment settles exactly one target — the same single-target rule
+      // the document builder enforces (a multi-target payment is skipped as a
+      // document, so linking either pointer would dangle or double-settle).
+      const targets = [
+        p.Invoice?.InvoiceID
+          ? { ref: `Invoice:${p.Invoice.InvoiceID}`, fx: invFx.get(p.Invoice.InvoiceID) }
+          : null,
+        p.CreditNote?.CreditNoteID
+          ? { ref: `CreditNote:${p.CreditNote.CreditNoteID}`, fx: cnFx.get(p.CreditNote.CreditNoteID) }
+          : null,
+      ].filter((t): t is { ref: string; fx: { currency: string; rate: string | null } | undefined } => t !== null);
+      // Prepayment/Overpayment pointers resolve to no imported document (those
+      // endpoints are not pulled), so a payment against one has no open item
+      // to link: it posts standalone and is skipped here rather than linked
+      // to a ref that can never resolve. Importing those endpoints (with
+      // their allocations) is the follow-up that closes those credits.
+      if (targets.length !== 1) continue;
+      const target = targets[0]!;
       const producerRate =
         typeof p.CurrencyRate === "number" && p.CurrencyRate > 0 ? String(p.CurrencyRate) : null;
       applications.push({
         paymentRef: `Payment:${p.PaymentID}`,
-        appliedRef: `Invoice:${p.Invoice.InvoiceID}`,
+        appliedRef: target.ref,
         amount: String(magnitude),
-        // Xero payments price in the invoice's currency (Amount is capped by
-        // the invoice outstanding). The producer rate is the payment's own
-        // Xero rate (home-per-invoice-ccy). A missing invoice code means a
-        // deleted invoice; the reconciler refuses the link honestly.
-        currency: inv?.currency ?? "",
-        rate: inv && producerRate ? producerRate : inv?.rate ?? null,
+        // Xero payments price in the settled document's currency (Amount is
+        // capped by its outstanding). The producer rate is the payment's own
+        // Xero rate (home-per-target-ccy). A missing target code means a
+        // deleted target; the reconciler refuses the link honestly.
+        currency: target.fx?.currency ?? "",
+        rate: target.fx && producerRate ? producerRate : target.fx?.rate ?? null,
       });
     }
-    const credits = await this.client.listAll<
-      XeroDoc & { Allocations?: { Amount?: number; Invoice?: { InvoiceID?: string } }[] }
-    >("CreditNotes", "CreditNotes");
     for (const c of credits) {
       if (!["AUTHORISED", "PAID"].includes(c.Status ?? "")) continue;
       for (const a of c.Allocations ?? []) {

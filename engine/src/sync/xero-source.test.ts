@@ -179,6 +179,62 @@ test("a signed payment amount settles as an unsigned magnitude", async () => {
   ]);
 });
 
+test("a refund payment links to the credit note it settles", async () => {
+  const src = source({
+    payments: [
+      {
+        PaymentID: "P-2",
+        Status: "AUTHORISED",
+        CreditNote: { CreditNoteID: "C-2", Type: "ACCRECCREDIT" },
+        PaymentType: "ARCREDITPAYMENT",
+        Amount: 50,
+        CurrencyRate: 1.5,
+      },
+    ],
+    credits: [
+      {
+        CreditNoteID: "C-2",
+        Status: "AUTHORISED",
+        CurrencyCode: "USD",
+        CurrencyRate: 1.5,
+        Allocations: [],
+      },
+    ],
+  });
+  const changes = await src.nativeChanges(null, ctx);
+  // The refund states the credit's currency at the payment's rate — the same
+  // shape as an invoice receipt link, so the credit closes in the subledger.
+  assert.deepEqual(changes.applications, [
+    {
+      paymentRef: "Payment:P-2",
+      appliedRef: "CreditNote:C-2",
+      amount: "50",
+      currency: "USD",
+      rate: "1.5",
+    },
+  ]);
+});
+
+test("a payment against an unimported prepayment links to nothing resolvable", async () => {
+  // Prepayment/Overpayment target documents are not pulled (no endpoint), so
+  // the payment posts standalone and no link is emitted — a link to a ref
+  // that can never resolve would only inflate the reconciler's skipped count.
+  const src = source({
+    payments: [
+      {
+        PaymentID: "P-3",
+        Status: "AUTHORISED",
+        Prepayment: { PrepaymentID: "PRE-1", Type: "RECEIVE-PREPAYMENT" },
+        PaymentType: "ARPREPAYMENTPAYMENT",
+        Amount: 70,
+        CurrencyRate: 1.5,
+      },
+    ],
+  });
+  const changes = await src.nativeChanges(null, ctx);
+  assert.deepEqual(changes.applications, []);
+});
+
 test("only Xero bank accounts inherit the reconcilable flag", () => {
   assert.equal(xeroReconcilableAccount("BANK"), true);
   assert.equal(xeroReconcilableAccount("CURRENT"), false);
