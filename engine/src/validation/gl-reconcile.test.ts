@@ -39,6 +39,27 @@ test("GL reconciliation filters the source on transaction date, not period start
   );
 });
 
+test("GL reconciliation compares currency buckets, never a mixed scalar", () => {
+  assert.match(source, /group by currency/, "invoices bucket by transaction currency");
+  assert.match(
+    source,
+    /group by s\.base_currency, je\.subsidiary_id/,
+    "P&L buckets by entity functional currency",
+  );
+  assert.match(source, /alignMoneyBuckets\(/, "buckets align on the union of labels");
+  assert.match(source, /no combined total/, "no cross-currency figure is produced");
+  assert.match(
+    source,
+    /have no base currency/,
+    "postings without a functional currency refuse by name",
+  );
+  assert.match(
+    source,
+    /sourceIsoCurrency\(/,
+    "unresolvable source currencies refuse by name through the shared resolver",
+  );
+});
+
 test("GL reconciliation excludes unposted journal entries from project detail", () => {
   const jobQuery = queryFor("job");
   assert.match(
