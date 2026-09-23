@@ -4,6 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import {
+  I18N1_IDENTICAL_BY_FACT,
   PROPERTY_MANAGEMENT_PREFIX,
   completenessReport,
   flattenCatalog,
@@ -469,15 +470,23 @@ test('property buildings list copy ships localized in every locale', () => {
   for (const locale of locales) {
     if (locale === 'en') continue
     const catalog = flattenCatalog(locale)
-    // Cognates spelled as in English are omitted into the declared fallback
-    // manifest and render from English at runtime — never copied as fake
-    // translations.
+    // Cognates spelled as in English are either omitted into the declared
+    // fallback manifest (rendering from English at runtime) or — since
+    // I18N1 — shipped in the locale file and pinned exactly in
+    // I18N1_IDENTICAL_BY_FACT. Never copied as fake translations.
     const declared = new Set(manifest.fallbacks[locale] ?? [])
     for (const key of sourceKeys) {
       if (declared.has(key)) continue
       const value = catalog.get(key)
       assert.ok(value && value.trim(), `${locale} is missing ${key}`)
-      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+      const identical = [...I18N1_IDENTICAL_BY_FACT].find((entry) =>
+        entry.startsWith(`${locale}:${key}|`),
+      )
+      if (identical) {
+        assert.equal(value, identical.slice(identical.indexOf('|') + 1), `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+      }
     }
   }
 })
@@ -789,8 +798,13 @@ test('the generated fallback manifest exactly identifies untranslated property-m
   for (const locale of translatedLocales) {
     const catalog = flattenCatalog(locale)
     const listed = manifest.fallbacks[locale] ?? []
+    // Reviewed identicals (I18N1_IDENTICAL_BY_FACT) are pinned translations
+    // that share English spelling — only UNREVIEWED copies pretend.
     const copiedEnglish = propertyKeys.filter(
-      (key) => catalog.has(key) && catalog.get(key) === source.get(key),
+      (key) =>
+        catalog.has(key) &&
+        catalog.get(key) === source.get(key) &&
+        !I18N1_IDENTICAL_BY_FACT.has(`${locale}:${key}|${catalog.get(key)}`),
     )
     const missing = propertyKeys.filter((key) => !catalog.has(key))
 
@@ -910,18 +924,19 @@ test('catalog completeness counts missing and declared fallback keys as untransl
     for (const key of declaredFallbacks) {
       assert.ok(source.has(key), `${row.locale} fallback key is absent from English source: ${key}`)
     }
-    // Per-locale pins: cognates spelled as in English (de/fr Code, de/pt-BR
-    // Status, fr Type) are omitted into declared fallbacks instead of copied
-    // as fake translations, so locales with more cognates report more
-    // fallbacks (F-t09-017). i10 remediated entities leaseSections/detail
-    // (F-i10): remaining fallbacks are reviewed identicals only.
+    // Per-locale pins: I18N1 backfilled the last property-management gaps
+    // (F-t09-017 fallbacks plus the F-i10 leaseSections/detail remainder) as
+    // real translations. Genuine cognates now ship IN the locale files and
+    // are pinned exactly in I18N1_IDENTICAL_BY_FACT instead of being omitted
+    // into declared fallbacks — so every locale reports zero remaining
+    // property-management fallbacks.
     const expectedPmFallbacks: Record<string, number> = {
-      de: 8,
-      es: 1,
-      fr: 10,
-      ja: 1,
-      'pt-BR': 6,
-      zh: 1,
+      de: 0,
+      es: 0,
+      fr: 0,
+      ja: 0,
+      'pt-BR': 0,
+      zh: 0,
     }
     assert.equal(
       declaredFallbacks.filter((key) => key.startsWith(PROPERTY_MANAGEMENT_PREFIX)).length,
@@ -4572,7 +4587,16 @@ test('I10 entities lease and deposit copy ships translated in every locale', () 
       if (I10_declared.has(I10_key)) continue
       const I10_value = I10_catalog.get(I10_key)
       assert.ok(I10_value && I10_value.trim(), `${I10_locale} is missing ${I10_key}`)
-      assert.notEqual(I10_value, I10_source.get(I10_key), `${I10_locale} must not copy English ${I10_key}`)
+      // Reviewed identicals ship in the locale file since I18N1 and pin
+      // their exact term (same pattern as the documents test below).
+      const I10_identical = [...I18N1_IDENTICAL_BY_FACT].find((I10_entry) =>
+        I10_entry.startsWith(`${I10_locale}:${I10_key}|`),
+      )
+      if (I10_identical) {
+        assert.equal(I10_value, I10_identical.split('|')[1], `${I10_locale}:${I10_key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(I10_value, I10_source.get(I10_key), `${I10_locale} must not copy English ${I10_key}`)
+      }
     }
     const I10_present = I10_wanted.filter((I10_key) => !I10_declared.has(I10_key))
     const I10_drift = I10_present.filter((I10_key) => {
@@ -5604,5 +5628,196 @@ test('leave on-behalf filing copy ships localized in every locale', () => {
       assert.ok(value && value.trim(), `${locale} is missing ${key}`)
       assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
     }
+  }
+})
+
+/**
+ * Flatten one catalog FILE with array-aware leaves. next-intl merges message
+ * arrays into objects at runtime, so a bare object walk would silently skip
+ * array leaves (and an array-vs-object shape mismatch would be invisible).
+ * Array elements compare by index: `sync.sources.qbo.steps.0`.
+ */
+function flattenFileShape(namespace: string, messages: unknown): Map<string, string> {
+  const leaves = new Map<string, string>()
+  const visit = (node: unknown, path: string): void => {
+    if (typeof node === 'string') {
+      leaves.set(path, node)
+    } else if (Array.isArray(node)) {
+      node.forEach((entry, index) => visit(entry, `${path}.${index}`))
+    } else if (node !== null && typeof node === 'object') {
+      for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+        visit(value, `${path}.${key}`)
+      }
+    }
+  }
+  visit(messages, namespace)
+  return leaves
+}
+
+/**
+ * Placeholder names carried by a message, brace-aware. A flat
+ * /\{[a-zA-Z_]…(?=[,}])/ scan misfires on plural/select literal branches:
+ * `=0 {Ereignisdetails}` is prose (one German word in braces) while
+ * `=0 {Event details}` is not, so the naive scan reports drift where there
+ * is none. Branch bodies are literal wrappers — skipped as names — but
+ * nested arguments inside them (`other {# dependents: {names}}`) still
+ * count, so a locale dropping `{names}` fails.
+ */
+function icuTokens(value: string): Set<string> {
+  const tokens = new Set<string>()
+  const stack: boolean[] = [] // true while inside a plural/select/selectordinal body
+  let index = 0
+  while (index < value.length) {
+    const char = value[index]
+    if (char === '{') {
+      if (stack.length > 0 && stack[stack.length - 1]) {
+        stack.push(false)
+        index += 1
+        continue
+      }
+      const arg = /^\{([a-zA-Z_][a-zA-Z0-9_]*)/.exec(value.slice(index))
+      const name = arg?.[1]
+      if (!arg || name === undefined) {
+        index += 1
+        continue
+      }
+      const rest = value.slice(index + arg[0].length)
+      if (rest.startsWith(',')) {
+        const typed = /^,\s*([a-zA-Z]+)/.exec(rest)
+        const typeName = typed?.[1]
+        tokens.add(name)
+        stack.push(typeName !== undefined && ['plural', 'select', 'selectordinal'].includes(typeName))
+        index += arg[0].length + (typed ? typed[0].length : 0)
+      } else if (rest.startsWith('}')) {
+        tokens.add(name)
+        stack.push(false)
+        index += arg[0].length
+      } else {
+        index += 1
+      }
+      continue
+    }
+    if (char === '}') {
+      stack.pop()
+      index += 1
+      continue
+    }
+    index += 1
+  }
+  return tokens
+}
+
+test('every English message key exists in every locale file (global parity)', () => {
+  // I18N1: the per-area pins above cover only SOME namespaces, so whole
+  // blocks (accounting lifecycle, expenses settlement, hrm queue detail,
+  // property-management fallbacks) shipped English-only while CI stayed
+  // green. This test derives the inventory from the files themselves: every
+  // leaf of every en file must exist non-empty in the same file in every
+  // other locale, with the same ICU placeholders. Reviewed identicals live
+  // in I18N1_IDENTICAL_BY_FACT — everything else in the remediated blocks
+  // must be translated prose, which the backfill test below enforces.
+  const sourceFiles = readdirSync(join(MESSAGES, 'en'))
+    .filter((file) => file.endsWith('.json'))
+    .sort()
+  assert.ok(sourceFiles.length > 0, 'no English catalog files found')
+
+  // Allow-list hygiene: every entry names a real English key and pins the
+  // exact term that locale ships — a stale entry fails here, not silently.
+  const source = flattenCatalog('en')
+  for (const entry of I18N1_IDENTICAL_BY_FACT) {
+    const pipe = entry.indexOf('|')
+    assert.ok(pipe > 0, `malformed identical-by-fact entry: ${entry}`)
+    const scope = entry.slice(0, pipe)
+    const term = entry.slice(pipe + 1)
+    const colon = scope.indexOf(':')
+    const locale = scope.slice(0, colon)
+    const key = scope.slice(colon + 1)
+    assert.ok(locales.includes(locale), `identical-by-fact entry names an unknown locale: ${entry}`)
+    assert.ok(source.has(key), `identical-by-fact entry names a missing English key: ${entry}`)
+    const shipped = flattenCatalog(locale).get(key)
+    assert.equal(shipped, term, `${locale}:${key} must stay the reviewed identical term`)
+  }
+
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const files = readdirSync(join(MESSAGES, locale))
+      .filter((file) => file.endsWith('.json'))
+      .sort()
+    assert.deepEqual(files, sourceFiles, `${locale} must ship exactly the English file set`)
+    for (const file of sourceFiles) {
+      const namespace = file.slice(0, -'.json'.length)
+      const enLeaves = flattenFileShape(
+        namespace,
+        JSON.parse(readFileSync(join(MESSAGES, 'en', file), 'utf8')),
+      )
+      const locLeaves = flattenFileShape(
+        namespace,
+        JSON.parse(readFileSync(join(MESSAGES, locale, file), 'utf8')),
+      )
+      assert.ok(enLeaves.size > 0, `en/${file} contributes no leaves`)
+      for (const [key, enValue] of enLeaves) {
+        assert.ok(locLeaves.has(key), `${locale}/${file} is missing ${key}`)
+        const value = locLeaves.get(key) ?? ''
+        assert.ok(value.trim() !== '', `${locale}/${file} leaves ${key} blank`)
+        const expected = icuTokens(enValue)
+        const actual = icuTokens(value)
+        const drift =
+          expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+        assert.ok(!drift, `${locale}/${file} ${key} drops or renames ICU placeholders`)
+      }
+      const extra = [...locLeaves.keys()].filter((key) => !enLeaves.has(key)).sort()
+      assert.deepEqual(extra, [], `${locale}/${file} carries keys absent from English`)
+    }
+  }
+})
+
+test('I18N1 backfilled keys are genuinely translated, never English pastes', () => {
+  // The global parity test above proves presence; this one proves the new
+  // translations are real prose: every backfilled key must differ from
+  // English except reviewed identicals, which must match their pinned term
+  // exactly. The inventory count pins the remediated surface (58 accounting
+  // lifecycle + 8 expenses settlement + 14 hrm queue/offer keys) so a new
+  // English-only key in these blocks fails here.
+  const prefixes = [
+    'accounting.lifecycle.',
+    'expenses.drawer.settlement.',
+    'expenses.drawer.cardLabel',
+    'expenses.drawer.cardPlaceholder',
+    'expenses.drawer.noCard',
+    'expenses.drawer.splits',
+    'hrm.queue.openRequest',
+    'hrm.queue.detail',
+    'hrm.positions.columns.holdersCount',
+    'hrm.public.offer.terms',
+  ]
+  const source = flattenCatalog('en')
+  const wanted = [...source.keys()]
+    .filter((key) => prefixes.some((prefix) => key === prefix || key.startsWith(prefix)))
+    .sort()
+  assert.equal(wanted.length, 80, 'I18N1 backfill inventory changed; translate the new keys everywhere and re-pin')
+  for (const key of wanted) {
+    assert.ok(source.get(key)?.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of wanted) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      const identical = [...I18N1_IDENTICAL_BY_FACT].find((entry) =>
+        entry.startsWith(`${locale}:${key}|`),
+      )
+      if (identical) {
+        assert.equal(value, identical.slice(identical.indexOf('|') + 1), `${locale}:${key} must stay the reviewed identical term`)
+      } else {
+        assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      }
+    }
+    const drift = wanted.filter((key) => {
+      const expected = icuTokens(source.get(key) ?? '')
+      const actual = icuTokens(catalog.get(key) ?? '')
+      return expected.size !== actual.size || [...expected].some((token) => !actual.has(token))
+    })
+    assert.deepEqual(drift, [], `${locale} backfilled translations drop or rename ICU placeholders`)
   }
 })

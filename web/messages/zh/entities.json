@@ -214,6 +214,7 @@
         "cam": "公共区域费用"
       },
       "tabsAria": "物业详情",
+      "description": "{subsidiary} · {location}",
       "noLocation": "无位置",
       "cancel": "取消",
       "saving": "保存中…",

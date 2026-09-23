@@ -72,11 +72,13 @@
       "notMapped": "Nicht zugeordnet",
       "columns": {
         "property": "Immobilie",
+        "code": "Code",
         "subsidiary": "Einheit",
         "location": "Standort",
         "propertyType": "Typ",
         "occupancy": "Belegung",
-        "currency": "Währung"
+        "currency": "Währung",
+        "status": "Status"
       }
     },
     "leaseSections": {
@@ -119,7 +121,8 @@
           "effective": "Gültig",
           "method": "Methode",
           "value": "Wert",
-          "result": "Ergebnis"
+          "result": "Ergebnis",
+          "status": "Status"
         },
         "apply": "Anwenden",
         "emptyTitle": "Keine Mietanpassungen",
@@ -184,8 +187,10 @@
     "detail": {
       "selectEmpty": "Nicht zugeordnet",
       "fields": {
+        "name": "Name",
         "code": "Objektcode",
         "propertyType": "Objekttyp",
+        "status": "Status",
         "subsidiary": "Tochtergesellschaft",
         "location": "Standort",
         "fixedAsset": "Anlagegut",
@@ -209,6 +214,7 @@
         "cam": "Nebenkosten"
       },
       "tabsAria": "Immobiliendetails",
+      "description": "{subsidiary} · {location}",
       "noLocation": "Kein Standort",
       "cancel": "Abbrechen",
       "saving": "Wird gespeichert…",
@@ -229,7 +235,8 @@
           "unit": "Einheit",
           "type": "Typ",
           "rentableArea": "Vermietbare Fläche",
-          "bedrooms": "Schlafzimmer"
+          "bedrooms": "Schlafzimmer",
+          "status": "Status"
         },
         "emptyTitle": "Noch keine Einheiten",
         "emptyDetail": "Fügen Sie die erste vermietbare Einheit aus diesem Immobiliendatensatz hinzu."
@@ -242,7 +249,8 @@
           "lease": "Mietvertrag",
           "unit": "Einheit",
           "tenant": "Mieter",
-          "term": "Laufzeit"
+          "term": "Laufzeit",
+          "status": "Status"
         },
         "wholeProperty": "Gesamte Immobilie",
         "openTerm": "Offen",

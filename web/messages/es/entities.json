@@ -214,6 +214,7 @@
         "cam": "Gastos comunes"
       },
       "tabsAria": "Detalles del inmueble",
+      "description": "{subsidiary} · {location}",
       "noLocation": "Sin ubicación",
       "cancel": "Cancelar",
       "saving": "Guardando…",

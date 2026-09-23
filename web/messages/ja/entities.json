@@ -214,6 +214,7 @@
         "cam": "共益費"
       },
       "tabsAria": "物件詳細",
+      "description": "{subsidiary} · {location}",
       "noLocation": "所在地なし",
       "cancel": "キャンセル",
       "saving": "保存中…",
