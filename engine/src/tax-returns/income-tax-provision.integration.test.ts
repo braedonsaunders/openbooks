@@ -1476,3 +1476,59 @@ test("per-entity overrides keyed by an unknown or out-of-scope subsidiary refuse
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("reposting a superseded run refuses by status instead of returning its reversed entry", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Repost Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-RPL-1", userId });
+
+    const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    const { entryId: entryId1 } = await postProvisionRun(org.orgId, runId1, userId);
+    // A changed recomputation becomes v2; posting it supersedes v1 and
+    // reverses v1's journals.
+    const runId2 = await computeProvisionRun(org.orgId, 2026, {
+      additionalDifferences: [
+        { category: "fixed_assets", description: "P&E book vs tax", difference: "1000.0000", source: "manual" },
+      ],
+    }, userId);
+    await postProvisionRun(org.orgId, runId2, userId);
+    assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
+
+    const ledgersBefore = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`));
+    const auditsBefore = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
+
+    // Retrying the superseded run refuses by status and names the remedy —
+    // it must NOT hand back v1's reversed entry as an effective posting.
+    await assert.rejects(
+      () => postProvisionRun(org.orgId, runId1, userId),
+      (error: unknown) => {
+        assert.ok(error instanceof IncomeTaxProvisionError);
+        assert.match(error.message, /is superseded/);
+        assert.match(error.message, new RegExp(`use the current run ${runId2}`));
+        assert.equal(error.message.includes(entryId1), false);
+        return true;
+      },
+    );
+
+    // No ledger or audit mutation, and v2 stays authoritative.
+    const ledgersAfter = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId} and origin = 'tax_provision'`));
+    assert.equal(ledgersAfter.rows[0]!.n, ledgersBefore.rows[0]!.n);
+    const auditsAfter = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
+    assert.equal(auditsAfter.rows[0]!.n, auditsBefore.rows[0]!.n);
+    assert.equal((await getProvisionRun(org.orgId, runId1))?.status, "superseded");
+    const current = (await getProvisionRun(org.orgId, runId2))!;
+    assert.equal(current.status, "posted");
+    const live = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where id = ${current.journalEntryId}`));
+    assert.equal(live.rows[0]!.status, "posted");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
