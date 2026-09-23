@@ -24,12 +24,22 @@ test(
           values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
 
         // A July fiscal year makes the June summary row prior-year P&L. The
-        // accounts list and COA balance must exclude it while ledger opening
-        // still includes it as inception-to-date activity.
+        // accounts list, the COA balance AND the GL opening must all exclude
+        // it: P&L resets at the fiscal-year boundary, so only balance-sheet
+        // accounts carry inception-to-date openings into a mid-year report.
+        // The boundary is declared for real (a July-start default calendar),
+        // not just flipped in settings, and the June seed row below is what
+        // proves all three readers exclude it.
         await db.execute(sql\`
           update orgs
              set settings = jsonb_set(settings, '{fiscalYearStartMonth}', '7'::jsonb, true)
            where id = \${scratch.orgId}\`);
+        await db.execute(sql\`
+          update fiscal_calendars set is_default = false
+           where org_id = \${scratch.orgId} and is_default\`);
+        await db.execute(sql\`
+          insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, is_default, is_active)
+          values (\${randomUUID()}, \${scratch.orgId}, 'July fiscal year', 'monthly', 7, true, true)\`);
         await db.execute(sql\`
           insert into gl_month_activity
             (org_id, account_id, book_id, month, subsidiary_id, debit_total, credit_total, line_count)
@@ -142,8 +152,8 @@ test(
           const before = await readAll();
           assert.equal(before.ledger.length, 1);
           assert.equal(before.ledger[0].lines, 1);
-          assert.equal(before.ledger[0].opening, '-25.0000');
-          assert.equal(before.ledger[0].closing, '-125.0000');
+          assert.equal(before.ledger[0].opening, '0.0000');
+          assert.equal(before.ledger[0].closing, '-100.0000');
           assert.equal(before.journal.length, 1);
           assert.equal(before.journal[0].lines, 2);
           assert.equal(before.revenueBalance, '100.0000');
