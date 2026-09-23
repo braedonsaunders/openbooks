@@ -48,7 +48,7 @@ async function seedCapture(orgId: string, connectionId: string, rows: Array<{ fa
       responseXml: row.responseXml,
     });
   }
-  const source = new QbdSource({ orgId, connectionId, historyStartDate: "2024-01-01" });
+  const source = new QbdSource({ orgId, connectionId, historyStartDate: "2024-01-01", baseCurrency: "CAD" });
   (source as unknown as { captureId: string }).captureId = captureId;
   (source as unknown as { captureReady: boolean }).captureReady = true;
   return source;
