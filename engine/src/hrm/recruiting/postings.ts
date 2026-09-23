@@ -393,20 +393,26 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
 export async function listFeedPostings(orgId: string): Promise<
   readonly { postingId: string; requisitionNumber: string; title: string; publishedAt: string | null }[]
 > {
-  const rows = (await db.execute<{
-    postingId: string;
-    requisitionNumber: string;
-    title: string;
-    publishedAt: string | null;
-  }>(sql`
-    select p.id as "postingId", r.requisition_number as "requisitionNumber",
-           r.title, p.published_at as "publishedAt"
-      from hrm_job_postings p
-      join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
-     where p.org_id = ${orgId} and p.status = 'published' and r.status = 'open'
-     order by p.published_at desc
-  `)).rows;
-  return rows;
+  // Public routes carry no request-org RLS scope, so the explicit org
+  // predicate alone is not enough under deny-by-default RLS: without this
+  // boundary the listing silently returns zero postings. The token resolved
+  // the org above; the read runs inside it.
+  return withOrgTransaction(orgId, async () => {
+    const rows = (await db.execute<{
+      postingId: string;
+      requisitionNumber: string;
+      title: string;
+      publishedAt: string | null;
+    }>(sql`
+      select p.id as "postingId", r.requisition_number as "requisitionNumber",
+             r.title, p.published_at as "publishedAt"
+        from hrm_job_postings p
+        join hrm_requisitions r on r.org_id = p.org_id and r.id = p.requisition_id
+       where p.org_id = ${orgId} and p.status = 'published' and r.status = 'open'
+       order by p.published_at desc
+    `)).rows;
+    return rows;
+  });
 }
 
 export interface ApplyViaPostingQuery {
