@@ -9,7 +9,9 @@ import {
   closeWebConnectorSession,
   nextWebConnectorRequest,
   prepareCapture,
+  recordConnectionError,
   releaseCapture,
+  webConnectorLastError,
 } from "./bridge.ts";
 
 const DB = Boolean(env.OPENBOOKS_DB_URL && env.OPENBOOKS_DATA_KEY);
@@ -245,6 +247,152 @@ test("a replayed response for a completed request is acknowledged, not errored",
       select count(*)::int as n from qbd_requests where capture_id = ${captureId} and status = 'complete'`));
     assert.equal(stored.rows[0]?.n, 1);
     await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+function ticketLockKey(ticket: string): string {
+  return `qbd-web-connector:${ticket}`;
+}
+
+/**
+ * Park a transaction holding the ticket advisory lock, so a send started
+ * afterwards blocks inside its locked section after completing its
+ * pre-transaction session lookup. Models the race window deterministically:
+ * whatever runs while the holder is parked commits between the send's lookup
+ * and its claim.
+ */
+async function holdTicketLock(ticket: string): Promise<{ release: () => void; done: Promise<void> }> {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let acquired = false;
+  const done = db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${ticketLockKey(ticket)}, 0))`);
+    acquired = true;
+    await gate;
+  }).then(() => undefined, (error: unknown) => { throw error; });
+  for (let i = 0; i < 200 && !acquired; i += 1) await sleep(25);
+  assert.ok(acquired, "the lock holder must hold the ticket lock before the race starts");
+  return { release, done };
+}
+
+async function sentOnTicket(ticket: string): Promise<number> {
+  const result = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from qbd_requests where session_id = ${ticket} and status = 'sent'`));
+  return result.rows[0]?.n ?? -1;
+}
+
+test("a close racing a send strands no request 'sent' on the closed ticket", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  const meta = { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 };
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const holder = await holdTicketLock(ticket);
+    let sendXml = "<unresolved>";
+    try {
+      const sendPromise = nextWebConnectorRequest(ticket, meta);
+      // Let the send finish its 'open' lookup and block on the ticket lock.
+      await sleep(500);
+      const closePromise = closeWebConnectorSession(ticket);
+      // Let the close reach the ticket lock too (pre-fix it never takes one
+      // and commits immediately while the send is parked).
+      await sleep(500);
+      holder.release();
+      const [send, closeMsg] = await Promise.all([sendPromise, closePromise]);
+      sendXml = send;
+      assert.match(closeMsg, /closed/);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    void sendXml; // either order is legal; only the end state is asserted
+    const status = (await db.execute<{ status: string }>(sql`select status from qbd_sessions where id = ${ticket}`));
+    assert.equal(status.rows[0]?.status, "closed");
+    assert.equal(await sentOnTicket(ticket), 0);
+    // The queued request was re-queued, never stranded: the next session
+    // claims it normally.
+    const auth = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(auth.ticket);
+    const retry = await nextWebConnectorRequest(auth.ticket, meta);
+    assert.match(retry, /<CompanyQueryRq requestID="/);
+    await closeWebConnectorSession(auth.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a connection error racing a send strands no request 'sent' on the errored ticket", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  const meta = { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 };
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const holder = await holdTicketLock(ticket);
+    try {
+      const sendPromise = nextWebConnectorRequest(ticket, meta);
+      await sleep(500);
+      const errorPromise = recordConnectionError(ticket, "0x80040400", "race-induced connection error");
+      await sleep(500);
+      holder.release();
+      await Promise.all([sendPromise, errorPromise]);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    const session = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, last_error as error from qbd_sessions where id = ${ticket}`));
+    assert.equal(session.rows[0]?.status, "error");
+    assert.match(session.rows[0]?.error ?? "", /race-induced connection error/);
+    assert.equal(await sentOnTicket(ticket), 0);
+    const auth = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(auth.ticket);
+    const retry = await nextWebConnectorRequest(auth.ticket, meta);
+    assert.match(retry, /<CompanyQueryRq requestID="/);
+    await closeWebConnectorSession(auth.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a send that read 'open' before a close commits claims nothing and records the reason", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  const meta = { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 };
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    const holder = await holdTicketLock(ticket);
+    let sendXml = "<unresolved>";
+    try {
+      const sendPromise = nextWebConnectorRequest(ticket, meta);
+      await sleep(500);
+      // Commit the pre-fix close shape (no ticket lock) while the send is
+      // parked: status closed between the send's lookup and its claim.
+      await db.execute(sql`update qbd_sessions set status = 'closed', closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${orgId}`);
+      holder.release();
+      sendXml = await sendPromise;
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    assert.equal(sendXml, "");
+    assert.equal(await sentOnTicket(ticket), 0);
+    const session = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket}`));
+    assert.match(session.rows[0]?.error ?? "", /no longer open/);
+    // The closed ticket keeps answering like a closed ticket, with the reason
+    // available through getLastError.
+    assert.equal(await nextWebConnectorRequest(ticket, meta), "");
+    assert.equal(await acceptWebConnectorResponse(ticket, companyResponse("00000000-0000-4000-8000-000000000000"), "", ""), -101);
+    assert.match(await webConnectorLastError(ticket), /no longer open/);
   } finally {
     await db.execute(sql`delete from connections where id = ${connection.id}`);
   }

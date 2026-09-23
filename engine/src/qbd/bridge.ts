@@ -244,6 +244,38 @@ async function session(ticket: string): Promise<SessionRow | null> {
   });
 }
 
+type BridgeTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The authoritative session read. The pre-transaction session() lookup is only
+ * a fast path: a close or connection error may commit between that lookup and
+ * the claim below. Every send/receive/close/error path takes the ticket
+ * advisory lock FIRST, then re-reads and locks the session row here, so the
+ * state check and the state transition are atomic with respect to each other.
+ * Lock order is always ticket advisory lock, then the session row, then the
+ * request rows, so these paths cannot deadlock each other.
+ */
+async function lockedSession(tx: BridgeTx, ticket: string): Promise<SessionRow | null> {
+  const result = (await tx.execute<SessionRow>(sql`
+    select s.id, s.org_id as "orgId", s.connection_id as "connectionId", s.status,
+           c.config->>'region' as "expectedRegion"
+      from qbd_sessions s
+        join connections c on c.id = s.connection_id and c.org_id = s.org_id
+     where s.id = ${ticket} and s.expires_at > now() limit 1 for update of s`));
+  return result.rows[0] ?? null;
+}
+
+/**
+ * A send/receive that arrived after its ticket stopped being open claims and
+ * settles nothing. The refusal is recorded on the session (without clobbering
+ * an earlier error's evidence) so a following getLastError names the closure
+ * instead of reporting "No error recorded".
+ */
+async function recordStaleSessionRefusal(tx: BridgeTx, locked: SessionRow): Promise<void> {
+  const reason = `QuickBooks Web Connector session is no longer open (status: ${locked.status}); the request was not claimed — authenticate again to open a new session`;
+  await tx.execute(sql`update qbd_sessions set last_error = coalesce(last_error, ${reason}), last_seen_at = now() where id = ${locked.id} and org_id = ${locked.orgId}`);
+}
+
 /**
  * One in-flight request per Web Connector ticket. The client retries
  * sendRequestXML whenever its scheduler fires before the previous response
@@ -267,15 +299,24 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
     try {
       return await withBypassContext(async () => db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
-        if (metadata.country && current.expectedRegion && metadata.country.toUpperCase() !== current.expectedRegion.toUpperCase()) {
-          const error = `QuickBooks region ${metadata.country} does not match configured region ${current.expectedRegion}`;
-          await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+        // Authoritative state check: a close or connection error may have
+        // committed after the pre-transaction lookup above. Claiming here
+        // would strand the request in 'sent' on a closed ticket, with no open
+        // session left to settle it (receive refuses closed tickets).
+        const locked = await lockedSession(tx, ticket);
+        if (!locked || locked.status !== "open") {
+          if (locked) await recordStaleSessionRefusal(tx, locked);
+          return "";
+        }
+        if (metadata.country && locked.expectedRegion && metadata.country.toUpperCase() !== locked.expectedRegion.toUpperCase()) {
+          const error = `QuickBooks region ${metadata.country} does not match configured region ${locked.expectedRegion}`;
+          await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
           await tx.execute(sql`
             update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now()
-             where connection_id = ${current.connectionId} and org_id = ${current.orgId} and status in ('queued', 'running')`);
+             where connection_id = ${locked.connectionId} and org_id = ${locked.orgId} and status in ('queued', 'running')`);
           await tx.execute(sql`
             update qbd_requests r set status = 'cancelled', session_id = null, updated_at = now()
-             where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status in ('queued', 'sent')
+             where r.connection_id = ${locked.connectionId} and r.org_id = ${locked.orgId} and r.status in ('queued', 'sent')
                and exists (select 1 from qbd_captures c where c.id = r.capture_id and c.org_id = r.org_id and c.status = 'failed')`);
           return "";
         }
@@ -283,19 +324,19 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
           update qbd_sessions set last_seen_at = now(), company_file = coalesce(${metadata.companyFile ?? null}, company_file),
                  country = coalesce(${metadata.country ?? null}, country), qbxml_major = coalesce(${metadata.qbxmlMajor ?? null}, qbxml_major),
                  qbxml_minor = coalesce(${metadata.qbxmlMinor ?? null}, qbxml_minor)
-           where id = ${ticket} and org_id = ${current.orgId}`);
+           where id = ${ticket} and org_id = ${locked.orgId}`);
         const held = (await tx.execute<{ id: string; requestXml: string; captureId: string }>(sql`
           select id, request_xml as "requestXml", capture_id as "captureId"
             from qbd_requests
-           where session_id = ${ticket} and org_id = ${current.orgId} and status = 'sent'
+           where session_id = ${ticket} and org_id = ${locked.orgId} and status = 'sent'
            order by sent_at desc limit 1 for update`));
         const outstanding = held.rows[0];
         if (outstanding) {
           const stamped = stampRequestId(outstanding.requestXml, outstanding.id);
           if (stamped !== outstanding.requestXml) {
-            await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${outstanding.id} and org_id = ${current.orgId}`);
+            await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${outstanding.id} and org_id = ${locked.orgId}`);
           }
-          await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${outstanding.captureId} and org_id = ${current.orgId} and status = 'queued'`);
+          await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${outstanding.captureId} and org_id = ${locked.orgId} and status = 'queued'`);
           return negotiateQbxmlVersion(stamped, metadata.qbxmlMajor, metadata.qbxmlMinor);
         }
         const result = (await tx.execute<{ id: string; requestXml: string; captureId: string }>(sql`
@@ -303,7 +344,7 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
            where id = (
              select r.id from qbd_requests r
               join qbd_captures c on c.id = r.capture_id and c.org_id = r.org_id
-             where r.connection_id = ${current.connectionId} and r.org_id = ${current.orgId} and r.status = 'queued'
+             where r.connection_id = ${locked.connectionId} and r.org_id = ${locked.orgId} and r.status = 'queued'
                and c.status in ('queued', 'running') and c.expires_at > now()
               order by r.sequence for update of r skip locked limit 1
            ) returning id, request_xml as "requestXml", capture_id as "captureId"`));
@@ -314,8 +355,8 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
         // The id is the row identity, not the ticket, so a request re-queued
         // onto a later session keeps its correlation.
         const stamped = stampRequestId(request.requestXml, request.id);
-        await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${request.id} and org_id = ${current.orgId}`);
-        await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${request.captureId} and org_id = ${current.orgId} and status = 'queued'`);
+        await tx.execute(sql`update qbd_requests set request_xml = ${stamped}, updated_at = now() where id = ${request.id} and org_id = ${locked.orgId}`);
+        await tx.execute(sql`update qbd_captures set status = 'running', updated_at = now() where id = ${request.captureId} and org_id = ${locked.orgId} and status = 'queued'`);
         return negotiateQbxmlVersion(stamped, metadata.qbxmlMajor, metadata.qbxmlMinor);
       }));
     } catch (error) {
@@ -384,19 +425,27 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
   if (!current || current.status !== "open") return -101;
   return withBypassContext(async () => db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
+    // Authoritative state check: settle nothing for a ticket that stopped
+    // being open after the pre-transaction lookup — same answer as a closed
+    // ticket (-101), with the reason recorded for getLastError.
+    const locked = await lockedSession(tx, ticket);
+    if (!locked || locked.status !== "open") {
+      if (locked) await recordStaleSessionRefusal(tx, locked);
+      return -101;
+    }
     const sent = (await tx.execute<QbdTicketRequest>(sql`
       select id, org_id as "orgId", capture_id as "captureId", family, request_kind as "requestKind",
              sequence, page, request_xml as "requestXml"
-        from qbd_requests where session_id = ${ticket} and org_id = ${current.orgId} and status = 'sent'
+        from qbd_requests where session_id = ${ticket} and org_id = ${locked.orgId} and status = 'sent'
        order by sent_at desc limit 1 for update`));
     const request = sent.rows[0];
-    if (!request) return (await acknowledgeReplayedResponse(tx, current, ticket, responseXml)) ?? -101;
+    if (!request) return (await acknowledgeReplayedResponse(tx, locked, ticket, responseXml)) ?? -101;
     if (hresult || !responseXml.trim()) {
       const error = [hresult, message].filter(Boolean).join(": ") || "QuickBooks returned an empty response";
       await tx.execute(sql`update qbd_requests set status = 'failed', error_message = ${error}, completed_at = now(), updated_at = now() where id = ${request.id} and org_id = ${request.orgId}`);
       await tx.execute(sql`update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now() where id = ${request.captureId} and org_id = ${request.orgId}`);
       await tx.execute(sql`update qbd_requests set status = 'cancelled', updated_at = now() where capture_id = ${request.captureId} and org_id = ${request.orgId} and status in ('queued', 'sent') and id <> ${request.id}`);
-      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       return -101;
     }
     let status: ReturnType<typeof responseStatus>;
@@ -414,14 +463,14 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
     if (expectedId !== null || status.requestId !== null) {
       if (status.requestId !== expectedId) {
         const error = `QuickBooks response requestID ${JSON.stringify(status.requestId)} does not match outstanding ${request.requestKind} request ${JSON.stringify(expectedId)}; the response was not stored — call sendRequestXML again to receive the outstanding request and submit its response`;
-        await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+        await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
         return -101;
       }
     }
     const expectedRs = responseElementForRequest(request.requestXml) ?? `${request.requestKind}Rs`;
     if (status.kind !== expectedRs) {
       const error = `QuickBooks ${status.kind} response does not answer the outstanding ${request.requestKind} request (expected ${expectedRs}); the response was not stored — call sendRequestXML again to receive the outstanding request and submit its response`;
-      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       return -101;
     }
     if (status.code !== 0) {
@@ -429,7 +478,7 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
       await tx.execute(sql`update qbd_requests set status = 'failed', error_message = ${error}, completed_at = now(), updated_at = now() where id = ${request.id} and org_id = ${request.orgId}`);
       await tx.execute(sql`update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now() where id = ${request.captureId} and org_id = ${request.orgId}`);
       await tx.execute(sql`update qbd_requests set status = 'cancelled', updated_at = now() where capture_id = ${request.captureId} and org_id = ${request.orgId} and status in ('queued', 'sent') and id <> ${request.id}`);
-      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+      await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       return -101;
     }
     const hash = createHash("sha256").update(responseXml).digest("hex");
@@ -445,7 +494,7 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
       };
       await tx.insert(schema.qbdRequests).values({
         orgId: request.orgId,
-        connectionId: current.connectionId,
+        connectionId: locked.connectionId,
         captureId: request.captureId,
         family: next.family,
         requestKind: next.requestKind,
@@ -466,7 +515,7 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
              progress = ${JSON.stringify({ completed: count.complete, total: count.total })}::jsonb,
              finished_at = ${complete ? new Date() : null}, updated_at = now()
        where id = ${request.captureId} and org_id = ${request.orgId}`);
-    await tx.execute(sql`update qbd_sessions set last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+    await tx.execute(sql`update qbd_sessions set last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
     return complete ? 100 : Math.max(1, Math.min(99, Math.floor((count.complete * 100) / Math.max(1, count.total))));
   }));
 }
@@ -484,17 +533,30 @@ export async function closeWebConnectorSession(ticket: string): Promise<string> 
   const current = await session(ticket);
   if (!current) return "QuickBooks Web Connector session was already closed";
   return withBypassContext(async () => {
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`update qbd_sessions set status = 'closed', closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+    // Same ticket advisory lock as send/receive, then re-read and lock the
+    // session row: a send that read 'open' before this close commits must lose
+    // the race (its in-lock re-read sees 'closed' and claims nothing) instead
+    // of stranding a request in 'sent' on this closed ticket.
+    const closed = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
+      const locked = await lockedSession(tx, ticket);
+      // Only an open or errored session transitions to closed. Re-closing an
+      // already-closed ticket touches nothing — its in-flight rows were
+      // already re-queued by the first close.
+      if (!locked || locked.status === "closed") return false;
+      await tx.execute(sql`update qbd_sessions set status = 'closed', closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       await tx.execute(sql`
         update qbd_requests r set
           status = case when c.status in ('queued', 'running') and c.expires_at > now() then 'queued' else 'cancelled' end,
           session_id = null, sent_at = null, updated_at = now()
           from qbd_captures c
          where c.id = r.capture_id and c.org_id = r.org_id
-           and r.session_id = ${ticket} and r.org_id = ${current.orgId} and r.status = 'sent'`);
+           and r.session_id = ${ticket} and r.org_id = ${locked.orgId} and r.status = 'sent'`);
+      return true;
     });
-    return "QuickBooks Web Connector session closed";
+    return closed
+      ? "QuickBooks Web Connector session closed"
+      : "QuickBooks Web Connector session was already closed";
   });
 }
 
@@ -503,15 +565,22 @@ export async function recordConnectionError(ticket: string, hresult: string, mes
   const current = await session(ticket);
   if (!current) return "done";
   await withBypassContext(async () => {
+    // Same ticket advisory lock as send/receive, then re-read and lock the
+    // session row: only an open session transitions to error, so this never
+    // resurrects a closed ticket and never clobbers an earlier error's
+    // evidence while a send is racing it.
     await db.transaction(async (tx) => {
-      await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
+      const locked = await lockedSession(tx, ticket);
+      if (!locked || locked.status !== "open") return;
+      await tx.execute(sql`update qbd_sessions set status = 'error', last_error = ${error}, closed_at = now(), last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       await tx.execute(sql`
         update qbd_requests r set
           status = case when c.status in ('queued', 'running') and c.expires_at > now() then 'queued' else 'cancelled' end,
           session_id = null, sent_at = null, updated_at = now()
           from qbd_captures c
          where c.id = r.capture_id and c.org_id = r.org_id
-           and r.session_id = ${ticket} and r.org_id = ${current.orgId} and r.status = 'sent'`);
+           and r.session_id = ${ticket} and r.org_id = ${locked.orgId} and r.status = 'sent'`);
     });
   });
   return "done";
