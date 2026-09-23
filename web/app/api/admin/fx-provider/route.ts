@@ -48,7 +48,8 @@ export async function PUT(req: Request) {
     apiKey?: string | null
   }
   try {
-    const existing = await readFxProviderConfigView(gate.user.orgId)
+    // The engine owns the config write plus its immutable before/after
+    // audit as one transaction; the route must not write a second audit.
     const id = await saveFxProviderConfig(gate.user.orgId, gate.user.id, {
       provider: body.provider as FxProviderKey,
       displayName: body.displayName,
@@ -60,12 +61,6 @@ export async function PUT(req: Request) {
       isEnabled: body.isEnabled === true,
       apiKey: body.apiKey,
     })
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${gate.user.orgId}, 'fx_provider_configs', ${id}, ${existing ? 'update' : 'insert'},
-              ${JSON.stringify({ provider: body.provider, displayName: body.displayName, baseCurrency: body.baseCurrency, currencies: body.currencies, schedule: body.schedule, syncHourUtc: body.syncHourUtc, lookbackDays: body.lookbackDays, isEnabled: body.isEnabled })}::jsonb,
-              ${gate.user.id})
-    `)
     return NextResponse.json({ id })
   } catch (error) {
     if (error instanceof FxProviderError) return NextResponse.json({ error: error.message }, { status: 422 })

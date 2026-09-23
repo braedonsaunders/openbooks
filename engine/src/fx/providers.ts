@@ -91,11 +91,32 @@ async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
   return dataDependentFeatureDefault(db, orgId, "multiCurrency", r.rows[0]?.features ?? null);
 }
 
-export async function readFxProviderConfig(orgId: string): Promise<FxProviderConfigRow | null> {
-  const r = (await db.execute<FxProviderConfigRow>(sql`
+export async function readFxProviderConfig(
+  orgId: string,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<FxProviderConfigRow | null> {
+  const r = (await runner.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
   `));
   return r.rows[0] ?? null;
+}
+
+/**
+ * Secrets never enter audit evidence: like the bank-profile audit, only the
+ * presence of a stored secret is recorded, never ciphertext or plaintext.
+ */
+function fxProviderConfigAuditView(row: FxProviderConfigRow): Record<string, unknown> {
+  return {
+    provider: row.provider,
+    displayName: row.displayName,
+    baseCurrency: row.baseCurrency,
+    currencies: row.currencies,
+    schedule: row.schedule,
+    syncHourUtc: row.syncHourUtc,
+    lookbackDays: row.lookbackDays,
+    isEnabled: row.isEnabled,
+    hasSecret: row.secrets != null,
+  };
 }
 
 export async function readFxProviderConfigView(orgId: string): Promise<FxProviderConfigView | null> {
@@ -149,33 +170,50 @@ export async function saveFxProviderConfig(
   `));
   if (known.rows.length !== currencies.length + 1) throw new FxProviderError("one or more currencies are not in the currency registry");
 
-  const existing = await readFxProviderConfig(orgId);
-  let sealed = existing?.secrets ?? null;
-  if (input.apiKey === null || input.provider !== "open_exchange_rates") sealed = null;
-  if (typeof input.apiKey === "string" && input.apiKey.trim()) sealed = sealJson({ apiKey: input.apiKey.trim() });
-  if (input.isEnabled && manifest.requiresSecret && !unsealJson<{ apiKey?: string }>(sealed)?.apiKey) {
-    throw new FxProviderError("an API key is required before enabling Open Exchange Rates");
-  }
-  const next = input.isEnabled ? computeNextSyncAt(input.schedule, input.syncHourUtc) : null;
-  const displayName = String(input.displayName ?? "").trim() || manifest.displayName;
-  const r = (await db.execute<{ id: string }>(sql`
-    insert into fx_provider_configs
-      (org_id, provider, display_name, base_currency, currencies, schedule, sync_hour_utc,
-       lookback_days, is_enabled, secrets, next_sync_at, created_by, updated_by)
-    values (${orgId}, ${input.provider}, ${displayName}, ${baseCurrency}, ${JSON.stringify(currencies)}::jsonb,
-            ${input.schedule}, ${input.syncHourUtc}, ${input.lookbackDays}, ${input.isEnabled},
-            ${sealed}, ${next}, ${actorId}, ${actorId})
-    on conflict (org_id) do update set
-      provider = excluded.provider, display_name = excluded.display_name,
-      base_currency = excluded.base_currency, currencies = excluded.currencies,
-      schedule = excluded.schedule, sync_hour_utc = excluded.sync_hour_utc,
-      lookback_days = excluded.lookback_days, is_enabled = excluded.is_enabled,
-      secrets = excluded.secrets, next_sync_at = excluded.next_sync_at,
-      last_error = null, updated_at = now(), updated_by = excluded.updated_by
-    where fx_provider_configs.org_id = ${orgId}
-    returning id
-  `));
-  return r.rows[0]!.id;
+  // The config write and its immutable before/after audit commit as one
+  // unit: an audit failure rolls the config back with it, so a provider,
+  // secret, or schedule change can never land without its evidence (the old
+  // route wrote the audit in a separate statement after the upsert had
+  // already committed, and recorded no before-state at all).
+  return db.transaction(async (tx) => {
+    const existing = await readFxProviderConfig(orgId, tx);
+    let sealed = existing?.secrets ?? null;
+    if (input.apiKey === null || input.provider !== "open_exchange_rates") sealed = null;
+    if (typeof input.apiKey === "string" && input.apiKey.trim()) sealed = sealJson({ apiKey: input.apiKey.trim() });
+    if (input.isEnabled && manifest.requiresSecret && !unsealJson<{ apiKey?: string }>(sealed)?.apiKey) {
+      throw new FxProviderError("an API key is required before enabling Open Exchange Rates");
+    }
+    const next = input.isEnabled ? computeNextSyncAt(input.schedule, input.syncHourUtc) : null;
+    const displayName = String(input.displayName ?? "").trim() || manifest.displayName;
+    const r = (await tx.execute<{ id: string }>(sql`
+      insert into fx_provider_configs
+        (org_id, provider, display_name, base_currency, currencies, schedule, sync_hour_utc,
+         lookback_days, is_enabled, secrets, next_sync_at, created_by, updated_by)
+      values (${orgId}, ${input.provider}, ${displayName}, ${baseCurrency}, ${JSON.stringify(currencies)}::jsonb,
+              ${input.schedule}, ${input.syncHourUtc}, ${input.lookbackDays}, ${input.isEnabled},
+              ${sealed}, ${next}, ${actorId}, ${actorId})
+      on conflict (org_id) do update set
+        provider = excluded.provider, display_name = excluded.display_name,
+        base_currency = excluded.base_currency, currencies = excluded.currencies,
+        schedule = excluded.schedule, sync_hour_utc = excluded.sync_hour_utc,
+        lookback_days = excluded.lookback_days, is_enabled = excluded.is_enabled,
+        secrets = excluded.secrets, next_sync_at = excluded.next_sync_at,
+        last_error = null, updated_at = now(), updated_by = excluded.updated_by
+      where fx_provider_configs.org_id = ${orgId}
+      returning id
+    `));
+    const id = r.rows[0]!.id;
+    const after = (await readFxProviderConfig(orgId, tx))!;
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'fx_provider_configs', ${id}, ${existing ? "update" : "insert"},
+              ${JSON.stringify({
+                before: existing ? fxProviderConfigAuditView(existing) : null,
+                after: fxProviderConfigAuditView(after),
+              })}::jsonb, ${actorId})
+    `);
+    return id;
+  });
 }
 
 export function computeNextSyncAt(schedule: FxSyncSchedule, hourUtc: number, now = new Date()): Date | null {
