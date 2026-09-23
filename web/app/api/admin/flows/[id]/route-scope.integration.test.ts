@@ -34,8 +34,8 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import('@openbooks/engine/src/testing/fixtures.ts')
-const { GET: list } = await import('../route')
-const { GET: detail } = await import('./route')
+const { GET: list, POST: create } = await import('../route')
+const { GET: detail, PATCH: edit, DELETE: remove } = await import('./route')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 function sessionUser(id: string, orgId: string): SessionUser {
@@ -110,7 +110,7 @@ test('a restricted flows.manage caller sees only in-scope runs', { skip: !DB }, 
     await seedRun(org.orgId, flowId, homeBill, 'completed')
     const params = { params: Promise.resolve({ id: flowId }) }
 
-    await seedUser(org.orgId, 'flow_checker', ['flows.manage'], [org.subsidiaryId])
+    await seedUser(org.orgId, 'flow_checker', ['flows.manage', 'ap.read'], [org.subsidiaryId])
 
     const listed = await withOrgContext(org.orgId, () => list())
     assert.equal(listed.status, 200)
@@ -145,11 +145,84 @@ test('an unrestricted flows.manage caller still sees every run', { skip: !DB }, 
     await seedRun(org.orgId, flowId, await makeBill(org.orgId, branch), 'failed')
     await seedRun(org.orgId, flowId, await makeBill(org.orgId, org.subsidiaryId), 'completed')
 
-    await seedUser(org.orgId, 'flow_admin', ['flows.manage'], null)
+    await seedUser(org.orgId, 'flow_admin', ['flows.manage', 'ap.read'], null)
 
     const listed = await withOrgContext(org.orgId, () => list())
     const flows = ((await listed.json()) as { flows: Record<string, unknown>[] }).flows
     assert.equal(String(flows[0]!.run_count), '2')
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('flows.manage without ap.read cannot see AP-subject run history or counts', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableFlows(org.orgId)
+    const flowId = await seedFlow(org.orgId)
+    const billId = await makeBill(org.orgId, org.subsidiaryId)
+    await seedRun(org.orgId, flowId, billId, 'failed')
+    await seedUser(org.orgId, 'flow_manage_only', ['flows.manage'], [org.subsidiaryId])
+
+    const listed = await withOrgContext(org.orgId, () => list())
+    const flows = ((await listed.json()) as { flows: Record<string, unknown>[] }).flows
+    assert.equal(String(flows[0]!.run_count), '0')
+    assert.equal(flows[0]!.last_run_status, null)
+
+    const params = { params: Promise.resolve({ id: flowId }) }
+    const got = await withOrgContext(org.orgId, () => detail(new Request(`http://admin.test/api/admin/flows/${flowId}`), params))
+    assert.equal(got.status, 200)
+    assert.deepEqual(((await got.json()) as { runs: unknown[] }).runs, [])
+  } finally {
+    state.user = null
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('restricted flows.manage cannot create, edit or delete org-wide flow policy', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    await enableFlows(org.orgId)
+    const flowId = await seedFlow(org.orgId)
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'flow_manage_restricted', 'flow_manage_restricted'))
+    await withBypassContext(() => db.execute(sql`
+      update app_roles set permissions = '["flows.manage"]'::jsonb,
+             subsidiary_restriction = ${JSON.stringify({ mode: 'list', subsidiaryIds: [org.subsidiaryId] })}::jsonb
+       where org_id = ${org.orgId} and key = 'flow_manage_restricted'`))
+    state.user = sessionUser(actorId, org.orgId)
+    const detailResponse = await withOrgContext(org.orgId, () => detail(new Request(`http://admin.test/api/admin/flows/${flowId}`), {
+      params: Promise.resolve({ id: flowId }),
+    }))
+    const token = ((await detailResponse.json()) as { flow: { updated_at: string } }).flow.updated_at
+    const beforeAudits = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`))).rows[0]!.n
+
+    const created = await withOrgContext(org.orgId, () => create(new Request('http://admin.test/api/admin/flows', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Unauthorized flow', subjectKind: 'vendor_bill' }),
+    })))
+    assert.equal(created.status, 403)
+    assert.deepEqual(await created.json(), { error: 'requires unrestricted subsidiary access' })
+
+    const edited = await withOrgContext(org.orgId, () => edit(new Request(`http://admin.test/api/admin/flows/${flowId}`, {
+      method: 'PATCH', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Unauthorized edit', expectedUpdatedAt: token }),
+    }), { params: Promise.resolve({ id: flowId }) }))
+    assert.equal(edited.status, 403)
+    assert.deepEqual(await edited.json(), { error: 'requires unrestricted subsidiary access' })
+
+    const deleted = await withOrgContext(org.orgId, () => remove(new Request(`http://admin.test/api/admin/flows/${flowId}`, {
+      method: 'DELETE', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedUpdatedAt: token }),
+    }), { params: Promise.resolve({ id: flowId }) }))
+    assert.equal(deleted.status, 403)
+    assert.deepEqual(await deleted.json(), { error: 'requires unrestricted subsidiary access' })
+
+    assert.equal((await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from flows where org_id = ${org.orgId}`))).rows[0]!.n, 1)
+    assert.equal((await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'flows'`))).rows[0]!.n, beforeAudits)
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))

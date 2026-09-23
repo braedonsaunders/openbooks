@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
+import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {
@@ -109,16 +110,20 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   subjects: readonly T[],
+  authz?: Authz,
 ): Promise<T[]> {
-  if (allowedSubsidiaryIds === null) return [...subjects]
-  if (subjects.length === 0) return []
+  const readableSubjects = authz
+    ? subjects.filter((subject) => canReadFlowSubject(authz, subject.kind))
+    : [...subjects]
+  if (allowedSubsidiaryIds === null) return readableSubjects
+  if (readableSubjects.length === 0) return []
   const subsidiaryBySubject = new Map<string, string | null>()
   const keyOf = (kind: string, id: string) => `${kind}\0${id}`
   // Document subjects (every kind the loader resolves through the
   // documents table) batch one query per kind.
   const documentKinds = new Map<string, { ids: string[] }>()
   const individual: { key: string; kind: string; id: string }[] = []
-  for (const subject of subjects) {
+  for (const subject of readableSubjects) {
     const key = keyOf(subject.kind, subject.id)
     if (subsidiaryBySubject.has(key)) continue
     subsidiaryBySubject.set(key, null)
@@ -155,7 +160,7 @@ export async function filterFlowRunSubjectsToScope<T extends { kind: string; id:
   // inline so this module's import surface — and the neighbouring unit
   // mock — stays exactly as it was): an unresolved or missing subsidiary
   // is never in scope for a restricted caller.
-  return subjects.filter((subject) => {
+  return readableSubjects.filter((subject) => {
     const subsidiaryId = subsidiaryBySubject.get(keyOf(subject.kind, subject.id))
     return subsidiaryId !== null && subsidiaryId !== undefined && allowedSubsidiaryIds.has(subsidiaryId)
   })

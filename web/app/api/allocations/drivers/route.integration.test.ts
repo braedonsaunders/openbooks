@@ -13,7 +13,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
   NextResponse: typeof import("next/server").NextResponse | null;
 }
@@ -34,6 +34,10 @@ const mockAuthz = `
     if (!covered) return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
     return state.authz
   }
+  export function guardUnrestrictedScope(authz) {
+    if (authz?.allowedSubsidiaryIds == null) return null
+    return NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+  }
 `;
 
 routeState.NextResponse = (await import("next/server")).NextResponse;
@@ -43,7 +47,10 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
-    if (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts")) {
+    if (
+      (specifier === "./authz" && String(context.parentURL ?? "").includes("lib/allocations-gate.ts"))
+      || (specifier.endsWith("/lib/authz") && String(context.parentURL ?? "").includes("/api/allocations/drivers/"))
+    ) {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -71,11 +78,11 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-function authenticate(orgId: string, actorId: string, permissions: string[]): void {
+function authenticate(orgId: string, actorId: string, permissions: string[], allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = {
     user: { orgId, id: actorId },
     permissions: new Set(permissions),
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds,
   };
 }
 
@@ -325,6 +332,61 @@ test("report_definition preview runs under the actor via the engine runner", { s
       to: "2026-05-31",
       field: null,
     });
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted allocations managers cannot mutate org-wide drivers", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await enableAllocations(org.orgId);
+    authenticate(org.orgId, actorId, [...READ, ...MANAGE]);
+    const created = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
+      key: "scope-driver",
+      name: "Scope driver",
+      dimension: "department",
+      sourceKind: "manual",
+    }));
+    assert.equal(created.status, 201);
+    const driver = ((await created.json()) as { driver: { id: string; updatedAt: string } }).driver;
+    const beforeAudits = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`)).rows[0]!.n;
+    authenticate(org.orgId, actorId, [...READ, ...MANAGE], new Set([org.subsidiaryId]));
+
+    const createdDenied = await listRoute.POST(jsonRequest("/api/allocations/drivers", "POST", {
+      key: "restricted-driver",
+      name: "Restricted driver",
+      dimension: "department",
+      sourceKind: "manual",
+    }));
+    assert.equal(createdDenied.status, 403);
+    assert.deepEqual(await createdDenied.json(), { error: "requires unrestricted subsidiary access" });
+
+    const updatedDenied = await itemRoute.PATCH(jsonRequest(`/api/allocations/drivers/${driver.id}`, "PATCH", {
+      name: "Must not change",
+      expectedUpdatedAt: driver.updatedAt,
+    }), { params: Promise.resolve({ id: driver.id }) });
+    assert.equal(updatedDenied.status, 403);
+    assert.deepEqual(await updatedDenied.json(), { error: "requires unrestricted subsidiary access" });
+
+    const deletedDenied = await itemRoute.DELETE(jsonRequest(`/api/allocations/drivers/${driver.id}`, "DELETE"), {
+      params: Promise.resolve({ id: driver.id }),
+    });
+    assert.equal(deletedDenied.status, 403);
+    assert.deepEqual(await deletedDenied.json(), { error: "requires unrestricted subsidiary access" });
+
+    const stored = await itemRoute.GET(jsonRequest(`/api/allocations/drivers/${driver.id}`, "GET"), {
+      params: Promise.resolve({ id: driver.id }),
+    });
+    assert.equal(stored.status, 200);
+    assert.equal(((await stored.json()) as { driver: { name: string } }).driver.name, "Scope driver");
+    assert.equal((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from allocation_drivers where org_id = ${org.orgId}`)).rows[0]!.n, 1);
+    assert.equal((await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'allocation_drivers'`)).rows[0]!.n, beforeAudits);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
