@@ -37,6 +37,8 @@ export {
   GateError,
   DecisionFailedError,
   ReleaseError,
+  causeKindOf,
+  type DecisionFailureCause,
   type DecideGateResult,
   type WorklistGate,
 } from "./gates.ts";

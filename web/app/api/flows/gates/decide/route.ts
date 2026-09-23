@@ -46,9 +46,10 @@ export async function POST(req: Request) {
     // throws: ANY post-flip failure rolls the whole decide unit back to its
     // savepoint (DecisionFailedError — decision NOT recorded, gate still
     // pending, retry the decision). gateErrorResponse maps a retryable
-    // failure (a domain refusal from the release, e.g. the approver's
-    // missing person link) to a 422 with the cause and remedy intact —
-    // 409 for stale state, 500 only for a defect in the decide path.
+    // domain failure (a typed refusal from the release, e.g. the
+    // approver's missing person link) to a 422 with the cause and remedy
+    // intact — 409 for stale state, 503 for an infrastructure failure,
+    // 500 only for a defect in the decide path.
     const res = await decideGate({
       gateId: body.gateId,
       decision: body.decision!,

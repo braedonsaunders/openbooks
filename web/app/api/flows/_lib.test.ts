@@ -69,7 +69,7 @@ registerHooks({
   },
 });
 
-const { DecisionFailedError, GateError, ReleaseError } = await import(
+const { DecisionFailedError, GateError, ReleaseError, causeKindOf } = await import(
   "@openbooks/engine/src/flows/index.ts"
 );
 const { gateErrorResponse } = await import("./_lib.ts");
@@ -115,6 +115,55 @@ test("every DecisionFailedError sibling maps by retryability, never blanket 500"
   );
   assert.equal(defect.status, 500);
   assert.match(String((await bodyText(defect)).error), /cannot read property/);
+});
+
+test("the cause kind is classified, never regexed from the message", () => {
+  // Infrastructure: Postgres connection/resource/operator-intervention
+  // SQLSTATEs, serialization failures and deadlocks, and connection
+  // errors with no SQLSTATE — including Drizzle-wrapped, one level down.
+  for (const code of ["08006", "53100", "57P01", "40001", "40P01", "ECONNREFUSED"]) {
+    assert.equal(causeKindOf({ code, message: "whatever the driver says" }), "infrastructure", code);
+  }
+  assert.equal(
+    causeKindOf(new Error("outer", { cause: { code: "40001" } })),
+    "infrastructure",
+    "the chain is walked past the wrapper",
+  );
+  // Domain: typed adapter refusals, programming defects, plain errors —
+  // none of which name the storage.
+  assert.equal(causeKindOf({ code: "REFUSED", message: "the approver has no linked person" }), "domain");
+  assert.equal(causeKindOf(new TypeError("cannot read property of undefined")), "domain");
+  assert.equal(causeKindOf(new Error("boom")), "domain");
+  assert.equal(causeKindOf(null), "domain");
+});
+
+test("a storage error during release answers 503 without storage internals", async () => {
+  const pgDown = { code: "08006", message: "connection to server at 10.0.0.1 failed" };
+  const failure = new ReleaseError(
+    "approved",
+    "connection to server at 10.0.0.1 failed",
+    true,
+    causeKindOf(pgDown),
+  );
+  assert.equal(failure.causeKind, "infrastructure");
+  const response = gateErrorResponse(failure);
+  assert.equal(response.status, 503);
+  const body = await bodyText(response);
+  assert.match(String(body.error), /temporarily unavailable, try again/);
+  assert.ok(!String(body.error).includes("10.0.0.1"), "no storage internals reach the operator");
+});
+
+test("a serialization failure during release answers 503", async () => {
+  const serialization = { code: "40001", message: "could not serialize access due to concurrent update" };
+  const failure = new DecisionFailedError({
+    decision: "approved",
+    stage: "release",
+    cause: "could not serialize access due to concurrent update",
+    causeKind: causeKindOf(serialization),
+  });
+  const response = gateErrorResponse(failure);
+  assert.equal(response.status, 503);
+  assert.match(String((await bodyText(response)).error), /temporarily unavailable, try again/);
 });
 
 test("a stale-state decision failure answers 409", async () => {

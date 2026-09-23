@@ -103,16 +103,28 @@ export async function loadFlowSubjectSubsidiary(
  */
 export function gateErrorResponse(e: unknown): NextResponse {
   // An atomic decision failure (any post-flip stage, including release)
-  // records NOTHING — the gate stays pending and the message carries the
-  // cause with its remedy, so it is never a success and never a bare
-  // 'internal error'. A retryable failure is a data condition (a domain
-  // refusal from the release adapter, e.g. the approver's missing person
-  // link): 422 with the message intact — 409 when the cause names stale
-  // state, reusing the markers below. Only a non-retryable failure is a
-  // defect in the decide path, and only that stays a 500.
+  // records NOTHING — the gate stays pending — so it is never a success
+  // and never a bare 'internal error'. The failure carries its cause's
+  // class, set where it was constructed from the cause itself: a retryable
+  // DOMAIN failure is a data condition (a typed refusal from the release
+  // adapter, e.g. the approver's missing person link) — 422 with the
+  // message intact, 409 when the cause names stale state, reusing the
+  // markers below. A retryable INFRASTRUCTURE failure (a dropped
+  // connection, a timeout, a serialization failure) is a 503 with a
+  // retry-again message that carries no storage internals. Only a
+  // non-retryable failure is a defect in the decide path, and only that
+  // stays a 500. Every non-422 path logs.
   if (e instanceof DecisionFailedError) {
+    if (e.retryable && e.causeKind === 'infrastructure') {
+      console.error('[flows] approval decision hit infrastructure:', e)
+      return NextResponse.json(
+        { error: 'The approval service is temporarily unavailable, try again.' },
+        { status: 503 },
+      )
+    }
     if (e.retryable) {
       const status = /already resolved|only a pending/.test(e.message) ? 409 : 422
+      if (status === 409) console.error('[flows] approval decision raced:', e)
       return NextResponse.json({ error: e.message }, { status })
     }
     console.error('[flows] approval decision failed:', e)
