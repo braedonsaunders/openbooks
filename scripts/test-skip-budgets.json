@@ -1,0 +1,10 @@
+{
+  "database": {
+    "budget": 0,
+    "reason": "The database partition HAS a database, so every `{ skip: !DB }` guard resolves to run. Measured 0 skipped across 314 tests in shard 1/16. A skip here means the DB wiring broke and the shard reported green having executed nothing — the exact hole that let a fixture violating an alpha-3 baseline constraint reach main."
+  },
+  "unit": {
+    "budget": 2,
+    "reason": "The unit partition has no database by design, and a small number of tests are gated on capabilities the runner does not provide rather than on the database. Measured 1 on a full local unit partition; 2 leaves one slot of headroom so an unrelated capability gate does not red the build on the day it lands. Lower it when the count is confirmed on CI — this budget may only shrink."
+  }
+}
