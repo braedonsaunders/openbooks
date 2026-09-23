@@ -461,3 +461,66 @@ test("a restricted HR reads only the exit records they cover", { skip: !DB }, as
     await dropScratchOrg(h.org.orgId);
   }
 });
+
+test("a divergent second fulfilment is refused, never silently dropped", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const request = await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
+      kind: "request", visibility: "manager_and_subject", body: "Tell me about the launch",
+      requestedFromPartyId: h.a.managerPartyId,
+    });
+    const first = await fulfillRequest({
+      orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
+      visibility: "manager_and_subject", body: "They led the launch",
+    });
+    // A changed body is a divergent answer: refused by name, naming the
+    // prior fulfilment and the remedy — never dropped while reporting success.
+    await assert.rejects(
+      fulfillRequest({
+        orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
+        visibility: "manager_and_subject", body: "They sank the launch",
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        assert.match(e.message, /already fulfilled/);
+        assert.match(e.message, /write a new feedback entry instead/);
+        return true;
+      },
+    );
+    // A changed visibility, or the same words from a different author, diverges too.
+    await assert.rejects(
+      fulfillRequest({
+        orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
+        visibility: "manager_only", body: "They led the launch",
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        return true;
+      },
+    );
+    await assert.rejects(
+      fulfillRequest({
+        orgId: h.org.orgId, actorId: h.hrFull, requestId: request.id,
+        visibility: "manager_and_subject", body: "They led the launch",
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        return true;
+      },
+    );
+    // The first answer stands alone and unchanged.
+    const stored = (await db.execute<{ n: string; body: string }>(sql`
+      select count(*)::text as n, min(body) as body from hrm_feedback
+       where org_id = ${h.org.orgId} and kind = 'feedback'
+         and context->>'fulfills_request_id' = ${request.id}`)).rows[0]!;
+    assert.equal(stored.n, "1");
+    assert.equal(stored.body, "They led the launch");
+    assert.equal(first.body, "They led the launch");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});

@@ -607,19 +607,44 @@ export async function fulfillRequest(args: {
     }
     // A retried fulfilment returns the first answer instead of writing a
     // second: the fulfils_request_id link is the idempotency key, read
-    // under the same request lock so two racers cannot both miss it.
-    const prior = (await db.execute<{ id: string }>(sql`
-      select id from hrm_feedback
-       where org_id = ${orgId} and kind = 'feedback'
-         and context->>'fulfills_request_id' = ${requestId}
+    // under the same request lock so two racers cannot both miss it. But
+    // the replay is exact or it is refused: a second call with a different
+    // author, body, or visibility is a divergent answer, and silently
+    // dropping it while reporting success would lose the caller's words.
+    const prior = (await db.execute<{
+      id: string;
+      authorPartyId: string | null;
+      authorName: string;
+      visibility: string;
+      body: string;
+      recordedAt: string;
+    }>(sql`
+      select f.id, f.author_party_id as "authorPartyId",
+             coalesce(p.display_name, f.author_party_id::text) as "authorName",
+             f.visibility, f.body, f.recorded_at::text as "recordedAt"
+        from hrm_feedback f
+        left join parties p on p.org_id = f.org_id and p.id = f.author_party_id
+       where f.org_id = ${orgId} and f.kind = 'feedback'
+         and f.context->>'fulfills_request_id' = ${requestId}
        limit 1
     `)).rows[0];
+    const body = args.body.trim();
+    if (prior) {
+      const exactReplay =
+        prior.authorPartyId === person.partyId && prior.body === body && prior.visibility === args.visibility;
+      if (!exactReplay) {
+        throw new HrmPerformanceError(
+          "REFUSED",
+          `feedback request ${requestId} was already fulfilled by ${prior.authorName} at ${prior.recordedAt} — a changed answer is not stored; write a new feedback entry instead of fulfilling the same request again`,
+        );
+      }
+    }
     const fulfilmentId =
       prior?.id ??
       (await db.execute<{ id: string }>(sql`
         insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, created_by)
         values (${orgId}, ${req.subject_employment_id}, ${person.partyId}, 'feedback', ${args.visibility},
-                ${args.body.trim()}, ${JSON.stringify({ fulfills_request_id: requestId })}::jsonb, ${actorId})
+                ${body}, ${JSON.stringify({ fulfills_request_id: requestId })}::jsonb, ${actorId})
         returning id
       `)).rows[0]?.id;
     if (!fulfilmentId) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row was written; retry the action");
