@@ -33,7 +33,11 @@ export function parseCivilDay(value: unknown, field: string): string {
   if (y! < 1 || y! > 9999 || m! < 1 || m! > 12 || d! < 1 || d! > 31) {
     throw new PerformanceMathError(`${field} must be a civil date YYYY-MM-DD`);
   }
-  const dt = new Date(Date.UTC(y!, m! - 1, d!));
+  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
+  // copied here so this pure module loads no platform stack).
+  const dt = new Date(0);
+  dt.setUTCFullYear(y!, m! - 1, d!);
   if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m! - 1 || dt.getUTCDate() !== d) {
     throw new PerformanceMathError(`${field} must be a real calendar date, got ${value}`);
   }

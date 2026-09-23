@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { HrmConstructionError } from "./errors.ts";
 import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
 import { add, cmp, fromUnits, mul, neg } from "../../money/money.ts";
+import { addCalendarDays } from "../../platform/business-date.ts";
 import {
   applyWeeklyRule,
   perDiemAmountForDay,
@@ -232,12 +233,9 @@ async function approvedWeekHours(
 }
 
 function weekDates(weekStart: string): readonly string[] {
-  const [y, m, d] = weekStart.split("-").map(Number);
-  const start = new Date(Date.UTC(y!, m! - 1, d!));
-  return Array.from({ length: 7 }, (_, i) => {
-    const day = new Date(start.getTime() + i * 86_400_000);
-    return day.toISOString().slice(0, 10);
-  });
+  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
+  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  return Array.from({ length: 7 }, (_, i) => addCalendarDays(weekStart, i));
 }
 
 async function coordinatesForLocation(
