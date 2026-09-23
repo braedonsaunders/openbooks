@@ -36,24 +36,21 @@ function check(cp: Awaited<ReturnType<typeof runScenario>>, name: string) {
   return c;
 }
 
-test("global-balance and per-entry-balance fail on an unbalanced posted entry", { skip: !DB }, async (t) => {
+test("global-balance and per-entry-balance fail on an unbalanced posted entry", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const client = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+    // Simulating a non-enforcing kernel needs superuser (SET
+    // session_replication_role). The probe session runs on the admin
+    // connection CI provides for exactly this; the runtime URL is only the
+    // fallback for hand runs against a superuser-owned database. No skip: a
+    // probe that cannot run is a hole, not a pass — 42501 fails loudly here.
+    const client = new Client({
+      connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? process.env.OPENBOOKS_DB_URL,
+    });
     await client.connect();
     try {
       await client.query(`select set_config('app.bypass_rls', 'on', false)`);
-      try {
-        await client.query(`SET session_replication_role = 'replica'`);
-      } catch (e) {
-        // Simulating a non-enforcing kernel needs superuser. Honest skip
-        // rather than a vacuous pass when the database user cannot.
-        if ((e as { code?: string }).code === "42501") {
-          t.skip("database user cannot disable enforcement triggers for the probe session");
-          return;
-        }
-        throw e;
-      }
+      await client.query(`SET session_replication_role = 'replica'`);
       const entryId = randomUUID();
       const entryNumber = `BAL-PROBE-${entryId.slice(0, 8)}`;
       await client.query(
