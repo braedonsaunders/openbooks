@@ -125,7 +125,7 @@ interface CamPoolDbRow extends Record<string, unknown> {
   budget_amount: string; subsidiary_id: string; currency: string;
 }
 interface CamLeaseRow extends Record<string, unknown> {
-  id: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;
+  id: string; lease_number: string; cam_share_percent: string | null; rentable_area: string | null; overlap_start: string;
   overlap_end: string; billed: string;
 }
 interface CamAllocationDbRow extends Record<string, unknown> {
@@ -2027,13 +2027,28 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     // Lease-id order everywhere below: the allocation, the rounding residual,
     // and the fingerprint are pure functions of the sources, never of the
     // physical row order the planner happens to return.
-    const weighted = leases.rows.map((lease) => {
+    const measured = leases.rows.map((lease) => {
       const days = overlapDayCount(lease.overlap_start, lease.overlap_end, pool.period_starts_on, pool.period_ends_on);
       const basis = pool.allocation_basis === "equal" ? 10_000n
         : pool.allocation_basis === "rentable_area" ? toUnits(lease.rentable_area ?? "0")
           : toUnits(lease.cam_share_percent ?? "0");
       return { ...lease, days, weight: basis * BigInt(days) };
-    }).filter((lease) => lease.days > 0 && lease.weight > 0n);
+    });
+    // An overlapping lease with no basis used to be filtered out below, so
+    // its share silently moved to the remaining leases (one area-less lease
+    // beside a 100 sqft one billed the other 100% of the pool). A missing
+    // basis is a data refusal that names every affected lease, never a
+    // zero weight. Leases with no overlap days are legitimately excluded.
+    if (pool.allocation_basis !== "equal") {
+      const unpriced = measured.filter((lease) => lease.days > 0 && lease.weight <= 0n);
+      if (unpriced.length) {
+        const numbers = unpriced.map((lease) => lease.lease_number).join(", ");
+        throw new PropertyManagementError(pool.allocation_basis === "rentable_area"
+          ? `CAM finalization needs a rentable area for every overlapping lease: ${numbers} overlap this period with no unit or zero rentable area — assign each lease a unit with positive rentable area before finalizing`
+          : `CAM finalization needs a custom CAM share for every overlapping lease: ${numbers} overlap this period with no positive CAM share — set each lease's CAM share before finalizing`);
+      }
+    }
+    const weighted = measured.filter((lease) => lease.days > 0 && lease.weight > 0n);
     if (!weighted.length) throw new PropertyManagementError(pool.allocation_basis === "rentable_area"
       ? "Overlapping CAM leases need positive rentable area" : "Overlapping CAM leases need a positive allocation weight");
     const totalWeight = weighted.reduce((total, lease) => total + lease.weight, 0n);

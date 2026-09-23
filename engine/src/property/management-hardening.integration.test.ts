@@ -479,6 +479,72 @@ test("R11: duplicate lease/escalation identities and invalid charge references f
     await dropScratchOrg(fx.org.orgId);
   }
 });
+test("R13: CAM finalization refuses an overlapping lease with no rentable area instead of shifting its share", async () => {
+  const fx = await seedProperty();
+  try {
+    const orgId = fx.org.orgId;
+    const unitA = randomUUID();
+    await db.execute(sql`
+      insert into property_units (id, org_id, property_id, code, rentable_area, status)
+      values (${unitA}, ${orgId}, ${fx.propertyId}, 'UA', 100, 'occupied')`);
+    const leaseA = randomUUID();
+    const leaseB = randomUUID();
+    await db.execute(sql`
+      insert into property_leases (id, org_id, property_id, unit_id, tenant_id, lease_number, status, starts_on, ends_on, cam_method)
+      values (${leaseA}, ${orgId}, ${fx.propertyId}, ${unitA}, ${fx.org.customerId}, 'LSE-CAM-AREA', 'active', '2026-07-01', '2026-07-31', 'pro_rata'),
+             (${leaseB}, ${orgId}, ${fx.propertyId}, null, ${fx.org.customerId}, 'LSE-CAM-NOAREA', 'active', '2026-07-01', '2026-07-31', 'pro_rata')`);
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${entryId}, ${orgId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, ${`CAM-${entryId.slice(0, 8)}`}, '2026-07-15', ${fx.org.periodId}, 'CAM source', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, location_id, amount, currency, txn_amount, fx_rate)
+      values (${orgId}, ${entryId}, 1, ${fx.org.accounts.adjustment}, ${fx.org.subsidiaryId}, ${fx.org.locationId}, 10000, 'CAD', 10000, 1),
+             (${orgId}, ${entryId}, 2, ${fx.org.accounts.bank}, ${fx.org.subsidiaryId}, null, -10000, 'CAD', -10000, 1)`);
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where org_id = ${orgId} and id = ${entryId}`);
+    await db.execute(sql`
+      insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
+      values (${orgId}, ${fx.org.periodId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, 'gl', 'closed', now(), ${fx.actorId}, 'CAM', ${fx.actorId}, ${fx.actorId})`);
+    const pool = await createCamPool({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, name: "FY26 AREA", fiscalYear: 2026,
+      periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31", allocationBasis: "rentable_area", budgetAmount: "10000",
+      expenseAccountIds: [fx.org.accounts.adjustment],
+    });
+    // The area-less lease used to vanish from the weights, billing lease A
+    // 100% of the pool. Finalization must refuse and name it instead.
+    await assert.rejects(
+      finalizeCamPool(orgId, fx.actorId, pool.id),
+      (error: unknown) => error instanceof PropertyManagementError
+        && /LSE-CAM-NOAREA/.test(error.message)
+        && /rentable area/.test(error.message),
+    );
+    const persisted = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from cam_allocations where org_id = ${orgId} and pool_id = ${pool.id}`)).rows[0]!.n;
+    assert.equal(persisted, 0, "the refused finalization persisted no allocations");
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from cam_pools where org_id = ${orgId} and id = ${pool.id}`)).rows[0]!.status;
+    assert.equal(status, "open", "the refused pool stays open for correction");
+    // Give the lease a 300 sqft unit: the pool now prices 100:300 exactly.
+    const unitB = randomUUID();
+    await db.execute(sql`
+      insert into property_units (id, org_id, property_id, code, rentable_area, status)
+      values (${unitB}, ${orgId}, ${fx.propertyId}, 'UB', 300, 'occupied')`);
+    await db.execute(sql`update property_leases set unit_id = ${unitB} where org_id = ${orgId} and id = ${leaseB}`);
+    const finalized = await finalizeCamPool(orgId, fx.actorId, pool.id);
+    assert.equal(finalized.allocations, 2);
+    const shares = (await db.execute<{ lease_number: string; share_percent: string; actual_allocation: string }>(sql`
+      select l.lease_number, a.share_percent::text, a.actual_allocation::text
+        from cam_allocations a join property_leases l on l.id = a.lease_id and l.org_id = a.org_id
+       where a.org_id = ${orgId} and a.pool_id = ${pool.id} order by l.lease_number`)).rows;
+    assert.deepEqual(shares.map((row) => [row.lease_number, row.share_percent, row.actual_allocation]), [
+      ["LSE-CAM-AREA", "25.0000", "2500.0000"],
+      ["LSE-CAM-NOAREA", "75.0000", "7500.0000"],
+    ]);
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
 
 test("R12: a blank termination date is refused without mutating the lease", { skip: !DB }, async () => {
   const fx = await seedProperty();
