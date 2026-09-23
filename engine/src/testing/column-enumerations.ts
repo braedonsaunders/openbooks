@@ -126,6 +126,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "scripts/bootstrap.ts",
     sites: [
       { stance: "descriptive", note: "column comments for the schema documentation check" },
+      { stance: "presence-probe", note: "payment-link seal applicability: whether token_hash/token_sealed exist; the probe only counts, the seal names its columns literally" },
       { stance: "presence-probe", note: "RLS coverage census over org_id tables" },
       { stance: "presence-probe", note: "RLS policy census over org_id tables" },
       { stance: "presence-probe", note: "ownership census over org_id tables" },
