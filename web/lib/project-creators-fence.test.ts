@@ -87,6 +87,11 @@ const mockSources = new Map<string, string>([
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
+      // postDocument (m58 PA1) opens a maintenance transaction for an ambient
+      // bypass with no pinned transaction. This suite never establishes an
+      // ambient context (orgContext.getStore() is always null above), so the
+      // real reader also answers false on every reachable state here.
+      export function ambientBypassWithoutTransaction() { return false }
       export const pool = {}
       export const env = {}
       // Link-time surface for the wider engine chain: these paths never run them.
