@@ -306,6 +306,76 @@ export function reportTxnCurrencyPin(entity: ReportEntity, q: ReportCustomQuery)
   return reportSingleValuePin(q, entity.currencyColumn)
 }
 
+/** Which money dimensions still need a runtime denomination census: every
+ *  dimension the plan blends that is certified single by neither a static
+ *  filter pin nor the server's book/subsidiary clamp. */
+export type DenominationCensusNeeds = {
+  txn: boolean
+  base: boolean
+  book: boolean
+}
+
+export type DenominationCensus = {
+  /** `COUNT(DISTINCT …) AS "…_n"` / `MIN(…) AS "…_v"` probes, in txn/base/book order. */
+  censusInner: string[]
+  /** Per-result-row `(SELECT … FROM __denom)` references. */
+  censusRefs: string[]
+  /** Per-group-row book-count probe (present exactly when books are censused). */
+  bookGroupCount: string[]
+  /** Dimensions the census covers, driving enforcement. */
+  dimensions: ('txn' | 'base' | 'book')[]
+  /** The `WITH __denom AS …` prefix for the plan's own FROM/WHERE. */
+  censusCTE: (from: string, where: string) => string
+}
+
+/** Inline denomination census over the plan's own FROM/WHERE, shared by the
+ *  custom-report summarize compiler and the insights compiler so both
+ *  surfaces probe the same dimensions with the same reserved aliases. Guard
+ *  and result derive from the SAME SQL snapshot — no separate preflight that
+ *  a concurrent insertion could slip between. Only still-open money
+ *  dimensions are censused; every COUNT(DISTINCT) shares the main query's
+ *  bound parameters. Reserved census aliases use the __ prefix, which no
+ *  catalog column may use, so a plan can never select over them. */
+export function buildDenominationCensus(
+  entity: ReportEntity,
+  needs: DenominationCensusNeeds,
+): DenominationCensus {
+  const censusInner: string[] = []
+  const txnRef = entity.currencyColumn ? columnRef(entity, entity.currencyColumn) : null
+  if (needs.txn && txnRef) {
+    censusInner.push(`COUNT(DISTINCT ${txnRef}) AS "txn_n"`, `MIN(${txnRef}) AS "txn_v"`)
+  }
+  const baseRef = entity.baseCurrencyColumn ? columnRef(entity, entity.baseCurrencyColumn) : null
+  if (needs.base && baseRef) {
+    censusInner.push(`COUNT(DISTINCT ${baseRef}) AS "base_n"`, `MIN(${baseRef}) AS "base_v"`)
+  }
+  if (needs.book && entity.bookScope) {
+    censusInner.push(`COUNT(DISTINCT ${entity.bookScope.column}) AS "book_n"`, `MIN(${entity.bookScope.column}::text) AS "book_v"`)
+  }
+  const censusRefs = [
+    ['txn_n', 'txn_v'],
+    ['base_n', 'base_v'],
+    ['book_n', 'book_v'],
+  ]
+    .filter(([n]) => censusInner.some((part) => part.includes(`AS "${n}"`)))
+    .flatMap(([n, v]) => [`(SELECT "${n}" FROM __denom) AS "__${n}"`, `(SELECT "${v}" FROM __denom) AS "__${v}"`])
+  const bookGroupCount = censusInner.some((part) => part.includes('AS "book_n"'))
+    ? [`COUNT(DISTINCT ${entity.bookScope!.column}) AS "__book_group_n"`]
+    : []
+  const dimensions = (['txn', 'base', 'book'] as const).filter((dim) =>
+    censusInner.some((part) => part.includes(`AS "${dim}_n"`)))
+  return {
+    censusInner,
+    censusRefs,
+    bookGroupCount,
+    dimensions,
+    censusCTE: (from: string, where: string) =>
+      censusInner.length > 0
+        ? `WITH __denom AS (SELECT ${censusInner.join(', ')} FROM ${from} WHERE ${where}) `
+        : '',
+  }
+}
+
 /** The entity's implicit predicates: org scope + subsidiary/book allowlists
  *  + optional baseFilter. Lifting the book clamp (null allowlist) never
  *  touches the org or subsidiary fences. */
@@ -473,39 +543,17 @@ function compileSummarize(
 
   const limit = resolveLimit(q.limit, opts.maxRows)
 
-  // Inline denomination census: one CTE over the plan's own FROM/WHERE,
-  // referenced per result row. Guard and result derive from the SAME SQL
-  // snapshot — no separate preflight that a concurrent insertion could slip
-  // between. Only still-open money dimensions are censused; every
-  // COUNT(DISTINCT) shares the main query's bound parameters.
-  const censusInner: string[] = []
-  const txnRef = entity.currencyColumn ? columnRef(entity, entity.currencyColumn) : null
-  if (txnMeasures.length > 0 && !txnCurrencyPinned && txnRef) {
-    censusInner.push(`COUNT(DISTINCT ${txnRef}) AS "txn_n"`, `MIN(${txnRef}) AS "txn_v"`)
-  }
-  const baseRef = entity.baseCurrencyColumn ? columnRef(entity, entity.baseCurrencyColumn) : null
-  if (baseMeasures.length > 0 && !baseCurrencyPinned && !baseSingleSubsidiary && baseRef) {
-    censusInner.push(`COUNT(DISTINCT ${baseRef}) AS "base_n"`, `MIN(${baseRef}) AS "base_v"`)
-  }
-  if (moneyMeasures.length > 0 && entity.bookScope && !bookSingleBasis && !bookPinned) {
-    censusInner.push(`COUNT(DISTINCT ${entity.bookScope.column}) AS "book_n"`, `MIN(${entity.bookScope.column}::text) AS "book_v"`)
-  }
-  // Reserved census aliases — no catalog column may use the __ prefix, so a
-  // plan can never select over them.
-  const censusRefs = [
-    ['txn_n', 'txn_v'],
-    ['base_n', 'base_v'],
-    ['book_n', 'book_v'],
-  ]
-    .filter(([n]) => censusInner.some((part) => part.includes(`AS "${n}"`)))
-    .flatMap(([n, v]) => [`(SELECT "${n}" FROM __denom) AS "__${n}"`, `(SELECT "${v}" FROM __denom) AS "__${v}"`])
-  const censusCTE = censusInner.length > 0
-    ? `WITH __denom AS (SELECT ${censusInner.join(', ')} FROM ${from} WHERE ${whereParts.join(' AND ')}) `
-    : ''
-
-  const bookGroupCount = censusInner.some((part) => part.includes('AS "book_n"'))
-    ? [`COUNT(DISTINCT ${entity.bookScope!.column}) AS "__book_group_n"`]
-    : []
+  // Inline denomination census over the plan's own FROM/WHERE — shared with
+  // the insights compiler (buildDenominationCensus) so both surfaces probe
+  // the same dimensions with the same reserved aliases.
+  const census = buildDenominationCensus(entity, {
+    txn: txnMeasures.length > 0 && !txnCurrencyPinned,
+    base: baseMeasures.length > 0 && !baseCurrencyPinned && !baseSingleSubsidiary,
+    book: moneyMeasures.length > 0 && !bookSingleBasis && !bookPinned,
+  })
+  const censusRefs = census.censusRefs
+  const censusCTE = census.censusCTE(from, whereParts.join(' AND '))
+  const bookGroupCount = census.bookGroupCount
   const text = [
     `${censusCTE}SELECT ${[...dimSelect, ...measSelect, ...censusRefs, ...bookGroupCount].join(', ')}`,
     `FROM ${from}`,
@@ -534,8 +582,7 @@ function compileSummarize(
     bookSingleBasis,
     baseSingleSubsidiary,
     hasDenominationCensus: censusRefs.length > 0,
-    denominationDimensions: (['txn', 'base', 'book'] as const).filter((dim) =>
-      censusInner.some((part) => part.includes(`AS "${dim}_n"`))),
+    denominationDimensions: census.dimensions,
   }
 }
 

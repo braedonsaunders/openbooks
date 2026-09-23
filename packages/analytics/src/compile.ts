@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, type ReportCustomQuery, type ReportRule } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, type ReportBreakout, type ReportCustomQuery, type ReportMeasure, type ReportRule } from '@openbooks/reports'
 import { getSource } from './catalog'
 import { sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -16,6 +16,7 @@ import type {
   CompiledQuery,
   DateBin,
   FilterOp,
+  InsightDenominationBasis,
   InsightQuery,
   QueryDimension,
   QueryFilter,
@@ -186,18 +187,21 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
 
 /** Adapt an insight plan to the report plan shape the shared basis helpers
  *  read. Insight filters are a flat AND list, so they become a single AND
- *  group; dimensions become breakouts. Only `eq`/`in` survive the mapping —
- *  every other operator maps to the conservative `neq`, which scopes rows but
- *  never certifies a single denomination. The shared walkers only ever read
- *  fields (references check) and eq/in-single pins, so the mapping preserves
- *  their exact semantics. */
+ *  group; dimensions become breakouts (bins ride along so a binned temporal
+ *  dimension is never mistaken for a denomination partition). Only `eq`/`in`
+ *  survive the mapping — every other operator maps to the conservative `neq`,
+ *  which scopes rows but never certifies a single denomination. The shared
+ *  walkers only ever read fields (references check) and eq/in-single pins, so
+ *  the mapping preserves their exact semantics. */
 function toReportPlan(query: InsightQuery): ReportCustomQuery {
   return {
     entity: query.source,
     mode: 'summarize',
     columns: [],
-    breakouts: (query.dimensions ?? []).map((d) => ({ column: d.field })),
-    measures: [],
+    breakouts: (query.dimensions ?? []).map(
+      (d) => ({ column: d.field, ...(d.bin ? { bin: d.bin } : {}) }) as ReportBreakout,
+    ),
+    measures: toReportMeasures(query),
     filters: {
       combinator: 'and',
       rules: (query.filters ?? []).map(
@@ -211,6 +215,16 @@ function toReportPlan(query: InsightQuery): ReportCustomQuery {
     },
     groupBy: null,
   }
+}
+
+/** Insight measures in the report plan shape the denomination classifiers
+ *  read. Catalog keys are shared verbatim between the two catalogs (the
+ *  insight catalog projects report columns key-for-key), so the report
+ *  entity's own txnCurrency/baseMoney flags classify each measure. */
+function toReportMeasures(query: InsightQuery): ReportMeasure[] {
+  return (query.measures ?? []).map((m) =>
+    m.agg === 'count' || !m.field ? { fn: 'count' } : { fn: m.agg, column: m.field },
+  )
 }
 
 /** True when the card explicitly scopes or partitions by accounting book — a
@@ -296,6 +310,41 @@ export function compileInsightQuery(
   const base = compileBaseFilter(ctx)
   if (base) wheres.push(base)
   for (const f of query.filters ?? []) wheres.push(compileFilter(ctx, f))
+
+  // Denomination analysis — the SAME rule as custom-report summarize plans
+  // (compileSummarize): which money the plan blends, and what already
+  // certifies a single denomination without touching the database — static
+  // filter pins, the server book clamp, or a single-subsidiary scope (one
+  // subsidiary owns one base_currency). Anything still open is measured at
+  // run time by an exact COUNT(DISTINCT) probe over the plan's own
+  // FROM/WHERE, enforced by the executor before any blended row materializes.
+  const reportPlan = toReportPlan(query)
+  const reportMeasures = reportPlan.measures ?? []
+  const txnMeasures = reportMeasures.filter((m) => isTxnCurrencyMeasure(entity, m))
+  const baseMeasures = reportMeasures.filter((m) => isBaseMoneyMeasure(entity, m))
+  const moneyMeasures = reportMeasures.filter((m) => isMoneyBlendingMeasure(entity, m))
+  const txnCurrencyPinned = txnMeasures.length > 0 ? reportTxnCurrencyPin(entity, reportPlan) : null
+  const baseCurrencyPinned = baseMeasures.length > 0 ? reportBaseCurrencyPin(entity, reportPlan) : null
+  const bookPinned = moneyMeasures.length > 0 ? reportBookPin(entity, reportPlan) : null
+  const bookSingleBasis = !!entity.bookScope && allowedBookIds != null && allowedBookIds.length <= 1
+  const baseSingleSubsidiary = !!entity.baseCurrencyColumn
+    && allowedSubsidiaryIds != null && allowedSubsidiaryIds.length === 1
+  const census = buildDenominationCensus(entity, {
+    txn: txnMeasures.length > 0 && !txnCurrencyPinned,
+    base: baseMeasures.length > 0 && !baseCurrencyPinned && !baseSingleSubsidiary,
+    book: moneyMeasures.length > 0 && !bookSingleBasis && !bookPinned,
+  })
+  const denomination: InsightDenominationBasis = {
+    breakouts: reportPlan.breakouts ?? [],
+    measures: reportMeasures,
+    txnCurrencyPinned,
+    baseCurrencyPinned,
+    bookPinned,
+    bookSingleBasis,
+    baseSingleSubsidiary,
+    hasDenominationCensus: census.censusRefs.length > 0,
+    denominationDimensions: census.dimensions,
+  }
 
   const limit = clampLimit(query.limit)
 
@@ -390,15 +439,22 @@ export function compileInsightQuery(
 
   const orderBy = compileOrderBy(query, columns, fieldOrd, source, isAggregate)
 
+  // The inline denomination census rides on the result rows: guard and result
+  // derive from the same statement and snapshot — no separate preflight a
+  // concurrent insertion could slip between. Every COUNT(DISTINCT) shares the
+  // main query's bound parameters.
+  const from = bindReportFromAsOf(source.from, ctx.asOf, (value) => bind(ctx, value))
+  const where = wheres.join(' and ')
   const sql =
-    `select ${selects.join(', ')}\n` +
-    `from ${bindReportFromAsOf(source.from, ctx.asOf, (value) => bind(ctx, value))}\n` +
-    `where ${wheres.join(' and ')}` +
+    `${census.censusCTE(from, where)}` +
+    `select ${[...selects, ...census.censusRefs, ...census.bookGroupCount].join(', ')}\n` +
+    `from ${from}\n` +
+    `where ${where}` +
     groupBy +
     orderBy +
     `\nlimit ${limit}`
 
-  return { sql, params: ctx.params, columns, limit }
+  return { sql, params: ctx.params, columns, limit, denomination }
 }
 
 function compileOrderBy(

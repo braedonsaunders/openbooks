@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { isFeatureEnabled } from '@/lib/features'
 import { pool } from '@openbooks/engine/src/platform/db.ts'
-import { runInsightQuery } from '@openbooks/analytics/server'
+import { InsightDenominationError, runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
 import { can, guardPermission } from '../../../../lib/authz'
 import { InsightBookScopeError, resolveInsightBookScope } from '@/lib/insight-books'
@@ -85,6 +85,12 @@ export async function POST(req: Request) {
     )
     return NextResponse.json(result)
   } catch (e) {
+    if (e instanceof InsightDenominationError) {
+      // A computed money-basis refusal: it names its remedy (group by the
+      // denomination or filter to one) and must reach the operator verbatim,
+      // never as a generic failure.
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
     if (e instanceof InsightCompileError) {
       return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 })
     }

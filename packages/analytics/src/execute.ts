@@ -8,9 +8,19 @@
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
 
+import { REPORT_ENTITY_MAP, parseDenominationCounts, resolveDenominations } from '@openbooks/reports'
 import { compileInsightQuery, INSIGHT_MAX_ROWS, type InsightLabelResolver } from './compile'
 import { validateInsightQuery } from './validate'
-import type { InsightQuery, QueryResult } from './types'
+import type { InsightDenominationBasis, InsightQuery, QueryResult } from './types'
+
+/** An insight card would blend money across denominations (mixed currencies
+ *  or accounting books) without partitioning by the denomination. The message
+ *  names the remedy (group by the denomination or filter to one) and must
+ *  reach the operator verbatim — the API layer returns it as the refusal,
+ *  never as a generic failure. */
+export class InsightDenominationError extends Error {
+  readonly name = 'InsightDenominationError'
+}
 
 /** Minimal shape of a node-postgres Pool — avoids a hard dep on `pg` types in
  *  this workspace while keeping the call site type-safe. */
@@ -23,6 +33,60 @@ export interface PoolClient {
 }
 
 const STATEMENT_TIMEOUT_MS = 8_000
+
+/** Fail-closed denomination enforcement — the report executor's rule
+ *  (run.ts), applied to an insight result. The inline `__denom` census rides
+ *  on the result rows, so guard and result derive from the same statement and
+ *  snapshot. Throws InsightDenominationError BEFORE any blended row or total
+ *  materializes: a dimension with several denominations and no partitioning
+ *  breakout would blend inside single group rows. Partitions keep labeled
+ *  per-denomination rows flowing — only the combining outputs are gated. */
+function enforceDenominationBasis(
+  sourceKey: string,
+  basis: InsightDenominationBasis,
+  rows: Record<string, unknown>[],
+): void {
+  if (!basis.hasDenominationCensus) return
+  for (const row of rows) {
+    for (const dim of basis.denominationDimensions) {
+      const count = row[`__${dim}_n`]
+      if (count == null || !Number.isSafeInteger(Number(count)) || Number(count) < 0) {
+        throw new InsightDenominationError('Report returned invalid denomination evidence')
+      }
+    }
+    if (basis.denominationDimensions.includes('book')) {
+      const count = row.__book_group_n
+      if (count == null || !Number.isSafeInteger(Number(count)) || Number(count) < 0) {
+        throw new InsightDenominationError('Report returned invalid accounting-book evidence')
+      }
+      // Book names are not unique. Grouping by a shared label must never
+      // silently merge two books even though it appears to be partitioned.
+      if (Number(count) > 1) {
+        throw new InsightDenominationError('Cannot aggregate rows that mix accounting books — group by Book code or Book (id)')
+      }
+    }
+  }
+  const entity = REPORT_ENTITY_MAP[sourceKey]
+  if (!entity) throw new InsightDenominationError(`unknown source "${sourceKey}"`)
+  try {
+    resolveDenominations(
+      entity,
+      {
+        breakouts: basis.breakouts,
+        measures: basis.measures,
+        txnCurrencyPinned: basis.txnCurrencyPinned,
+        baseCurrencyPinned: basis.baseCurrencyPinned,
+        bookPinned: basis.bookPinned,
+        bookSingleBasis: basis.bookSingleBasis,
+        baseSingleSubsidiary: basis.baseSingleSubsidiary,
+      },
+      parseDenominationCounts(rows[0]),
+    )
+  } catch (e) {
+    if (e instanceof InsightDenominationError) throw e
+    throw new InsightDenominationError(e instanceof Error ? e.message : 'query failed')
+  }
+}
 
 /**
  * Compile + execute an insight query for an org. Returns the typed result set,
@@ -65,8 +129,20 @@ export async function runInsightQuery(
     const res = await client.query(wrapped, compiled.params)
     await client.query('rollback')
 
+    enforceDenominationBasis(validatedQuery.source, compiled.denomination, res.rows)
+
     const truncated = res.rows.length > capped
     const rows = truncated ? res.rows.slice(0, capped) : res.rows
+    if (compiled.denomination.hasDenominationCensus) {
+      // The inline census travels in `__`-prefixed columns no catalog field
+      // may use; strip it before the result leaves the executor so API
+      // consumers never see guard machinery as data.
+      for (const row of rows) {
+        for (const key of Object.keys(row)) {
+          if (key.startsWith('__')) delete row[key]
+        }
+      }
+    }
     return {
       columns: compiled.columns,
       rows,
