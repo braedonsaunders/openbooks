@@ -170,8 +170,9 @@ test("the evaluator runs BEGIN READ ONLY with a bounded timeout and always rolls
   });
   assert.deepEqual(result, { status: "ready", findings: [], leastPrivilege: false });
   const texts = calls.map((call) => call.text);
-  assert.ok(texts[0].toLowerCase().startsWith("begin"), texts[0]);
-  assert.ok(texts[0].toLowerCase().includes("read only"), texts[0]);
+  const first = texts[0] ?? "(no statements issued)";
+  assert.ok(first.toLowerCase().startsWith("begin"), first);
+  assert.ok(first.toLowerCase().includes("read only"), first);
   assert.ok(texts.some((text) => text === "set local statement_timeout = 60000"));
   assert.ok(texts.some((text) => text === "set local app.bypass_rls = 'on'"));
   assert.equal(texts.at(-1), "rollback");

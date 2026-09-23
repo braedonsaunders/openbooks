@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "noUncheckedIndexedAccess": true,
+    "allowImportingTsExtensions": true,
+    "types": ["node"],
+    // Same reason as engine/tsconfig.json: scripts import engine modules
+    // whose transitive graph resolves web's @/ alias.
+    "paths": { "@/*": ["../web/*"] }
+  },
+  "include": ["**/*.ts", "**/*.mts"]
+}

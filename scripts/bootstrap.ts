@@ -1598,8 +1598,9 @@ async function applyTracked(
   const seen = (await db.execute<{ sha256: string }>(sql`
     select sha256 from public._applied_migrations where filename = ${filename}
   `));
-  if (seen.rows.length > 0) {
-    const recorded = seen.rows[0].sha256;
+  const recordedRow = seen.rows[0];
+  if (recordedRow) {
+    const recorded = recordedRow.sha256;
     if (recorded !== digest) {
       const transition = APPROVED_MIGRATION_TRANSITIONS.find(
         (entry) =>
@@ -2614,7 +2615,8 @@ async function ensureOrg(): Promise<string> {
   const existing = (await db.execute<{ id: string }>(
     sql`select id from orgs order by created_at limit 1`,
   ));
-  if (existing.rows.length > 0) return existing.rows[0].id;
+  const existingRow = existing.rows[0];
+  if (existingRow) return existingRow.id;
 
   const name = env.ORG_NAME || "OpenBooks";
   const currency = env.ORG_CURRENCY?.trim().toUpperCase();
@@ -2631,7 +2633,8 @@ async function ensureOrg(): Promise<string> {
     insert into orgs (name, base_currency, country) values (${name}, ${currency}, ${country})
     returning id
   `));
-  const orgId = ins.rows[0].id;
+  const orgId = ins.rows[0]?.id;
+  if (!orgId) throw new Error("org insert returned no id");
   console.log(`[bootstrap] created org "${name}" (${currency}/${country})`);
 
   await db.execute(sql`
