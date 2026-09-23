@@ -6,6 +6,7 @@ import {
   CONVERSION_TARGETS,
   convertOrder,
   createOrderDraft,
+  OrderDraftError,
   type OrderKind,
 } from "../order-cycle";
 import { isFeatureEnabled } from "../features";
@@ -79,6 +80,9 @@ export async function createApplicationOrder(
         const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind, subsidiaryId);
         return { id: draft.id, documentNumber: draft.document_number };
       } catch (error) {
+        if (error instanceof OrderDraftError) {
+          throw invalidInput(error.message);
+        }
         if (error instanceof Error && error.message === "Orders feature is disabled") {
           throw notFound("order");
         }
