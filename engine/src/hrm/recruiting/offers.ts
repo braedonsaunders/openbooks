@@ -272,9 +272,12 @@ export async function materialiseOfferExpiry(
   if (offer.status !== "sent" || offer.expiresOn === null || offer.expiresOn >= args.businessToday) {
     return false;
   }
+  // Expiry revokes the outstanding signing link in the same write: an
+  // expired offer is never signable, so its token must die with it.
   const updated = (await exec.execute<OfferRow>(sql`
     update hrm_offers
-       set status = 'expired', updated_by = ${args.actorId}, updated_at = now()
+       set status = 'expired', signing_token_hash = null,
+           updated_by = ${args.actorId}, updated_at = now()
      where org_id = ${args.orgId} and id = ${offer.id} and status = 'sent'
     returning ${OFFER_COLUMNS}
   `)).rows[0];
@@ -358,10 +361,11 @@ export async function declineOffer(query: DeclineOfferQuery): Promise<OfferDTO> 
     if (current.status !== "sent") {
       throw new RecruitingError("BAD_STATE", `a ${current.status} offer cannot be declined — only sent offers decline`);
     }
+    // A declined offer is never signable: revoke the outstanding link here.
     const updated = (await db.execute<OfferRow>(sql`
       update hrm_offers
          set status = 'declined', responded_at = now(), decline_reason = ${reason},
-             updated_by = ${actorId}, updated_at = now()
+             signing_token_hash = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'sent'
       returning ${OFFER_COLUMNS}
     `)).rows[0];
@@ -414,9 +418,11 @@ export async function withdrawOffer(query: WithdrawOfferQuery): Promise<OfferDTO
     if (current.status !== "draft" && current.status !== "sent") {
       throw new RecruitingError("BAD_STATE", `a ${current.status} offer cannot be withdrawn — only drafts and sent offers withdraw`);
     }
+    // A withdrawn offer is never signable: revoke the outstanding link here.
     const updated = (await db.execute<OfferRow>(sql`
       update hrm_offers
-         set status = 'withdrawn', updated_by = ${actorId}, updated_at = now()
+         set status = 'withdrawn', signing_token_hash = null,
+             updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status in ('draft', 'sent')
       returning ${OFFER_COLUMNS}
     `)).rows[0];

@@ -178,10 +178,11 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
     }
 
     // (3) The hire evidence: offer link, hired application, requisition fill.
+    // An accepted offer is never signable again: revoke the link here.
     const acceptedOffer = (await db.execute<{ id: string }>(sql`
       update hrm_offers
          set status = 'accepted', responded_at = now(), approved_change_id = ${submitted.id},
-             updated_by = ${actorId}, updated_at = now()
+             signing_token_hash = null, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId} and status = 'sent'
       returning id
     `)).rows[0];

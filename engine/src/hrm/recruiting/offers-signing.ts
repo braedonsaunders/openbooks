@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { renderTemplate } from "@openbooks/pdf";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import { requireHrmRecruitingManage } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
@@ -777,11 +778,33 @@ export async function signOffer(query: {
   const documentHash: unknown = query.documentHash;
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
-    const current = (await db.execute<{ signatureStatus: string | null; version: number }>(sql`
-      select signature_status as "signatureStatus", version
+    const current = (await db.execute<{
+      signatureStatus: string | null;
+      version: number;
+      status: string;
+      expiresOn: string | null;
+    }>(sql`
+      select signature_status as "signatureStatus", version, status,
+             expires_on::text as "expiresOn"
         from hrm_offers where org_id = ${orgId} and id = ${offerId}
     `)).rows[0];
     if (!current) throw new RecruitingError("NOT_FOUND", "this offer no longer exists — ask the recruiter for the current terms");
+    // The signature lifecycle rides beside the commercial status 0195 owns:
+    // a terminal offer (withdrawn, expired, declined, accepted) is never
+    // signable, whatever the signature column still says. A past-due sent
+    // offer reads expired here even before a recruiter write materialises it.
+    if (["withdrawn", "expired", "declined", "accepted"].includes(current.status)) {
+      throw new RecruitingError(
+        "REFUSED",
+        `this offer is ${current.status} — a ${current.status} offer takes no signature; ask the recruiter for fresh terms instead of signing this one`,
+      );
+    }
+    if (current.status === "sent" && current.expiresOn !== null && current.expiresOn < await businessToday(orgId)) {
+      throw new RecruitingError(
+        "REFUSED",
+        "this offer expired before it was signed — the expiry stands as recorded; ask the recruiter for fresh terms instead of signing this one",
+      );
+    }
     if (current.signatureStatus === "signed") {
       throw new RecruitingError("REFUSED", "this offer is already signed — the signature stands as recorded; token reuse changes nothing");
     }
