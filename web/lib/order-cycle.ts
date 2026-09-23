@@ -126,9 +126,10 @@ export async function createOrderDraft(
   subsidiaryId: string | null = null,
 ): Promise<{ id: string; document_number: string; replayed: boolean }> {
   // One system for every caller: the document id derives deterministically
-  // from the key (verbatim for UUID keys, namespaced hash for opaque v1
-  // keys), so claim, replay, insert, and audit all join on the same id.
-  const draftId = draftDocumentId(idempotencyKey)
+  // from the org and key (verbatim for UUID keys, namespaced hash for
+  // opaque v1 keys), so claim, replay, insert, and audit all join on the
+  // same id.
+  const draftId = draftDocumentId(orgId, idempotencyKey)
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
   const org = (await db.execute<{ base_currency: string | null }>(
@@ -231,25 +232,28 @@ export class OrderDraftConflictError extends OrderDraftError {
 
 /**
  * Namespace the draft factory hashes opaque idempotency keys under (RFC 4122
- * name-based UUIDs). Fixed for the life of the product: the same key must
- * always resolve to the same document id, or a retry would mint a second
- * draft instead of replaying.
+ * name-based UUIDs). Fixed for the life of the product: the same org and key
+ * must always resolve to the same document id, or a retry would mint a
+ * second draft instead of replaying.
  */
 const DRAFT_ID_NAMESPACE = '8f2c3a90-5b1e-4d6f-a7c8-e9f0a1b2c3d4'
 
 /**
- * The document id for an idempotency key. UUID keys are used verbatim (the
- * UI contract requires them); any other non-empty key — the v1 API accepts
- * opaque keys — hashes to a stable UUID under the draft namespace, so every
- * caller shares the one claim/replay/insert system and a retry still
- * replays. Empty keys refuse: they cannot name a document.
+ * The document id for an idempotency key within an org. UUID keys are used
+ * verbatim (the UI contract requires them); any other non-empty key — the
+ * v1 API accepts opaque keys — hashes to a stable UUID over the org id and
+ * the key, so every caller shares the one claim/replay/insert system, a
+ * retry still replays, and two orgs sending the same opaque key (say
+ * 'order-1') never collide into a false 409. Empty keys refuse: they cannot
+ * name a document.
  */
-export function draftDocumentId(idempotencyKey: string): string {
+export function draftDocumentId(orgId: string, idempotencyKey: string): string {
   if (isUuid(idempotencyKey)) return idempotencyKey
   if (!idempotencyKey.trim()) throw new OrderDraftError('invalid_idempotency_key', 400)
   const namespace = Buffer.from(DRAFT_ID_NAMESPACE.replaceAll('-', ''), 'hex')
   const digest = createHash('sha1')
     .update(namespace)
+    .update(orgId, 'utf8')
     .update(idempotencyKey, 'utf8')
     .digest()
   digest[6] = (digest[6]! & 0x0f) | 0x50

@@ -30,6 +30,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { POST: postPurchase } = await import('./route')
 const { POST: postSales } = await import('../../sales-orders/draft/route')
 const { POST: postEstimate } = await import('../../estimates/draft/route')
+const { createOrderDraft } = await import('../../../../lib/order-cycle')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 type Post = (req: Request) => Promise<Response>
@@ -105,6 +106,29 @@ for (const [kind, path, post, prefix] of [
     }
   })
 }
+
+test('two orgs sending the same opaque key each mint their own draft', { skip: !DB }, async () => {
+  const first = await setup()
+  const second = await setup()
+  try {
+    // The factory hashes the org id into the document id, so a shared
+    // counter-style key like 'order-1' never collides across tenants into
+    // a false 409.
+    const [a, b] = await Promise.all([
+      withOrgContext(first.org.orgId, () => createOrderDraft(first.org.orgId, first.actor, 'purchase_order', 'order-1')),
+      withOrgContext(second.org.orgId, () => createOrderDraft(second.org.orgId, second.actor, 'purchase_order', 'order-1')),
+    ])
+    assert.equal(a.replayed, false)
+    assert.equal(b.replayed, false)
+    assert.notEqual(a.id, b.id)
+    assert.equal(await kindCount(first.org.orgId, 'purchase_order'), 1)
+    assert.equal(await kindCount(second.org.orgId, 'purchase_order'), 1)
+  } finally {
+    session.user = null
+    await dropScratchOrg(first.org.orgId)
+    await dropScratchOrg(second.org.orgId)
+  }
+})
 
 test('a purchase-order draft key minted for another document refuses as conflict', { skip: !DB }, async () => {
   const { org } = await setup()
