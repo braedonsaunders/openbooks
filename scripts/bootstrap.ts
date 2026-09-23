@@ -33,6 +33,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sealLegacyPaymentLinkTokens } from "../engine/src/payments/payment-link-seal.ts";
+import { revokeRuntimeFunctionExecute } from "./bootstrap-function-denials.ts";
 import { sql } from "drizzle-orm";
 import pg from "pg";
 import {
@@ -2352,8 +2353,12 @@ async function ensureRuntimeDatabaseRole(
   );
   // Function execution is inherited only from deliberately retained PUBLIC
   // grants. Never blanket-grant the runtime role: the public schema also holds
-  // tightly controlled SECURITY DEFINER maintenance functions.
-  await pool.query(`revoke execute on all functions in schema public from ${role}`);
+  // tightly controlled SECURITY DEFINER maintenance functions. The revoke is
+  // issued per function, skipping owner-held entries: after the ownership
+  // transfer the runtime role owns these functions, and a blanket revoke
+  // would strip its own entry, collapsing the ACL to explicitly empty —
+  // which denies EXECUTE even to the owner.
+  await revokeRuntimeFunctionExecute(pool, config.roleName);
   // Retain the automatic mode's catalog-refresh grant for legacy constrained
   // owners and migration-replay tooling. In host-managed mode, only the
   // separate migration owner needs this maintenance function.
