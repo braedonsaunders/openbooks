@@ -2164,6 +2164,7 @@
   "statements": {
     "title": "Relevé de compte",
     "opening": "Solde d'ouverture",
+    "agingAsOf": "Ancienneté au {date}",
     "closing": "Solde de clôture"
   },
   "detail": {

@@ -81,6 +81,7 @@ export interface StatementData {
   isReceivable: boolean
   isPayable: boolean
   agingCells: { key: string; label: string; value: string; drill: ReportDrillTarget }[]
+  agingAsOfLabel: string
   agingTotalLabel: string
   agingTotal: string
   agingTotalDrill: ReportDrillTarget
@@ -172,6 +173,7 @@ export async function loadStatement(
         bucket: b,
       },
     })),
+    agingAsOfLabel: t('statements.agingAsOf', { date: period.to }),
     agingTotalLabel: t('aging.columns.total'),
     agingTotal: m(st.aging.total),
     agingTotalDrill: { kind: 'aging', label: name, side, asOf: period.to, partyId },
@@ -293,6 +295,7 @@ export function statementSpec(data: StatementData): PageSpec {
         blocks: [
           widgetBlock('aging-strip', {
             cells: data.agingCells,
+            asOfLabel: data.agingAsOfLabel,
             totalLabel: data.agingTotalLabel,
             total: data.agingTotal,
             totalDrill: data.agingTotalDrill,

@@ -2181,6 +2181,7 @@
   "statements": {
     "title": "Account Statement",
     "opening": "Opening balance",
+    "agingAsOf": "Aging as of {date}",
     "closing": "Closing balance"
   },
   "detail": {

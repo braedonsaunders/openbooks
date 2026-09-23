@@ -2181,6 +2181,7 @@
   "statements": {
     "title": "勘定明細書",
     "opening": "期首残高",
+    "agingAsOf": "{date}時点のエイジング",
     "closing": "期末残高"
   },
   "detail": {
