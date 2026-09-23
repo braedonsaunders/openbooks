@@ -191,7 +191,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Employment history',
     category: 'hrm',
     description:
-      'One row per employment version — person, employer, status, effective and recorded stamps, and the closure evidence reason. Requires the HRM employment permission.',
+      'Employment versions — person, status, dates and reasons.',
     // Full version history, not an as-of snapshot: every version row reads
     // back, live or superseded. The change reason is the linked aggregate
     // employment_changes evidence (closed_by_change_id); live versions carry
@@ -228,7 +228,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Change requests',
     category: 'hrm',
     description:
-      'One row per employment change request — status, kind, employment, requester, submission and decision stamps, bound approval run and revision binding. Requires the HRM employment permission.',
+      'Change requests — status, kind, requester and decision.',
     // The 0185 register: kind is the frozen proposal's kind
     // (payload->>'kind'); the requester is the submission actor, NULL for
     // drafts withdrawn before submission, which never fabricate one. The
@@ -285,7 +285,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Positions',
     category: 'hrm',
     description:
-      'One row per established position at the report as-of date: code, title, status, department, employer, and planned versus funded versus filled FTE. Requires the HRM position permission.',
+      'Established positions — code, title, status and FTE.',
     // One row per position whose version covers the as-of day (half-open
     // effective containment, currently-known revisions only — the same
     // contract the vacancy read resolves through temporal.ts). Filled sums
@@ -355,7 +355,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Process checklists',
     category: 'hrm',
     description:
-      'One row per process checklist step — process kind and status, employee, template, step owner, due date, evidence kind, and step status with its evidence. Requires the HRM process permission.',
+      'Process checklist steps — owner, due date and evidence.',
     // The 0193 runtime: every row is a snapshot step copied at open time, so
     // the template join only names the checklist (LEFT: a retired template
     // row is never required for history to read). Skip reasons and done
@@ -398,7 +398,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Leave absences',
     category: 'hrm',
     description:
-      'One row per absence day — person, employer, department at the time, leave type, and hours. Reversals are separate rows; sums net. Requires the HRM leave permission.',
+      'Absence days — person, leave type and hours.',
     // One row per hrm_absences day row (request approvals and after-the-fact
     // recordings alike). The department is the primary assignment effective
     // on the absence day — the same half-open containment the calendar
@@ -443,7 +443,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Requisitions',
     category: 'hrm',
     description:
-      'One row per vacancy opening: number, title, status, employer, department, position, and headcount versus filled count. Requires the HRM recruiting permission.',
+      'Vacancy openings — title, status and filled count.',
     // One row per requisition with its establishment and placement. The
     // fill itself is hire-driven (filled_count moves only in the hire
     // transaction), so the register reads the stored counters, never a
@@ -482,7 +482,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Applications',
     category: 'hrm',
     description:
-      'One row per candidacy with its funnel stage, plus the funnel-per-stage counts and time-to-fill from opening to hire. Candidate contact PII never leaves through reports — names only. Requires the HRM recruiting permission.',
+      'Candidacies with funnel stage and time-to-fill.',
     // One row per application on its requisition's funnel: the stage name
     // resolves through the same-org stage join, and the hire day resolves
     // through the append-only event ledger (the first hired event), never
@@ -527,7 +527,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Reviews',
     category: 'hrm',
     description:
-      'One row per performance review — cycle and period, employee, kind, status, and the author rating beside the calibration. HR-only: runners hold the performance grant, so unshared reviews never leave the HR scope. Requires the HRM performance permission.',
+      'Performance reviews — ratings beside calibration.',
     // One row per hrm_reviews assessment with its cycle period and the
     // subject's name. Calibration never overwrites: both ratings read
     // side by side with the reason. Review texts stay out of the report
@@ -564,7 +564,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Goals',
     category: 'hrm',
     description:
-      'One row per performance goal — employee, title, status, progress, and due date. Requires the HRM performance permission.',
+      'Performance goals — status, progress and due date.',
     from: `hrm_goals g
       JOIN worker_employments e ON e.id = g.employment_id AND e.org_id = g.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = g.org_id
@@ -591,7 +591,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Turnover',
     category: 'hrm',
     description:
-      'One row per leaver — person, termination date, tenure in days, exit reason, and the voluntary and regrettable flags from the exit record. Group by termination month and department for the period-by-department leaver table; rates come from the Retention panel, which pairs leavers with both headcount legs. Leavers without an exit record read involuntary until recorded. Requires the HRM retention permission.',
+      'Leavers — tenure, exit reason and flags.',
     // Leaver facts: the terminated version start is the termination date.
     // The base subquery pins the leaver set (terminated, currently
     // asserted — superseded rows are not the story); tenure runs from the
@@ -638,7 +638,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Benefit enrolments',
     category: 'hrm',
     description:
-      'One row per benefit election — person, employer, department at election, plan and coverage tier, status, and the stored per-period employee and employer amounts in plan currency. Requires the HRM benefits permission.',
+      'Benefit elections — plan, tier and amounts.',
     // One row per hrm_benefit_enrollments row with its stored amounts: a
     // later plan repricing never rewrites these figures, so SUM over a
     // period is the cost the org actually owes. The department is the
@@ -695,7 +695,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Pay bands',
     category: 'hrm',
     description:
-      'One row per live pay band version: level, scope, currency, basis, and the min/target/max SHOULD-pay figures with their effective window. Requires the HRM compensation permission.',
+      'Live pay bands — level, scope and min/target/max.',
     from: `hrm_pay_bands b
   JOIN hrm_job_levels lvl ON lvl.id = b.level_id AND lvl.org_id = b.org_id
   LEFT JOIN hrm_job_families fam ON fam.id = b.family_id AND fam.org_id = b.org_id
@@ -725,7 +725,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Merit cycle lines',
     category: 'hrm',
     description:
-      'One row per cycle decision: person, employer, snapshotted current rate, stored compa-ratio, guideline range, proposal, and status. Rates here are the frozen snapshot at open, never live payroll. Requires the HRM compensation permission.',
+      'Merit decisions — proposal, guideline and status.',
     from: `hrm_comp_cycle_lines l
       JOIN hrm_comp_cycles c ON c.id = l.cycle_id AND c.org_id = l.org_id
       JOIN worker_employments emp ON emp.id = l.employment_id AND emp.org_id = l.org_id
@@ -757,7 +757,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Headcount plan lines',
     category: 'hrm',
     description:
-      'One row per planned movement: plan, kind, title, employer, planned FTE, start, computed annual cost with its basis, and status. Costs are computed at save, never typed. Requires the HRM compensation permission.',
+      'Planned movements — FTE, cost and status.',
     from: `hrm_headcount_plan_lines l
       JOIN hrm_headcount_plans p ON p.id = l.plan_id AND p.org_id = l.org_id
       JOIN subsidiaries sub ON sub.id = l.employer_subsidiary_id AND sub.org_id = l.org_id`,
@@ -785,7 +785,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Pay gap snapshots',
     category: 'hrm',
     description:
-      'One row per frozen snapshot per equal-value category: as-of date, level, headcounts, mean/median gaps, the OLS unexplained gap, and the joint-assessment flag. Category aggregates only — no per-person pay ever leaves through reports. Requires the HRM compensation permission.',
+      'Frozen pay-gap snapshots by category — aggregates only.',
     // One row per snapshot × category: the categories jsonb expands in
     // a lateral (skipped by the join-pin rule, which only governs table
     // joins); the level join resolves the code and the subsidiary join
@@ -831,7 +831,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Automations',
     category: 'hrm',
     description:
-      'One row per automation recipe — trigger kind, status, version, and last run. Requires the automations permission.',
+      'Automation recipes — trigger, status and last run.',
     from: `automations a`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -863,7 +863,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Automation runs',
     category: 'hrm',
     description:
-      'One row per automation firing — executed version, subject, status, steps, and error. Requires the automations permission.',
+      'Automation firings — subject, status and errors.',
     from: `automation_runs r JOIN automations a ON a.id = r.automation_id AND a.org_id = r.org_id`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -896,7 +896,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Action reasons',
     category: 'hrm',
     description:
-      'One row per reason code per HR action — the vocabulary change requests file under. Requires the HRM employment permission.',
+      'Reason codes each HR action files under.',
     from: `hrm_action_reasons r`,
     // Org-level configuration with no legal-entity column: the policy is
     // declared as no-clamp rather than omitted. An omitted policy makes
@@ -929,7 +929,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Rate schedule lines',
     category: 'hrm',
     description:
-      'One row per schedule, classification, and effective date: the resolvable base, cash fringe, creditable fringe, and overtime multiplier the wage resolver prices from.',
+      'Wage schedule lines — base, fringes and multipliers.',
     from: `hrm_rate_schedule_lines l
   JOIN hrm_rate_schedules s ON s.id = l.schedule_id AND s.org_id = l.org_id
   JOIN hrm_work_classifications c ON c.id = l.classification_id AND c.org_id = l.org_id`,
@@ -956,7 +956,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Per-diem entries',
     category: 'hrm',
     description:
-      'One row per employment, project, and day: computed per-diem and travel amounts with their status across computed, approved, voided, and consumed.',
+      'Per-diem and travel amounts per day, with status.',
     from: `hrm_per_diem_entries e
   JOIN hrm_per_diem_policies p ON p.id = e.policy_id AND p.org_id = e.org_id
   LEFT JOIN pay_components pc ON pc.id = p.pay_component_id AND pc.org_id = p.org_id
@@ -982,7 +982,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Comp class split',
     category: 'hrm',
     description:
-      'Approved project hours priced per comp class: the daily split the resolver reports from the priority match rules.',
+      'Project hours priced per comp class, by day.',
     from: `hrm_comp_class_rules r
   JOIN hrm_comp_classes c ON c.id = r.comp_class_id AND c.org_id = r.org_id
   LEFT JOIN hrm_work_classifications cl ON cl.id::text = (r.match->>'classification_id') AND cl.org_id = r.org_id`,
@@ -1006,7 +1006,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Certified runs',
     category: 'hrm',
     description:
-      'Certified payroll runs by project and week: frozen payloads with their pack format, file artefact, and amendment links.',
+      'Certified payroll runs by project and week.',
     from: `hrm_certified_payroll_runs r
   LEFT JOIN projects p ON p.id = r.project_id AND p.org_id = r.org_id
   LEFT JOIN hrm_certified_payroll_runs a ON a.id = r.amends_run_id AND a.org_id = r.org_id`,
@@ -1031,7 +1031,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Compliance findings',
     category: 'hrm',
     description:
-      'Append-only pre-run flags by kind: ratio breaches, missing rates, unresolved classes, missing registrations, and fringe mismatches with their lifecycle status.',
+      'Pre-run flags by kind, with lifecycle status.',
     from: `hrm_compliance_findings f
   LEFT JOIN projects p ON p.id = f.project_id AND p.org_id = f.org_id
   LEFT JOIN worker_employments w ON w.id = f.employment_id AND w.org_id = f.org_id`,
@@ -1064,7 +1064,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Qualifications',
     category: 'hrm',
     description:
-      'One row per held certification or license — holder, employer, type and category, issuance and expiry, and stored status with its verification. Requires the HRM certifications permission.',
+      'Held certifications — holder, type and expiry.',
     from: `hrm_worker_qualifications q
       JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = q.org_id
       JOIN worker_employments e ON e.id = q.employment_id AND e.org_id = q.org_id
@@ -1098,7 +1098,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Qualification alerts',
     category: 'hrm',
     description:
-      'One row per certification renewal alert — holder, type, expiry, the lead-day schedule it fired on, and whether it has been sent. Requires the HRM certifications permission.',
+      'Certification renewal alerts — sent or pending.',
     from: `hrm_qualification_alerts a
       JOIN hrm_worker_qualifications q ON q.id = a.qualification_id AND q.org_id = a.org_id
       JOIN hrm_qualification_types t ON t.id = q.type_id AND t.org_id = a.org_id
@@ -1137,7 +1137,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'HR documents',
     category: 'hrm',
     description:
-      'One row per HR document — title, declared category, lifecycle status, send/completion/expiry, and legal hold. Requires the HRM documents permission.',
+      'HR documents — category, status and legal hold.',
     from: `hrm_documents d
       LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id`,
     // Documents hang off the PERSON, not an employment, so this source has
@@ -1170,7 +1170,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Document signers',
     category: 'hrm',
     description:
-      'One row per ordered signer — document, signing order, role, and per-signer status. Requires the HRM documents permission.',
+      'Document signers in order, with per-signer status.',
     from: `hrm_document_signers s
       JOIN hrm_documents d ON d.id = s.document_id AND d.org_id = s.org_id`,
     // Signers inherit the document's scope; see hrm_documents above.
@@ -1200,7 +1200,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Retention actions',
     category: 'hrm',
     description:
-      'One row per retention action — document, category, due date, terminal action, execution, and any legal-hold block. Requires the HRM documents permission.',
+      'Retention actions — due date, execution and blocks.',
     from: `hrm_retention_actions a
       JOIN hrm_documents d ON d.id = a.document_id AND d.org_id = a.org_id
       JOIN hrm_retention_schedules s ON s.id = a.schedule_id AND s.org_id = a.org_id`,
@@ -1234,7 +1234,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Survey results',
     category: 'hrm',
     description:
-      'One row per survey — kind, anonymity grade, status, invitation and response counts, and close date. Requires the HRM surveys permission.',
+      'Surveys — responses, status and close date.',
     from: `hrm_surveys s
       LEFT JOIN LATERAL (
         SELECT count(*)::integer AS invitations,
@@ -1274,7 +1274,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Org chart',
     category: 'hrm',
     description:
-      'One row per in-service employment at the report as-of date — name, title, department, and line manager. Requires the HRM employment permission.',
+      'In-service employments — name, title and manager.',
     from: `worker_employments e
       JOIN LATERAL (
         SELECT ev.status
@@ -1335,7 +1335,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'One-on-ones',
     category: 'hrm',
     description:
-      'One row per 1:1 meeting — manager, report, scheduled and held dates, and status. Requires the HRM performance permission.',
+      '1:1 meetings — scheduled and held dates, status.',
     from: `hrm_one_on_ones o
       JOIN worker_employments m ON m.id = o.manager_employment_id AND m.org_id = o.org_id
       JOIN worker_employments r ON r.id = o.report_employment_id AND r.org_id = o.org_id
@@ -1363,7 +1363,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Feedback',
     category: 'hrm',
     description:
-      'One row per praise, feedback, or request — subject, kind, visibility, and recorded date. HR-only runners (the service visibility matrix lives at the write/read service); retracted rows and retractions never read. Requires the HRM performance permission.',
+      'Praise, feedback and requests, with visibility.',
     // Retractions hide both rows, exactly like listFeedback: the
     // retraction rows themselves never read, and neither do the
     // originals they link.
@@ -1395,7 +1395,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Calibration entries',
     category: 'hrm',
     description:
-      'One row per calibrated review — session, employee, proposed beside calibrated rating, potential, and the decider. Requires the HRM performance permission.',
+      'Calibrated reviews — proposed beside final rating.',
     from: `hrm_calibration_entries e
       JOIN hrm_calibration_sessions s ON s.id = e.session_id AND s.org_id = e.org_id
       JOIN hrm_reviews r ON r.id = e.review_id AND r.org_id = e.org_id
@@ -1424,7 +1424,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Talent reviews',
     category: 'hrm',
     description:
-      'One row per talent review — employee, performance and potential keys, loss impact and risk, and promotion readiness. HR-only, never visible to the subject. Requires the HRM performance permission.',
+      'Talent reviews — performance, potential and risk.',
     from: `hrm_talent_reviews t
       JOIN worker_employments e ON e.id = t.employment_id AND e.org_id = t.org_id
       JOIN parties w ON w.id = e.worker_party_id AND w.org_id = t.org_id
@@ -1459,7 +1459,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Scorecards',
     category: 'hrm',
     description:
-      'One row per interview with the panel verdict aggregates: submitted and panel counts plus the overall distribution. Per-interviewer detail never leaves through reports — the blind rule holds structurally. Requires the HRM recruiting permission.',
+      'Interviews with panel verdict aggregates.',
     // One row per interview: the verdict aggregates resolve through
     // scalar laterals (the hired-on lateral on hrm_applications is the
     // house precedent), so the entity stays a detail row source with no
@@ -1509,7 +1509,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Interview slots',
     category: 'hrm',
     description:
-      'One row per proposed, booked, or declined interview slot with its window and kind. Candidate contact PII and booking token hashes never leave. Requires the HRM recruiting permission.',
+      'Interview slots — window, kind and status.',
     from: `hrm_interview_slots s
   JOIN hrm_interviews i ON i.id = s.interview_id AND i.org_id = s.org_id
   JOIN hrm_applications a ON a.id = i.application_id AND a.org_id = s.org_id
@@ -1538,7 +1538,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Offers',
     category: 'hrm',
     description:
-      'One row per offer with its commercial status, signature state, and version. Amounts, letter bodies, and signed evidence never leave through reports. Requires the HRM recruiting permission.',
+      'Offers — commercial and signature status.',
     from: `hrm_offers o
   JOIN hrm_applications a ON a.id = o.application_id AND a.org_id = o.org_id
   JOIN hrm_requisitions r ON r.id = a.requisition_id AND r.org_id = o.org_id
@@ -1569,7 +1569,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Postings',
     category: 'hrm',
     description:
-      'One row per job-board posting with its status plus the applies and dispositions-sent counts that make source effectiveness (per board, per opening). Requires the HRM recruiting permission.',
+      'Job-board postings — applies and dispositions.',
     from: `hrm_job_postings p
   JOIN hrm_requisitions r ON r.id = p.requisition_id AND r.org_id = p.org_id
   JOIN subsidiaries sub ON sub.id = r.employer_subsidiary_id AND sub.org_id = p.org_id
@@ -1606,7 +1606,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Retention runs',
     category: 'hrm',
     description:
-      'One row per retention-rule evaluation with the anonymized, deleted, and extension-requested counts. Requires the HRM recruiting permission.',
+      'Retention-rule evaluations with outcome counts.',
     from: `hrm_retention_runs r
   JOIN hrm_retention_rules u ON u.id = r.rule_id AND u.org_id = r.org_id`,
     orgColumn: 'r.org_id',
@@ -1631,7 +1631,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Pool members',
     category: 'hrm',
     description:
-      'One row per talent-pool membership: pool, candidate name, and when they joined. Contact PII never leaves through reports — names only. Requires the HRM recruiting permission.',
+      'Talent-pool members — pool and join date.',
     from: `hrm_talent_pool_members m
   JOIN hrm_talent_pools p ON p.id = m.pool_id AND p.org_id = m.org_id
   JOIN hrm_candidates c ON c.id = m.candidate_id AND c.org_id = m.org_id`,
@@ -1663,7 +1663,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'Payroll anomaly flags',
     category: 'Payroll',
     description:
-      'One row per deterministic pre-run payroll or timesheet check flag: kind, severity, status, period, employment and the explanation. Block severity refuses the pay-run finalize while open. Requires the payroll manager permission.',
+      'Pre-run payroll and timesheet check flags.',
     from: `payroll_anomaly_flags f
       LEFT JOIN worker_employments e ON e.id = f.employment_id AND e.org_id = f.org_id
       LEFT JOIN parties w ON w.id = e.worker_party_id AND w.org_id = f.org_id`,
@@ -1699,7 +1699,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'AI decisions',
     category: 'AI governance',
     description:
-      'One row per AI-assisted answer: capability, subject, cited sources, the PII-free summary and outcome. Digests and prompts never project. Requires the ledger admin permission.',
+      'AI-assisted answers — subject, sources and outcome.',
     from: `ai_decisions d`,
     orgColumn: 'd.org_id',
     // Org-wide ledger by design: the no-clamp policy is declared, never
@@ -1730,7 +1730,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     label: 'AI capabilities',
     category: 'AI governance',
     description:
-      'One row per AI capability: autonomy ceiling, reviewer, subject notice, enabled state and last review. Requires the ledger admin permission.',
+      'AI capabilities — autonomy ceiling and review state.',
     from: `ai_capabilities c`,
     orgColumn: 'c.org_id',
     // Org-wide registry mirror by design: the no-clamp policy is declared,

@@ -63,8 +63,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'ap-aging-by-vendor',
     name: 'AP aging by vendor',
-    description:
-      'Open payable ledger lines summed per vendor and due month. Negative totals are amounts owed (credit-normal payables).',
+    description: 'Open payable balances per vendor, by due month.',
     query: {
       entity: 'ledger_lines',
       mode: 'summarize',
@@ -89,8 +88,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'open-ar-by-customer',
     name: 'Open AR by customer',
-    description:
-      'Outstanding receivable balance per customer from open ledger items. Positive totals are amounts owed to you.',
+    description: 'Outstanding receivable balances per customer.',
     query: {
       entity: 'ledger_lines',
       mode: 'summarize',
@@ -115,9 +113,8 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   },
   {
     slug: 'gl-activity-by-account-fy',
-    name: 'GL activity by account (this FY)',
-    description:
-      'Posted journal activity this fiscal year, one row per account: net movement and line count.',
+    name: 'GL activity by account',
+    description: 'Net movement and line count per account, this fiscal year.',
     query: {
       entity: 'ledger_lines',
       mode: 'summarize',
@@ -140,9 +137,8 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   },
   {
     slug: 'expense-detail-by-department-fy',
-    name: 'Expense detail by department (this FY)',
-    description:
-      'Posted expense and COGS lines this fiscal year, sectioned by department — date, entry, account, party, memo and amount.',
+    name: 'Expense detail by department',
+    description: 'Expense and COGS lines this fiscal year, by department.',
     query: {
       entity: 'ledger_lines',
       mode: 'rows',
@@ -178,8 +174,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'lot-recall',
     name: 'Lot recall',
-    description:
-      'Complete traceability for every movement that touched a tracked lot, including expiry, item, stock location, source transaction, party, quantity, and movement time.',
+    description: 'Every movement for a lot — item, location, quantity, expiry.',
     urlFilters: [
       { param: 'lotNumber', field: 'lot_number', op: 'contains', valueKind: 'text' },
       { param: 'itemId', field: 'item_id', op: 'eq', valueKind: 'uuid' },
@@ -215,8 +210,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-register',
     name: 'Payroll register',
-    description:
-      'Every pay stub this fiscal year, one row per employee per run: gross, statutory withholdings, net, and employer cost, sectioned by pay run. Requires the payroll permission.',
+    description: 'Pay stubs this fiscal year — gross, withholdings, net, employer cost.',
     query: {
       entity: 'pay_stubs',
       mode: 'rows',
@@ -236,8 +230,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-journal',
     name: 'Payroll journal',
-    description:
-      'The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission.',
+    description: 'Per-employee audit detail — earnings, deductions, amounts and YTD.',
     query: {
       entity: 'pay_stub_lines',
       mode: 'summarize',
@@ -271,8 +264,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-deductions-register',
     name: 'Deductions & contributions register',
-    description:
-      'Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission.',
+    description: 'Withholdings and employer contributions by component, with YTD.',
     query: {
       entity: 'pay_stub_lines',
       mode: 'summarize',
@@ -296,8 +288,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-cost-by-department',
     name: 'Payroll cost by department',
-    description:
-      'Labor distribution: payroll amounts by department and component kind (earnings, deductions withheld, employer burden). Requires the payroll permission.',
+    description: 'Payroll amounts by department and component kind.',
     query: {
       entity: 'pay_stub_lines',
       mode: 'summarize',
@@ -318,8 +309,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-employee-totals',
     name: 'Employee totals (YTD)',
-    description:
-      'One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission.',
+    description: 'Gross, tax, net and employer cost per employee, with stub counts.',
     query: {
       entity: 'pay_stubs',
       mode: 'summarize',
@@ -343,8 +333,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-cost-by-month',
     name: 'Payroll cost by month',
-    description:
-      'Monthly payroll totals this fiscal year: gross, net, income tax withheld, and employer cost, with stub counts. Requires the payroll permission.',
+    description: 'Monthly payroll totals — gross, net, tax and employer cost.',
     query: {
       entity: 'pay_stubs',
       mode: 'summarize',
@@ -368,8 +357,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-parallel-run',
     name: 'Parallel run reconciliation',
-    description:
-      'The adoption control: for one pay period, every employee and every component compared against the prior payroll provider, sectioned by result so material differences and one-sided employees are read first and exact matches last. The comparison and its classification come from the filed reconciliation — this report never restates them. A tolerance, where one is configured, is shown in its own column. Requires the payroll permission.',
+    description: 'One period checked against the prior provider, sectioned by result.',
     query: {
       entity: 'payroll_parallel_findings',
       mode: 'rows',
@@ -395,8 +383,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'payroll-parallel-run-totals',
     name: 'Parallel run totals by component',
-    description:
-      'The same reconciliation rolled up: per component, what the prior provider paid in total, what this payroll calculates, and the difference — so a period-level variance is attributed to the components that produced it rather than left as one number. The employee counts on each row state how much was actually compared. Requires the payroll permission.',
+    description: 'Prior-provider vs calculated totals per component, with differences.',
     query: {
       entity: 'payroll_parallel_findings',
       mode: 'summarize',
@@ -423,8 +410,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'entitlement-balances',
     name: 'Entitlement balances',
-    description:
-      'Every employee pay bank — banked time, vacation, benefit recoup — sectioned by plan, with the limit resolved for that person and an over/near-limit state. Balances are the entitlement ledger sum; a negative balance is money the employee owes back. Requires the payroll permission.',
+    description: 'Time-off and benefit balances per employee, with plan limits.',
     query: {
       entity: 'entitlement_balances',
       mode: 'rows',
@@ -442,8 +428,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'allocation-summary',
     name: 'Allocation summary',
-    description:
-      'One row per rule, period, and run status: pooled source, allocated total, residual, and run count. Requires the allocations permission.',
+    description: 'Pooled source, allocated total and residual, per rule and period.',
     query: {
       entity: 'allocation_runs',
       mode: 'summarize',
@@ -463,8 +448,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'allocation-lineage',
     name: 'Allocation lineage',
-    description:
-      'Every allocated line traced to its rule, source period, account, and dimensions, with driver share and amount, sectioned by rule. Requires the allocations permission.',
+    description: 'Allocated lines traced to rule, source, account and share.',
     query: {
       entity: 'allocation_lineage',
       mode: 'rows',
@@ -483,8 +467,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'entitlement-service-milestones',
     name: 'Service milestones reached',
-    description:
-      'Service anniversaries an entitlement tier acts on this fiscal year — benefits eligibility, RRSP eligibility, and each rung of the vacation ladder — with the date every employee reaches it. The list the milestone letters go out from. Requires the payroll permission.',
+    description: 'Service anniversaries this fiscal year that change entitlements.',
     query: {
       entity: 'entitlement_service_milestones',
       mode: 'rows',
@@ -506,7 +489,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'crm-pipeline-summary',
     name: 'Pipeline summary by stage',
-    description: 'Open opportunity pipeline amounts, counts, and weighted values broken out by stage and currency.',
+    description: 'Open pipeline amounts, counts and weighted values by stage.',
     query: {
       entity: 'crm_opportunities',
       mode: 'summarize',
@@ -531,7 +514,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'crm-forecast-by-owner',
     name: 'Pipeline forecast by owner',
-    description: 'Projected and weighted opportunity pipeline values broken out by sales representative and forecast category.',
+    description: 'Projected and weighted pipeline by owner and category.',
     query: {
       entity: 'crm_opportunities',
       mode: 'summarize',
@@ -556,7 +539,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'crm-win-loss-analysis',
     name: 'Win/loss analysis',
-    description: 'Closed opportunity outcomes, win/loss reasons, and deal totals grouped by win status and reason.',
+    description: 'Closed deals by outcome and reason, with totals.',
     query: {
       entity: 'crm_opportunities',
       mode: 'summarize',
@@ -580,7 +563,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'crm-lead-conversion-funnel',
     name: 'Lead lifecycle & source summary',
-    description: 'CRM relationship profiles categorized by lifecycle stage, status, and acquisition lead source.',
+    description: 'Accounts by lifecycle stage, status and lead source.',
     query: {
       entity: 'crm_account_profiles',
       mode: 'summarize',
@@ -601,8 +584,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'headcount-statement',
     name: 'Headcount statement',
-    description:
-      'Headcount and full-time equivalents as of the report date, one row per employer subsidiary and department with an organization total. Requires the HRM employment permission.',
+    description: 'Headcount and FTE by subsidiary and department, with totals.',
     query: {
       entity: 'hrm_headcount',
       mode: 'summarize',

@@ -10,8 +10,8 @@ import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts
  * catalog entry in @openbooks/reports BUILT_IN_REPORT_DEFINITIONS:
  *   - AP aging by vendor
  *   - Open AR by customer
- *   - GL activity by account (this FY)
- *   - Expense detail by department (this FY)
+ *   - GL activity by account
+ *   - Expense detail by department
  *
  * Each plan is re-validated through validateCustomQuery before storage, so a
  * catalog typo fails loudly here rather than at run time. Idempotent: keyed on

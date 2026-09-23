@@ -5,7 +5,7 @@
     "savedViews": "Vues enregistrées",
     "cards": {
       "pnlTitle": "État des résultats",
-      "pnlDescription": "État des résultats — préréglages par exercice, comparatifs, ventilation par département, mises en page personnalisées",
+      "pnlDescription": "Résultat de la période, avec comparatifs et ventilations",
       "balanceSheetTitle": "Bilan",
       "balanceSheetDescription": "Situation financière à toute date, bénéfices non répartis calculés",
       "trialBalanceTitle": "Balance de vérification",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "Tableau des flux de trésorerie",
       "cashFlowDescription": "Méthode directe — exploitation, investissement et financement, rapproché aux mouvements bancaires",
       "generalLedgerTitle": "Grand livre",
-      "generalLedgerDescription": "Activité comptabilisée par compte avec solde progressif — le détail prêt pour l'audit derrière chaque état",
+      "generalLedgerDescription": "Activité comptabilisée par compte, avec solde progressif",
       "journalTitle": "Journal",
       "journalDescription": "Chaque écriture comptabilisée avec ses lignes — le livre chronologique des écritures d'origine",
       "registersTitle": "Registres clients et fournisseurs",
@@ -27,7 +27,7 @@
       "budgetTitle": "Budget vs Réel",
       "budgetDescription": "Réels par rapport à un scénario budgétaire, par compte, avec écart $ et %",
       "projectProfitabilityTitle": "Rentabilité des projets",
-      "projectProfitabilityDescription": "Produits, coûts et marge par projet — concorde avec le résultat, avec les heures approuvées",
+      "projectProfitabilityDescription": "Produits, coûts et marge par projet, avec les heures approuvées",
       "ordersTitle": "Pipeline de commandes",
       "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion",
       "cashFlowIndirectTitle": "Flux de trésorerie (indirect)",
@@ -2059,67 +2059,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "Âge des comptes fournisseurs par fournisseur",
-      "description": "Lignes ouvertes de comptes fournisseurs du grand livre, sommées par fournisseur et par mois d’échéance. Les totaux négatifs sont des montants dus (comptes fournisseurs de nature créditrice)."
+      "description": "Soldes fournisseurs ouverts par fournisseur, par mois d’échéance."
     },
     "open-ar-by-customer": {
       "name": "Comptes clients ouverts par client",
-      "description": "Solde à recevoir par client à partir des postes ouverts du grand livre. Les totaux positifs sont des montants qui vous sont dus."
+      "description": "Soldes clients ouverts par client."
     },
     "gl-activity-by-account-fy": {
-      "name": "Activité du GL par compte (exercice courant)",
-      "description": "Activité de journal comptabilisée cette année, une ligne par compte : mouvement net et nombre de lignes. Utilise l’année civile jusqu’à l’arrivée des opérateurs de période financière."
+      "name": "Activité du GL par compte",
+      "description": "Mouvement net et nombre de lignes par compte, cet exercice."
     },
     "expense-detail-by-department-fy": {
-      "name": "Détail des charges par département (exercice courant)",
-      "description": "Lignes de charges et de coût des marchandises vendues comptabilisées cette année, sectionnées par département — date, écriture, compte, tiers, note et montant."
+      "name": "Détail des charges par département",
+      "description": "Lignes de charges et de coût des ventes de l’exercice, par département."
     },
     "lot-recall": {
       "name": "Rappel de lot",
-      "description": "Chaque mouvement de stock lié à un lot, avec article, expiration, quantité, emplacement, document source et tiers pour les rappels et la traçabilité."
+      "description": "Chaque mouvement d’un lot — article, emplacement, quantité, expiration."
     },
     "payroll-journal": {
       "name": "Journal de paie",
-      "description": "Le dossier d’audit complet de la période de paie, une section par employé : chaque gain, retenue et cotisation patronale avec heures, taux, montant de la période et cumul annuel. Choisissez une seule période de paie dans le menu des périodes pour correspondre à un cycle. Exige la permission paie."
+      "description": "Détail d’audit par employé — gains, retenues, montants et cumul."
     },
     "payroll-deductions-register": {
       "name": "Registre des retenues et cotisations",
-      "description": "Chaque retenue et cotisation patronale, par composante : qui a payé quoi sur la période et en cumul annuel. Le détail justificatif des versements et des assureurs. Exige la permission paie."
+      "description": "Retenues et cotisations patronales par composante, avec cumul."
     },
     "payroll-cost-by-department": {
       "name": "Coût de la paie par département",
-      "description": "Répartition de la main-d’œuvre : montants de paie par département et nature de composante (gains, retenues, charges patronales). Exige la permission paie."
+      "description": "Montants de paie par département et nature de composante."
     },
     "payroll-employee-totals": {
       "name": "Totaux par employé (cumul annuel)",
-      "description": "Une ligne par employé : brut, impôt retenu, paie nette et totaux du coût patronal avec nombre de bulletins pour la période. Exige la permission paie."
+      "description": "Brut, impôt, net et coût patronal par employé, avec compteurs."
     },
     "payroll-parallel-run": {
       "name": "Rapprochement du cycle parallèle",
-      "description": "Le contrôle d’adoption : pour une période de paie, chaque employé et chaque composante comparés à l’ancien fournisseur de paie, par résultat pour lire d’abord les écarts significatifs et les employés unilatéraux, puis les rapprochements exacts. La tolérance, lorsqu’elle est configurée, figure dans sa propre colonne."
+      "description": "Une période comparée à l’ancien fournisseur, par résultat."
     },
     "payroll-parallel-run-totals": {
       "name": "Totaux du cycle parallèle par composante",
-      "description": "Le même rapprochement cumulé : par composante, ce que l’ancien fournisseur a payé au total, ce que cette paie calcule, et l’écart — pour attribuer un écart de période aux composantes qui l’ont produit."
+      "description": "Totaux antérieurs contre calculés par composante, avec écarts."
     },
     "crm-pipeline-summary": {
       "name": "Synthèse du pipeline par étape",
-      "description": "Montants du pipeline d'opportunités ouvertes, volumes et valeurs pondérées ventilés par étape et devise."
+      "description": "Montants, volumes et valeurs pondérées du pipeline ouvert, par étape."
     },
     "crm-forecast-by-owner": {
       "name": "Prévisions du pipeline par responsable",
-      "description": "Valeurs prévisionnelles et pondérées ventilées par représentant commercial et catégorie de prévision."
+      "description": "Pipeline prévisionnel et pondéré par responsable et catégorie."
     },
     "crm-win-loss-analysis": {
       "name": "Analyse gains et pertes",
-      "description": "Résultats des opportunités clôturées, motifs de gain ou perte et montants globaux."
+      "description": "Affaires conclues par résultat et motif, avec totaux."
     },
     "crm-lead-conversion-funnel": {
       "name": "Cycle de vie et origines des prospects",
-      "description": "Profils relationnels CRM catégorisés selon l'étape du cycle de vie, le statut et l'origine d'acquisition."
+      "description": "Comptes par étape de cycle de vie, statut et origine."
     },
     "headcount-statement": {
       "name": "État des effectifs",
-      "description": "Effectif et équivalents temps plein à la date du rapport, une ligne par filiale employeuse et par service avec un total pour l'organisation. Requiert l'autorisation d'emploi RH."
+      "description": "Effectif et équivalents temps plein par filiale et service, avec totaux."
     }
   },
   "generalLedger": {
