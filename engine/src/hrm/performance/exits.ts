@@ -265,6 +265,21 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
           `employment change ${terminationChangeId} is not visible in this organization — link the terminating change, or leave it unlinked`,
         );
       }
+      // The link is provenance for THIS exit: the change must belong to
+      // the same employment and must itself be the termination — linking
+      // another employment's change, or a non-terminating change, would
+      // misattribute the exit forever.
+      const terminating = (await db.execute<{ id: string }>(sql`
+        select id from employment_changes
+         where org_id = ${orgId} and id = ${terminationChangeId}
+           and employment_id = ${employmentId} and change_kind = 'terminated'
+      `)).rows[0];
+      if (!terminating) {
+        throw new HrmPerformanceError(
+          "REFUSED",
+          `employment change ${terminationChangeId} is not the termination of employment ${employmentId} — link the terminating change for this employment, or leave it unlinked`,
+        );
+      }
     }
     if (interviewerPartyId !== null) {
       const party = (await db.execute<{ id: string }>(sql`

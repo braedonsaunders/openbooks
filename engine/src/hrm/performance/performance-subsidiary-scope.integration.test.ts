@@ -123,6 +123,18 @@ async function mkTemplate(orgId: string, actorId: string): Promise<string> {
   return templateId;
 }
 
+async function mkChange(orgId: string, employmentId: string, kind: string, actorId: string): Promise<string> {
+  // employment_changes carries a per-employment revision unique: successive
+  // changes on one employment take the next revision, never a hardcoded 1.
+  const next = (await db.execute<{ revision: number }>(sql`
+    select coalesce(max(revision), 0) + 1 as revision from employment_changes
+     where org_id = ${orgId} and employment_id = ${employmentId}`)).rows[0]!.revision;
+  return (await db.execute<{ id: string }>(sql`
+    insert into employment_changes (org_id, employment_id, revision, change_kind, prior_snapshot, reason, recorded_by)
+    values (${orgId}, ${employmentId}, ${next}, ${kind}, '{}'::jsonb, 'test change', ${actorId})
+    returning id`)).rows[0]!.id;
+}
+
 type Side = {
   userId: string;
   partyId: string;
@@ -566,6 +578,51 @@ test("HR-A's turnover and overview count only A's leavers and gaps", { skip: !DB
       [leaverB1.employmentId],
     );
     assert.equal(fullOverview.exitRecordsWithoutInterview.length, 1);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("the termination link must be this employment's own termination", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const leaverA = await mkLeaver(h, "leaver-a", h.org.subsidiaryId);
+    const leaverB = await mkLeaver(h, "leaver-b", h.subB);
+    const otherTermination = await mkChange(h.org.orgId, leaverB.employmentId, "terminated", h.hrFull);
+    const sameNonTermination = await mkChange(h.org.orgId, leaverA.employmentId, "status_changed", h.hrFull);
+    // Another employment's termination is refused by name.
+    await assert.rejects(
+      recordExit({
+        orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverA.employmentId,
+        terminationChangeId: otherTermination, reasonKind: "resignation", isVoluntary: true,
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        assert.match(e.message, /is not the termination of employment/);
+        return true;
+      },
+    );
+    // A non-terminating change on the same employment is refused too.
+    await assert.rejects(
+      recordExit({
+        orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverA.employmentId,
+        terminationChangeId: sameNonTermination, reasonKind: "resignation", isVoluntary: true,
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        assert.match(e.message, /is not the termination of employment/);
+        return true;
+      },
+    );
+    // The employment's own termination links cleanly.
+    const ownTermination = await mkChange(h.org.orgId, leaverA.employmentId, "terminated", h.hrFull);
+    const exit = await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverA.employmentId,
+      terminationChangeId: ownTermination, reasonKind: "resignation", isVoluntary: true,
+    });
+    assert.equal(exit.terminationChangeId, ownTermination);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
