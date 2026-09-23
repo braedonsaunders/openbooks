@@ -10,6 +10,7 @@ import { recordPayRunPayment } from "./payment.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPaymentDocument, updateDraftPayment } from "../payments/payment-documents.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
+import { PaymentError } from "../payments/payment-errors.ts";
 import { reversePaymentForReturn } from "../payments/payment-return.ts";
 import { sameCurrencyAllocation } from "../payments/settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -132,11 +133,15 @@ test("payroll residual ignores controlled reversals of earlier payment applicati
   }
 });
 
-test("payroll residual includes source-side credits created by the ordinary payment service", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("payroll liability cannot masquerade as the credit; the run pays the full liability", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const fx = await postedRun();
   try {
-    // A receivable from the employee can be offset against their payroll
-    // liability by the universal credit workpaper; no application is fabricated.
+    // A receivable from the employee cannot be offset against their payroll
+    // liability through the credit path: the "credit" in a credit settlement
+    // must be a credit memo (engine/src/payments/credit-allocation.ts), and a
+    // payroll liability line is not one. The refusal names the remedy and
+    // writes nothing, so the run that follows pays the full liability with
+    // no phantom offset.
     const invoiceId = randomUUID();
     await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,
       document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
@@ -149,22 +154,27 @@ test("payroll residual includes source-side credits created by the ordinary paym
     const invoiceEntry = await postDocument(invoiceId, { control: { ar: fx.source.account_id, ap: fx.source.account_id, bank: fx.bankAccountId } });
     const target = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${fx.orgId}
       and entry_id=${invoiceEntry} and account_id=${fx.source.account_id} and amount>0`)).rows[0]!;
-    await withOrgTransaction(fx.orgId, async () => {
-      const receipt = await createPaymentDocument({ orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
-        partyId: fx.employeeId, bankAccountId: fx.bankAccountId, subsidiaryId: fx.subsidiaryId, documentDate: "2026-07-21", currency: "CAD" });
-      await updateDraftPayment(receipt.id, {
-        controlAccountId: fx.source.account_id,
-        allocations: [sameCurrencyAllocation(target.id, "50")],
-        creditAllocations: [{ fromLineId: fx.source.id, toLineId: target.id, amount: "50", sourceDocumentId: fx.input.documentId }],
-      }, fx.actorId, fx.orgId);
-      assert.equal((await submitAndReleaseIfUngated("customer_payment", receipt.id, fx.actorId)).autoApproved, true);
-      await postPaymentWithApplications(receipt.id, undefined, fx.actorId, "ui", { deferEffects: true });
-    });
-    const prior = (await db.execute<{ source_amount: string; source_transaction_amount: string }>(sql`
-      select source_amount,source_transaction_amount from applications where org_id=${fx.orgId} and from_line_id=${fx.source.id}`)).rows;
-    assert.deepEqual(prior, [{ source_amount: "50.0000", source_transaction_amount: "50.0000" }]);
+    await assert.rejects(
+      withOrgTransaction(fx.orgId, async () => {
+        const receipt = await createPaymentDocument({ orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
+          partyId: fx.employeeId, bankAccountId: fx.bankAccountId, subsidiaryId: fx.subsidiaryId, documentDate: "2026-07-21", currency: "CAD" });
+        await updateDraftPayment(receipt.id, {
+          controlAccountId: fx.source.account_id,
+          allocations: [sameCurrencyAllocation(target.id, "50")],
+          creditAllocations: [{ fromLineId: fx.source.id, toLineId: target.id, amount: "50", sourceDocumentId: fx.input.documentId }],
+        }, fx.actorId, fx.orgId);
+      }),
+      (error: unknown) =>
+        error instanceof PaymentError && /must be a posted customer_credit line/.test(error.message),
+      "a payroll liability line is refused as the credit by name",
+    );
+    const written = (await db.execute<{ id: string }>(sql`
+      select id from applications where org_id=${fx.orgId}
+        and (from_line_id=${fx.source.id} or to_line_id=${fx.source.id} or to_line_id=${target.id})
+        and unapplied_at is null`)).rows;
+    assert.deepEqual(written, [], "the refused set-off writes no application");
     const payment = await recordPayRunPayment({ ...fx.input, bankAccountId: fx.bankAccountId });
-    assert.equal(payment.total, add(neg(fx.source.txn_amount), "-50"));
+    assert.equal(payment.total, neg(fx.source.txn_amount));
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }
