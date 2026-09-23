@@ -234,6 +234,21 @@
     "totalJobCost": "Total job cost",
     "committedHint": "Open purchase-order commitments.",
     "grossProfit": "Gross profit",
+    "pricingMethod": {
+      "contract_field": "Fixed price",
+      "billable_value": "Time & Materials",
+      "not_to_exceed": "Not-to-exceed",
+      "cost_plus": "Cost-plus"
+    },
+    "pricingBasis": {
+      "contract_field": "The saved contract value prices the job",
+      "billable_value": "Billable value of rated work",
+      "not_to_exceed": "Lower of contract value and billable value of rated work",
+      "cost_plus": "Incurred cost plus the project markup"
+    },
+    "unratedWorkNote": "Work without a bill rate is unrated and adds $0 to the billable value.",
+    "contractValueReference": "Contract value (reference)",
+    "contractValueReferenceHint": "The saved reference amount — Total job price follows the basis named above.",
     "crewToday": "Crew today",
     "unknownWorker": "(unknown worker)",
     "sinceTime": "since {since}",

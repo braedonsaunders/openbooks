@@ -234,6 +234,21 @@
     "totalJobCost": "作业总成本",
     "committedHint": "未结采购订单承诺。",
     "grossProfit": "毛利",
+    "pricingMethod": {
+      "contract_field": "固定总价",
+      "billable_value": "工料实报",
+      "not_to_exceed": "封顶价",
+      "cost_plus": "成本加成"
+    },
+    "pricingBasis": {
+      "contract_field": "已保存的合同额即为作业定价",
+      "billable_value": "已定价工作的可开票价值",
+      "not_to_exceed": "合同额与已定价工作可开票价值两者孰低",
+      "cost_plus": "已发生成本加项目加成"
+    },
+    "unratedWorkNote": "没有开票费率的工作为未定价，对可开票价值贡献为 $0。",
+    "contractValueReference": "合同额（参考）",
+    "contractValueReferenceHint": "已保存的参考金额——作业总价遵循上文所述的计价基础。",
     "crewToday": "今日班组",
     "unknownWorker": "（未知工人）",
     "sinceTime": "自{since}",

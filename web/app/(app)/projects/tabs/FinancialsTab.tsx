@@ -11,6 +11,12 @@ import { add, cmp, neg } from '@openbooks/engine/src/money/money.ts'
 interface CategoryRow { category: string; amount: string }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: string }
 
+/** How Total job price is determined — the project type's pricing method. */
+export type PricingMethod = 'contract_field' | 'billable_value' | 'not_to_exceed' | 'cost_plus'
+
+/** Pricing methods whose price is built from rated work (bill rates). */
+export const RATED_WORK_METHODS: ReadonlySet<PricingMethod> = new Set(['billable_value', 'not_to_exceed'])
+
 export interface FinancialsData {
   /** measure key → dollar value (margin_pct is a percentage). */
   measures: Record<string, string | number>
@@ -23,6 +29,10 @@ export interface FinancialsData {
   costBudgetApplies: boolean
   /** Whether statistical overhead is already a component of total job cost. */
   overheadIncludedInTotalCost: boolean
+  /** How Total job price is priced, so the figure names its basis. */
+  pricingMethod: PricingMethod
+  /** The saved Contract value — a reference figure, not the priced total (except for fixed-price types). */
+  contractValue: string
 }
 
 /** Measures that read better as "good when positive, bad when negative". */
@@ -140,15 +150,45 @@ export function FinancialsTab({ data }: {
           <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
             <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.pnlTitle')}</h2>
           </div>
+          {/* Pricing basis: a $0 Total job price is method-consistent for
+              Time & Materials with no rated work yet — but only when the
+              figure names its method and basis next to itself. */}
+          <div className="border-b border-slate-200 px-4 py-2.5 dark:border-slate-800">
+            <p className="text-xs font-medium text-slate-700 dark:text-slate-200">
+              {t(`cockpit.pricingMethod.${data.pricingMethod}` as never)} · {t(`cockpit.pricingBasis.${data.pricingMethod}` as never)}
+            </p>
+            {RATED_WORK_METHODS.has(data.pricingMethod) ? (
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{t('cockpit.unratedWorkNote')}</p>
+            ) : null}
+          </div>
+          {/* Reference Contract value, kept visibly distinct from the priced
+              total. For fixed-price types the two are the same figure, so no
+              second line. */}
+          {data.pricingMethod !== 'contract_field' ? (
+            <div className="flex items-baseline justify-between gap-4 border-b border-slate-200 px-4 py-2 dark:border-slate-800">
+              <div className="min-w-0">
+                <div className="text-sm text-slate-600 dark:text-slate-300">{t('cockpit.contractValueReference')}</div>
+                <div className="text-xs text-slate-400 dark:text-slate-500">{t('cockpit.contractValueReferenceHint')}</div>
+              </div>
+              <div className="shrink-0 text-sm tabular-nums text-slate-700 dark:text-slate-200">{money(data.contractValue)}</div>
+            </div>
+          ) : null}
           <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {visibleLayout.map((line, i) => {
               const v = m[line.measure] ?? 0
               if (shouldHideFinancialLine(line.hideWhenZero === true, v)) return null
+              // Total job price carries its pricing basis (not the generic
+              // contract-price hint): the figure and its method read as one.
+              const lineHint = line.measure === 'total_price'
+                ? t(`cockpit.pricingBasis.${data.pricingMethod}` as never)
+                : line.measure === 'gross_profit'
+                  ? measureHint(line.measure)
+                  : line.variant === 'line' ? measureHint(line.measure) : undefined
               return (
                 <Line
                   key={`${line.measure}-${i}`}
                   label={line.label ?? measureLabel(line.measure)}
-                  hint={line.measure === 'gross_profit' ? measureHint(line.measure) : line.variant === 'line' ? measureHint(line.measure) : undefined}
+                  hint={lineHint}
                   value={fmt(line.measure, v)}
                   variant={line.variant}
                   tone={line.variant === 'total' && line.measure === 'gross_profit'
