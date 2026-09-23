@@ -77,6 +77,33 @@ test("utcDateFromParts keeps the literal year and matches Date.UTC normalization
   assert.throws(() => utcDateFromParts(2026.5, 0, 1), RangeError);
 });
 
+test("utcDateFromParts carries out-of-range time into the date like Date.UTC", () => {
+  // Date.UTC parity for years >= 100, where both spellings are exact.
+  const cases: Array<[number, number, number, number, number, number, number]> = [
+    [2026, 0, 1, 24, 0, 0, 0],
+    [2026, 0, 1, -1, 0, 0, 0],
+    [2026, 0, 1, 0, 1440, 0, 0],
+    [2026, 0, 1, 0, 0, 0, 1500],
+    [2026, 0, 1, 25, 61, 61, 1001],
+    [2026, 11, 31, 24, 0, 0, 0],
+  ];
+  for (const [y, mo, d, h, mi, s, ms] of cases) {
+    assert.equal(
+      utcDateFromParts(y, mo, d, h, mi, s, ms).getTime(),
+      Date.UTC(y, mo, d, h, mi, s, ms),
+    );
+  }
+  // The same carries across the 0099/0100 boundary keep the literal year.
+  assert.equal(
+    utcDateFromParts(99, 11, 31, 24).toISOString().slice(0, 10),
+    "0100-01-01",
+  );
+  assert.equal(
+    utcDateFromParts(100, 0, 1, -1).toISOString().slice(0, 10),
+    "0099-12-31",
+  );
+});
+
 test("civilDateFromParts renders zero-padded YYYY-MM-DD", () => {
   assert.equal(civilDateFromParts(96, 2, 29), "0096-02-29");
   assert.equal(civilDateFromParts(1, 1, 1), "0001-01-01");
