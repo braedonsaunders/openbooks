@@ -95,10 +95,10 @@ async function seedQuebecAccelerated2(): Promise<{ orgId: string; actorId: strin
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, created_by, updated_by)
+       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${randomUUID()}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
             'Quebec withholding', '400.0000', 10, ${liabilityAccountId}, 'commit',
-            ${actorId}, ${actorId})`);
+            ${org.vendorId}, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, actorId, accountId, vendorId: org.vendorId };
 }
 

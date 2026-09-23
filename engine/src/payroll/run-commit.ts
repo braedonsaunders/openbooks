@@ -52,7 +52,15 @@ async function payRunGlLegs(
   orgId: string,
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
-): Promise<{ legs: PayRunGlLeg[]; debitTotal: string; lineLiabilities: { lineId: string; accountId: string }[] }> {
+): Promise<{
+  legs: PayRunGlLeg[];
+  debitTotal: string;
+  lineLiabilities: { lineId: string; accountId: string }[];
+  /** Commit-time remittance destination per accrual line: the component's
+   * vendor AS OF THIS COMMIT. Remittances route by this snapshot, so a
+   * vendor edited afterwards can never re-point committed payroll. */
+  lineDestinations: { lineId: string; partyId: string | null }[];
+}> {
   {
     const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
     const costing = await laborCostingSettings(orgId);
@@ -88,7 +96,7 @@ async function payRunGlLegs(
       select l.id as line_id, s.employee_party_id, l.kind, l.description, l.amount, l.project_id, l.department_id,
              c.system_key, c.country, l.expense_account_id as line_expense_account_id,
              c.expense_account_id as component_expense_account_id,
-             c.liability_account_id, s.net_pay
+             c.liability_account_id, c.remittance_party_id, s.net_pay
         from pay_stub_lines l
         join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
         left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
@@ -127,6 +135,12 @@ async function payRunGlLegs(
     // stamped on the stub line at commit so a later remittance debits the
     // account that was credited, not the component's setup of the day.
     const lineLiabilities: { lineId: string; accountId: string }[] = [];
+    // The vendor each accrual line remits to, frozen the same way: the
+    // component's remittance_party_id AS OF THIS COMMIT. A union agreement's
+    // destination is already folded in — union.ts copies the agreement's
+    // vendor onto its auto-provisioned component — so this one stamp covers
+    // agreement-sourced destinations too.
+    const lineDestinations: { lineId: string; partyId: string | null }[] = [];
     for (const line of stubLines.rows) {
       netByEmployee.set(line.employee_party_id!, line.net_pay!);
       const amount = line.amount!;
@@ -156,6 +170,7 @@ async function payRunGlLegs(
         }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
+        lineDestinations.push({ lineId: line.line_id!, partyId: line.remittance_party_id ?? null });
       } else if (line.kind === "credit") {
         // A refundable credit is reclaimed from the tax authority by paying
         // it less (F24 compensation for IT): debit the same liability the
@@ -170,6 +185,7 @@ async function payRunGlLegs(
         }
         accumulate(liability, amount, line.description ?? "Credit");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
+        lineDestinations.push({ lineId: line.line_id!, partyId: line.remittance_party_id ?? null });
       } else {
         const liability = line.liability_account_id ?? statutoryLiability(line.system_key ?? null, line.country ?? null);
         if (!liability) {
@@ -189,6 +205,7 @@ async function payRunGlLegs(
         });
         accumulate(liability, neg(amount), line.description ?? "Employer burden");
         lineLiabilities.push({ lineId: line.line_id!, accountId: liability });
+        lineDestinations.push({ lineId: line.line_id!, partyId: line.remittance_party_id ?? null });
       }
     }
     for (const [employeePartyId, net] of netByEmployee) {
@@ -198,7 +215,7 @@ async function payRunGlLegs(
     const total = sum([...legs.values()].map((l) => l.amount));
     if (cmp(total, "0") !== 0) throw new PayrollError(`pay run GL projection is unbalanced (${total})`);
     const debitTotal = sum([...legs.values()].filter((l) => cmp(l.amount, "0") > 0).map((l) => l.amount));
-    return { legs: [...legs.values()], debitTotal, lineLiabilities };
+    return { legs: [...legs.values()], debitTotal, lineLiabilities, lineDestinations };
   }
 }
 
@@ -463,7 +480,7 @@ export async function commitPayRun(input: {
       }
     }
 
-    const { legs, debitTotal, lineLiabilities } = await payRunGlLegs(
+    const { legs, debitTotal, lineLiabilities, lineDestinations } = await payRunGlLegs(
       tx,
       orgId,
       documentId,
@@ -472,16 +489,27 @@ export async function commitPayRun(input: {
     // Freeze the credited liability account on every deduction/contribution
     // line (migration 0094): remittance reads the snapshot, so editing the
     // component's account afterwards can never restate a committed period.
+    // The remittance destination freezes in the same write (migration 0296):
+    // the vendor the line accrued to, so a vendor edited afterwards can
+    // never re-point committed payroll at a new payee. The RETURNING count
+    // is the write's own receipt — a stamp that matches zero rows is a
+    // failure, not a success.
     if (lineLiabilities.length > 0) {
-      await tx.execute(sql`
+      const stamped = (await tx.execute<{ id: string }>(sql`
         update pay_stub_lines l
            set liability_account_id = stamp.account_id, liability_account_source = 'commit',
+               remittance_party_id = nullif(stamp.party_text, '')::uuid,
                updated_by = ${actorId}, updated_at = now()
           from unnest(${`{${lineLiabilities.map((x) => x.lineId).join(",")}}`}::uuid[],
-                      ${`{${lineLiabilities.map((x) => x.accountId).join(",")}}`}::uuid[])
-               as stamp(line_id, account_id)
+                      ${`{${lineLiabilities.map((x) => x.accountId).join(",")}}`}::uuid[],
+                      ${`{${lineDestinations.map((x) => `"${x.partyId ?? ""}"`).join(",")}}`}::text[])
+               as stamp(line_id, account_id, party_text)
          where l.org_id = ${orgId} and l.id = stamp.line_id
-      `);
+        returning l.id::text as id
+      `));
+      if (stamped.rows.length !== lineLiabilities.length) {
+        throw new PayrollError("pay run commit could not stamp its liability history — recalculate and commit again");
+      }
     }
 
     // An approved pay run commits after its release (migration 0145): the

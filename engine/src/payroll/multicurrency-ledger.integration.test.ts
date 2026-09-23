@@ -23,6 +23,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type MixedFixture = {
   orgId: string;
   actorId: string;
+  vendorId: string;
   rootSub: string;
   eurSub: string;
   liability: string;
@@ -79,7 +80,7 @@ async function seedMixedOrg(): Promise<MixedFixture> {
        remittance_party_id, sequence, country, created_by, updated_by)
     values (${component}, ${orgId}, ${`MIX-${component.slice(0, 6)}`}, 'Test withholding', 'deduction',
             'income_tax', ${liability}, ${org.vendorId}, 10, 'GB', ${actorId}, ${actorId})`);
-  return { orgId, actorId, rootSub, eurSub, liability, component, septPeriod, control };
+  return { orgId, actorId, vendorId: org.vendorId, rootSub, eurSub, liability, component, septPeriod, control };
 }
 
 async function addCommittedRun(
@@ -125,9 +126,9 @@ async function addCommittedRun(
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, created_by, updated_by)
+       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${lineId}, ${fx.orgId}, ${stubId}, ${fx.component}, 'deduction', 'Test withholding',
-            ${input.gross}, 10, ${fx.liability}, 'commit', ${fx.actorId}, ${fx.actorId})`);
+            ${input.gross}, 10, ${fx.liability}, 'commit', ${fx.vendorId}, ${fx.actorId}, ${fx.actorId})`);
   return documentId;
 }
 
