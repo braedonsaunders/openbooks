@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../lib/features'
+import { checkProjectsWriteEnabled, isFeatureEnabled } from '../../../lib/features'
 import { isUuid } from '../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
@@ -260,7 +260,7 @@ async function save(req: Request) {
   // genuinely new lines insert. Only editable (draft/rejected) entries are
   // ever deleted — approved and submitted entries are left intact so a save
   // never silently overwrites an approval (or an in-flight submission).
-  await withOrgTransaction(orgId, async () => {
+  const projectsRefused = await withOrgTransaction(orgId, async () => {
     const tx = db
     // When approval is not required, saved entries land already approved, so
     // the replaceable set has to include those too — otherwise every save
@@ -393,6 +393,14 @@ async function save(req: Request) {
       }
       toInsert.push(p)
     }
+    // Project-carrying lines are Projects disable-blockers (open project
+    // time), so a disable racing this save must refuse one side or the
+    // other. Fenced inside the write transaction, and only when the save
+    // actually inserts project lines: replays and deletions need no gate.
+    // True escapes the transaction as a refusal; the route answers below.
+    if (toInsert.some((p) => p.projectId != null) && !(await checkProjectsWriteEnabled(orgId, tx))) {
+      return true
+    }
     const deleteIds = Array.from(replaceableIds.values()).flat()
     if (deleteIds.length > 0) {
       await tx.execute(sql`
@@ -422,7 +430,9 @@ async function save(req: Request) {
     // Effects run only for freshly inserted lines: replayed lines already
     // carry theirs.
     if (newStatus === 'approved') await runTimeApprovalEffects(orgId, user.id, savedIds)
+    return false
   })
+  if (projectsRefused) return bad('Projects feature is disabled')
 
   const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)

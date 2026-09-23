@@ -3,6 +3,7 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import pg from 'pg'
 import type { SessionUser } from '../../../lib/auth'
 
 const root = pathToFileURL(process.cwd() + '/').href
@@ -242,6 +243,51 @@ test('a foreign reference custom value cannot be saved on a time row', { skip: !
     assert.equal((await f.snapshot()).rows.length, 1)
   } finally {
     await dropScratchOrgReporting(foreign.orgId)
+    await f.close()
+  }
+})
+
+test('a project save racing a Projects disable loses and stores nothing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Steady state never reaches the write transaction (timeTracking's parent
+  // gate refuses at entry), so this parks a disable mid-flight: the entry
+  // guard still sees Projects on while the staged flag write holds the org
+  // row exclusively. The save must wait on the fence, then refuse once the
+  // disable commits — never land project lines first.
+  const f = await fixture(true)
+  const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL })
+  let pending: Promise<Response> | undefined
+  try {
+    await writer.connect()
+    await writer.query('begin')
+    await writer.query("select set_config('app.bypass_rls','on',true)")
+    await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [f.org.orgId])
+    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
+    pending = f.save({})
+    pending.catch(() => {})
+    let blocked = false
+    const deadline = Date.now() + 10000
+    while (Date.now() < deadline) {
+      await writer.query('select pg_stat_clear_snapshot()')
+      const row = (await writer.query<{ blocked: boolean }>(
+        'select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked',
+        [pid],
+      )).rows[0]!
+      if (row.blocked) {
+        blocked = true
+        break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+    assert.ok(blocked, 'the save must wait on the feature fence while the disable holds the org row')
+    await writer.query('commit')
+    const response = await pending
+    assert.equal(response.status, 422, await response.clone().text())
+    assert.equal(((await response.json()) as { error: string }).error, 'Projects feature is disabled')
+    assert.equal((await f.snapshot()).rows.length, 0, 'the losing save inserts no project lines')
+  } finally {
+    await writer.query('rollback').catch(() => {})
+    await writer.end()
+    await pending?.catch(() => {})
     await f.close()
   }
 })
