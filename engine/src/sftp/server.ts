@@ -29,10 +29,25 @@ export interface SftpServerConfig {
 }
 
 export interface SftpResolver {
-  /** Return the server config if the password authenticates this login. */
+  /**
+   * Return the server config if the password authenticates this login.
+   * Side-effect free: matching must not record anything — the daemon calls
+   * loginSucceeded only after the session is accepted.
+   */
   password(username: string, password: string): Promise<SftpServerConfig | null>;
-  /** Return the server config if the public key authenticates this login. */
+  /**
+   * Return the server config if the public key authenticates this login.
+   * Side-effect free, and called for the UNSIGNED probe as well as the
+   * signed attempt: matching alone never records a connection.
+   */
   publicKey?(username: string, keyAlgo: string, keyData: Buffer): Promise<SftpServerConfig | null>;
+  /**
+   * Record a successful login (e.g. last-connected bookkeeping). Called at
+   * most once per connection, only after ctx.accept of a VERIFIED attempt —
+   * never for an unsigned probe and never for a rejected signature. A throw
+   * rejects the login instead of accepting an unrecorded session.
+   */
+  loginSucceeded?(config: SftpServerConfig): Promise<void>;
 }
 
 interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
@@ -71,20 +86,36 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
     let config: SftpServerConfig | null = null;
     client.on("authentication", async (ctx) => {
       try {
-        if (ctx.method === "password") config = await opts.resolve.password(ctx.username, ctx.password);
-        else if (ctx.method === "publickey" && opts.resolve.publicKey) {
+        if (ctx.method === "password") {
+          config = await opts.resolve.password(ctx.username, ctx.password);
+          // The password check already proved possession; record the login
+          // before accepting, so a bookkeeping failure rejects instead of
+          // accepting an unrecorded session.
+          if (config) {
+            try { await opts.resolve.loginSucceeded?.(config); }
+            catch { config = null; }
+          }
+        } else if (ctx.method === "publickey" && opts.resolve.publicKey) {
           config = await opts.resolve.publicKey(ctx.username, ctx.key.algo, ctx.key.data);
           if (config) {
+            // The unsigned probe only asks whether the key would be
+            // accepted: it must never record a connection. Anyone holding
+            // the public username and key can send one without the private
+            // key, and the signed attempt that follows may still fail.
             if (ctx.signature === undefined) return ctx.accept(); // pubkey probe
 
             // ssh2 deliberately leaves public-key signature verification to the
             // application.  The resolver only establishes that this public key
             // is authorized; the signed request must still prove possession of
-            // the corresponding private key before the session is accepted.
+            // the corresponding private key before the session is accepted —
+            // and only that verified accept records the connection.
             const parsedKey = utils.parseKey(ctx.key.data);
             if (parsedKey instanceof Error || !ctx.blob
                 || parsedKey.verify(ctx.blob, ctx.signature, ctx.hashAlgo) !== true) {
               config = null;
+            } else {
+              try { await opts.resolve.loginSucceeded?.(config); }
+              catch { config = null; }
             }
           }
         }

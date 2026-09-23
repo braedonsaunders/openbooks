@@ -17,7 +17,7 @@ import {
   withOrgContext,
 } from "../platform/db.ts";
 import { dbResolver, encryptSecret } from "./manager.ts";
-import { generateHostKey } from "./server.ts";
+import { generateHostKey, startSftpServer, type SftpServerConfig } from "./server.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -40,6 +40,7 @@ interface LoginSeed {
   usernameB: string;
   serverB: string;
   keyB: ssh2.ParsedKey;
+  keyBPem: string;
 }
 
 async function seedTwoTenants(): Promise<LoginSeed> {
@@ -50,7 +51,8 @@ async function seedTwoTenants(): Promise<LoginSeed> {
   const passwordA = `pw-${randomUUID()}`;
   const serverA = randomUUID();
   const serverB = randomUUID();
-  const keyB = parsePrivate(generateHostKey());
+  const keyBPem = generateHostKey();
+  const keyB = parsePrivate(keyBPem);
   await withBypass(async () => {
     await db.execute(sql`
       insert into sftp_servers (id, org_id, name, username, password_encrypted, backend, bucket, root_prefix, is_active)
@@ -61,7 +63,7 @@ async function seedTwoTenants(): Promise<LoginSeed> {
       values (${serverB}, ${orgB.orgId}, 'M42 F1 key login', ${usernameB}, ${openSshLine(keyB)}, 'local', null, ${`sftp/${orgB.orgId}/m42-f1`}, true)
     `);
   });
-  return { orgA, orgB, usernameA, passwordA, serverA, usernameB, serverB, keyB };
+  return { orgA, orgB, usernameA, passwordA, serverA, usernameB, serverB, keyB, keyBPem };
 }
 
 async function lastConnectedAt(serverId: string): Promise<string | null> {
@@ -105,7 +107,13 @@ test(
         assert.ok(byPassword, "valid password login must succeed with no ambient org");
         assert.equal(byPassword.orgId, s.orgA.orgId);
         assert.equal(byPassword.id, s.serverA);
-        assert.ok(await lastConnectedAt(s.serverA), "a successful login records last_connected_at");
+        assert.equal(
+          await lastConnectedAt(s.serverA),
+          null,
+          "matching alone must not record a connection (F13: side-effect-free resolver)",
+        );
+        await dbResolver.loginSucceeded!(byPassword);
+        assert.ok(await lastConnectedAt(s.serverA), "a verified login records last_connected_at");
         assert.equal(
           await lastConnectedAt(s.serverB),
           null,
@@ -116,6 +124,13 @@ test(
         assert.ok(byKey, "valid key login must succeed with no ambient org");
         assert.equal(byKey.orgId, s.orgB.orgId);
         assert.equal(byKey.id, s.serverB);
+        assert.equal(
+          await lastConnectedAt(s.serverB),
+          null,
+          "a matched-but-unverified key must not record a connection",
+        );
+        await dbResolver.loginSucceeded!(byKey);
+        assert.ok(await lastConnectedAt(s.serverB), "a verified key login records last_connected_at");
 
         const touchedA = await lastConnectedAt(s.serverA);
         const touchedB = await lastConnectedAt(s.serverB);
@@ -168,14 +183,113 @@ test(
         const byKey = await dbResolver.publicKey?.(s.usernameB, s.keyB.type, s.keyB.getPublicSSH());
         assert.ok(byKey, "tenant B key login must succeed inside tenant A's ambient scope");
         assert.equal(byKey.orgId, s.orgB.orgId);
+        await dbResolver.loginSucceeded!(byKey);
         const byPassword = await dbResolver.password(s.usernameA, s.passwordA);
         assert.ok(byPassword, "tenant A password login must succeed inside its own ambient scope");
+        await dbResolver.loginSucceeded!(byPassword);
       });
       await withoutAmbientScope(async () => {
         assert.ok(await lastConnectedAt(s.serverA), "tenant A touch landed on exactly its row");
         assert.ok(await lastConnectedAt(s.serverB), "tenant B touch landed on exactly its row");
       });
     } finally {
+      await dropScratchOrg(s.orgA.orgId);
+      await dropScratchOrg(s.orgB.orgId);
+    }
+  },
+);
+
+test(
+  "recording a login for a vanished server row fails instead of reporting success",
+  { skip: !DB },
+  async () => {
+    const s = await seedTwoTenants();
+    try {
+      const byPassword = await dbResolver.password(s.usernameA, s.passwordA);
+      assert.ok(byPassword);
+      const stale: SftpServerConfig = { ...byPassword, id: randomUUID() };
+      // A write matching zero rows is a failure, not a success: the row was
+      // deleted or deactivated (or RLS denies it) between match and record.
+      await assert.rejects(
+        () => dbResolver.loginSucceeded!(stale),
+        /no longer present in its organization/,
+      );
+      assert.equal(await lastConnectedAt(s.serverA), null);
+    } finally {
+      await dropScratchOrg(s.orgA.orgId);
+      await dropScratchOrg(s.orgB.orgId);
+    }
+  },
+);
+
+function sshConnect(port: number, auth: Record<string, unknown>): Promise<import("ssh2").Client> {
+  return new Promise((resolveClient, reject) => {
+    const client = new ssh2.Client();
+    let settled = false;
+    client.on("error", (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    client.once("ready", () => {
+      settled = true;
+      resolveClient(client);
+    });
+    client.connect({ host: "127.0.0.1", port, hostVerifier: () => true, ...auth });
+  });
+}
+
+test(
+  "a boot-started server accepts verified credentials and records only verified logins",
+  { skip: !DB },
+  async () => {
+    const s = await seedTwoTenants();
+    const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: dbResolver });
+    try {
+      await withoutAmbientScope(async () => {
+        // Invalid password: rejected, nothing recorded.
+        await assert.rejects(
+          sshConnect(server.port, { username: s.usernameA, password: `wrong-${s.passwordA}` }),
+          /All configured authentication methods failed|authentication/i,
+        );
+        assert.equal(await lastConnectedAt(s.serverA), null);
+
+        // Valid password: accepted and exactly its row recorded.
+        const passwordClient = await sshConnect(server.port, { username: s.usernameA, password: s.passwordA });
+        passwordClient.end();
+        assert.ok(await lastConnectedAt(s.serverA), "a verified password login updates exactly its row");
+        assert.equal(await lastConnectedAt(s.serverB), null);
+
+        // Bad signature: the unsigned probe is accepted but the signed
+        // attempt is rejected — and neither records a connection. The
+        // presented key is the registered one; only its signature is forged
+        // (same shape as the server unit test's invalid-signature case).
+        const badKey = parsePrivate(s.keyBPem);
+        badKey.sign = () => Buffer.alloc(64);
+        await assert.rejects(
+          sshConnect(server.port, {
+            username: s.usernameB,
+            authHandler: [{ type: "publickey", username: s.usernameB, key: badKey }],
+          }),
+          /All configured authentication methods failed|authentication/i,
+        );
+        assert.equal(
+          await lastConnectedAt(s.serverB),
+          null,
+          "an unsigned probe and a bad signature leave last_connected_at unchanged",
+        );
+
+        // Valid signature: accepted and exactly its row recorded.
+        const keyClient = await sshConnect(server.port, {
+          username: s.usernameB,
+          authHandler: [{ type: "publickey", username: s.usernameB, key: s.keyB }],
+        });
+        keyClient.end();
+        assert.ok(await lastConnectedAt(s.serverB), "a verified signature updates exactly its row");
+      });
+    } finally {
+      await server.close();
       await dropScratchOrg(s.orgA.orgId);
       await dropScratchOrg(s.orgB.orgId);
     }
