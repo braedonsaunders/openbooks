@@ -1658,7 +1658,10 @@
     "requestCancel": "Abbrechen",
     "requestStatus": {
       "open": "Offen"
-    }
+    },
+    "emptyTitle": "Noch keine Vergütung hinterlegt",
+    "emptyDescription": "Für Sie sind noch keine Bandeinordnung und keine Abrechnung hinterlegt. Fordern Sie unten Ihre Entgeltinformation an — die Personalabteilung antwortet darauf.",
+    "notLinked": "mit dieser Anmeldung ist keine Person verknüpft — bitten Sie einen Administrator, Ihre Person unter Admin → Users → Link person zu verknüpfen, bevor Sie den Self-Service verwenden"
   },
   "qualifications": {
     "title": "Qualifikationen",
