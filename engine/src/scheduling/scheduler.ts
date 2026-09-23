@@ -204,7 +204,11 @@ async function dispatchScriptOccurrence(
     return;
   }
   try {
-    const outcome = await withOrgContext(occ.orgId, () => runScheduledScript(occ.scriptId, occ.orgId));
+    const outcome = await withOrgContext(occ.orgId, () => runScheduledScript(occ.scriptId, occ.orgId, {
+      // The tick's own stable identity: a recovery retry of this occurrence
+      // reuses the run's journal idempotency namespace.
+      idempotencyScope: occ.occurrenceKey,
+    }));
     await finalizeOccurrence(
       occ.id,
       outcome.status,

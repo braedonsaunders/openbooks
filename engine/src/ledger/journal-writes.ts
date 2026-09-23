@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { db, schema, withOrgTransaction } from "../platform/db.ts";
+import { db, orgContext, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
@@ -76,6 +76,25 @@ export interface CreateScriptJournalOptions {
    * (never assumed unrestricted); an actor-less system caller is unrestricted.
    */
   allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  /**
+   * Dedupe identity for one script-run write: the run namespace plus the
+   * journal.create call ordinal within that run. When present the draft
+   * insert runs ON CONFLICT DO NOTHING on (org_id, idempotency_key) and a
+   * conflicting retry reads back the first execution's document instead of
+   * posting a second numbered journal. Omitted = no dedupe (non-script
+   * callers, and script runs with no stable retry identity).
+   */
+  idempotencyKey?: string;
+  /**
+   * Wall-clock deadline (ms epoch) of the enclosing script run. The write
+   * transaction is fenced to it: a run that already exceeded its deadline
+   * refuses before starting, and a transaction this call owns carries
+   * SET LOCAL statement_timeout = remaining budget, so PostgreSQL itself
+   * aborts statements still running past the deadline instead of letting
+   * them commit after the host reported a timeout. Omitted = unfenced
+   * (non-script callers keep the pool's own bounds).
+   */
+  deadlineMs?: number;
 }
 
 export interface ScriptJournalResult {
@@ -198,10 +217,46 @@ export function validateJournalInput(input: ScriptJournalInput): {
 }
 
 /**
+ * Whether the caller's tenant transaction is already open: withOrgTransaction
+ * joins it instead of beginning a new one (same condition as that helper —
+ * an ambient pinned txDb for this org). A joined caller owns the transaction,
+ * so this write must not re-fence it with SET LOCAL.
+ */
+function joinsAmbientTenantTransaction(orgId: string): boolean {
+  const active = orgContext.getStore();
+  return !!active?.txDb && !active.bypass && active.orgId === orgId;
+}
+
+/**
+ * Bound the current transaction's statements to the script run's remaining
+ * budget. Refuses outright when the deadline already passed (a lock held
+ * past the deadline must resolve into a refusal, never into a late commit).
+ * Transaction-local: the setting dies with the transaction, so a pooled
+ * connection can never leak a shortened timeout into later work.
+ */
+async function fenceTransactionToDeadline(
+  executor: Pick<SqlExecutor, "execute">,
+  deadlineMs: number,
+): Promise<void> {
+  if (Date.now() >= deadlineMs) {
+    throw new JournalWriteError("journal.create: script run deadline exceeded");
+  }
+  const remaining = Math.max(1, Math.floor(deadlineMs - Date.now()));
+  await executor.execute(sql`select set_config('statement_timeout', ${String(remaining)}, true)`);
+}
+
+/**
  * Insert the numbered draft documents row + lines. Runs inside whatever
  * transaction owns the operation: standalone for draft-only requests, or
  * joined into the caller's pinned tenant transaction for post:true (db routes
  * to the transaction connection inside withOrgTransaction).
+ *
+ * With an idempotencyKey the header insert is ON CONFLICT DO NOTHING on the
+ * partial (org_id, idempotency_key) index and a conflicting retry reads back
+ * the winner's row. The DO NOTHING is load-bearing dedupe, not a dropped
+ * write: a conflict is only possible when this exact script write already
+ * committed, and the follow-up SELECT makes that row the returned effect —
+ * every conflict is therefore observed, never swallowed.
  */
 async function insertScriptDraft(
   orgId: string,
@@ -210,19 +265,58 @@ async function insertScriptDraft(
   v: ReturnType<typeof validateJournalInput>,
   byCode: Map<string, string>,
   actorId: string | null,
-): Promise<{ id: string; documentNumber: string }> {
+  idempotencyKey?: string,
+  deadlineMs?: number,
+): Promise<{ id: string; documentNumber: string; deduped: boolean }> {
   return db.transaction(async (tx) => {
+    // Fence the write to the script run's remaining budget — unless this
+    // draft nests inside the caller's own transaction (post:true path, or an
+    // ambient tenant unit), which the caller fenced already. SET LOCAL dies
+    // with the transaction, so the pool's 120 s bound is restored after.
+    if (deadlineMs !== undefined && !joinsAmbientTenantTransaction(orgId)) {
+      await fenceTransactionToDeadline(tx, deadlineMs);
+    }
+    if (idempotencyKey !== undefined) {
+      const existing = (await tx.execute<{ id: string; document_number: string }>(sql`
+        select id, document_number from documents
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
+      if (existing.rows[0]) {
+        return {
+          id: String(existing.rows[0].id),
+          documentNumber: String(existing.rows[0].document_number),
+          deduped: true,
+        };
+      }
+    }
     // JE- sequence via the ONE canonical allocator (engine/src/records/numbering.ts).
     const documentNumber = await allocateDocumentNumber(tx, orgId, "journal", "JE-");
 
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
-                             memo, reference_number, subtotal, tax_total, total, created_by, custom)
+                             memo, reference_number, subtotal, tax_total, total, created_by, custom,
+                             idempotency_key)
       values (${orgId}, 'journal', ${documentNumber}, ${subsidiaryId}, ${v.documentDate}, ${currency},
               ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId},
-              ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb)
+              ${JSON.stringify(actorId ? {} : SYSTEM_PROVENANCE)}::jsonb, ${idempotencyKey ?? null})
+      on conflict (org_id, idempotency_key) where idempotency_key is not null do nothing
       returning id`));
-    const id = String(ins.rows[0]!.id);
+    const won = ins.rows[0];
+    if (!won) {
+      // A concurrent identical write won the race: return its document rather
+      // than a second numbered journal. The conflict above is the proof the
+      // row exists — a zero-row read here is a failure, not a success.
+      const raced = (await tx.execute<{ id: string; document_number: string }>(sql`
+        select id, document_number from documents
+         where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
+      const row = raced.rows[0];
+      if (!row) {
+        throw new JournalWriteError(
+          "journal.create collided on its idempotency key but the winning row is not visible; retry the script run",
+        );
+      }
+      return { id: String(row.id), documentNumber: String(row.document_number), deduped: true };
+    }
+    const id = String(won.id);
 
     for (let i = 0; i < v.lines.length; i++) {
       const l = v.lines[i]!;
@@ -234,7 +328,7 @@ async function insertScriptDraft(
                 '1', ${l.amount}, ${l.amount}, ${l.departmentId}, ${l.projectId}, '{}')`);
     }
     const num = (await tx.execute<{ document_number: string }>(sql`select document_number from documents where id = ${id} and org_id = ${orgId}`));
-    return { id, documentNumber: String(num.rows[0]!.document_number) };
+    return { id, documentNumber: String(num.rows[0]!.document_number), deduped: false };
   });
 }
 
@@ -342,6 +436,29 @@ async function resolveScriptJournalSubsidiary(
  * A null actor (scheduled/bulk script) posts under explicit system provenance;
  * an interactive actor is retained on created_by and every evidence row.
  */
+/**
+ * Read back the document a previous identical script write committed, so a
+ * retry observes the first execution's outcome instead of posting a second
+ * numbered journal. The key row exists only if its whole unit committed, so
+ * the live status/posted entry is the truthful result to return: a posted
+ * retry reports its entry, an approval-gated one reports pending, anything
+ * else reports the draft pointer.
+ */
+async function findScriptJournalByKey(
+  orgId: string,
+  idempotencyKey: string,
+): Promise<ScriptJournalResult | null> {
+  const r = (await db.execute<{ id: string; document_number: string; status: string; posted_entry_id: string | null }>(sql`
+    select id, document_number, status, posted_entry_id from documents
+     where org_id = ${orgId} and idempotency_key = ${idempotencyKey}`));
+  const row = r.rows[0];
+  if (!row) return null;
+  const base = { id: String(row.id), documentNumber: String(row.document_number) };
+  if (row.posted_entry_id) return { ...base, entryId: String(row.posted_entry_id) };
+  if (row.status === "pending_approval") return { ...base, approvalPending: true };
+  return base;
+}
+
 export async function createScriptJournal(
   orgId: string,
   actorId: string | null,
@@ -396,6 +513,14 @@ export async function createScriptJournal(
     }
   }
 
+  // The deadline fence starts before any write: a run that already exceeded
+  // its budget must not begin a journal it can no longer report truthfully.
+  // (The host also checks this before invoking, but createScriptJournal is a
+  // public boundary — App backends and future callers get the same refusal.)
+  if (opts.deadlineMs !== undefined && Date.now() >= opts.deadlineMs) {
+    throw new JournalWriteError("journal.create: script run deadline exceeded");
+  }
+
   const { subsidiaryId, baseCurrency } = await resolveScriptJournalSubsidiary(
     orgId,
     actorId,
@@ -403,10 +528,22 @@ export async function createScriptJournal(
     opts.allowedSubsidiaryIds,
   );
 
+  // A retry presenting an already-committed key observes the first
+  // execution's document instead of posting a second numbered journal. The
+  // row exists only if its whole unit committed (draft-only or post), so its
+  // current status is the truthful outcome to return.
+  if (opts.idempotencyKey !== undefined) {
+    const prior = await findScriptJournalByKey(orgId, opts.idempotencyKey);
+    if (prior) return prior;
+  }
+
   if (!opts.post) {
     // A committed draft IS the documented successful outcome of a draft-only
     // request; it stands alone in its own transaction.
-    return insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId);
+    const { deduped: _deduped, ...draft } = await insertScriptDraft(
+      orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs,
+    );
+    return draft;
   }
 
   // post:true is ONE atomic unit: the numbered draft, its approval submission,
@@ -415,8 +552,35 @@ export async function createScriptJournal(
   // period) leave a hidden orphan journal behind. An actor-less scheduled
   // script now posts under explicit system provenance instead of being
   // refused only after its draft had already been committed.
-  const outcome = await withOrgTransaction(orgId, async () => {
-    const docId = await insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId);
+  const owned = !joinsAmbientTenantTransaction(orgId);
+  type PostOutcome =
+    | { approvalPending: true; docId: ScriptJournalResult }
+    | { approvalPending: false; entryId: unknown; docId: ScriptJournalResult }
+    | { deduped: true; live: ScriptJournalResult };
+  const outcome: PostOutcome = await withOrgTransaction(orgId, async (): Promise<PostOutcome> => {
+    // Fence the whole post unit (draft + submission + entry) to the run's
+    // remaining budget when this call owns the transaction. A joined ambient
+    // unit belongs to its outer flow and must not be re-fenced from here.
+    if (owned && opts.deadlineMs !== undefined) {
+      await fenceTransactionToDeadline(db, opts.deadlineMs);
+    }
+    const docId = await insertScriptDraft(orgId, subsidiaryId, baseCurrency, v, byCode, actorId, opts.idempotencyKey, opts.deadlineMs);
+    // A deduped draft is another execution's committed unit: re-submitting
+    // or re-posting it here would double-apply the first run's document.
+    // Return its live outcome; the pre-unit read usually catches this first
+    // and this branch covers the commit that landed between that read and
+    // this insert.
+    if (docId.deduped) {
+      const live = await findScriptJournalByKey(orgId, opts.idempotencyKey!);
+      if (!live) {
+        throw new JournalWriteError(
+          "journal.create collided on its idempotency key but the winning row is not visible; retry the script run",
+        );
+      }
+      // The live row carries its own entry/pending mapping; resubmitting it
+      // here would double-apply the first run's document.
+      return { deduped: true as const, live };
+    }
     const submission = await submitAndReleaseIfUngated(
       "journal",
       docId.id,
@@ -436,6 +600,7 @@ export async function createScriptJournal(
     );
     return { approvalPending: false as const, entryId, docId };
   });
+  if ("deduped" in outcome) return outcome.live;
   if (outcome.approvalPending) return { ...outcome.docId, approvalPending: true };
   // Effects fire after the atomic commit: after_post automation may itself
   // post journals and must never nest inside this unit. The posting
