@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import { businessToday, daysInCivilMonth, utcDateFromParts } from "../../platform/business-date.ts";
 import {
   loadApprovalPerson,
   loadManagedEmploymentIds,
@@ -872,8 +872,10 @@ export async function getRetentionOverview(args: {
 /** Shift a civil date by whole months, clamped to month end. */
 function shiftMonths(date: string, months: number): string {
   const [y, m, d] = date.split("-").map(Number);
-  const dt = new Date(Date.UTC(y!, m! - 1 + months, 1));
-  const lastDay = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth() + 1, 0)).getUTCDate();
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the clamp-then-setUTCDate shape is unchanged.
+  const dt = utcDateFromParts(y!, m! - 1 + months, 1);
+  const lastDay = daysInCivilMonth(dt.getUTCFullYear(), dt.getUTCMonth() + 1);
   dt.setUTCDate(Math.min(d!, lastDay));
   return dt.toISOString().slice(0, 10);
 }

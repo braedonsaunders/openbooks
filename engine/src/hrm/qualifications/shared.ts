@@ -1,4 +1,5 @@
 import { db, type SqlExecutor } from "../../platform/db.ts";
+import { daysInCivilMonth } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmQualificationError } from "./errors.ts";
 
@@ -139,8 +140,11 @@ export function addMonthsUtc(ymd: string, months: number): string {
   const total = m - 1 + months;
   const year = y + Math.floor(total / 12);
   const month = (total % 12) + 1;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the year renders zero-padded so the YYYY-MM-DD contract
+  // holds below year 1000 too.
+  const lastDay = daysInCivilMonth(year, month);
   const day = Math.min(d, lastDay);
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${year}-${pad(month)}-${pad(day)}`;
+  return `${String(year).padStart(4, "0")}-${pad(month)}-${pad(day)}`;
 }

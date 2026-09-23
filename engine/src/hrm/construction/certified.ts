@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../../platform/business-date.ts";
+import { addCalendarDays, businessToday, utcDateFromParts } from "../../platform/business-date.ts";
 import { HrmConstructionError } from "./errors.ts";
 import { requireHrmConstructionManage, requireHrmConstructionRead } from "../authorization.ts";
 import { classificationAsOf } from "./classifications.ts";
@@ -96,10 +96,9 @@ export async function constructionCarveOuts(
 }
 
 function weekStartOf(weekEnding: string): string {
-  const [y, m, d] = weekEnding.split("-").map(Number);
-  const end = new Date(Date.UTC(y!, m! - 1, d!));
-  const start = new Date(end.getTime() - 6 * 86_400_000);
-  return start.toISOString().slice(0, 10);
+  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
+  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  return addCalendarDays(weekEnding, -6);
 }
 
 interface PayloadBuild {
@@ -661,10 +660,12 @@ export async function projectComplianceSummary(
 
 /** Sunday closing the week that holds the given day. */
 function weekEndingSunday(iso: string): string {
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the weekday read is identical either way.
   const [y, m, d] = iso.split("-").map(Number);
-  const date = new Date(Date.UTC(y!, m! - 1, d!));
+  const date = utcDateFromParts(y!, m! - 1, d!);
   const add = (7 - date.getUTCDay()) % 7;
-  return new Date(date.getTime() + add * 86_400_000).toISOString().slice(0, 10);
+  return addCalendarDays(iso, add);
 }
 
 /** Download the frozen rendered file — the payload's copy, never a re-render. */
