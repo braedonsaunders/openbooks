@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   ALLOWLIST,
   isAllowlisted,
+  isEscapeClass,
   regexLiterals,
   scanFile,
   scanTree,
@@ -62,4 +63,31 @@ test("an allowlisted literal is suppressed only with its reason on record", () =
 test("the live repository has no unallowlisted double-backslash test regexes", () => {
   const findings = scanTree();
   assert.deepEqual(findings, [], `${findings.length} suspect regexes:\n${findings.map((finding) => `${finding.file}:${finding.line} [${finding.origin}] ${finding.snippet}`).join("\n")}`);
+});
+
+test("the escapeRegExp idiom is recognised by shape, in any file, without an allowlist entry", () => {
+  assert.equal(isEscapeClass("[.*+?^${}()|[\\]\\\\]"), true);
+  assert.equal(isEscapeClass("[.*+?${}()|[\\]\\\\]"), true, "the variant without ^");
+  const dir = mkdtempSync(join(tmpdir(), "openbooks-regex-escapes-"));
+  try {
+    const file = join(dir, "fresh.test.ts");
+    const text = `const escaped = name.replace(/[.*+?^\${}()|[\\]\\\\]/g, "\\\\$&");\n`;
+    writeFileSync(file, text);
+    // Seen, then exempted: an empty result from a scan that never found the
+    // literal would pass this test for the wrong reason.
+    assert.deepEqual(regexLiterals(text).map((entry) => entry.pattern), ["[.*+?^${}()|[\\]\\\\]"]);
+    assert.deepEqual(scanFile(file, dir), [], "a new file using the idiom needs no allowlist entry");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  assert.ok(
+    !ALLOWLIST.some((entry) => /escapeRegExp/i.test(entry.reason)),
+    "the idiom is exempt by shape; a per-file entry for it would only hide a new use",
+  );
+});
+
+test("a backslash in a short or mixed class is still checked", () => {
+  assert.equal(isEscapeClass("[\\\\.]"), false, "a two-member class may be a mis-escape");
+  assert.equal(isEscapeClass("[a\\\\]"), false, "a class with a non-metacharacter is not the idiom");
+  assert.equal(isEscapeClass("\\\\d"), false, "outside a class, a double backslash is the vacuous case");
 });
