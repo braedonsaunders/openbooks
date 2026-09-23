@@ -77,9 +77,21 @@ export const recognitionRules = pgTable(
     deferredAccountId: uuid("deferred_account_id"),
     recognizedAccountId: uuid("recognized_account_id"),
     isActive: boolean("is_active").notNull().default(true),
+    /** Effective-dated policy chain (0297): once a rule is referenced by any
+     *  obligation, a policy edit creates a successor row instead of rewriting
+     *  this one. Obligations pin their version through recognition_rule_id,
+     *  so rebuilds and modification snapshots always read the pinned row.
+     *  The self-reference is declared as a storage foreign key in 0297. */
+    version: integer("version").notNull().default(1),
+    supersededBy: uuid("superseded_by"),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("recognition_rules_org_code").on(t.orgId, t.code)],
+  (t) => [
+    uniqueIndex("recognition_rules_org_code")
+      .on(t.orgId, t.code)
+      .where(sql`${t.supersededBy} is null`),
+    index("recognition_rules_superseded_by").on(t.supersededBy),
+  ],
 );
 
 /**
