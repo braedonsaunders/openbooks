@@ -64,3 +64,39 @@ test('reviewed extension projects navigation, dated settings and grantable permi
     } finally { await dropScratchOrg(org.orgId); }
   });
 });
+
+type NavProbeItem = { href?: string; hidden?: boolean; extensionKey?: string };
+
+async function navItemsAt(orgId: string, href: string): Promise<NavProbeItem[]> {
+  const nav = (await db.execute<{ config: { groups: { items: NavProbeItem[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`)).rows[0]!.config;
+  return nav.groups.flatMap((group) => group.items).filter((item) => item.href === href);
+}
+
+test('a disabled extension releases its navigation href; re-enabling refuses while another extension owns it', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
+    const permissions = ['admin.customization.manage'];
+    try {
+      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'first-extension', name: 'First', version: '1.0.0', permissions, contributions: [{ kind: 'nav', href: '/module-sample', label: 'Sample A', group: 'insights' }] } });
+      await disableTestExtension({ orgId: org.orgId, actorId, key: 'first-extension' });
+      // The href is free again: a different extension may claim it.
+      await installTestExtension({ orgId: org.orgId, actorId, manifest: { key: 'second-extension', name: 'Second', version: '1.0.0', permissions, contributions: [{ kind: 'nav', href: '/module-sample', label: 'Sample B', group: 'insights' }] } });
+      let atHref = await navItemsAt(org.orgId, '/module-sample');
+      assert.equal(atHref.filter((item) => !item.hidden).length, 1);
+      assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, 'second-extension');
+      // The disabled owner's row is kept for history, but owns nothing.
+      assert.ok(atHref.some((item) => item.hidden && item.extensionKey === 'first-extension'));
+      // Re-enabling the first extension while the second owns the href refuses.
+      // Variable indirection (not a literal) so engine typecheck does not
+      // follow the import into web's graph — same pattern as the nav import.
+      const storePath = '../../../web/lib/apps/store.ts';
+      const { setAppStatus } = await import(storePath);
+      await assert.rejects(() => setAppStatus(org.orgId, actorId, 'first-extension', 'installed'), /already has an owner/);
+      atHref = await navItemsAt(org.orgId, '/module-sample');
+      assert.equal(atHref.find((item) => !item.hidden)?.extensionKey, 'second-extension');
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+});
+

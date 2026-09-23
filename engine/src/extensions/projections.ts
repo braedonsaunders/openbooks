@@ -98,7 +98,11 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
     if (item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden) { item.hidden = true; changed = true; }
   }
   for (const contribution of navs) {
-    const occupants = config.groups.flatMap((group) => group.items).filter((item) => item.kind === 'link' && item.href === contribution.href);
+    // Ownership is a VISIBLE-link property: withdraw hides (never deletes) an
+    // extension's links so history survives, and a hidden row owns nothing. A
+    // live link from another extension still refuses; re-enabling the retired
+    // owner while the new one is visible therefore refuses deterministically.
+    const occupants = config.groups.flatMap((group) => group.items).filter((item) => item.kind === 'link' && item.href === contribution.href && !item.hidden);
     if (occupants.some((item) => item.kind === 'link' && item.extensionKey !== args.extensionKey)) throw new ExtensionProjectionError(`navigation href ${contribution.href} already has an owner`);
     // Move our owned row when the new version changes its group; never duplicate a live shortcut.
     for (const group of config.groups) group.items = group.items.filter((item) => !(item.kind === 'link' && item.extensionKey === args.extensionKey && item.href === contribution.href));
