@@ -5,9 +5,12 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import {
+  assertTaskTransition,
   parseExpectedTaskVersion,
+  parseTaskReason,
   parseWorkBreakdownTaskInput,
   ProjectWorkBreakdownError,
+  sameTaskDecimal,
 } from './project-work-breakdown-validation.ts'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -45,6 +48,61 @@ test('WBS input validation is strict and preserves exact four-decimal values', (
   }
 })
 
+test('closed WBS tasks transition explicitly and never silently', () => {
+  const open = { estimatedHoursChanged: false, estimatedCostChanged: false, reason: null }
+  // Open tasks move freely without a reason.
+  for (const to of ['open', 'complete', 'cancelled'] as const) {
+    assertTaskTransition({ from: 'open', to, ...open })
+  }
+  // Same-state saves and renames on closed tasks need no reason.
+  assertTaskTransition({ from: 'complete', to: 'complete', ...open })
+  assertTaskTransition({ from: 'cancelled', to: 'cancelled', ...open })
+  // Sideways moves between terminal states refuse with the remedy, even
+  // with a reason — the path runs through open.
+  assert.throws(
+    () => assertTaskTransition({ from: 'complete', to: 'cancelled', ...open, reason: 'oops' }),
+    /Reopen the task before cancelling it/,
+  )
+  assert.throws(
+    () => assertTaskTransition({ from: 'cancelled', to: 'complete', ...open, reason: 'oops' }),
+    /Reopen the task before completing it/,
+  )
+  // Reopening and re-budgeting a closed task require a reason.
+  assert.throws(
+    () => assertTaskTransition({ from: 'complete', to: 'open', ...open }),
+    /Reopening a closed task requires a reason/,
+  )
+  assert.throws(
+    () => assertTaskTransition({ from: 'cancelled', to: 'open', ...open }),
+    /Reopening a closed task requires a reason/,
+  )
+  assert.throws(
+    () => assertTaskTransition({ from: 'complete', to: 'complete', estimatedHoursChanged: true, estimatedCostChanged: false, reason: null }),
+    /Changing estimates on a closed task requires a reason/,
+  )
+  assert.throws(
+    () => assertTaskTransition({ from: 'cancelled', to: 'cancelled', estimatedHoursChanged: false, estimatedCostChanged: true, reason: null }),
+    /Changing estimates on a closed task requires a reason/,
+  )
+  // With a reason, reopening and closed-task budget changes pass.
+  assertTaskTransition({ from: 'complete', to: 'open', ...open, reason: 'client reinstated the scope' })
+  assertTaskTransition({ from: 'cancelled', to: 'cancelled', estimatedHoursChanged: true, estimatedCostChanged: true, reason: 're-estimated after delay' })
+})
+
+test('WBS transition reasons are short text and estimates compare canonically', () => {
+  assert.equal(parseTaskReason(undefined), null)
+  assert.equal(parseTaskReason(null), null)
+  assert.equal(parseTaskReason(''), null)
+  assert.equal(parseTaskReason('  reinstated  '), 'reinstated')
+  assert.throws(() => parseTaskReason(42), /Reason must be text/)
+  assert.throws(() => parseTaskReason('x'.repeat(501)), /500 characters/)
+  assert.equal(sameTaskDecimal(null, null), true)
+  assert.equal(sameTaskDecimal('', null), true)
+  assert.equal(sameTaskDecimal('10', '10.0000'), true)
+  assert.equal(sameTaskDecimal('10', '10.0001'), false)
+  assert.equal(sameTaskDecimal(null, '1'), false)
+})
+
 test('WBS updates require a valid optimistic-concurrency version', () => {
   assert.equal(
     parseExpectedTaskVersion('2026-07-28T12:34:56.000000Z'),
@@ -78,6 +136,9 @@ test('WBS API boundaries enforce project gates, permissions, ownership, concurre
   assert.match(service, /Concurrent creates cannot both observe the same max/)
   assert.match(service, /insert into audit_log/)
   assert.match(service, /source: 'project_work_breakdown'/)
+  assert.match(service, /assertTaskTransition\(\{/)
+  assert.match(service, /reason: args\.reason/)
+  assert.match(item, /parseTaskReason\(rawReason\)/)
   assert.match(collection, /parseJsonBody\(request, jsonObject\)/)
   assert.match(item, /parseJsonBody\(request, jsonObject\)/)
   assert.doesNotMatch(collection, /request\.json\(/)
