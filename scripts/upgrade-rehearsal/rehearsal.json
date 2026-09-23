@@ -7,10 +7,6 @@
         {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
-        },
-        {
-          "check": "rls-org-isolation",
-          "reason": "The tagged harness probes the base table on its own pool login, which in the rehearsal is the database superuser that FORCE ROW LEVEL SECURITY cannot bind, so with two or more document-holding orgs it sees foreign rows. Fixed on main (R1.11)."
         }
       ]
     },
@@ -20,10 +16,6 @@
         {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
-        },
-        {
-          "check": "rls-org-isolation",
-          "reason": "The tagged harness probes the base table on its own pool login, which in the rehearsal is the database superuser that FORCE ROW LEVEL SECURITY cannot bind, so with two or more document-holding orgs it sees foreign rows. Fixed on main (R1.11)."
         }
       ]
     }

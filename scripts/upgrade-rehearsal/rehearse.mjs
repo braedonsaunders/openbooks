@@ -143,8 +143,21 @@ export function diffFindingKeys(actual, expected) {
   return { missing, extra: remaining };
 }
 
+/**
+ * The source release's own tooling writes the dataset as the RUNTIME role,
+ * the non-owner login an install's app and worker actually run as. Seeding
+ * is tenant writes, and the migration login is a superuser in CI, which
+ * FORCE ROW LEVEL SECURITY cannot bind. The source sim runs its harness as a
+ * month-end invariant, and under that login the tagged rls-org-isolation
+ * probe halts any multi-org seed (R1.13). Installs and upgrades keep the
+ * migration login.
+ */
+function sourceRuntimeEnv() {
+  return { OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: requireEnv("OPENBOOKS_RUNTIME_DB_URL") };
+}
+
 async function seedSim(step, sourceDir) {
-  const env = { OPENBOOKS_SIM: "1" };
+  const env = sourceRuntimeEnv();
   const provisioned = await run("seed", "npm", [
     "--prefix", "engine", "run", "--silent", "sim", "--",
     "provision", "--profile", step.profile, "--seed", step.seed, "--start", step.start, "--end", step.end,
@@ -164,7 +177,7 @@ async function seedSim(step, sourceDir) {
 async function seedSamples(sourceDir) {
   const stdout = await run("seed", "npm", ["--prefix", "engine", "run", "--silent", "samples", "--", "prepare"], {
     cwd: sourceDir,
-    env: { OPENBOOKS_SIM: "1" },
+    env: sourceRuntimeEnv(),
   });
   const orgIds = stdout
     .split("\n")
@@ -188,7 +201,7 @@ async function seedWithSeeder(step, sourceDir) {
   copyFileSync(file, join(targetDir, `${step.name}.ts`));
   const stdout = await run("seed", "npx", ["tsx", join("engine", "src", "upgrade-rehearsal-seed", `${step.name}.ts`), ...(step.args ?? [])], {
     cwd: sourceDir,
-    env: { OPENBOOKS_SIM: "1" },
+    env: sourceRuntimeEnv(),
   });
   const orgIds = lastJsonLine("seed", stdout).orgIds;
   if (!Array.isArray(orgIds) || orgIds.length === 0) throw new PhaseRefusal("seed", `seeder ${step.name} reported no orgIds`);
@@ -220,11 +233,11 @@ export function classifyHarnessFailures(stdout, tolerated) {
  * undeclared FAIL, is refused. The candidate harness is always run with no
  * tolerance, and it re-checks the same data after the upgrade.
  */
-async function harness(phase, treeDir, orgIds, tolerated = new Set()) {
+async function harness(phase, treeDir, orgIds, tolerated = new Set(), env = {}) {
   const toleratedRuns = [];
   for (const orgId of orgIds) {
     try {
-      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir });
+      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir, env });
     } catch (error) {
       if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string") throw error;
       const { failed, unexpected } = classifyHarnessFailures(error.details.stdout, tolerated);
@@ -504,7 +517,7 @@ async function main() {
     const sourceEntry = config.sources.find((candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG);
     const toleratedAtSource = new Set((sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check));
     report.toleratedSourceHarness = await phase("source-harness", () =>
-      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource));
+      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource, sourceRuntimeEnv()));
 
     const before = await phase("snapshot-before", () => withClient(dbUrl, snapshotLedger));
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
@@ -524,7 +537,7 @@ async function main() {
         withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
       writeFileSync(join(reportDir, "ledger-after-remedies.json"), `${JSON.stringify(baseline, null, 2)}\n`);
       await phase("source-harness-after-remedies", () =>
-        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
+        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource, sourceRuntimeEnv()));
     }
 
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
