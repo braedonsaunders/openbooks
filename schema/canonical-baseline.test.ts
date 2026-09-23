@@ -583,6 +583,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // with no persisted payment anchor, so moving asOf rephased them (0288
     // backfills anchorDate onto manual_recurring categories missing it).
     "0288_cashflow_category_anchor_date.sql",
+    // SFTP delivery published the bank file before the approval gate
+    // re-checked: 0290 carries the delivery lease (claim token, owner,
+    // expiry) plus the delivering/delivery_uncertain lifecycle states, so
+    // the publish happens only under a durable claim.
+    "0290_payment_file_delivery_claim.sql",
     // Duplicate (item, stock location, lot) lines in one cycle count each
     // posted the full variance, double-applying one physical observation.
     // Storage now refuses a second line per subject (NULLS NOT DISTINCT so
