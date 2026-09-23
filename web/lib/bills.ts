@@ -3,7 +3,7 @@ import type { BillLineInput } from '@openbooks/engine/src/ledger/document-input.
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { allocateDocumentNumber } from '@openbooks/engine/src/records/numbering.ts'
-import { add, sum } from '@openbooks/engine/src/money/money.ts'
+import { add, isZero, sum } from '@openbooks/engine/src/money/money.ts'
 import {
   computeLineTaxes,
   type ComputedTaxComponent,
@@ -28,6 +28,7 @@ interface TaxCodeProfileRow extends Record<string, unknown> {
 import {
   quoteExternalTax,
   readTaxRateProviderConfig,
+  resolveProviderTaxComponents,
   type TaxQuoteRequest,
   type TaxQuoteResult,
 } from '@openbooks/engine/src/tax/rate-providers.ts'
@@ -221,17 +222,44 @@ export async function computeBillTotalsWithProvider(
         `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,
       )
     }
-    const calculated = computeLineTaxes(request.taxableAmount, config, {
-      overridden: true,
-      taxAmount: quote.taxAmount,
-    })
+    // Book the provider's per-jurisdiction amounts under their mapped tax
+    // codes — never the local profile's split with a residual stuffed onto
+    // the last component. A jurisdiction the mapping does not name refuses
+    // here, before approval, instead of posting under the wrong code.
+    let taxComponents: typeof line.taxComponents
+    if (quote.components.length > 0) {
+      try {
+        taxComponents = await resolveProviderTaxComponents(
+          options.orgId,
+          request.taxableAmount,
+          quote,
+          provider.settings,
+        )
+      } catch (error) {
+        throw new Error(
+          `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    } else if (isZero(quote.taxAmount)) {
+      // A genuinely-nil quote (zero headline, no components) keeps the local
+      // profile's zero booking so the line retains calculation evidence.
+      const calculated = computeLineTaxes(request.taxableAmount, config, {
+        overridden: true,
+        taxAmount: quote.taxAmount,
+      })
+      taxComponents = calculated.components
+    } else {
+      throw new Error(
+        `configured tax provider ${provider.provider} returned tax ${quote.taxAmount} with no components — recalculate the draft`,
+      )
+    }
     resolved.push({
       ...line,
-      amount: calculated.netAmount,
-      taxInputAmount: calculated.inputAmount,
-      taxAmount: calculated.taxTotal,
+      amount: line.amount,
+      taxInputAmount: line.taxInputAmount,
+      taxAmount: quote.taxAmount,
       taxOverridden: true,
-      taxComponents: calculated.components,
+      taxComponents,
       providerQuote: { providerConfigId: provider.id, request, result: quote },
     })
   }

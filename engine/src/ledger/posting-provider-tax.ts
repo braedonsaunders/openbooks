@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address } from "../tax/rate-providers.ts";
+import { providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
 type ProviderTaxPlan = {
@@ -199,6 +199,15 @@ export async function resolveProviderTaxPlans(
     } catch (error) {
       throw new PostingError(
         `line ${line.lineNumber} has invalid immutable tax-provider evidence: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    // The GL must book the provider's per-jurisdiction amounts, not a local
+    // re-split that merely shares the headline: compare the booked components
+    // against the quote component by component, in posting order.
+    const evidenceMismatch = providerEvidenceMismatch(existingComponents, persisted.components);
+    if (evidenceMismatch) {
+      throw new PostingError(
+        `line ${line.lineNumber} booked tax components do not match the provider quote (${evidenceMismatch}); recalculate the draft before approval`,
       );
     }
     const configs = taxConfigsFromEvidence(existingComponents);

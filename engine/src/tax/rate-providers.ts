@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { fromUnits, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import { fromUnits, mulPercent, mulRatio, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
+import type { ComputedTaxComponent } from "./tax.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
@@ -114,6 +115,88 @@ export interface SaveTaxRateProviderInput {
   licenseKey?: string | null;
 }
 
+/**
+ * Read the provider-jurisdiction → tax-code mapping from provider settings.
+ * Keys are provider vocabulary matched EXACTLY against each quote component's
+ * jurisdiction (Avalara jurisdiction types, TaxJar breakdown keys, or the
+ * custom hook's own names); values are org tax_code ids. Shape-checked here so
+ * every reader fails closed on a hand-edited row; existence and active state
+ * are checked at save and again at booking, never trusted from the JSON.
+ */
+export function readJurisdictionMapping(settings: Record<string, unknown>): Record<string, string> {
+  const raw = settings.jurisdictionTaxCodes;
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    throw new TaxRateProviderError(
+      "settings.jurisdictionTaxCodes must be an object mapping provider jurisdiction names to tax code ids",
+    );
+  }
+  const mapping: Record<string, string> = {};
+  for (const [jurisdiction, codeId] of Object.entries(raw)) {
+    if (typeof codeId !== "string" || codeId.trim() === "") {
+      throw new TaxRateProviderError(
+        `provider jurisdiction "${jurisdiction}" is not mapped to a tax code id — map it in the provider settings before approving provider-taxed documents`,
+      );
+    }
+    mapping[jurisdiction] = codeId;
+  }
+  return mapping;
+}
+
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Validate the jurisdiction mapping against the org's tax codes: every target
+ * must exist, belong to this org, and be active. Returns the normalized
+ * mapping, or null when the settings carry none (settings are left untouched
+ * so audit evidence stays stable). Runs at save AND at booking: a row written
+ * before this validation, or a code deactivated since, still fails closed.
+ */
+export async function validateJurisdictionTaxCodes(
+  orgId: string,
+  settings: Record<string, unknown>,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<Record<string, string> | null> {
+  if (settings.jurisdictionTaxCodes == null) return null;
+  const mapping = readJurisdictionMapping(settings);
+  const normalized: Record<string, string> = {};
+  for (const [jurisdiction, codeId] of Object.entries(mapping)) {
+    const name = jurisdiction.trim();
+    if (name === "") {
+      throw new TaxRateProviderError("settings.jurisdictionTaxCodes has an empty jurisdiction name");
+    }
+    if (name in normalized) {
+      throw new TaxRateProviderError(
+        `settings.jurisdictionTaxCodes maps jurisdiction "${name}" more than once — jurisdiction names must be unique`,
+      );
+    }
+    normalized[name] = codeId.trim();
+  }
+  for (const [jurisdiction, codeId] of Object.entries(normalized)) {
+    if (!UUID_SHAPE.test(codeId)) {
+      throw new TaxRateProviderError(
+        `provider jurisdiction "${jurisdiction}" is mapped to "${codeId}", which is not a tax code id`,
+      );
+    }
+    const row = (
+      await runner.execute<{ id: string; code: string; isActive: boolean }>(sql`
+        select id, code, is_active as "isActive" from tax_codes where org_id = ${orgId} and id = ${codeId}
+      `)
+    ).rows[0];
+    if (!row) {
+      throw new TaxRateProviderError(
+        `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
+      );
+    }
+    if (!row.isActive) {
+      throw new TaxRateProviderError(
+        `provider jurisdiction "${jurisdiction}" is mapped to inactive tax code "${row.code}" — reactivate it or remap the jurisdiction`,
+      );
+    }
+  }
+  return normalized;
+}
+
 function persistableTaxProviderSettings(
   settings: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -214,7 +297,12 @@ export async function saveTaxRateProviderConfig(
       ({ avalara: "Avalara AvaTax", taxjar: "TaxJar", custom_http: "Custom tax HTTP", manual: "Manual rates" } as const)[
         input.provider
       ];
-    const settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
+    let settings = persistableTaxProviderSettings(input.settings ?? existing?.settings ?? {});
+    // The jurisdiction mapping is validated against this org's tax codes on
+    // every save and normalized in place, so the audited after-state is
+    // exactly what booking will read — no silent drift between setup and use.
+    const normalizedMapping = await validateJurisdictionTaxCodes(orgId, settings);
+    if (normalizedMapping) settings = { ...settings, jurisdictionTaxCodes: normalizedMapping };
 
     const before: TaxProviderConfigAuditState | null = existing
       ? {
@@ -664,6 +752,218 @@ function validateTaxQuoteResult(result: TaxQuoteResult, expectedProvider: TaxRat
       `provider returned an invalid tax quote: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
+}
+
+interface ProviderTaxCodeFields {
+  id: string;
+  code: string;
+  calculationType: "standard" | "withholding" | "reverse_charge";
+  recoverablePercent: string;
+  roundingScale: number;
+  collectedAccountId: string | null;
+  paidAccountId: string | null;
+  withholdingAccountId: string | null;
+}
+
+async function providerTaxCodeFields(
+  orgId: string,
+  codeId: string,
+  jurisdiction: string,
+  runner: Pick<typeof db, "execute">,
+): Promise<ProviderTaxCodeFields> {
+  const row = (
+    await runner.execute<{
+      id: string;
+      code: string;
+      calculationType: string;
+      recoverablePercent: string;
+      roundingScale: number;
+      collectedAccountId: string | null;
+      paidAccountId: string | null;
+      withholdingAccountId: string | null;
+      isActive: boolean;
+    }>(sql`
+      select id, code, calculation_type as "calculationType",
+             recoverable_percent::text as "recoverablePercent", rounding_scale as "roundingScale",
+             collected_account_id as "collectedAccountId", paid_account_id as "paidAccountId",
+             withholding_account_id as "withholdingAccountId", is_active as "isActive"
+        from tax_codes where org_id = ${orgId} and id = ${codeId}
+    `)
+  ).rows[0];
+  if (!row) {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to a tax code that does not exist in this organization`,
+    );
+  }
+  if (!row.isActive) {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to inactive tax code "${row.code}" — reactivate it or remap the jurisdiction`,
+    );
+  }
+  if (row.calculationType !== "standard" && row.calculationType !== "withholding" && row.calculationType !== "reverse_charge") {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to tax code "${row.code}" with an unknown calculation type`,
+    );
+  }
+  let recoverable: string;
+  try {
+    recoverable = normalizeDecimal(row.recoverablePercent, 4);
+  } catch {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to tax code "${row.code}" whose recoverable percent is not an exact decimal`,
+    );
+  }
+  if (toUnits(recoverable) < 0n || toUnits(recoverable) > toUnits("100")) {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to tax code "${row.code}" whose recoverable percent is outside 0–100`,
+    );
+  }
+  if (!Number.isInteger(row.roundingScale) || row.roundingScale < 0 || row.roundingScale > 4) {
+    throw new TaxRateProviderError(
+      `provider jurisdiction "${jurisdiction}" is mapped to tax code "${row.code}" whose rounding scale is outside 0–4`,
+    );
+  }
+  return {
+    id: row.id,
+    code: row.code,
+    calculationType: row.calculationType,
+    recoverablePercent: normalizeMoney(recoverable),
+    roundingScale: row.roundingScale,
+    collectedAccountId: row.collectedAccountId,
+    paidAccountId: row.paidAccountId,
+    withholdingAccountId: row.withholdingAccountId,
+  };
+}
+
+/**
+ * Book a provider quote as per-jurisdiction calculation evidence. Every
+ * component is attributed to its mapped tax code and carries the PROVIDER's
+ * amount — the local profile's split is never used, so no residual can land
+ * on an arbitrary component. Refuses, before approval, when a jurisdiction
+ * has no mapping, when the mapping target is unusable, or when the components
+ * do not reconcile to the headline (the quote-time cross-foot is the primary
+ * gate; this re-checks at booking so a hand-persisted quote cannot slip by).
+ */
+export async function resolveProviderTaxComponents(
+  orgId: string,
+  taxableAmount: string,
+  result: TaxQuoteResult,
+  settings: Record<string, unknown>,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<ComputedTaxComponent[]> {
+  if (result.components.length === 0) {
+    throw new TaxRateProviderError(
+      `${result.provider} returned tax ${result.taxAmount} with no components — refusing to split it across local codes`,
+    );
+  }
+  let base: string;
+  try {
+    base = normalizeMoney(taxableAmount);
+  } catch {
+    throw new TaxRateProviderError("provider taxable amount is not a ledger-scale decimal — refusing to book");
+  }
+  let headline: bigint;
+  let componentTotal = 0n;
+  try {
+    headline = toUnits(result.taxAmount);
+    for (const component of result.components) componentTotal += toUnits(component.taxAmount);
+  } catch {
+    throw new TaxRateProviderError(
+      `${result.provider} returned a tax amount that is not a ledger-scale decimal — refusing to book`,
+    );
+  }
+  if (headline !== componentTotal) {
+    throw new TaxRateProviderError(
+      `${result.provider} returned tax ${result.taxAmount} but its components sum to ${fromUnits(componentTotal)} — refusing to book`,
+    );
+  }
+  const mapping = (await validateJurisdictionTaxCodes(orgId, settings, runner)) ?? {};
+  const fields = new Map<string, ProviderTaxCodeFields>();
+  for (const component of result.components) {
+    const codeId = mapping[component.jurisdiction];
+    if (!codeId) {
+      throw new TaxRateProviderError(
+        `${result.provider} jurisdiction "${component.jurisdiction}" has no mapped tax code — map it in the provider settings (settings.jurisdictionTaxCodes) before approving this document`,
+      );
+    }
+    if (!fields.has(codeId)) {
+      fields.set(codeId, await providerTaxCodeFields(orgId, codeId, component.jurisdiction, runner));
+    }
+  }
+  return result.components.map((component, index) => {
+    const code = fields.get(mapping[component.jurisdiction]!)!;
+    let rate: string;
+    try {
+      rate = normalizeDecimal(component.ratePercent, 4);
+    } catch {
+      throw new TaxRateProviderError(
+        `${result.provider} jurisdiction "${component.jurisdiction}" returned a rate that is not an exact decimal — refusing to book`,
+      );
+    }
+    if (toUnits(rate) < 0n) {
+      throw new TaxRateProviderError(
+        `${result.provider} jurisdiction "${component.jurisdiction}" returned a negative rate — refusing to book`,
+      );
+    }
+    // Provider amounts are flat additions on the quoted base: the code keeps
+    // its posting semantics (type and accounts) but never its inclusive or
+    // compound behavior, which would restate the quoted amount.
+    const taxAmount = fromUnits(toUnits(component.taxAmount));
+    const recoverableAmount = mulPercent(taxAmount, code.recoverablePercent, 4);
+    const nonrecoverableAmount = fromUnits(toUnits(taxAmount) - toUnits(recoverableAmount));
+    return {
+      taxCodeId: code.id,
+      code: code.code,
+      sequence: index + 1,
+      ratePercent: normalizeMoney(rate),
+      recoverablePercent: code.recoverablePercent,
+      taxableAmount: base,
+      taxAmount,
+      recoverableAmount,
+      nonrecoverableAmount,
+      calculationType: code.calculationType,
+      priceIncludesTax: false,
+      compoundOnPrevious: false,
+      roundingScale: code.roundingScale,
+      collectedAccountId: code.collectedAccountId,
+      paidAccountId: code.paidAccountId,
+      withholdingAccountId: code.withholdingAccountId,
+      overridden: true,
+    };
+  });
+}
+
+/**
+ * Pure: compare booked line components against the immutable provider quote,
+ * in posting order. Returns a human-readable mismatch, or null when every
+ * booked per-jurisdiction amount equals the quote. Posting calls this so the
+ * GL books the provider's amounts — not just a headline that happens to add
+ * up — and a locally re-split line fails closed with a recalculation remedy.
+ */
+export function providerEvidenceMismatch(
+  evidence: Array<{ sequence: number; taxAmount: string }>,
+  quote: TaxComponentQuote[],
+): string | null {
+  const ordered = [...evidence].sort((a, b) => a.sequence - b.sequence);
+  if (ordered.length !== quote.length) {
+    return `booked ${ordered.length} tax component(s) but the provider quote has ${quote.length}`;
+  }
+  for (let index = 0; index < quote.length; index++) {
+    const booked = ordered[index]!;
+    const quoted = quote[index]!;
+    let bookedUnits: bigint;
+    let quotedUnits: bigint;
+    try {
+      bookedUnits = toUnits(booked.taxAmount);
+      quotedUnits = toUnits(quoted.taxAmount);
+    } catch {
+      return `component ${index + 1} carries an amount that is not a ledger-scale decimal`;
+    }
+    if (bookedUnits !== quotedUnits) {
+      return `component ${index + 1} books ${booked.taxAmount} but the provider quote says ${quoted.taxAmount}`;
+    }
+  }
+  return null;
 }
 
 export interface PersistedTaxQuote {
