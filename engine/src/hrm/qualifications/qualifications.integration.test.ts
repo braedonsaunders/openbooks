@@ -867,6 +867,36 @@ test("alert scan enumerates orgs past RLS: a constrained caller still scans", { 
   });
 });
 
+test("alert scan catches up crossed thresholds instead of skipping them", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Catchup Hand");
+    const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
+    const today = await businessToday(h.org.orgId);
+    // Seven days out with the default 30/14/7/1 schedule: the 30- and
+    // 14-day runs were "missed", so catch-up writes all three crossed
+    // thresholds exactly once — exact-day matching would write only the
+    // 7-day row and lose the earlier warnings forever.
+    const q = await recordQualification(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
+      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 7),
+    });
+    await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
+    const first = await runQualificationAlertScan(new Date());
+    const mine = first.find((s) => s.orgId === h.org.orgId);
+    assert.ok(mine);
+    assert.equal(mine.alertsWritten, 3);
+    const leads = (await listAlerts(db, { orgId: h.org.orgId, actorId: h.adminId }))
+      .filter((a) => a.qualificationId === q.id)
+      .map((a) => a.leadDays)
+      .sort((a, b) => a - b);
+    assert.deepEqual(leads, [7, 14, 30]);
+    // A re-run is silent: every crossed threshold was already sent.
+    const second = await runQualificationAlertScan(new Date());
+    assert.equal(second.find((s) => s.orgId === h.org.orgId)?.alertsWritten, 0);
+    assert.equal(second.find((s) => s.orgId === h.org.orgId)?.notificationsWritten, 0);
+  });
+});
+
 test("grants, self scope, masking seed and the second-org floor", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Scoped Hand");
