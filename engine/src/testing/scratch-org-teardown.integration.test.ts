@@ -188,6 +188,37 @@ test("dropScratchOrg commits durably from inside a pinned bypass transaction", {
   }
 });
 
+test("a replacement default calendar releases the lease without tripping the default uniqueness", { skip: !DB }, async () => {
+  // The baseline restore used to UPDATE the saved default back to
+  // is_default BEFORE the delete passes removed the test-installed
+  // replacement, so every bounded retry died on
+  // fiscal_calendars_one_default (23505) and the lease never released. The
+  // restore now clears the test default first, in the same transaction.
+  const org = await createScratchOrg();
+  try {
+    const fixtureDefault = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default`)).rows[0]!.id;
+    await db.execute(sql`update fiscal_calendars set is_default = false where id = ${fixtureDefault}`);
+    const replacement = randomUUID();
+    await db.execute(sql`
+      insert into fiscal_calendars (id, org_id, name, cadence, year_start_month, is_default, is_active)
+      values (${replacement}, ${org.orgId}, 'Replacement default', 'monthly', 7, true, true)`);
+    // Must not throw: pre-fix this died on 23505 inside the restore.
+    await dropScratchOrg(org.orgId);
+    if (POOLED_FIXTURES) {
+      const current = (await db.execute<{ id: string }>(sql`
+        select id from fiscal_calendars where org_id = ${org.orgId} and is_default`)).rows;
+      assert.equal(current.length, 1, "exactly one default is handed back");
+      assert.equal(current[0]!.id, fixtureDefault, "the baseline default is restored");
+      const leftover = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from fiscal_calendars where id = ${replacement}`));
+      assert.equal(leftover.rows[0]!.n, 0, "the replacement row is removed by the delete passes");
+    }
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async () => {
   const orgId = randomUUID();
   await db.execute(sql`
