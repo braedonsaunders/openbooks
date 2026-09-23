@@ -72,6 +72,7 @@
     "noParty": "Aucun tiers",
     "partylessControlWarning": "Comptabilisé sans tiers sur {accounts}. Ces soldes restent hors de tout auxiliaire client ou fournisseur — voir la ligne (sans tiers) de la balance âgée.",
     "accountPlaceholder": "Compte…",
+    "lineMissingAccount": "Ligne {line} : sélectionnez un compte.",
     "columns": {
       "debit": "Débit",
       "credit": "Crédit"

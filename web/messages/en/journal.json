@@ -72,6 +72,7 @@
     "noParty": "No party",
     "partylessControlWarning": "Posted with no party on {accounts}. These balances sit outside any customer or vendor subledger — see the aging (no party) row.",
     "accountPlaceholder": "Account…",
+    "lineMissingAccount": "Line {line}: choose an account.",
     "columns": {
       "debit": "Debit",
       "credit": "Credit"

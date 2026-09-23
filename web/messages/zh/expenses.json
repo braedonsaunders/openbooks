@@ -19,6 +19,7 @@
     "reportDate": "报销单日期",
     "selectEmployeePlaceholder": "选择员工…",
     "accountPlaceholder": "科目…",
+    "lineMissingAccount": "第 {line} 行：请选择科目。",
     "noTax": "无税",
     "deleteTitle": "删除此费用报销单？",
     "deleteDraftBody": "此操作将永久删除该草稿费用报销单。无法撤销。",

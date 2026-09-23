@@ -146,6 +146,9 @@ const STATUS_LABEL_KEYS: Record<string, string> = {
   voided: 'voided',
 }
 
+/** The settlement every fresh row carries: a default, not user content. */
+const DEFAULT_SETTLEMENT_TYPE = 'out_of_pocket'
+
 const emptyLine = (): LineRow => ({
   accountId: '',
   description: '',
@@ -155,8 +158,67 @@ const emptyLine = (): LineRow => ({
   amount: '',
   taxOverridden: false,
   taxAmount: '',
-  settlementType: 'out_of_pocket',
+  settlementType: DEFAULT_SETTLEMENT_TYPE,
 })
+
+/** A single expense grid cell carries user content when it is anything but blank. */
+function isBlankExpenseCell(value: unknown): boolean {
+  if (value === '' || value == null || value === false) return true
+  if (typeof value === 'string') return value.trim() === ''
+  return false
+}
+
+/**
+ * The only expense rows the splits and the save payload may drop: truly
+ * blank placeholder rows with no user-entered content in ANY field. The
+ * settlement default rides every fresh row, so only an explicit choice
+ * away from it counts as content. Every other row rides to the server,
+ * where prepareExpenseEdit names the line and refuses what cannot book
+ * (a missing account, a malformed amount). Dropping a contentful row here
+ * used to book a total the operator never reviewed (OM-09b).
+ */
+export function isBlankExpenseLine(row: Record<string, unknown>): boolean {
+  for (const key of [
+    'accountId',
+    'description',
+    'departmentId',
+    'projectId',
+    'taxProfileId',
+    'amount',
+    'taxAmount',
+  ]) {
+    if (!isBlankExpenseCell(row[key])) return false
+  }
+  if (row.taxOverridden === true) return false
+  const settlement = row.settlementType
+  if (typeof settlement === 'string') {
+    if (settlement !== '' && settlement !== DEFAULT_SETTLEMENT_TYPE) return false
+  } else if (!isBlankExpenseCell(settlement)) {
+    return false
+  }
+  for (const [key, value] of Object.entries(row)) {
+    if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankExpenseCell(value)) return false
+  }
+  return true
+}
+
+/**
+ * First grid row carrying user content but no account. The line number is
+ * the visible grid position (index + 1): blank placeholders are normally
+ * trailing, so this is also the number the server refusal will cite for
+ * the same row. Null when every contentful row names an account.
+ */
+export function findMissingExpenseAccountLine(
+  rows: readonly Record<string, unknown>[],
+): { index: number; lineNumber: number } | null {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    if (!isBlankExpenseLine(row) && String(row.accountId ?? '').trim() === '') {
+      return { index: i, lineNumber: i + 1 }
+    }
+  }
+  return null
+}
 
 function positiveAmount(value: unknown): boolean {
   try { return cmp(String(value ?? ''), '0') > 0 } catch { return false }
@@ -181,7 +243,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     amount: l.amount != null ? String(l.amount) : '',
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
-    settlementType: lineText(l.settlement_type ?? 'out_of_pocket'),
+    settlementType: lineText(l.settlement_type ?? DEFAULT_SETTLEMENT_TYPE),
   }
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
@@ -313,7 +375,9 @@ export function ExpenseDrawer({
   // Settlement split (0171, owner Q4): the clerk sees what the company owes
   // the employee (reimbursable) beside what the employee owes the company
   // (personal) even though the two settle separately — no auto-netting. Gross
-  // of tax, like the posted legs. Unparseable rows contribute nothing until
+  // of tax, like the posted legs. Every contentful row splits here —
+  // including one missing its account, which the save refuses by line name
+  // instead of silently excluding. Unparseable rows contribute nothing until
   // fixed; the save-time validators still name them.
   const splits = useMemo(() => {
     let oop = '0'
@@ -321,7 +385,7 @@ export function ExpenseDrawer({
     let personal = '0'
     for (const row of rows) {
       try {
-        if (!row.accountId || cmp(String(row.amount || '0'), '0') <= 0) continue
+        if (isBlankExpenseLine(row)) continue
         const gross = add(String(row.amount || '0'), lineTax(row))
         if (row.settlementType === 'company_paid') card = add(card, gross)
         else if (row.settlementType === 'personal') personal = add(personal, gross)
@@ -341,10 +405,12 @@ export function ExpenseDrawer({
       memo,
       extraDims,
       custom: customValues,
+      // Every contentful row rides — including one missing its account —
+      // so the server names the line and refuses instead of the drawer
+      // silently booking a smaller total (OM-09b). Only blank placeholders
+      // are dropped.
       lines: rows
-        .filter((r) => {
-          try { return r.accountId && cmp(r.amount, '0') > 0 } catch { return false }
-        })
+        .filter((r) => !isBlankExpenseLine(r))
         .map((r) => ({
           accountId: r.accountId,
           description: r.description,
@@ -508,6 +574,17 @@ export function ExpenseDrawer({
       setBusy(false)
       return
     }
+    // A contentful row without an account can never book: the server names
+    // the line and refuses. Refuse up front with the grid line named and
+    // keep every entered row in place — dropping the row here used to book
+    // a total the operator never reviewed (OM-09b).
+    const missingAccount = findMissingExpenseAccountLine(rows)
+    if (missingAccount) {
+      setSaveState('error')
+      toast.error(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }))
+      setBusy(false)
+      return
+    }
     const outcome = await saveExpenseReport({
       documentId: String(doc.id),
       revision,
@@ -617,6 +694,14 @@ export function ExpenseDrawer({
     }
     setBusy(true)
     setSaveState('saving')
+    // Same up-front refusal as save: the correction carries the same lines.
+    const missingCorrectionAccount = findMissingExpenseAccountLine(rows)
+    if (missingCorrectionAccount) {
+      setSaveState('error')
+      toast.error(t('drawer.lineMissingAccount', { line: missingCorrectionAccount.lineNumber }))
+      setBusy(false)
+      return
+    }
     try {
       const res = await fetch(`/api/expenses/${doc.id}/correct`, {
         method: 'POST',

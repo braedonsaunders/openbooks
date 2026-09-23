@@ -158,6 +158,66 @@ const emptyLine = (): LineRow => ({
   credit: '',
 })
 
+/** A single journal grid cell carries user content when it is anything but blank. */
+function isBlankJournalCell(value: unknown): boolean {
+  if (value === '' || value == null || value === false) return true
+  if (typeof value === 'string') return value.trim() === ''
+  return false
+}
+
+/**
+ * The only journal rows the save payload may drop: truly blank placeholder
+ * rows with no user-entered content in ANY field. An amount side counts as
+ * empty when it is blank or an exact zero leg — a zero leg carries no
+ * financial meaning and the server refuses (rather than books) one, so
+ * dropping a leg that is genuinely empty or zero keeps the intentional
+ * existing behavior. Every other row rides to the server, which names the
+ * line and refuses what cannot book (a missing account, a zero amount).
+ * Dropping a contentful account-less row here used to book a journal the
+ * operator never reviewed (OM-09b).
+ */
+export function isBlankJournalLine(row: Record<string, unknown>): boolean {
+  for (const key of [
+    'accountId',
+    'description',
+    'partyId',
+    'departmentId',
+    'projectId',
+    'subsidiaryId',
+  ]) {
+    if (!isBlankJournalCell(row[key])) return false
+  }
+  for (const key of ['debit', 'credit']) {
+    const value = row[key]
+    if (value === '' || value == null) continue
+    if (typeof value === 'string' && value.trim() === '') continue
+    if (journalAmountUnits(value) === 0n) continue
+    return false
+  }
+  for (const [key, value] of Object.entries(row)) {
+    if ((key.startsWith('cf_') || key.startsWith('seg_')) && !isBlankJournalCell(value)) return false
+  }
+  return true
+}
+
+/**
+ * First grid row carrying user content but no account. The line number is
+ * the visible grid position (index + 1): blank placeholders are normally
+ * trailing, so this is also the number the server refusal will cite for
+ * the same row. Null when every contentful row names an account.
+ */
+export function findMissingJournalAccountLine(
+  rows: readonly Record<string, unknown>[],
+): { index: number; lineNumber: number } | null {
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!
+    if (!isBlankJournalLine(row) && String(row.accountId ?? '').trim() === '') {
+      return { index: i, lineNumber: i + 1 }
+    }
+  }
+  return null
+}
+
 /** Line text columns are uuids/text-or-null. */
 function lineText(v: unknown): string {
   return typeof v === 'string' ? v : v == null ? '' : String(v)
@@ -351,10 +411,16 @@ export function JournalDrawer({
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
       extraDims,
       custom: customValues,
+      // Every contentful row rides — including one missing its account —
+      // so the server names the line and refuses instead of the drawer
+      // silently booking a smaller journal (OM-09b). Only blank
+      // placeholders (no content in any field, amount sides empty or an
+      // exact zero leg) are dropped.
       lines: rows
         .flatMap((r) => {
+          if (isBlankJournalLine(r)) return []
           const signed = journalLineUnits(r.debit, r.credit)
-          if (!r.accountId || signed === null || signed === 0n) return []
+          if (signed === null) return []
           return [{
             accountId: r.accountId,
             description: r.description,
@@ -502,8 +568,21 @@ export function JournalDrawer({
    * duplicate. Cancel/close before this point wrote nothing — this is the
    * first and only write, and the JE- number is allocated inside it.
    */
+  // A contentful row without an account can never book: the server names
+  // the line and refuses. Refuse up front with the grid line named and keep
+  // every entered row in place — dropping the row here used to book a
+  // journal the operator never reviewed (OM-09b).
+  const refuseMissingAccount = (): boolean => {
+    const missingAccount = findMissingJournalAccountLine(rows)
+    if (!missingAccount) return false
+    refuse(t('lineMissingAccount', { line: missingAccount.lineNumber }), t('postFailed'))
+    setSaveState('error')
+    return true
+  }
+
   async function saveNew() {
     if (!requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    if (refuseMissingAccount()) return
     setSaveState('saving')
     const ok = await execute(
       () =>
@@ -541,6 +620,7 @@ export function JournalDrawer({
       await saveNew()
       return
     }
+    if (refuseMissingAccount()) return
     setSaveState('saving')
     if (documentRevisionRef.current == null) await refreshFromServer(false).catch(() => {})
     const revision = documentRevisionRef.current

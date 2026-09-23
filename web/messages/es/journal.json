@@ -72,6 +72,7 @@
     "noParty": "Sin tercero",
     "partylessControlWarning": "Contabilizado sin tercero en {accounts}. Estos saldos quedan fuera de cualquier submayor de clientes o proveedores — ver la fila (sin tercero) del informe de antigüedad.",
     "accountPlaceholder": "Cuenta…",
+    "lineMissingAccount": "Línea {line}: seleccione una cuenta.",
     "columns": {
       "debit": "Débito",
       "credit": "Crédito"

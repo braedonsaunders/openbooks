@@ -19,6 +19,7 @@
     "reportDate": "Fecha del informe",
     "selectEmployeePlaceholder": "Seleccionar empleado…",
     "accountPlaceholder": "Cuenta…",
+    "lineMissingAccount": "Línea {line}: seleccione una cuenta.",
     "noTax": "Sin impuesto",
     "deleteTitle": "¿Eliminar este informe de gastos?",
     "deleteDraftBody": "Esto elimina permanentemente el informe de gastos en borrador. No se puede deshacer.",

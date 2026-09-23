@@ -12,7 +12,7 @@ import { loadJournalDoc } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
+import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -55,7 +55,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 const journalLineInput = z
   .object({
-    accountId: uuidId,
+    // Blank/malformed accounts pass the boundary so the handler below can
+    // refuse them with the line number (a bare uuid failure names neither
+    // the line nor the remedy).
+    accountId: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
     amount: exactMoney(),
     partyId: nullableUuidId.optional(),
@@ -204,6 +207,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     preparedLines = []
     for (let i = 0; i < submitted.length; i++) {
       const l = submitted[i]!
+      // Every submitted leg must name its account: the drawers send every
+      // contentful row (OM-09b), so an account-less row arrives here rather
+      // than vanishing client-side — name its line instead of booking
+      // without it. Malformed ids get the same line-numbered treatment the
+      // boundary's anonymous uuid failure never gave them.
+      const accountId = l.accountId
+      if (typeof accountId !== 'string' || accountId.trim() === '') {
+        return NextResponse.json({ error: `Line ${i + 1}: an account is required` }, { status: 422 })
+      }
+      if (!isUuid(accountId)) {
+        return NextResponse.json({ error: `Line ${i + 1}: invalid account` }, { status: 422 })
+      }
       const lv = validateCustomValues(lineDefs, l.custom)
       if (!lv.ok) {
         return NextResponse.json(
@@ -225,7 +240,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const lineDims = validateExtraDims(l.extraDims, segments)
       if (!lineDims.ok) return NextResponse.json({ error: `Line ${i + 1}: ${lineDims.error}` }, { status: 422 })
       preparedLines.push({
-        accountId: l.accountId,
+        accountId,
         description: l.description ?? null,
         amount: l.amount,
         partyId: l.partyId ?? null,
@@ -242,7 +257,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // tenant-coherent, so a foreign account dies at the re-insert as an
   // unhandled storage error; refuse it here with a domain 404 that reveals
   // nothing about other tenants' charts (same contract as the shared
-  // applyDocumentEdit service). Shape validation above guarantees uuidIds.
+  // applyDocumentEdit service). The per-line loop above guarantees every
+  // submitted accountId is a uuid string.
   if (preparedLines) {
     const lineAccountIds = [...new Set(preparedLines.map((l) => l.accountId))]
     const owned = lineAccountIds.length
