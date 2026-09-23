@@ -8,6 +8,7 @@ import { InventoryError, type Runner } from "./contracts.ts";
 import { normalizeMovementIdempotencyKey } from "./action-idempotency.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
+import { assertItemsActive } from "./item-active.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, addLayerAtCost } from "./cost-layers.ts";
@@ -120,6 +121,15 @@ export async function receiveInventory(
     // costing-policy writer takes the same profile lock before revaluing
     // layers, so a receipt cannot carry a stale pre-transaction policy.
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    // INV-ACTIVE fence: a receipt mints stock, so an inactive item refuses
+    // by name here — before any layer, settlement, movement, or journal
+    // write. Shared helper holds the items row FOR SHARE through posting so
+    // a racing deactivation serializes (see item-active.ts).
+    await assertItemsActive(tx, orgId, [input.itemId], {
+      inactiveRemedy: "reactivate it before posting stock movements",
+      outsideOrganization:
+        "receipt references an item outside this organization",
+    });
     assertTracking(
       profile,
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },
@@ -485,6 +495,18 @@ export async function issueInventory(
     // concurrent costing-policy revision cannot price this issue from stale
     // standard-cost or tracking settings.
     const profile = await resolveProfile(orgId, input.itemId, tx, true);
+    // INV-ACTIVE fence: an issue moves stock out, so an inactive item
+    // refuses by name here — before any consumption, movement, or journal
+    // write. Shared helper holds the items row FOR SHARE through posting so
+    // a racing deactivation serializes (see item-active.ts). Adjustments
+    // inherit this fence by delegating to receive/issue in the same
+    // transaction, as do purchase receipts, sales fulfilment, and
+    // stock-count posts.
+    await assertItemsActive(tx, orgId, [input.itemId], {
+      inactiveRemedy: "reactivate it before posting stock movements",
+      outsideOrganization:
+        "issue references an item outside this organization",
+    });
     assertTracking(
       profile,
       { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },

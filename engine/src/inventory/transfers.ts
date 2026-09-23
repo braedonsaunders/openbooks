@@ -8,6 +8,7 @@ import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.t
 import { InventoryError, type Runner } from "./contracts.ts";
 import { assertTracking, validateTrackingSelection } from "./tracking.ts";
 import { assertStockLocationAdmitsSubsidiary, assertNoForeignOnHand, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
+import { assertItemsActive } from "./item-active.ts";
 import { postInventoryEntry } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions, addLayerAtCost } from "./cost-layers.ts";
@@ -163,6 +164,16 @@ export async function transferInventoryTx(
   // take a share lock only after both positions are fenced, then use this
   // transaction-local policy snapshot for the entire transfer.
   const profile = await resolveProfile(orgId, input.itemId, tx, true);
+  // INV-ACTIVE fence: a transfer mints stock at the destination, so an
+  // inactive item refuses by name here — before any consumption, movement,
+  // or journal write. Shared helper holds the items row FOR SHARE through
+  // posting so a racing deactivation serializes (see item-active.ts).
+  // Transfer orders inherit this fence by delegating here.
+  await assertItemsActive(tx, orgId, [input.itemId], {
+    inactiveRemedy: "reactivate it before posting stock movements",
+    outsideOrganization:
+      "transfer references an item outside this organization",
+  });
   assertTracking(
     profile,
     { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId },

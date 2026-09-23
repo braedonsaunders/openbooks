@@ -308,6 +308,12 @@ async function returnCustomerCreditInventoryLine(
   date: string,
   line: CustomerCreditInventoryReturnLine,
 ): Promise<void> {
+  // Deliberately NOT fenced by assertItemsActive (see item-active.ts): every
+  // return names a specific posted source shipment and is capped at its
+  // unreturned quantity at the cost the units left at — it unwinds that
+  // shipment rather than minting a new position, so it must stay possible
+  // after deactivation (physical returns still happen for discontinued
+  // items, and the books must record them).
   const profile = await resolveProfile(orgId, line.itemId, runner, true);
   assertTracking(
     profile,

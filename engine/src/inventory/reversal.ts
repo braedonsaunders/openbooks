@@ -343,6 +343,11 @@ export async function reverseInventoryJournal(
  * leg. It fails closed when later consumption, landed cost, negative-stock
  * settlement, blended moving-average provenance, or a compound operation means
  * the original state cannot be reconstructed exactly.
+ *
+ * Deliberately NOT fenced by assertItemsActive (see item-active.ts): a
+ * reversal restores exact prior state rather than minting a new position, so
+ * it must stay possible after deactivation — otherwise posted history could
+ * never be corrected once its item is discontinued.
  */
 export async function reverseInventoryMovement(
   orgId: string,
