@@ -1108,7 +1108,10 @@ async function quoteTaxJar(
  * before approval. A headline that disagrees with its components is refused.
  * The request's documentKind crosses verbatim when the caller sets it, so a
  * hook can distinguish sales, purchases, and returns; counterpartyCode
- * crosses the same way for per-counterparty handling.
+ * crosses the same way for per-counterparty handling. The request's
+ * quotedOn crosses too, but the hook is treated as current-rates-only
+ * unless settings.supportsHistoricalDates is true — back-dated documents
+ * otherwise refuse rather than persist a deceptively dated quote.
  */
 export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,
@@ -1231,6 +1234,27 @@ async function synthesizeCustomHeadlineComponent(
   };
 }
 
+const PROVIDER_DISPLAY_NAMES = {
+  avalara: "Avalara",
+  taxjar: "TaxJar",
+  custom_http: "custom tax hook",
+  manual: "manual rates",
+} as const;
+
+/**
+ * Whether the provider can quote as of a historical date. Avalara takes the
+ * quote date on the wire; TaxJar's parameter list has no transaction or tax
+ * date, so it always prices at current rates; a custom hook declares support
+ * via settings.supportsHistoricalDates (defaulting to refusal, since the
+ * hook contract cannot prove it honors quotedOn).
+ */
+function providerSupportsAsOf(cfg: TaxRateProviderConfigRow): boolean {
+  if (cfg.provider === "avalara") return true;
+  if (cfg.provider === "taxjar") return false;
+  if (cfg.provider === "custom_http") return cfg.settings.supportsHistoricalDates === true;
+  return true;
+}
+
 /** Resolve the configured provider without mutating provider or quote rows. */
 async function resolveConfiguredTax(
   orgId: string,
@@ -1238,6 +1262,19 @@ async function resolveConfiguredTax(
   cfg: TaxRateProviderConfigRow,
   options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
+  // A back-dated document priced at today's rates and stamped with the old
+  // date is deceptively dated evidence: refuse before any provider call when
+  // the provider cannot quote as of the document date. The evidence then
+  // always records a date the provider actually used.
+  if (req.quotedOn) {
+    const today = await businessToday(orgId);
+    if (req.quotedOn !== today && !providerSupportsAsOf(cfg)) {
+      const direction = req.quotedOn < today ? "back-dated" : "future-dated";
+      throw new TaxRateProviderError(
+        `${PROVIDER_DISPLAY_NAMES[cfg.provider]} can't calculate tax as of ${req.quotedOn} — enter tax manually for this ${direction} document or use a provider that supports historical dates`,
+      );
+    }
+  }
   let result: TaxQuoteResult;
   if (cfg.provider === "avalara") result = await quoteAvalara(cfg, req, options);
   else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req, options);
