@@ -14,6 +14,7 @@ import {
   parseBankOfCanadaJson,
   parseEcbCsv,
   ratioRate,
+  readFxProviderConfig,
   runDueFxProviders,
   runFxProvider,
   saveFxProviderConfig,
@@ -923,6 +924,95 @@ test(
     } finally {
       globalThis.fetch = originalFetch;
       await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a failed config audit rolls back the config write with it",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      for (const code of ["CAD", "USD"]) {
+        await db.execute(sql`
+          insert into currencies (code, name, minor_units) values (${code}, ${code}, 2)
+          on conflict (code) do nothing`);
+      }
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
+      const input = {
+        provider: "bank_of_canada" as const,
+        baseCurrency: "CAD",
+        currencies: ["USD"],
+        schedule: "manual" as const,
+        syncHourUtc: 0,
+        lookbackDays: 7,
+        isEnabled: true,
+        apiKey: null,
+      };
+      // Block only the audit leg: the config upsert would succeed alone.
+      await db.execute(sql`alter table audit_log add constraint fx_audit_proof_block check (table_name <> 'fx_provider_configs')`);
+      try {
+        await assert.rejects(saveFxProviderConfig(org.orgId, actorId, input));
+        assert.equal(await readFxProviderConfig(org.orgId), null,
+          "the config must not survive its audit failing");
+      } finally {
+        await db.execute(sql`alter table audit_log drop constraint fx_audit_proof_block`);
+      }
+      // Recovery: the write and its evidence commit together — true before
+      // (null on insert) and after, with no secret material.
+      await saveFxProviderConfig(org.orgId, actorId, input);
+      const audits = await db.execute<{ action: string; changes: unknown }>(sql`
+        select action, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
+         order by at asc, id asc`);
+      assert.equal(audits.rows.length, 1);
+      assert.equal(audits.rows[0]!.action, "insert");
+      const first = audits.rows[0]!.changes as { before: null; after: Record<string, unknown> };
+      assert.equal(first.before, null);
+      const firstAfter = {
+        provider: "bank_of_canada",
+        displayName: "Bank of Canada",
+        baseCurrency: "CAD",
+        currencies: ["USD"],
+        schedule: "manual",
+        syncHourUtc: 0,
+        lookbackDays: 7,
+        isEnabled: true,
+        hasSecret: false,
+      };
+      assert.deepEqual(first.after, firstAfter);
+      // Update: the audit carries the true before-state and stays redacted
+      // even while a secret is stored.
+      await saveFxProviderConfig(org.orgId, actorId, {
+        ...input,
+        provider: "open_exchange_rates",
+        baseCurrency: "USD",
+        currencies: ["CAD"],
+        apiKey: "test-secret-proof",
+      });
+      const afterUpdate = await db.execute<{ action: string; changes: unknown }>(sql`
+        select action, changes from audit_log
+         where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
+         order by at asc, id asc`);
+      assert.equal(afterUpdate.rows.length, 2);
+      assert.equal(afterUpdate.rows[1]!.action, "update");
+      const second = afterUpdate.rows[1]!.changes as { before: Record<string, unknown>; after: Record<string, unknown> };
+      assert.deepEqual(second.before, firstAfter, "the update audit must carry the true before-state");
+      assert.deepEqual(second.after, {
+        provider: "open_exchange_rates",
+        displayName: "Open Exchange Rates",
+        baseCurrency: "USD",
+        currencies: ["CAD"],
+        schedule: "manual",
+        syncHourUtc: 0,
+        lookbackDays: 7,
+        isEnabled: true,
+        hasSecret: true,
+      });
+      assert.ok(!JSON.stringify(second).includes("test-secret-proof"), "plaintext secrets must never enter audit evidence");
+    } finally {
       await withBypass(() => dropScratchOrg(org.orgId));
     }
   },
