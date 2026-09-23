@@ -79,7 +79,7 @@ const mockSources = new Map<string, string>([
         state.databaseCalls.push(text)
         if (state.inTransaction) state.pendingQueries.push(text)
         else state.committedQueries.push(text)
-        if (text.includes('select settings')) return { rows: [{ cats: state.priorCategories }] }
+        if (text.includes('select settings')) return { rows: [{ cats: state.priorCategories, rev: state.priorRevision }] }
         return { rows: [] }
       }
       export const db = {
@@ -127,11 +127,11 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?cashflow-categories-route-test'
-const { PUT } = (await import(routeUrl)) as typeof import('./route.ts')
+const { PUT, GET } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(): void {
-  state.permissions = new Set(['admin.setup.manage'])
+  state.permissions = new Set(['admin.setup.manage', 'reports.read'])
   state.permissionChecks.length = 0
   state.databaseCalls.length = 0
   state.committedQueries.length = 0
@@ -146,18 +146,19 @@ function reset(): void {
       frequency: 'monthly',
     },
   ]
+  state.priorRevision = 7
   state.inTransaction = false
   state.transactions = 0
   state.commits = 0
   state.rollbacks = 0
 }
 
-function put(categories: unknown[]): Promise<Response> {
+function put(categories: unknown[], expectedRevision: unknown = state.priorRevision): Promise<Response> {
   return PUT(
     new Request('http://openbooks.test/api/analytics/cashflow/categories', {
       method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ categories }),
+      body: JSON.stringify({ categories, expectedRevision }),
     }),
   )
 }
@@ -251,6 +252,7 @@ test('replacement persists every valid row with exact money and complete audit e
       expectedValidCategory,
       { ...fractionalCategory, anchorDate: todayAnchor() },
     ],
+    revision: 8,
   })
   assert.equal(state.transactions, 1)
   assert.equal(state.commits, 1)
@@ -267,6 +269,48 @@ test('replacement persists every valid row with exact money and complete audit e
   assert.match(audit, /category-fractional/)
   assert.match(audit, /"amount":"12\.3456"/)
   assert.doesNotMatch(audit, /category-capped/)
+})
+
+test('GET returns the list with its revision', async () => {
+  reset()
+  const response = await GET()
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { categories: state.priorCategories, revision: 7 })
+})
+
+test('a replacement without the expected revision refuses before touching the database', async () => {
+  reset()
+  const response = await PUT(
+    new Request('http://openbooks.test/api/analytics/cashflow/categories', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ categories: [validCategory] }),
+    }),
+  )
+  assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), {
+    error: 'expectedRevision required',
+    message: 'Send the revision returned by GET with every replacement.',
+  })
+  assert.equal(state.databaseCalls.length, 0, 'a revision-less replacement never reaches persistence')
+  assert.equal(state.transactions, 0, 'a revision-less replacement never opens a transaction')
+})
+
+test('a stale replacement gets 409 and writes nothing', async () => {
+  reset()
+  const response = await put([validCategory], 6)
+
+  assert.equal(response.status, 409)
+  assert.deepEqual(await response.json(), {
+    error: 'revision conflict',
+    message: 'Cashflow categories changed since revision 6 (now at 7): reload and reapply your edit.',
+    revision: 7,
+  })
+  assert.equal(state.transactions, 1, 'the conflict is detected on the locked row')
+  assert.equal(state.commits, 1, 'detecting the conflict writes nothing to roll back')
+  assert.equal(state.committedQueries.length, 1, 'only the locking read commits')
+  assert.doesNotMatch(state.committedQueries[0]!, /update orgs/i)
+  assert.doesNotMatch(state.committedQueries[0]!, /insert into audit_log/i)
 })
 
 test('an unknown direction refuses instead of flipping the sign', async () => {
@@ -299,7 +343,7 @@ test('manual schedules keep an explicit anchor and refuse a malformed one', asyn
   }
   const kept = await put([anchored])
   assert.equal(kept.status, 200)
-  assert.deepEqual(await kept.json(), { ok: true, categories: [anchored] })
+  assert.deepEqual(await kept.json(), { ok: true, categories: [anchored], revision: 8 })
 
   for (const bad of ['2026-02-30', '2026-13-01', 'not-a-date', 20260830]) {
     reset()

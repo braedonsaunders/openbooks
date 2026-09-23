@@ -98,17 +98,24 @@ export function CategoryManager({
   const [cats, setCats] = useState<ForecastCategory[]>(initialCategories)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  // The revision read with the list: every replacement sends it back, and a
+  // 409 means another editor saved first — reload instead of overwriting.
+  const [revision, setRevision] = useState<number | null>(null)
   /** Index being edited, -1 for a new category, null = closed. */
   const [editIdx, setEditIdx] = useState<number | null>(null)
   const [draft, setDraft] = useState<ForecastCategory | null>(null)
 
   // Authoritative list of raw configs (payloads carry computed rows).
-  useEffect(() => {
-    fetch('/api/analytics/cashflow/categories')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => { if (j && Array.isArray(j.categories)) setCats(j.categories) })
-      .catch(() => {})
-  }, [])
+  const reload = async () => {
+    try {
+      const r = await fetch('/api/analytics/cashflow/categories')
+      if (!r.ok) return
+      const j = await r.json()
+      if (j && Array.isArray(j.categories)) setCats(j.categories)
+      if (j && typeof j.revision === 'number') setRevision(j.revision)
+    } catch { /* keep the last known list */ }
+  }
+  useEffect(() => { void reload() }, [])
 
   const glAccounts = accountOptions.filter((a) => !a.type || !['asset_bank', 'liability_card'].includes(a.type))
   const cardAccounts = accountOptions.filter((a) => a.type === 'liability_card')
@@ -121,15 +128,22 @@ export function CategoryManager({
     const r = await fetch('/api/analytics/cashflow/categories', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ categories: next }),
+      body: JSON.stringify({ categories: next, expectedRevision: revision }),
     })
     if (r.ok) {
       const j = await r.json()
       setCats(j.categories)
+      if (typeof j.revision === 'number') setRevision(j.revision)
       setMsg(t('toasts.savedRecomputing'))
       setEditIdx(null)
       setDraft(null)
       router.refresh()
+    } else if (r.status === 409) {
+      // Another editor saved first: show their win and reload instead of
+      // overwriting it.
+      const j = await r.json().catch(() => null)
+      setMsg(j && typeof j.message === 'string' ? j.message : t('toasts.saveFailed', { status: r.status }))
+      await reload()
     } else {
       setMsg(r.status === 403 ? t('toasts.forbidden') : t('toasts.saveFailed', { status: r.status }))
     }
