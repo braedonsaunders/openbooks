@@ -97,12 +97,19 @@ export async function PATCH(req: Request, { params }: Params) {
 
   try {
     const outcome = await db.transaction(async (tx) => {
-      // The self-update runs FIRST and its affected row is checked: a
-      // concurrent delete between the pre-check above and this statement
-      // matches zero rows, and that is a 404 — never {ok:true} with a phantom
-      // audit event. The default-clear below must not run before this check,
-      // or a vanished row would still lose the kind's default on a 404.
-      const updated = (await tx.execute<{ id: string }>(sql`
+      // The before-image rides the row lock inside this transaction (never the
+      // pre-transaction read above, which a concurrent PATCH could already
+      // have superseded). The self-update runs FIRST and its affected row is
+      // checked: a concurrent delete between the pre-check above and this
+      // statement matches zero rows, and that is a 404 — never {ok:true} with
+      // a phantom audit event. The default-clear below must not run before
+      // this check, or a vanished row would still lose the kind's default on
+      // a 404.
+      const before = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
+        select to_jsonb(pdf_templates) as snapshot from pdf_templates
+         where org_id = ${user.orgId} and id = ${id} for update`))
+      if (before.rows.length === 0) return 'missing' as const
+      const updated = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
         update pdf_templates
            set name = ${name}, description = ${body.description !== undefined ? body.description : existing.description},
                paper_size = ${paperSize}, orientation = ${orientation}, margin_mm = ${marginMm},
@@ -111,15 +118,19 @@ export async function PATCH(req: Request, { params }: Params) {
                is_default = ${isDefault}, is_active = ${isActive},
                updated_at = now(), updated_by = ${user.id}
          where org_id = ${user.orgId} and id = ${id}
-        returning id`))
+        returning to_jsonb(pdf_templates) as snapshot`))
       if (updated.rows.length === 0) return 'missing' as const
       if (isDefault && !existing.isDefault)
         await tx.execute(sql`
           update pdf_templates set is_default = false, updated_at = now()
            where org_id = ${user.orgId} and record_type = ${existing.recordType} and is_default and id <> ${id}`);
+      // The design audit carries the full before/after row — a bare {name}
+      // cannot show what the save changed, and the failing audit write rolls
+      // the design change back with it.
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'pdf_templates', ${id}, 'update', ${JSON.stringify({ name })}, ${user.id})`);
+        values (${user.orgId}, 'pdf_templates', ${id}, 'update',
+                ${JSON.stringify({ before: before.rows[0]!.snapshot, after: updated.rows[0]!.snapshot })}, ${user.id})`);
       return 'ok' as const
     });
     if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
@@ -145,16 +156,23 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  // A concurrent delete between the pre-check above and this statement
-  // matches zero rows: that is a 404, and no audit event is written for a
-  // row this call did not remove.
+  // The removed design's before-image rides the row lock, so the delete
+  // event stays auditable after no read can observe the row. A concurrent
+  // delete between the pre-check above and this statement matches zero rows:
+  // that is a 404, and no audit event is written for a row this call did
+  // not remove.
   const deleted = (await db.transaction(async (tx) => {
+    const before = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
+      select to_jsonb(pdf_templates) as snapshot from pdf_templates
+       where org_id = ${user.orgId} and id = ${id} for update`))
+    if (before.rows.length === 0) return 'missing' as const
     const removed = (await tx.execute<{ id: string }>(sql`
       delete from pdf_templates where org_id = ${user.orgId} and id = ${id} returning id`))
     if (removed.rows.length === 0) return 'missing' as const
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${user.orgId}, 'pdf_templates', ${id}, 'delete', ${JSON.stringify({ name: existing.name })}, ${user.id})`);
+      values (${user.orgId}, 'pdf_templates', ${id}, 'delete',
+              ${JSON.stringify({ before: before.rows[0]!.snapshot })}, ${user.id})`);
     return 'ok' as const
   }));
   if (deleted === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
