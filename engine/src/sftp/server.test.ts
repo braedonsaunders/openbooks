@@ -111,6 +111,18 @@ function readFile(sftp: ssh2.SFTPWrapper, path: string): Promise<Buffer> {
   });
 }
 
+function setstat(sftp: ssh2.SFTPWrapper, path: string, attrs: ssh2.InputAttributes): Promise<void> {
+  return new Promise((resolveSet, reject) => {
+    sftp.setstat(path, attrs, (error) => error ? reject(error) : resolveSet());
+  });
+}
+
+function fsetstat(sftp: ssh2.SFTPWrapper, handle: Buffer, attrs: ssh2.InputAttributes): Promise<void> {
+  return new Promise((resolveSet, reject) => {
+    sftp.fsetstat(handle, attrs, (error) => error ? reject(error) : resolveSet());
+  });
+}
+
 test("public-key authentication rejects an invalid signature but accepts a valid one", async () => {
   const untrusted = ssh2.utils.parseKey(keyPair.private);
   if (untrusted instanceof Error) throw untrusted;
@@ -144,6 +156,36 @@ test("SFTP writes honor offsets and preserve bytes when opening without truncati
       // RED before the fix: opening r+ started an empty buffer and CLOSE
       // silently replaced the existing object with only the new chunk.
       assert.deepEqual(await readFile(sftp, "offsets.bin"), Buffer.from("ABZDEF"));
+    } finally {
+      client.end();
+    }
+  });
+});
+
+test("SETSTAT and FSETSTAT refuse instead of answering OK for a no-op", async () => {
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+
+      const created = await open(sftp, "truncate-me.bin", "w");
+      await write(sftp, created, Buffer.from("original bytes"), 0);
+      await close(sftp, created);
+
+      // RED before the fix: both answered STATUS_CODE.OK while changing
+      // nothing, so a partner's SETSTAT(size=0) looked like a cleared
+      // upload while the original bytes still posted.
+      await assert.rejects(setstat(sftp, "truncate-me.bin", { size: 0 }), /not supported/i);
+
+      const handle = await open(sftp, "truncate-me.bin", "r+");
+      try {
+        await assert.rejects(fsetstat(sftp, handle, { size: 0 }), /not supported/i);
+      } finally {
+        await close(sftp, handle);
+      }
+
+      // The refused truncate changed nothing: the original bytes survive.
+      assert.deepEqual(await readFile(sftp, "truncate-me.bin"), Buffer.from("original bytes"));
     } finally {
       client.end();
     }
