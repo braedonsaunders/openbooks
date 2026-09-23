@@ -4034,6 +4034,7 @@
     },
     "wizard": {
       "skip": "Skip for now",
+      "skipped": "Setup skipped — resume anytime from Company Setup.",
       "back": "Back",
       "next": "Continue",
       "apply": "Set up my books",
@@ -4343,6 +4344,12 @@
       "holidayCompanyDay": "Company holiday",
       "benefitCosts": "Costs and proration",
       "benefitComponents": "Pay components"
+    },
+    "redirectNotice": {
+      "title": "You were redirected",
+      "settingsBody": "/admin/settings now lives here, under Company Setup — update your bookmark.",
+      "indexBody": "Setup now opens on the go-live checklist — start here.",
+      "providersBody": "Payment providers need the Online payments feature — turn it on here to continue."
     },
     "guide": {
       "hero": {

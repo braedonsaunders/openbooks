@@ -219,7 +219,10 @@ export function SetupWizard(props: {
     try {
       const res = await fetch('/api/admin/setup/wizard', { method: 'POST' })
       if (!res.ok) throw new Error('failed')
-      close()
+      // Skipping is a deferral, not an abandonment: land on the canonical
+      // home and name where setup resumes, instead of detouring into Setup.
+      toast.success(t('skipped'))
+      router.push('/dashboard')
     } catch {
       toast.error(t('error'))
     } finally {

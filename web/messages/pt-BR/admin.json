@@ -4034,6 +4034,7 @@
     },
     "wizard": {
       "skip": "Pular por ora",
+      "skipped": "Configuração ignorada — retome a qualquer momento em Configuração da empresa.",
       "back": "Voltar",
       "next": "Continuar",
       "apply": "Montar minha contabilidade",
@@ -4343,6 +4344,12 @@
       "holidayCompanyDay": "Feriado da empresa",
       "benefitCosts": "Custos e rateio",
       "benefitComponents": "Componentes de folha"
+    },
+    "redirectNotice": {
+      "title": "Você foi redirecionado",
+      "settingsBody": "/admin/settings agora fica aqui, em Configuração da empresa — atualize seu favorito.",
+      "indexBody": "A configuração agora abre na lista de go-live — comece aqui.",
+      "providersBody": "Provedores de pagamento precisam do recurso Pagamentos on-line — ative-o aqui para continuar."
     },
     "guide": {
       "hero": {

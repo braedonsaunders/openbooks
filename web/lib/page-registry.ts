@@ -535,11 +535,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/setup/payment-providers': {
     route: '/admin/setup/payment-providers',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/setup/payment-providers/view')
       return {
-        load: () => m.loadPaymentProviders(),
+        load: (input) => m.loadPaymentProviders(input.searchParams ?? {}),
         spec: () => m.paymentProvidersSpec(),
       }
     },

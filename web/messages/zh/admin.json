@@ -4034,6 +4034,7 @@
     },
     "wizard": {
       "skip": "暂跳过",
+      "skipped": "已跳过设置——可随时从“公司设置”继续。",
       "back": "上一步",
       "next": "继续",
       "apply": "建账",
@@ -4343,6 +4344,12 @@
       "holidayCompanyDay": "公司假日",
       "benefitCosts": "费用与分摊",
       "benefitComponents": "工资组成部分"
+    },
+    "redirectNotice": {
+      "title": "已将您重定向",
+      "settingsBody": "/admin/settings 已移至此处“公司设置”下——请更新您的书签。",
+      "indexBody": "设置现在从上线清单开始——请从这里着手。",
+      "providersBody": "支付服务商需要“在线支付”功能——请在此处启用以继续。"
     },
     "guide": {
       "hero": {

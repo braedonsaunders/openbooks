@@ -12,7 +12,7 @@ export function BrandHomeLink({ className }: { className?: string }) {
   const t = useTranslations('shell.brand')
   return (
     <Link
-      href="/"
+      href="/dashboard"
       aria-label={t('home')}
       title={t('home')}
       className={cn(
