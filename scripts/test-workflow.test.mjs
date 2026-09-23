@@ -318,9 +318,9 @@ test('receipt directory comparison accepts two-digit shard names and still rejec
 })
 
 test('a skipped control is an unrun control: both partitions audit their own skips', () => {
-  // The hazard this pins: every DB-backed test is written `{ skip: !DB }`, so a
-  // partition whose database wiring breaks reports green having executed
-  // nothing. The canary proves ONE known file ran; these prove the shard that
+  // The hazard this pins: every DB-backed test skips itself when no database is
+  // configured, so a partition whose database wiring breaks reports green
+  // having executed nothing. The canary proves ONE known file ran; these prove the shard that
   // actually matters did not quietly skip.
   for (const partition of ['unit', 'database']) {
     const job = topLevelJob(partition)

@@ -459,7 +459,9 @@ test('the merge-gating workflow runs the golden harness, after real activity, in
   assert.match(simulation, /OPENBOOKS_SIM:\s*"1"/, 'the sim opt-in interlock must be set')
   assert.ok(simulation.includes(harnessCode.trim().split('\n')[0]), 'simulation must own the golden harness')
   const integration = topLevelBlock(source, 'integration')
-  assert.match(integration, /needs: \[unit, database, simulation\]/, 'the required gate must wait for every test partition and the simulation')
+  // `scope` is there because the gate reads its `full` output: a partition may
+  // be skipped only on a scoped run, never on the full run that clears a release.
+  assert.match(integration, /needs: \[scope, unit, database, simulation\]/, 'the required gate must wait for every test partition and the simulation')
   assert.doesNotMatch(simulation, /continue-on-error/)
 
   // The gate only blocks merges while the workflow fires on pull requests.
