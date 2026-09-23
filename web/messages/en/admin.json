@@ -745,6 +745,8 @@
       "description": "Control when vendor bills release after submit.",
       "requireVendorBillApproval": "Require approval before vendor bills release",
       "requireVendorBillApprovalHint": "When on, a vendor bill releases only through an approval flow. A bill with no matching flow stays submitted, and the submitter is told to set up a flow or turn this off.",
+      "requireStockCountReview": "Require a different user to post stock counts",
+      "requireStockCountReviewHint": "When on, the user who recorded or submitted a count cannot post it — a different user with posting authority must. When off, anyone with posting authority can post their own count.",
       "noFlowTitle": "No approval flow for vendor bills",
       "noFlowWarningAuto": "No approval flow is configured for vendor bills. <flows>Set one up in Flows</flows> — until then, submitted bills release automatically with no approver.",
       "noFlowWarningRequired": "No approval flow is configured for vendor bills. <flows>Set one up in Flows</flows> — until then, every vendor-bill submit is refused."

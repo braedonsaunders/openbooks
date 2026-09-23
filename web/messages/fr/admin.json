@@ -745,6 +745,8 @@
       "description": "Contrôlez quand les factures fournisseurs sont libérées après soumission.",
       "requireVendorBillApproval": "Exiger une approbation avant de libérer les factures fournisseurs",
       "requireVendorBillApprovalHint": "Si activé, une facture fournisseur n’est libérée que via un flux d’approbation. Une facture sans flux correspondant reste soumise, et le soumetteur est invité à configurer un flux ou à désactiver cette option.",
+      "requireStockCountReview": "Exiger un autre utilisateur pour comptabiliser les inventaires",
+      "requireStockCountReviewHint": "Si activé, l’utilisateur qui a compté ou soumis un inventaire ne peut pas le comptabiliser — un autre utilisateur autorisé doit le faire. Si désactivé, tout utilisateur autorisé peut comptabiliser son propre inventaire.",
       "noFlowTitle": "Aucun flux d’approbation pour les factures fournisseurs",
       "noFlowWarningAuto": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, les factures soumises sont libérées automatiquement sans approbateur.",
       "noFlowWarningRequired": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, chaque soumission de facture fournisseur est refusée."

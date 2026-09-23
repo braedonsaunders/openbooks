@@ -227,7 +227,8 @@
       "loading": "Loading count…",
       "noLines": "No lines on this count.",
       "postedBadge": "Posted",
-      "unpostedBadge": "Not posted"
+      "unpostedBadge": "Not posted",
+      "noIndependentReviewWarning": "Independent review is off — the same user who counted this can post it. Require a second user in Company Settings → Approvals."
     },
     "list": {
       "showMore": "Show more ({loaded} of {total})",

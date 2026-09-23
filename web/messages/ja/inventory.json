@@ -227,7 +227,8 @@
       "loading": "カウントを読込中…",
       "noLines": "このカウントに明細はありません。",
       "postedBadge": "計上済み",
-      "unpostedBadge": "未計上"
+      "unpostedBadge": "未計上",
+      "noIndependentReviewWarning": "独立したレビューはオフです — この棚卸を数えたユーザー自身が計上できます。会社設定 → 承認で2人目のユーザーを必須にしてください。"
     },
     "list": {
       "showMore": "さらに表示（{total}件中{loaded}件）",

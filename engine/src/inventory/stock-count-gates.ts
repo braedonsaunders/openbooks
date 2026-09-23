@@ -172,6 +172,26 @@ export async function assertCountWarehouses(
   }
 }
 
+/**
+ * Is the org's "require a different user to post stock counts" switch on?
+ * Stored at `orgs.settings.approvals.requireStockCountReview`, default OFF
+ * (today's self-post behaviour). Absent — or anything but the JSON boolean
+ * true — reads as OFF. The comparison is strict text, never a boolean
+ * cast: Postgres accepts 'yes'/'on'/'1' as true, so a cast would let junk
+ * enable the gate (fail open toward refusals). Mirrors the vendor-bill
+ * release policy in flows/vendor-bill-approval.ts.
+ */
+export async function isStockCountReviewRequired(
+  orgId: string,
+  executor: Runner,
+): Promise<boolean> {
+  const rows = (await executor.execute<{ required: boolean | null }>(sql`
+    select coalesce((settings->'approvals'->>'requireStockCountReview') = 'true', false) as required
+      from orgs where id = ${orgId}
+  `)).rows;
+  return rows[0]?.required === true;
+}
+
 export type CountHeader = {
   id: string;
   status: StockCountStatus;

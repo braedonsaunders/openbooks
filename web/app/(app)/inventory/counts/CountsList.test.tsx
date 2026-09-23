@@ -110,6 +110,7 @@ function baseProps(overrides: Record<string, unknown> = {}) {
     stockLocations: [{ id: SL_BIN, code: 'BIN-1', locationId: LOC_MAIN }],
     lots: [],
     canPost: true,
+    reviewRequired: true,
     canManageStockLocations: true,
     canManageItems: true,
     itemsExcludedCount: 0,
@@ -118,10 +119,17 @@ function baseProps(overrides: Record<string, unknown> = {}) {
   }
 }
 
-async function mountCounts(t: TestContext, props: Record<string, unknown>): Promise<void> {
+async function mountCounts(
+  t: TestContext,
+  props: Record<string, unknown>,
+  onFetch?: (url: string, method: string) => unknown,
+): Promise<void> {
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
-    script.fetchCalls.push({ url: String(input), method: init?.method ?? 'GET' })
+    const url = String(input)
+    const method = init?.method ?? 'GET'
+    script.fetchCalls.push({ url, method })
+    if (onFetch) return Response.json(await onFetch(url, method))
     return Response.json({ counts: [], totalCount: 0, nextCursor: null })
   }) as typeof fetch
   t.after(() => {
@@ -311,4 +319,69 @@ test('a poster keeps the actionable empty state', async (t) => {
   await tick()
   const body = document.body.textContent ?? ''
   assert.match(body, /Open one to snapshot/, 'posters keep the actionable empty copy')
+})
+
+// IN11: while the independent-review requirement is off, the review panel
+// must warn that the same user who counted can post — the visible half of
+// the maker/checker control (the engine refusal is the other half).
+const REVIEW_DETAIL = {
+  header: {
+    id: 'count-1',
+    status: 'review',
+    locationId: LOC_MAIN,
+    subsidiaryId: 'sub-1',
+    countedOn: '2026-09-23',
+    memo: null,
+    locationName: 'Main',
+    subsidiaryName: 'Sub',
+  },
+  lines: [
+    {
+      id: 'line-1',
+      itemId: ITEM_WIDGET,
+      stockLocationId: SL_BIN,
+      lotId: null,
+      expectedQuantity: '10.0000',
+      countedQuantity: '9.0000',
+      adjustmentMovementId: null,
+      itemCode: 'W-1',
+      itemName: 'Widget',
+      stockLocationCode: 'BIN-1',
+      lotNumber: null,
+      variance: '-1.0000',
+    },
+  ],
+}
+
+async function mountReviewDetail(t: TestContext, reviewRequired: boolean): Promise<void> {
+  await mountCounts(
+    t,
+    baseProps({ selectedCountId: 'count-1', createRequested: false, reviewRequired }),
+    (url) => (url.includes('id=') ? REVIEW_DETAIL : { counts: [], totalCount: 0, nextCursor: null }),
+  )
+  await tick()
+  await tick()
+  await tick()
+  await tick()
+  await tick()
+}
+
+test('a review-status count warns while independent review is off', async (t) => {
+  await mountReviewDetail(t, false)
+  const note = document.querySelector('[role="note"]')
+  assert.ok(note, 'the review panel must warn while independent review is off')
+  assert.match(
+    note.textContent ?? '',
+    /Independent review is off/,
+    'the warning must say the same user may post',
+  )
+})
+
+test('a review-status count shows no warning while independent review is required', async (t) => {
+  await mountReviewDetail(t, true)
+  assert.equal(
+    document.querySelector('[role="note"]'),
+    null,
+    'no warning may show while the requirement is on',
+  )
 })

@@ -227,7 +227,8 @@
       "loading": "正在加载盘点单…",
       "noLines": "该盘点单暂无行。",
       "postedBadge": "已过账",
-      "unpostedBadge": "未过账"
+      "unpostedBadge": "未过账",
+      "noIndependentReviewWarning": "独立复核已关闭 — 盘点的人可以自己过账。请在公司设置 → 审批中要求第二用户。"
     },
     "list": {
       "showMore": "显示更多（共{total}条，已加载{loaded}条）",

@@ -227,7 +227,8 @@
       "loading": "Chargement du comptage…",
       "noLines": "Aucune ligne dans ce comptage.",
       "postedBadge": "Comptabilisé",
-      "unpostedBadge": "Non comptabilisé"
+      "unpostedBadge": "Non comptabilisé",
+      "noIndependentReviewWarning": "Le contrôle indépendant est désactivé — l’utilisateur qui a effectué ce comptage peut le comptabiliser. Exigez un second utilisateur dans Paramètres de la société → Approbations."
     },
     "list": {
       "showMore": "Afficher plus ({loaded} sur {total})",

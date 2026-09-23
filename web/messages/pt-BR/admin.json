@@ -745,6 +745,8 @@
       "description": "Controle quando as faturas de fornecedores são liberadas após o envio.",
       "requireVendorBillApproval": "Exigir aprovação antes de liberar faturas de fornecedores",
       "requireVendorBillApprovalHint": "Quando ativado, uma fatura de fornecedor só é liberada por meio de um fluxo de aprovação. Uma fatura sem fluxo correspondente permanece enviada, e o remetente é orientado a configurar um fluxo ou desativar esta opção.",
+      "requireStockCountReview": "Exigir outro usuário para lançar contagens",
+      "requireStockCountReviewHint": "Quando ativado, o usuário que registrou ou enviou uma contagem não pode lançá-la — outro usuário com permissão deve fazê-lo. Quando desativado, qualquer usuário com permissão pode lançar a própria contagem.",
       "noFlowTitle": "Sem fluxo de aprovação para faturas de fornecedores",
       "noFlowWarningAuto": "Nenhum fluxo de aprovação está configurado para faturas de fornecedores. <flows>Configure um em Fluxos</flows> — até lá, as faturas enviadas são liberadas automaticamente sem aprovador.",
       "noFlowWarningRequired": "Nenhum fluxo de aprovação está configurado para faturas de fornecedores. <flows>Configure um em Fluxos</flows> — até lá, cada envio de fatura de fornecedor será recusado."

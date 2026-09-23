@@ -77,6 +77,7 @@ export function CountsList({
   stockLocations,
   lots,
   canPost,
+  reviewRequired,
   canManageStockLocations,
   canManageItems,
   itemsExcludedCount,
@@ -92,6 +93,8 @@ export function CountsList({
   stockLocations: { id: string; code: string | null; locationId: string }[]
   lots: { id: string; item_id: string; lot_number: string }[]
   canPost: boolean
+  /** Independent-review requirement for posting (Company Settings → Approvals). */
+  reviewRequired: boolean
   canManageStockLocations: boolean
   /** May manage items: gates the Item Costing setup link in the picker note. */
   canManageItems: boolean
@@ -275,6 +278,7 @@ export function CountsList({
               itemOptions={itemOptions}
               stockLocationOptions={stockLocationOptions}
               canPost={canPost}
+              reviewRequired={reviewRequired}
               onDone={() => {
                 setSelectedId(null)
                 router.replace('/inventory?inventoryView=counts')
@@ -581,6 +585,7 @@ function CountDetailBody({
   itemOptions,
   stockLocationOptions,
   canPost,
+  reviewRequired,
   onDone,
   onChanged,
 }: {
@@ -588,6 +593,7 @@ function CountDetailBody({
   itemOptions: { value: string; label: string }[]
   stockLocationOptions: { value: string; label: string }[]
   canPost: boolean
+  reviewRequired: boolean
   onDone: () => void
   onChanged: () => void
 }) {
@@ -743,6 +749,14 @@ function CountDetailBody({
             <Button size="sm" disabled={busy} onClick={() => void run(t('counts.actions.submit'), { action: 'submit' })}>
               {t('counts.actions.submit')}
             </Button>
+          ) : null}
+          {header.status === 'review' && !reviewRequired ? (
+            <p
+              role="note"
+              className="w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+            >
+              {t('counts.detail.noIndependentReviewWarning')}
+            </p>
           ) : null}
           {header.status === 'review' ? (
             <>
