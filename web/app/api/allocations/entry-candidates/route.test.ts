@@ -98,6 +98,14 @@ const mockSources = new Map<string, string>([
      }`,
   ],
   [
+    "mock:business-date",
+    `export async function businessToday(orgId) {
+       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
+       state.lastBusinessTodayOrg = orgId
+       return '2026-07-15'
+     }`,
+  ],
+  [
     "mock:match",
     `export async function listEntryRulesInEffect(request) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
@@ -176,6 +184,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
   ["@openbooks/engine/src/allocations/match.ts", "mock:match"],
+  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
 ]);
 
 const hooks = registerHooks({
@@ -327,4 +336,19 @@ test("header context without a line returns every rule in effect", async () => {
     ["auto-rule", "manual-rule"],
   );
   assert.equal(state.matchCalls, 0);
+});
+
+test("the default document date is the org business day, passed through as asOf", async () => {
+  reset();
+  state.rules = [cannedRule("auto-rule", { policy: "automatic" })];
+  const res = await get("?documentKind=bill");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { rules: { ruleKey: string }[] };
+  assert.deepEqual(
+    body.rules.map((r) => r.ruleKey),
+    ["auto-rule"],
+  );
+  const seen = state as RouteState & { lastBusinessTodayOrg?: string; lastListRequest?: { asOf?: string } };
+  assert.equal(seen.lastBusinessTodayOrg, ORG_ID);
+  assert.equal(seen.lastListRequest?.asOf, "2026-07-15");
 });

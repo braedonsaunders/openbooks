@@ -48,8 +48,8 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
  * universal transaction editor (shard A9; matching owned by A4).
  *
  * Query: documentKind, accountId, departmentId, locationId, classId,
- * projectId, subsidiaryId, documentDate (YYYY-MM-DD, default today UTC),
- * policy (automatic|suggest|manual).
+ * projectId, subsidiaryId, documentDate (YYYY-MM-DD, default the org's
+ * business day), policy (automatic|suggest|manual).
  *
  * With `accountId` the response holds the rules whose version matches that
  * line coordinate, most specific first (the selectRule ordering in
