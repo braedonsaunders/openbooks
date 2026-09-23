@@ -2469,6 +2469,26 @@
         "singularTitle": "招聘流程阶段",
         "description": "流程模板中的一个有序阶段：筛选、面试、测评、录用、已入职或已拒绝。"
       },
+      "ai-rails-settings": {
+        "title": "AI 护栏设置",
+        "singularTitle": "AI 护栏设置",
+        "description": "确定性 HR 护栏的扫描阈值、基线队列、组织声明的偏见词和台账复核频率。"
+      },
+      "hrm-action-reasons": {
+        "title": "操作原因",
+        "singularTitle": "操作原因",
+        "description": "每种 HR 操作的原因代码：撤销和更正归入其一，并遵守备注规则。"
+      },
+      "qualification-types": {
+        "title": "资质类型",
+        "singularTitle": "资质类型",
+        "description": "组织的资质体系：认证、执照、许可和培训，含颁发机构和有效期。"
+      },
+      "qualification-settings": {
+        "title": "资质设置",
+        "singularTitle": "资质设置",
+        "description": "超出基础词汇的扩展资质类别（按组织）。"
+      },
       "hrm-review-templates": {
         "title": "评审模板",
         "singularTitle": "评审模板",

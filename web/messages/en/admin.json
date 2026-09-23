@@ -2469,6 +2469,26 @@
         "singularTitle": "Pipeline stage",
         "description": "One ordered stage of a pipeline template: screening, interview, assessment, offer, hired, or rejected."
       },
+      "ai-rails-settings": {
+        "title": "AI rails settings",
+        "singularTitle": "AI rails setting",
+        "description": "Scan thresholds, baseline cohorts, org-declared bias terms, and the ledger review cadence for the deterministic HR rails."
+      },
+      "hrm-action-reasons": {
+        "title": "Action reasons",
+        "singularTitle": "Action reason",
+        "description": "Reason codes per HR action: rescind and correct file under one of these, with comment rules."
+      },
+      "qualification-types": {
+        "title": "Qualification types",
+        "singularTitle": "Qualification type",
+        "description": "The org's qualification taxonomy: certifications, licenses, clearances, and training, with issuing bodies and validity."
+      },
+      "qualification-settings": {
+        "title": "Qualification settings",
+        "singularTitle": "Qualification settings",
+        "description": "Extended qualification categories beyond the base vocabulary, per org."
+      },
       "hrm-review-templates": {
         "title": "Review templates",
         "singularTitle": "Review template",

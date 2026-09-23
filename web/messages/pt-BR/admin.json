@@ -2469,6 +2469,26 @@
         "singularTitle": "Etapa do funil",
         "description": "Uma etapa ordenada de um modelo: triagem, entrevista, avaliação, oferta, contratado ou recusado."
       },
+      "ai-rails-settings": {
+        "title": "Configurações dos trilhos de IA",
+        "singularTitle": "Configuração dos trilhos de IA",
+        "description": "Limiares de varredura, coortes de referência, termos de viés declarados e a cadência de revisão do razão para os trilhos determinísticos de RH."
+      },
+      "hrm-action-reasons": {
+        "title": "Motivos de ação",
+        "singularTitle": "Motivo de ação",
+        "description": "Códigos de motivo por ação de RH: a rescisão e a correção são registradas sob um deles, com regras de comentário."
+      },
+      "qualification-types": {
+        "title": "Tipos de qualificação",
+        "singularTitle": "Tipo de qualificação",
+        "description": "A taxonomia de qualificações da organização: certificações, licenças, habilitações e treinamentos, com emissores e validade."
+      },
+      "qualification-settings": {
+        "title": "Configurações de qualificação",
+        "singularTitle": "Configurações de qualificação",
+        "description": "Categorias de qualificação estendidas além do vocabulário base, por organização."
+      },
       "hrm-review-templates": {
         "title": "Modelos de avaliação",
         "singularTitle": "Modelo de avaliação",

@@ -2424,6 +2424,26 @@
         "singularTitle": "Etapa de contratación",
         "description": "Una etapa ordenada de una plantilla: criba, entrevista, evaluación, oferta, contratado o rechazado."
       },
+      "ai-rails-settings": {
+        "title": "Ajustes de rieles de IA",
+        "singularTitle": "Ajuste de rieles de IA",
+        "description": "Umbrales de análisis, cohortes de referencia, términos de sesgo declarados y la cadencia de revisión del registro para los rieles deterministas de RR. HH."
+      },
+      "hrm-action-reasons": {
+        "title": "Motivos de acción",
+        "singularTitle": "Motivo de acción",
+        "description": "Códigos de motivo por acción de RR. HH.: la rescisión y la corrección se registran bajo uno de ellos, con reglas de comentario."
+      },
+      "qualification-types": {
+        "title": "Tipos de cualificación",
+        "singularTitle": "Tipo de cualificación",
+        "description": "La taxonomía de cualificaciones de la organización: certificaciones, licencias, habilitaciones y formación, con emisores y validez."
+      },
+      "qualification-settings": {
+        "title": "Ajustes de cualificación",
+        "singularTitle": "Ajustes de cualificación",
+        "description": "Categorías de cualificación ampliadas más allá del vocabulario base, por organización."
+      },
       "hrm-review-templates": {
         "title": "Plantillas de evaluación",
         "singularTitle": "Plantilla de evaluación",

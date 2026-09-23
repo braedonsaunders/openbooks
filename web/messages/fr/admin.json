@@ -2424,6 +2424,26 @@
         "singularTitle": "Étape de recrutement",
         "description": "Une étape ordonnée d'un modèle : présélection, entretien, évaluation, offre, embauché ou refusé."
       },
+      "ai-rails-settings": {
+        "title": "Paramètres des garde-fous IA",
+        "singularTitle": "Paramètre des garde-fous IA",
+        "description": "Seuils d'analyse, cohortes de référence, termes de biais déclarés et rythme de révision du registre pour les garde-fous RH déterministes."
+      },
+      "hrm-action-reasons": {
+        "title": "Motifs d'action",
+        "singularTitle": "Motif d'action",
+        "description": "Codes de motif par action RH : l'annulation et la correction sont classées sous l'un d'eux, avec règles de commentaire."
+      },
+      "qualification-types": {
+        "title": "Types de qualification",
+        "singularTitle": "Type de qualification",
+        "description": "La taxonomie des qualifications de l'organisation : certifications, licences, habilitations et formations, avec organismes et validité."
+      },
+      "qualification-settings": {
+        "title": "Paramètres de qualification",
+        "singularTitle": "Paramètres de qualification",
+        "description": "Catégories de qualification étendues au-delà du vocabulaire de base, par organisation."
+      },
       "hrm-review-templates": {
         "title": "Modèles d’évaluation",
         "singularTitle": "Modèle d’évaluation",
