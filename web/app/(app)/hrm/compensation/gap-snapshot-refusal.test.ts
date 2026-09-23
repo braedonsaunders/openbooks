@@ -56,11 +56,27 @@ registerHooks({
         url: "data:text/javascript,export const can = () => true; export async function getAuthz() { return null; }",
       };
     }
-    if (owned && specifier === "../features") {
+    // The feature gate is stubbed for EVERY importer, not just the two
+    // loaders under test: the gate is also reached through
+    // ../feature-gates (requireFeatureEnabled) and web/lib/hrm/home.ts,
+    // and a parent-scoped stub lets those edges fall through to the real
+    // `select settings->'features' from orgs` read. The unit partition has
+    // no database, so every such edge must be stubbed. All cases run with
+    // the gates on (the off-switch remedy is pinned by
+    // compensation-page.test.ts); the loaders' real refusal and error
+    // classes stay intact.
+    if (specifier === "../features") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export async function isFeatureEnabled(orgId, key) { const flags = globalThis.__f17Features; if (flags && key in flags) return flags[key]; return true; }",
+      };
+    }
+    if (specifier === "../feature-gates") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function requireFeatureEnabled() {}",
       };
     }
     if (owned && specifier === "../../components/module-home/group-tabs") {
