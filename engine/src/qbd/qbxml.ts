@@ -219,6 +219,37 @@ export function nodes<T extends Record<string, unknown> = Record<string, unknown
   return out;
 }
 
+/**
+ * A response whose statusCode or iteratorRemainingCount is not a strict
+ * integer token. The bridge refuses these before completing the request (and
+ * fails the capture with a named error) instead of reading a blank status as
+ * success or a garbage iterator count as the last page.
+ */
+export class MalformedQbxmlResponseError extends Error {
+  readonly name = "MalformedQbxmlResponseError";
+  readonly attribute: string;
+  readonly raw: string;
+  constructor(attribute: string, raw: string) {
+    super(`QuickBooks returned an invalid ${attribute} ${JSON.stringify(raw)}`);
+    this.attribute = attribute;
+    this.raw = raw;
+  }
+}
+
+/**
+ * Strict integer-token validation for numeric qbXML attributes. No trimming
+ * (whitespace is malformed, not zero), no floats, no non-finite values, and
+ * within the safe-integer range so the value survives the Number conversion
+ * exactly. Returns null for anything else, including a missing attribute.
+ */
+function strictIntegerToken(raw: unknown, pattern: RegExp): number | null {
+  if (raw == null) return null;
+  const text = String(raw);
+  if (!pattern.test(text)) return null;
+  const value = Number(text);
+  return Number.isSafeInteger(value) ? value : null;
+}
+
 export function responseStatus(xml: string): {
   code: number;
   severity: string;
@@ -232,15 +263,43 @@ export function responseStatus(xml: string): {
   let kind: string | null = null;
   let response: Record<string, unknown> | null = null;
   walk(parsed, (key, value) => { if (!response && key.endsWith("Rs") && "statusCode" in value) { response = value; kind = key; } });
-  if (!response) throw new Error("QuickBooks response contains no status-bearing response node");
+  if (!response) {
+    // An Rs element with no statusCode at all is a malformed status, not an
+    // absent response: refusing it here fails the capture with a named error
+    // instead of leaving the request in flight.
+    let bareKind: string | null = null;
+    walk(parsed, (key) => { if (!bareKind && key.endsWith("Rs")) bareKind = key; });
+    if (bareKind) throw new MalformedQbxmlResponseError("statusCode", "");
+    throw new Error("QuickBooks response contains no status-bearing response node");
+  }
   const node = response as Record<string, unknown>;
   const rawRequestId = node.requestID ?? node.requestId ?? null;
+  // statusCode must be present as a strict signed integer token: a blank or
+  // whitespace status previously coerced to 0 (SUCCESS) via Number(""), which
+  // could store a response and complete a capture that never succeeded.
+  const code = strictIntegerToken(node.statusCode ?? null, /^-?\d+$/);
+  if (code === null) {
+    const raw = node.statusCode == null ? "" : String(node.statusCode);
+    throw new MalformedQbxmlResponseError("statusCode", raw);
+  }
+  // iteratorRemainingCount is absent when the response is not paged (0
+  // remaining). When present it must be a strict non-negative integer: NaN,
+  // negative, fractional or infinite counts previously read as falsy or
+  // positive and could complete a capture with pages missing.
+  let iteratorRemaining = 0;
+  if (node.iteratorRemainingCount != null) {
+    const parsed = strictIntegerToken(node.iteratorRemainingCount, /^\d+$/);
+    if (parsed === null) {
+      throw new MalformedQbxmlResponseError("iteratorRemainingCount", String(node.iteratorRemainingCount));
+    }
+    iteratorRemaining = parsed;
+  }
   return {
-    code: Number(node.statusCode ?? -1),
+    code,
     severity: String(node.statusSeverity ?? "Error"),
     message: String(node.statusMessage ?? "Unknown QuickBooks error"),
     iteratorId: node.iteratorID ? String(node.iteratorID) : null,
-    iteratorRemaining: Number(node.iteratorRemainingCount ?? 0),
+    iteratorRemaining,
     kind: kind ?? "UnknownRs",
     requestId: rawRequestId == null ? null : String(rawRequestId),
   };
