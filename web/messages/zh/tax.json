@@ -155,7 +155,9 @@
       "rowDescriptionRequiredTemporary": "暂时性差异第{row}行需要填写说明——请添加说明或清空该行。",
       "computeFailed": "无法计算所得税计提。",
       "rowAmountRequiredPermanent": "永久性差异第{row}行需要填写金额——请添加金额或清空说明。",
-      "rowDifferenceRequiredTemporary": "暂时性差异第{row}行需要填写差异金额——请添加金额或清空说明。"
+      "rowDifferenceRequiredTemporary": "暂时性差异第{row}行需要填写差异金额——请添加金额或清空说明。",
+      "rowObjectRequiredPermanent": "永久性差异第{row}行必须是包含说明和金额的有效行——请修正该行后重试。",
+      "rowObjectRequiredTemporary": "暂时性差异第{row}行必须是包含说明、类别和差异金额的有效行——请修正该行后重试。"
     },
     "detail": {
       "title": "{year} 财年计提 · v{version}",

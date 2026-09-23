@@ -53,6 +53,17 @@ export function ProvisionComputeButton() {
         ? t("rowDescriptionRequiredTemporary", { row })
         : t("rowDifferenceRequiredTemporary", { row });
     }
+    // A grid element that is not a row object at all (string, null, number,
+    // nested array): the server refuses it by the same grid index.
+    const shape = /^(permanentDifferences|additionalDifferences)\[(\d+)\]: each row must be an object/.exec(
+      serverError ?? "",
+    );
+    if (shape) {
+      const row = Number(shape[2]) + 1;
+      return shape[1] === "permanentDifferences"
+        ? t("rowObjectRequiredPermanent", { row })
+        : t("rowObjectRequiredTemporary", { row });
+    }
     return serverError || t("computeFailed");
   }
 

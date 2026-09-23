@@ -159,7 +159,9 @@
       "rowDescriptionRequiredTemporary": "Temporary differences row {row} needs a description — add one or clear the row.",
       "computeFailed": "The provision could not be computed.",
       "rowAmountRequiredPermanent": "Permanent differences row {row} needs an amount — add one or clear the description.",
-      "rowDifferenceRequiredTemporary": "Temporary differences row {row} needs a difference — add one or clear the description."
+      "rowDifferenceRequiredTemporary": "Temporary differences row {row} needs a difference — add one or clear the description.",
+      "rowObjectRequiredPermanent": "Permanent differences row {row} must be a grid row with a description and an amount — fix the line and try again.",
+      "rowObjectRequiredTemporary": "Temporary differences row {row} must be a grid row with a description, a category and a difference — fix the line and try again."
     },
     "detail": {
       "title": "FY{year} provision · v{version}",

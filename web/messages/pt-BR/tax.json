@@ -155,7 +155,9 @@
       "rowDescriptionRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma descrição — adicione uma ou limpe a linha.",
       "computeFailed": "Não foi possível calcular a provisão.",
       "rowAmountRequiredPermanent": "A linha {row} de diferenças permanentes precisa de um valor — adicione um ou limpe a descrição.",
-      "rowDifferenceRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma diferença — adicione uma ou limpe a descrição."
+      "rowDifferenceRequiredTemporary": "A linha {row} de diferenças temporárias precisa de uma diferença — adicione uma ou limpe a descrição.",
+      "rowObjectRequiredPermanent": "A linha {row} de diferenças permanentes deve ser uma linha válida com descrição e valor — corrija a linha e tente de novo.",
+      "rowObjectRequiredTemporary": "A linha {row} de diferenças temporárias deve ser uma linha válida com descrição, categoria e diferença — corrija a linha e tente de novo."
     },
     "detail": {
       "title": "Provisão {year} · v{version}",

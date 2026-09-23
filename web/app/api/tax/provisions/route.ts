@@ -82,6 +82,15 @@ export async function POST(req: Request) {
     isBlank(v) || (typeof v === "string" && v.trim() === PRISTINE_GRID_CATEGORY);
   const described = (v: unknown): string | null =>
     typeof v === "string" && v.trim() ? v.trim() : null;
+  // Grid rows arrive unfiltered so server indexes match the preparer's grid.
+  // Anything that is not a plain row object (a string, null, a number, a
+  // nested array) reads as "blank" through optional chaining and would be
+  // SKIPPED as an empty line, silently understating the provision — refuse it
+  // by indexed path BEFORE the blank-row test runs. Only a genuine object
+  // with empty description/amount (and the pristine "other" category) stays
+  // blank.
+  const isRowObject = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
   if (body.permanentDifferences !== undefined && !Array.isArray(body.permanentDifferences)) {
     return NextResponse.json({ error: "invalid permanent differences" }, { status: 400 });
   }
@@ -90,6 +99,12 @@ export async function POST(req: Request) {
   }
   const permanentDifferences: PermanentDifference[] = [];
   for (const [i, p] of (body.permanentDifferences as { description?: unknown; amount?: unknown }[] | undefined ?? []).entries()) {
+    if (!isRowObject(p)) {
+      return NextResponse.json(
+        { error: `permanentDifferences[${i}]: each row must be an object with description and amount` },
+        { status: 400 },
+      );
+    }
     const description = described(p?.description);
     if (!description) {
       if (isBlank(p?.amount)) continue;
@@ -110,6 +125,12 @@ export async function POST(req: Request) {
   }
   const additionalDifferences: DifferenceInput[] = [];
   for (const [i, d] of (body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[] | undefined ?? []).entries()) {
+    if (!isRowObject(d)) {
+      return NextResponse.json(
+        { error: `additionalDifferences[${i}]: each row must be an object with description, category and difference` },
+        { status: 400 },
+      );
+    }
     // An undescribed row is an empty grid line, not data — skip it exactly
     // as permanent differences do. A described row with an unknown category
     // is a caller error: dropping it would silently understate the run.
@@ -163,6 +184,9 @@ export async function POST(req: Request) {
       if (bad) return bad;
     }
     for (const [i, p] of ((permanentRaw ?? []) as { description?: unknown; amount?: unknown }[]).entries()) {
+      if (!isRowObject(p)) {
+        return fail(`${path}.permanentDifferences[${i}]: each row must be an object with description and amount`);
+      }
       const description = described(p?.description);
       if (!description) {
         if (isBlank(p?.amount)) continue;
@@ -181,6 +205,9 @@ export async function POST(req: Request) {
       if (bad) return bad;
     }
     for (const [i, d] of ((additionalRaw ?? []) as { category?: unknown; description?: unknown; difference?: unknown }[]).entries()) {
+      if (!isRowObject(d)) {
+        return fail(`${path}.additionalDifferences[${i}]: each row must be an object with description, category and difference`);
+      }
       const description = described(d?.description);
       if (!description) {
         if (isBlank(d?.difference) && isBlankCategory(d?.category)) continue;

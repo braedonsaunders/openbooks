@@ -418,6 +418,68 @@ test("POST refuses malformed per-entity inputs without reaching the run", async 
   }
 });
 
+test("POST refuses non-object grid rows by indexed path instead of skipping them", async () => {
+  // A grid element that is not a plain object reads as "blank" through
+  // optional chaining — without the shape refusal each of these computes with
+  // [] and saves an understated provision with 201.
+  const shapes: { name: string; value: unknown }[] = [
+    { name: "string", value: "25000" },
+    { name: "null", value: null },
+    { name: "number", value: 42 },
+    { name: "nested array", value: [{ description: "Meals", amount: "10.00" }] },
+  ];
+  for (const { name, value } of shapes) {
+    for (const body of [
+      { fiscalYear: 2026, permanentDifferences: [value] },
+      { fiscalYear: 2026, additionalDifferences: [value] },
+    ]) {
+      routeState.calls.length = 0;
+      const response = await post(body);
+      assert.equal(response.status, 400, `${name}: ${JSON.stringify(body)}`);
+      const payload = (await response.json()) as { error: string };
+      assert.match(payload.error, /^\S+\[0\]: each row must be an object with/);
+      assert.equal(routeState.calls.length, 0, `${name} must never reach the provision run`);
+    }
+    for (const key of ["permanentDifferences", "additionalDifferences"] as const) {
+      routeState.calls.length = 0;
+      const response = await post({
+        fiscalYear: 2026,
+        entities: { "sub-1": { [key]: [value] } },
+      });
+      assert.equal(response.status, 400, `per-entity ${name}: ${key}`);
+      const payload = (await response.json()) as { error: string };
+      assert.match(
+        payload.error,
+        new RegExp(`^entities\\["sub-1"\\]\\.${key}\\[0\\]: each row must be an object with`),
+      );
+      assert.equal(routeState.calls.length, 0, `per-entity ${name} must never reach the provision run`);
+    }
+  }
+
+  // The refusal names the exact grid row, matching the described-row errors.
+  routeState.calls.length = 0;
+  const indexed = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [{ description: "Meals", amount: "10.00" }, null],
+  });
+  assert.equal(indexed.status, 400);
+  assert.deepEqual(await indexed.json(), {
+    error: "permanentDifferences[1]: each row must be an object with description and amount",
+  });
+  assert.equal(routeState.calls.length, 0);
+
+  routeState.calls.length = 0;
+  const temporary = await post({
+    fiscalYear: 2026,
+    additionalDifferences: ["25000"],
+  });
+  assert.equal(temporary.status, 400);
+  assert.deepEqual(await temporary.json(), {
+    error: "additionalDifferences[0]: each row must be an object with description, category and difference",
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
 test("POST refuses a malformed presentation currency without reaching the run", async () => {
   for (const presentationCurrency of ["US", "usd", "USDD", 123, ""]) {
     routeState.calls.length = 0;
