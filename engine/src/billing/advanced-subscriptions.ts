@@ -602,6 +602,17 @@ export async function publishPlanVersion(orgId: string, actorId: string, version
        where version_id = ${versionId} and org_id = ${orgId}
     `));
     if (!count.rows[0]?.n) throw new AdvancedSubscriptionError("a published version needs at least one component");
+    // Activation copies only required components, so an all-optional
+    // version would activate into a subscription with zero components that
+    // every invoice then refuses. Refuse the catalog error here, by name,
+    // instead of surfacing it at billing time.
+    const required = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from subscription_plan_version_components
+       where version_id = ${versionId} and org_id = ${orgId} and not is_optional
+    `));
+    if (!required.rows[0]?.n) {
+      throw new AdvancedSubscriptionError("a published version needs at least one required component — mark a component as required before publishing");
+    }
     const sameDate = (await db.execute(sql`
       select 1 from subscription_plan_versions where org_id = ${orgId} and plan_id = ${version.planId}
        and status = 'published' and effective_from = ${version.effectiveFrom} and id <> ${versionId} limit 1
@@ -639,6 +650,16 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     }
     if (version.effectiveFrom > termStartsOn || (version.effectiveTo && version.effectiveTo < termStartsOn)) {
       throw new AdvancedSubscriptionError("plan version is not effective on the contract start date");
+    }
+    // Backstop for versions published before the required-component publish
+    // guard: only required components are copied below, so activating a
+    // version with none would leave an unbillable subscription.
+    const requiredComponents = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from subscription_plan_version_components
+       where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional
+    `));
+    if (!requiredComponents.rows[0]?.n) {
+      throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before activating");
     }
     const renewalTermMonths = input.renewalTermMonths == null ? null : subscriptionPeriodCount(input.renewalTermMonths, "renewal term");
     const renewalPolicy = input.renewalPolicy ?? "auto";
