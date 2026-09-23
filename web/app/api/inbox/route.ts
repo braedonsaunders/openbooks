@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { countInbox, listInbox, type InboxKind } from "@openbooks/engine/src/inbox/index.ts";
+import { countInbox, listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
 import { approvalWorklistPageForAuthz } from "../../../lib/application/approvals";
 import { getAuthz } from "../../../lib/authz";
 import { inboxContext, INBOX_FILTER_KINDS, maySeeUnion } from "../../../lib/inbox-context";
@@ -47,9 +47,13 @@ export async function GET(req: Request) {
     }
     const kinds: InboxKind[] | undefined =
       filter === "all" || filter === "overdue" ? undefined : INBOX_FILTER_KINDS[filter];
-    const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}) });
+    // One failing source names itself in notices while the healthy legs
+    // still list (OM-10) — the page renders them beside the surviving rows.
+    const notices: InboxSourceNotice[] = [];
+    const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
     return NextResponse.json({
       items: filter === "overdue" ? items.filter((i) => i.priority === "overdue") : items,
+      notices: notices.map((notice) => ({ source: notice.kind, reason: notice.message })),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "the inbox could not be read";

@@ -45,6 +45,7 @@
   "open": "打开",
   "acted": "已完成",
   "refused": "无法完成：{message}",
+  "sourceUnavailable": "{source}不可用：{reason}",
   "delegatePlaceholder": "委派给…",
   "count": "{count}项"
 }

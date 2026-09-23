@@ -45,6 +45,7 @@
   "open": "Ouvrir",
   "acted": "Terminé",
   "refused": "Impossible de terminer : {message}",
+  "sourceUnavailable": "{source} indisponible : {reason}",
   "delegatePlaceholder": "Déléguer à…",
   "count": "{count, plural, one {# élément} other {# éléments}}"
 }

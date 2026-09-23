@@ -57,10 +57,13 @@ export function InboxTaskList({
   rows,
   users,
   labels,
+  notices,
 }: {
   rows: InboxTaskRow[]
   users: { id: string; name: string }[]
   labels: { open: string; acted: string; delegatePlaceholder: string }
+  /** Named per-source notices for the legs that refused or failed (OM-10). */
+  notices?: string[]
 }) {
   // `refused` carries an ICU argument, so it is resolved HERE, where the
   // argument exists. Resolved in the loader it threw FORMATTING_ERROR and
@@ -132,10 +135,25 @@ export function InboxTaskList({
   }
 
   const visible = rows.filter((row) => !done.has(row.id))
-  if (visible.length === 0) return null
+  const notes = notices ?? []
+  if (visible.length === 0 && notes.length === 0) return null
 
   return (
-    <Table>
+    <>
+      {notes.length > 0 ? (
+        <div className="mb-3 space-y-2" role="status">
+          {notes.map((note) => (
+            <div
+              key={note}
+              className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300"
+            >
+              {note}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {visible.length > 0 ? (
+      <Table>
       <TableHeader>
         <TableRow>
           <TableHead>{t('columns.task')}</TableHead>
@@ -205,5 +223,7 @@ export function InboxTaskList({
         ))}
       </TableBody>
     </Table>
+      ) : null}
+    </>
   )
 }

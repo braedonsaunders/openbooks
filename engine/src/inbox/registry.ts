@@ -12,6 +12,7 @@
 
 import type { InboxItem, InboxKind, InboxListContext } from "./types.ts";
 import { compareInboxItems } from "./types.ts";
+import { HrmAuthorizationError } from "../hrm/authorization.ts";
 
 /**
  * A read window for one source. Applies per source (not to the merged
@@ -71,15 +72,43 @@ function adapterFor(kind: string): InboxAdapter | null {
 }
 
 /**
- * Live read over every registered adapter. A small per-request cache
- * (Map passed by the caller, scoped to one request) avoids re-reading a
- * source the home page and the badge both ask for. Deterministic: the
- * merged list is sorted overdue → due soon → newest with a stable id
- * tiebreak.
+ * One source that could not be read. The kind names the area so the surface
+ * can say WHICH work is missing, and the message is the source's own
+ * refusal or failure intact — never a generic placeholder, never silence.
+ */
+export interface InboxSourceNotice {
+  readonly kind: InboxKind;
+  readonly message: string;
+}
+
+/**
+ * One source's refusal or failure must not blank the whole inbox (OM-10).
+ * The failure is named into the caller's notices collector (when supplied)
+ * so the surface renders it beside the surviving sources; a failed leg is
+ * never cached, so a retry re-reads rather than serving an empty list as
+ * "no work". Expected gating refusals stay out of the logs — they are an
+ * outcome of the read model, not an operational failure. Anything else
+ * logs the way the house does.
+ */
+function recordSourceFailure(kind: InboxKind, error: unknown, notices?: InboxSourceNotice[]): void {
+  const message = error instanceof Error ? error.message : "the inbox source could not be read";
+  if (!(error instanceof HrmAuthorizationError)) {
+    console.error(`[inbox] ${kind} list failed:`, error);
+  }
+  notices?.push({ kind, message });
+}
+
+/**
+ * Live read over every registered adapter. Each source is isolated: one
+ * source's refusal or failure names itself in `opts.notices` while the
+ * other sources still list. A small per-request cache (Map passed by the
+ * caller, scoped to one request) avoids re-reading a source the home page
+ * and the badge both ask for. Deterministic: the merged list is sorted
+ * overdue → due soon → newest with a stable id tiebreak.
  */
 export async function listInbox(
   ctx: InboxListContext,
-  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage },
+  opts?: { kinds?: InboxKind[]; cache?: Map<string, InboxItem[]>; page?: InboxPage; notices?: InboxSourceNotice[] },
 ): Promise<InboxItem[]> {
   const kinds = opts?.kinds ?? inboxAdapterKinds();
   const out: InboxItem[] = [];
@@ -98,12 +127,20 @@ export async function listInbox(
     // the source default, not the whole table), so an item outside the
     // window 404s with a reload instead of deciding blind.
     if (opts?.page) {
-      out.push(...(await adapter.list(ctx, opts.page)));
+      try {
+        out.push(...(await adapter.list(ctx, opts.page)));
+      } catch (error) {
+        recordSourceFailure(kind, error, opts?.notices);
+      }
       continue;
     }
-    const items = await adapter.list(ctx);
-    opts?.cache?.set(cacheKey, items);
-    out.push(...items);
+    try {
+      const items = await adapter.list(ctx);
+      opts?.cache?.set(cacheKey, items);
+      out.push(...items);
+    } catch (error) {
+      recordSourceFailure(kind, error, opts?.notices);
+    }
   }
   return out.sort(compareInboxItems);
 }
@@ -126,13 +163,19 @@ export async function countInbox(
     // A real count never materializes rows: sources with a list window
     // report their full pending count, so the badge stops undercounting
     // past the window. Sources without one fall back to the list length.
-    if (adapter.count) {
-      total += await adapter.count(ctx);
-      continue;
+    // A failing source counts nothing rather than refusing the badge; the
+    // list read above names it, and unexpected failures log here too.
+    try {
+      if (adapter.count) {
+        total += await adapter.count(ctx);
+        continue;
+      }
+      const items = await adapter.list(ctx);
+      opts?.cache?.set(cacheKey, items);
+      total += items.length;
+    } catch (error) {
+      recordSourceFailure(kind, error);
     }
-    const items = await adapter.list(ctx);
-    opts?.cache?.set(cacheKey, items);
-    total += items.length;
   }
   return total;
 }

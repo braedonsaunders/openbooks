@@ -14,7 +14,9 @@ import {
   countInbox,
   InboxError,
   listInbox,
+  type InboxSourceNotice,
 } from "./registry.ts";
+import { HrmAuthorizationError } from "../hrm/authorization.ts";
 import type { InboxAdapter } from "./registry.ts";
 import type { InboxItem } from "./types.ts";
 
@@ -229,6 +231,118 @@ describe("inbox count and paging", () => {
       __testResetInboxAdapters([]);
     }
   });
+
+describe("adapter isolation (OM-10)", () => {
+  function failingAdapter(kind: "notification", error: Error): InboxAdapter {
+    return {
+      kind,
+      async list(): Promise<InboxItem[]> {
+        throw error;
+      },
+      async act(): Promise<void> {},
+    };
+  }
+
+  async function captureConsoleError<T>(work: () => Promise<T>): Promise<{ result: T; errors: unknown[][] }> {
+    const errors: unknown[][] = [];
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      errors.push(args);
+    };
+    try {
+      return { result: await work(), errors };
+    } finally {
+      console.error = orig;
+    }
+  }
+
+  it("one failing source does not blank the others; the failure is named in notices", async () => {
+    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", new Error("notification store unreachable"))]);
+    const notices: InboxSourceNotice[] = [];
+    try {
+      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
+      assert.deepEqual(
+        listed.map((i) => i.id),
+        ["flows_approval:g1"],
+      );
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0]!.kind, "notification");
+      assert.match(notices[0]!.message, /notification store unreachable/);
+      assert.equal(errors.length, 1, "an unexpected source failure is logged the way the house does");
+      assert.match(String(errors[0]![0]), /\[inbox\] notification/);
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("a named authorization refusal is noticed by name, not logged", async () => {
+    // Gating refusals are an expected outcome of the read model, not an
+    // operational failure: the inbox names the source and keeps the other
+    // legs, without log noise on every load.
+    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+    __testResetInboxAdapters([
+      fakeAdapter(healthy),
+      failingAdapter(
+        "notification",
+        new HrmAuthorizationError(
+          "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",
+        ),
+      ),
+    ]);
+    const notices: InboxSourceNotice[] = [];
+    try {
+      const { result: listed, errors } = await captureConsoleError(() => listInbox(CTX, { notices }));
+      assert.deepEqual(
+        listed.map((i) => i.id),
+        ["flows_approval:g1"],
+      );
+      assert.equal(notices.length, 1);
+      assert.equal(notices[0]!.kind, "notification");
+      assert.match(notices[0]!.message, /hrm\.leave\.request/);
+      assert.deepEqual(errors, [], "an expected refusal must not log");
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("a failing source is not cached as an empty leg", async () => {
+    let calls = 0;
+    const flaky: InboxAdapter = {
+      kind: "notification",
+      async list(): Promise<InboxItem[]> {
+        calls += 1;
+        throw new Error("notification store unreachable");
+      },
+      async act(): Promise<void> {},
+    };
+    __testResetInboxAdapters([flaky]);
+    const orig = console.error;
+    console.error = () => {};
+    try {
+      await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
+      await listInbox(CTX, { kinds: ["notification"], cache: new Map(), notices: [] });
+      assert.equal(calls, 2, "a failed leg is re-attempted, never served as a cached empty list");
+    } finally {
+      console.error = orig;
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("countInbox skips a failing source instead of refusing the badge", async () => {
+    const healthy = [item({ id: "flows_approval:g1", actions: [] })];
+    __testResetInboxAdapters([fakeAdapter(healthy), failingAdapter("notification", new Error("notification store unreachable"))]);
+    const orig = console.error;
+    console.error = () => {};
+    try {
+      assert.equal(await countInbox(CTX), 1);
+    } finally {
+      console.error = orig;
+      __testResetInboxAdapters([]);
+    }
+  });
+
+});
 
   it("listInbox forwards the read window to the adapter", async () => {
     const seen: Array<{ limit?: number; offset?: number } | undefined> = [];

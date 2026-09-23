@@ -45,6 +45,7 @@
   "open": "開く",
   "acted": "完了",
   "refused": "完了できませんでした: {message}",
+  "sourceUnavailable": "{source}は利用できません: {reason}",
   "delegatePlaceholder": "委任先…",
   "count": "{count}件"
 }

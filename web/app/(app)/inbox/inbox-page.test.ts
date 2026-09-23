@@ -75,3 +75,31 @@ test('the inbox route is canonical and the task actions post in place', () => {
 test('no /approvals page route remains (rebrand: the route moved once)', () => {
   assert.throws(() => source('../approvals/page.tsx'), 'the approvals route must not exist')
 })
+
+test('one failing source names itself beside the surviving rows (OM-10)', () => {
+  // The leave own leg used to throw for actors without hrm.leave.request
+  // and the throw blanked the whole inbox. Each task read now collects its
+  // failed sources while the healthy legs still list, and the loader
+  // renders them as small named notices — never a crash, never silence.
+  assert.match(page, /notices: collected/, 'each task read collects its failed sources')
+  assert.match(page, /taskNoticeByKind/, 'the parallel reads dedupe notices by kind')
+  assert.match(
+    page,
+    /ti\('sourceUnavailable', \{ source: ti\(`kinds\./,
+    'the notice names the area through its kinds label',
+  )
+  assert.match(page, /notices: data\.taskNotices/, 'the task list carries the notices')
+  assert.match(
+    page,
+    /tasksPresent: showTasks && \(taskRows\.length > 0 \|\| failedSourceNotices\.length > 0\)/,
+    'the list block stays mounted so a notice renders even with no rows',
+  )
+  assert.match(
+    page,
+    /taskRows\.length === 0 && failedSourceNotices\.length === 0/,
+    'a failed source is not "all clear"',
+  )
+  const island = source('./InboxTaskList.tsx')
+  assert.match(island, /notes\.length === 0/, 'notices render even when no rows remain')
+  assert.match(island, /role="status"/, 'the notice is a status region, not a second table')
+})
