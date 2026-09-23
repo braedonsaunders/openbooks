@@ -5,7 +5,7 @@
     "savedViews": "Vistas guardadas",
     "cards": {
       "pnlTitle": "Estado de resultados",
-      "pnlDescription": "Estado de resultados — valores predefinidos por ejercicio fiscal, comparativos, desglose por departamento, diseños personalizados",
+      "pnlDescription": "Pérdidas y ganancias del período, con comparativos y desgloses",
       "balanceSheetTitle": "Balance general",
       "balanceSheetDescription": "Situación financiera a cualquier fecha, con utilidades retenidas calculadas",
       "trialBalanceTitle": "Balanza de comprobación",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "Estado de flujo de efectivo",
       "cashFlowDescription": "Método directo — operación, inversión y financiamiento, conciliado con movimientos bancarios",
       "generalLedgerTitle": "Libro mayor",
-      "generalLedgerDescription": "Actividad registrada por cuenta con saldo acumulado — el detalle listo para auditoría detrás de cada estado",
+      "generalLedgerDescription": "Actividad registrada por cuenta, con saldo acumulado",
       "journalTitle": "Libro diario",
       "journalDescription": "Cada asiento registrado con sus líneas — el libro cronológico de entrada original",
       "registersTitle": "Registros de CxC y CxP",
@@ -27,7 +27,7 @@
       "budgetTitle": "Presupuesto vs Real",
       "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %",
       "projectProfitabilityTitle": "Rentabilidad por proyecto",
-      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas",
+      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto, con horas aprobadas",
       "ordersTitle": "Flujo de pedidos",
       "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
       "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
@@ -2059,67 +2059,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "Antigüedad de cuentas por pagar por proveedor",
-      "description": "Líneas del mayor de cuentas por pagar abiertas, sumadas por proveedor y mes de vencimiento. Los totales negativos son importes adeudados (cuentas por pagar de naturaleza acreedora)."
+      "description": "Saldos pendientes de cuentas por pagar por proveedor, por mes de vencimiento."
     },
     "open-ar-by-customer": {
       "name": "Cuentas por cobrar abiertas por cliente",
-      "description": "Saldo pendiente de cuentas por cobrar por cliente, a partir de partidas abiertas del libro mayor. Los totales positivos son importes que le adeudan."
+      "description": "Saldos pendientes de cuentas por cobrar por cliente."
     },
     "gl-activity-by-account-fy": {
-      "name": "Actividad del mayor por cuenta (este ejercicio fiscal)",
-      "description": "Actividad de asientos contabilizados este año, una fila por cuenta: movimiento neto y cantidad de líneas. Usa el año calendario hasta que estén disponibles los operadores de período fiscal."
+      "name": "Actividad del mayor por cuenta",
+      "description": "Movimiento neto y cantidad de líneas por cuenta, este ejercicio fiscal."
     },
     "expense-detail-by-department-fy": {
-      "name": "Detalle de gastos por departamento (este ejercicio fiscal)",
-      "description": "Líneas de gastos y costo de ventas contabilizadas este año, seccionadas por departamento — fecha, asiento, cuenta, tercero, memo e importe."
+      "name": "Detalle de gastos por departamento",
+      "description": "Líneas de gastos y costo de ventas de este ejercicio fiscal, por departamento."
     },
     "lot-recall": {
       "name": "Retirada de lote",
-      "description": "Cada movimiento de inventario vinculado a un lote, con artículo, vencimiento, cantidad, ubicación, documento de origen y tercero para retiradas y trazabilidad."
+      "description": "Cada movimiento de un lote — artículo, ubicación, cantidad, vencimiento."
     },
     "payroll-journal": {
       "name": "Diario de nómina",
-      "description": "El registro de auditoría completo del período de nómina, una sección por empleado: cada percepción, deducción y aportación patronal con horas, tarifa, monto del período y acumulado anual. Elija un solo período de nómina en el menú de períodos para igualar un ciclo. Requiere el permiso de nómina."
+      "description": "Detalle de auditoría por empleado — percepciones, deducciones, montos y acumulado."
     },
     "payroll-deductions-register": {
       "name": "Registro de deducciones y aportaciones",
-      "description": "Cada retención y aportación patronal, por componente: quién pagó qué en el período y en el acumulado anual. El detalle de respaldo para remesas y aseguradoras. Requiere el permiso de nómina."
+      "description": "Retenciones y aportaciones patronales por componente, con acumulado anual."
     },
     "payroll-cost-by-department": {
       "name": "Costo de nómina por departamento",
-      "description": "Distribución laboral: montos de nómina por departamento y tipo de componente (percepciones, deducciones retenidas, carga patronal). Requiere el permiso de nómina."
+      "description": "Montos de nómina por departamento y tipo de componente."
     },
     "payroll-employee-totals": {
       "name": "Totales por empleado (acumulado anual)",
-      "description": "Una línea por empleado: bruto, impuesto retenido, neto y totales de costo patronal con conteo de recibos del período. Requiere el permiso de nómina."
+      "description": "Bruto, impuesto, neto y costo patronal por empleado, con conteos."
     },
     "payroll-parallel-run": {
       "name": "Conciliación del ciclo paralelo",
-      "description": "El control de adopción: para un período de nómina, cada empleado y cada componente comparados con el proveedor de nómina anterior, por resultado para leer primero las diferencias materiales y los empleados unilaterales y al final las conciliaciones exactas. La tolerancia, si está configurada, aparece en su propia columna."
+      "description": "Un período comparado con el proveedor anterior, por resultado."
     },
     "payroll-parallel-run-totals": {
       "name": "Totales del ciclo paralelo por componente",
-      "description": "La misma conciliación acumulada: por componente, lo que pagó en total el proveedor anterior, lo que calcula esta nómina y la diferencia, para atribuir una diferencia del período a los componentes que la produjeron."
+      "description": "Totales anteriores frente a calculados por componente, con diferencias."
     },
     "crm-pipeline-summary": {
       "name": "Resumen de pipeline por etapa",
-      "description": "Importes de pipeline, recuento y valores ponderados desglosados por etapa y moneda."
+      "description": "Montos, recuento y valores ponderados del pipeline abierto, por etapa."
     },
     "crm-forecast-by-owner": {
       "name": "Previsión de pipeline por propietario",
-      "description": "Valores proyectados y ponderados de oportunidades desglosados por representante y categoría."
+      "description": "Pipeline proyectado y ponderado por propietario y categoría."
     },
     "crm-win-loss-analysis": {
       "name": "Análisis de ganancias y pérdidas",
-      "description": "Resultados de oportunidades cerradas, motivos de ganancia o pérdida y totales agrupados."
+      "description": "Negocios cerrados por resultado y motivo, con totales."
     },
     "crm-lead-conversion-funnel": {
       "name": "Ciclo de vida y fuentes de leads",
-      "description": "Perfiles de CRM categorizados por etapa de ciclo de vida, estado y fuente de captación."
+      "description": "Cuentas por etapa de ciclo de vida, estado y fuente."
     },
     "headcount-statement": {
       "name": "Estado de plantilla",
-      "description": "Plantilla y equivalentes a tiempo completo a la fecha del informe, una fila por filial empleadora y departamento con un total de la organización. Requiere el permiso de empleo de RR. HH."
+      "description": "Plantilla y equivalentes a tiempo completo por filial y departamento, con totales."
     }
   },
   "generalLedger": {

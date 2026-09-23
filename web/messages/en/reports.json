@@ -5,7 +5,7 @@
     "savedViews": "Saved views",
     "cards": {
       "pnlTitle": "Profit & Loss",
-      "pnlDescription": "Income statement — fiscal-year presets, comparatives, breakout by department, custom layouts",
+      "pnlDescription": "Profit and loss for the period, with comparatives and breakdowns",
       "balanceSheetTitle": "Balance Sheet",
       "balanceSheetDescription": "Financial position as of any date, retained earnings computed",
       "trialBalanceTitle": "Trial Balance",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "Cash Flow Statement",
       "cashFlowDescription": "Direct method — operating, investing and financing, tied to bank movements",
       "generalLedgerTitle": "General Ledger",
-      "generalLedgerDescription": "Per-account posted activity with a running balance — the audit-ready detail behind every statement",
+      "generalLedgerDescription": "Posted activity per account, with a running balance",
       "journalTitle": "Journal",
       "journalDescription": "Every posted journal entry with its lines — the chronological book of original entry",
       "registersTitle": "A/R & A/P Registers",
@@ -27,7 +27,7 @@
       "budgetTitle": "Budget vs Actual",
       "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %",
       "projectProfitabilityTitle": "Project Profitability",
-      "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours",
+      "projectProfitabilityDescription": "Revenue, cost and margin by project, with approved job hours",
       "ordersTitle": "Order pipeline",
       "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
       "cashFlowIndirectTitle": "Cash Flow (Indirect)",
@@ -2079,67 +2079,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "AP aging by vendor",
-      "description": "Open payable ledger lines summed per vendor and due month. Negative totals are amounts owed (credit-normal payables)."
+      "description": "Open payable balances per vendor, by due month."
     },
     "open-ar-by-customer": {
       "name": "Open AR by customer",
-      "description": "Outstanding receivable balance per customer from open ledger items. Positive totals are amounts owed to you."
+      "description": "Outstanding receivable balances per customer."
     },
     "gl-activity-by-account-fy": {
-      "name": "GL activity by account (this FY)",
-      "description": "Posted journal activity this year, one row per account: net movement and line count. Covers the calendar year."
+      "name": "GL activity by account",
+      "description": "Net movement and line count per account, this fiscal year."
     },
     "expense-detail-by-department-fy": {
-      "name": "Expense detail by department (this FY)",
-      "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+      "name": "Expense detail by department",
+      "description": "Expense and COGS lines this fiscal year, by department."
     },
     "lot-recall": {
       "name": "Lot recall",
-      "description": "Every inventory movement tied to a lot, with item, expiry, quantity, location, source document and party for recall and traceability."
+      "description": "Every movement for a lot — item, location, quantity, expiry."
     },
     "payroll-journal": {
       "name": "Payroll journal",
-      "description": "The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission."
+      "description": "Per-employee audit detail — earnings, deductions, amounts and YTD."
     },
     "payroll-deductions-register": {
       "name": "Deductions & contributions register",
-      "description": "Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission."
+      "description": "Withholdings and employer contributions by component, with YTD."
     },
     "payroll-cost-by-department": {
       "name": "Payroll cost by department",
-      "description": "Labor distribution: payroll amounts by department and component kind (earnings, deductions withheld, employer burden). Requires the payroll permission."
+      "description": "Payroll amounts by department and component kind."
     },
     "payroll-employee-totals": {
       "name": "Employee totals (YTD)",
-      "description": "One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission."
+      "description": "Gross, tax, net and employer cost per employee, with stub counts."
     },
     "payroll-parallel-run": {
       "name": "Parallel run reconciliation",
-      "description": "The adoption control: for one pay period, every employee and every component compared against the prior payroll provider, sectioned by result so material differences and one-sided employees are read first and exact matches last. A tolerance, where one is configured, is shown in its own column."
+      "description": "One period checked against the prior provider, sectioned by result."
     },
     "payroll-parallel-run-totals": {
       "name": "Parallel run totals by component",
-      "description": "The same reconciliation rolled up: per component, what the prior provider paid in total, what this payroll calculates, and the difference — so a period-level variance is attributed to the components that produced it."
+      "description": "Prior-provider vs calculated totals per component, with differences."
     },
     "crm-pipeline-summary": {
       "name": "Pipeline summary by stage",
-      "description": "Open opportunity pipeline amounts, counts, and weighted values broken out by stage and currency."
+      "description": "Open pipeline amounts, counts and weighted values by stage."
     },
     "crm-forecast-by-owner": {
       "name": "Pipeline forecast by owner",
-      "description": "Projected and weighted opportunity pipeline values broken out by sales representative and forecast category."
+      "description": "Projected and weighted pipeline by owner and category."
     },
     "crm-win-loss-analysis": {
       "name": "Win/loss analysis",
-      "description": "Closed opportunity outcomes, win/loss reasons, and deal totals grouped by win status and reason."
+      "description": "Closed deals by outcome and reason, with totals."
     },
     "crm-lead-conversion-funnel": {
       "name": "Lead lifecycle & source summary",
-      "description": "CRM relationship profiles categorized by lifecycle stage, status, and acquisition lead source."
+      "description": "Accounts by lifecycle stage, status and lead source."
     },
     "headcount-statement": {
       "name": "Headcount statement",
-      "description": "Headcount and full-time equivalents as of the report date, one row per employer subsidiary and department with an organization total. Requires the HRM employment permission."
+      "description": "Headcount and FTE by subsidiary and department, with totals."
     }
   },
   "generalLedger": {

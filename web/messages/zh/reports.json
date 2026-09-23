@@ -5,7 +5,7 @@
     "savedViews": "已保存视图",
     "cards": {
       "pnlTitle": "利润表",
-      "pnlDescription": "损益表——财年预设、比较期、按部门分列、自定义版式",
+      "pnlDescription": "本期损益，含比较期与明細",
       "balanceSheetTitle": "资产负债表",
       "balanceSheetDescription": "任意日期的财务状况，自动计算留存收益",
       "trialBalanceTitle": "试算平衡表",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "现金流量表",
       "cashFlowDescription": "直接法——经营、投资与筹资活动，与银行资金变动勾稽",
       "generalLedgerTitle": "总账",
-      "generalLedgerDescription": "各科目的已过账活动及累计余额——支撑每张报表、可供审计的明细",
+      "generalLedgerDescription": "各科目的已过账活动及累计余额",
       "journalTitle": "日记账",
       "journalDescription": "每笔已过账分录及其分录行——按时间顺序记录的原始分录簿",
       "registersTitle": "应收/应付明细簿",
@@ -27,7 +27,7 @@
       "budgetTitle": "预算与实际对比",
       "budgetDescription": "按科目将实际数与预算方案对比，含差异金额与百分比",
       "projectProfitabilityTitle": "项目盈利能力",
-      "projectProfitabilityDescription": "按项目列示收入、成本与利润率——与利润表勾稽，含已审批工时",
+      "projectProfitabilityDescription": "按项目列示收入、成本与利润（含已审批工时）",
       "ordersTitle": "订单管线",
       "ordersDescription": "未清报价单、销售订单与采购订单——数量、金额与转化情况",
       "cashFlowIndirectTitle": "现金流量（间接法）",
@@ -2079,67 +2079,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "按供应商列示应付账龄",
-      "description": "按供应商和到期月份汇总未清应付款总账行。负数合计为欠付金额（贷方正常的应付款）。"
+      "description": "按供应商和到期月份列示未清应付款余额。"
     },
     "open-ar-by-customer": {
       "name": "按客户列示未清应收款",
-      "description": "根据未清总账项目列示各客户的未清应收余额。正数合计为客户欠您的金额。"
+      "description": "按客户列示未清应收款余额。"
     },
     "gl-activity-by-account-fy": {
-      "name": "按科目列示总账活动（本财年）",
-      "description": "本年度已过账的日记账活动，每个科目一行：净变动和行数。涵盖整个日历年度。"
+      "name": "按科目列示总账活动",
+      "description": "本财年各科目净变动与行数。"
     },
     "expense-detail-by-department-fy": {
-      "name": "按部门列示费用明细（本财年）",
-      "description": "本年度已过账的费用和销售成本行，按部门分节——日期、分录、科目、往来方、备注和金额。"
+      "name": "按部门列示费用明細",
+      "description": "本财年费用与销售成本行，按部门列示。"
     },
     "lot-recall": {
       "name": "批次召回",
-      "description": "与批次关联的每笔库存变动，包括物料、到期日、数量、库位、源单据和往来方，用于召回和追溯。"
+      "description": "某批次的每笔变动——物料、库位、数量、到期日。"
     },
     "payroll-journal": {
       "name": "工资日记账",
-      "description": "工资期间的完整审计记录，按员工分节：每项应发、扣除与雇主缴存，含工时、费率、本期金额与本年累计。请从期间菜单选择单个工资期间以对应核算。需要工资权限。"
+      "description": "按员工列示审计明細——应发、扣除、金额与本年累计。"
     },
     "payroll-deductions-register": {
       "name": "扣款与缴存登记簿",
-      "description": "按组成部分列示每项代扣与雇主缴存：本期与本年累计各自为谁支付了多少。是汇缴与福利机构的支撑明细。需要工资权限。"
+      "description": "按组成部分列示代扣与雇主缴存，含本年累计。"
     },
     "payroll-cost-by-department": {
       "name": "部门工资成本",
-      "description": "人工分布：按部门与组成部分类型（应发、代扣、雇主负担）列示工资金额。需要工资权限。"
+      "description": "按部门与组成部分类型列示工资金额。"
     },
     "payroll-employee-totals": {
       "name": "员工合计（本年累计）",
-      "description": "每员工一行：所选期间的应发总额、代扣所得税、实发与雇主成本合计及工资条计数。需要工资权限。"
+      "description": "按员工列示应发、税款、实发与雇主成本及计数。"
     },
     "payroll-parallel-run": {
       "name": "并行核算对账",
-      "description": "上线管控：针对一个工资期间，将每位员工与每个组成部分同原工资服务商比较，按结果分节，重大差异与单边员工优先阅读，完全一致最后阅读。已配置的容差显示在单独列中。"
+      "description": "将一个工资期间与原服务商比较，按结果分节。"
     },
     "payroll-parallel-run-totals": {
       "name": "并行核算组成部分合计",
-      "description": "同一对账的汇总版：按组成部分列示原服务商支付总额、本系统计算额与差异——以便将期间差异归因至产生差异的组成部分。"
+      "description": "按组成部分比较原服务商总额与计算额及差异。"
     },
     "crm-pipeline-summary": {
       "name": "按阶段汇总管道商机",
-      "description": "按阶段与币种细分的未结商机金额、数量及加权预期汇总。"
+      "description": "按阶段列示未结商机金额、数量与加权预期。"
     },
     "crm-forecast-by-owner": {
       "name": "按负责人统计管道预测",
-      "description": "按销售代表与预测类别细分的预计金额与加权预测分析。"
+      "description": "按负责人与类别列示预计与加权管道。"
     },
     "crm-win-loss-analysis": {
       "name": "商机赢单与输单复盘",
-      "description": "已关单商机的赢单/输单结果、原因及成交金额综合分析。"
+      "description": "按结果与原因列示已关单商机及合计。"
     },
     "crm-lead-conversion-funnel": {
       "name": "线索阶段与来源概览",
-      "description": "按生命周期阶段、跟进状态与获客渠道细分的客户分布统计。"
+      "description": "按生命周期阶段、状态与来源列示客户。"
     },
     "headcount-statement": {
       "name": "人员数量报表",
-      "description": "报表日期的人员数量和全职当量，每个雇主子公司和部门一行，并含组织合计。需要人力资源雇用权限。"
+      "description": "按子公司与部门列示人数与全职当量及合计。"
     }
   },
   "generalLedger": {

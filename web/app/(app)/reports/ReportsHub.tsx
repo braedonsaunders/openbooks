@@ -148,13 +148,18 @@ export function ReportsHub({
                 {group.label}
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-                {group.cards.map((card) => {
+                {group.cards.map((card, cardIndex) => {
                   const Icon = ICONS[card.icon] ?? FileText
+                  // UX-12b: titles wrap instead of mid-word truncating, and a
+                  // still-clamped description stays reachable through
+                  // aria-describedby — never the title tooltip alone.
+                  // line-clamp-2 is a visual safety net only.
+                  const descId = `reports-hub-card-${group.key}-${cardIndex}`
                   return (
                     <Link
                       key={card.href}
                       href={card.href}
-                      title={card.desc}
+                      aria-describedby={descId}
                       className={cn(
                         'group flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-colors dark:border-slate-800 dark:bg-slate-900',
                         accent.border,
@@ -164,8 +169,8 @@ export function ReportsHub({
                         <Icon size={18} />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{card.title}</h3>
-                        <p className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{card.desc}</p>
+                        <h3 className="break-words text-sm font-semibold text-slate-900 dark:text-slate-100">{card.title}</h3>
+                        <p id={descId} className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{card.desc}</p>
                       </div>
                       <ArrowUpRight
                         size={15}

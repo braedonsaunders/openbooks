@@ -5,7 +5,7 @@
     "savedViews": "Gespeicherte Ansichten",
     "cards": {
       "pnlTitle": "Gewinn- und Verlustrechnung",
-      "pnlDescription": "Gewinn- und Verlustrechnung – Geschäftsjahres-Voreinstellungen, Vergleichswerte, Aufgliederung nach Abteilung, benutzerdefinierte Layouts",
+      "pnlDescription": "Gewinn und Verlust der Periode, mit Vergleichswerten und Aufgliederungen",
       "balanceSheetTitle": "Bilanz",
       "balanceSheetDescription": "Finanzlage zu einem beliebigen Stichtag, Gewinnvortrag berechnet",
       "trialBalanceTitle": "Summen- und Saldenliste",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "Kapitalflussrechnung",
       "cashFlowDescription": "Direkte Methode – betriebliche, Investitions- und Finanzierungstätigkeit, an Bankbewegungen gebunden",
       "generalLedgerTitle": "Hauptbuch",
-      "generalLedgerDescription": "Gebuchte Bewegungen je Konto mit laufendem Saldo – die prüfungssicheren Details hinter jedem Abschluss",
+      "generalLedgerDescription": "Gebuchte Bewegungen je Konto mit laufendem Saldo",
       "journalTitle": "Journal",
       "journalDescription": "Jede gebuchte Buchung mit ihren Zeilen – das chronologische Grundbuch",
       "registersTitle": "Forderungs- und Verbindlichkeitsregister",
@@ -27,7 +27,7 @@
       "budgetTitle": "Budget vs. Ist",
       "budgetDescription": "Ist-Werte im Vergleich zu einem Budgetszenario, nach Konto, mit Abweichung in Betrag und %",
       "projectProfitabilityTitle": "Projektrentabilität",
-      "projectProfitabilityDescription": "Umsatz, Kosten und Marge je Projekt – abgestimmt auf die GuV, mit genehmigten Projektstunden",
+      "projectProfitabilityDescription": "Umsatz, Kosten und Marge je Projekt, mit genehmigten Projektstunden",
       "ordersTitle": "Auftragspipeline",
       "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion",
       "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
@@ -2079,67 +2079,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "Fälligkeitsanalyse Verbindlichkeiten nach Lieferant",
-      "description": "Offene Verbindlichkeits-Buchungszeilen, summiert je Lieferant und Fälligkeitsmonat. Negative Summen sind geschuldete Beträge (Verbindlichkeiten mit Haben-Saldo)."
+      "description": "Offene Verbindlichkeitssalden je Lieferant, nach Fälligkeitsmonat."
     },
     "open-ar-by-customer": {
       "name": "Offene Forderungen nach Kunde",
-      "description": "Offener Forderungssaldo je Kunde aus offenen Hauptbuchposten. Positive Summen sind Beträge, die Ihnen geschuldet werden."
+      "description": "Offene Forderungssalden je Kunde."
     },
     "gl-activity-by-account-fy": {
-      "name": "Hauptbuchbewegungen nach Konto (dieses GJ)",
-      "description": "Gebuchte Journalbewegungen dieses Jahres, eine Zeile je Konto: Nettobewegung und Zeilenanzahl. Umfasst das Kalenderjahr."
+      "name": "GL-Bewegungen nach Konto",
+      "description": "Nettobewegung und Zeilenanzahl je Konto, dieses Geschäftsjahr."
     },
     "expense-detail-by-department-fy": {
-      "name": "Aufwandsdetails nach Abteilung (dieses GJ)",
-      "description": "Gebuchte Aufwands- und Umsatzkostenzeilen dieses Jahres, gegliedert nach Abteilung – Datum, Buchung, Konto, Geschäftspartner, Notiz und Betrag."
+      "name": "Aufwandsdetails nach Abteilung",
+      "description": "Aufwands- und Umsatzkostenzeilen dieses Geschäftsjahres, nach Abteilung."
     },
     "lot-recall": {
       "name": "Chargenrückruf",
-      "description": "Jede mit einer Charge verknüpfte Lagerbewegung mit Artikel, Verfallsdatum, Menge, Standort, Quelldokument und Geschäftspartner für Rückrufe und Rückverfolgbarkeit."
+      "description": "Jede Bewegung einer Charge — Artikel, Standort, Menge, Verfallsdatum."
     },
     "payroll-journal": {
       "name": "Lohnjournal",
-      "description": "Der vollständige Prüfbericht der Lohnperiode, ein Abschnitt je Mitarbeiter: jeder Bezug, Abzug und Arbeitgeberanteil mit Stunden, Satz, Periodenbetrag und Jahreswert. Wählen Sie im Periodenmenü eine einzelne Lohnperiode passend zum Lauf. Erfordert die Lohnabrechnungs-Berechtigung."
+      "description": "Prüfdetails je Mitarbeiter — Bezüge, Abzüge, Beträge und Jahreswerte."
     },
     "payroll-deductions-register": {
       "name": "Abzugs- und Beitragsregister",
-      "description": "Jeder Abzug und Arbeitgeberanteil, gegliedert nach Komponente: wer in Periode und Jahr was gezahlt hat. Der Detailnachweis für Abführungen und Versorgungsträger. Erfordert die Lohnabrechnungs-Berechtigung."
+      "description": "Abzüge und Arbeitgeberanteile nach Komponente, mit Jahreswerten."
     },
     "payroll-cost-by-department": {
       "name": "Lohnkosten nach Abteilung",
-      "description": "Arbeitsverteilung: Lohnbeträge nach Abteilung und Komponentenart (Bezüge, einbehaltene Abzüge, Arbeitgeberlast). Erfordert die Lohnabrechnungs-Berechtigung."
+      "description": "Lohnbeträge nach Abteilung und Komponentenart."
     },
     "payroll-employee-totals": {
       "name": "Mitarbeitersummen (Jahr)",
-      "description": "Eine Zeile je Mitarbeiter: Brutto, einbehaltene Lohnsteuer, Netto und Arbeitgeberkostensummen mit Abrechnungszählern der gewählten Periode. Erfordert die Lohnabrechnungs-Berechtigung."
+      "description": "Brutto, Steuer, Netto und Arbeitgeberkosten je Mitarbeiter, mit Zählern."
     },
     "payroll-parallel-run": {
       "name": "Abstimmung des Parallellaufs",
-      "description": "Die Einführungskontrolle: für eine Lohnperiode jeder Mitarbeiter und jede Komponente im Vergleich zum früheren Lohnanbieter, nach Ergebnis gegliedert, sodass wesentliche Differenzen und einseitige Mitarbeiter zuerst und exakte Treffer zuletzt gelesen werden. Eine konfigurierte Toleranz steht in eigener Spalte."
+      "description": "Eine Lohnperiode im Vergleich zum früheren Anbieter, nach Ergebnis."
     },
     "payroll-parallel-run-totals": {
       "name": "Parallellauf-Summen je Komponente",
-      "description": "Dieselbe Abstimmung verdichtet: je Komponente, was der frühere Anbieter insgesamt gezahlt hat, was diese Abrechnung ermittelt, und die Differenz — sodass eine Periodenabweichung den verursachenden Komponenten zugeordnet wird."
+      "description": "Frühere gegen berechnete Summen je Komponente, mit Differenzen."
     },
     "crm-pipeline-summary": {
       "name": "Pipeline-Zusammenfassung nach Phase",
-      "description": "Offene Verkaufschancenbeträge, Anzahl und gewichtete Werte nach Phase und Währung."
+      "description": "Offene Pipelinebeträge, Anzahl und gewichtete Werte nach Phase."
     },
     "crm-forecast-by-owner": {
       "name": "Pipeline-Prognose nach Zuständigem",
-      "description": "Prognostizierte und gewichtete Werte aufgeschlüsselt nach Vertriebsmitarbeiter und Prognosekategorie."
+      "description": "Prognostizierte und gewichtete Pipeline nach Zuständigem und Kategorie."
     },
     "crm-win-loss-analysis": {
       "name": "Gewinn- und Verlustanalyse",
-      "description": "Ergebnisse geschlossener Verkaufschancen, Gründe und Gesamtsummen nach Status und Grund."
+      "description": "Geschlossene Chancen nach Ergebnis und Grund, mit Summen."
     },
     "crm-lead-conversion-funnel": {
       "name": "Lead-Lebenszyklus & Quellenübersicht",
-      "description": "CRM-Beziehungsprofile kategorisiert nach Lebenszyklusphase, Status und Herkunftsquelle."
+      "description": "Konten nach Lebenszyklusphase, Status und Quelle."
     },
     "headcount-statement": {
       "name": "Personalbestandsaufstellung",
-      "description": "Personalbestand und Vollzeitäquivalente zum Berichtsdatum, eine Zeile je Arbeitgeber-Tochtergesellschaft und Abteilung mit Organisationssumme. Erfordert die HRM-Beschäftigungsberechtigung."
+      "description": "Personalbestand und FTE je Tochtergesellschaft und Abteilung, mit Summen."
     }
   },
   "generalLedger": {

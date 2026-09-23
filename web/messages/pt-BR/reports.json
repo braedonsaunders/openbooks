@@ -5,7 +5,7 @@
     "savedViews": "Visualizações salvas",
     "cards": {
       "pnlTitle": "Demonstração de Resultados",
-      "pnlDescription": "Demonstração de resultados — predefinições de ano fiscal, comparativos, detalhamento por departamento, layouts personalizados",
+      "pnlDescription": "Resultado do período, com comparativos e detalhamentos",
       "balanceSheetTitle": "Balanço Patrimonial",
       "balanceSheetDescription": "Posição financeira em qualquer data, com lucros acumulados calculados",
       "trialBalanceTitle": "Balancete de Verificação",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "Demonstração de Fluxo de Caixa",
       "cashFlowDescription": "Método direto — operacional, investimento e financiamento, conciliado às movimentações bancárias",
       "generalLedgerTitle": "Razão Geral",
-      "generalLedgerDescription": "Atividade lançada por conta com saldo corrente — o detalhamento pronto para auditoria por trás de cada demonstração",
+      "generalLedgerDescription": "Atividade lançada por conta, com saldo corrente",
       "journalTitle": "Livro Diário",
       "journalDescription": "Cada lançamento contábil lançado com suas linhas — o livro cronológico de registro original",
       "registersTitle": "Registros de Contas a Receber e a Pagar",
@@ -27,7 +27,7 @@
       "budgetTitle": "Orçado vs. Realizado",
       "budgetDescription": "Realizado em relação a um cenário orçamentário, por conta, com variação em valor e %",
       "projectProfitabilityTitle": "Rentabilidade de Projetos",
-      "projectProfitabilityDescription": "Receita, custo e margem por projeto — conciliado à Demonstração de Resultados, com horas de trabalho aprovadas",
+      "projectProfitabilityDescription": "Receita, custo e margem por projeto, com horas aprovadas",
       "ordersTitle": "Funil de pedidos",
       "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão",
       "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
@@ -2079,67 +2079,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "Aging de contas a pagar por fornecedor",
-      "description": "Linhas de razão de contas a pagar em aberto somadas por fornecedor e mês de vencimento. Totais negativos são valores devidos (contas a pagar de natureza credora)."
+      "description": "Saldos de contas a pagar em aberto por fornecedor, por mês de vencimento."
     },
     "open-ar-by-customer": {
       "name": "Contas a receber em aberto por cliente",
-      "description": "Saldo de contas a receber em aberto por cliente a partir de itens de razão em aberto. Totais positivos são valores devidos a você."
+      "description": "Saldos de contas a receber em aberto por cliente."
     },
     "gl-activity-by-account-fy": {
-      "name": "Movimentação do razão por conta (este ano fiscal)",
-      "description": "Atividade de lançamentos lançados neste ano, uma linha por conta: movimentação líquida e contagem de linhas. Abrange o ano-calendário."
+      "name": "Movimentação do razão por conta",
+      "description": "Movimentação líquida e contagem de linhas por conta, neste ano fiscal."
     },
     "expense-detail-by-department-fy": {
-      "name": "Detalhe de despesas por departamento (este ano fiscal)",
-      "description": "Linhas de despesa e CPV lançadas neste ano, seccionadas por departamento — data, lançamento, conta, parte, memorando e valor."
+      "name": "Detalhe de despesas por departamento",
+      "description": "Linhas de despesa e CPV deste ano fiscal, por departamento."
     },
     "lot-recall": {
       "name": "Recolhimento de lote",
-      "description": "Cada movimentação de estoque vinculada a um lote, com item, validade, quantidade, local, documento de origem e parte para recolhimento e rastreabilidade."
+      "description": "Cada movimento de um lote — item, local, quantidade, validade."
     },
     "payroll-journal": {
       "name": "Diário da folha",
-      "description": "O registro completo de auditoria do período da folha, uma seção por funcionário: cada provento, desconto e contribuição patronal com horas, taxa, valor do período e acumulado no ano. Escolha um único período da folha no menu de períodos para corresponder a uma apuração. Exige a permissão da folha."
+      "description": "Detalhe de auditoria por funcionário — proventos, descontos, valores e acumulado."
     },
     "payroll-deductions-register": {
       "name": "Registro de descontos e contribuições",
-      "description": "Cada retenção e contribuição patronal, por componente: quem pagou o quê no período e no acumulado do ano. O detalhe de suporte para remessas e operadoras. Exige a permissão da folha."
+      "description": "Retenções e contribuições patronais por componente, com acumulado anual."
     },
     "payroll-cost-by-department": {
       "name": "Custo da folha por departamento",
-      "description": "Distribuição de mão de obra: valores da folha por departamento e tipo de componente (proventos, descontos retidos, encargos patronais). Exige a permissão da folha."
+      "description": "Valores da folha por departamento e tipo de componente."
     },
     "payroll-employee-totals": {
       "name": "Totais por funcionário (acumulado anual)",
-      "description": "Uma linha por funcionário: bruto, imposto retido, líquido e totais de custo patronal com contagem de contracheques do período. Exige a permissão da folha."
+      "description": "Bruto, imposto, líquido e custo patronal por funcionário, com contagens."
     },
     "payroll-parallel-run": {
       "name": "Conciliação da apuração paralela",
-      "description": "O controle de adoção: para um período da folha, cada funcionário e cada componente comparados com o fornecedor anterior da folha, por resultado para ler primeiro as diferenças materiais e os funcionários unilaterais e por último as conciliações exatas. A tolerância, quando configurada, aparece em coluna própria."
+      "description": "Um período comparado ao fornecedor anterior, por resultado."
     },
     "payroll-parallel-run-totals": {
       "name": "Totais da apuração paralela por componente",
-      "description": "A mesma conciliação acumulada: por componente, o que o fornecedor anterior pagou no total, o que esta folha calcula e a diferença — para atribuir uma variação do período aos componentes que a produziram."
+      "description": "Totais anteriores frente aos calculados por componente, com diferenças."
     },
     "crm-pipeline-summary": {
       "name": "Resumo do pipeline por estágio",
-      "description": "Valores do pipeline de oportunidades em aberto, contagem e valores ponderados por estágio e moeda."
+      "description": "Valores, contagem e ponderados do pipeline aberto, por estágio."
     },
     "crm-forecast-by-owner": {
       "name": "Previsão do pipeline por responsável",
-      "description": "Valores projetados e ponderados de oportunidades divididos por representante e categoria de previsão."
+      "description": "Pipeline projetado e ponderado por responsável e categoria."
     },
     "crm-win-loss-analysis": {
       "name": "Análise de vitórias e perdas",
-      "description": "Desfechos de oportunidades encerradas, motivos de ganho ou perda e valores totais."
+      "description": "Negócios encerrados por resultado e motivo, com totais."
     },
     "crm-lead-conversion-funnel": {
       "name": "Ciclo de vida e origens de leads",
-      "description": "Perfis de relacionamento categorizados por estágio de ciclo de vida, status e canal de origem."
+      "description": "Contas por estágio de ciclo de vida, status e origem."
     },
     "headcount-statement": {
       "name": "Demonstrativo de headcount",
-      "description": "Headcount e equivalentes em tempo integral na data do relatório, uma linha por subsidiária empregadora e departamento com o total da organização. Requer a permissão de emprego de RH."
+      "description": "Headcount e equivalentes em tempo integral por subsidiária e departamento, com totais."
     }
   },
   "generalLedger": {

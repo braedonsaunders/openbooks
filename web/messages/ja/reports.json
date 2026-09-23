@@ -5,7 +5,7 @@
     "savedViews": "保存済みビュー",
     "cards": {
       "pnlTitle": "損益計算書",
-      "pnlDescription": "損益計算書 — 会計年度プリセット、比較、部門別内訳、カスタムレイアウト",
+      "pnlDescription": "期間の損益を比較・内訳付きで表示",
       "balanceSheetTitle": "貸借対照表",
       "balanceSheetDescription": "任意の日付時点の財政状態、利益剰余金を自動計算",
       "trialBalanceTitle": "試算表",
@@ -19,7 +19,7 @@
       "cashFlowTitle": "キャッシュフロー計算書",
       "cashFlowDescription": "直接法 — 営業、投資、財務活動を銀行の入出金に紐付け",
       "generalLedgerTitle": "総勘定元帳",
-      "generalLedgerDescription": "勘定ごとの記帳済み活動と累計残高 — すべての財務諸表を裏付ける監査対応の明細",
+      "generalLedgerDescription": "勘定別の記帳済み活動と累計残高",
       "journalTitle": "仕訳帳",
       "journalDescription": "各明細を含むすべての記帳済み仕訳 — 原始記入の時系列帳簿",
       "registersTitle": "売掛金／買掛金補助簿",
@@ -27,7 +27,7 @@
       "budgetTitle": "予算実績比較",
       "budgetDescription": "予算シナリオに対する実績を勘定別に、差異の金額と％で表示",
       "projectProfitabilityTitle": "プロジェクト収益性",
-      "projectProfitabilityDescription": "プロジェクト別の収益、原価、利益 — 損益計算書に紐付き、承認済みの作業時間を含む",
+      "projectProfitabilityDescription": "プロジェクト別の収益・原価・利益（承認済み作業時間付き）",
       "ordersTitle": "受注パイプライン",
       "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率",
       "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
@@ -2079,67 +2079,67 @@
   "builtIns": {
     "ap-aging-by-vendor": {
       "name": "仕入先別買掛金年齢分析",
-      "description": "未消込の買掛金元帳明細を仕入先および期日月ごとに合計します。マイナスの合計は債務額（貸方残の買掛金）です。"
+      "description": "仕入先別・期日月別の未払残高。"
     },
     "open-ar-by-customer": {
       "name": "得意先別未収売掛金",
-      "description": "未消込の元帳項目に基づく得意先ごとの未収売掛金残高。プラスの合計は貴社への債権額です。"
+      "description": "得意先別の未収売掛金残高。"
     },
     "gl-activity-by-account-fy": {
-      "name": "勘定別GL活動（今年度）",
-      "description": "今年の記帳済み仕訳活動を勘定ごとに1行で表示：純増減と明細数。暦年を対象とします。"
+      "name": "勘定別GL活動",
+      "description": "今年度の勘定別純増減と明細数。"
     },
     "expense-detail-by-department-fy": {
-      "name": "部門別費用明細（今年度）",
-      "description": "今年の記帳済み費用および売上原価明細を部門別に区分 — 日付、仕訳、勘定、取引先、摘要、金額。"
+      "name": "部門別費用明細",
+      "description": "今年度の費用・売上原価明細を部門別に表示。"
     },
     "lot-recall": {
       "name": "ロットリコール",
-      "description": "リコールとトレーサビリティのため、ロットに紐づくすべての在庫変動を品目、有効期限、数量、拠点、元書類、取引先とともに表示します。"
+      "description": "ロットの全変動 — 品目・拠点・数量・有効期限。"
     },
     "payroll-journal": {
       "name": "給与仕訳帳",
-      "description": "給与期間の完全な監査記録。従業員ごとに区分し、すべての支給・控除・事業主負担分を時間数・単価・当期金額・年累計付きで示します。計算に対応させるには期間メニューから単一の給与期間を選んでください。給与権限が必要です。"
+      "description": "従業員別の監査明細 — 支給・控除・金額・年累計。"
     },
     "payroll-deductions-register": {
       "name": "控除・負担金台帳",
-      "description": "すべての源泉徴収と事業主負担分を項目別に表示し、当期と年累計で誰が何を支払ったかを示します。納付と保険者の裏付け明細です。給与権限が必要です。"
+      "description": "項目別の源泉徴収・事業主負担分（年累計付き）。"
     },
     "payroll-cost-by-department": {
       "name": "部門別給与コスト",
-      "description": "労務費配分：部門別・項目種類別（支給・預り控除・事業主負担）の給与金額です。給与権限が必要です。"
+      "description": "部門別・項目種類別の給与金額。"
     },
     "payroll-employee-totals": {
       "name": "従業員別合計（年累計）",
-      "description": "従業員ごとに1行：選択期間の総支給・源泉所得税・手取額・事業主コスト合計と明細件数です。給与権限が必要です。"
+      "description": "従業員別の総支給・税・手取り額・事業主コストと件数。"
     },
     "payroll-parallel-run": {
       "name": "並行計算の照合",
-      "description": "導入時統制：1つの給与期間について、全従業員・全項目を旧給与ベンダーと比較し、結果別に区分して重要な差異と片側のみの従業員を先に、完全一致を後に読みます。設定済みの許容値は専用列に表示します。"
+      "description": "1給与期間を旧ベンダーと比較し結果別に表示。"
     },
     "payroll-parallel-run-totals": {
       "name": "並行計算の項目別合計",
-      "description": "同じ照合の集計版：項目ごとに旧ベンダーの支払総額・自社計算額・差異を示し、期間差異を生んだ項目に帰属させます。"
+      "description": "項目別の旧ベンダー額と計算額の比較（差異付き）。"
     },
     "crm-pipeline-summary": {
       "name": "ステージ別パイプライン概要",
-      "description": "ステージおよび通貨別の商談パイプライン合計、件数、加重予測額。"
+      "description": "ステージ別の商談金額・件数・加重予測額。"
     },
     "crm-forecast-by-owner": {
       "name": "担当者別パイプライン予測",
-      "description": "営業担当者および予測カテゴリごとの予測額・加重額一覧。"
+      "description": "担当者別・カテゴリ別の予測額と加重額。"
     },
     "crm-win-loss-analysis": {
       "name": "成約・失注分析",
-      "description": "完了した商談の勝敗結果、理由、合計金額の分析レポート。"
+      "description": "結果・理由別の完了商談と合計。"
     },
     "crm-lead-conversion-funnel": {
       "name": "リード獲得元＆ステージ概要",
-      "description": "ライフサイクルステージ、ステータス、獲得経路別のプロファイル集計。"
+      "description": "ライフサイクル・ステータス・獲得経路別の顧客数。"
     },
     "headcount-statement": {
       "name": "人員数計算書",
-      "description": "レポート日時点の人員数とFTE換算。雇用主の子会社と部門ごとに1行、組織合計付き。HRM雇用権限が必要です。"
+      "description": "子会社・部門別の人員数とFTE（合計付き）。"
     }
   },
   "generalLedger": {

@@ -6,9 +6,12 @@ const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { ReportsHub } = await import('./ReportsHub')
 
-// UX-12: hub card descriptions rendered one-line `truncate`, clipping
-// mid-word at desktop widths. Descriptions get a readable two-line clamp;
-// the full text stays on the link tooltip. Titles stay single-line.
+// UX-12b: hub card titles wrapped mid-word under `truncate` and descriptions
+// clipped mid-word ("custo…", "every…", "(this…") at 1280px, with the full
+// text only in the link's title tooltip. Titles now wrap (no truncate) and
+// copy is budgeted to fit two lines; line-clamp-2 stays as a visual safety
+// net, and any still-clamped text stays reachable via aria-describedby —
+// never the title tooltip alone.
 const LONG_DESC =
   'Every outstanding vendor bill across all subsidiaries with due dates and aging buckets'
 
@@ -36,18 +39,30 @@ function hubHtml() {
   /* eslint-enable react/no-children-prop */
 }
 
-test('UX-12: card descriptions clamp to two readable lines, never one-line truncate', () => {
+test('UX-12b: card descriptions clamp to two readable lines, never one-line truncate', () => {
   const html = hubHtml()
-  const desc = html.match(new RegExp(`<p class="([^"]*)">${LONG_DESC}`))
+  const desc = html.match(new RegExp(`<p id="([^"]*)" class="([^"]*)">${LONG_DESC}`))
   assert.ok(desc, 'the full description must render in the card body')
-  assert.match(desc[1]!, /line-clamp-2/, 'description must use a two-line clamp')
-  assert.doesNotMatch(desc[1]!, /(^|\s)truncate(\s|$)/, 'description must not one-line truncate mid-word')
+  assert.match(desc[2]!, /line-clamp-2/, 'description must use a two-line clamp')
+  assert.doesNotMatch(desc[2]!, /(^|\s)truncate(\s|$)/, 'description must not one-line truncate mid-word')
 })
 
-test('UX-12: the full description stays on the card tooltip and the title stays single-line', () => {
+test('UX-12b: the card title wraps instead of truncating mid-word', () => {
   const html = hubHtml()
-  assert.ok(html.includes(`title="${LONG_DESC}"`), 'the card link must keep the full description as its tooltip')
   const title = html.match(/<h3 class="([^"]*)">AP aging<\/h3>/)
   assert.ok(title, 'the card title must render')
-  assert.match(title[1]!, /(^|\s)truncate(\s|$)/, 'the title stays a single truncated line')
+  assert.doesNotMatch(title[1]!, /(^|\s)truncate(\s|$)/, 'the title must wrap, never truncate')
+})
+
+test('UX-12b: a still-clamped description stays reachable without the title tooltip', () => {
+  const html = hubHtml()
+  assert.doesNotMatch(html, / title="/, 'the card must not rely on the title tooltip alone')
+  const link = html.match(/<a[^>]*aria-describedby="([^"]*)"[^>]*>/)
+  assert.ok(link, 'the card link must describe itself with the full description')
+  const descId = link[1]!
+  assert.ok(
+    html.includes(`<p id="${descId}"`),
+    'aria-describedby must point at the rendered description element',
+  )
+  assert.ok(html.includes(`>${LONG_DESC}<`), 'the full description text must render in the card body')
 })
