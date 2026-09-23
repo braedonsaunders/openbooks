@@ -5,9 +5,10 @@ export const signOfferBody = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("sign"),
     signerName: z.string().trim().min(1).max(240),
-    // Optional client-observed hash; the service seals its own latest
-    // render and refuses when the two disagree.
-    documentHash: z.string().trim().min(1).max(128).nullable().optional(),
+    // Required hash of the displayed terms; the service seals its own
+    // latest render and refuses when the two disagree — or when the
+    // client never saw terms at all.
+    documentHash: z.string().trim().min(1).max(128),
     renderedFileId: z.string().trim().min(1).max(80).nullable().optional(),
   }),
   z.object({

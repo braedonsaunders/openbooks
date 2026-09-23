@@ -351,10 +351,15 @@ export async function renderOfferVersion(query: {
                 created_at as "createdAt"
     `)).rows[0];
     if (!inserted) throw new RecruitingError("REFUSED", "the offer version was not stored — no row was written; retry the request");
+    // Re-rendering rotates the signing link: the outstanding token hash is
+    // cleared in the same statement that reopens signing, so an old link
+    // can never sign terms it never displayed. The recruiter resends a
+    // fresh link for the new version.
     const bumped = (await db.execute<{ one: number }>(sql`
       update hrm_offers
          set template_id = ${templateId}, version = ${version}, rendered_file_id = ${renderedFileId},
-             signature_status = 'unsigned', updated_by = ${actorId}, updated_at = now()
+             signature_status = 'unsigned', signing_token_hash = null,
+             updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
       returning 1 as one
     `)).rows[0];
@@ -758,7 +763,7 @@ export async function signOffer(query: {
   signingToken: string;
   signerName: unknown;
   ipHash: unknown;
-  /** Optional client-observed hash; the service seals the latest rendered version when absent. */
+  /** Required hash of the displayed version — the service seals the latest rendered version only when it agrees. */
   documentHash?: unknown;
   renderedFileId?: unknown;
 }): Promise<{ offerId: string; signedAt: string }> {
@@ -787,16 +792,20 @@ export async function signOffer(query: {
       throw new RecruitingError("REFUSED", "this offer was already declined — a decline stands; ask the recruiter for fresh terms to reconsider");
     }
     // The sealed hash is the latest rendered version's payload — the
-    // server's own render, never the client's claim about what it saw. A
-    // client-supplied hash that disagrees names the disagreement instead
-    // of sealing a document nobody rendered.
-    const latest = (await db.execute<{ payload: unknown }>(sql`
-      select payload from hrm_offer_versions
-       where org_id = ${orgId} and offer_id = ${offerId}
-       order by version desc limit 1
-    `)).rows[0];
-    const serverHash = hashOfferDocument(JSON.stringify(latest?.payload ?? { unsigned: true }));
-    if (typeof documentHash === "string" && documentHash.length > 0 && documentHash !== serverHash) {
+    // server's own render, never the client's claim about what it saw.
+    // The client MUST return the hash of the version it displayed: an
+    // absent hash means the terms were never shown, and a disagreeing one
+    // means the letter changed under the link. Either way the signature
+    // is refused instead of sealing a document nobody rendered.
+    if (typeof documentHash !== "string" || documentHash.length === 0) {
+      throw new RecruitingError(
+        "REFUSED",
+        "signing needs the hash of the displayed terms — reload the link to review the current terms before signing",
+      );
+    }
+    const sealedTerms = await loadSealedOfferTerms(db, orgId, offerId);
+    const serverHash = sealedTerms.documentHash;
+    if (documentHash !== serverHash) {
       throw new RecruitingError(
         "REFUSED",
         "the letter changed since this link was opened — reload the link to review the current terms before signing",
