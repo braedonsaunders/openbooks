@@ -1555,8 +1555,37 @@ async function migrate(): Promise<void> {
     const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
     await applyTracked("migration", filename, content);
   }
-  await sealLegacyPaymentLinkTokens();
+  if (await isPaymentLinkSealApplicable()) {
+    await sealLegacyPaymentLinkTokens();
+  } else {
+    console.log(
+      "[bootstrap] skipping payment-link at-rest seal: 0251 is not applied to this schema",
+    );
+  }
   await applyRowLevelSecurity();
+}
+
+/**
+ * The at-rest seal is the second half of 0251: it must run only where 0251
+ * ran. The ledger is checked first as a matter of principle — but the ledger
+ * alone can lie, because migration-replay fixtures fake _applied_migrations
+ * on historical schemas (the 0064 suite holds a pre-0064 catalog with the
+ * full tail marked applied). The column check is the structural guard that
+ * saves those fixtures from a 42703 on the seal's SELECT.
+ */
+const PAYMENT_LINK_SEAL_MIGRATION = "generated/0251_payment_link_token_at_rest.sql";
+
+async function isPaymentLinkSealApplicable(): Promise<boolean> {
+  const ledger = await pool.query("select 1 from _applied_migrations where filename = $1", [
+    PAYMENT_LINK_SEAL_MIGRATION,
+  ]);
+  if (ledger.rows.length === 0) return false;
+  const columns = await pool.query<{ n: number }>(
+    `select count(*)::int as n from information_schema.columns
+      where table_schema = 'public' and table_name = 'payment_links'
+        and column_name in ('token_hash', 'token_sealed')`,
+  );
+  return columns.rows[0]?.n === 2;
 }
 
 /**
