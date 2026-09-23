@@ -60,6 +60,10 @@ for(const enabled of [false,true])test(`project reference picker parent gate ${e
  const org=await createScratchOrg();
  try{
   const actor=await createScratchUser(org.orgId,'Project picker','picker');
+  // The picker route demands the source's native read permission first, so
+  // grant it exactly like the sibling cases — otherwise this 403s before
+  // ever reaching the Projects parent gate it names.
+  await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='picker'`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,projects}',${JSON.stringify(enabled)}::jsonb,true) where id=${org.orgId}`);
   session.user={id:actor,orgId:org.orgId,name:'Project picker',email:'picker@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
   const id=randomUUID();await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,status,is_active) values (${id},${org.orgId},${id},'Retained project',${org.subsidiaryId},'active',true)`);
