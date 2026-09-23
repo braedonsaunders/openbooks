@@ -4,20 +4,31 @@ import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.form-template-route-test')
 interface Call { kind: 'tx'; text: string }
+interface AuditCall {
+  orgId: string
+  table: string
+  rowId: string
+  action: string
+  changes: Record<string, unknown>
+  actorId: string
+}
 interface RouteState {
   calls: Call[]
+  audits: AuditCall[]
   transactionStarts: number
   committedMetadataUpdates: number
-  latest: { id: string; version: number; published_at: string | null } | undefined
+  latest: { id: string; version: number; schema: unknown; published_at: string | null } | undefined
   failSchemaWrite: boolean
   templateLocked: boolean
   versionUpdateKept: boolean
 }
+const DRAFT_SCHEMA = { schemaVersion: 1, title: 'Intake', sections: [] }
 const routeState: RouteState = {
   calls: [],
+  audits: [],
   transactionStarts: 0,
   committedMetadataUpdates: 0,
-  latest: { id: 'version-1', version: 1, published_at: null },
+  latest: { id: 'version-1', version: 1, schema: DRAFT_SCHEMA, published_at: null },
   failSchemaWrite: false,
   templateLocked: true,
   versionUpdateKept: true,
@@ -72,10 +83,26 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    'mock:audit',
+    `
+      const state = globalThis[Symbol.for('openbooks.form-template-route-test')]
+      export async function auditSetupChange(args, runner) {
+        state.audits.push(args)
+        // The audit must share the mutation's transaction: run the insert
+        // through the passed runner so a rollback takes the event with it.
+        await runner.execute({ queryChunks: ['insert into audit_log (mocked)'] })
+      }
+    `,
+  ],
+  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.form-template-route-test')]
       const sqlText = globalThis.openbooksSqlText
+      const templateRow = () => ({
+        id: 'template-1', key: 'intake', name: 'Intake', category: null,
+        description: null, status: 'draft', kind: 'form', allowed_roles: null,
+      })
       export const db = {
         execute() { throw new Error('unexpected direct database write') },
         async transaction(work) {
@@ -85,15 +112,21 @@ const mockSources = new Map<string, string>([
             async execute(query) {
               const text = sqlText(query)
               state.calls.push({ kind: 'tx', text })
-              if (text.includes('update form_templates')) staged.metadata = true
+              if (text.includes('update form_templates')) {
+                staged.metadata = true
+                return { rows: [{ id: 'template-1' }] }
+              }
               if (state.failSchemaWrite && text.includes('update form_template_versions')) {
                 throw new Error('schema write failed')
               }
               if (text.includes('from form_templates') && text.includes('for update')) {
-                return { rows: state.templateLocked ? [{ id: 'template-1' }] : [] }
+                return { rows: state.templateLocked ? [templateRow()] : [] }
               }
               if (text.includes('update form_template_versions')) {
                 return { rows: state.versionUpdateKept && state.latest ? [{ version: state.latest.version }] : [] }
+              }
+              if (text.includes('insert into form_template_versions')) {
+                return { rows: [{ id: 'version-2' }] }
               }
               if (text.includes('form_template_versions') && text.includes('select id')) {
                 return { rows: state.latest ? [state.latest] : [] }
@@ -114,6 +147,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
+  ['../../../../../lib/setup/audit', 'mock:audit'],
   ['../../_lib', 'mock:forms-lib'],
 ])
 
@@ -137,14 +171,15 @@ const hooks = registerHooks({
 })
 
 const routeUrl = './route.ts?form-template-atomic-test'
-const { PUT } = (await import(routeUrl)) as typeof import('./route.ts')
+const { PUT, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(): void {
   routeState.calls.length = 0
+  routeState.audits.length = 0
   routeState.transactionStarts = 0
   routeState.committedMetadataUpdates = 0
-  routeState.latest = { id: 'version-1', version: 1, published_at: null }
+  routeState.latest = { id: 'version-1', version: 1, schema: DRAFT_SCHEMA, published_at: null }
   routeState.failSchemaWrite = false
   routeState.templateLocked = true
   routeState.versionUpdateKept = true
@@ -190,13 +225,29 @@ test('metadata and a valid draft schema commit together in one transaction', asy
   assert.deepEqual(await response.json(), { ok: true, savedVersion: 1 })
   assert.equal(routeState.transactionStarts, 1)
   assert.equal(routeState.committedMetadataUpdates, 1)
-  assert.equal(routeState.calls.length, 4)
+  assert.equal(routeState.calls.length, 6)
   assert.match(routeState.calls[0]!.text, /from form_templates[\s\S]*for update/)
   assert.match(routeState.calls[1]!.text, /update form_templates/)
-  assert.match(routeState.calls[2]!.text, /select id, version, published_at/)
-  assert.match(routeState.calls[2]!.text, /for update/)
-  assert.match(routeState.calls[3]!.text, /update form_template_versions/)
-  assert.match(routeState.calls[3]!.text, /published_at is null/)
+  assert.match(routeState.calls[2]!.text, /insert into audit_log/)
+  assert.match(routeState.calls[3]!.text, /select id, version, schema, published_at/)
+  assert.match(routeState.calls[3]!.text, /for update/)
+  assert.match(routeState.calls[4]!.text, /update form_template_versions/)
+  assert.match(routeState.calls[4]!.text, /published_at is null/)
+  assert.match(routeState.calls[5]!.text, /insert into audit_log/)
+
+  const metaAudit = routeState.audits.find((a) => a.table === 'form_templates')
+  assert.equal(metaAudit?.action, 'update')
+  assert.equal(metaAudit?.actorId, 'user-1')
+  assert.equal((metaAudit?.changes.before as { name: string }).name, 'Intake')
+  assert.equal((metaAudit?.changes.after as { name: string }).name, 'Renamed intake')
+  const versionAudit = routeState.audits.find((a) => a.table === 'form_template_versions')
+  assert.equal(versionAudit?.action, 'update')
+  assert.ok((versionAudit?.changes.before as { schemaHash: string }).schemaHash)
+  assert.ok((versionAudit?.changes.after as { schemaHash: string }).schemaHash)
+  assert.notEqual(
+    (versionAudit?.changes.before as { schemaHash: string }).schemaHash,
+    (versionAudit?.changes.after as { schemaHash: string }).schemaHash,
+  )
 })
 
 test('a schema write failure does not commit the transaction metadata update', async () => {
@@ -235,4 +286,39 @@ test('a template deleted mid-request is a 404, not a silent success', async () =
   const response = await put({ name: 'Renamed intake', schema: validSchema })
 
   assert.equal(response.status, 404)
+})
+
+test('archive writes a before/after audit event in the same transaction', async () => {
+  reset()
+
+  const response = await DELETE(
+    new Request('http://openbooks.test/api/forms/templates/intake', { method: 'DELETE' }),
+    { params: Promise.resolve({ key: 'intake' }) },
+  )
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true })
+  assert.equal(routeState.calls.length, 3)
+  assert.match(routeState.calls[0]!.text, /from form_templates[\s\S]*for update/)
+  assert.match(routeState.calls[1]!.text, /update form_templates/)
+  assert.match(routeState.calls[2]!.text, /insert into audit_log/)
+  assert.equal(routeState.audits.length, 1)
+  const audit = routeState.audits[0]!
+  assert.equal(audit.table, 'form_templates')
+  assert.equal(audit.actorId, 'user-1')
+  assert.equal((audit.changes.before as { status: string }).status, 'draft')
+  assert.equal((audit.changes.after as { status: string }).status, 'archived')
+})
+
+test('archiving a vanished template is a 404, not success', async () => {
+  reset()
+  routeState.templateLocked = false
+
+  const response = await DELETE(
+    new Request('http://openbooks.test/api/forms/templates/intake', { method: 'DELETE' }),
+    { params: Promise.resolve({ key: 'intake' }) },
+  )
+
+  assert.equal(response.status, 404)
+  assert.equal(routeState.audits.length, 0)
 })
