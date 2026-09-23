@@ -168,6 +168,9 @@ type FilingRow = {
   adjustments: Record<string, string>;
   snapshot_hash: string;
   snapshot_version: number | null;
+  subsidiary_ids: string[] | null;
+  registration_id: string | null;
+  translation: TaxReturnTranslation | null;
 };
 
 /**
@@ -263,6 +266,41 @@ async function assertCoveredPeriodsClosed(
 }
 
 /**
+ * The `computeTaxReturn` options that reproduce a frozen filing: its
+ * subsidiary scope and pinned registration as the filing entity, its stored
+ * translation evidence as the declared policy. A v2 filing with an empty
+ * scope and no registration is the degenerate org-wide return and replays no
+ * filing entity (the engine reads that as the historical unpredicated
+ * scope); a NULL scope is a pre-snapshot (v1) filing and replays no posture
+ * at all, so it verifies boxes only, exactly as prepared.
+ */
+function frozenReturnOpts(row: FilingRow): {
+  filingEntity?: { subsidiaryIds: string[]; registrationId?: string };
+  translation?: { presentationCurrency: string; rateType: string; rateDate: string };
+} {
+  if (row.snapshot_version !== 2) return {};
+  const scopeIds = row.subsidiary_ids ?? [];
+  const filingEntity =
+    scopeIds.length > 0 || row.registration_id
+      ? {
+          subsidiaryIds: scopeIds,
+          ...(row.registration_id ? { registrationId: row.registration_id } : {}),
+        }
+      : undefined;
+  const translation = row.translation
+    ? {
+        presentationCurrency: row.translation.presentationCurrency,
+        rateType: row.translation.rateType,
+        rateDate: row.translation.rateDate,
+      }
+    : undefined;
+  return {
+    ...(filingEntity ? { filingEntity } : {}),
+    ...(translation ? { translation } : {}),
+  };
+}
+
+/**
  * Record the one-way prepared → filed transition. Runs in one tenant
  * transaction: governance gate, live recompute + fingerprint verification,
  * then the status write and its audit evidence. Throws {@link TaxFilingError}
@@ -280,7 +318,7 @@ export async function markTaxFilingFiled(
   return await withOrg(orgId, async () => {
     const filing = (await db.execute<FilingRow>(sql`
       select id, form_code, period_from, period_to, status, adjustments, snapshot_hash,
-             snapshot_version
+             snapshot_version, subsidiary_ids, registration_id, translation
         from tax_filings
        where id = ${filingId} and org_id = ${orgId}
          for update`));
@@ -305,6 +343,13 @@ export async function markTaxFilingFiled(
     // one pool connection and see one consistent world. (A dedicated handle
     // here would pin a second pool client for the whole recompute and
     // deadlock a saturated pool.)
+    //
+    // The recompute replays the filing's FROZEN posture — its subsidiary
+    // scope, pinned registration and translation policy — never the org-wide
+    // default. A scoped or translated filing verified org-wide would either
+    // throw on mixed currency or hash a different posture and read stale on
+    // every filing that was prepared exactly as requested. Pre-identity (v1)
+    // filings replay no posture and verify boxes only, exactly as prepared.
     let live: TaxReturnResult;
     try {
       live = await computeTaxReturn(
@@ -313,7 +358,7 @@ export async function markTaxFilingFiled(
         row.period_from,
         row.period_to,
         row.adjustments ?? {},
-        { runner: db },
+        { ...frozenReturnOpts(row), runner: db },
       );
     } catch (error) {
       if (error instanceof TaxReturnError) {

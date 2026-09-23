@@ -7,6 +7,7 @@ import { buildTaxFilingSnapshot, TAX_FILING_SNAPSHOT_VERSION } from '@openbooks/
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { parseReturnScopeBody, returnScopeOpts } from '@/lib/tax-return-scope'
 
 export const runtime = 'nodejs'
 
@@ -47,8 +48,6 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission('compliance.file')
   if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardSubsidiaryScope(gate, null)
-  if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
@@ -56,6 +55,8 @@ export async function POST(req: Request) {
     from?: string
     to?: string
     adjustments?: Record<string, string>
+    filingEntity?: unknown
+    translation?: unknown
   } | null
   if (!body?.code || !body.from || !body.to || !isIsoDate(body.from) || !isIsoDate(body.to)) {
     return NextResponse.json({ error: 'invalid return or period' }, { status: 422 })
@@ -67,9 +68,27 @@ export async function POST(req: Request) {
     Object.entries(body.adjustments).some(([key, value]) => !key || typeof value !== 'string' || value.length > 100)
   )) return NextResponse.json({ error: 'invalid adjustments' }, { status: 422 })
   const adjustments = body.adjustments ?? {}
+  // The filing scope parses with the SAME shared parser the preview GET
+  // uses, so a scoped preview can always be frozen as prepared. An
+  // explicitly scoped prepare stays inside the caller's allowed
+  // subsidiaries; the org-wide return keeps the historical denial for
+  // restricted callers.
+  const parsedScope = parseReturnScopeBody({ filingEntity: body.filingEntity, translation: body.translation })
+  if (parsedScope.error || !parsedScope.scope) {
+    return NextResponse.json({ error: parsedScope.error ?? 'invalid scope' }, { status: 422 })
+  }
+  if (parsedScope.scope.subsidiaryIds.length > 0) {
+    for (const id of parsedScope.scope.subsidiaryIds) {
+      const denied = guardSubsidiaryScope(gate, id)
+      if (denied) return denied
+    }
+  } else {
+    const scopeDenied = guardSubsidiaryScope(gate, null)
+    if (scopeDenied) return scopeDenied
+  }
 
   try {
-    const result = await computeTaxReturn(gate.user.orgId, body.code, body.from, body.to, adjustments)
+    const result = await computeTaxReturn(gate.user.orgId, body.code, body.from, body.to, adjustments, returnScopeOpts(parsedScope.scope))
     const editableCodes = new Set(result.boxes.filter((box) => box.editable).map((box) => box.lineCode))
     const normalizedAdjustments = Object.fromEntries(
       Object.entries(adjustments)
