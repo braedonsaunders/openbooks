@@ -264,6 +264,12 @@ export interface SetupEntity {
   actorCols?: boolean
   /** Column that must be unique per org and is used for default ordering. */
   naturalKey?: string
+  /** Field key whose column carries the ref option value. Defaults to the
+   *  idColumn (usually `id`); entities referenced by natural key (e.g.
+   *  hrm-document-categories, stored as `key` on templates and retention
+   *  schedules) declare it so pickers offer the stored value. The generic
+   *  coercer accepts non-UUID input for refs to such entities. */
+  refValue?: string
   /** ORDER BY column when there is no natural key. */
   orderBy?: string
   /** Whether the table has `is_active` (→ archive on delete instead of hard delete). */
@@ -3029,4 +3035,37 @@ export function setupEntitiesByGroup(): Map<string, SetupEntity[]> {
 /** camelCase field key → snake_case db column. */
 export function toSnake(key: string): string {
   return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`)
+}
+
+/** Generic picker columns for a ref-option target, derived from the columns
+ *  the target entity actually declares. Most entities carry code/name
+ *  (subsidiaries are name-only, stock locations code-only);
+ *  hrm-document-categories carries key/label instead. Referencing fields
+ *  store the category's KEY, so the option value is the refValue column
+ *  (the natural key), never the row id the write path cannot take back.
+ *  loadEntityOptions (./ref-options.ts) builds its SQL from exactly this,
+ *  so this function is the single derivation the picker test pins. */
+export interface RefTargetPicker {
+  /** Option-value column (what referencing rows store). */
+  valueCol: string
+  /** Label columns: both when a code-like and a name-like column exist
+   *  (rendered `code · name`), else the single one, else the natural key,
+   *  else the value column itself (never a missing column). */
+  labelCols: string[]
+  /** ORDER BY column, same priority as the label. */
+  orderCol: string
+}
+
+export function refTargetPicker(target: SetupEntity): RefTargetPicker {
+  const declared = new Set([
+    ...target.fields.map((f) => toSnake(f.key)),
+    ...target.columns.map((c) => toSnake(c.key)),
+  ])
+  const valueCol = toSnake(target.refValue ?? target.idColumn ?? 'id')
+  const codeCol = declared.has('code') ? 'code' : declared.has('key') ? 'key' : null
+  const nameCol = declared.has('name') ? 'name' : declared.has('label') ? 'label' : null
+  const naturalCol = target.naturalKey ? toSnake(target.naturalKey) : null
+  const labelCols =
+    codeCol && nameCol ? [codeCol, nameCol] : [nameCol ?? codeCol ?? naturalCol ?? valueCol]
+  return { valueCol, labelCols, orderCol: nameCol ?? codeCol ?? naturalCol ?? valueCol }
 }

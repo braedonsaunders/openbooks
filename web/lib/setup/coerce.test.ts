@@ -175,3 +175,16 @@ test('setup booleans accept documented scalar spellings and reject malformed con
   for (const value of [false, 0, 'false', ' NO ', 'n', '0', 'f', '', ' ', null, undefined]) assert.deepEqual(coerceField(field, value), { column: 'taxable', value: false })
   for (const value of ['false-ish', 'truthy', 2, -1, 0.5, NaN, Infinity, [], ['yes'], { enabled: true }]) assert.deepEqual(coerceField(field, value), { error: 'taxable must be a boolean' })
 })
+
+test('refs to natural-key entities carry the key, never a UUID (hrm-document-categories)', () => {
+  // Templates and retention schedules store the category KEY, and the generic
+  // picker offers it via refValue — so the writer must accept what the picker
+  // offered. Before refValue, a key like 'offer-letter' died here with
+  // 'categoryKey must reference a valid record' and never reached the
+  // write path's declared-category refusal.
+  const field: SetupField = { key: 'categoryKey', kind: 'ref', ref: 'hrm-document-categories' }
+  assert.deepEqual(coerceField(field, 'offer-letter'), { column: 'category_key', value: 'offer-letter' })
+  // UUID-shaped refs to ordinary entities still validate as UUIDs.
+  const uuidField: SetupField = { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels' }
+  assert.deepEqual(coerceField(uuidField, 'not-a-uuid'), { error: 'levelId must reference a valid record' })
+})
