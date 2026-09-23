@@ -316,6 +316,8 @@ export type CertificateRow = {
   category: string
   projectId: string | null
   projectName: string | null
+  /** Optimistic-concurrency token the certificate PATCH fence requires. */
+  revision: number
   status: string
   issuerName: string | null
   policyNumber: string | null
@@ -347,6 +349,7 @@ export async function loadVendorCertificates(
            req.name as "requirementName", req.category, cr.project_id as "projectId",
            case when pj.id is null then null
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as "projectName",
+           cr.revision as "revision",
            cr.status, cr.issuer_name as "issuerName", cr.policy_number as "policyNumber",
            cr.effective_from as "effectiveFrom", cr.expires_on as "expiresOn",
            cr.coverage_amount as "coverageAmount", cr.aggregate_amount as "aggregateAmount",

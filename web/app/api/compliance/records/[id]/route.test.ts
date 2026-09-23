@@ -112,9 +112,11 @@ const mockSources = new Map<string, string>([
         if (text.includes('update compliance_records')) {
           // The next row is the deterministic result for the action under test.
           // Transaction-local writes remain invisible until transaction commit.
+          // The fenced mutation returns its row; zero rows would read as a
+          // revision-race refusal, so the mock returns the written identity.
           if (transactional) state.stagedRecord = { ...state.nextRecord }
           else state.committedRecord = { ...state.nextRecord }
-          return { rows: [] }
+          return { rows: [{ id: '00000000-0000-4000-8000-00000000a006' }] }
         }
 
         if (text.includes('insert into audit_log')) {
@@ -239,6 +241,9 @@ function certificate(overrides: Certificate = {}): Certificate {
     status: 'pending_review',
     party_id: PARTY_ID,
     requirement_id: REQUIREMENT_ID,
+    supersedes_id: null,
+    revision: 1,
+    verified_revision: null,
     created_by: CREATOR_ID,
     effective_from: '2026-08-01',
     expires_on: '2027-08-01',
@@ -264,21 +269,21 @@ type Scenario = {
 const scenarios: Scenario[] = [
   {
     action: 'verify',
-    body: { action: 'verify' },
+    body: { action: 'verify', revision: 1 },
     before: certificate(),
-    after: certificate({ status: 'active' }),
+    after: certificate({ status: 'active', revision: 2, verified_revision: 1 }),
   },
   {
     action: 'reject',
-    body: { action: 'reject', reason: 'Policy evidence is incomplete' },
+    body: { action: 'reject', reason: 'Policy evidence is incomplete', revision: 1 },
     before: certificate(),
-    after: certificate({ status: 'rejected' }),
+    after: certificate({ status: 'rejected', revision: 2 }),
   },
   {
     action: 'reopen',
-    body: { action: 'reopen' },
+    body: { action: 'reopen', revision: 1 },
     before: certificate({ status: 'rejected' }),
-    after: certificate({ status: 'pending_review' }),
+    after: certificate({ status: 'pending_review', revision: 2 }),
   },
   {
     action: 'update',
@@ -288,9 +293,10 @@ const scenarios: Scenario[] = [
       policyNumber: 'POL-UPDATED',
       coverageAmount: '125000.50',
       notes: 'renewal paperwork received',
+      revision: 1,
     },
     before: certificate({ status: 'active' }),
-    after: certificate({ status: 'pending_review', issuer_name: 'Updated Insurer', policy_number: 'POL-UPDATED', coverage_amount: '125000.50' }),
+    after: certificate({ status: 'pending_review', issuer_name: 'Updated Insurer', policy_number: 'POL-UPDATED', coverage_amount: '125000.50', revision: 2 }),
   },
 ]
 

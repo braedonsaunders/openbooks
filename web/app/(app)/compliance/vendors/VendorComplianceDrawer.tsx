@@ -174,13 +174,17 @@ export function VendorComplianceDrawer({
   }
 
   async function verify(id: string) {
-    await call(`/api/compliance/records/${id}`, 'PATCH', { action: 'verify' })
+    const cert = data.certificates.find((row) => row.id === id)
+    if (!cert) return
+    await call(`/api/compliance/records/${id}`, 'PATCH', { action: 'verify', revision: cert.revision })
   }
 
   async function reject(id: string) {
     const reason = await promptDialog({ title: t('certificates.rejectTitle'), label: t('certificates.rejectReason') })
     if (!reason) return
-    await call(`/api/compliance/records/${id}`, 'PATCH', { action: 'reject', reason })
+    const cert = data.certificates.find((row) => row.id === id)
+    if (!cert) return
+    await call(`/api/compliance/records/${id}`, 'PATCH', { action: 'reject', reason, revision: cert.revision })
   }
 
   async function grantException() {

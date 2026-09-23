@@ -186,7 +186,7 @@ test("verifying the renewal supersedes the prior certificate", { skip: !DB }, as
         new Request(`http://records.test/api/compliance/records/${created.id}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "verify" }),
+          body: JSON.stringify({ action: "verify", revision: 1 }),
         }),
         { params: Promise.resolve({ id: created.id }) },
       ),
