@@ -147,6 +147,13 @@ test("Xero trial-balance month-ends follow the org calendar", async (t) => {
   const dates: string[] = [];
   const source = new XeroSource({
     get: async (path: string, params: Record<string, string> = {}) => {
+      // Full-history coverage reads the organisation first to bound the
+      // migration from the earliest sourced accounting period.
+      if (path === "Organisation") {
+        return {
+          Organisations: [{ Name: "Test Org", FinancialYearEndMonth: 3, FinancialYearEndDay: 31 }],
+        };
+      }
       assert.equal(path, "Reports/TrialBalance");
       dates.push(params.date!);
       return { Reports: [{ Rows: [] }] };
