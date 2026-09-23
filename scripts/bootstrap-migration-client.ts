@@ -442,13 +442,23 @@ export function splitSqlStatements(content: string): string[] {
  * Execute one migration attempt on an already-connected migration client:
  * impose the bounded lock_timeout, run the body (one query per statement
  * outside a transaction, a single transactional query inside one), restore
- * the session defaults, and record the ledger row. Throws the raw driver
- * error so the caller can decide between a 55P03 retry and a loud deploy
- * failure. bootstrap.ts owns the retry loop (and the one special-case body
- * executor); this function owns the execution path so tests can drive the
- * real runner logic — including a genuine CREATE INDEX CONCURRENTLY file —
- * without importing bootstrap.ts, which runs main() on import.
+ * the session defaults, and record the ledger row. A lock-wait timeout
+ * throws the raw driver error so the caller can retry on 55P03; any other
+ * no-transaction step failure carries the step index and the resume remedy.
+ * The ledger row is written only after the last step succeeds, so a killed
+ * or failed attempt leaves no record and the next run replays the file from
+ * its first step. bootstrap.ts owns the retry loop (and the one special-case
+ * body executor); this function owns the execution path so tests can drive
+ * the real runner logic — including a genuine CREATE INDEX CONCURRENTLY
+ * file — without importing bootstrap.ts, which runs main() on import.
  */
+export type MigrationBodyStep = {
+  /** False for `-- openbooks: no-transaction` files, which run statement by statement. */
+  transactional: boolean;
+  /** The migration file being executed, for step-indexed failure messages. */
+  filename: string;
+};
+
 export type MigrationAttempt = {
   filename: string;
   /** Sanitized body (file-level lock_timeout already stripped). */
@@ -457,23 +467,46 @@ export type MigrationAttempt = {
   lock: MigrationLockConfig;
   digest: string;
   recordedDigest?: string;
-  executeBody: (client: pg.PoolClient, body: string) => Promise<void>;
+  executeBody: (
+    client: pg.PoolClient,
+    body: string,
+    step: MigrationBodyStep,
+  ) => Promise<void>;
 };
 
 /** The standard body executor: one transactional query, or one query per
  * statement outside a transaction (see splitSqlStatements for why the file
- * cannot go out as a single multi-statement string). */
+ * cannot go out as a single multi-statement string).
+ *
+ * Outside a transaction a mid-file failure leaves earlier statements
+ * committed, so each statement failure names its step and the resume remedy:
+ * fix the cause and re-run the migration, which replays its steps
+ * idempotently (the no-transaction contract every such file honors). A
+ * lock-wait timeout passes through unwrapped so the caller still sees the
+ * raw 55P03 and retries the whole file. */
 export async function executeMigrationBody(
   client: pg.PoolClient,
   body: string,
-  transactional: boolean,
+  step: MigrationBodyStep,
 ): Promise<void> {
-  if (transactional) {
+  if (step.transactional) {
     await client.query(body);
     return;
   }
-  for (const statement of splitSqlStatements(body)) {
-    await client.query(statement);
+  const statements = splitSqlStatements(body);
+  for (let index = 0; index < statements.length; index += 1) {
+    try {
+      await client.query(statements[index]);
+    } catch (error) {
+      if (isLockNotAvailable(error)) throw error;
+      const raw = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[bootstrap] ${step.filename} step ${index + 1}/${statements.length} failed (${raw}). `
+          + "Statements before this step are committed — fix the cause and re-run the migration, "
+          + "which replays its steps idempotently.",
+        { cause: error },
+      );
+    }
   }
 }
 
@@ -489,7 +522,7 @@ export async function executeMigrationAttempt(
     await client.query(`SET lock_timeout = ${lock.lockTimeoutMs}`);
   }
   try {
-    await executeBody(client, body);
+    await executeBody(client, body, { transactional, filename });
     // pg_dump-style baselines intentionally clear search_path while creating
     // fully qualified objects. Restore the application default before this
     // pooled session is returned to callers that execute reviewed SQL files.

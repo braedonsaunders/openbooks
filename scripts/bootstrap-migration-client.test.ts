@@ -12,11 +12,14 @@ import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import type pg from "pg";
 import {
   DEFAULT_MIGRATION_LOCK_MAX_ATTEMPTS,
   DEFAULT_MIGRATION_LOCK_RETRY_BASE_MS,
   DEFAULT_MIGRATION_LOCK_TIMEOUT_MS,
   describeBootstrapMigrationFailure,
+  executeMigrationAttempt,
+  executeMigrationBody,
   isLockNotAvailable,
   migrationLockConfig,
   migrationRetryDelayMs,
@@ -253,6 +256,113 @@ test("sanitize and split stay linear on the real baseline and a 5 MB synthetic b
   assert.ok(cleanSynthetic.includes("-- SET lock_timeout = 0 is prose"));
   assert.ok(cleanSynthetic.includes("RAISE NOTICE 'SET lock_timeout = 0;'"));
   assert.doesNotMatch(cleanSynthetic, /^SET lock_timeout = 0;$/m);
+});
+
+/** A PoolClient double that records every statement and fails on demand. The
+ * runner only calls query(), so the double implements nothing else. */
+function recordingClient(
+  onQuery?: (sql: string, calls: string[]) => Promise<unknown>,
+): { client: pg.PoolClient; calls: string[] } {
+  const calls: string[] = [];
+  const client = {
+    query: async (sql: string) => {
+      calls.push(sql);
+      if (onQuery) await onQuery(sql, calls);
+      return { rows: [], rowCount: 0 };
+    },
+  } as unknown as pg.PoolClient;
+  return { client, calls };
+}
+
+const RESUME_BODY = [
+  "CREATE TABLE IF NOT EXISTS probe_resume (id integer PRIMARY KEY);",
+  "INSERT INTO probe_resume (id) VALUES (1);",
+  "CREATE INDEX IF NOT EXISTS probe_resume_id ON probe_resume (id);",
+].join("\n");
+
+test("a no-transaction step failure names the file, the step, and the resume remedy", async () => {
+  const { client } = recordingClient(async (_sql, calls) => {
+    if (calls.length === 3) throw new Error("relation \"probe_resume\" does not exist");
+  });
+  await assert.rejects(
+    executeMigrationBody(client, RESUME_BODY, { transactional: false, filename: "generated/0999_probe.sql" }),
+    (error: unknown) => {
+      const message = (error as Error).message;
+      assert.ok(message.includes("generated/0999_probe.sql"), "names the file");
+      assert.ok(message.includes("step 3/3"), "names the step");
+      assert.ok(message.includes("committed"), "says earlier steps are committed");
+      assert.ok(message.includes("re-run"), "names the resume remedy");
+      assert.ok(message.includes("does not exist"), "keeps the driver cause text");
+      return true;
+    },
+  );
+});
+
+test("a lock-wait failure passes through unwrapped so the attempt still retries", async () => {
+  const lockError = new Error("canceling statement due to lock timeout") as Error & {
+    code: string;
+  };
+  lockError.code = "55P03";
+  const { client } = recordingClient(async () => {
+    throw lockError;
+  });
+  let caught: unknown = null;
+  try {
+    await executeMigrationBody(client, RESUME_BODY, { transactional: false, filename: "generated/0999_probe.sql" });
+  } catch (error) {
+    caught = error;
+  }
+  assert.equal(caught, lockError, "the raw 55P03 must reach the retry loop untouched");
+  assert.equal(isLockNotAvailable(caught), true);
+});
+
+test("a killed no-transaction attempt writes no ledger row; the resume completes with exactly one", async () => {
+  const lock = migrationLockConfig({});
+  const filename = "generated/0999_probe.sql";
+  const digest = "probe-digest";
+  const ledgerWrites = (calls: string[]): string[] =>
+    calls.filter((sql) => /_applied_migrations/.test(sql) && /insert/i.test(sql));
+
+  // First attempt: the process dies after the first statement — the kill
+  // happens inside the body, before the ledger write.
+  const killed = recordingClient();
+  const killBody = async (client: pg.PoolClient, body: string): Promise<void> => {
+    const [first] = body.split(";");
+    await client.query(`${first};`);
+    throw new Error("simulated kill after step 1");
+  };
+  await assert.rejects(
+    executeMigrationAttempt(killed.client, {
+      filename,
+      body: RESUME_BODY,
+      transactional: false,
+      lock,
+      digest,
+      executeBody: killBody,
+    }),
+    /simulated kill/,
+  );
+  assert.deepEqual(ledgerWrites(killed.calls), [], "a killed attempt must leave no ledger row");
+
+  // Resume: the full body replays from its first step and records once.
+  const resumed = recordingClient();
+  await executeMigrationAttempt(resumed.client, {
+    filename,
+    body: RESUME_BODY,
+    transactional: false,
+    lock,
+    digest,
+    executeBody: (client, body, step) => executeMigrationBody(client, body, step),
+  });
+  assert.equal(ledgerWrites(resumed.calls).length, 1, "the resume records the ledger row once");
+  const ledgerIndex = resumed.calls.findIndex((sql) => /_applied_migrations/.test(sql));
+  for (const stepStatement of splitSqlStatements(RESUME_BODY)) {
+    assert.ok(
+      resumed.calls.indexOf(stepStatement) !== -1
+        && resumed.calls.indexOf(stepStatement) < ledgerIndex,
+      `step runs before the ledger write: ${stepStatement.slice(0, 40)}`,
+    );
+  }
 });
 
 test("the real 0251 header is neutralized exactly where the runner would run it", () => {
