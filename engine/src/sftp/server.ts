@@ -243,8 +243,24 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e); }
           });
-          sftp.on("SETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OK));
-          sftp.on("FSETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OK));
+          // Attribute mutation is not implemented and SftpBackend exposes no
+          // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
+          // of answering OK: an OK for a no-op tells a partner its
+          // SETSTAT(size=0) cleared a mistaken upload while the original
+          // bytes still post, and makes chmod/mtime look accepted while
+          // ignored. OP_UNSUPPORTED names the refusal; a future
+          // implementation must apply attributes atomically through the
+          // backend (especially size/truncate) before answering OK.
+          // Attribute mutation is not implemented and SftpBackend exposes no
+          // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
+          // of answering OK: an OK for a no-op tells a partner its
+          // SETSTAT(size=0) cleared a mistaken upload while the original
+          // bytes still post, and makes chmod/mtime look accepted while
+          // ignored. OP_UNSUPPORTED names the refusal; a future
+          // implementation must apply attributes atomically through the
+          // backend (especially size/truncate) before answering OK.
+          sftp.on("SETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead"));
+          sftp.on("FSETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead"));
         });
       });
     });
