@@ -40,11 +40,13 @@ export async function resolveItemPrice(input: {
     source: 'customer_item' | 'customer_level' | 'base_level'
   }>(sql`
     with assigned_level as (
+      -- Membership is the effective-dated window, never current activation:
+      -- deactivating an assignment end-dates it (0327), so a late transaction
+      -- inside the old window still finds its level.
       select assignment.price_level_id
         from customer_price_level_assignments assignment
        where assignment.org_id = ${input.orgId}
          and assignment.customer_id = ${input.customerId ?? null}
-         and assignment.is_active
          and assignment.effective_from <= ${input.onDate}::date
          and (assignment.effective_to is null or assignment.effective_to >= ${input.onDate}::date)
        order by assignment.effective_from desc
@@ -59,8 +61,21 @@ export async function resolveItemPrice(input: {
                else 99
              end as precedence
         from item_price_schedules schedule
+        -- Level state as of the transaction date (0327): past dates read the
+        -- versioned activation history, today and the future read the current
+        -- flag — a dead level must not price new work. Levels are standing
+        -- offers (first period opens at -infinity), so creation never ends
+        -- coverage of human-backdated schedules; only deactivation does.
         left join price_levels level
-          on level.id = schedule.price_level_id and level.org_id = schedule.org_id and level.is_active
+          on level.id = schedule.price_level_id and level.org_id = schedule.org_id
+         and (case when ${input.onDate}::date < current_date
+                   then exists (
+                     select 1 from price_level_activation_history history
+                      where history.org_id = level.org_id and history.price_level_id = level.id
+                        and history.active_from <= ${input.onDate}::date
+                        and (history.active_to is null or ${input.onDate}::date < history.active_to)
+                   )
+                   else level.is_active end)
        where schedule.org_id = ${input.orgId}
          and schedule.item_id = ${input.itemId}
          and schedule.currency = ${currency}
