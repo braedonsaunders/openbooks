@@ -282,6 +282,7 @@ test(
           defaultLocale: "en",
           reportingFramework: "us_gaap",
           taxFramework: "asc740",
+          requireVendorBillApproval: false,
         },
       });
       assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage"]);
