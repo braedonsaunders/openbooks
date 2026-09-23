@@ -1210,17 +1210,23 @@ export async function requireHrmPerformanceOnEmployment(
   return subject;
 }
 
-/** See exit records and turnover. HR-only: no structural scope exists here. */
+/**
+ * See exit records and turnover. HR-only — and, like every other HRM gate,
+ * scoped: returns the actor's allowed employer set (null = unrestricted)
+ * so list- and record-shaped readers filter to the legal entities the
+ * actor covers instead of reading the whole org.
+ */
 export async function requireHrmRetentionRead(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
-): Promise<void> {
+): Promise<Set<string> | null> {
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
     throw new HrmAuthorizationError(
       "Retention access requires the hrm.retention.read permission — ask an administrator to grant it in /admin/roles.",
     );
   }
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
 /**

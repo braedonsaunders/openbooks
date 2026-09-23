@@ -85,6 +85,7 @@ export interface ExitRecordDTO {
 type StoredExit = {
   id: string;
   employmentId: string;
+  employerSubsidiaryId: string;
   terminationChangeId: string | null;
   reasonKind: string;
   isVoluntary: boolean;
@@ -121,20 +122,23 @@ function toExitDTO(row: StoredExit): ExitRecordDTO {
 
 async function loadExit(exec: SqlExecutor, orgId: string, exitId: string): Promise<StoredExit> {
   const row = (await exec.execute<StoredExit>(sql`
-    select id,
-           employment_id as "employmentId",
-           termination_change_id as "terminationChangeId",
-           reason_kind as "reasonKind",
-           is_voluntary as "isVoluntary",
-           is_regrettable as "isRegrettable",
-           would_rehire as "wouldRehire",
-           interview_held_on::text as "interviewHeldOn",
-           interviewer_party_id as "interviewerPartyId",
-           destination, notes,
-           recorded_by as "recordedBy",
-           recorded_at as "recordedAt"
-      from hrm_exit_records
-     where org_id = ${orgId} and id = ${exitId}
+    select x.id,
+           x.employment_id as "employmentId",
+           e.employer_subsidiary_id as "employerSubsidiaryId",
+           x.termination_change_id as "terminationChangeId",
+           x.reason_kind as "reasonKind",
+           x.is_voluntary as "isVoluntary",
+           x.is_regrettable as "isRegrettable",
+           x.would_rehire as "wouldRehire",
+           x.interview_held_on::text as "interviewHeldOn",
+           x.interviewer_party_id as "interviewerPartyId",
+           x.destination, x.notes,
+           x.recorded_by as "recordedBy",
+           x.recorded_at as "recordedAt"
+      from hrm_exit_records x
+      join worker_employments e
+        on e.org_id = x.org_id and e.id = x.employment_id
+     where x.org_id = ${orgId} and x.id = ${exitId}
   `)).rows[0];
   if (!row) {
     throw new HrmPerformanceError(
@@ -143,6 +147,23 @@ async function loadExit(exec: SqlExecutor, orgId: string, exitId: string): Promi
     );
   }
   return row;
+}
+
+/**
+ * Retention reads act through the retention grant, so the exit's
+ * employment must sit inside the actor's allowed subsidiary set — a
+ * legal-entity-restricted HR reads only the exits they cover. Answered
+ * NOT_FOUND uniformly, so an out-of-scope id is indistinguishable from a
+ * missing one.
+ */
+function assertExitInScope(allowed: Set<string> | null, exit: StoredExit): void {
+  if (allowed === null) return;
+  if (!allowed.has(exit.employerSubsidiaryId)) {
+    throw new HrmPerformanceError(
+      "NOT_FOUND",
+      `exit record ${exit.id} is not visible in this organization — check the id or the organization`,
+    );
+  }
 }
 
 /**
@@ -381,12 +402,18 @@ export async function getExitRecord(args: {
   const exitId = requireId("exitId", args.exitId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireHrmRetentionRead(db, orgId, actorId);
-    return toExitDTO(await loadExit(db, orgId, exitId));
+    const allowed = await requireHrmRetentionRead(db, orgId, actorId);
+    const exit = await loadExit(db, orgId, exitId);
+    assertExitInScope(allowed, exit);
+    return toExitDTO(exit);
   });
 }
 
-/** Exit records, newest first, through the retention read gate (HR only). */
+/**
+ * Exit records, newest first, through the retention read gate (HR only,
+ * inside their legal-entity scope): a restricted HR lists only the exits
+ * whose employments sit in their allowed subsidiaries.
+ */
 export async function listExitRecords(args: {
   orgId: string;
   actorId: string;
@@ -398,24 +425,38 @@ export async function listExitRecords(args: {
     args.employmentId == null ? null : requireId("employmentId", args.employmentId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireHrmRetentionRead(db, orgId, actorId);
+    const allowed = await requireHrmRetentionRead(db, orgId, actorId);
+    if (allowed !== null && allowed.size === 0) return [];
+    // One parameter per id: bare JS arrays must never be interpolated into
+    // ANY() (they bind as row constructors, not PostgreSQL arrays).
+    const scopeFilter =
+      allowed === null
+        ? sql``
+        : sql`and e.employer_subsidiary_id in (${sql.join(
+            [...allowed].map((id) => sql`${id}::uuid`),
+            sql`, `,
+          )})`;
     const rows = (await db.execute<StoredExit>(sql`
-      select id,
-             employment_id as "employmentId",
-             termination_change_id as "terminationChangeId",
-             reason_kind as "reasonKind",
-             is_voluntary as "isVoluntary",
-             is_regrettable as "isRegrettable",
-             would_rehire as "wouldRehire",
-             interview_held_on::text as "interviewHeldOn",
-             interviewer_party_id as "interviewerPartyId",
-             destination, notes,
-             recorded_by as "recordedBy",
-             recorded_at as "recordedAt"
-        from hrm_exit_records
-       where org_id = ${orgId}
-         ${employmentId === null ? sql`` : sql`and employment_id = ${employmentId}`}
-       order by recorded_at desc
+      select x.id,
+             x.employment_id as "employmentId",
+             e.employer_subsidiary_id as "employerSubsidiaryId",
+             x.termination_change_id as "terminationChangeId",
+             x.reason_kind as "reasonKind",
+             x.is_voluntary as "isVoluntary",
+             x.is_regrettable as "isRegrettable",
+             x.would_rehire as "wouldRehire",
+             x.interview_held_on::text as "interviewHeldOn",
+             x.interviewer_party_id as "interviewerPartyId",
+             x.destination, x.notes,
+             x.recorded_by as "recordedBy",
+             x.recorded_at as "recordedAt"
+        from hrm_exit_records x
+        join worker_employments e
+          on e.org_id = x.org_id and e.id = x.employment_id
+       where x.org_id = ${orgId}
+         ${employmentId === null ? sql`` : sql`and x.employment_id = ${employmentId}`}
+         ${scopeFilter}
+       order by x.recorded_at desc
     `)).rows;
     return rows.map(toExitDTO);
   });
