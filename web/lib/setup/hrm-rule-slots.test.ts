@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { applyRuleSlotColumns, RULE_SLOT_ENTITIES } from './hrm-rule-slots'
+import { buildRow } from './coerce'
+import { applyRuleSlotColumns, coveredSlotFields, RULE_SLOT_ENTITIES } from './hrm-rule-slots'
+import { SETUP_ENTITY_BY_KEY } from './registry'
 
 // Generated slot columns are readable prefills and must never be written;
 // the folded jsonb objects must always be written. Both entities share the
@@ -58,4 +60,40 @@ test('entities without rule slots pass through untouched', () => {
   const res = applyRuleSlotColumns('departments', { name: 'x' }, cols)
   assert.ok(!('error' in res))
   assert.deepEqual(res.cols, cols)
+})
+
+// OM-17 follow-up: the review-template fold strips the scale slots before
+// buildRow, so the writer refused every create with "ratingScaleMin is
+// required". A present fold covers its slots: buildRow skips them (required
+// check and column emission alike) and the integrity check proves the scale
+// with the engine's own words. A body with no fold covers nothing.
+test('a present scale fold covers the review-template slots in buildRow', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('hrm-review-templates')!
+  const body = {
+    name: 'Annual',
+    ratingScale: { min: 1, max: 5, labels: ['low', 'high'] },
+    isActive: true,
+  }
+  assert.deepEqual(
+    [...coveredSlotFields('hrm-review-templates', body)].sort(),
+    ['ratingScaleLabels', 'ratingScaleMax', 'ratingScaleMin'],
+  )
+  const covered = buildRow(entity, body, { forCreate: true, coverFoldedSlots: true })
+  assert.ok(!('error' in covered), `folded slots must not block the write: ${JSON.stringify(covered)}`)
+  const columns = covered.cols.map((col) => col.column).sort()
+  assert.deepEqual(columns, ['is_active', 'name'], 'slot fields must never emit phantom columns')
+})
+
+test('without the opt-in or without a fold the slots still refuse by name', () => {
+  const entity = SETUP_ENTITY_BY_KEY.get('hrm-review-templates')!
+  const folded = { name: 'Annual', ratingScale: { min: 1, max: 5, labels: [] }, isActive: true }
+  // Import paths never normalize: without the flag the loud required
+  // refusal stands instead of a silently dropped scale.
+  assert.deepEqual(buildRow(entity, folded, { forCreate: true }), { error: 'ratingScaleMin is required' })
+  // And a scaleless create still names its missing field with the flag on.
+  assert.deepEqual(
+    buildRow(entity, { name: 'Annual', isActive: true }, { forCreate: true, coverFoldedSlots: true }),
+    { error: 'ratingScaleMin is required' },
+  )
+  assert.deepEqual([...coveredSlotFields('departments', { name: 'x' })], [])
 })
