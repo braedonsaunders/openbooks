@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "Nombre del informe",
+      "nameRequired": "Escriba un nombre de informe para guardar.",
       "descriptionPlaceholder": "Descripción (opcional)",
       "allChangesSaved": "Todos los cambios guardados",
       "unsavedChanges": "Cambios sin guardar…",

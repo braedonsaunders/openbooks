@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "レポート名",
+      "nameRequired": "保存するにはレポート名を入力してください。",
       "descriptionPlaceholder": "説明（任意）",
       "allChangesSaved": "すべての変更を保存しました",
       "unsavedChanges": "未保存の変更…",

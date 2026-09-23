@@ -30,6 +30,10 @@ export function ExportClient() {
   const [format, setFormat] = useState<Format>('csv')
   const [loadingCols, setLoadingCols] = useState(false)
   const [busy, setBusy] = useState(false)
+  // Last completed download, tied to the actual file: filename read back
+  // from the response disposition and the columns it contains. Cleared
+  // whenever the export context changes so success never trails a new run.
+  const [done, setDone] = useState<{ filename: string; columns: number } | null>(null)
 
   useEffect(() => {
     fetch('/api/data/resources')
@@ -80,10 +84,12 @@ export function ExportClient() {
 
   const onResourceChange = (key: string) => {
     setResource(key)
+    setDone(null)
     loadColumns(key)
   }
 
   const toggle = (key: string) => {
+    setDone(null)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(key)) next.delete(key)
@@ -95,15 +101,13 @@ export function ExportClient() {
   const runExport = async () => {
     if (!resource) return
     setBusy(true)
+    setDone(null)
     try {
+      const chosen = columns.filter((c) => selected.has(c.key)).map((c) => c.key)
       const res = await fetch('/api/data/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          resource,
-          format,
-          columns: columns.filter((c) => selected.has(c.key)).map((c) => c.key),
-        }),
+        body: JSON.stringify({ resource, format, columns: chosen }),
       })
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'export failed'))
       const blob = await res.blob()
@@ -112,17 +116,29 @@ export function ExportClient() {
       a.href = url
       const disp = res.headers.get('Content-Disposition') ?? ''
       const match = /filename="?([^"]+)"?/.exec(disp)
-      a.download = match?.[1] ?? `${resource}.${format}`
+      const filename = match?.[1] ?? `${resource}.${format}`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
+      // Completion is claimed only now: the bytes arrived and the download
+      // started, with the real filename and column count.
+      setDone({ filename, columns: chosen.length })
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
       setBusy(false)
     }
   }
+
+  // Named disabled reasons: the Export button never sits disabled in
+  // silence. The no-resource reason reuses the existing empty-state copy.
+  const disabledReason = !resource
+    ? t('export.empty')
+    : selected.size === 0
+      ? t('export.needColumns')
+      : null
 
   return (
     <div className="space-y-6">
@@ -158,7 +174,10 @@ export function ExportClient() {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelected(new Set(columns.map((c) => c.key)))}
+                    onClick={() => {
+                      setDone(null)
+                      setSelected(new Set(columns.map((c) => c.key)))
+                    }}
                   >
                     {t('export.selectAll')}
                   </button>
@@ -166,7 +185,10 @@ export function ExportClient() {
                   <button
                     type="button"
                     className="text-primary hover:underline"
-                    onClick={() => setSelected(new Set())}
+                    onClick={() => {
+                      setDone(null)
+                      setSelected(new Set())
+                    }}
                   >
                     {t('export.clearAll')}
                   </button>
@@ -205,7 +227,10 @@ export function ExportClient() {
                 <button
                   key={f}
                   type="button"
-                  onClick={() => setFormat(f)}
+                  onClick={() => {
+                    setDone(null)
+                    setFormat(f)
+                  }}
                   className={cn(
                     'rounded-md border px-4 py-2 text-sm font-medium uppercase',
                     format === f
@@ -220,10 +245,24 @@ export function ExportClient() {
           </div>
         )}
 
-        <Button onClick={runExport} disabled={!resource || busy || selected.size === 0}>
+        <Button
+          onClick={runExport}
+          disabled={!resource || busy || selected.size === 0}
+          aria-describedby={disabledReason ? 'data-export-hint' : undefined}
+        >
           <Download className="mr-2 h-4 w-4" />
           {busy ? t('export.running') : t('export.run')}
         </Button>
+        {disabledReason ? (
+          <p id="data-export-hint" className="text-sm text-muted-foreground">
+            {disabledReason}
+          </p>
+        ) : null}
+        {done && !disabledReason ? (
+          <p role="status" className="text-sm text-emerald-700 dark:text-emerald-400">
+            {t('export.exported', { filename: done.filename, count: done.columns })}
+          </p>
+        ) : null}
       </div>
     </div>
   )

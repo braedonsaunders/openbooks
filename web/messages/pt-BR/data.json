@@ -16,6 +16,8 @@
     "format": "Formato",
     "run": "Exportar",
     "running": "Exportando…",
+    "exported": "{filename} exportado com {count, plural, one {# coluna} other {# colunas}}.",
+    "needColumns": "Selecione pelo menos uma coluna para exportar.",
     "empty": "Escolha o que exportar.",
     "noColumns": "Este tipo de registro não tem colunas exportáveis.",
     "loadFailed": "Não foi possível carregar os tipos de registro exportáveis.",

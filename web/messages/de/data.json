@@ -16,6 +16,8 @@
     "format": "Format",
     "run": "Exportieren",
     "running": "Wird exportiert…",
+    "exported": "{filename} exportiert mit {count, plural, one {# Spalte} other {# Spalten}}.",
+    "needColumns": "Wählen Sie mindestens eine Spalte für den Export.",
     "empty": "Wählen Sie aus, was exportiert werden soll.",
     "noColumns": "Dieser Datensatztyp hat keine exportierbaren Spalten.",
     "loadFailed": "Exportierbare Datensatztypen konnten nicht geladen werden.",

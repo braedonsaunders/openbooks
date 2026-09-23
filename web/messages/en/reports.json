@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "Report name",
+      "nameRequired": "Enter a report name to save.",
       "descriptionPlaceholder": "Description (optional)",
       "allChangesSaved": "All changes saved",
       "unsavedChanges": "Unsaved changes…",

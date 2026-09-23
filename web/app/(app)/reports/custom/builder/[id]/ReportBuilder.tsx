@@ -365,11 +365,22 @@ export function ReportBuilder({
           <div className="flex items-center gap-3">
             {createMode ? (
               <>
-                <span className="text-xs text-slate-500 dark:text-slate-400">{t('unsavedChanges')}</span>
+                <span
+                  id="custom-report-save-hint"
+                  className="text-xs text-slate-500 dark:text-slate-400"
+                >
+                  {!name.trim() && !creating ? t('nameRequired') : t('unsavedChanges')}
+                </span>
                 <Button type="button" variant="outline" disabled={creating} onClick={() => router.push('/reports/custom')}>
                   {tc('actions.cancel')}
                 </Button>
-                <Button type="button" disabled={creating || !name.trim()} onClick={createReport}>
+                <Button
+                  type="button"
+                  disabled={creating || !name.trim()}
+                  title={!name.trim() && !creating ? t('nameRequired') : undefined}
+                  aria-describedby={!name.trim() && !creating ? 'custom-report-save-hint' : undefined}
+                  onClick={createReport}
+                >
                   {creating ? tc('actions.saving') : tc('actions.save')}
                 </Button>
               </>
