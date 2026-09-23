@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { EmailJobData, EnqueueEmailData } from "@openbooks/jobs";
-import type { EmailAttachmentPayload } from "@openbooks/emails";
+import { normalizeEmailDeliveryInput, type EmailAttachmentPayload } from "@openbooks/emails";
 import { storeEmailAttachments } from "../delivery/email-attachments.ts";
 import {
   ALLOCATION_RUN_OUTBOX_KIND,
@@ -271,6 +271,26 @@ export async function enqueueFlowEmail(input: {
   if (!input.runId) throw new Error("flow email requires its flow run");
   if (!input.occurrenceKey) throw new Error("flow email requires an occurrence key");
   parseFlowEmailPayload(input.payload);
+  // Fail closed on the exact delivery contract the queue enforces at drain:
+  // an invalid recipient, subject, reply-to, or attachment must refuse here,
+  // synchronously inside the flow's transaction — never commit as a
+  // successful send that only surfaces as an error at drain time, after the
+  // flow already reported success.
+  try {
+    normalizeEmailDeliveryInput({
+      to: input.payload.to,
+      subject: input.payload.subject,
+      html: input.payload.html,
+      text: input.payload.text,
+      ...(input.payload.attachments ? { attachments: input.payload.attachments } : {}),
+      ...(input.payload.replyTo ? { replyTo: input.payload.replyTo } : {}),
+    });
+  } catch (error) {
+    throw new Error(
+      `flow email refused: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
   const inserted = (await db.execute<{ id: string }>(sql`
     insert into scheduler_outbox
       (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)

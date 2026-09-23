@@ -6,6 +6,7 @@ import {
   SCHEDULER_OUTBOX_RETRY_HORIZON_MS,
   STALE_SCHEDULER_OUTBOX_MS,
   deliverFlowEmail,
+  enqueueFlowEmail,
   parseFlowEmailPayload,
   schedulerOutboxBackoffMs,
   type OutboxRow,
@@ -106,6 +107,29 @@ test("flow email payloads carry an optional reply-to and refuse non-addresses", 
       `replyTo ${JSON.stringify(replyTo)} must not become durable`,
     );
   }
+});
+
+test("flow email enqueue refuses an invalid message synchronously, before any row", async () => {
+  const base = { to: ["a@example.com"], subject: "s", html: "<p>x</p>", text: "x" };
+  // Shaped like an address but not one: the old includes('@') check let it
+  // become a durable row and report success, failing only at drain.
+  await assert.rejects(
+    enqueueFlowEmail({ orgId: "org-1", runId: "run-1", occurrenceKey: "k-1", payload: { ...base, to: ["x@"] } }),
+    /flow email refused: Email delivery contains an invalid recipient address\./,
+  );
+  await assert.rejects(
+    enqueueFlowEmail({ orgId: "org-1", runId: "run-1", occurrenceKey: "k-2", payload: { ...base, subject: "" } }),
+    /flow email refused: Email subject is required\./,
+  );
+  await assert.rejects(
+    enqueueFlowEmail({
+      orgId: "org-1",
+      runId: "run-1",
+      occurrenceKey: "k-3",
+      payload: { ...base, attachments: [{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }] },
+    }),
+    /flow email refused: Email attachment 1 is not valid bounded base64 content\./,
+  );
 });
 
 test("flow email delivery forwards reply-to to the queue", async () => {

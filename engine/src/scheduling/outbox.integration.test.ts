@@ -324,6 +324,41 @@ test("an undeliverable flow email retries visibly instead of sending garbage", {
   }
 });
 
+test("an invalid flow email refuses at enqueue and never becomes a row", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const runId = randomUUID();
+  try {
+    await assert.rejects(
+      enqueueFlowEmail({
+        orgId: org.orgId,
+        runId,
+        occurrenceKey: `${runId}:email:bad`,
+        payload: { to: ["x@"], subject: "Approval", html: "<b>x</b>", text: "x" },
+      }),
+      /flow email refused: Email delivery contains an invalid recipient address\./,
+    );
+    const refused = (await db.execute<{ id: string }>(sql`
+      select id from scheduler_outbox where subject_id=${runId}
+    `)).rows;
+    assert.equal(refused.length, 0, "a refused send must leave no outbox row behind");
+
+    const ok = await enqueueFlowEmail({
+      orgId: org.orgId,
+      runId,
+      occurrenceKey: `${runId}:email:good`,
+      payload: { to: ["approver@scratch.test"], subject: "Approval", html: "<b>Approval</b>", text: "Approval" },
+    });
+    assert.equal(ok, true, "a valid message still enqueues");
+    const stored = (await db.execute<{ id: string }>(sql`
+      select id from scheduler_outbox where subject_id=${runId}
+    `)).rows;
+    assert.equal(stored.length, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where subject_id=${runId} or org_id=${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // fnd_mt97ro32_l25fnb — the crash gap between the queued provider send and the
 // PG success mark. enqueueEmail used to receive no job identity at all, so a
