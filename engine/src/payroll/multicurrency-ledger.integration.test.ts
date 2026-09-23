@@ -160,6 +160,8 @@ test("a mixed scope translates through derived rates — never at a silent 1.0",
     assert.equal(groups.length, 1);
     // 11,083.33 GBP + 12,250.00 EUR × 0.85 = 21,495.83 GBP. The raw-unit sum
     // 23,333.33 (a silent 1.0) must never appear.
+    assert.equal(groups[0]!.currency, "GBP");
+    assert.equal(groups[0]!.translated, true);
     assert.equal(cmp(groups[0]!.grossPayroll, "21495.83"), 0);
     assert.equal(cmp(groups[0]!.total, "21495.83"), 0);
     assert.ok(cmp(groups[0]!.grossPayroll, "23333.33") !== 0);
@@ -182,13 +184,30 @@ test("a single-currency scope aggregates exactly as before", { skip: !DB }, asyn
   }
 });
 
-test("a homogeneous foreign-currency scope passes through untranslated", { skip: !DB }, async () => {
+test("a homogeneous foreign-currency scope states its native currency, never the org base", { skip: !DB }, async () => {
   const fx = await seedMixedOrg();
   try {
     await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
     const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
     assert.equal(groups.length, 1);
+    // The consolidated figure is 12,250 EUR stated as EUR: the label travels
+    // with the amount, so no consumer can read it as £12,250.
+    assert.equal(groups[0]!.currency, "EUR");
+    assert.equal(groups[0]!.translated, false);
     assert.equal(cmp(groups[0]!.grossPayroll, "12250.00"), 0);
+    assert.equal(cmp(groups[0]!.total, "12250.00"), 0);
+    // A derived non-1 rate must not leak into the single-currency reading:
+    // the scope stays native EUR rather than translating at 0.85.
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${fx.orgId}, 'EUR', 'GBP', '2026-09-15', 'spot', '0.85')`);
+    assert.ok(await deriveConsolidatedRates(fx.orgId, fx.septPeriod, fx.actorId) > 0);
+    const relabelled = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
+    assert.equal(relabelled.length, 1);
+    assert.equal(relabelled[0]!.currency, "EUR");
+    assert.equal(relabelled[0]!.translated, false);
+    assert.equal(cmp(relabelled[0]!.grossPayroll, "12250.00"), 0);
+    assert.equal(cmp(relabelled[0]!.total, "12250.00"), 0);
   } finally {
     await dropScratchOrg(fx.orgId);
   }

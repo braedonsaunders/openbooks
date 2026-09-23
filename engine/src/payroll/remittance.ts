@@ -61,6 +61,9 @@ export interface RemittanceComponentLine {
   liabilityAccountId: string | null;
   accountLabel: string | null;
   amount: string;
+  /** The ISO 4217 currency `amount` is stated in — the consolidated group's
+   *  currency for group lines, the slice's currency for slice lines. */
+  currency: string;
 }
 
 /**
@@ -146,6 +149,22 @@ export interface RemittanceGroup {
   components: RemittanceComponentLine[];
   total: string;
   /**
+   * The ISO 4217 currency the consolidated `components`, `total` and
+   * `grossPayroll` are stated in. A scope whose committed stubs share one
+   * currency states that native currency (a EUR-only scope under a GBP org
+   * states EUR, never GBP); a multi-currency scope states the org's base
+   * currency with `translated` set. Consumers must format with this
+   * currency, never assume the org's base.
+   */
+  currency: string;
+  /**
+   * True when the consolidated amounts were translated into `currency`
+   * through each period's derived consolidated average rate (or the summary
+   * refused naming the missing pair). False means native units: no rate was
+   * read and none was needed.
+   */
+  translated: boolean;
+  /**
    * Per-entity slices for the WRITE path — one entry per legal entity whose
    * books credited the group's accruals, each in that entity's currency.
    * The consolidated `components`/`total`/`grossPayroll`/`employeeCount`
@@ -156,9 +175,9 @@ export interface RemittanceGroup {
   slices: RemittanceEntitySlice[];
   /** PD7A worksheet context: gross pay and employee count in the period,
    *  counted within this filing account (the PD7A is filed per account).
-   *  Stated in the organization's base currency: a multi-currency scope is
-   *  translated slice-by-slice through derived consolidated rates (or the
-   *  summary refuses), never summed as raw units. */
+   *  Stated in `currency` above: a multi-currency scope is translated
+   *  slice-by-slice through derived consolidated rates (or the summary
+   *  refuses), never summed as raw units. */
   grossPayroll: string;
   employeeCount: number;
   /** Remittance bills already raised for this destination and period. */
@@ -480,12 +499,14 @@ export async function payrollRemittanceSummary(
     declarations.set(country, found);
     return found;
   };
-  // Amounts are stated in the organization's base currency — the currency the
-  // page formats every group total in. A scope whose committed stubs span more
+  // Every group states its own currency (RemittanceGroup.currency): a scope
+  // whose committed stubs share one currency states that native currency —
+  // even when it differs from the org's base — and a scope spanning more
   // than one currency takes the mixed-currency path (translate each slice
   // through its own period's derived consolidated rate, or refuse naming the
-  // missing pair). A single-currency scope keeps the historical queries below
-  // verbatim, so its figures stay byte-identical.
+  // missing pair) and states the org's base with `translated` set. A
+  // single-currency scope keeps the historical queries below verbatim, so
+  // its figures stay byte-identical.
   const presentation = (await executor.execute<{ base_currency: string }>(sql`
     select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? null;
   const scopeCurrencies = presentation
@@ -500,10 +521,15 @@ export async function payrollRemittanceSummary(
     : [];
   let rows: RemittanceRow[];
   let contextByAccount: Map<string, { gross: string; employees: number }>;
+  // The consolidated presentation currency, set only when the mixed path
+  // below translates into the org's base. A single-currency scope states its
+  // native currency per group instead — even a foreign one.
+  let presentationCurrency: string | undefined;
   if (scopeCurrencies.length > 1 && presentation) {
     ({ rows, contextByAccount } = await mixedCurrencyAccruals(
       orgId, range, allowedSubsidiaryIds, executor, presentation, declarationFor,
     ));
+    presentationCurrency = presentation;
   } else {
   // Grouped by the STUB's snapshot province as well as by component: a
   // component whose pack declares a region-scoped remittance vendor (QPP and
@@ -633,6 +659,7 @@ export async function payrollRemittanceSummary(
   const groups = groupRemittanceRows({
     rows, contextByAccount, filingAccounts, resolveParty, resolveAccount, resolveVendorKey,
     subsidiaries,
+    presentationCurrency,
   });
 
   // One group, one destination, one schedule. Provenance first: rows that
@@ -936,9 +963,20 @@ export function groupRemittanceRows(input: {
    * inside its own transaction — refuses what it cannot stamp.
    */
   subsidiaries?: Map<string, { name: string | null; currency: string | null }>;
+  /**
+   * The org-base currency the caller translated consolidated amounts into
+   * (the mixed-currency scope). Present means every group states this
+   * currency with `translated` set; absent means each group states its rows'
+   * single native currency. Optional so existing callers keep their shape;
+   * absent means native, never translated.
+   */
+  presentationCurrency?: string;
 }): Map<string, RemittanceGroup> {
   const groups = new Map<string, RemittanceGroup>();
   const provincesByGroup = new Map<string, Set<string>>();
+  // Distinct stub currencies behind each group, for the consolidated stated
+  // currency of an untranslated (single-currency) scope.
+  const currenciesByGroup = new Map<string, Set<string>>();
   // The pack country stamped on the group's own component rows — the same
   // country-first resolution the vendor declarations use.
   const countryByGroup = new Map<string, string>();
@@ -961,6 +999,11 @@ export function groupRemittanceRows(input: {
       provinces: [],
       regionalCalendar: null,
       components: [], total: "0",
+      // The stated currency resolves after the fold (below): the caller's
+      // presentation currency when translated, else the rows' single native
+      // currency. The placeholder is never observed — every group has a row.
+      currency: "",
+      translated: false,
       slices: [],
       grossPayroll: runContext?.gross ?? "0",
       employeeCount: runContext?.employees ?? 0,
@@ -980,6 +1023,9 @@ export function groupRemittanceRows(input: {
         componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
         systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
         accountLabel: null, amount: row.amount,
+        // Resolved after the fold with the group's stated currency: in a
+        // translated scope the consolidated amount is presentation units.
+        currency: "",
       });
     }
     group.total = add(group.total, row.amount);
@@ -1006,6 +1052,8 @@ export function groupRemittanceRows(input: {
           componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
           systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
           accountLabel: null, amount: row.sliceAmount,
+          // Slice currency resolves after the fold, beside the slice total.
+          currency: "",
         });
       }
       slice.total = add(slice.total, row.sliceAmount);
@@ -1017,6 +1065,9 @@ export function groupRemittanceRows(input: {
     const provinces = provincesByGroup.get(key) ?? new Set<string>();
     provinces.add(row.province);
     provincesByGroup.set(key, provinces);
+    const rowCurrencies = currenciesByGroup.get(key) ?? new Set<string>();
+    rowCurrencies.add(row.currency);
+    currenciesByGroup.set(key, rowCurrencies);
     if (row.country && !countryByGroup.has(key)) countryByGroup.set(key, row.country);
     const vendorKey = input.resolveVendorKey?.(row);
     if (vendorKey) {
@@ -1026,6 +1077,19 @@ export function groupRemittanceRows(input: {
     }
   }
   for (const [key, group] of groups) {
+    // The consolidated stated currency: the caller's presentation currency
+    // when the scope was translated into the org's base, else the rows'
+    // single native currency. Several native currencies with no presentation
+    // (an org with no base currency) state nothing rather than guess.
+    if (input.presentationCurrency != null) {
+      group.currency = input.presentationCurrency;
+      group.translated = true;
+    } else {
+      const native = [...(currenciesByGroup.get(key) ?? [])].sort();
+      group.currency = native.length === 1 ? native[0]! : "";
+      group.translated = false;
+    }
+    for (const component of group.components) component.currency = group.currency;
     group.provinces = [...(provincesByGroup.get(key) ?? [])].sort();
     // The declaring pack is the one stamped on the group's own component
     // rows. Rows naming no country declare no regions, so a group the pack
@@ -1041,13 +1105,15 @@ export function groupRemittanceRows(input: {
       .map(([subsidiaryId, slice]) => {
         const known = input.subsidiaries?.get(subsidiaryId);
         const native = [...slice.currencies].sort();
+        // The entity's own base currency when known; otherwise the stubs'
+        // single currency when they agree. The bill creator re-resolves
+        // this authoritatively and refuses anything it cannot stamp.
+        const currency = known?.currency ?? (native.length === 1 ? native[0]! : "");
+        for (const component of slice.components) component.currency = currency;
         return {
           subsidiaryId,
           subsidiaryName: known?.name ?? null,
-          // The entity's own base currency when known; otherwise the stubs'
-          // single currency when they agree. The bill creator re-resolves
-          // this authoritatively and refuses anything it cannot stamp.
-          currency: known?.currency ?? (native.length === 1 ? native[0]! : ""),
+          currency,
           components: slice.components,
           total: slice.total,
           existingBills: [],

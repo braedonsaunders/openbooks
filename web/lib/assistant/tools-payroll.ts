@@ -348,7 +348,7 @@ const payrollEntitlements: AssistantToolDef = {
 const payrollRemittances: AssistantToolDef = {
   name: "payroll_remittances",
   description:
-    "Unremitted payroll withholdings and employer costs by destination for a pay-date range: component lines, filing account, gross payroll, headcount, bills raised. Read-only.",
+    "Unremitted payroll withholdings and employer costs by destination for a pay-date range: component lines, filing account, stated currency (native, or translated to base), gross payroll, headcount, bills raised. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   feature: "payroll",
@@ -372,6 +372,7 @@ const payrollRemittances: AssistantToolDef = {
             kind: c.kind,
             accountLabel: c.accountLabel,
             amount: num(c.amount),
+            currency: c.currency,
           })),
           50,
         );
@@ -381,6 +382,12 @@ const payrollRemittances: AssistantToolDef = {
           partyName: g.partyName,
           filingAccountNumber: g.filingAccount.accountNumber,
           filingAccountName: g.filingAccount.name,
+          // The stated currency of total/grossPayroll/component amounts:
+          // native for a single-currency scope (even a foreign one), the
+          // org base with translated set for a translated scope. Never
+          // assume the org currency.
+          currency: g.currency,
+          translated: g.translated,
           total: num(g.total),
           grossPayroll: num(g.grossPayroll),
           employeeCount: g.employeeCount,

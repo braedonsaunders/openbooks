@@ -1087,7 +1087,8 @@
     "billCreated": "Borrador de factura {number} creado. Revíselo y contabilícelo en cuentas por pagar.",
     "dueOn": "Vence el {dueDate} · {authority}",
     "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
-    "apLink": "abrir facturas de proveedor"
+    "apLink": "abrir facturas de proveedor",
+    "translated": "Convertido a {currency} al tipo consolidado derivado"
   },
   "yearEnd": {
     "title": "Cierre anual",

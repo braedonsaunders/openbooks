@@ -1087,7 +1087,8 @@
     "billCreated": "账单草稿 {number} 已创建。请在应付账款中复核并过账。",
     "dueOn": "{dueDate} 到期 · {authority}",
     "apNote": "代缴账单是普通的供应商账单:",
-    "apLink": "打开应付账单"
+    "apLink": "打开应付账单",
+    "translated": "已按衍生合并汇率折算为{currency}"
   },
   "yearEnd": {
     "title": "年终",

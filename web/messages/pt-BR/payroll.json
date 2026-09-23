@@ -1087,7 +1087,8 @@
     "billCreated": "Rascunho de fatura {number} criado. Revise e contabilize no contas a pagar.",
     "dueOn": "Vence em {dueDate} · {authority}",
     "apNote": "Faturas de recolhimento são faturas comuns de fornecedor:",
-    "apLink": "abrir faturas de fornecedor"
+    "apLink": "abrir faturas de fornecedor",
+    "translated": "Convertido para {currency} à taxa consolidada derivada"
   },
   "yearEnd": {
     "title": "Fechamento anual",

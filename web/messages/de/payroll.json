@@ -1087,7 +1087,8 @@
     "billCreated": "Rechnungsentwurf {number} erstellt. Prüfen und buchen Sie ihn in den Kreditoren.",
     "dueOn": "Fällig am {dueDate} · {authority}",
     "apNote": "Abführungsrechnungen sind gewöhnliche Lieferantenrechnungen:",
-    "apLink": "Kreditorenrechnungen öffnen"
+    "apLink": "Kreditorenrechnungen öffnen",
+    "translated": "Zum abgeleiteten konsolidierten Kurs in {currency} umgerechnet"
   },
   "yearEnd": {
     "title": "Jahresabschluss",
