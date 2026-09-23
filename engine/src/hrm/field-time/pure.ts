@@ -221,19 +221,121 @@ export function quantumUnitsToHours(units: number, rule: RoundingRule): string {
   return formatTenThousandths(BigInt(units) * BigInt(roundingQuantumUnits(rule)));
 }
 
-export interface UtcDayPiece {
+export interface DayPiece {
   date: string;
-  /** Whole milliseconds of the span falling on this UTC date. */
+  /** Whole milliseconds of the span falling on this zone-local date. */
   ms: number;
 }
 
+const supportedTimeZones: ReadonlySet<string> | null = (() => {
+  if (typeof Intl.supportedValuesOf !== "function") return null;
+  try {
+    return new Set<string>(Intl.supportedValuesOf("timeZone"));
+  } catch {
+    return null;
+  }
+})();
+
 /**
- * Split [fromMs, toMs) at UTC midnights. UTC is the boundary because
- * the org model declares no business timezone and the rest of time
- * tracking already days in UTC (week starts in sundayOf, crew
- * worked_on dates). Integer-millisecond pieces sum to exactly the span.
+ * An IANA zone the runtime can day in, or a refusal that names the
+ * remedy. Canonical membership is the fast path; otherwise the zone
+ * must actually format — small-icu runtimes list no Etc/UTC/GMT zones
+ * yet still format "UTC" fine, so the list alone would refuse the
+ * fallback zone every org without a configured zone resolves to.
  */
-export function splitUtcDays(fromMs: number, toMs: number): UtcDayPiece[] {
+function requireTimeZone(timeZone: string): string {
+  const zone = timeZone?.trim();
+  if (zone && supportedTimeZones?.has(zone)) return zone;
+  let formats = !!zone;
+  if (formats) {
+    try {
+      zoneDateParts(0, zone);
+    } catch {
+      formats = false;
+    }
+  }
+  if (!formats || !zone) {
+    throw new FieldTimeError(
+      "invalid_time_zone",
+      `Time zone ${JSON.stringify(timeZone)} is not a known IANA zone — set a valid timeZone in Company Settings before clocking across midnights`,
+    );
+  }
+  return zone;
+}
+
+/**
+ * The zone-local calendar date of an instant, as parts. Self-contained
+ * (rather than importing the platform formatter) so this database-free
+ * module never loads the db-backed platform stack in unit tests.
+ */
+function zoneDateParts(instantMs: number, timeZone: string): { y: number; mo: number; d: number; date: string } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(instantMs));
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return {
+    y: Number(value("year")),
+    mo: Number(value("month")),
+    d: Number(value("day")),
+    date: `${value("year")}-${value("month")}-${value("day")}`,
+  };
+}
+
+/**
+ * Whole-minute zone offset (local minus UTC) at an instant, from the
+ * zone wall clock — no float date arithmetic. Modern IANA offsets are
+ * whole minutes, so midnight epochs derived from this are exact to
+ * the millisecond.
+ */
+function zoneOffsetMs(instantMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date(instantMs));
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  // en-CA midnight formats as "24" on some runtimes; normalize to 00.
+  const hour = value("hour") === "24" ? "00" : value("hour");
+  const asUTC = Date.UTC(
+    Number(value("year")),
+    Number(value("month")) - 1,
+    Number(value("day")),
+    Number(hour),
+    Number(value("minute")),
+    Number(value("second")),
+  );
+  return asUTC - Math.floor(instantMs / 1000) * 1000;
+}
+
+/** Epoch milliseconds of 00:00 on a zone-local date. Deterministic. */
+function startOfZoneDayMs(y: number, mo: number, d: number, timeZone: string): number {
+  let guess = Date.UTC(y, mo - 1, d, 12);
+  for (let i = 0; i < 4; i++) {
+    const next = Date.UTC(y, mo - 1, d) - zoneOffsetMs(guess, timeZone);
+    if (next === guess) return next;
+    guess = next;
+  }
+  return guess;
+}
+
+/**
+ * Split [fromMs, toMs) at midnights in the org's business timezone —
+ * time-entry dates are business dates, so a UTC-5 evening shift stays
+ * on its one local date instead of straddling the UTC day. The caller
+ * resolves the zone once per close (businessTimeZone, same basis as
+ * businessToday); an unknown zone refuses here rather than guessing a
+ * boundary. Integer-millisecond pieces sum to exactly the span.
+ */
+export function splitZoneDays(fromMs: number, toMs: number, timeZone: string): DayPiece[] {
+  const zone = requireTimeZone(timeZone);
   for (const [name, value] of [["span start", fromMs], ["span end", toMs]] as const) {
     if (!Number.isFinite(value) || value < 0) {
       throw new FieldTimeError(
@@ -242,16 +344,22 @@ export function splitUtcDays(fromMs: number, toMs: number): UtcDayPiece[] {
       );
     }
   }
-  const out: UtcDayPiece[] = [];
+  const out: DayPiece[] = [];
   if (toMs <= fromMs) return out;
-  let from = Math.floor(fromMs);
+  let cursor = Math.floor(fromMs);
   const end = Math.floor(toMs);
-  while (from < end) {
-    const day = new Date(from);
-    const dayEnd = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) + 86_400_000;
-    const pieceEnd = Math.min(end, dayEnd);
-    out.push({ date: day.toISOString().slice(0, 10), ms: pieceEnd - from });
-    from = pieceEnd;
+  while (cursor < end) {
+    const here = zoneDateParts(cursor, zone);
+    const morrow = new Date(Date.UTC(here.y, here.mo - 1, here.d) + 86_400_000);
+    const nextMidnight = startOfZoneDayMs(
+      morrow.getUTCFullYear(), morrow.getUTCMonth() + 1, morrow.getUTCDate(), zone,
+    );
+    let pieceEnd = Math.min(end, nextMidnight);
+    // A degenerate boundary (a midnight that does not exist or repeats
+    // around a transition) never emits a zero-ms piece.
+    if (pieceEnd <= cursor) pieceEnd = end;
+    out.push({ date: here.date, ms: pieceEnd - cursor });
+    cursor = pieceEnd;
   }
   return out;
 }

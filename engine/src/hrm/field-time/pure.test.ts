@@ -12,7 +12,7 @@ import {
   roundHours,
   roundingQuantumUnits,
   sameClockPayload,
-  splitUtcDays,
+  splitZoneDays,
   validateClockSequence,
   validateEventChronology,
   validateStages,
@@ -123,19 +123,46 @@ describe("round-once dealing", () => {
     refuses(() => hoursToQuantumUnits("7.1300", quarter));
   });
   it("UTC day splits are exact to the millisecond", () => {
-    const pieces = splitUtcDays(
+    const pieces = splitZoneDays(
       Date.parse("2026-09-14T23:52:00.000Z"),
       Date.parse("2026-09-15T00:08:00.000Z"),
+      "UTC",
     );
     assert.deepEqual(pieces.map((p) => p.date), ["2026-09-14", "2026-09-15"]);
     assert.deepEqual(pieces.map((p) => p.ms), [8 * 60_000, 8 * 60_000]);
   });
   it("a single-day span is one piece", () => {
-    const pieces = splitUtcDays(
+    const pieces = splitZoneDays(
       Date.parse("2026-09-14T08:00:00.000Z"),
       Date.parse("2026-09-14T16:00:00.000Z"),
+      "UTC",
     );
     assert.deepEqual(pieces, [{ date: "2026-09-14", ms: 8 * 3_600_000 }]);
+  });
+  it("a UTC-5 evening shift stays on its one local date", () => {
+    // 20:00-24:00 Toronto time is 01:00-05:00Z: a UTC split would date
+    // the whole shift on Jan 15.
+    const pieces = splitZoneDays(
+      Date.parse("2026-01-15T01:00:00.000Z"),
+      Date.parse("2026-01-15T05:00:00.000Z"),
+      "America/Toronto",
+    );
+    assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
+  });
+  it("an overnight local shift splits at the business midnight", () => {
+    // 22:00-02:00 Toronto time: local midnight is 05:00Z.
+    const pieces = splitZoneDays(
+      Date.parse("2026-01-15T03:00:00.000Z"),
+      Date.parse("2026-01-15T07:00:00.000Z"),
+      "America/Toronto",
+    );
+    assert.deepEqual(pieces, [
+      { date: "2026-01-14", ms: 2 * 3_600_000 },
+      { date: "2026-01-15", ms: 2 * 3_600_000 },
+    ]);
+  });
+  it("an unknown zone refuses instead of guessing a boundary", () => {
+    refuses(() => splitZoneDays(Date.parse("2026-01-15T01:00:00.000Z"), Date.parse("2026-01-15T05:00:00.000Z"), "Not/AZone"));
   });
   it("the 23:52-00:08 shift deals its single quarter deterministically", () => {
     // 16 minutes round once to one quarter; the 8/8-minute tie breaks

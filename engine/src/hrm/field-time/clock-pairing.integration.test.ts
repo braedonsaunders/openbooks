@@ -9,6 +9,8 @@
  *   across UTC day pieces by largest remainder.
  * - D9: concurrent replays of one offline id record once; a reused id
  *   with a different payload conflicts.
+ * - Business dates: midnight splits day in the org's business timezone,
+ *   never UTC.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -21,7 +23,7 @@ import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-async function enableFieldTime(orgId: string, fieldTimeExtra: Record<string, unknown> = {}): Promise<void> {
+async function enableFieldTime(orgId: string, fieldTimeExtra: Record<string, unknown> = {}, timeZone: string | null = null): Promise<void> {
   const fieldTime = {
     roundingIncrement: 15,
     roundingMode: "nearest",
@@ -43,6 +45,12 @@ async function enableFieldTime(orgId: string, fieldTimeExtra: Record<string, unk
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}',
       ${JSON.stringify(fieldTime)}::jsonb)
      where id = ${orgId}`);
+  if (timeZone) {
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{timeZone}',
+        ${JSON.stringify(timeZone)}::jsonb)
+       where id = ${orgId}`);
+  }
 }
 
 function refusesCode(fn: () => Promise<unknown>): Promise<string> {
@@ -263,6 +271,69 @@ test("a reused offline id with a different payload conflicts", { skip: !DB }, as
         select count(*)::text as n from time_clock_events
          where org_id = ${org.orgId} and client_event_id = ${key}`)).rows[0]?.n;
       assert.equal(rows, "1");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a UTC-5 evening shift posts on its one local date", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 }, "America/Toronto");
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    await withOrg(org.orgId, async () => {
+      // 20:00-24:00 Toronto time (01:00-05:00Z): a UTC split would date
+      // the whole shift on Jan 15.
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-01-15T01:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      const result = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-01-15T05:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      assert.equal(result.entryIds.length, 1);
+      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+        select hours::text as hours, worked_on::text as worked_on from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+      assert.deepEqual(rows.map((r) => r.hours), ["4.0000"]);
+      assert.deepEqual(rows.map((r) => r.worked_on), ["2026-01-14"]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an overnight local shift splits at the business midnight", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 }, "America/Toronto");
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    await withOrg(org.orgId, async () => {
+      // 22:00-02:00 Toronto time (03:00-07:00Z): local midnight is 05:00Z.
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-01-15T03:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-01-15T07:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+        select hours::text as hours, worked_on::text as worked_on from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}
+         order by worked_on`)).rows;
+      assert.deepEqual(rows.map((r) => r.hours), ["2.0000", "2.0000"]);
+      assert.deepEqual(rows.map((r) => r.worked_on), ["2026-01-14", "2026-01-15"]);
     });
   } finally {
     await dropScratchOrg(org.orgId);
