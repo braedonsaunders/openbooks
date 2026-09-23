@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { statementBookExpr } from "../../../../lib/gl-summary";
 import { isUuid } from "../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { serializeLedgerDecimal } from "./ledger-decimal";
@@ -64,6 +65,14 @@ export async function GET(req: Request) {
   const docJoinScope = joinedSubsidiaryScope(sql`d.id`, sql`d.subsidiary_id`, allowed);
   const docScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed);
   const srcEntryScope = joinedSubsidiaryScope(sql`e.id`, sql`e.subsidiary_id`, allowed);
+  // The posted population every parent metric reads: spend-velocity resolves
+  // GL activity in the statement book with posted/reversed entries and live
+  // documents; customer data reads posted invoices. Drafts, secondary-book
+  // mirrors and voided documents are not activity, whatever the caller knew.
+  const book = statementBookExpr(user.orgId);
+  const postedEntry = sql`and e.status in ('posted', 'reversed') and e.book_id = ${book}`;
+  const liveDoc = sql`and (d.id is null or d.voided_at is null)`;
+  const postedDoc = sql`and d.status = 'posted'`;
 
   if (account) {
     const [detail, monthly, byParty, agg] = await Promise.all([
@@ -81,6 +90,8 @@ export async function GET(req: Request) {
           ${lineScope}
           ${entryScope}
           ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
         order by e.posting_date desc, abs(l.amount) desc
         limit 1000
       `)),
@@ -88,21 +99,29 @@ export async function GET(req: Request) {
         select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as amount
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
           ${lineScope}
           ${entryScope}
+          ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
         group by 1 order by 1
       `)),
       (db.execute(sql`
         select coalesce(p.display_name, 'No party') as name, sum(l.amount) as amount, count(*) as n
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
         left join parties p on p.id = l.party_id and p.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
           ${lineScope}
           ${entryScope}
+          ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
         group by 1 order by abs(sum(l.amount)) desc
         limit 15
       `)),
@@ -110,10 +129,14 @@ export async function GET(req: Request) {
         select count(*) as n, coalesce(sum(l.amount), 0) as total
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
           ${lineScope}
           ${entryScope}
+          ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
       `)),
     ]);
     return NextResponse.json({
@@ -148,6 +171,7 @@ export async function GET(req: Request) {
         and coalesce(d.document_date, d.posting_date) <= ${to}
         ${docScope}
         ${srcEntryScope}
+        ${postedDoc}
       order by coalesce(d.document_date, d.posting_date) desc, abs(d.total) desc
       limit 1000
     `)),
@@ -158,6 +182,7 @@ export async function GET(req: Request) {
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
         ${docScope}
+        ${postedDoc}
       group by 1 order by 1
     `)),
     (db.execute(sql`
@@ -167,6 +192,7 @@ export async function GET(req: Request) {
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
         ${docScope}
+        ${postedDoc}
       group by 1 order by sum(abs(d.total)) desc
     `)),
     (db.execute(sql`
@@ -176,6 +202,7 @@ export async function GET(req: Request) {
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
         ${docScope}
+        ${postedDoc}
     `)),
   ]);
   return NextResponse.json({
