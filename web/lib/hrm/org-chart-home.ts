@@ -6,7 +6,7 @@ import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, getAuthz, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * Org chart loader (0230, HR-19).
@@ -15,7 +15,8 @@ import { isFeatureEnabled } from '../features'
  * reads (loadOrgChart, loadDirectory) as of a civil date — names,
  * titles, departments, and managers only, never pay or private
  * fields. Renders when hrm and hrmOrgChart are on and the actor holds
- * hrm.employment.read OR hrm.self.read — the loader 404s otherwise.
+ * hrm.employment.read OR hrm.self.read — a switched-off feature redirects
+ * to its remedy instead.
  * The Directory sub-tab renders the same loader rows through the
  * shared `table` block: RecordListView's registry serves document
  * record types only, and bending its document drawer machinery around
@@ -33,8 +34,8 @@ export async function orgChartAuthz(): Promise<OrgChartHomeAuthz | null> {
   const gate = await getAuthz()
   if (!gate) return null
   if (!can(gate, 'hrm.employment.read') && !can(gate, 'hrm.self.read')) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrmOrgChart'))) return null
+  await requireFeatureEnabled(gate.user.orgId, 'hrm')
+  await requireFeatureEnabled(gate.user.orgId, 'hrmOrgChart')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
 

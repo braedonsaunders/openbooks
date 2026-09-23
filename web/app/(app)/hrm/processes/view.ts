@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
 import {
   badge,
   column,
@@ -18,7 +17,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadProcessesPage, type ProcessesPageData } from '../../../../lib/hrm/processes-page'
 
 /**
@@ -140,7 +139,7 @@ export async function loadProcessesRoute(sp: Record<string, string | undefined>)
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.process.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   return loadProcessesPage(authz, sp)
 }
 

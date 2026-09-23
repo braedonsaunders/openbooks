@@ -202,7 +202,7 @@ export async function loadSetupEntity(
     notFound()
   }
   const features = await resolvedFeatureState(orgId)
-  if (baseEntity?.featureKey && !featureEnabled(features, baseEntity.featureKey)) notFound()
+  if (baseEntity?.featureKey) await requireFeatureEnabled(orgId, baseEntity.featureKey)
   const entity = baseEntity
     ? resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
         multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),

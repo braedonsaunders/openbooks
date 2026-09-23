@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   grid,
@@ -14,7 +13,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadMeProfile, type MeProfileData } from '../../../../lib/hrm/self-service'
 
 /**
@@ -99,7 +98,7 @@ export async function loadMeProfilePage(
   sp: Record<string, string | undefined> = {},
 ): Promise<MeProfileData> {
   const authz = await requirePermission('hrm.self.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   return loadMeProfile(authz, sp)
 }
 

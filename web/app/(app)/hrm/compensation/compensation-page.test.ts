@@ -16,10 +16,10 @@ const islands = readFileSync(new URL("./islands.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../../lib/hrm/compensation.ts", import.meta.url), "utf8");
 
 test("compensation pages carry the gates where the route-gate scanner reads them", () => {
-  assert.match(loader, /isFeatureEnabled\(authz\.user\.orgId, 'hrmCompensation'\)/, "the home loader enforces the hrmCompensation switch with a 404");
-  assert.match(loader, /isFeatureEnabled\(authz\.user\.orgId, 'hrmMeritCycles'\)/, "the cycle loader enforces the hrmMeritCycles switch with a 404");
-  assert.match(loader, /isFeatureEnabled\(authz\.user\.orgId, 'hrmHeadcountPlans'\)/, "the plan loader enforces the hrmHeadcountPlans switch with a 404");
-  assert.match(loader, /isFeatureEnabled\(authz\.user\.orgId, 'hrmPayTransparency'\)/, "the equity loader enforces the hrmPayTransparency switch with a 404");
+  assert.match(loader, /requireFeatureEnabled\(authz\.user\.orgId, 'hrmCompensation'\)/, "the home loader redirects to the feature remedy when hrmCompensation is off");
+  assert.match(loader, /requireFeatureEnabled\(authz\.user\.orgId, 'hrmMeritCycles'\)/, "the cycle loader redirects to the feature remedy when hrmMeritCycles is off");
+  assert.match(loader, /requireFeatureEnabled\(authz\.user\.orgId, 'hrmHeadcountPlans'\)/, "the plan loader redirects to the feature remedy when hrmHeadcountPlans is off");
+  assert.match(loader, /requireFeatureEnabled\(authz\.user\.orgId, 'hrmPayTransparency'\)/, "the equity loader redirects to the feature remedy when hrmPayTransparency is off");
   assert.match(loader, /can\(authz, 'hrm\.compensation\.read'\)/, "readers carry the compensation read grant");
   assert.match(loader, /can\(authz, 'hrm\.compensation\.manage'\)/, "writers carry the compensation manage grant");
   assert.match(loader, /can\(authz, 'hrm\.compensation\.approve'\)/, "deciders carry the compensation approve grant");

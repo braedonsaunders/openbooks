@@ -15,7 +15,7 @@ const loader = readFileSync(new URL("../../../../lib/hrm/surveys-home.ts", impor
 
 test("surveys page carries the gate where the route-gate scanner reads it", () => {
   assert.match(loader, /requirePermission\('hrm\.surveys\.manage'\)/, "the page enforces the surveys manage grant");
-  assert.match(loader, /isFeatureEnabled\(gate\.user\.orgId, 'hrmSurveys'\)/, "the page enforces the surveys switch with a 404");
+  assert.match(loader, /requireFeatureEnabled\(gate\.user\.orgId, 'hrmSurveys'\)/, "a switched-off surveys switch redirects to the feature remedy, never a bare 404");
   assert.match(page, /loadSurveysPage\(sp\)/, "the page renders only after the view gate resolves");
   assert.match(page, /searchParams=\{sp\}/, "the query string reaches the loader and the spec host");
   assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");

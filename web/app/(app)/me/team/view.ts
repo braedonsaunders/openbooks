@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -20,7 +19,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadMeTeam, type MeTeamData } from '../../../../lib/hrm/self-service'
 
 /**
@@ -219,7 +218,7 @@ export function meTeamSpec(data: MeTeamData): PageSpec {
 
 export async function loadMeTeamPage(): Promise<MeTeamData> {
   const authz = await requirePermission('hrm.self.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   return loadMeTeam(authz)
 }
 

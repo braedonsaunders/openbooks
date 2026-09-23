@@ -39,7 +39,7 @@ test("the overview loader scopes every row to the login", () => {
   assert.match(loader, /getMySteps\(\{\s*orgId/, "steps read the self-service path");
   assert.match(loader, /getMyRequests\(\{\s*orgId/, "requests read the self-service path");
   assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page requires the hrm feature");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
 });
 
 // HR-14 begin: the viewer's own certifications needing action ride the

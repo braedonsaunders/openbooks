@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -20,7 +19,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { loadQualificationsPage as loadQualifications } from '../../../../lib/hrm/qualifications'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 
 /**
  * Qualifications home: four stat tiles (expiring in 30 days, expired and
@@ -214,7 +213,7 @@ export async function loadQualificationsPage(
   // the loader enforces nothing twice: it takes the authorized session
   // as input. Off hides the surface, never the data.
   const authz = await requirePermission('hrm.certifications.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCertifications'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCertifications')
   const canManage = await (async () => {
     try {
       await requirePermission('hrm.certifications.manage')

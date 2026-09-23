@@ -264,7 +264,6 @@ test('the surfaces this test was written for are covered', () => {
     'app/api/pdf-templates/[id]/route.ts',
     'app/api/pdf-templates/preview/route.ts',
     'app/(app)/ap/capture/page.tsx',
-    'app/(app)/admin/pdf-templates/[id]/page.tsx',
     'lib/application/documents.ts',
     'lib/api/writers.ts',
     'lib/assistant/tools.ts',
@@ -274,6 +273,14 @@ test('the surfaces this test was written for are covered', () => {
   ]) {
     assert.match(read(file), /isDocKindEnabled\(/, `${file} must refuse optional-module kinds when the feature is off`)
   }
+  // The PDF template editor resolves the kind's switch itself so the
+  // refusal names the remedy: a template on a switched-off kind exists, so
+  // a bare 404 would strand the author with no path to enable it.
+  assert.match(
+    read('app/(app)/admin/pdf-templates/[id]/page.tsx'),
+    /DOC_KIND_FEATURE\[row\.recordType\][\s\S]{0,200}requireFeatureEnabled/,
+    'the template editor must name the Features switch when an optional-module kind is off',
+  )
   assert.match(
     read('app/api/documents/[id]/route.ts'),
     /\['inventory', 'assembly', 'kit'\]/,

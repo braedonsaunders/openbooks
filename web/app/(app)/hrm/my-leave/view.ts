@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -19,7 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadMyLeave, type MyLeaveData } from '../../../../lib/hrm/leave'
 import { meTabs } from '../../../../lib/hrm/self-service'
 
@@ -129,7 +128,7 @@ export async function loadMyLeavePage(
   // Self-service gate: hrm.leave.request. Managers land on /hrm/leave; this
   // page never lists another worker's rows.
   const authz = await requirePermission('hrm.leave.request')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   const data = await loadMyLeave(authz, sp)
   return { ...data, tabs: await meTabs(authz, '/hrm/my-leave') }
 }

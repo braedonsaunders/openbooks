@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { notFound, redirect } from 'next/navigation'
+import { redirect  } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -20,6 +20,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { listCrewBatches, getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
@@ -66,7 +67,7 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     await requirePermission('time.read')
   }
   const authed = session
-  if (!(await isFeatureEnabled(authed.user.orgId, 'fieldTimeCrewEntry'))) notFound()
+  await requireFeatureEnabled(authed.user.orgId, 'fieldTimeCrewEntry')
   const t = await getTranslations('timesheets')
   const orgId = authed.user.orgId
   const segment = sp.segment ?? 'all'

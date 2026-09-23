@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { listAutomations, listAutomationRuns } from '@openbooks/engine/src/automations/services.ts'
@@ -31,7 +32,7 @@ export interface AutomationBuilderData {
 
 export async function loadAutomationBuilder(id: string): Promise<AutomationBuilderData> {
   const authz = await requirePermission('automations.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'automations'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'automations')
   if (!isUuid(id)) notFound()
   const t = await getTranslations('admin.automations')
   const automations = await listAutomations(authz.user.orgId, authz.user.id)

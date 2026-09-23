@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
 import {
   badge,
   column,
@@ -27,7 +26,7 @@ import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { depthTabOptions } from '../recruiting/depth-view'
 import { can, requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 import type { PositionCreateProps } from './PositionCreateForm'
@@ -254,7 +253,7 @@ export async function loadPositionsPage(
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.position.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   const t = await getTranslations('hrm')
   const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/positions')

@@ -9,7 +9,7 @@ import { listTemplates } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * HR documents home loader (0230, HR-19).
@@ -18,8 +18,9 @@ import { isFeatureEnabled } from '../features'
  * getDocumentDetail, listTemplates, listCategories, listExports,
  * listRetentionActions); the loader only joins display names from
  * parties and computes the four statTiles. Renders only when hrm and
- * hrmDocuments are on and the actor holds hrm.documents.read — the
- * loader 404s otherwise, the same gate the route-gate scanner reads on
+ * hrmDocuments are on and the actor holds hrm.documents.read — a
+ * switched-off feature redirects to its remedy instead, the same gate
+ * the route-gate scanner reads on
  * the cockpit. No org id, user id, or Authz crosses into the spec.
  */
 
@@ -49,8 +50,8 @@ export async function documentsAuthz(): Promise<DocumentsHomeAuthz | null> {
   } catch {
     return null
   }
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrmDocuments'))) return null
+  await requireFeatureEnabled(gate.user.orgId, 'hrm')
+  await requireFeatureEnabled(gate.user.orgId, 'hrmDocuments')
   return { orgId: gate.user.orgId, userId: gate.user.id, canManage: can(gate, 'hrm.documents.manage'), session: gate }
 }
 

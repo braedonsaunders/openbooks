@@ -6,15 +6,16 @@ import { listOwnExports } from '@openbooks/engine/src/hrm/documents/dsar.ts'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * Me documents loader (0230, HR-19): the person's own documents with
  * inline sign/acknowledge plus their subject-access exports with an
  * export-my-data request. Fenced to the actor's own party by the
  * services; HR readers land on /hrm/documents instead. Renders when
- * hrm and hrmDocuments are on and the actor holds hrm.self.read —
- * the loader 404s otherwise. The export request renders only while
- * hrmDataSubjectExport is on.
+ * hrm and hrmDocuments are on and the actor holds hrm.self.read — a
+ * switched-off feature redirects to its remedy instead. The export request
+ * renders only while hrmDataSubjectExport is on.
  */
 
 export interface MeDocumentsAuthz {
@@ -26,8 +27,8 @@ export interface MeDocumentsAuthz {
 export async function meDocumentsAuthz(): Promise<MeDocumentsAuthz | null> {
   const gate = await getAuthz()
   if (!gate) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrmDocuments'))) return null
+  await requireFeatureEnabled(gate.user.orgId, 'hrm')
+  await requireFeatureEnabled(gate.user.orgId, 'hrmDocuments')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
 

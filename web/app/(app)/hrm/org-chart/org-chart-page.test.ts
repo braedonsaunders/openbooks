@@ -13,10 +13,10 @@ const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../../lib/hrm/org-chart-home.ts", import.meta.url), "utf8");
 
-test("org chart page carries the dual gate with a 404", () => {
+test("org chart page carries the dual gate with the feature remedy", () => {
   assert.match(loader, /hrm\.employment\.read/, "employment readers see the tree");
   assert.match(loader, /hrm\.self\.read/, "self-service logins see the tree");
-  assert.match(loader, /isFeatureEnabled\(gate\.user\.orgId, 'hrmOrgChart'\)/, "the page enforces the org-chart switch with a 404");
+  assert.match(loader, /requireFeatureEnabled\(gate\.user\.orgId, 'hrmOrgChart'\)/, "a switched-off org-chart switch redirects to the feature remedy, never a bare 404");
   assert.match(page, /loadOrgChartPage\(sp\)/, "the page renders only after the view gate resolves");
   assert.match(page, /searchParams=\{sp\}/, "the query string reaches the loader and the spec host");
   assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");

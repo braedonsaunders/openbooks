@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -19,7 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBenefits, type BenefitsData } from '../../../../lib/hrm/benefits'
 
 /**
@@ -160,7 +159,7 @@ export async function loadBenefitsPage(sp: Record<string, string | undefined>): 
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('hrm.benefits.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   return loadBenefits(authz, sp)
 }
 

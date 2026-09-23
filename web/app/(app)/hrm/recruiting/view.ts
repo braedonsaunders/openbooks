@@ -3,7 +3,6 @@ import 'server-only'
 import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
 
 import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
 import {
   badge,
   column,
@@ -30,6 +29,7 @@ import {
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
@@ -327,8 +327,8 @@ export async function loadRecruitingPage(
   // HR-18: the HR-6 funnel rides the hrmRecruiting parent (on wherever hrm
   // is on) — the wrap is additive and changes nothing by default.
   const authz = await requirePermission('hrm.recruiting.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmRecruiting'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmRecruiting')
   const t = await getTranslations('hrm')
   const tc = await getTranslations('common')
   const tabs = await hrmGroupTabs(authz, '/hrm/recruiting')

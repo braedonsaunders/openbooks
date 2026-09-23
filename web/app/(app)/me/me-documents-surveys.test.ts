@@ -18,7 +18,7 @@ const surveysSections = readFileSync(new URL("./surveys/sections.tsx", import.me
 const surveysLoader = readFileSync(new URL("../../../lib/hrm/me-surveys.ts", import.meta.url), "utf8");
 
 test("me documents page renders own documents behind the documents switch", () => {
-  assert.match(documentsLoader, /isFeatureEnabled\(gate\.user\.orgId, 'hrmDocuments'\)/, "the page enforces the documents switch with a 404");
+  assert.match(documentsLoader, /requireFeatureEnabled\(gate\.user\.orgId, 'hrmDocuments'\)/, "a switched-off documents switch redirects to the feature remedy, never a bare 404");
   assert.match(documentsLoader, /listOwnDocuments\(\{/, "rows resolve through the own-scope documents read");
   assert.match(documentsLoader, /listOwnExports\(\{/, "exports resolve through the own-scope export read");
   assert.match(documentsLoader, /hrmDataSubjectExport/, "the export request renders only while its switch is on");
@@ -40,7 +40,7 @@ test("me document islands sign and acknowledge in-session with refusals intact",
 });
 
 test("me surveys page lists open invitations with the respond link", () => {
-  assert.match(surveysLoader, /isFeatureEnabled\(gate\.user\.orgId, 'hrmSurveys'\)/, "the page enforces the surveys switch with a 404");
+  assert.match(surveysLoader, /requireFeatureEnabled\(gate\.user\.orgId, 'hrmSurveys'\)/, "a switched-off surveys switch redirects to the feature remedy, never a bare 404");
   assert.match(surveysLoader, /listOwnInvitations\(\{/, "rows resolve through the own-scope invitation read");
   assert.match(surveysPage, /loadMeSurveysPage\(\)/, "the page renders only after the view gate resolves");
   assert.match(surveysView, /route: '\/me\/surveys'/, "the spec names its own route for the registry");

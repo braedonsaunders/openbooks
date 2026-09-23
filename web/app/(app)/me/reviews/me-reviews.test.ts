@@ -41,5 +41,5 @@ test("answering rides the performance drawer and acknowledge rides a row island"
 test("the reviews loader scopes every row to the login", () => {
   assert.match(loader, /getMyReviewWorkspace\(\{\s*orgId/, "the page reads the self-service workspace, never an org list");
   assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page requires the hrm feature");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
 });

@@ -36,6 +36,7 @@ import { can, getAuthz, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmRewardsViewTabs } from './workspace-tabs'
 import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * Compensation workspace loaders — one read per surface behind the
@@ -153,8 +154,8 @@ async function workerNames(orgId: string, employmentIds: string[]): Promise<Map<
 }
 
 export async function loadCompensationHome(authz: Authz): Promise<CompHomeData | null> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return null
   if (!can(authz, 'hrm.compensation.read')) return null
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
@@ -384,8 +385,8 @@ export async function loadCompCycleDetail(
   cycleId: string,
   sp: Record<string, string | undefined>,
 ): Promise<CompCycleDetailData | null> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmMeritCycles'))) return null
   if (!can(authz, 'hrm.compensation.read')) return null
+  await requireFeatureEnabled(authz.user.orgId, 'hrmMeritCycles')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const cycle = await getCycle({ orgId, actorId: authz.user.id, cycleId }).catch(() => null)
@@ -581,8 +582,8 @@ export async function loadHeadcountPlanDetail(
   authz: Authz,
   planId: string,
 ): Promise<CompPlanDetailData | null> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmHeadcountPlans'))) return null
   if (!can(authz, 'hrm.compensation.read')) return null
+  await requireFeatureEnabled(authz.user.orgId, 'hrmHeadcountPlans')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const plans = await listPlans({ orgId, actorId: authz.user.id }).catch(() => [])
@@ -667,8 +668,8 @@ export interface EquityData {
 }
 
 export async function loadEquity(authz: Authz): Promise<EquityData | null> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmPayTransparency'))) return null
   if (!can(authz, 'hrm.compensation.read')) return null
+  await requireFeatureEnabled(authz.user.orgId, 'hrmPayTransparency')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
@@ -763,7 +764,7 @@ export interface MyCompData {
 }
 
 export async function loadMyCompensation(authz: Authz): Promise<MyCompData | null> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmCompensation'))) return null
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const own = await loadOwnEmploymentIds(db, orgId, authz.user.id).catch(() => [] as string[])
