@@ -21,12 +21,30 @@ export async function GET(req: Request) {
     if (!isUuid(raw)) throw new RunQueryError("validation", `${name} must be a uuid`);
     return raw;
   };
+  // Real pagination: the drill answers { anchor, rows, total, limit, offset,
+  // truncated } so a run with more lines than fit one page never looks
+  // complete. Malformed paging is a 400 via the engine validators below.
+  const numeric = (name: "limit" | "offset"): number | undefined => {
+    const raw = params.get(name);
+    if (raw === null || raw === "") return undefined;
+    const value = Number(raw);
+    if (!Number.isFinite(value)) throw new RunQueryError("validation", `${name} must be a number`);
+    return value;
+  };
   try {
-    const result = await queryLineage(gate.user.orgId, {
-      runId: anchor("runId"),
-      journalEntryId: anchor("journalEntryId"),
-      documentId: anchor("documentId"),
-    });
+    const result = await queryLineage(
+      gate.user.orgId,
+      {
+        runId: anchor("runId"),
+        journalEntryId: anchor("journalEntryId"),
+        documentId: anchor("documentId"),
+      },
+      {
+        limit: numeric("limit"),
+        offset: numeric("offset"),
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      },
+    );
     return NextResponse.json(result);
   } catch (error) {
     if (error instanceof RunQueryError) {

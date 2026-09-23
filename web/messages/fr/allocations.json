@@ -595,6 +595,7 @@
     "share": "Quote-part",
     "empty": "Aucune ligne répartie ne mène à cet enregistrement.",
     "viewJournal": "Ouvrir l'écriture",
-    "loadFailed": "Impossible de charger la traçabilité."
+    "loadFailed": "Impossible de charger la traçabilité.",
+    "truncated": "Affichage des {shown} premières lignes sur {total}."
   }
 }

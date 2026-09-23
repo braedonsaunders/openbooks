@@ -595,6 +595,7 @@
     "share": "Anteil",
     "empty": "Keine zugeordneten Zeilen führen zu diesem Datensatz.",
     "viewJournal": "Journalbeleg öffnen",
-    "loadFailed": "Herkunft konnte nicht geladen werden."
+    "loadFailed": "Herkunft konnte nicht geladen werden.",
+    "truncated": "Die ersten {shown} von {total} Zeilen werden angezeigt."
   }
 }

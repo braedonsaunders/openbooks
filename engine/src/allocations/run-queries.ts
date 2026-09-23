@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { allocationScopeVisible } from "./subsidiary-scope.ts";
 import type { AllocationRunStatus, AllocationRunTrigger, RunComputation } from "./types.ts";
 
 /**
@@ -217,21 +218,96 @@ export async function getRun(orgId: string, id: string, executor?: SqlExecutor):
   };
 }
 
+export interface QueryLineageOptions {
+  limit?: number;
+  offset?: number;
+  executor?: SqlExecutor;
+  /**
+   * The caller's subsidiary scope (null/undefined = unrestricted). A
+   * restricted caller must fully see the anchor — the run's pin plus every
+   * subsidiary its computation touches, the journal entry's header plus
+   * every line, or the document — or the drill refuses tenant-opaque
+   * not_found. The scope decision is the shared allocationScopeVisible
+   * predicate, never a per-anchor variation.
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
+}
+
+export interface LineageResult {
+  anchor: LineageAnchor;
+  rows: LineageRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  /** True when rows beyond this page exist: the drill never looks complete. */
+  truncated: boolean;
+}
+
+/**
+ * Subsidiary gate for one lineage anchor. Unrestricted callers skip every
+ * check; anything a restricted caller cannot fully see is not_found, so a
+ * hidden run, entry or document is indistinguishable from a missing one.
+ */
+async function assertLineageAnchorVisible(
+  ex: SqlExecutor,
+  orgId: string,
+  anchor: LineageAnchor,
+  allowed: ReadonlySet<string> | null | undefined,
+): Promise<void> {
+  if (allowed === null || allowed === undefined) return;
+  if (anchor.kind === "run") {
+    const run = (await ex.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
+      select subsidiary_id, computation from allocation_runs
+       where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+    if (!run || !allocationScopeVisible(allowed, run.subsidiary_id, run.computation)) {
+      fail("not_found", "run not found");
+    }
+    return;
+  }
+  if (anchor.kind === "journalEntry") {
+    const head = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from journal_entries
+       where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+    if (!head) fail("not_found", "journal entry not found");
+    const lines = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+      select distinct subsidiary_id from journal_lines
+       where org_id = ${orgId} and entry_id = ${anchor.id}`)).rows;
+    const touched = [head.subsidiary_id, ...lines.map((line) => line.subsidiary_id)];
+    if (touched.some((sub) => sub === null || !allowed.has(sub))) {
+      fail("not_found", "journal entry not found");
+    }
+    return;
+  }
+  const doc = (await ex.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from documents
+     where org_id = ${orgId} and id = ${anchor.id}`)).rows[0];
+  if (!doc || doc.subsidiary_id === null || !allowed.has(doc.subsidiary_id)) {
+    fail("not_found", "document not found");
+  }
+}
+
 export async function queryLineage(
   orgId: string,
   query: LineageAnchorQuery,
-  opts?: { limit?: number; executor?: SqlExecutor },
-): Promise<{ anchor: LineageAnchor; rows: LineageRow[] }> {
+  opts?: QueryLineageOptions,
+): Promise<LineageResult> {
   const anchor = validateLineageAnchor(query);
   const limit = opts?.limit ?? 200;
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) fail("validation", "limit must be 1..500");
+  const offset = opts?.offset ?? 0;
+  if (!Number.isInteger(offset) || offset < 0) fail("validation", "offset must be >= 0");
   const ex = opts?.executor ?? db;
+  await assertLineageAnchorVisible(ex, orgId, anchor, opts?.allowedSubsidiaryIds);
   const anchorCond =
     anchor.kind === "run"
       ? sql`l.run_id = ${anchor.id}`
       : anchor.kind === "journalEntry"
         ? sql`l.journal_entry_id = ${anchor.id}`
         : sql`l.document_id = ${anchor.id}`;
+  const counted = await ex.execute<{ n: string }>(sql`
+    select count(*) as n from allocation_lineage l
+     where l.org_id = ${orgId} and ${anchorCond}`);
+  const total = Number(counted.rows[0]?.n ?? 0);
   const rows = await ex.execute<Record<string, unknown>>(sql`
     select l.*,
            rule.key as rule_key,
@@ -241,9 +317,13 @@ export async function queryLineage(
       left join allocation_drivers driver on driver.org_id = l.org_id and driver.id = l.driver_id
      where l.org_id = ${orgId} and ${anchorCond}
      order by l.created_at, l.id
-     limit ${limit}`);
+     limit ${limit} offset ${offset}`);
   return {
     anchor,
+    total,
+    limit,
+    offset,
+    truncated: offset + rows.rows.length < total,
     rows: rows.rows.map((row) => ({
       id: String(row.id),
       mode: String(row.mode),

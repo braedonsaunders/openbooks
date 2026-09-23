@@ -616,11 +616,15 @@ const explainAllocation: AssistantToolDef = {
            limit 1`);
         if (!seen.rows[0]) return { ok: false, error: "document_not_found" };
       }
-      const result = await queryLineage(authz.user.orgId, {
-        runId: a.runId,
-        journalEntryId: a.journalEntryId,
-        documentId: a.documentId,
-      });
+      const result = await queryLineage(
+        authz.user.orgId,
+        {
+          runId: a.runId,
+          journalEntryId: a.journalEntryId,
+          documentId: a.documentId,
+        },
+        { allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
+      );
       const rows = result.rows.map((row) => ({
         id: row.id,
         mode: row.mode,

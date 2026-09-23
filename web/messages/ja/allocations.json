@@ -595,6 +595,7 @@
     "share": "割合",
     "empty": "このレコードに遡る配賦明細がありません。",
     "viewJournal": "仕訳を開く",
-    "loadFailed": "追跡を読み込めませんでした。"
+    "loadFailed": "追跡を読み込めませんでした。",
+    "truncated": "{total} 件中最初の {shown} 件を表示しています。"
   }
 }

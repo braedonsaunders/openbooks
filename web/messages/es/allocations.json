@@ -595,6 +595,7 @@
     "share": "Porción",
     "empty": "Ninguna línea distribuida lleva a este registro.",
     "viewJournal": "Abrir el asiento",
-    "loadFailed": "No se pudo cargar el origen."
+    "loadFailed": "No se pudo cargar el origen.",
+    "truncated": "Mostrando las primeras {shown} de {total} líneas."
   }
 }

@@ -595,6 +595,7 @@
     "share": "Share",
     "empty": "No allocated lines trace to this record.",
     "viewJournal": "Open journal entry",
-    "loadFailed": "Could not load lineage."
+    "loadFailed": "Could not load lineage.",
+    "truncated": "Showing the first {shown} of {total} lines."
   }
 }
