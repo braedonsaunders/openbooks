@@ -25,7 +25,7 @@ SELECT * FROM (
                 coalesce(d.lot_id::text, '(none)')) AS subject,
          format('%s lines share one (count, item, stock location, lot) subject in org %s on a %s count. Each posted the full variance',
                 d.n, d.org_id, d.status) AS detail,
-         'Merge each group into one line per count before applying 0293: keep one line per subject and remove the rest (a recount re-snapshots the one line, it does not add a second). The mechanized remedy keeps the lowest-id line per subject, see schema/migrations/preflight/remedies/0293.duplicate_subject.sql.' AS remedy
+         'Merge each group into one line per count before applying 0293: keep one line per subject and remove the rest (a recount re-snapshots the one line, it does not add a second). The mechanized remedy keeps the lowest-id line per subject, see schema/migrations/preflight/remedies/0293.duplicate_subject.sql. Alternatively, cancel the count and open a new count with one line per subject — the remedy the migration itself names; the cancelled husk keeps its lines as evidence.' AS remedy
     FROM dups d
    WHERE d.status NOT IN ('posted', 'cancelled')
    ORDER BY d.stock_count_id, d.item_id, d.stock_location_id
