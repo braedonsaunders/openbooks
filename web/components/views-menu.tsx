@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { ChevronDown, Check } from 'lucide-react'
 import { Button, Popover, cn } from '@openbooks/ui'
 import { buildHref, pickString } from '../lib/list-params'
+import { readApiErrorMessage } from '../lib/api-error'
 import { menuArrowKeys } from './menu-a11y'
 import type { ListViewRow } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
@@ -44,14 +45,19 @@ export function ViewsMenu({
 
   const setDefault = async (viewId: string | null) => {
     setBusy(true)
-    const res = await fetch('/api/customization/list-preferences', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordType, viewId }),
-    })
-    setBusy(false)
-    if (res.ok) toast.success(viewId ? t('setDefaultDone') : t('clearDefaultDone'))
-    else toast.error((await res.json()).error ?? t('setDefaultFailed'))
+    try {
+      const res = await fetch('/api/customization/list-preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordType, viewId }),
+      })
+      if (res.ok) toast.success(viewId ? t('setDefaultDone') : t('clearDefaultDone'))
+      else toast.error(await readApiErrorMessage(res, t('setDefaultFailed')))
+    } catch {
+      toast.error(t('setDefaultFailed'))
+    } finally {
+      setBusy(false)
+    }
     router.refresh()
   }
 

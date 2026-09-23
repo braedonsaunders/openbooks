@@ -9,6 +9,7 @@ import type { BankingAccountRow } from '../../../lib/module-home/banking'
 import { HomePanel } from '../../../components/module-home/client'
 import { Sparkline } from '../../../components/module-home/ui'
 import { LayoutMenu } from '../../../components/page-layout/LayoutMenu'
+import { LayoutSaveStatus } from '../../../components/page-layout/LayoutSaveStatus'
 import { usePageLayout } from '../../../components/page-layout/use-page-layout'
 
 /** Statements older than this are flagged as a stale feed on the roster. */
@@ -56,6 +57,7 @@ export function AccountsRosterPanel({
       actions={
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-400 dark:text-slate-500">{t('home.roster.hint')}</span>
+          <LayoutSaveStatus saveState={layout.saveState} saveError={layout.saveError} onRetry={layout.retry} />
           <LayoutMenu
             size="xs"
             title={t('home.roster.customizeTitle')}

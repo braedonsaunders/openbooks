@@ -18,6 +18,7 @@ import {
   type RevisionFencedRequest,
 } from '../../../components/document-drawer'
 import { displayFormName } from '../../../lib/document-display'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -816,13 +817,17 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   }
 
   async function setPreferredForm(layoutId: string | null) {
-    const response = await fetch('/api/customization/form-preferences', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recordType: 'field_ticket', layoutId }),
-    })
-    if (response.ok) toast.success(t('editor.form.preferredSaved'))
-    else toast.error((await response.json()).error ?? t('editor.form.preferredFailed'))
+    try {
+      const response = await fetch('/api/customization/form-preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordType: 'field_ticket', layoutId }),
+      })
+      if (response.ok) toast.success(t('editor.form.preferredSaved'))
+      else toast.error(await readApiErrorMessage(response, t('editor.form.preferredFailed')))
+    } catch {
+      toast.error(t('editor.form.preferredFailed'))
+    }
   }
 
   const showFormPicker = mode === 'view' && !!props.availableLayouts?.length

@@ -25,6 +25,7 @@ import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
 import type { PageLayoutPrefs } from '@openbooks/schema'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
 import { LayoutMenu } from '../../../../components/page-layout/LayoutMenu'
+import { LayoutSaveStatus } from '../../../../components/page-layout/LayoutSaveStatus'
 import { usePageLayout } from '../../../../components/page-layout/use-page-layout'
 import { StatTile, CockpitPanel } from '../../../../components/cockpit/ui'
 import { CashTimeline } from '../../analytics/_ui/CashTimeline'
@@ -225,6 +226,7 @@ export function CashCockpit({
           ))}
         </div>
         <div className="flex items-center gap-2">
+          <LayoutSaveStatus saveState={layout.saveState} saveError={layout.saveError} onRetry={layout.retry} />
           <LayoutMenu
             title={t('layout.title')}
             triggerLabel={t('layout.customize')}
