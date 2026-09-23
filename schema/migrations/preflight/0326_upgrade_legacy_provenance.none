@@ -1,0 +1,1 @@
+0326 creates the shared upgrade_legacy_provenance registry and records its retrospective rows with deterministic INSERT ... SELECT statements (ON CONFLICT DO NOTHING on replay) that cannot fail and offer no operator decision: there is no pre-upgrade data shape that can block it, and readers label or refuse by membership only after the upgrade.
