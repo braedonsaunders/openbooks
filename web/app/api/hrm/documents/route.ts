@@ -32,6 +32,9 @@ export function resolveAppBaseUrl(req: Request): string {
   return appBaseUrl(req);
 }
 
+/** Body ceiling for mode=upload only; preview/generate stay on the house default. */
+export const MAX_UPLOAD_BODY_BYTES = 15 * 1024 * 1024;
+
 export async function GET(req: Request) {
   const gate = await guardPermission("hrm.documents.read");
   if (gate instanceof NextResponse) return gate;
@@ -75,7 +78,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ mergeValues });
     }
     if (mode === "upload") {
-      const parsedBody = await parseJsonBody(req, uploadDocumentBody);
+      // HR letters ride this body as base64 (bodies.ts caps fileBase64 at
+      // 14M chars ≈ 10 MB decoded), so the body cap is that cap plus
+      // headroom — the house 1 MiB default would refuse every real upload.
+      const parsedBody = await parseJsonBody(req, uploadDocumentBody, {
+        maxBodyBytes: MAX_UPLOAD_BODY_BYTES,
+      });
       if (!parsedBody.ok) return parsedBody.response;
       const body = parsedBody.data;
       let bytes: Buffer;
