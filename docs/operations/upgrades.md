@@ -14,7 +14,8 @@ against a database that has already been migrated is not a rollback.
    configuration, and the current image digest.
 4. Restore that set into isolated infrastructure using
    [the recovery runbook](backup-restore.md). Record the measured RPO/RTO.
-5. Upgrade the restored copy first. Run bootstrap once, wait for it to complete,
+5. Upgrade the restored copy first. Run `npm run upgrade:check` against it,
+   resolve every refusal, then run bootstrap once, wait for it to complete,
    then start web and worker processes.
 6. Exercise health, sign-in, authorization, worker heartbeat, attachments,
    reports, a reversible draft transaction, reconciliation/report totals, and
@@ -143,6 +144,64 @@ histories). A seeder lives in `scripts/upgrade-rehearsal/seeders/<name>.ts`.
 It is copied into the source tree, runs on the source release's runtime, and
 must print `{"orgIds": [...]}` as its last JSON line. It may use only engine
 APIs present in every supported source release.
+
+## Migration preflights
+
+Every install can ask, read-only and before upgrading, "will these pending
+migrations work on MY data, and what do I need to do?"
+
+**Operator flow.** Run the read-only check against the live install — or,
+for extra caution, against a restored copy of it — resolve every refusal,
+then upgrade:
+
+```bash
+npm run upgrade:check
+# or: node --import tsx scripts/bootstrap.ts --check [--json]
+```
+
+`upgrade:check` lists the pending migrations, runs each evaluable preflight
+in `BEGIN READ ONLY` (bypass RLS, a bounded `statement_timeout` defaulting
+to five minutes via `OPENBOOKS_PREFLIGHT_STATEMENT_TIMEOUT_MS`, then
+`ROLLBACK`), and prints every finding with its code, severity, subject,
+detail, and remedy. It creates nothing, takes no advisory lock, and performs
+no role, seed, or RLS work, so it never disturbs a running app. Every
+statement is a `SELECT`, so it also runs under the SELECT-only
+`openbooks_read` role. It exits 1 on any `refuse` finding and 0 otherwise.
+A preflight that needs an object an earlier *pending* migration creates is
+reported as "evaluated at apply time" and runs immediately before its own
+migration during the upgrade.
+
+When plain `bootstrap` runs, the same gate runs first: any `refuse` finding
+stops the upgrade BEFORE the first migration (nothing is applied), `notice`
+findings are printed and the upgrade continues, and a deferred preflight
+that refuses stops before its own migration naming exactly which migrations
+already applied. A fresh install (no `_applied_migrations` table) has
+nothing to preflight.
+
+**Author contract.** Every generated migration with ordinal ≥ 0242 (the
+first after v0.1.0-alpha.23) must have EXACTLY ONE decision file in
+`schema/migrations/preflight/`:
+
+- `<basename>.sql`: the preflight — exactly one read-only statement
+  (`SELECT` or `WITH … SELECT`). Zero rows means the install is ready; each
+  row is a finding with columns `code` (`<ordinal>.<snake_reason>`),
+  `severity` (`refuse` | `notice`), `subject` (which record), `detail`, and
+  `remedy` (what the operator does). Keep sample rows bounded (the first 50
+  subjects plus a count row). A preflight examines EXISTING data, so it may
+  reference only objects that exist before its migration.
+- `<basename>.none`: plain text saying why no preflight is needed (at least
+  20 non-whitespace characters).
+
+A preflight is NOT part of the migration's digest, and `bootstrap` never
+applies anything in `preflight/` — so preflights can be added for any
+unpublished migration. When a `refuse` finding needs an operator-side data
+fix, the remedy text names the repo remedy file
+(`schema/migrations/preflight/remedies/<code>.sql`, the same file the
+upgrade rehearsal applies), never a private script.
+
+`scripts/check-migration-preflights.mjs` enforces the contract: a missing
+decision, both files present, an orphan decision, a short `.none` reason,
+or a `.sql` that is not one read-only statement each fail by name.
 
 ## Rollback
 

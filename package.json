@@ -60,6 +60,8 @@
     "check:fetch-response-parse": "node scripts/check-fetch-response-parse.mjs",
     "check:civil-date-arithmetic": "node scripts/check-civil-date-arithmetic.mjs",
     "check:migration-headers": "node scripts/check-migration-headers.mjs",
+    "check:migration-preflights": "node scripts/check-migration-preflights.mjs",
+    "upgrade:check": "node --import tsx scripts/bootstrap.ts --check",
     "test:load-harness": "node --test scripts/load-smoke.test.mjs",
     "test:history-rewrite": "node --test scripts/history-rewrite/history-rewrite.test.mjs",
     "test:load": "node scripts/load-smoke.mjs",

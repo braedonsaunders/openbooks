@@ -16,6 +16,17 @@
  *      one-time, audited; refused by name when the address names no user).
  *
  * Run: npx tsx scripts/bootstrap.ts   (or the esbuild bundle in the image)
+ *
+ * Before applying any pending migration, bootstrap runs every pending
+ * migration's preflight (schema/migrations/preflight/<basename>.sql), each
+ * in BEGIN READ ONLY with bypass RLS and a bounded statement_timeout, then
+ * ROLLBACK. Any refuse finding stops bootstrap before the first migration;
+ * notices are printed and the upgrade continues. Preflights that need an
+ * object an earlier pending migration creates are deferred to apply time.
+ *
+ * Read-only check (no writes, no locks, no role/seed/RLS work):
+ *   node --import tsx scripts/bootstrap.ts --check [--json]
+ * (npm run upgrade:check). Exits 1 on any refuse finding, 0 otherwise.
  */
 import { createHash, randomBytes, scryptSync } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
@@ -45,6 +56,19 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "./bootstrap-migration-client.ts";
+import {
+  PREFLIGHT_MIN_ORDINAL,
+  earlierPendingCreatesObject,
+  evaluatePreflight,
+  formatFinding,
+  ordinalOf as preflightOrdinalOf,
+  preflightDecisionFor,
+  preflightDirFor,
+  preflightStatementTimeoutMs,
+  readNoneReason,
+  readPreflightSql,
+  type PreflightFinding,
+} from "./migration-preflight.ts";
 import { ensureCloseDefaults } from "../engine/src/close/defaults.ts";
 import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts";
 import { SUPPORTED_CURRENCIES } from "../engine/src/fx/currencies.ts";
@@ -1518,7 +1542,7 @@ async function applyTracked(
   label: string,
   filename: string,
   content: string,
-): Promise<void> {
+): Promise<boolean> {
   const digest = sha256(content);
   const seen = (await db.execute<{ sha256: string }>(sql`
     select sha256 from public._applied_migrations where filename = ${filename}
@@ -1544,24 +1568,350 @@ async function applyTracked(
       console.log(`[bootstrap]   ${transition.reason}`);
       if (transition.strategy === "reapply") {
         await executeTrackedMigration(filename, content, digest, recorded);
-        return;
+        return true;
       }
       await db.execute(sql`
         update public._applied_migrations
            set sha256 = ${digest}
          where filename = ${filename} and sha256 = ${recorded}
       `);
-      return;
+      return false;
     }
-    return;
+    return false;
   }
   console.log(`[bootstrap] applying ${label}: ${filename}`);
   await executeTrackedMigration(filename, content, digest);
+  return true;
+}
+
+type PendingMigrationItem = {
+  file: string;
+  filename: string;
+  ordinal: string;
+  content: string;
+};
+
+type DeferredPreflight = {
+  file: string;
+  filename: string;
+  ordinal: string;
+  sql: string;
+};
+
+type PendingPreflightReport = {
+  findings: PreflightFinding[];
+  deferred: DeferredPreflight[];
+  noPreflight: { migration: string; reason: string }[];
+  missingDecisions: string[];
+  evaluated: string[];
+  leastPrivilege: boolean;
+};
+
+async function appliedMigrationsTableExists(): Promise<boolean> {
+  const result = await pool.query<{ exists: boolean }>(
+    "select to_regclass('public._applied_migrations') is not null as exists",
+  );
+  return result.rows[0]!.exists;
+}
+
+async function readAppliedMigrationFilenames(): Promise<Set<string>> {
+  const result = await pool.query<{ filename: string }>(
+    "select filename from public._applied_migrations",
+  );
+  return new Set(result.rows.map((row) => row.filename));
+}
+
+function pendingMigrationItems(
+  generated: readonly string[],
+  applied: ReadonlySet<string>,
+): PendingMigrationItem[] {
+  const pending: PendingMigrationItem[] = [];
+  for (const f of generated) {
+    const filename = `generated/${f}`;
+    if (applied.has(filename)) continue;
+    if ((preflightOrdinalOf(f) ?? -1) < PREFLIGHT_MIN_ORDINAL) continue;
+    pending.push({
+      file: f,
+      filename,
+      ordinal: f.slice(0, 4),
+      content: readFileSync(join(migrationsDir, "generated", f), "utf8"),
+    });
+  }
+  return pending;
+}
+
+function listPreflightEntries(): Set<string> {
+  try {
+    return new Set(readdirSync(preflightDirFor(repoRoot)));
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === "ENOENT") return new Set();
+    throw error;
+  }
+}
+
+/**
+ * Run every pending migration's preflight in ordinal order, each in
+ * BEGIN READ ONLY with bypass RLS and a bounded statement_timeout, then
+ * ROLLBACK. A preflight that needs an object an earlier PENDING migration
+ * creates is deferred to apply time; anything else missing is a real error.
+ */
+async function evaluatePendingMigrations(
+  pending: readonly PendingMigrationItem[],
+  options: { leastPrivilegeRole?: string },
+): Promise<PendingPreflightReport> {
+  const report: PendingPreflightReport = {
+    findings: [],
+    deferred: [],
+    noPreflight: [],
+    missingDecisions: [],
+    evaluated: [],
+    leastPrivilege: true,
+  };
+  if (pending.length === 0) return report;
+  const entries = listPreflightEntries();
+  const timeoutMs = preflightStatementTimeoutMs(env);
+  const preflightDir = preflightDirFor(repoRoot);
+  const client = await connectMigrationClient();
+  try {
+    for (let index = 0; index < pending.length; index += 1) {
+      const item = pending[index]!;
+      const decision = preflightDecisionFor(item.file, entries);
+      if (decision.kind === "missing") {
+        // TRANSITIONAL: the wiring commit (with P1B's decision files) turns
+        // this into a refusal. Until then, list loudly and do not block, so
+        // installs with pending 0242+ migrations keep upgrading.
+        report.missingDecisions.push(item.filename);
+        console.log(
+          `[bootstrap] migration preflight: ${item.filename} has no decision file yet; `
+            + `add schema/migrations/preflight/${item.file.replace(/\.sql$/, ".sql")} or .none`,
+        );
+        continue;
+      }
+      if (decision.kind === "none") {
+        report.noPreflight.push({
+          migration: item.filename,
+          reason: readNoneReason(preflightDir, decision.filename),
+        });
+        continue;
+      }
+      const sqlText = readPreflightSql(preflightDir, decision.filename);
+      const earlierContents = pending.slice(0, index).map((earlier) => earlier.content);
+      let evaluation;
+      try {
+        evaluation = await evaluatePreflight(client, item.filename, item.ordinal, sqlText, {
+          statementTimeoutMs: timeoutMs,
+          leastPrivilegeRole: options.leastPrivilegeRole,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const code = (error as { code?: unknown } | null)?.code;
+        if (options.leastPrivilegeRole && code === "42501") {
+          throw new Error(
+            `[bootstrap] upgrade check as ${options.leastPrivilegeRole} was denied access: ${message}; `
+              + `the install's grants have drifted — run bootstrap once to converge them, then re-run upgrade:check`,
+          );
+        }
+        throw new Error(
+          `[bootstrap] migration preflight ${item.filename} failed to evaluate: ${message}`,
+        );
+      }
+      report.leastPrivilege = report.leastPrivilege && evaluation.leastPrivilege;
+      if (evaluation.status === "deferred") {
+        if (!earlierPendingCreatesObject(evaluation.reason, earlierContents)) {
+          throw new Error(
+            `[bootstrap] migration preflight ${item.filename} cannot evaluate: ${evaluation.reason}; `
+              + `no earlier pending migration creates that object, so this is not a deferral — fix the preflight or the schema`,
+          );
+        }
+        report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
+        console.log(
+          `[bootstrap] migration preflight ${item.filename} is deferred: it needs an object an earlier `
+            + `pending migration creates, so it runs at apply time (${evaluation.reason})`,
+        );
+        continue;
+      }
+      report.evaluated.push(item.filename);
+      report.findings.push(...evaluation.findings);
+    }
+  } finally {
+    await releaseMigrationClient(client);
+  }
+  return report;
+}
+
+function printPreflightFindings(findings: readonly PreflightFinding[]): void {
+  for (const finding of findings) {
+    console.log(`[bootstrap] migration preflight finding: ${formatFinding(finding)}`);
+  }
+}
+
+/**
+ * The pre-apply gate: every evaluable pending preflight has run BEFORE the
+ * first migration. Any refuse finding stops bootstrap here, with every
+ * finding printed and no migration applied.
+ */
+async function runPreflightGate(pending: readonly PendingMigrationItem[]): Promise<DeferredPreflight[]> {
+  if (pending.length === 0) {
+    console.log("[bootstrap] no pending migrations: nothing to preflight");
+    return [];
+  }
+  const report = await evaluatePendingMigrations(pending, {});
+  printPreflightFindings(report.findings);
+  const refusals = report.findings.filter((finding) => finding.severity === "refuse");
+  if (refusals.length > 0) {
+    const codes = [...new Set(refusals.map((finding) => finding.code))].sort().join(", ");
+    throw new Error(
+      `[bootstrap] migration preflights refuse this upgrade (${codes}). Every finding above names its remedy; `
+        + `resolve them, then re-run bootstrap. No migration was applied.`,
+    );
+  }
+  if (report.findings.length > 0) {
+    console.log("[bootstrap] migration preflights report only notices; upgrade continues");
+  } else {
+    console.log(
+      `[bootstrap] migration preflights clean for ${pending.length} pending migration(s)`,
+    );
+  }
+  return report.deferred;
+}
+
+/**
+ * A deferred preflight runs immediately before its own migration, when the
+ * earlier migrations it needs have applied. A refusal here stops the upgrade
+ * naming exactly which migrations already applied in this run.
+ */
+async function runDeferredPreflight(
+  deferred: DeferredPreflight,
+  appliedThisRun: readonly string[],
+): Promise<void> {
+  const client = await connectMigrationClient();
+  try {
+    const evaluation = await evaluatePreflight(client, deferred.filename, deferred.ordinal, deferred.sql, {
+      statementTimeoutMs: preflightStatementTimeoutMs(env),
+    });
+    if (evaluation.status === "deferred") {
+      throw new Error(
+        `[bootstrap] migration preflight ${deferred.filename} still cannot see its objects at apply time `
+          + `(${evaluation.reason}); the earlier migration that should create them did not`,
+      );
+    }
+    printPreflightFindings(evaluation.findings);
+    const refusals = evaluation.findings.filter((finding) => finding.severity === "refuse");
+    if (refusals.length === 0) return;
+    const codes = [...new Set(refusals.map((finding) => finding.code))].sort().join(", ");
+    const applied = appliedThisRun.length > 0 ? appliedThisRun.join(", ") : "(none)";
+    throw new Error(
+      `[bootstrap] migration preflight ${deferred.filename} refuses this upgrade (${codes}). `
+        + `Migrations already applied in this run: ${applied}. Every finding above names its remedy; `
+        + `resolve them, then re-run bootstrap.`,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("[bootstrap] migration preflight")) throw error;
+    throw new Error(
+      `[bootstrap] migration preflight ${deferred.filename} failed to evaluate at apply time: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  } finally {
+    await releaseMigrationClient(client);
+  }
+}
+
+/**
+ * Read-only upgrade check: list the pending migrations, run the evaluable
+ * preflights, and print the findings. Strictly read-only — no ledger table
+ * creation, no role or seed work, no RLS refresh, and no advisory lock that
+ * could block a live app. Every statement is a SELECT (plus transaction
+ * control), so this also runs under the SELECT-only openbooks_read role;
+ * when the connecting login cannot assume it, the check says so and runs
+ * as the connecting role instead. Exits 1 on any refuse finding, else 0.
+ *
+ * Usage: node --import tsx scripts/bootstrap.ts --check [--json]
+ */
+async function runUpgradeCheckMain(json: boolean): Promise<number> {
+  const generated = generatedMigrationFiles();
+  assertMigrationFilenameTransitionTargets(generated);
+  const ledgerPreexisted = await appliedMigrationsTableExists();
+  const result = {
+    freshInstall: !ledgerPreexisted,
+    pending: [] as string[],
+    noPreflight: [] as { migration: string; reason: string }[],
+    missingDecisions: [] as string[],
+    evaluated: [] as string[],
+    deferred: [] as { migration: string; reason: string }[],
+    leastPrivilege: false,
+    findings: [] as PreflightFinding[],
+  };
+  const emit = (): void => {
+    if (json) {
+      // One line: the rehearsal reads the last `{`-leading line as the result.
+      console.log(JSON.stringify(result));
+      return;
+    }
+    console.log(`[bootstrap] upgrade check: ${result.pending.length} pending migration(s)`);
+    for (const filename of result.pending) console.log(`[bootstrap]   pending: ${filename}`);
+    for (const entry of result.noPreflight) {
+      console.log(`[bootstrap]   no preflight: ${entry.migration} — ${entry.reason}`);
+    }
+    for (const filename of result.missingDecisions) {
+      console.log(
+        `[bootstrap]   no decision file yet: ${filename} (add its .sql or .none under schema/migrations/preflight/)`,
+      );
+    }
+    printPreflightFindings(result.findings);
+    for (const entry of result.deferred) {
+      console.log(`[bootstrap]   deferred to apply time: ${entry.migration} (${entry.reason})`);
+    }
+    if (result.evaluated.length > 0 && !result.leastPrivilege) {
+      console.log(
+        "[bootstrap] upgrade check ran as the connecting role because SET LOCAL ROLE openbooks_read was refused; "
+          + "grant the check login membership in openbooks_read to prove least privilege",
+      );
+    }
+  };
+  if (!ledgerPreexisted) {
+    emit();
+    if (!json) {
+      console.log("[bootstrap] upgrade check: no _applied_migrations table (fresh install): nothing to preflight");
+    }
+    return 0;
+  }
+  const applied = await readAppliedMigrationFilenames();
+  const pending = pendingMigrationItems(generated, applied);
+  result.pending = pending.map((item) => item.filename);
+  if (pending.length === 0) {
+    emit();
+    return 0;
+  }
+  const report = await evaluatePendingMigrations(pending, { leastPrivilegeRole: "openbooks_read" });
+  result.noPreflight = report.noPreflight;
+  result.missingDecisions = report.missingDecisions;
+  result.evaluated = report.evaluated;
+  result.deferred = report.deferred.map((deferred) => ({
+    migration: deferred.filename,
+    reason: "evaluated at apply time",
+  }));
+  const ranAnyCheck = report.evaluated.length + report.deferred.length > 0;
+  result.leastPrivilege = report.leastPrivilege && ranAnyCheck;
+  result.findings = report.findings;
+  emit();
+  const refusals = result.findings.filter((finding) => finding.severity === "refuse");
+  if (refusals.length > 0) {
+    if (!json) {
+      console.log(
+        `[bootstrap] upgrade check refused: ${refusals.length} refuse finding(s); resolve each remedy above, then re-run`,
+      );
+    }
+    return 1;
+  }
+  if (!json) console.log("[bootstrap] upgrade check: no refuse findings");
+  return 0;
 }
 
 async function migrate(): Promise<void> {
   const generated = generatedMigrationFiles();
   assertMigrationFilenameTransitionTargets(generated);
+  const ledgerPreexisted = await appliedMigrationsTableExists();
   await db.execute(sql`
     create table if not exists public._applied_migrations (
       filename text primary key,
@@ -1571,10 +1921,22 @@ async function migrate(): Promise<void> {
   `);
   await convergeMigrationFilenames();
 
+  const applied = await readAppliedMigrationFilenames();
+  const pending = pendingMigrationItems(generated, applied);
+  let deferred: DeferredPreflight[] = [];
+  if (!ledgerPreexisted) {
+    console.log("[bootstrap] fresh install: no _applied_migrations table, nothing to preflight");
+  } else {
+    deferred = await runPreflightGate(pending);
+  }
+
+  const appliedThisRun: string[] = [];
   for (const f of generated) {
     const filename = `generated/${f}`;
     const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
-    await applyTracked("migration", filename, content);
+    const deferredPreflight = deferred.find((candidate) => candidate.filename === filename);
+    if (deferredPreflight) await runDeferredPreflight(deferredPreflight, appliedThisRun);
+    if (await applyTracked("migration", filename, content)) appliedThisRun.push(filename);
   }
   if (await isPaymentLinkSealApplicable()) {
     await sealLegacyPaymentLinkTokens();
@@ -2452,6 +2814,24 @@ async function ensureFirstPlatformAdmin(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes("--check")) {
+    // Strictly read-only: this path takes no advisory lock (it must not
+    // block a live app), creates nothing, and performs no role, seed, or
+    // RLS work. It lists the pending migrations and runs the evaluable
+    // preflights, exiting 1 on any refuse finding and 0 otherwise.
+    const json = process.argv.includes("--json");
+    let code = 1;
+    try {
+      code = await runUpgradeCheckMain(json);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      code = 1;
+    } finally {
+      await pool.end().catch(() => {});
+      await longPool.end().catch(() => {});
+    }
+    process.exit(code);
+  }
   const precreated = precreatedRolesEnabled(env);
   const runtimeConfig = runtimeDatabaseConfig();
   const constrainedSchemaOwnerMigration =

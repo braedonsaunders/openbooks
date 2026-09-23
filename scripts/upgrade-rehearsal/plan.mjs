@@ -18,11 +18,20 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const CONFIG_PATH = join(HERE, "rehearsal.json");
 
-export const STEP_KINDS = Object.freeze(["sim", "samples", "seeder"]);
+export const STEP_KINDS = Object.freeze(["sim", "samples", "seeder", "remedy"]);
 const SIM_MODES = new Set(["run", "endurance"]);
 const TAG = /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$/;
 const ID = /^[a-z0-9][a-z0-9-]*$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const FINDING_CODE = /^\d{4}\.[a-z][a-z0-9_]*$/;
+const SEVERITIES = new Set(["refuse", "notice"]);
+/**
+ * Remedy SQL files live next to the preflights, never in the rehearsal:
+ * the rehearsal must prove the SAME remedy operators get. A remedy step
+ * references its file by repo-relative path, and anything outside the
+ * remedies directory is refused here.
+ */
+export const REMEDY_DIR_PREFIX = "schema/migrations/preflight/remedies/";
 
 function refuse(problems, message) {
   problems.push(message);
@@ -48,6 +57,89 @@ function validateStep(step, where, problems) {
   if (step.kind === "seeder" && !ID.test(step.name ?? "")) {
     refuse(problems, `${where}: seeder step needs a kebab-case name`);
   }
+  if (step.kind === "remedy") {
+    validateRemedyStep(step, where, problems);
+  }
+}
+
+function validateRemedyStep(step, where, problems) {
+  const code = step?.code;
+  if (!FINDING_CODE.test(code ?? "")) {
+    refuse(problems, `${where}: remedy step needs a finding code like 0296.malformed_marker`);
+  }
+  const sql = (step?.sql ?? "").replace(/\\/g, "/");
+  if (
+    typeof step?.sql !== "string" ||
+    !sql.startsWith(REMEDY_DIR_PREFIX) ||
+    sql.includes("..") ||
+    !sql.endsWith(".sql") ||
+    sql.length <= REMEDY_DIR_PREFIX.length + ".sql".length
+  ) {
+    refuse(
+      problems,
+      `${where}: remedy sql must be a file under ${REMEDY_DIR_PREFIX} (the rehearsal carries no private remedies): got ${JSON.stringify(step?.sql)}`,
+    );
+    return;
+  }
+  const fileCode = sql.slice(REMEDY_DIR_PREFIX.length, -".sql".length);
+  if (!FINDING_CODE.test(fileCode)) {
+    refuse(problems, `${where}: remedy sql filename must be <finding-code>.sql: got ${JSON.stringify(step.sql)}`);
+    return;
+  }
+  if (code !== fileCode) {
+    refuse(problems, `${where}: remedy code ${JSON.stringify(code)} does not match its file ${JSON.stringify(step.sql)}`);
+  }
+}
+
+function validateExpectFindings(dataset, where, problems) {
+  const expected = dataset?.expectFindings;
+  if (expected === undefined) return [];
+  if (!Array.isArray(expected)) {
+    refuse(problems, `${where}: expectFindings must be an array`);
+    return [];
+  }
+  for (const [index, finding] of expected.entries()) {
+    if (!FINDING_CODE.test(finding?.code ?? "")) {
+      refuse(problems, `${where} expectFindings ${index}: code must look like <ordinal>.<snake_reason>`);
+    }
+    if (!SEVERITIES.has(finding?.severity)) {
+      refuse(problems, `${where} expectFindings ${index}: severity must be refuse or notice`);
+    }
+  }
+  return expected;
+}
+
+function validateRemedies(dataset, expected, where, problems) {
+  const remedies = dataset?.remedies;
+  if (remedies === undefined) return [];
+  if (!Array.isArray(remedies)) {
+    refuse(problems, `${where}: remedies must be an array`);
+    return [];
+  }
+  remedies.forEach((step, index) => {
+    if (step?.kind !== "remedy") {
+      refuse(problems, `${where} remedies ${index}: kind must be remedy`);
+      return;
+    }
+    validateRemedyStep(step, `${where} remedies ${index}`, problems);
+  });
+  if (expected.length === 0) {
+    refuse(problems, `${where}: remedies without expectFindings prove nothing; declare what the check must report first`);
+  }
+  const expectedRefuses = new Set(
+    expected.filter((finding) => finding?.severity === "refuse").map((finding) => finding.code),
+  );
+  for (const step of remedies) {
+    if (step?.kind === "remedy" && typeof step?.code === "string" && !expectedRefuses.has(step.code)) {
+      refuse(problems, `${where}: remedy ${step.code} matches no expected refuse finding`);
+    }
+  }
+  for (const code of expectedRefuses) {
+    if (!remedies.some((step) => step?.kind === "remedy" && step?.code === code)) {
+      refuse(problems, `${where}: expected refuse ${code} has no remedy; the rehearsal cannot prove the operator path past it`);
+    }
+  }
+  return remedies;
 }
 
 /** Validate a parsed rehearsal config. Returns the list of refusals (empty = valid). */
@@ -78,7 +170,16 @@ export function validateConfig(config) {
       refuse(problems, `${where}: class ${JSON.stringify(dataset?.class)} is not a required class`);
     }
     if (!Array.isArray(dataset?.steps)) refuse(problems, `${where}: steps must be an array`);
-    else dataset.steps.forEach((step, index) => validateStep(step, `${where} step ${index}`, problems));
+    else {
+      dataset.steps.forEach((step, index) => {
+        if (step?.kind === "remedy") {
+          refuse(problems, `${where} step ${index}: remedy steps belong in the remedies array, not in steps`);
+        }
+        validateStep(step, `${where} step ${index}`, problems);
+      });
+    }
+    const expected = validateExpectFindings(dataset, where, problems);
+    validateRemedies(dataset, expected, where, problems);
     if (dataset?.class !== "empty" && Array.isArray(dataset?.steps) && dataset.steps.length === 0) {
       refuse(problems, `${where}: only the empty class may have no steps`);
     }
