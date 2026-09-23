@@ -2536,8 +2536,30 @@ export type CamAllocationRow = {
   invoiceDocumentId: string | null;
 };
 
-export async function propertyManagementWorkspace(orgId: string) {
-  const [properties, units, leases, charges, escalations, schedules, deposits, pools, allocations] = await Promise.all([
+export type ScheduleCountRow = {
+  leaseId: string;
+  total: number;
+};
+
+export type OverdueLeaseRow = {
+  leaseId: string;
+  balance: string;
+};
+
+export type OverdueInvoiceRow = {
+  leaseId: string;
+  documentId: string;
+  documentNumber: string | null;
+  dueOn: string | null;
+  openBalance: string | null;
+};
+
+/** Schedule-list preview depth. Totals and money never come from the preview. */
+export const SCHEDULE_PREVIEW_LIMIT = 2000;
+
+export async function propertyManagementWorkspace(orgId: string, asOf?: string) {
+  const overdueOn = validDate(asOf, "Overdue date") ?? await businessToday(orgId);
+  const [properties, units, leases, charges, escalations, schedules, scheduleTotal, scheduleCounts, overdue, deposits, pools, allocations] = await Promise.all([
     db.execute<ManagedPropertyRow>(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
       p.rent_income_account_id as "rentIncomeAccountId",p.cam_income_account_id as "camIncomeAccountId",p.deposit_liability_account_id as "depositLiabilityAccountId",p.default_bank_account_id as "defaultBankAccountId",
       count(u.id)::int as "unitCount",count(u.id) filter(where u.status='occupied')::int as "occupiedUnits" from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
@@ -2556,14 +2578,48 @@ export async function propertyManagementWorkspace(orgId: string) {
     db.execute<LeaseScheduleRow>(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
       d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
       from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
-      left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit 2000`),
+      left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit ${SCHEDULE_PREVIEW_LIMIT}`),
+    // Completeness evidence for the capped preview above: the full line
+    // count overall and per lease, so lists render an explicit
+    // "showing N of M" instead of silently dropping older lines.
+    db.execute<{ total: number }>(sql`select count(*)::int as total from lease_schedule_lines where org_id=${orgId}`),
+    db.execute<ScheduleCountRow>(sql`select lease_id as "leaseId",count(*)::int as total from lease_schedule_lines where org_id=${orgId} group by lease_id`),
+    // Past-due balances age the native posted document's remaining balance
+    // once per document, over the COMPLETE set of schedule lines — never the
+    // capped preview, which drops older lines first. One rent invoice covers
+    // one lease (billing groups lines by lease), so the per-lease balance is
+    // exact and the portfolio total de-duplicates by document.
+    db.execute<OverdueInvoiceRow>(sql`select s.lease_id as "leaseId",d.id as "documentId",d.document_number as "documentNumber",
+      d.due_date as "dueOn",d.open_balance as "openBalance"
+      from lease_schedule_lines s join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id
+      where s.org_id=${orgId} and d.status='posted' and d.due_date<${overdueOn}
+      group by s.lease_id,d.id,d.document_number,d.due_date,d.open_balance`),
     db.execute<SecurityDepositRow>(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
       exists(select 1 from security_deposit_transactions r where r.org_id=d.org_id and r.reversal_of_id=d.id) as reversed
       from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
     db.execute<CamPoolRow>(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
     db.execute<CamAllocationRow>(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
   ]);
-  return { properties: properties.rows, units: units.rows, leases: leases.rows, charges: charges.rows, escalations: escalations.rows, schedules: schedules.rows, deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows };
+  const overdueDocumentBalance = new Map<string, string>();
+  const overdueByLeaseBalance = new Map<string, string>();
+  for (const line of overdue.rows) {
+    if (!overdueDocumentBalance.has(line.documentId)) {
+      overdueDocumentBalance.set(line.documentId, normalizeMoney(line.openBalance ?? "0"));
+    }
+    const balance = overdueDocumentBalance.get(line.documentId)!;
+    overdueByLeaseBalance.set(line.leaseId, add(overdueByLeaseBalance.get(line.leaseId) ?? "0.0000", balance));
+  }
+  const overdueTotal = sum([...overdueDocumentBalance.values()]);
+  const overdueByLease: OverdueLeaseRow[] = [...overdueByLeaseBalance].map(([leaseId, balance]) => ({ leaseId, balance }));
+  const totalSchedules = scheduleTotal.rows[0]?.total ?? 0;
+  return {
+    properties: properties.rows, units: units.rows, leases: leases.rows, charges: charges.rows, escalations: escalations.rows,
+    schedules: schedules.rows, scheduleTotal: totalSchedules, schedulesTruncated: totalSchedules > schedules.rows.length,
+    scheduleCountsByLease: scheduleCounts.rows,
+    overdueAsOf: overdueOn, overdueTotal, overdueByLease,
+    overdueInvoices: overdue.rows.map((line) => ({ ...line, openBalance: normalizeMoney(line.openBalance ?? "0") })),
+    deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows,
+  };
 }
 
 /**

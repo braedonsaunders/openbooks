@@ -228,7 +228,14 @@ export function LeaseDetail({
               />
               <Read
                 label="Scheduled periods"
-                value={String(schedules.length)}
+                value={(() => {
+                  const total = data.scheduleCountsByLease?.find(
+                    (row) => row.leaseId === lease.id,
+                  )?.total ?? schedules.length;
+                  return total > schedules.length
+                    ? `${schedules.length} of ${total} shown`
+                    : String(total);
+                })()}
               />
             </CardContent>
           </Card>

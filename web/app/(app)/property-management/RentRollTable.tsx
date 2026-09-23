@@ -25,8 +25,19 @@ export function monthlyCharges(data: Pick<PropertyWorkspace, "charges">, lease: 
   return lease.status === "draft" ? lease.baseRent ?? "0" : "0";
 }
 
-export function pastDue(data: Pick<PropertyWorkspace, "schedules">, lease: LeaseRow | null, today: string): string {
+export function pastDue(
+  data: Pick<PropertyWorkspace, "schedules"> & Partial<Pick<PropertyWorkspace, "overdueByLease">>,
+  lease: LeaseRow | null,
+  today: string,
+): string {
   if (!lease) return "0";
+  // The server aggregates past-due balances over the complete set of posted
+  // documents. The capped schedule preview below is only a fallback for
+  // partial data: it drops older lines once the portfolio passes the preview
+  // limit, so it must never be the source of a financial total.
+  const aggregated = data.overdueByLease?.find((row) => row.leaseId === lease.id);
+  if (aggregated) return aggregated.balance;
+  if (data.overdueByLease) return "0";
   const invoices = new Map<string, string>();
   for (const line of data.schedules) {
     if (line.leaseId === lease.id && line.invoiceDocumentId &&

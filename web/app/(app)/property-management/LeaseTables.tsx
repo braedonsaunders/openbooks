@@ -63,7 +63,7 @@ export function LeasesTable({ leases, money, onOpen }: { leases: LeaseRow[]; mon
   );
 }
 
-export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money }) {
+export function RentTable({ schedules, leases, money, total }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money; total?: number }) {
   const t = useTranslations("entities.propertyManagement");
   const tc = useTranslations("common");
   if (!schedules.length)
@@ -73,7 +73,14 @@ export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow
         detail={t("detail.rent.description")}
       />
     );
+  const shown = Math.min(schedules.length, 300);
   return (
+    <>
+    {total != null && total > shown ? (
+      <p className="px-1 pb-2 text-xs text-slate-500">
+        Showing {shown} of {total} scheduled periods — older lines fall out of this preview; totals always cover every line.
+      </p>
+    ) : null}
     <Table>
       <TableHeader>
         <TableRow>
@@ -112,6 +119,7 @@ export function RentTable({ schedules, leases, money }: { schedules: ScheduleRow
         })}
       </TableBody>
     </Table>
+    </>
   );
 }
 

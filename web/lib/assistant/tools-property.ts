@@ -21,10 +21,11 @@ import { dateInput, uuidInput, num, capList } from "./tools-shared";
  * the caller's allowlist; everything else follows the visible properties).
  *
  * The rent-roll figures reuse the exact predicates behind the rent-roll
- * screen (RentRollTable `monthlyCharges` / `pastDue`): monthly charges in
- * effect on the date, and posted invoices past due with per-invoice
- * de-duplication. Money is summed with the engine decimal helpers and
- * presented with the shared 2-dp projection.
+ * screen: monthly charges in effect on the date, and the server-side
+ * past-due aggregate over the complete set of posted documents (per-invoice
+ * de-duplication) — never the capped schedule preview, which drops older
+ * lines once the portfolio passes the preview limit. Money is summed with
+ * the engine decimal helpers and presented with the shared 2-dp projection.
  */
 
 const FEATURE_ERROR = "propertyManagement_feature_disabled";
@@ -39,13 +40,15 @@ async function featureOff(orgId: string): Promise<boolean> {
 type Workspace = Awaited<ReturnType<typeof propertyManagementWorkspace>>;
 type LeaseRow = Workspace["leases"][number];
 type ChargeRow = Workspace["charges"][number];
-type ScheduleRow = Workspace["schedules"][number];
+type OverdueLeaseRow = Workspace["overdueByLease"][number];
+type OverdueInvoiceRow = Workspace["overdueInvoices"][number];
 
-async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | null): Promise<Workspace> {
+async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | null, asOf?: string): Promise<Workspace> {
   // Same narrowing as GET /api/property-management: restricted callers see
   // only their subsidiaries' properties, and every child collection follows
-  // the visible properties and leases.
-  const workspace = await propertyManagementWorkspace(orgId);
+  // the visible properties and leases. The past-due aggregate is computed for
+  // the caller's date and re-aggregated over the visible documents only.
+  const workspace = await propertyManagementWorkspace(orgId, asOf);
   if (allowed === null) return workspace;
   const properties = workspace.properties.filter((row) => allowed.has(String(row.subsidiaryId)));
   const propertyIds = new Set(properties.map((row) => String(row.id)));
@@ -53,13 +56,31 @@ async function visibleWorkspace(orgId: string, allowed: ReadonlySet<string> | nu
   const leaseIds = new Set(leases.map((row) => String(row.id)));
   const camPools = workspace.camPools.filter((row) => propertyIds.has(String(row.propertyId)));
   const poolIds = new Set(camPools.map((row) => String(row.id)));
+  const schedules = workspace.schedules.filter((row) => leaseIds.has(String(row.leaseId)));
+  const scheduleCountsByLease = workspace.scheduleCountsByLease.filter((row) => leaseIds.has(String(row.leaseId)));
+  const scheduleTotal = scheduleCountsByLease.reduce((acc, row) => acc + row.total, 0);
+  const overdueByLease = workspace.overdueByLease.filter((row) => leaseIds.has(String(row.leaseId)));
+  const overdueInvoices = workspace.overdueInvoices.filter((row) => leaseIds.has(String(row.leaseId)));
+  const overdueDocumentBalance = new Map<string, string>();
+  for (const line of overdueInvoices) {
+    if (!overdueDocumentBalance.has(String(line.documentId))) {
+      overdueDocumentBalance.set(String(line.documentId), String(line.openBalance ?? "0"));
+    }
+  }
   return {
     properties,
     units: workspace.units.filter((row) => propertyIds.has(String(row.propertyId))),
     leases,
     charges: workspace.charges.filter((row) => leaseIds.has(String(row.leaseId))),
     escalations: workspace.escalations.filter((row) => leaseIds.has(String(row.leaseId))),
-    schedules: workspace.schedules.filter((row) => leaseIds.has(String(row.leaseId))),
+    schedules,
+    scheduleTotal,
+    schedulesTruncated: scheduleTotal > schedules.length,
+    scheduleCountsByLease,
+    overdueAsOf: workspace.overdueAsOf,
+    overdueTotal: sum([...overdueDocumentBalance.values()]),
+    overdueByLease,
+    overdueInvoices,
     deposits: workspace.deposits.filter((row) => leaseIds.has(String(row.leaseId))),
     camPools,
     camAllocations: workspace.camAllocations.filter(
@@ -80,22 +101,17 @@ function monthlyChargesFor(charges: ChargeRow[], lease: LeaseRow, asOf: string):
   return lease.status === "draft" ? String(lease.baseRent ?? "0") : "0";
 }
 
-/** Rent-roll screen predicate: posted invoices past due, de-duplicated per invoice. */
-function pastDueInvoices(schedules: ScheduleRow[], leaseId: unknown, asOf: string): Map<string, ScheduleRow> {
-  const invoices = new Map<string, ScheduleRow>();
-  for (const line of schedules) {
-    if (
-      String(line.leaseId) === String(leaseId) && line.invoiceDocumentId
-      && line.invoiceStatus === "posted" && line.invoiceDueOn && String(line.invoiceDueOn) < asOf
-    ) {
-      invoices.set(String(line.invoiceDocumentId), line);
-    }
-  }
-  return invoices;
+/**
+ * Posted overdue invoices for one lease, from the server-side aggregate over
+ * the complete set of posted documents — never the capped schedule preview.
+ */
+function pastDueInvoices(overdue: OverdueInvoiceRow[], leaseId: unknown): OverdueInvoiceRow[] {
+  return overdue.filter((line) => String(line.leaseId) === String(leaseId));
 }
 
-function pastDueFor(schedules: ScheduleRow[], leaseId: unknown, asOf: string): string {
-  return sum([...pastDueInvoices(schedules, leaseId, asOf).values()].map((line) => String(line.invoiceOpenBalance ?? "0")));
+/** Per-lease past-due balance from the server-side aggregate. */
+function pastDueFor(overdue: OverdueLeaseRow[], leaseId: unknown): string {
+  return overdue.find((row) => String(row.leaseId) === String(leaseId))?.balance ?? "0.0000";
 }
 
 const listProperties: AssistantToolDef = {
@@ -218,12 +234,12 @@ const getLease: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     if (await featureOff(authz.user.orgId)) return { ok: false, error: FEATURE_ERROR };
     const a = raw as { leaseId: string };
-    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds);
+    const asOf = await businessToday(authz.user.orgId);
+    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds, asOf);
     // The workspace is already narrowed to the caller's properties, so a
     // lease outside subsidiary scope reads as missing, like the route.
     const lease = workspace.leases.find((l) => String(l.id) === a.leaseId) as LeaseRow | undefined;
     if (!lease) return { ok: false, error: "lease_not_found" };
-    const asOf = await businessToday(authz.user.orgId);
     const charges = workspace.charges.filter((c) => String(c.leaseId) === a.leaseId);
     const escalations = workspace.escalations.filter((e) => String(e.leaseId) === a.leaseId);
     const schedules = capList(
@@ -283,7 +299,7 @@ const getLease: AssistantToolDef = {
           currency: lease.currency,
           depositBalance: num(lease.depositBalance ?? 0),
           monthlyCharges: num(monthlyChargesFor(workspace.charges, lease, asOf)),
-          pastDue: num(pastDueFor(workspace.schedules, lease.id, asOf)),
+          pastDue: num(pastDueFor(workspace.overdueByLease, lease.id)),
           notes: lease.notes == null ? null : truncateText(String(lease.notes), 500),
         },
         charges: charges.map((c) => ({
@@ -325,7 +341,7 @@ const rentRoll: AssistantToolDef = {
     const a = raw as z.infer<typeof rentRollSchema>;
     const limit = Math.min(a.limit ?? 50, 200);
     const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
-    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds);
+    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds, asOf);
     const q = (a.query ?? "").toLowerCase();
     const leases = workspace.leases.filter(
       (l) =>
@@ -337,7 +353,7 @@ const rentRoll: AssistantToolDef = {
     const rows = leases.map((l) => ({
       lease: l,
       monthly: monthlyChargesFor(workspace.charges, l, asOf),
-      pastDue: pastDueFor(workspace.schedules, l.id, asOf),
+      pastDue: pastDueFor(workspace.overdueByLease, l.id),
     }));
     const chargesByCurrency = new Map<string, string>();
     const pastDueByCurrency = new Map<string, string>();
@@ -402,14 +418,14 @@ const leaseArrears: AssistantToolDef = {
     const a = raw as z.infer<typeof leaseArrearsSchema>;
     const limit = Math.min(a.limit ?? 50, 200);
     const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
-    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds);
+    const workspace = await visibleWorkspace(authz.user.orgId, authz.allowedSubsidiaryIds, asOf);
     const leases = workspace.leases.filter(
       (l) => !a.propertyId || String(l.propertyId) === a.propertyId,
     );
     const rows = leases
       .map((l) => {
-        const invoices = [...pastDueInvoices(workspace.schedules, l.id, asOf).values()];
-        const pastDue = sum(invoices.map((line) => String(line.invoiceOpenBalance ?? "0")));
+        const invoices = pastDueInvoices(workspace.overdueInvoices, l.id);
+        const pastDue = sum(invoices.map((line) => String(line.openBalance ?? "0")));
         return { lease: l, invoices, pastDue };
       })
       .filter((row) => cmp(row.pastDue, "0") > 0)
@@ -430,10 +446,10 @@ const leaseArrears: AssistantToolDef = {
         currency: row.lease.currency,
         pastDue: num(row.pastDue),
         invoices: row.invoices.map((line) => ({
-          invoiceDocumentId: line.invoiceDocumentId,
-          invoiceNumber: line.invoiceNumber,
-          invoiceDueOn: line.invoiceDueOn,
-          invoiceOpenBalance: line.invoiceOpenBalance == null ? null : num(line.invoiceOpenBalance),
+          invoiceDocumentId: line.documentId,
+          invoiceNumber: line.documentNumber,
+          invoiceDueOn: line.dueOn,
+          invoiceOpenBalance: line.openBalance == null ? null : num(line.openBalance),
         })),
       })),
       limit

@@ -24,14 +24,16 @@ test("property-management KPI money aggregates preserve exact decimals", () => {
 
 test("property-management KPI totals use exact decimal helpers", () => {
   assert.match(source, /const monthlyRent = decimalSum\(/);
-  assert.match(
-    source,
-    /const overdue = decimalSum\(\[\.\.\.overdueInvoices\.values\(\)\]\)/,
-  );
   assert.match(source, /const depositsHeld = decimalSum\(/);
   assert.match(source, /tone=\{decimalCmp\(overdue, "0"\) > 0 \? "danger"/);
   assert.doesNotMatch(
     source,
     /Number\((?:charge\.amount|line\.invoiceOpenBalance|lease\.depositBalance)/,
   );
+});
+
+test("property-management past-due total reads the server aggregate, never the capped preview", () => {
+  assert.match(source, /const overdue = data\.overdueTotal/);
+  assert.doesNotMatch(source, /overdueInvoices\.values\(\)/);
+  assert.doesNotMatch(source, /for \(const line of data\.schedules\)/);
 });
