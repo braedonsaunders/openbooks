@@ -456,6 +456,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       `)).rows;
     });
 
+    // Omission evidence for the manifest: every requested document whose
+    // bytes cannot be retrieved is named here with its reason. A non-empty
+    // list marks the documents module — and the whole export — 'incomplete',
+    // never 'ready': a subject-access export presented as complete while
+    // files are missing is a completeness lie, and the legal property that
+    // matters is whether the requester got everything.
+    const omittedDocuments: { id: string; title: string; reason: string }[] = [];
     await gather("documents", async () => {
       const docs = (await db.execute<{
         id: string;
@@ -477,7 +484,14 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
       }));
       let n = 0;
       for (const doc of docs) {
-        if (!doc.file_id) continue;
+        if (!doc.file_id) {
+          omittedDocuments.push({
+            id: doc.id,
+            title: doc.title,
+            reason: "the document has no cabinet file — nothing was ever stored to export",
+          });
+          continue;
+        }
         const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
           select v.storage_kind, b.bytes
             from files f
@@ -489,14 +503,40 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         // must never silently omit the file (that would certify a complete
         // export that is missing documents).
         if (blob) refuseMaskedStorageKind(blob.storage_kind);
-        if (!blob?.bytes) continue;
+        // Missing bytes are NEVER silently skipped: the file row exists but
+        // the version/blob join finds nothing (purged, orphaned, or never
+        // stored). Record the omission and keep the export auditable.
+        if (!blob?.bytes) {
+          omittedDocuments.push({
+            id: doc.id,
+            title: doc.title,
+            reason: "the cabinet file's bytes are missing — the file record exists but no retrievable bytes remain",
+          });
+          continue;
+        }
         n += 1;
         entries.push({
           name: `documents/${String(n).padStart(2, "0")}-${doc.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "document"}.pdf`,
           data: blob.bytes as Buffer,
         });
       }
+      payload.omittedDocuments = omittedDocuments;
     });
+    if (omittedDocuments.length > 0) {
+      const entry = included.find((s) => s.module === "documents");
+      const detail =
+        `${omittedDocuments.length} document file(s) unavailable: ` +
+        omittedDocuments.map((o) => `${o.title} (${o.id}): ${o.reason}`).join("; ");
+      // A failed gather keeps its failure (the error is the story there);
+      // omissions downgrade a SUCCESSFUL gather from included to incomplete.
+      if (entry && entry.status === "included") {
+        entry.status = "incomplete";
+        entry.detail = detail;
+      } else if (!entry) {
+        included.push({ module: "documents", status: "incomplete", detail });
+      }
+    }
+    const exportIncomplete = included.some((s) => s.status === "incomplete");
     await gather("payroll", async () => {
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
@@ -569,9 +609,13 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     // the winner. The freshly stored zip is then unreferenced cabinet bytes
     // under the export's folder rather than anyone's download — refused
     // rather than orphaned into the wrong hands.
+    // Completeness: an export with omitted document bytes is marked
+    // 'incomplete', never 'ready' — the scope manifest and export.json name
+    // every omission, and the UI/API show the incomplete status distinctly.
+    const terminalStatus = exportIncomplete ? "incomplete" : "ready";
     const marked = (await db.execute<{ n: string }>(sql`
       update hrm_data_subject_exports
-         set status = 'ready', file_id = ${fileId}, scope = ${JSON.stringify(included)}::jsonb,
+         set status = ${terminalStatus}, file_id = ${fileId}, scope = ${JSON.stringify(included)}::jsonb,
              completed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${exportId}
          and status = 'building' and claimed_by = ${owner}
@@ -621,7 +665,11 @@ export async function drainExportQueue(orgId: string, limit = 5): Promise<number
   return done;
 }
 
-/** Download a ready export (subject or manage) — flips ready to delivered. */
+/**
+ * Download a finished export (subject or manage). Ready flips to delivered
+ * on download; incomplete STAYS incomplete — flipping it would erase the
+ * distinct partial status the requester must keep seeing.
+ */
 export async function downloadExport(query: {
   orgId: string;
   actorId: string;
@@ -632,7 +680,7 @@ export async function downloadExport(query: {
       ${EXPORT_COLS} where org_id = ${query.orgId} and id = ${query.exportId}
     `)).rows[0];
     if (!row) throw new HrmDocumentsError("NOT_FOUND", "export request is not visible in this organization");
-    if (row.status !== "ready" && row.status !== "delivered") {
+    if (row.status !== "ready" && row.status !== "incomplete" && row.status !== "delivered") {
       throw new HrmDocumentsError(
         "REFUSED",
         `this export is ${row.status} — download opens once it is ready`,

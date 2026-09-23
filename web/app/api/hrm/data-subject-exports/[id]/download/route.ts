@@ -4,7 +4,7 @@ import { guardPermission } from "../../../../../../lib/authz";
 import { hrmDocumentsErrorResponse } from "../../../documents/_lib";
 import { gateExports } from "../../route";
 
-/** Download a ready export (subject or manage) — flips ready to delivered. */
+/** Download a finished export (subject or manage) — ready flips to delivered; incomplete stays incomplete. */
 export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const hr = await guardPermission("hrm.documents.manage");
   const actor = hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;

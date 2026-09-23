@@ -497,3 +497,47 @@ test("DSAR reclaims expired leases oldest-first", { skip: !DB }, async () => {
     assert.equal(done.status, "ready");
   });
 });
+
+test("DSAR export with missing file bytes is incomplete with omission evidence", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const tpl = await makeTemplate(h, "contract");
+    const docId = await completeDocument(h, tpl, "My contract");
+    // Lose the bytes the way retention delete does (file row survives, no
+    // retrievable version remains) so the documents join finds nothing.
+    const file = (await db.execute<{ file_id: string }>(sql`
+      select file_id from hrm_documents where id = ${docId}
+    `)).rows[0]!;
+    const { purgeCabinetBytes } = await import("./documents/cabinet.ts");
+    await purgeCabinetBytes(db, h.org.orgId, file.file_id);
+
+    const requested = await requestExport({ orgId: h.org.orgId, actorId: h.employeeId, partyId: h.partyId });
+    await buildExport(h.org.orgId, requested.id);
+    // Never ready: the export is incomplete and says which file is missing.
+    const listed = await listExports({ orgId: h.org.orgId, actorId: h.hrId, partyId: h.partyId });
+    assert.equal(listed[0]!.status, "incomplete");
+    const scope = listed[0]!.scope as { module: string; status: string; detail?: string }[];
+    const documents = scope.find((s) => s.module === "documents")!;
+    assert.equal(documents.status, "incomplete");
+    assert.ok(documents.detail?.includes("My contract"), "manifest names the omitted document");
+    assert.ok(documents.detail?.includes(docId), "manifest names the omitted document id");
+
+    // export.json carries the same per-document omission evidence.
+    const { bytes } = await downloadExport({ orgId: h.org.orgId, actorId: h.employeeId, exportId: requested.id });
+    const dir = mkdtempSync(join(tmpdir(), "hrm-dsar-omitted-"));
+    const path = join(dir, "export.zip");
+    writeFileSync(path, bytes);
+    const raw = execFileSync("unzip", ["-p", path, "export.json"], { maxBuffer: 64 * 1024 * 1024 });
+    const payload = JSON.parse(Buffer.from(raw).toString("utf8")) as {
+      omittedDocuments: { id: string; title: string; reason: string }[];
+    };
+    assert.equal(payload.omittedDocuments.length, 1);
+    assert.equal(payload.omittedDocuments[0]!.id, docId);
+    assert.ok(payload.omittedDocuments[0]!.reason.length > 0);
+    // Download serves the partial zip but the incomplete status sticks —
+    // it never flips to delivered and hides the partiality.
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from hrm_data_subject_exports where id = ${requested.id}
+    `)).rows[0]!;
+    assert.equal(status.status, "incomplete");
+  });
+});

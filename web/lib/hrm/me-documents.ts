@@ -78,7 +78,9 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
       requested: e.requestedAt,
       status: e.status,
       statusLabel: statusLabel(e.status),
-      downloadable: e.status === 'ready' || e.status === 'delivered',
+      // Incomplete exports are downloadable too — the partial zip is the
+      // requester's, and the row keeps showing its incomplete status.
+      downloadable: e.status === 'ready' || e.status === 'incomplete' || e.status === 'delivered',
       downloadHref: `/api/hrm/data-subject-exports/${e.id}/download`,
       error: e.error,
     })),
