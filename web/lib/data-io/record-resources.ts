@@ -333,10 +333,12 @@ async function writeRecords(
           // next save instead of silently winning or losing. The overwrite is
           // evidenced per row (same source:'import' shape as the setup import
           // resource) alongside the import_jobs run row.
+          // Bulk import never changes lifecycle: status moves only through
+          // the native record PATCH with its audited reason, so an
+          // export→reimport round-trip leaves an inactive record inactive.
           const written = (await db.execute(sql`
             update custom_records
                set data = ${JSON.stringify(computed)}::jsonb, search_text = ${searchText},
-                   status = 'active',
                    updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')
              where id = ${existingId} and org_id = ${orgId}
              returning *`)) as { rows: Record<string, unknown>[] }
