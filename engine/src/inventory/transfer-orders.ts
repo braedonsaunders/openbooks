@@ -5,11 +5,13 @@ import { cmp, isZero, neg, sum } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
 import {
   loadSubsidiaryContext,
+  restrictionAdmits,
   SubsidiaryError,
   validateSubsidiaryRestrictions,
+  type SubsidiaryContext,
 } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { resolveProfile, assertInventoryFeature } from "./profile-policy.ts";
+import { resolveProfile, assertInventoryFeature, assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, persistReceiptMoney, assertInventoryDate } from "./position.ts";
 import { nextSequenceNumber } from "./document-numbering.ts";
@@ -71,12 +73,24 @@ export async function createTransferOrder(
       });
     }
     const documentNumber = await nextSequenceNumber(orgId, "transfer_order", "TO-", tx);
+    // The transit warehouse is decided here, at creation: a caller-selected
+    // one is validated for scope and subsidiary, otherwise the deterministic
+    // default resolves among warehouses that admit this subsidiary — and an
+    // order with no eligible warehouse refuses now, by name, instead of
+    // dying at shipment with no way to choose.
+    const subCtx = await loadSubsidiaryContext(tx, orgId);
+    let transitStockLocationId = input.transitStockLocationId ?? null;
+    if (transitStockLocationId) {
+      await assertTransitLocationUsable(tx, orgId, subCtx, transitStockLocationId, input.subsidiaryId);
+    } else {
+      transitStockLocationId = await defaultTransitLocationId(tx, orgId, subCtx, input.subsidiaryId, documentNumber);
+    }
     const order = (await tx.execute<{ id: string }>(sql`
       insert into transfer_orders
         (org_id, document_number, status, from_stock_location_id, to_stock_location_id,
          transit_stock_location_id, in_transit_account_id, subsidiary_id, ordered_on, memo, created_by, updated_by)
       values (${orgId}, ${documentNumber}, 'draft', ${input.fromStockLocationId}, ${input.toStockLocationId},
-              ${input.transitStockLocationId ?? null}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
+              ${transitStockLocationId}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
               ${input.orderedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id`));
     const id = order.rows[0]!.id;
@@ -188,6 +202,77 @@ async function assertInTransitAccountUsable(
   }
 }
 
+/**
+ * Goods in transit are inventory owned by the order's legal entity, so a
+ * caller-selected transit warehouse must be a real, active transit
+ * warehouse of this organization that admits the order's subsidiary —
+ * checked here at creation, and again at each posting leg, because the
+ * warehouse can be deactivated, re-typed, or re-scoped while the order
+ * sits in draft or in transit.
+ */
+async function assertTransitLocationUsable(
+  tx: Runner,
+  orgId: string,
+  ctx: SubsidiaryContext,
+  transitStockLocationId: string,
+  subsidiaryId: string,
+): Promise<void> {
+  const warehouse = (await tx.execute<{ code: string | null; kind: string }>(sql`
+    select code, kind from stock_locations
+     where org_id = ${orgId} and id = ${transitStockLocationId}`)).rows[0];
+  if (!warehouse) {
+    throw new InventoryError(
+      "transfer transit warehouse not found in this organization — choose an active transit warehouse",
+    );
+  }
+  if (warehouse.kind !== "transit") {
+    throw new InventoryError(
+      `stock location "${warehouse.code ?? transitStockLocationId}" is not a transit warehouse — choose an active transit warehouse to hold goods in transit`,
+    );
+  }
+  // Scope, activity, and subsidiary admission share the movement-time rule,
+  // so creation, picker, and posting can never disagree. The ownership
+  // refusal propagates unchanged: a warehouse of another legal entity is
+  // an authorization failure, and its message already names the warehouse.
+  await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, transitStockLocationId, subsidiaryId);
+}
+
+/**
+ * Deterministic default transit warehouse: the oldest active transit
+ * warehouse that admits the order's subsidiary. Warehouses that admit
+ * nobody relevant are skipped rather than picked — picking the org's
+ * oldest warehouse regardless of entity shipped one subsidiary's goods
+ * through another's and died at posting with no way to choose.
+ */
+async function defaultTransitLocationId(
+  tx: Runner,
+  orgId: string,
+  ctx: SubsidiaryContext,
+  subsidiaryId: string,
+  documentNumber: string,
+): Promise<string> {
+  const candidates = (await tx.execute<{
+    id: string;
+    subsidiary_id: string | null;
+    include_children: boolean;
+  }>(sql`
+    select sl.id, l.subsidiary_id, l.subsidiary_include_children as "include_children"
+      from stock_locations sl
+      join locations l on l.id = sl.location_id and l.org_id = sl.org_id
+     where sl.org_id = ${orgId} and sl.kind = 'transit' and sl.is_active
+     order by sl.created_at, sl.id`)).rows;
+  const eligible = candidates.find((candidate) =>
+    restrictionAdmits(ctx, candidate.subsidiary_id, candidate.include_children, subsidiaryId),
+  );
+  if (!eligible) {
+    throw new InventoryError(
+      `transfer order ${documentNumber} names no transit warehouse and no active transit warehouse admits this subsidiary — ` +
+        `create a transit warehouse available to the order's subsidiary, or select one on the order`,
+    );
+  }
+  return eligible.id;
+}
+
 async function loadTransferOrderForUpdate(
   tx: Runner,
   orgId: string,
@@ -226,15 +311,11 @@ async function resolveTransitLocation(
     }
     return result.id;
   }
-  const r = (await tx.execute<{ id: string }>(sql`
-    select id from stock_locations where org_id = ${orgId} and kind = 'transit' and is_active
-     order by created_at limit 1`));
-  if (!r.rows[0]) {
-    throw new InventoryError(
-      `transfer order ${order.document_number} has no transit stock location and none exists`,
-    );
-  }
-  return r.rows[0].id;
+  // Legacy draft rows predate creation-time resolution and carry no stored
+  // warehouse: resolve the same subsidiary-aware default rather than the
+  // org's oldest warehouse regardless of entity.
+  const ctx = await loadSubsidiaryContext(tx, orgId);
+  return defaultTransitLocationId(tx, orgId, ctx, order.subsidiary_id, order.document_number);
 }
 
 /** Post the in-transit value reclass for a ship/receive leg, when the order
