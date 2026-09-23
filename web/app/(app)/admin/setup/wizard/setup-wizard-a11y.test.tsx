@@ -119,6 +119,7 @@ async function renderWizard(host: HTMLElement, root: ReturnType<typeof createRoo
             country: "US",
             baseCurrency: "USD",
             fiscalYearStartMonth: 1,
+            timeZone: null,
             industry: null,
             workspaceProfile: {
               teamSize: "solo",
@@ -134,6 +135,7 @@ async function renderWizard(host: HTMLElement, root: ReturnType<typeof createRoo
           canSwitchIndustry
           isRerun={false}
           payrollPacks={[]}
+          timeZones={["UTC", "America/Toronto"]}
         />
       </NextIntlClientProvider>,
     );

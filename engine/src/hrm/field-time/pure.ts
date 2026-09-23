@@ -7,6 +7,7 @@
  */
 
 import { FieldTimeError } from "./errors.ts";
+import { canonicalTimeZone } from "../../platform/time-zone.ts";
 
 export type RoundingMode = "nearest" | "up" | "down";
 
@@ -227,40 +228,23 @@ export interface DayPiece {
   ms: number;
 }
 
-const supportedTimeZones: ReadonlySet<string> | null = (() => {
-  if (typeof Intl.supportedValuesOf !== "function") return null;
-  try {
-    return new Set<string>(Intl.supportedValuesOf("timeZone"));
-  } catch {
-    return null;
-  }
-})();
-
 /**
  * An IANA zone the runtime can day in, or a refusal that names the
- * remedy. Canonical membership is the fast path; otherwise the zone
- * must actually format — small-icu runtimes list no Etc/UTC/GMT zones
- * yet still format "UTC" fine, so the list alone would refuse the
- * fallback zone every org without a configured zone resolves to.
+ * remedy. Validated through the shared platform zone validator (which
+ * accepts every zone Intl.DateTimeFormat accepts and canonicalizes
+ * aliases), so this module keeps no second copy of the rule. The remedy
+ * names the real setting: Business time zone in Company Settings →
+ * Organization.
  */
 function requireTimeZone(timeZone: string): string {
-  const zone = timeZone?.trim();
-  if (zone && supportedTimeZones?.has(zone)) return zone;
-  let formats = !!zone;
-  if (formats) {
-    try {
-      zoneDateParts(0, zone);
-    } catch {
-      formats = false;
-    }
-  }
-  if (!formats || !zone) {
+  const canonical = canonicalTimeZone(timeZone);
+  if (!canonical) {
     throw new FieldTimeError(
       "invalid_time_zone",
-      `Time zone ${JSON.stringify(timeZone)} is not a known IANA zone — set a valid timeZone in Company Settings before clocking across midnights`,
+      `Time zone ${JSON.stringify(timeZone)} is not a known IANA time zone — set Business time zone in Company Settings → Organization before clocking across midnights`,
     );
   }
-  return zone;
+  return canonical;
 }
 
 /**

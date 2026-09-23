@@ -84,6 +84,17 @@ const INDUSTRY_ICONS: Record<string, typeof Building2> = {
   healthcare_practice: Stethoscope,
 }
 
+/** The operator's own zone for a fresh org's default: the browser's
+ *  resolved zone, UTC when the runtime cannot tell. The server validates
+ *  and canonicalizes whatever the company step sends. */
+function browserTimeZone(): string {
+  try {
+    return new Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 
 export function SetupWizard(props: {
@@ -95,6 +106,10 @@ export function SetupWizard(props: {
     country: string
     baseCurrency: string
     fiscalYearStartMonth: number
+    /** Stored effective business time zone (canonical), or null when the
+     *  org never set one — the company step then defaults to the browser
+     *  zone so a fresh org days on its own calendar from day one. */
+    timeZone: string | null
     industry: string | null
     workspaceProfile: WorkspaceProfile
     features: Record<ToggleKey, boolean>
@@ -109,6 +124,9 @@ export function SetupWizard(props: {
   /** Installable payroll country packs, in registry order — declared by the
    *  server from the pack registry, never a list in this file. */
   payrollPacks?: WizardPayrollPack[]
+  /** Canonical IANA zone names for the business-time-zone picker — declared
+   *  by the server from the shared platform validator, never a list here. */
+  timeZones: string[]
   onClose?: () => void
 }) {
   const t = useTranslations('admin.setup.wizard')
@@ -128,6 +146,15 @@ export function SetupWizard(props: {
   const [country, setCountry] = useState(props.initial.country)
   const [currency, setCurrency] = useState(props.initial.baseCurrency)
   const [fiscalMonth, setFiscalMonth] = useState(props.initial.fiscalYearStartMonth)
+  const [timeZone, setTimeZone] = useState(() => {
+    // The select can only offer the server's canonical list: a stored zone
+    // from a richer ICU (or a browser zone the server does not enumerate)
+    // falls back to UTC rather than rendering a blank selection.
+    const offered = new Set(props.timeZones)
+    if (props.initial.timeZone && offered.has(props.initial.timeZone)) return props.initial.timeZone
+    const browser = browserTimeZone()
+    return offered.has(browser) ? browser : 'UTC'
+  })
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
   const [teamSize, setTeamSize] = useState<TeamSize>(props.initial.workspaceProfile.teamSize)
   const [complexity, setComplexity] = useState<ComplexityLevel>(props.initial.workspaceProfile.complexity)
@@ -244,6 +271,7 @@ export function SetupWizard(props: {
           country,
           baseCurrency: currency,
           fiscalYearStartMonth: fiscalMonth,
+          timeZone,
           industry: industryKey,
           workspaceProfile: { teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence },
           features: { ...featureChoices, ...toggles },
@@ -435,14 +463,17 @@ export function SetupWizard(props: {
           country={country}
           currency={currency}
           fiscalMonth={fiscalMonth}
+          timeZone={timeZone}
           countries={countries}
           currencies={currencies}
           months={fiscalMonths}
+          timeZones={props.timeZones}
           setName={setName}
           setLegalName={setLegalName}
           setCountry={setCountry}
           setCurrency={setCurrency}
           setFiscalMonth={setFiscalMonth}
+          setTimeZone={setTimeZone}
         />
       )}
       {step === 'industry' && (
@@ -515,10 +546,14 @@ export function SetupWizard(props: {
           country={country}
           currency={currency}
           fiscalMonth={fiscalMonth}
+          timeZone={timeZone}
           defaults={{
             country: props.initial.country,
             currency: props.initial.baseCurrency,
             fiscalMonth: props.initial.fiscalYearStartMonth,
+            // The company step opened with the stored zone, or the browser
+            // zone when none was stored — the same default the state holds.
+            timeZone: props.initial.timeZone ?? browserTimeZone(),
             teamSize: props.initial.workspaceProfile.teamSize,
             complexity: props.initial.workspaceProfile.complexity,
             bookStart: props.initial.workspaceProfile.bookStart,
@@ -595,16 +630,19 @@ function CompanyStep(props: {
   country: string
   currency: string
   fiscalMonth: number
+  timeZone: string
   countries: { value: string; label: string }[]
   currencies: { value: string; label: string }[]
   months: { value: number; label: string }[]
+  timeZones: string[]
   setName: (v: string) => void
   setLegalName: (v: string) => void
   setCountry: (v: string) => void
   setCurrency: (v: string) => void
   setFiscalMonth: (v: number) => void
+  setTimeZone: (v: string) => void
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, countries, currencies, months } = props
+  const { t, name, legalName, country, currency, fiscalMonth, timeZone, countries, currencies, months, timeZones } = props
   // The comboboxes' selected values as plain text: an accessibility snapshot
   // that cannot expose a native select's current option still reads this
   // line, and aria-live announces it when a selection changes.
@@ -692,9 +730,26 @@ function CompanyStep(props: {
             ))}
           </select>
         </div>
+        <div>
+          <label htmlFor="setup-time-zone" className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            {t('company.timeZone')}
+          </label>
+          <select
+            id="setup-time-zone"
+            value={timeZone}
+            onChange={(e) => props.setTimeZone(e.target.value)}
+            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+          >
+            {timeZones.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
       <p aria-live="polite" className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-        {t('company.selectedSummary', { country: countryLabel, currency: currencyLabel, fiscalMonth: fiscalMonthLabel })}
+        {t('company.selectedSummary', { country: countryLabel, currency: currencyLabel, fiscalMonth: fiscalMonthLabel, timeZone })}
       </p>
     </div>
   )
@@ -1255,6 +1310,7 @@ function ReviewStep(props: {
   country: string
   currency: string
   fiscalMonth: number
+  timeZone: string
   /** The pre-selected values the wizard opened with: a review value still
    *  equal to its default was accepted by click-through, never deliberately
    *  chosen, and is badged so. */
@@ -1262,6 +1318,7 @@ function ReviewStep(props: {
     country: string
     currency: string
     fiscalMonth: number
+    timeZone: string
     teamSize: TeamSize
     complexity: ComplexityLevel
     bookStart: BookStart
@@ -1284,7 +1341,7 @@ function ReviewStep(props: {
   payrollPacks: WizardPayrollPack[]
   seedChartOfAccounts: boolean
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
+  const { t, name, legalName, country, currency, fiscalMonth, timeZone, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
   const payrollPackName = payrollPack
     ? (payrollPacks.find((pack) => pack.country === payrollPack)?.name ?? payrollPack)
     : null
@@ -1293,7 +1350,7 @@ function ReviewStep(props: {
   )
   const defaultBadge = t('review.defaultBadge')
   const anyDefault = country === defaults.country || currency === defaults.currency
-    || fiscalMonth === defaults.fiscalMonth || teamSize === defaults.teamSize
+    || fiscalMonth === defaults.fiscalMonth || timeZone === defaults.timeZone || teamSize === defaults.teamSize
     || complexity === defaults.complexity || bookStart === defaults.bookStart
     || taxPosition === defaults.taxPosition || monthlyActivity === defaults.monthlyActivity
     || closeCadence === defaults.closeCadence
@@ -1316,6 +1373,7 @@ function ReviewStep(props: {
         <ReviewRow label={t('review.country')} value={country.toUpperCase()} isDefault={country === defaults.country} defaultBadge={defaultBadge} />
         <ReviewRow label={t('review.currency')} value={currency} isDefault={currency === defaults.currency} defaultBadge={defaultBadge} />
         <ReviewRow label={t('review.fiscalYear')} value={fiscalMonthName} isDefault={fiscalMonth === defaults.fiscalMonth} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.timeZone')} value={timeZone} isDefault={timeZone === defaults.timeZone} defaultBadge={defaultBadge} />
         <ReviewRow label={t('review.teamSize')} value={t(`profile.team.${teamSize}.title`)} isDefault={teamSize === defaults.teamSize} defaultBadge={defaultBadge} />
         <ReviewRow label={t('review.complexity')} value={t(`profile.complexity.${complexity}.title`)} isDefault={complexity === defaults.complexity} defaultBadge={defaultBadge} />
         <ReviewRow label={t('review.bookStart')} value={t(`launch.books.${bookStart}.title`)} isDefault={bookStart === defaults.bookStart} defaultBadge={defaultBadge} />

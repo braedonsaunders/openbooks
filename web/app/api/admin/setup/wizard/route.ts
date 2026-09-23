@@ -6,6 +6,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
+import { canonicalTimeZone } from '@openbooks/engine/src/platform/time-zone.ts'
 import {
   periodDerivationSql,
   periodDerivationStagingSql,
@@ -39,7 +40,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Setup wizard apply endpoint. One audited transaction:
- *   1. Updates org identity (name, legal name, country, base currency, fiscal-year start).
+ *   1. Updates org identity (name, legal name, country, base currency, fiscal-year start, business time zone).
  *   2. Inserts the industry COA template (idempotent by account number via on conflict).
  *   3. Maps control accounts by account number → inserted account IDs.
  *   4. Merges the industry feature presets into orgs.settings.features.
@@ -67,6 +68,7 @@ export async function PUT(req: Request) {
     country: inputCountry,
     baseCurrency: inputCurrency,
     fiscalYearStartMonth: inputFiscalMonth,
+    timeZone: inputTimeZone,
     reportingFramework: inputReportingFramework,
     industry: inputIndustry,
     features: inputFeatureOverrides,
@@ -77,6 +79,7 @@ export async function PUT(req: Request) {
     country?: string
     baseCurrency?: string
     fiscalYearStartMonth?: number
+    timeZone?: string
     reportingFramework?: string
     industry?: string
     features?: Record<string, boolean>
@@ -119,6 +122,12 @@ export async function PUT(req: Request) {
     || inputFiscalMonth > 12
   ) {
     return NextResponse.json({ error: 'invalid-fiscal-year-start-month' }, { status: 422 })
+  }
+  // The business time zone is optional (omission leaves the stored value
+  // untouched on re-runs); when present it must be a zone the runtime
+  // accepts, stored canonical like the Company Settings save path.
+  if (inputTimeZone !== undefined && canonicalTimeZone(inputTimeZone) === null) {
+    return NextResponse.json({ error: 'invalid-time-zone' }, { status: 422 })
   }
   if (
     inputReportingFramework !== undefined
@@ -283,6 +292,16 @@ export async function PUT(req: Request) {
         nextSettings!.fiscalYearStartMonth = inputFiscalMonth
         settingsChanges.fiscalYearStartMonth = [curMonth, inputFiscalMonth]
         fiscalStartChanged = true
+      }
+    }
+    // Business time zone: validated above, stored canonical. Unlike the
+    // foundation fields it stays mutable after postings — business dates
+    // are computed live from this key, and posted rows keep their dates.
+    if (inputTimeZone !== undefined) {
+      const canonical = canonicalTimeZone(inputTimeZone)!
+      if (canonical !== canonicalTimeZone(nextSettings!.timeZone)) {
+        settingsChanges.timeZone = [nextSettings!.timeZone ?? null, canonical]
+        nextSettings!.timeZone = canonical
       }
     }
 

@@ -448,6 +448,70 @@ test(
 );
 
 test(
+  "business time zone stores canonical, refuses unknown zones, and survives omission",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      routeState.authz = authorize(fixture);
+      routeState.authzQueue = [];
+      const putBody = (extra: Record<string, unknown>): Promise<Response> =>
+        withOrgContext(fixture.orgId, () =>
+          PUT(new Request("http://localhost/api/admin/setup/wizard", {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              name: "Scratch Company",
+              country: "CA",
+              baseCurrency: "CAD",
+              fiscalYearStartMonth: 1,
+              industry: "general_business",
+              features: {},
+              workspaceProfile: {
+                teamSize: "solo",
+                complexity: "essentials",
+                bookStart: "fresh",
+                taxPosition: "unsure",
+                monthlyActivity: "light",
+                closeCadence: "monthly",
+              },
+              ...extra,
+            }),
+          })));
+      const zoneOf = async (): Promise<unknown> =>
+        (await withBypassContext(() => db.execute<{ settings: Record<string, unknown> }>(sql`
+          select settings from orgs where id = ${fixture.orgId}`))).rows[0]!.settings.timeZone;
+
+      // An alias the runtime accepts stores canonical, like Company Settings.
+      const aliased = await putBody({ timeZone: "US/Eastern" });
+      assert.equal(aliased.status, 200, JSON.stringify(await aliased.clone().json()));
+      assert.equal(await zoneOf(), "America/New_York");
+      const zoneAudit = await withBypassContext(() => db.execute<{ change: unknown }>(sql`
+        select changes->'settings'->'timeZone' as change from audit_log
+         where org_id = ${fixture.orgId} and table_name = 'orgs'
+         order by at desc limit 1`));
+      assert.deepEqual(zoneAudit.rows[0]?.change, [null, "America/New_York"]);
+
+      // An unknown zone refuses before the transaction writes anything.
+      const refused = await putBody({ timeZone: "Not/AZone" });
+      assert.equal(refused.status, 422);
+      assert.deepEqual(await refused.json(), { error: "invalid-time-zone" });
+      assert.equal(await zoneOf(), "America/New_York");
+
+      // Omission is not a change: a re-run that says nothing about the zone
+      // keeps the stored value.
+      const omitted = await putBody({});
+      assert.equal(omitted.status, 200, JSON.stringify(await omitted.clone().json()));
+      assert.equal(await zoneOf(), "America/New_York");
+    } finally {
+      routeState.authz = null;
+      routeState.authzQueue = [];
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
   "accounting-foundation probe re-runs after the wizard waits for the org lock",
   { skip: !DB },
   async () => {

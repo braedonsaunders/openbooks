@@ -721,7 +721,7 @@ test('setup wizard selection copy ships localized in every locale', () => {
   }
   for (const locale of locales) {
     const summary = flattenCatalog(locale).get('admin.setup.wizard.company.selectedSummary') ?? ''
-    for (const token of ['{country}', '{currency}', '{fiscalMonth}']) {
+    for (const token of ['{country}', '{currency}', '{fiscalMonth}', '{timeZone}']) {
       assert.ok(summary.includes(token), `${locale} must keep the ${token} interpolation`)
     }
   }
@@ -3127,7 +3127,10 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // m23_insights_autosave/F1: 4069 = 4063 plus 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
   // CTRL-01 (+7) + UX-19 (+3) + g22 UX-17 (+5 redirect/home keys): 4084 = 4069 + 15, all 7 locales.
-  assert.equal(wanted.length, 4084, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // TZ1 (+5 business-time-zone keys: settings.organization timeZone/timeZoneHint/
+  // timeZonePlaceholder, wizard.company.timeZone, wizard.review.timeZone):
+  // 4089 = 4084 + 5, all 7 locales.
+  assert.equal(wanted.length, 4089, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3506,8 +3509,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // m23_insights_autosave/F1: 4069 + rehash for the 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
   // CTRL-01 + UX-19 + UX-17: 4084 + rehash.
-  const ADMIN_I2_SOURCE_COUNT = 4084
-  const ADMIN_I2_SOURCE_HASH = '3ea51954b6322d1d327430ec08fde24ae9ae03fb67d472313bf15ae221b33570'
+  // TZ1: 4089 + rehash for the 5 business-time-zone keys, translated in
+  // all 7 locales.
+  const ADMIN_I2_SOURCE_COUNT = 4089
+  const ADMIN_I2_SOURCE_HASH = '51e6aa6130e722ab51615ae99371a2dbd9b6ddd38bba7c738c779b89fc1aa8dc'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

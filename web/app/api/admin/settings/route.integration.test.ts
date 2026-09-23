@@ -280,6 +280,7 @@ test(
           legalName: "",
           country: "CA",
           defaultLocale: "en",
+          timeZone: "UTC",
           reportingFramework: "us_gaap",
           taxFramework: "asc740",
           requireVendorBillApproval: false,

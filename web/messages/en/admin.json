@@ -606,6 +606,9 @@
       "defaultLanguageHint": "The language the app renders in for everyone who hasn’t picked their own in the account menu.",
       "baseCurrency": "Base currency",
       "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching.",
+      "timeZone": "Business time zone",
+      "timeZoneHint": "The time zone business dates post in — entries filed near local midnight land on this calendar day, not the UTC day.",
+      "timeZonePlaceholder": "Select a time zone…",
       "reportPdfStyle": "Financial report PDF style",
       "reportPdfStyleModern": "Modern (branded)",
       "reportPdfStyleFormal": "Formal (GAAP)",
@@ -4055,8 +4058,9 @@
         "legalNamePlaceholder": "Registered legal entity name",
         "country": "Country",
         "currency": "Base currency",
+        "timeZone": "Business time zone",
         "fiscalYear": "Fiscal year starts in",
-        "selectedSummary": "Selected: {country} · {currency} · fiscal year starts {fiscalMonth}."
+        "selectedSummary": "Selected: {country} · {currency} · fiscal year starts {fiscalMonth} · business day in {timeZone}."
       },
       "industry": {
         "title": "What's your industry?",
@@ -4237,6 +4241,7 @@
         "country": "Country",
         "currency": "Currency",
         "fiscalYear": "Fiscal year starts",
+        "timeZone": "Business time zone",
         "teamSize": "OpenBooks team",
         "complexity": "Starting workspace",
         "bookStart": "Ledger starting point",

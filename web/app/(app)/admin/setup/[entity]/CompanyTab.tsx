@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
 import { DEFAULT_LOCALE, isLocale } from '../../../../../i18n/config'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../../lib/features'
@@ -53,6 +54,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           legalName: (row?.legal_name as string | null) ?? '',
           country: (row?.country as string) ?? '',
           baseCurrency: (row?.base_currency as string) ?? '',
+          timeZone: canonicalTimeZone(settings.timeZone) ?? 'UTC',
           fiscalYearStartMonth:
             typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
           reportingFramework: settings.reportingFramework === 'ifrs' ? 'ifrs' : 'us_gaap',
@@ -90,6 +92,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
         }}
         accounts={accountOptions}
         currencies={currencies.rows as { code: string; name: string }[]}
+        timeZones={listCanonicalTimeZones()}
         multiSubsidiary={multiSubsidiary}
         revenueRecognition={revenueRecognition}
         vendorBillFlowConfigured={vendorBillFlowConfigured}

@@ -164,6 +164,22 @@ describe("round-once dealing", () => {
   it("an unknown zone refuses instead of guessing a boundary", () => {
     refuses(() => splitZoneDays(Date.parse("2026-01-15T01:00:00.000Z"), Date.parse("2026-01-15T05:00:00.000Z"), "Not/AZone"));
   });
+  it("the zone refusal names the Business time zone setting that fixes it", () => {
+    const message = refuses(() => splitZoneDays(Date.parse("2026-01-15T01:00:00.000Z"), Date.parse("2026-01-15T05:00:00.000Z"), "Not/AZone"));
+    assert.match(message, /"Not\/AZone"/, "the refusal names the offending zone");
+    assert.match(message, /Business time zone/, "the refusal names the real setting");
+    assert.match(message, /Company Settings/, "the refusal names where the setting lives");
+  });
+  it("a stored alias days in its canonical zone", () => {
+    // US/Eastern is absent from supportedValuesOf but formats fine; the
+    // shared validator canonicalizes it instead of refusing it.
+    const pieces = splitZoneDays(
+      Date.parse("2026-01-15T01:00:00.000Z"),
+      Date.parse("2026-01-15T05:00:00.000Z"),
+      "US/Eastern",
+    );
+    assert.deepEqual(pieces, [{ date: "2026-01-14", ms: 4 * 3_600_000 }]);
+  });
   it("the 23:52-00:08 shift deals its single quarter deterministically", () => {
     // 16 minutes round once to one quarter; the 8/8-minute tie breaks
     // to the earlier day, and the posted entries sum to exactly 0.25.

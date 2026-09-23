@@ -604,6 +604,9 @@
       "defaultLanguageHint": "El idioma en que se muestra la aplicación para todos los que no hayan elegido el suyo en el menú de la cuenta.",
       "baseCurrency": "Moneda base",
       "baseCurrencyHint": "La moneda de reporte en la que se equilibra el libro mayor. Agregue más monedas antes de cambiarla.",
+      "timeZone": "Zona horaria comercial",
+      "timeZoneHint": "La zona horaria en la que se fechan los días hábiles: los registros cercanos a la medianoche local caen en este día calendario, no en el día UTC.",
+      "timeZonePlaceholder": "Selecciona una zona horaria…",
       "reportPdfStyle": "Estilo de PDF de informes financieros",
       "reportPdfStyleModern": "Moderno (con marca)",
       "reportPdfStyleFormal": "Formal (PCGA)",
@@ -4045,8 +4048,9 @@
         "legalNamePlaceholder": "Nombre de la entidad jurídica registrada",
         "country": "País",
         "currency": "Moneda base",
+        "timeZone": "Zona horaria comercial",
         "fiscalYear": "El ejercicio empieza en",
-        "selectedSummary": "Selección: {country} · {currency} · el año fiscal comienza en {fiscalMonth}."
+        "selectedSummary": "Selección: {country} · {currency} · el año fiscal comienza en {fiscalMonth} · día hábil en {timeZone}."
       },
       "industry": {
         "title": "¿A qué sector pertenece?",
@@ -4227,6 +4231,7 @@
         "country": "País",
         "currency": "Moneda",
         "fiscalYear": "Inicio del ejercicio",
+        "timeZone": "Zona horaria comercial",
         "teamSize": "Equipo de OpenBooks",
         "complexity": "Espacio inicial",
         "bookStart": "Punto de partida del mayor",

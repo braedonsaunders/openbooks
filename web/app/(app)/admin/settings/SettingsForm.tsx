@@ -54,6 +54,8 @@ type Initial = {
   legalName: string
   country: string
   baseCurrency: string
+  /** Effective business time zone (canonical IANA name, UTC when unset). */
+  timeZone: string
   fiscalYearStartMonth: number
   reportingFramework: 'us_gaap' | 'ifrs'
   taxFramework?: 'asc740' | 'ias12'
@@ -98,6 +100,7 @@ export function SettingsForm({
   initial,
   accounts,
   currencies,
+  timeZones,
   multiSubsidiary = false,
   revenueRecognition = false,
   vendorBillFlowConfigured,
@@ -105,6 +108,8 @@ export function SettingsForm({
   initial: Initial
   accounts: AccountOption[]
   currencies: { code: string; name: string }[]
+  /** Canonical IANA zone names the business-time-zone picker offers. */
+  timeZones: string[]
   /** When the org runs multiple legal entities, identity/currency are per
    *  subsidiary and control accounts here are the fallback defaults. */
   multiSubsidiary?: boolean
@@ -137,6 +142,11 @@ export function SettingsForm({
   const accountOptions: SelectOption[] = useMemo(
     () => accounts.map((a) => ({ value: a.id, label: a.label })),
     [accounts],
+  )
+
+  const timeZoneOptions: SelectOption[] = useMemo(
+    () => timeZones.map((zone) => ({ value: zone, label: zone })),
+    [timeZones],
   )
 
   const startMonthChanged = form.fiscalYearStartMonth !== initial.fiscalYearStartMonth
@@ -282,6 +292,18 @@ export function SettingsForm({
                 </option>
               ))}
             </Select>
+          </div>
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="timeZone" help={t('organization.timeZoneHint')}>{t('organization.timeZone')}</FieldLabel>
+            <SearchSelect
+              id="timeZone"
+              value={form.timeZone}
+              onChange={(value) => setForm((f) => ({ ...f, timeZone: value ?? f.timeZone }))}
+              options={timeZoneOptions}
+              placeholder={t('organization.timeZonePlaceholder')}
+              sheetTitle={t('organization.timeZone')}
+              ariaLabel={t('organization.timeZone')}
+            />
           </div>
         </CardContent>
       </Card>
