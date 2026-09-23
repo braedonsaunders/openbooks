@@ -33,6 +33,22 @@ function s3(): S3Client {
 
 const objectKey = (versionId: string) => `file-cabinet/${versionId}`;
 
+/**
+ * Build the `x-amz-copy-source` value for an S3 server-side copy: the bucket
+ * plus the source key with every path segment URL-encoded (`/` separators
+ * kept). The installed SDK sends CopySource verbatim and AWS requires the
+ * encoded form — keys with spaces, `#`, `?`, `+` or non-ASCII otherwise break
+ * the copy (versioned blobs, SFTP renames). The single shared helper for every
+ * server-side copy in the engine; do not fork it.
+ */
+export function encodeS3CopySource(bucket: string, sourceKey: string): string {
+  const encodedKey = sourceKey
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${encodeURIComponent(bucket)}/${encodedKey}`;
+}
+
 /** Shared S3 client + bucket for other object-storage users (org backups). */
 export function getS3Client(): S3Client {
   return s3();
@@ -85,7 +101,7 @@ const s3Store: FileBlobStore = {
     // Server-side copy: bytes never transit the clone worker.
     await s3().send(new CopyObjectCommand({
       Bucket: env.S3_BUCKET!,
-      CopySource: `${env.S3_BUCKET!}/${objectKey(fromVersionId)}`,
+      CopySource: encodeS3CopySource(env.S3_BUCKET!, objectKey(fromVersionId)),
       Key: objectKey(toVersionId),
     }));
   },
