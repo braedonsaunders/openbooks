@@ -16,6 +16,8 @@
     "format": "Format",
     "run": "Export",
     "running": "Exporting…",
+    "exported": "Exported {filename} with {count, plural, one {# column} other {# columns}}.",
+    "needColumns": "Select at least one column to export.",
     "empty": "Pick what to export.",
     "noColumns": "This record type has no exportable columns.",
     "loadFailed": "Could not load exportable record types.",

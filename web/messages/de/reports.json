@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "Berichtsname",
+      "nameRequired": "Geben Sie einen Berichtsnamen ein, um zu speichern.",
       "descriptionPlaceholder": "Beschreibung (optional)",
       "allChangesSaved": "Alle Änderungen gespeichert",
       "unsavedChanges": "Nicht gespeicherte Änderungen…",

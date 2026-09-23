@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "Nom du rapport",
+      "nameRequired": "Saisissez un nom de rapport pour enregistrer.",
       "descriptionPlaceholder": "Description (facultative)",
       "allChangesSaved": "Toutes les modifications sont enregistrées",
       "unsavedChanges": "Modifications non enregistrées…",

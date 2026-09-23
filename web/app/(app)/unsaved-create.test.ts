@@ -116,6 +116,20 @@ test('create saves send one idempotent POST and check status before parsing', ()
   assert.match(reportBuilder, /createInFlightRef\.current/, 'ReportBuilder must fence double Save')
 })
 
+test('the custom-report Save names its missing name instead of disabling silently', () => {
+  // UX-16: the create-mode Save disables on a blank name; the header must
+  // say a name is required (visible copy, described to assistive tech) and
+  // the disabled button must point at that reason.
+  assert.match(reportBuilder, /t\('nameRequired'\)/, 'ReportBuilder must render the missing-name reason')
+  assert.match(
+    reportBuilder,
+    /aria-describedby=\{!name\.trim\(\) && !creating \? 'custom-report-save-hint' : undefined\}/,
+    'the disabled Save must describe its reason',
+  )
+  const catalog = read('../../messages/en/reports.json')
+  assert.match(catalog, /"nameRequired": "Enter a report name to save\."/)
+})
+
 test('create endpoints require the key, insert once, and audit the insert', () => {
   for (const [name, source] of [
     ['records/types', typesRoute],

@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "Nome do relatório",
+      "nameRequired": "Digite um nome de relatório para salvar.",
       "descriptionPlaceholder": "Descrição (opcional)",
       "allChangesSaved": "Todas as alterações salvas",
       "unsavedChanges": "Alterações não salvas…",

@@ -371,6 +371,7 @@
     },
     "builder": {
       "namePlaceholder": "报表名称",
+      "nameRequired": "输入报表名称以保存。",
       "descriptionPlaceholder": "描述（可选）",
       "allChangesSaved": "所有更改已保存",
       "unsavedChanges": "有未保存的更改…",

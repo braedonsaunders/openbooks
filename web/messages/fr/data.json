@@ -16,6 +16,8 @@
     "format": "Format",
     "run": "Exporter",
     "running": "Exportation…",
+    "exported": "{filename} exporté avec {count, plural, one {# colonne} other {# colonnes}}.",
+    "needColumns": "Sélectionnez au moins une colonne à exporter.",
     "empty": "Choisissez une table à exporter.",
     "noColumns": "Cette table n'a aucune colonne exportable.",
     "loadFailed": "Impossible de charger les types d'enregistrement exportables.",

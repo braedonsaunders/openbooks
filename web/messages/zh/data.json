@@ -16,6 +16,8 @@
     "format": "格式",
     "run": "导出",
     "running": "导出中…",
+    "exported": "已导出 {filename}，共 {count, plural, other {# 列}}。",
+    "needColumns": "请至少选择一列进行导出。",
     "empty": "请选择要导出的内容。",
     "noColumns": "此记录类型没有可导出的列。",
     "loadFailed": "无法加载可导出的记录类型。",
