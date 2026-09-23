@@ -67,6 +67,8 @@
     "outOfBalance": "Out of balance · {amount}",
     "balanced": "Balanced",
     "referenceNumber": "Reference #",
+    "referenceNumberHint": "External number for this entry — the source document or statement reference. Shown beside the entry number.",
+    "memoHint": "Internal narration stored on the entry. Shown on the journal list and audit trail.",
     "noParty": "No party",
     "partylessControlWarning": "Posted with no party on {accounts}. These balances sit outside any customer or vendor subledger — see the aging (no party) row.",
     "accountPlaceholder": "Account…",

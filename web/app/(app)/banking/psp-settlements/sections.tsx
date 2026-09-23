@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { Button, Card, Input, Label, Select } from '@openbooks/ui'
+import { Button, Card, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 
@@ -28,6 +28,13 @@ export interface PspSubsidiaryOption {
   id: string
   name: string
   baseCurrency: string
+}
+
+/** Chart account offered by the import form's house pickers. The label is
+ *  preformatted (`number · name`); the stored value stays the UUID. */
+export interface PspAccountOption {
+  id: string
+  label: string
 }
 
 const STATUS_MESSAGE: Record<SettlementStatus, 'draft' | 'posted' | 'voided'> = {
@@ -134,6 +141,7 @@ export function PspSettlementsWorkspace({
   strings,
   initialRows,
   initialSubsidiaries,
+  initialAccounts,
 }: {
   strings: {
     acceptanceNote: string
@@ -143,12 +151,19 @@ export function PspSettlementsWorkspace({
     externalRef: string
     settlementDate: string
     bankAccountId: string
+    bankAccountHint: string
     feeAccountId: string
+    feeAccountHint: string
     clearingAccountId: string
+    clearingAccountHint: string
     subsidiaryLabel: string
     noneLabel: string
     payloadShapeHint: string
-    uuidPlaceholder: string
+    genericPayloadHint: string
+    accountPlaceholder: string
+    uploadPayload: string
+    invalidStripePayload: string
+    invalidGenericPayload: string
     importDraft: string
     recentBatches: string
     reversalDate: string
@@ -168,6 +183,9 @@ export function PspSettlementsWorkspace({
   }
   initialRows: PspSettlementRow[] | null
   initialSubsidiaries?: PspSubsidiaryOption[] | null
+  /** Loader-resolved postable chart accounts for the house pickers. The
+   *  stored import value stays the UUID — only the affordance changes. */
+  initialAccounts?: PspAccountOption[] | null
 }) {
   const t = useTranslations('banking.pspSettlements')
   // Client-fetched rows (native path, and spec-path reloads after a mutation)
@@ -177,6 +195,10 @@ export function PspSettlementsWorkspace({
   const today = useBusinessToday()
   const [batches, setBatches] = useState<SettlementBatch[]>([])
   const [subsidiaries, setSubsidiaries] = useState<PspSubsidiaryOption[]>(initialSubsidiaries ?? [])
+  // House picker options arrive loader-resolved (both render paths); the
+  // list reloads batches/subsidiaries after mutations but the chart snapshot
+  // stays — a newly created account is validated by name at import.
+  const [accounts] = useState<PspAccountOption[]>(initialAccounts ?? [])
   const [provider, setProvider] = useState<ImportProvider>('stripe')
   const [externalRef, setExternalRef] = useState('')
   const [settlementDate, setSettlementDate] = useState(today)
@@ -241,6 +263,18 @@ export function PspSettlementsWorkspace({
   // no options and post to the root like every other document.
   const needsSubsidiaryChoice = subsidiaries.length > 0
 
+  // Pasted-or-uploaded payloads fail fast on shape, before the POST: Stripe
+  // settles a JSON array of balance transactions while Recurly/Chargebee
+  // settle one JSON object. The server re-validates authoritatively.
+  function payloadShapeError(parsed: unknown): string | null {
+    if (provider === 'stripe') {
+      return Array.isArray(parsed) ? null : strings.invalidStripePayload
+    }
+    return typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+      ? null
+      : strings.invalidGenericPayload
+  }
+
   const importBatch = async () => {
     setErr(null)
     setMsg(null)
@@ -249,6 +283,11 @@ export function PspSettlementsWorkspace({
       parsed = JSON.parse(payload)
     } catch {
       setErr(t('invalidJson'))
+      return
+    }
+    const shapeError = payloadShapeError(parsed)
+    if (shapeError) {
+      setErr(shapeError)
       return
     }
     const body: Record<string, unknown> = {
@@ -365,49 +404,64 @@ export function PspSettlementsWorkspace({
         <h3 className="text-sm font-semibold">{strings.importTitle}</h3>
         <div className="grid gap-3 sm:grid-cols-3">
           <div>
-            <Label>{strings.providerLabel}</Label>
-            <Select value={provider} onChange={(e) => setProvider(e.target.value as ImportProvider)}>
+            <Label htmlFor="psp-provider">{strings.providerLabel}</Label>
+            <Select id="psp-provider" value={provider} onChange={(e) => setProvider(e.target.value as ImportProvider)}>
               <option value="stripe">{t('providers.stripe')}</option>
               <option value="recurly">{t('providers.recurly')}</option>
               <option value="chargebee">{t('providers.chargebee')}</option>
             </Select>
           </div>
           <div>
-            <Label>{strings.externalRef}</Label>
-            <Input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} />
+            <Label htmlFor="psp-external-ref">{strings.externalRef}</Label>
+            <Input id="psp-external-ref" value={externalRef} onChange={(e) => setExternalRef(e.target.value)} />
           </div>
           <div>
-            <Label>{strings.settlementDate}</Label>
-            <Input type="date" value={settlementDate} onChange={(e) => setSettlementDate(e.target.value)} />
+            <Label htmlFor="psp-settlement-date">{strings.settlementDate}</Label>
+            <Input id="psp-settlement-date" type="date" value={settlementDate} onChange={(e) => setSettlementDate(e.target.value)} />
           </div>
           <div>
-            <Label>{strings.bankAccountId}</Label>
-            <Input
+            <Label htmlFor="psp-bank-account">{strings.bankAccountId}</Label>
+            <SearchSelect
+              id="psp-bank-account"
+              options={accounts.map((a) => ({ value: a.id, label: a.label }))}
               value={bankAccountId}
-              onChange={(e) => setBankAccountId(e.target.value)}
-              placeholder={strings.uuidPlaceholder}
+              onChange={(v) => setBankAccountId(v ?? '')}
+              placeholder={strings.accountPlaceholder}
+              clearable
+              emptyLabel={strings.noneLabel}
             />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{strings.bankAccountHint}</p>
           </div>
           <div>
-            <Label>{strings.feeAccountId}</Label>
-            <Input
+            <Label htmlFor="psp-fee-account">{strings.feeAccountId}</Label>
+            <SearchSelect
+              id="psp-fee-account"
+              options={accounts.map((a) => ({ value: a.id, label: a.label }))}
               value={feeAccountId}
-              onChange={(e) => setFeeAccountId(e.target.value)}
-              placeholder={strings.uuidPlaceholder}
+              onChange={(v) => setFeeAccountId(v ?? '')}
+              placeholder={strings.accountPlaceholder}
+              clearable
+              emptyLabel={strings.noneLabel}
             />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{strings.feeAccountHint}</p>
           </div>
           <div>
-            <Label>{strings.clearingAccountId}</Label>
-            <Input
+            <Label htmlFor="psp-clearing-account">{strings.clearingAccountId}</Label>
+            <SearchSelect
+              id="psp-clearing-account"
+              options={accounts.map((a) => ({ value: a.id, label: a.label }))}
               value={clearingAccountId}
-              onChange={(e) => setClearingAccountId(e.target.value)}
-              placeholder={strings.uuidPlaceholder}
+              onChange={(v) => setClearingAccountId(v ?? '')}
+              placeholder={strings.accountPlaceholder}
+              clearable
+              emptyLabel={strings.noneLabel}
             />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{strings.clearingAccountHint}</p>
           </div>
           {needsSubsidiaryChoice && (
             <div>
-              <Label>{strings.subsidiaryLabel}</Label>
-              <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
+              <Label htmlFor="psp-subsidiary">{strings.subsidiaryLabel}</Label>
+              <Select id="psp-subsidiary" value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
                 <option value="">{strings.noneLabel}</option>
                 {subsidiaries.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -419,15 +473,32 @@ export function PspSettlementsWorkspace({
           )}
         </div>
         <div>
-          <Label>{provider === 'stripe' ? t('stripePayloadLabel') : t('genericPayloadLabel')}</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="psp-payload">{provider === 'stripe' ? t('stripePayloadLabel') : t('genericPayloadLabel')}</Label>
+            <label className="cursor-pointer text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {strings.uploadPayload}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  void file.text().then((text) => setPayload(text))
+                  e.target.value = ''
+                }}
+              />
+            </label>
+          </div>
           <textarea
+            id="psp-payload"
             className="mt-1 min-h-32 w-full rounded border p-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
             value={payload}
             onChange={(e) => setPayload(e.target.value)}
           />
-          {provider === 'stripe' && (
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{strings.payloadShapeHint}</p>
-          )}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {provider === 'stripe' ? strings.payloadShapeHint : strings.genericPayloadHint}
+          </p>
         </div>
         <Button
           size="sm"

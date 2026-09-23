@@ -67,6 +67,8 @@
     "outOfBalance": "Nicht ausgeglichen · {amount}",
     "balanced": "Ausgeglichen",
     "referenceNumber": "Referenz-Nr.",
+    "referenceNumberHint": "Externe Nummer dieses Eintrags — Quellbeleg oder Kontoauszugsreferenz. Wird neben der Buchungsnummer angezeigt.",
+    "memoHint": "Interne Buchungserläuterung. Wird in der Journalübersicht und im Prüfpfad angezeigt.",
     "noParty": "Keine Partei",
     "partylessControlWarning": "Ohne Partner auf {accounts} gebucht. Diese Salden stehen außerhalb aller Kunden- oder Lieferanten-Nebenbücher — siehe Zeile (kein Partner) in der Alterungsliste.",
     "accountPlaceholder": "Konto…",

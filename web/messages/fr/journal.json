@@ -67,6 +67,8 @@
     "outOfBalance": "Non équilibré · {amount}",
     "balanced": "Équilibré",
     "referenceNumber": "N° de référence",
+    "referenceNumberHint": "Numéro externe de cette écriture — pièce source ou référence de relevé. Affiché à côté du numéro d’écriture.",
+    "memoHint": "Narration interne enregistrée sur l’écriture. Affichée dans le journal et la piste d’audit.",
     "noParty": "Aucun tiers",
     "partylessControlWarning": "Comptabilisé sans tiers sur {accounts}. Ces soldes restent hors de tout auxiliaire client ou fournisseur — voir la ligne (sans tiers) de la balance âgée.",
     "accountPlaceholder": "Compte…",

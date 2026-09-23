@@ -752,22 +752,28 @@ export function PaymentDrawer({
         </span>
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
+      // Save is the primary header action in edit mode — burying it in the
+      // Actions menu hid receipt/payment persistence from routine operators.
       primaryAction={
         canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
-            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
-          </Button>
-        ) : null
-      }
-      actions={
-        <>
-          {mode === 'edit' ? (
+          mode === 'edit' ? (
             <>
-              <Button disabled={busy} onClick={save}>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => cancel()}>
+                {tCommon('actions.cancel')}
+              </Button>
+              <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => save()}>
                 {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>
             </>
           ) : (
+            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
+              {tCommon('actions.edit')}
+            </Button>
+          )
+        ) : null
+      }
+      actions={
+        mode === 'edit' ? null : (
             <>
               <PdfButton
                 recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
@@ -800,8 +806,7 @@ export function PaymentDrawer({
                 </Button>
               ) : null}
             </>
-          )}
-        </>
+        )
       }
       // No approvals tab before the first Save: the history reads the
       // persisted row the drawer has not written yet.

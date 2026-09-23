@@ -648,6 +648,55 @@ test('row-post grant label ships localized in every locale', () => {
   }
 })
 
+test('psp settlement import copy ships localized in every locale', () => {
+  // UX-18: the settlement import form labels its account pickers by posting
+  // role, explains each one, and refuses mis-shaped payloads by name —
+  // absent outside en they fall back to English inside otherwise translated
+  // banking screens. Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = [
+    'banking.pspSettlements.bankAccountId',
+    'banking.pspSettlements.bankAccountHint',
+    'banking.pspSettlements.feeAccountId',
+    'banking.pspSettlements.feeAccountHint',
+    'banking.pspSettlements.clearingAccountId',
+    'banking.pspSettlements.clearingAccountHint',
+    'banking.pspSettlements.genericPayloadHint',
+    'banking.pspSettlements.accountPlaceholder',
+    'banking.pspSettlements.uploadPayload',
+    'banking.pspSettlements.invalidStripePayload',
+    'banking.pspSettlements.invalidGenericPayload',
+  ]
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
+test('journal memo/reference hints ship localized in every locale', () => {
+  // UX-18: the journal drawer explains Reference vs Memo beside each field —
+  // absent outside en they fall back to English inside otherwise translated
+  // drawers. Every leaf must exist and be localized.
+  const source = flattenCatalog('en')
+  const keys = ['journal.drawer.referenceNumberHint', 'journal.drawer.memoHint']
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('pack-declared tax filing notices resolve localized in every locale', () => {
   // F-w4-001: the generic prepare panel branched on the literal `CA_GST34`
   // code because packs had no notice channel. Packs now declare a
@@ -5354,7 +5403,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "customization": 185,
   "dashboard": 203,
   "data": 88,
-  "journal": 58,
+  "journal": 60,
   "labor-pricing": 128,
   "nav": 109,
   "parties": 221,

@@ -67,6 +67,8 @@
     "outOfBalance": "貸借不一致 · {amount}",
     "balanced": "貸借一致",
     "referenceNumber": "参照番号",
+    "referenceNumberHint": "この仕訳の外部番号 — ソースドキュメントまたは明細参照。仕訳番号の横に表示されます。",
+    "memoHint": "仕訳に保存される内部メモ。仕訳一覧と監査証跡に表示されます。",
     "noParty": "取引先なし",
     "partylessControlWarning": "{accounts} に取引先なしで転記されました。これらの残高は得意先・仕入先の補助簿の対象外です — エイジングの（取引先なし）行を参照してください。",
     "accountPlaceholder": "勘定…",
