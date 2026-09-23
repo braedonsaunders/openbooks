@@ -28,6 +28,7 @@ import type { ScriptJournalLine } from "../ledger/journal-writes.ts";
  *   npm run sim -- verify <runDir>      (re-check after a fix)
  *   npm run sim -- status|coverage <runDir>
  *   npm run sim -- reset <runDir>
+ *   npm run sim -- reset-org <orgId>
  *   npm run sim -- list-profiles
  */
 
@@ -183,6 +184,17 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    // Remove a SIM-tagged org by id without needing its run directory (e.g.
+    // a sample-template attempt whose simulation failed before any manifest
+    // was written). Refuses anything that is not a tagged SIM org.
+    case "reset-org": {
+      const orgId = argv[1];
+      if (!orgId) throw new Error("usage: npm run sim -- reset-org <orgId>");
+      await resetOrg(orgId);
+      print({ reset: orgId });
+      return 0;
+    }
+
     case "observe": {
       const screen = argv[1];
       const runDir = argv[2]!;
@@ -323,7 +335,7 @@ async function main(): Promise<number> {
     }
 
     default:
-      console.error("usage: provision | day-start | observe | act | day-end | verify | endurance | endurance-report | status | coverage | reset | list-profiles");
+      console.error("usage: provision | day-start | observe | act | day-end | verify | endurance | endurance-report | status | coverage | reset | reset-org | list-profiles");
       return 1;
   }
 }

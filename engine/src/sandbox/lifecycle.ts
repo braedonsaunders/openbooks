@@ -120,6 +120,14 @@ export interface CreateSandboxInput {
   masked?: boolean;
   asOfPeriodId?: string | null;
   createdBy?: string | null;
+  /**
+   * Caller-owned settings keys merged over the provisional org row at birth
+   * and preserved across the clone's authoritative configuration overwrite.
+   * Lets the caller (e.g. sample-company provisioning) record crash-recovery
+   * ownership atomically with the org's creation instead of in a separate
+   * transaction after the clone returns.
+   */
+  settingsOverlay?: Record<string, unknown>;
 }
 
 const UUID_VALUE =
@@ -363,7 +371,8 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     )
     values (
       ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
-      ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb, ${JSON.stringify(p.settings ?? {})}::jsonb,
+      ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
+      (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
       'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
     )`);
 
@@ -391,6 +400,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       masked,
       asOfPeriodId: input.asOfPeriodId ?? null,
       initializeOrg: true,
+      settingsOverlay: input.settingsOverlay,
     });
     // S3-backed attachments live outside the row-copy transaction: copy the
     // objects onto the rebased keys now that the rows exist. A copy failure

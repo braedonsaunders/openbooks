@@ -90,11 +90,23 @@ export class SampleCompanyProvisioningError extends SampleCompanyError {
 }
 
 /**
+ * A provisioning precondition that cannot proceed — e.g. a previous attempt
+ * that could not be removed, so provisioning again would strand a second
+ * org. Unlike unexpected stage failures these carry their specific message
+ * (naming the stranded org and its remedy) past the stage wrapper:
+ * relabelling them into the fixed per-stage string would hide both.
+ */
+export class SampleCompanyPreconditionError extends SampleCompanyError {
+  override readonly name = "SampleCompanyPreconditionError";
+}
+
+/**
  * Run one provisioning stage, converting any unexpected failure into the
  * stage's named refusal. An already-staged refusal passes through untouched
- * so nested stages cannot relabel each other. The original error is logged
- * with its full detail and retained as `cause`; only the fixed per-stage
- * message ever reaches the API body.
+ * so nested stages cannot relabel each other, as does a precondition refusal
+ * whose specific message names a stranded org and its remedy. Any other
+ * original error is logged with its full detail and retained as `cause`;
+ * only the fixed per-stage message ever reaches the API body.
  */
 export async function runProvisioningStage<T>(
   stage: SampleCompanyProvisioningStage,
@@ -104,6 +116,7 @@ export async function runProvisioningStage<T>(
     return await operation();
   } catch (error) {
     if (error instanceof SampleCompanyProvisioningError) throw error;
+    if (error instanceof SampleCompanyPreconditionError) throw error;
     console.error(`[sample-company] ${stage} stage failed`, error);
     throw new SampleCompanyProvisioningError(stage, { cause: error });
   }

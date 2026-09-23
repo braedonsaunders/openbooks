@@ -32,6 +32,13 @@ export interface CloneOptions {
    * production org configuration captured inside the clone snapshot. Refresh
    * preserves the sandbox's own org row and omits this. */
   initializeOrg?: boolean;
+  /**
+   * Create-only: caller-owned settings keys merged over the captured source
+   * configuration (and over the provisional row), so ownership/provenance the
+   * caller needs for crash recovery survives the authoritative overwrite.
+   * Refresh never carries one.
+   */
+  settingsOverlay?: Record<string, unknown>;
   /** Restrict the copy to these tables (used by refresh to skip the preserved
    * customization layer). Undefined = copy the tier's full set. */
   onlyTables?: Set<string>;
@@ -153,6 +160,7 @@ async function applySandboxOrgConfig(
   sandboxOrgId: string,
   source: SourceOrgConfig,
   masked: boolean,
+  settingsOverlay: Record<string, unknown> = {},
 ): Promise<void> {
   const updated = await db.execute(sql`
     update orgs
@@ -160,7 +168,7 @@ async function applySandboxOrgConfig(
            base_currency = ${source.baseCurrency},
            country = ${source.country},
            tax_ids = ${JSON.stringify(masked ? {} : (source.taxIds ?? {}))}::jsonb,
-           settings = ${JSON.stringify(source.settings)}::jsonb,
+           settings = (${JSON.stringify(source.settings)}::jsonb || ${JSON.stringify(settingsOverlay)}::jsonb),
            updated_at = now()
      where id = ${sandboxOrgId}`);
   if ((updated.rowCount ?? 0) !== 1) {
@@ -345,7 +353,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // leave it marked ready with pre-change settings beside post-change rows.
     if (opts.initializeOrg) {
       const source = await readSourceOrgConfig(opts.productionOrgId);
-      await applySandboxOrgConfig(opts.sandboxOrgId, source, opts.masked);
+      await applySandboxOrgConfig(opts.sandboxOrgId, source, opts.masked, opts.settingsOverlay ?? {});
       sourceSettings = source.settings;
     }
     // As-of trims journal entries past the cutoff but copies every document,
