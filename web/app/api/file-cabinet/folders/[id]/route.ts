@@ -58,9 +58,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (typeof body.isPrivate === 'boolean') patch.isPrivate = body.isPrivate
   if (typeof body.isInactive === 'boolean') patch.isInactive = body.isInactive
   if (Object.keys(patch).length > 0) {
-    const result = await patchFolder(gate.user.orgId, id, patch, gate.user.id, { actorId: gate.user.id })
+    const result = await patchFolder(gate.user.orgId, id, patch, gate.user.id, {
+      actorId: gate.user.id,
+      viewer: fileViewer(gate),
+    })
     if (!result.ok) {
-      const status = result.reason === 'not found' ? 404 : 400
+      const status = result.reason === 'not found' ? 404 : result.reason === 'forbidden' ? 403 : 400
       return NextResponse.json({ error: result.reason }, { status })
     }
   }
@@ -77,13 +80,19 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
   const purge = new URL(req.url).searchParams.get('purge') === '1'
-  const audit = { actorId: gate.user.id }
+  const audit = { actorId: gate.user.id, viewer: fileViewer(gate) }
   const result = purge
     ? await purgeFolder(gate.user.orgId, id, audit)
     : await deleteFolder(gate.user.orgId, id, audit)
   if (!result.ok) {
     const status =
-      result.reason === 'not found' ? 404 : result.reason === 'system' ? 400 : 409
+      result.reason === 'not found'
+        ? 404
+        : result.reason === 'forbidden'
+          ? 403
+          : result.reason === 'system'
+            ? 400
+            : 409
     return NextResponse.json({ error: result.reason }, { status })
   }
   return NextResponse.json({ ok: true })

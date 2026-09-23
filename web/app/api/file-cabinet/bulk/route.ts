@@ -60,7 +60,7 @@ export async function POST(req: Request) {
   const result = await inDbTransaction(async (tx) => {
     let done = 0
     let skipped = 0
-    const audit = { actorId: gate.user.id, executor: tx }
+    const audit = { actorId: gate.user.id, executor: tx, viewer }
 
     if (action === 'move') {
       for (const id of fileIds) {

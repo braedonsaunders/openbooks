@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { replaceFile } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
-import { isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
+import { fileViewer, isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
 
 export const runtime = 'nodejs'
 
@@ -35,7 +35,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     contentType: file.type.split(';')[0]!.trim().toLowerCase(),
     bytes,
     updatedBy: gate.user.id,
-    audit: { actorId: gate.user.id },
+    audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
   })
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })

@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     isPrivate: body.isPrivate === true,
     ownerId: body.isPrivate === true ? gate.user.id : undefined,
     createdBy: gate.user.id,
-    audit: { actorId: gate.user.id },
+    audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
   })
   return NextResponse.json({ id }, { status: 201 })
 }
