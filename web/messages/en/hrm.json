@@ -1741,7 +1741,8 @@
       "expiring": "Expiring",
       "expired": "Expired",
       "revoked": "Revoked",
-      "pending_verification": "Pending verification"
+      "pending_verification": "Pending verification",
+      "not_yet_effective": "Not yet effective"
     },
     "emptyTitle": "No qualifications recorded",
     "emptyDescription": "Record the crew's licenses and certifications to gate dispatch.",
@@ -1755,7 +1756,8 @@
       "qualified": "Qualified",
       "missing": "Missing",
       "expired": "Expired",
-      "pending": "Pending"
+      "pending": "Pending",
+      "not_yet_effective": "Not yet effective"
     },
     "alertsTitle": "Expiry alerts",
     "alertsEmpty": "No alerts fired.",

@@ -56,6 +56,42 @@ test("derived status: stored states pass through or pin", () => {
   );
 });
 
+test("derived status: a verified future-dated credential is not yet effective", () => {
+  // Issued tomorrow, verified today: valid storage must never project
+  // valid (or expiring) before the issue date — the gate would dispatch
+  // on it.
+  assert.equal(
+    projectDerivedStatus({ stored: "valid", expiresOn: "2027-09-21", leadDays: 30, today: "2026-09-21", issuedOn: "2026-09-22" }),
+    "not_yet_effective",
+  );
+  // On the issue date itself it counts.
+  assert.equal(
+    projectDerivedStatus({ stored: "valid", expiresOn: "2027-09-21", leadDays: 30, today: "2026-09-22", issuedOn: "2026-09-22" }),
+    "valid",
+  );
+  // Expiry-window position never rescues a future issue: even inside the
+  // lead window the credential is not yet effective, not expiring.
+  assert.equal(
+    projectDerivedStatus({ stored: "valid", expiresOn: "2026-09-25", leadDays: 30, today: "2026-09-21", issuedOn: "2026-09-22" }),
+    "not_yet_effective",
+  );
+  // Pending and revoked never derive through the issue date: pending
+  // still needs verification first, revoked stays revoked.
+  assert.equal(
+    projectDerivedStatus({ stored: "pending_verification", expiresOn: "2027-09-21", leadDays: 30, today: "2026-09-21", issuedOn: "2026-09-22" }),
+    "pending_verification",
+  );
+  assert.equal(
+    projectDerivedStatus({ stored: "revoked", expiresOn: "2027-09-21", leadDays: 30, today: "2026-09-21", issuedOn: "2026-09-22" }),
+    "revoked",
+  );
+  // Callers that do not know the issue date keep the old projection.
+  assert.equal(
+    projectDerivedStatus({ stored: "valid", expiresOn: "2027-09-21", leadDays: 30, today: "2026-09-21" }),
+    "valid",
+  );
+});
+
 test("month arithmetic clamps month-ends for validity defaults", () => {
   assert.equal(addMonthsUtc("2026-01-31", 1), "2026-02-28");
   assert.equal(addMonthsUtc("2024-01-31", 1), "2024-02-29");

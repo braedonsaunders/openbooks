@@ -142,6 +142,7 @@ const STATUS_VARIANT: Record<DerivedQualificationStatus, QualificationRow['statu
   expired: 'danger',
   revoked: 'default',
   pending_verification: 'info',
+  not_yet_effective: 'info',
 }
 
 async function employmentsForParties(orgId: string, partyIds: string[]): Promise<Map<string, string>> {
@@ -194,6 +195,7 @@ export async function loadQualificationsPage(
     expired: 0,
     revoked: 0,
     pending_verification: 0,
+    not_yet_effective: 0,
   }
   for (const q of all) counts[q.status] += 1
 
@@ -364,7 +366,7 @@ export async function loadQualificationsPage(
     section,
     segmentsLabel: t('qualifications.segmentsLabel'),
     allLabel: t('qualifications.allLabel'),
-    segments: (['all', 'expiring', 'expired', 'pending_verification', 'valid', 'revoked'] as QualificationSegment[]).map(
+    segments: (['all', 'expiring', 'expired', 'pending_verification', 'not_yet_effective', 'valid', 'revoked'] as QualificationSegment[]).map(
       (value) => ({
         value,
         label: value === 'all' ? t('qualifications.allLabel') : statusLabel(t, value),

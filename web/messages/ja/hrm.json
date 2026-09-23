@@ -1683,7 +1683,8 @@
       "expiring": "期限間近",
       "expired": "期限切れ",
       "revoked": "取消済み",
-      "pending_verification": "確認待ち"
+      "pending_verification": "確認待ち",
+      "not_yet_effective": "未発効"
     },
     "emptyTitle": "資格が登録されていません",
     "emptyDescription": "作業員の免許・資格を登録して配置を管理します。",
@@ -1697,7 +1698,8 @@
       "qualified": "充足",
       "missing": "不足",
       "expired": "期限切れ",
-      "pending": "確認待ち"
+      "pending": "確認待ち",
+      "not_yet_effective": "未発効"
     },
     "alertsTitle": "期限アラート",
     "alertsEmpty": "アラートはありません。",

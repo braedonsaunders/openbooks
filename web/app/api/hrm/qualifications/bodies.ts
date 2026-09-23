@@ -80,4 +80,4 @@ export const declareCategoryBody = z.object({
   category: text255,
 });
 
-export const qualificationStatusFilter = z.enum(["valid", "expiring", "expired", "revoked", "pending_verification"]);
+export const qualificationStatusFilter = z.enum(["valid", "expiring", "expired", "revoked", "pending_verification", "not_yet_effective"]);

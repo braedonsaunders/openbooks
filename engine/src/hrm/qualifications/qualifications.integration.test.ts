@@ -418,6 +418,49 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
   });
 });
 
+test("future-issued credentials project not-yet-effective and the gate refuses by name", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Future Hand");
+    const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
+    const today = await businessToday(h.org.orgId);
+    const issued = addDays(today, 1);
+    const projectId = await seedProject(h.org.orgId, "Future Tower");
+    await setRequirement(db, {
+      orgId: h.org.orgId, actorId: h.adminId, subjectKind: "project", subjectId: projectId, typeId, severity: "block",
+    });
+    // Recording a future-dated credential is legitimate (a renewal in hand
+    // early); verifying it attests authenticity, not effectiveness — so
+    // both succeed, and the hole below is what the projection must close.
+    const q = await recordQualification(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
+      typeId, issuedOn: issued, expiresOn: addDays(issued, 300),
+    });
+    await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
+    // The display projection names it: not yet effective, never valid.
+    const listed = await listQualifications(db, { orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId });
+    assert.equal(listed.find((row) => row.id === q.id)?.status, "not_yet_effective");
+    const filtered = await listQualifications(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId, status: "not_yet_effective",
+    });
+    assert.ok(filtered.some((row) => row.id === q.id));
+    // The gate refuses BY NAME before the issue date, naming the date.
+    const early = await checkAssignment(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
+      subjectKind: "project", subjectId: projectId, on: today,
+    });
+    assert.equal(early.ok, false);
+    if (early.ok) throw new Error("expected a blocked verdict");
+    assert.equal(early.blocking[0]?.reason, "not_yet_effective");
+    assert.match(early.blocking[0]?.detail ?? "", new RegExp(issued));
+    // ... and passes on the issue date: time, not data, was the blocker.
+    const onTime = await checkAssignment(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
+      subjectKind: "project", subjectId: projectId, on: issued,
+    });
+    assert.equal(onTime.ok, true);
+  });
+});
+
 test("category vocabulary: undeclared refused, Setup declaration opens it", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     await assert.rejects(

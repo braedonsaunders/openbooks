@@ -1543,7 +1543,7 @@ const automationsStatus: AssistantToolDef = {
 const hrmQualifications: AssistantToolDef = {
   name: "hrm_qualifications",
   description:
-    "Held certifications and licenses: type and category, issuance and expiry, stored status with the live expiring/expired projection, and verification. License numbers stay on the page. Read-only.",
+    "Held certifications and licenses: type and category, issuance and expiry, stored status with the live expiring/expired/not-yet-effective projection, and verification. License numbers stay on the page. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
   feature: "hrmCertifications",
@@ -1552,9 +1552,9 @@ const hrmQualifications: AssistantToolDef = {
     employmentId: uuidInput.optional().describe("Keep only this employment's qualifications"),
     typeId: uuidInput.optional().describe("Keep only this qualification type"),
     status: z
-      .enum(["valid", "revoked", "pending_verification", "expiring", "expired"])
+      .enum(["valid", "revoked", "pending_verification", "expiring", "expired", "not_yet_effective"])
       .optional()
-      .describe("Keep only this read status (expiring/expired are projected at read)"),
+      .describe("Keep only this read status (expiring/expired/not_yet_effective are projected at read)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
@@ -1566,7 +1566,7 @@ const hrmQualifications: AssistantToolDef = {
         actorId: authz.user.id,
         employmentId: a.employmentId,
         typeId: a.typeId,
-        status: a.status as "valid" | "revoked" | "pending_verification" | "expiring" | "expired" | undefined,
+        status: a.status as "valid" | "revoked" | "pending_verification" | "expiring" | "expired" | "not_yet_effective" | undefined,
       });
       return {
         ok: true,
