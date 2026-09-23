@@ -54,7 +54,22 @@ async function main(): Promise<void> {
     if (!sub) throw new Error("legacy-shapes seeder found no subsidiary to seed into");
 
     if (MODE === "refusals") await seedRefusals(client, orgId, sub.id);
-    else await seedLegacy(client, orgId, sub.id);
+    else {
+      // The 0291 scope (and the scheduler tick the assertions drive) admits
+      // only production orgs with Bank Feeds on the Features switchboard.
+      // env_kind defaults to production; bankFeeds defaults off, so the
+      // legacy org opts in here — deep-merged, never clobbering siblings.
+      await client.query(
+        `update public.orgs
+            set settings = coalesce(settings, '{}'::jsonb)
+              || jsonb_build_object('features',
+                   coalesce(settings->'features', '{}'::jsonb)
+                   || '{"bankFeeds": true}'::jsonb)
+          where id = $1`,
+        [orgId],
+      );
+      await seedLegacy(client, orgId, sub.id);
+    }
 
     console.log(JSON.stringify({ orgIds: [orgId] }));
   } finally {
@@ -211,22 +226,47 @@ async function seedLegacy(client: pg.Client, orgId: string, subsidiaryId: string
   await client.query(`update public.projects set name = 'EDGE Tower Renamed' where id = $1`, [project]);
 
   // Active SFTP schedule with no binding configured (the binding column does
-  // not exist pre-0291): 0291.unbound-schedule notice. The watch-folder file
-  // half of U7 is owned by m73's integration test; the rehearsal proves the
-  // schedule pauses with a named notice instead of misattributing.
-  const server = (await client.query<{ id: string }>(
-    `insert into public.sftp_servers (org_id, name, username, root_prefix)
-     values ($1, 'EDGE bank', 'edge', 'edge-inbound') returning id`,
+  // not exist pre-0291): 0291.unbound-schedule notice. The assertions drive
+  // one scheduler tick and stage one identified file, proving the schedule
+  // pauses with a named notice instead of misattributing — so the server is
+  // local-backend (a rehearsal has no S3) and the org holds a recipient
+  // operator (the notice needs an active author, super-admin, or setup
+  // manager; a source install has no users at all). The operator arrives
+  // inactive (an active user must hold an explicit role assignment, 0096
+  // guard), takes the Administrator role, then activates. A source install
+  // seeds the roles; the hash is never used for a login, only the flags.
+  const operator = (await client.query<{ id: string }>(
+    `insert into public.users (org_id, email, name, password_hash, is_super_admin, is_active)
+     values ($1, 'edge-operator@example.invalid', 'EDGE Operator', 'NOT-A-REAL-HASH', true, false)
+     returning id`,
     [orgId],
+  )).rows[0]!.id;
+  const assigned = await client.query(
+    `insert into public.role_assignments (org_id, user_id, role_id)
+     select $1, $2, r.id from public.app_roles r
+      where r.org_id = $1 and r.name = 'Administrator'
+      limit 1`,
+    [orgId, operator],
+  );
+  if (assigned.rowCount !== 1) {
+    throw new Error("legacy-shapes seeder found no Administrator role to assign the EDGE operator");
+  }
+  await client.query(`update public.users set is_active = true where id = $1`, [operator]);
+  // The tick confines every server under sftp/<org_id>/ (assertTenantRootPrefix),
+  // and the local backend roots at $OPENBOOKS_DATA_DIR/sftp.
+  const server = (await client.query<{ id: string }>(
+    `insert into public.sftp_servers (org_id, name, username, backend, root_prefix)
+     values ($1, 'EDGE bank', 'edge', 'local', $2) returning id`,
+    [orgId, `sftp/${orgId}/edge-inbound`],
   )).rows[0]!.id;
   const acct = (await client.query<{ id: string }>(
     `insert into public.accounts (org_id, name, type) values ($1, 'EDGE checking', 'asset') returning id`,
     [orgId],
   )).rows[0]!.id;
   await client.query(
-    `insert into public.sftp_import_schedules (org_id, sftp_server_id, account_id, is_active)
-     values ($1, $2, $3, true)`,
-    [orgId, server, acct],
+    `insert into public.sftp_import_schedules (org_id, sftp_server_id, account_id, is_active, created_by)
+     values ($1, $2, $3, true, $4)`,
+    [orgId, server, acct, operator],
   );
 
   // Document completed under a live-action schedule: 0274 notice. The doc is

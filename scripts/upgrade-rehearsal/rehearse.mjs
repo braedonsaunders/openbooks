@@ -26,6 +26,9 @@
  *                      and row counts are identical before and after
  *   candidate-harness  golden harness (candidate code) on every seeded org and
  *                      every org with posted activity
+ *   assertions         post-upgrade legacy assertions
+ *                      (scripts/upgrade-rehearsal/assertions/<dataset>.mjs,
+ *                      when that file exists; assertions.json)
  *   catalog            the upgraded schema equals a fresh install's
  *
  * Environment:
@@ -394,6 +397,55 @@ async function catalogSnapshot(phase, env) {
   return run(phase, "npx", ["tsx", "scripts/schema-catalog-snapshot.ts"], { cwd: CANDIDATE, env });
 }
 
+/** The post-upgrade assertions script for a dataset, when one exists. */
+export function assertionsFileFor(datasetId) {
+  return join(HERE, "assertions", `${datasetId}.mjs`);
+}
+
+/**
+ * The refusal message for an assertions result, or null when it passes.
+ * Fail closed: a result that is not a non-empty assertions array refuses —
+ * an assertions file that checks nothing must not read as green.
+ */
+export function assertionsRefusal(datasetId, result) {
+  const checks = result?.assertions;
+  if (!Array.isArray(checks) || checks.length === 0) {
+    return `dataset ${datasetId} assertions declared no checks (assertions.json holds no non-empty assertions array)`;
+  }
+  const failed = checks.filter((check) => !check || check.ok !== true);
+  if (failed.length === 0) return null;
+  const names = failed.map((check) => check?.name ?? "(unnamed check)").join(", ");
+  return `dataset ${datasetId} failed ${failed.length} post-upgrade assertion(s): ${names}`;
+}
+
+/**
+ * The assertions phase runs after the candidate harness: legacy handling
+ * that is only observable on the upgraded install (frozen-or-refused
+ * artifacts, paused schedules, provenance rows) is checked by the
+ * dataset's own script on the candidate runtime, with the upgraded
+ * install in OPENBOOKS_DB_URL and the seeded orgs in
+ * UPGRADE_SEEDED_ORGS (JSON array). The script must print a final JSON
+ * line shaped {"assertions": [{"name", "ok", "detail"?}]} and exit 0;
+ * any failed check, or a result that declares no checks, refuses the
+ * rehearsal by name. A dataset with no assertions file skips the phase.
+ */
+async function runAssertionsPhase(datasetId, reportDir, { seededOrgs }) {
+  const file = assertionsFileFor(datasetId);
+  if (!existsSync(file)) return { ran: false, file: null, passed: [], failed: [] };
+  const stdout = await run("assertions", "npx", ["tsx", file], {
+    cwd: CANDIDATE,
+    env: { UPGRADE_SEEDED_ORGS: JSON.stringify(seededOrgs) },
+  });
+  const result = lastJsonLine("assertions", stdout);
+  writeFileSync(join(reportDir, "assertions.json"), `${JSON.stringify(result, null, 2)}\n`);
+  const refusal = assertionsRefusal(datasetId, result);
+  if (refusal) {
+    const failed = (result.assertions ?? []).filter((check) => !check || check.ok !== true);
+    throw new PhaseRefusal("assertions", refusal, { failed });
+  }
+  return { ran: true, file, passed: result.assertions.map((check) => check.name), failed: [] };
+}
+
 async function main() {
   const datasetId = arg("dataset");
   const sourceDir = resolve(arg("source-dir"));
@@ -421,6 +473,7 @@ async function main() {
     seededOrgs: [],
     upgrade: null,
     preflight: null,
+    assertions: null,
     refusals: [],
     ok: false,
   };
@@ -505,6 +558,9 @@ async function main() {
 
     await phase("candidate-harness", () =>
       harness("candidate-harness", CANDIDATE, candidateHarnessOrgIds(report.seededOrgs, after)));
+
+    report.assertions = await phase("assertions", () =>
+      runAssertionsPhase(datasetId, reportDir, { seededOrgs: report.seededOrgs }));
 
     await phase("catalog", async () => {
       const actual = await catalogSnapshot("catalog", {});
