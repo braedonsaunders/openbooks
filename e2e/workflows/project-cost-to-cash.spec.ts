@@ -249,12 +249,12 @@ async function uiAllocateAndPostReceipt(page: Page, payId: string, invNumber: st
   await expect(received).toHaveValue(amount, { timeout: 15000 });
   await drawer.getByRole('button', { name: 'Auto-apply' }).click();
   await expect(drawer.getByText(`Total ${fmtUSD(toCents(amount))}`).first()).toBeVisible({ timeout: 30000 });
-  // Save lives inside the Actions menu in edit mode.
-  await drawer.getByRole('button', { name: 'Actions', exact: true }).click();
+  // In edit mode Save is the drawer's primary header button (UX-18); the
+  // Actions menu is hidden until the drawer returns to view mode.
   const saved = page.waitForResponse(
     (r) => r.url().endsWith(`/api/payments/${payId}`) && r.request().method() === 'PATCH',
   );
-  await page.locator('button', { hasText: /^Save$/ }).click();
+  await drawer.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await saved).status(), 'receipt allocation saved').toBe(200);
   await expect(drawer.getByRole('button', { name: 'Edit', exact: true })).toBeVisible({ timeout: 15000 });
   // The final post goes through the same route with the same body the
