@@ -673,6 +673,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // and then holds one active catch-all per (org, dimension) in storage
     // for every writer including direct SQL.
     "0319_account_group_single_active_catch_all.sql",
+    // Backfills that invent history must certify it instead: 0326 creates
+    // the shared legacy-provenance registry and records the retrospective
+    // rows (pre-versioning rules, backfilled pins, snapshot-less waivers,
+    // inherited retention actions, posted duplicate/negative count lines),
+    // which readers refuse or label by membership.
+    "0326_upgrade_legacy_provenance.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
