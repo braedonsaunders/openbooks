@@ -71,8 +71,8 @@ function connect(key: ssh2.ParsedKey): Promise<ssh2.Client> {
 
 let serverPort = 0;
 
-async function withServer<T>(fn: () => Promise<T>): Promise<T> {
-  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolve() });
+async function withServer<T>(fn: () => Promise<T>, resolver = resolve()): Promise<T> {
+  const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolver });
   serverPort = server.port;
   try {
     return await fn();
@@ -160,6 +160,42 @@ test("SFTP writes honor offsets and preserve bytes when opening without truncati
       client.end();
     }
   });
+});
+
+test("an authorized_keys line that passed validation authenticates a real signed login end to end", async () => {
+  const { validateAuthorizedKeys } = await import("./authorized-keys.ts");
+  const pair = ssh2.utils.generateKeyPairSync("ed25519");
+  if (typeof pair.public !== "string") throw new Error("expected an OpenSSH public key line");
+  // Stored exactly as the creation route stores it: validated, normalized.
+  const stored = validateAuthorizedKeys(`  ${pair.public.trim()}   bank@example.com  \n`).join("\n");
+  const loginKey = ssh2.utils.parseKey(pair.private);
+  if (loginKey instanceof Error) throw loginKey;
+  // The production matcher shape from manager.ts, reading the stored text.
+  const textResolver = {
+    async password() { return null; },
+    async publicKey(_username: string, keyAlgo: string, keyData: Buffer) {
+      for (const line of stored.split("\n")) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) continue;
+        const parsed = ssh2.utils.parseKey(trimmed);
+        if (parsed instanceof Error) continue;
+        if (parsed.type === keyAlgo && parsed.getPublicSSH().equals(keyData)) return config;
+      }
+      return null;
+    },
+  };
+  await withServer(async () => {
+    const client = await connect(loginKey);
+    try {
+      const sftp = await sftpSession(client);
+      const handle = await open(sftp, "validated-login.bin", "w");
+      await write(sftp, handle, Buffer.from("key login works"), 0);
+      await close(sftp, handle);
+      assert.deepEqual(await readFile(sftp, "validated-login.bin"), Buffer.from("key login works"));
+    } finally {
+      client.end();
+    }
+  }, textResolver);
 });
 
 test("SETSTAT and FSETSTAT refuse instead of answering OK for a no-op", async () => {

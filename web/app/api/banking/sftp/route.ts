@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
+import { validateAuthorizedKeys } from '@openbooks/engine/src/sftp/authorized-keys.ts'
 import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/src/sftp/backend.ts'
 import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -67,7 +68,26 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: (e as Error).message }, { status: 400 })
     }
   }
-  const authorizedKeys = body.authorizedKeys?.trim() || null
+  // Key material is validated BEFORE any insert: every non-comment line must
+  // parse as a public key or the save is refused naming the bad lines, and a
+  // supplied but empty key set is refused instead of silently degrading to a
+  // password-only login. What is stored is the normalized form.
+  let authorizedKeys: string | null = null
+  if (body.authorizedKeys !== undefined && body.authorizedKeys !== null) {
+    let lines: string[]
+    try {
+      lines = validateAuthorizedKeys(String(body.authorizedKeys))
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 400 })
+    }
+    if (lines.length === 0) {
+      return NextResponse.json(
+        { error: 'authorizedKeys was supplied but contains no public keys — add one key per line or omit the field for a password-only login' },
+        { status: 400 },
+      )
+    }
+    authorizedKeys = lines.join('\n')
+  }
   type Created = SftpServerAuditRow & { id: string }
   let created: Created | null = null
   let username = ''
