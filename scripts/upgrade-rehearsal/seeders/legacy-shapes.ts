@@ -92,7 +92,7 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
     [orgId],
   )).rows[0]!.id;
 
-  // Duplicate subjects on a DRAFT count: 0293.duplicate-subject refuse.
+  // Duplicate subjects on a DRAFT count: 0293.duplicate_subject refuse.
   const draft = (await client.query<{ id: string }>(
     `insert into public.stock_counts (org_id, location_id, subsidiary_id, status, counted_on, memo)
      values ($1, $2, $3, 'draft', '2026-01-15', 'EDGE dup')
@@ -106,8 +106,9 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
     [orgId, draft, item, sloc],
   );
 
-  // Negatives on their own DRAFT count with the fixed ids the
-  // 0299 remedy file restores to their documented true values (7 and 0).
+  // Negatives on their own DRAFT count. Fixed ids are kept for stability
+  // and discoverability; the 0299 remedy takes the delete-and-recount
+  // branch for draft counts holding negatives.
   const negCount = (await client.query<{ id: string }>(
     `insert into public.stock_counts (org_id, location_id, subsidiary_id, status, counted_on, memo)
      values ($1, $2, $3, 'draft', '2026-01-16', 'EDGE neg')
@@ -130,8 +131,8 @@ async function seedRefusals(client: pg.Client, orgId: string, subsidiaryId: stri
     [orgId],
   );
   // Malformed payrollRemittance markers: impossible date, mis-dashed uuid,
-  // and a marker missing its required fields. 0296.malformed-remittance-marker
-  // refuse. The remedy file corrects these exact ids.
+  // and a marker missing its required fields. 0296.malformed_remittance_marker
+  // refuse. The remedy file strips the tag from exactly these bills.
   await client.query(
     `insert into public.documents
        (id, org_id, kind, document_number, document_date, currency, custom)
