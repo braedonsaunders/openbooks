@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import net from "node:net";
 import test from "node:test";
 import {
   ensureSftpServer,
   hostKeyFingerprint,
   loadDaemonConfig,
+  revokeSftpSessions,
   sftpListenerState,
   stopSftpServer,
   type DaemonConfig,
@@ -182,6 +184,14 @@ test("a first-load that loses the insert advertises the persisted host key, not 
     hostKey: storedWinner.host_key,
     advertisedHost: storedWinner.advertised_host,
   });
+});
+
+test("revoking sessions with no listener running is a silent no-op", () => {
+  // The PATCH/DELETE routes call this after every revocation commit; it must
+  // never throw the request — not even when this process holds no listener.
+  // (The per-operation fence is the authority; this is only the hurry.)
+  assert.equal(sftpListenerState().listening, false);
+  revokeSftpSessions(randomUUID());
 });
 
 test("a first-load that cannot observe a persisted row after a lost insert fails closed", async () => {

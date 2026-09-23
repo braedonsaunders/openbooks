@@ -3,7 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { once } from "node:events";
 import ssh2 from "ssh2";
+import type { SessionLiveness, SftpResolver, SftpServerConfig } from "./server.ts";
 
 // The local SFTP backend reads its data root from the engine env snapshot.
 // Set a throwaway root before loading the server module, just like the other
@@ -69,11 +71,46 @@ function connect(key: ssh2.ParsedKey): Promise<ssh2.Client> {
   });
 }
 
+function connectPassword(username: string, password: string): Promise<ssh2.Client> {
+  return new Promise((resolveClient, reject) => {
+    const client = new ssh2.Client();
+    let settled = false;
+    client.on("error", (error) => {
+      if (!settled) {
+        settled = true;
+        reject(error);
+      }
+    });
+    client.once("ready", () => {
+      settled = true;
+      resolveClient(client);
+    });
+    client.connect({ host: "127.0.0.1", port: serverPort, username, password, hostVerifier: () => true });
+  });
+}
+
+/** A resolver whose liveness the test flips, standing in for the DB fence. */
+function livelyResolver() {
+  let live: SessionLiveness = { alive: true };
+  const resolver: SftpResolver = {
+    async password(username: string, _password: string): Promise<SftpServerConfig | null> {
+      return username === config.username ? { ...config } : null;
+    },
+    async checkSession(_config: SftpServerConfig): Promise<SessionLiveness> {
+      return live;
+    },
+  };
+  return {
+    resolver,
+    kill: (reason: string) => { live = { alive: false, reason }; },
+  };
+}
+
 let serverPort = 0;
 
 async function withServer<T>(
   fn: () => Promise<T>,
-  resolver = resolve(),
+  resolver: SftpResolver = resolve(),
   limits?: { maxFileBytes?: number; maxOpenHandles?: number; maxSessionBufferBytes?: number },
 ): Promise<T> {
   const server = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: resolver, limits });
@@ -112,6 +149,18 @@ function close(sftp: ssh2.SFTPWrapper, handle: Buffer): Promise<void> {
 function readFile(sftp: ssh2.SFTPWrapper, path: string): Promise<Buffer> {
   return new Promise((resolveFile, reject) => {
     sftp.readFile(path, (error, data) => error ? reject(error) : resolveFile(data));
+  });
+}
+
+function readChunk(sftp: ssh2.SFTPWrapper, handle: Buffer, offset: number, length: number): Promise<Buffer> {
+  return new Promise((resolveRead, reject) => {
+    sftp.read(handle, Buffer.alloc(length), 0, length, offset, (error, _bytes, data) => error ? reject(error) : resolveRead(data));
+  });
+}
+
+function opendir(sftp: ssh2.SFTPWrapper, path: string): Promise<Buffer> {
+  return new Promise((resolveDir, reject) => {
+    sftp.opendir(path, (error, handle) => error ? reject(error) : resolveDir(handle));
   });
 }
 
@@ -335,6 +384,106 @@ test("session limit env overrides apply, and garbage never disables a cap", () =
     else process.env.SFTP_MAX_OPEN_HANDLES = saved.handles;
     if (saved.session === undefined) delete process.env.SFTP_MAX_SESSION_BUFFER_BYTES;
     else process.env.SFTP_MAX_SESSION_BUFFER_BYTES = saved.session;
+  }
+});
+
+test("a held connection can no longer read or write once the login is disabled", async () => {
+  const lively = livelyResolver();
+  await withServer(async () => {
+    const clients: ssh2.Client[] = [];
+    const freshSftp = async (): Promise<ssh2.SFTPWrapper> => {
+      // A refused operation ends the connection, so every post-revocation
+      // probe reconnects: each operation class below is fenced on its own.
+      const client = await connectPassword(config.username, "test-password");
+      clients.push(client);
+      return sftpSession(client);
+    };
+    try {
+      // While alive, reads and writes work. The reader and the resume-writer
+      // below stay open across the revocation: the fence must stop their
+      // next operation too, not just fresh OPENs.
+      const setup = await freshSftp();
+      const writer = await open(setup, "held.txt", "w");
+      await write(setup, writer, Buffer.from("before"), 0);
+      await close(setup, writer);
+      const reader = await open(setup, "held.txt", "r");
+      assert.deepEqual(await readChunk(setup, reader, 0, 6), Buffer.from("before"));
+      const resumer = await open(setup, "held.txt", "r+");
+
+      lively.kill("sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect");
+
+      // RED before the fix: the config was cached for the whole connection,
+      // so every one of these succeeded after the disable.
+      await assert.rejects(open(await freshSftp(), "held.txt", "r"), /is disabled/);
+      await assert.rejects(write(await freshSftp(), resumer, Buffer.from("after"), 0), /is disabled/);
+      await assert.rejects(readChunk(await freshSftp(), reader, 0, 6), /is disabled/);
+      await assert.rejects(opendir(await freshSftp(), "/"), /is disabled/);
+    } finally {
+      for (const client of clients) client.end();
+    }
+  }, lively.resolver);
+});
+
+test("a held connection can no longer read or write after credential rotation", async () => {
+  const lively = livelyResolver();
+  await withServer(async () => {
+    const clients: ssh2.Client[] = [];
+    const freshSftp = async (): Promise<ssh2.SFTPWrapper> => {
+      const client = await connectPassword(config.username, "test-password");
+      clients.push(client);
+      return sftpSession(client);
+    };
+    try {
+      const setup = await freshSftp();
+      const writer = await open(setup, "rotated.txt", "w");
+      await write(setup, writer, Buffer.from("before"), 0);
+
+      lively.kill("sftp login 'sftp-test' credentials changed — reconnect with the current password or key");
+
+      await assert.rejects(write(await freshSftp(), writer, Buffer.from("after"), 0), /credentials changed/);
+      await assert.rejects(open(await freshSftp(), "rotated.txt", "r"), /credentials changed/);
+    } finally {
+      for (const client of clients) client.end();
+    }
+  }, lively.resolver);
+});
+
+test("revoke ends only the revoked server's live sessions", async () => {
+  const serverA: SftpServerConfig = { ...config, id: "server-a", username: "login-a" };
+  const serverB: SftpServerConfig = { ...config, id: "server-b", username: "login-b" };
+  const both: SftpResolver = {
+    async password(username: string, _password: string) {
+      if (username === "login-a") return serverA;
+      if (username === "login-b") return serverB;
+      return null;
+    },
+  };
+  const handle = await startSftpServer({ port: 0, hostKey: generateHostKey(), resolve: both });
+  serverPort = handle.port;
+  const clientA = await connectPassword("login-a", "pw");
+  const clientB = await connectPassword("login-b", "pw");
+  try {
+    const sftpA = await sftpSession(clientA);
+    const sftpB = await sftpSession(clientB);
+    const dirA = await opendir(sftpA, "/");
+    await close(sftpA, dirA);
+
+    handle.revoke("server-a");
+    // The revoked login's connection ends promptly. (No SFTP operation is
+    // issued on it afterwards: ssh2 never settles a request sent on an
+    // already-dead channel, so the disconnect itself is the assertion.)
+    await once(clientA, "close");
+
+    // ...while the other login on the same listener is untouched.
+    const dirB = await opendir(sftpB, "/");
+    await close(sftpB, dirB);
+
+    // Unknown ids are a no-op, never a throw.
+    handle.revoke("no-such-server");
+  } finally {
+    clientA.end();
+    clientB.end();
+    await handle.close();
   }
 });
 
