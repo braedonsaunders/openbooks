@@ -16,7 +16,13 @@ import { can, getAuthz } from '../../../../lib/authz'
 import { getOrgAiConfig } from '../../../../lib/assistant/ai-config'
 import { AIDisabledError, getModel } from '../../../../lib/assistant/client'
 import { orgInfo } from '../../../../lib/data'
-import { recordFeedbackFiledAudit } from '../../../../lib/feedback/audit'
+import {
+  createIntentFirstPublisher,
+  feedbackAuditPendingMessage,
+  FeedbackFilingRefusedError,
+  feedbackFilingRefusedMessage,
+  recordFeedbackFiledAudit,
+} from '../../../../lib/feedback/audit'
 import { feedbackDenyList, getFeedbackRuntime } from '../../../../lib/feedback/config'
 import { feedbackGithubRequest } from '../../../../lib/feedback/github'
 import { createFeedbackKnowledge } from '../../../../lib/feedback/knowledge'
@@ -103,25 +109,64 @@ export async function POST(req: Request): Promise<Response> {
   })
   // Withholding `searchOpen` is how the operator's "search open issues first"
   // switch is enforced — the model cannot reach a capability it was not given.
-  const publisher: IssuePublisher = destination.searchDuplicates
+  const searchScoped: IssuePublisher = destination.searchDuplicates
     ? github
     : { create: (draft) => github.create(draft) }
+  // One report id for the whole turn: the intent row and its completion row
+  // share it, so an intent with no completion sibling is pending work — never
+  // a silent success.
+  const reportId = randomUUID()
+  const refusal: { error: FeedbackFilingRefusedError | null } = { error: null }
+  // The intent row lands BEFORE the wrapped publisher files anything. If the
+  // intent cannot be written the wrapper throws and nothing is published.
+  const publisher = createIntentFirstPublisher(
+    searchScoped,
+    {
+      orgId,
+      actorId: userId,
+      reportId,
+      owner: destination.owner,
+      repo: destination.repo,
+      pathname: context.pathname,
+      refusal,
+    },
+  )
   const knowledge = createFeedbackKnowledge()
 
+  /** A computed refusal the package may have swallowed — raised here instead. */
+  function raisedRefusal(result: FeedbackTurnResult): Response | null {
+    if (refusal.error && result.kind === 'unavailable') {
+      return Response.json(
+        { kind: 'unavailable', message: feedbackFilingRefusedMessage() },
+        { status: 503 },
+      )
+    }
+    return null
+  }
+
   async function finish(result: FeedbackTurnResult): Promise<Response> {
+    const swallowed = raisedRefusal(result)
+    if (swallowed) return swallowed
     if (result.kind === 'filed') {
       try {
         await recordFeedbackFiledAudit({
           orgId,
           actorId: userId,
-          reportId: randomUUID(),
+          reportId,
           result,
           pathname: context.pathname,
         })
       } catch (error) {
         // The issue is already public; losing the evidence write must not
-        // also lose the person's answer, but it must be loud.
+        // also lose the person's answer — but it must not read as a clean
+        // filing either. The intent row is durable and reconcilable, and the
+        // reporter is told exactly that (including the issue link, and not to
+        // re-file).
         console.error('[feedback/turn] failed to record audit evidence', error)
+        return Response.json({
+          kind: 'unavailable',
+          message: feedbackAuditPendingMessage(result.issue),
+        })
       }
     }
     return Response.json(result)
