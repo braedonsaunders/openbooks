@@ -8,6 +8,7 @@ import {
   OfferActionsIsland,
   OfferCreateIsland,
   OfferSigningIsland,
+  RequisitionLifecycleIsland,
   PoolRediscoverIsland,
   PoolMemberRemoveIsland,
   PostingActionsIsland,
@@ -125,6 +126,15 @@ export interface RequisitionDrawerData {
   /** HR-21 "Draft from evidence" link for the description (job_description kind). */
   draft: { href: string; label: string } | null
   labels: DrawerLabels
+  /**
+   * Lifecycle controls (open/hold/resume/cancel) as the status allows.
+   * canManage mirrors the hrm.recruiting.manage grant the PATCH endpoint
+   * enforces — display gating only; the server owns audit and SoD.
+   */
+  lifecycle: {
+    canManage: boolean
+    labels: { title: string; open: string; hold: string; resume: string; cancel: string; reason: string; failed: string }
+  }
   candidateOptions: Option[]
   employeeOptions: Option[]
   kindOptions: Option[]
@@ -202,6 +212,12 @@ export function RequisitionDrawerBody({ detail }: { detail: RequisitionDrawerDat
           </p>
         ) : null}
       </div>
+      <RequisitionLifecycleIsland
+        requisitionId={detail.id}
+        status={detail.status}
+        canManage={detail.lifecycle.canManage}
+        labels={detail.lifecycle.labels}
+      />
       {detail.description || detail.draft ? (
         <div>
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.description}</h4>

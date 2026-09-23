@@ -613,6 +613,15 @@
       "submit": "Anfrage erstellen",
       "failed": "Die Anfrage konnte nicht erstellt werden."
     },
+    "lifecycle": {
+      "title": "Lebenszyklus",
+      "open": "Öffnen",
+      "hold": "Pausieren",
+      "resume": "Fortsetzen",
+      "cancel": "Anfrage abbrechen",
+      "reasonLabel": "Grund",
+      "failed": "Der Anfragestatus konnte nicht geändert werden."
+    },
     "attach": {
       "title": "Kandidat zuordnen",
       "name": "Kandidatenname",

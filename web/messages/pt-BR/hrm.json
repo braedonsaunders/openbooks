@@ -613,6 +613,15 @@
       "submit": "Criar requisição",
       "failed": "Não foi possível criar a requisição."
     },
+    "lifecycle": {
+      "title": "Ciclo de vida",
+      "open": "Abrir",
+      "hold": "Pausar",
+      "resume": "Retomar",
+      "cancel": "Cancelar requisição",
+      "reasonLabel": "Motivo",
+      "failed": "Não foi possível alterar o status da requisição."
+    },
     "attach": {
       "title": "Vincular um candidato",
       "name": "Nome",
