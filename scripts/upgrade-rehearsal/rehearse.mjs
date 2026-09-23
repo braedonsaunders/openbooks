@@ -329,7 +329,7 @@ async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedg
       `the refused bootstrap changed _applied_migrations: ${ledgerDrift.join(", ") || "rows removed"}`,
     );
   }
-  const after = await withClient(dbUrl, snapshotLedger);
+  const after = await withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) }));
   const differences = compareSnapshots(before, after);
   if (differences.length > 0) {
     throw new PhaseRefusal("preflight", `the refused bootstrap moved the ledger fingerprint: ${differences.length} difference(s)`);
@@ -421,6 +421,19 @@ async function main() {
     report.preflight = await phase("preflight", () =>
       runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }));
 
+    // Remedies change data on purpose, and an operator runs them BEFORE
+    // upgrading. From here the parity baseline is the remedied install, and
+    // the source harness proves the remedies left it clean, so the upgrade is
+    // judged only on what the upgrade itself did.
+    let baseline = before;
+    if ((dataset.remedies ?? []).length > 0) {
+      baseline = await phase("snapshot-after-remedies", () =>
+        withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
+      writeFileSync(join(reportDir, "ledger-after-remedies.json"), `${JSON.stringify(baseline, null, 2)}\n`);
+      await phase("source-harness-after-remedies", () =>
+        harness("source-harness-after-remedies", sourceDir, report.seededOrgs));
+    }
+
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
     report.upgrade.pending = candidateMigrationFilenames().filter((file) => !sourceLedger.includes(file));
     report.upgrade.migrations.sort((left, right) => right.seconds - left.seconds);
@@ -440,10 +453,10 @@ async function main() {
     });
 
     const after = await phase("snapshot-after", () =>
-      withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
+      withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(baseline) })));
     writeFileSync(join(reportDir, "ledger-after.json"), `${JSON.stringify(after, null, 2)}\n`);
     await phase("ledger-parity", async () => {
-      const differences = compareSnapshots(before, after);
+      const differences = compareSnapshots(baseline, after);
       if (differences.length > 0) {
         report.refusals.push(...differences.slice(0, 200));
         throw new PhaseRefusal("ledger-parity", `${differences.length} ledger difference(s) across the upgrade`);
