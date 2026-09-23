@@ -1408,19 +1408,18 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   },
   {
     filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
-    from: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
-    to: "84fe8ca15877116d6f7cb221907a13c2163a1f38f13019afa85962ec80912498",
+    from: "84fe8ca15877116d6f7cb221907a13c2163a1f38f13019afa85962ec80912498",
+    to: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
     strategy: "reapply",
     reason:
-      "divergent-line reconciliation (0079/0080 precedent): the tax-nexus shard line "
-      + "published 0265 with the documents ship-to snapshot appended (ship_to_country / "
-      + "ship_to_region DDL plus an evidence-only backfill limited to untouched rows), "
-      + "while main still publishes the filings-only bytes. A ledger recorded at the "
-      + "shard-line digest already has the snapshot columns; re-running main's current "
-      + "body re-applies the filings DDL (all IF NOT EXISTS) and its NULL-guarded "
-      + "backfill idempotently, and moves the recorded identity back to the published "
-      + "one. When the shard's snapshot half lands on main as its own corrective "
-      + "revision, this entry's to must advance with it.",
+      "corrective revision 97609eae (tax-nexus shard) appends the documents ship-to "
+      + "snapshot to the filings-only 0265: ship_to_country / ship_to_region DDL (both "
+      + "IF NOT EXISTS) plus an evidence-only backfill from first-line provider-quote "
+      + "destinations, limited to untouched rows so a kernel stamp is never overwritten. "
+      + "A database recorded at the filings-only 84fe8ca1 that re-runs the current body "
+      + "gains the snapshot columns and backfill idempotently; the filings DDL is all "
+      + "IF NOT EXISTS and its backfill NULL-guarded. Reapply, not restamp: the revision "
+      + "adds real schema the old state lacks.",
   },
 ];
 
