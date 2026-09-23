@@ -99,14 +99,22 @@ export async function loadFlowSubjectSubsidiary(
  * Map an engine GateError onto an HTTP status. The engine throws one error
  * class with human-readable messages; the route pre-checks catch the common
  * cases (404 missing, 409 already decided) so this mapping only has to cover
- * races and authorization.
+ * races, authorization, and atomic decision failures.
  */
 export function gateErrorResponse(e: unknown): NextResponse {
-  // An atomic decision failure (any post-flip stage, including release) is a
-  // server-side defect with the cause and the remedy in the message
-  // (decision NOT recorded, gate still pending) — a 500 with that body
-  // intact, never a success and never a bare 'internal error'.
+  // An atomic decision failure (any post-flip stage, including release)
+  // records NOTHING — the gate stays pending and the message carries the
+  // cause with its remedy, so it is never a success and never a bare
+  // 'internal error'. A retryable failure is a data condition (a domain
+  // refusal from the release adapter, e.g. the approver's missing person
+  // link): 422 with the message intact — 409 when the cause names stale
+  // state, reusing the markers below. Only a non-retryable failure is a
+  // defect in the decide path, and only that stays a 500.
   if (e instanceof DecisionFailedError) {
+    if (e.retryable) {
+      const status = /already resolved|only a pending/.test(e.message) ? 409 : 422
+      return NextResponse.json({ error: e.message }, { status })
+    }
     console.error('[flows] approval decision failed:', e)
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
