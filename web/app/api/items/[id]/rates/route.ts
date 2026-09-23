@@ -207,7 +207,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
            where org_id = ${gate.user.orgId} and version_id = ${previousVersion.rows[0].id}
              and item_id <> ${id}
         `)
+        // Pins travel with the lines they describe: every other item keeps
+        // the policy it was saved with, exactly like its tiers.
+        await tx.execute(sql`
+          insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
+          select org_id, ${version.rows[0]!.id}, item_id, base_unit, pricing_policy, invoice_presentation, ${gate.user.id}, ${gate.user.id}
+            from item_rate_version_profiles
+           where org_id = ${gate.user.orgId} and version_id = ${previousVersion.rows[0].id}
+             and item_id <> ${id}
+        `)
       }
+      // The saved item's behavior is pinned to this version. The profile row
+      // above keeps only the defaults for future versions; resolution reads
+      // this pin, so a later policy switch cannot reprice this version.
+      await tx.execute(sql`
+        insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
+        values (${gate.user.orgId}, ${version.rows[0]!.id}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
+      `)
       let sort = 0
       for (const tier of tiers) {
         await tx.execute(sql`

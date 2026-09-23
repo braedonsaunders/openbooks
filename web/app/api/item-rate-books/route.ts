@@ -220,6 +220,14 @@ export async function POST(request: Request) {
               where item_rate_profiles.org_id = ${gate.user.orgId}
             returning id`)
           if (profile.rows.length !== 1) throw new Error('An item rate profile was not saved. Reload the rate book and try again.')
+          // Pin this item's behavior to the new version. The profile row
+          // above keeps only the defaults for future versions; resolution
+          // reads this pin, so a later policy switch cannot reprice it.
+          const pinned = await tx.execute(sql`
+            insert into item_rate_version_profiles (org_id, version_id, item_id, base_unit, pricing_policy, invoice_presentation, created_by, updated_by)
+            values (${gate.user.orgId}, ${version.id}, ${line.itemId}, ${line.baseUnit}, ${line.pricingPolicy}, ${line.invoicePresentation}, ${gate.user.id}, ${gate.user.id})
+            returning id`)
+          if (pinned.rows.length !== 1) throw new Error('An item rate profile pin was not saved. Reload the rate book and try again.')
           seenProfiles.add(line.itemId)
         }
         const inserted = await tx.execute(sql`
