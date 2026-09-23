@@ -17,7 +17,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
@@ -77,7 +77,9 @@ export async function loadClockPage(): Promise<ClockPageData> {
   const authz = await requirePermission('time.clock')
   await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
-  return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText)
+  return loadClockPageData(authz.user.orgId, authz.user.id, t as unknown as ClockText, {
+    canManageSetup: can(authz, 'time.manage'),
+  })
 }
 
 /**
@@ -92,6 +94,7 @@ export async function loadClockPageData(
   orgId: string,
   userId: string,
   t: ClockText,
+  opts: { canManageSetup?: boolean } = {},
 ): Promise<ClockPageData> {
   const tabs = [
     { href: '/timesheets', label: t('field.timesheetsTab'), active: false },
@@ -104,7 +107,17 @@ export async function loadClockPageData(
     tabs,
   }
   const outcome = await loadOrRefuse(() => clockBody(orgId, userId, t), {
-    refusals: [{ error: FieldTimeError, code: 'no_employee_link' }],
+    refusals: [
+      { error: FieldTimeError, code: 'no_employee_link' },
+      // Field time switched on before its rules were declared: the engine
+      // names the setup remedy, and a caller who may configure it gets the
+      // link (time.manage, the setup page's own permission).
+      {
+        error: FieldTimeError,
+        code: 'field_time_not_configured',
+        ...(opts.canManageSetup ? { action: { href: '/time/setup', label: t('field.openSetup') } } : {}),
+      },
+    ],
     title: t('field.title'),
   })
   if (outcome.ok) return { ...base, ...outcome.data, refusal: null }
@@ -222,6 +235,9 @@ export function clockSpec(data: ClockPageData): PageSpec {
         {
           title: data.refusal?.title ?? '',
           description: data.refusal?.message,
+          ...(data.refusal?.action
+            ? { action: 'link-button', actionProps: { href: data.refusal.action.href, label: data.refusal.action.label } }
+            : {}),
         },
         f('refusal'),
       ),

@@ -14,9 +14,17 @@ import 'server-only'
  * engine's own words into the page state is safe.
  */
 
+/** Where the refusal's remedy is performed, when the caller may go there. */
+export interface RefusalAction {
+  href: string
+  label: string
+}
+
 export interface PageRefusal {
   title: string
   message: string
+  /** The remedy's destination (for example the setup page), if any. */
+  action?: RefusalAction
 }
 
 export interface KnownRefusal {
@@ -29,6 +37,8 @@ export interface KnownRefusal {
    * refusal from the same call still throws.
    */
   messageIncludes?: string
+  /** Link to the remedy, rendered beside the refusal (omit when the caller cannot act). */
+  action?: RefusalAction
 }
 
 export type LoadOutcome<T> = { ok: true; data: T } | { ok: false; refusal: PageRefusal }
@@ -51,7 +61,11 @@ export async function loadOrRefuse<T>(
       ) {
         return {
           ok: false,
-          refusal: { title: opts.title, message: e instanceof Error ? e.message : String(e) },
+          refusal: {
+            title: opts.title,
+            message: e instanceof Error ? e.message : String(e),
+            ...(known.action ? { action: known.action } : {}),
+          },
         }
       }
     }

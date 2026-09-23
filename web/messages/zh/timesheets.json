@@ -83,6 +83,7 @@
     "timesheetsTab": "工时单",
     "clockTab": "打卡",
     "crewTab": "班组",
+    "openSetup": "打开工时表设置",
     "geoHint": "已声明项目围栏时将核对您的位置。围栏外的位置也会记录，并标记给审批人。",
     "clockIn": "上班打卡",
     "clockOut": "下班打卡",

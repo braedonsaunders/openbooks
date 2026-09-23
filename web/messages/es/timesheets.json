@@ -83,6 +83,7 @@
     "timesheetsTab": "Partes",
     "clockTab": "Fichar",
     "crewTab": "Cuadrilla",
+    "openSetup": "Abrir la configuración de partes de horas",
     "geoHint": "Tu ubicación se compara con la geocerca del proyecto cuando existe. Un punto fuera se registra igualmente y se marca para quien aprueba.",
     "clockIn": "Fichar entrada",
     "clockOut": "Fichar salida",

@@ -83,6 +83,7 @@
     "timesheetsTab": "Stundenzettel",
     "clockTab": "Stempeln",
     "crewTab": "Team",
+    "openSetup": "Zeiterfassungs-Einrichtung öffnen",
     "geoHint": "Dein Standort wird mit dem Projekt-Geofence abgeglichen, falls einer hinterlegt ist. Ein Fix außerhalb wird trotzdem erfasst und dem Genehmiger markiert.",
     "clockIn": "Einstempeln",
     "clockOut": "Ausstempeln",
