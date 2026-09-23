@@ -155,7 +155,9 @@
       "rowDescriptionRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Beschreibung – bitte ergänzen oder die Zeile leeren.",
       "computeFailed": "Die Abgrenzung konnte nicht berechnet werden.",
       "rowAmountRequiredPermanent": "Zeile {row} der permanenten Differenzen braucht einen Betrag – bitte ergänzen oder die Beschreibung entfernen.",
-      "rowDifferenceRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Differenz – bitte ergänzen oder die Beschreibung entfernen."
+      "rowDifferenceRequiredTemporary": "Zeile {row} der temporären Differenzen braucht eine Differenz – bitte ergänzen oder die Beschreibung entfernen.",
+      "rowObjectRequiredPermanent": "Zeile {row} der permanenten Differenzen muss eine gültige Zeile mit Beschreibung und Betrag sein – bitte korrigieren und erneut versuchen.",
+      "rowObjectRequiredTemporary": "Zeile {row} der temporären Differenzen muss eine gültige Zeile mit Beschreibung, Kategorie und Differenz sein – bitte korrigieren und erneut versuchen."
     },
     "detail": {
       "title": "Abgrenzung {year} · v{version}",

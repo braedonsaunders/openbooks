@@ -199,6 +199,28 @@ test("a described row with an empty amount refuses by row in translated copy", a
   }
 });
 
+test("a non-object grid element refusal renders in translated copy naming the row", async () => {
+  const restore = installFetch();
+  globalThis.__provisionPostStatus = {
+    status: 400,
+    body: { error: "permanentDifferences[0]: each row must be an object with description and amount" },
+  };
+  const dialog = await mountDialog();
+  try {
+    await click(buttonsNamed("Compute")[0]!);
+    assert.equal(globalThis.__provisionPosts!.length, 1);
+    const alert = document.querySelector('[role="alert"]');
+    assert.equal(
+      alert?.textContent,
+      "Permanent differences row 1 must be a grid row with a description and an amount \u2014 fix the line and try again.",
+    );
+    assert.equal(globalThis.__provisionPushed!.length, 0);
+  } finally {
+    await dialog.unmount();
+    restore();
+  }
+});
+
 test("grid rows travel unfiltered and a valid grid with a pristine trailing row still saves", async () => {
   const restore = installFetch();
   globalThis.__provisionPostStatus = { status: 201, body: { runId: "run-9" } };
