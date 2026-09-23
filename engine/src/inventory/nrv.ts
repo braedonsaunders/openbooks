@@ -6,7 +6,8 @@ import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, mul, normalizeMoney, roundDiv, toUnits } from "../money/money.ts";
-import { getOnHandForEntity, lockInventoryPosition } from "./position.ts";
+import { getOnHandForEntity, lockInventoryPosition, primaryBookId } from "./position.ts";
+import { InventoryError } from "./contracts.ts";
 import { inventoryOffsetAccountProblem, postInventoryEntry, stockLocationDim } from "./journal.ts";
 import { orgReportingFramework, type ReportingFramework } from "../platform/reporting-framework.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -235,14 +236,22 @@ async function postingContext(
   // (default calendar, deterministic), outside the book/currency lookup.
   const period = await resolveCoveringPeriod(tx, orgId, date);
   if (!period) throw new InventoryNrvError(`no accounting period covers ${date}`);
-  const r = (await tx.execute<{ book_id: string | null; currency: string | null }>(sql`
-    select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
-           (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
+  // The book is the shared primary-posting-book rule (is_primary AND
+  // is_active AND posts_gl), reused from position.ts — never a local copy —
+  // so a writedown refuses exactly where receipts and issues refuse.
+  let bookId: string;
+  try {
+    bookId = await primaryBookId(orgId, tx);
+  } catch (error) {
+    if (error instanceof InventoryError) throw new InventoryNrvError(error.message);
+    throw error;
+  }
+  const r = (await tx.execute<{ currency: string | null }>(sql`
+    select base_currency as currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}
   `));
   const row = r.rows[0];
-  if (!row?.book_id) throw new InventoryNrvError("no primary accounting book");
-  if (!row.currency) throw new InventoryNrvError("subsidiary not found");
-  return { bookId: row.book_id, periodId: period.id, currency: row.currency };
+  if (!row?.currency) throw new InventoryNrvError("subsidiary not found");
+  return { bookId, periodId: period.id, currency: row.currency };
 }
 
 export interface NrvWritedownInput {
