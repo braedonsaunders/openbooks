@@ -27,7 +27,7 @@ export async function loadEquipment(id: string, orgId: string) {
         left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
         where jl.equipment_unit_id = ${id} and jl.org_id = ${orgId} and je.org_id = ${orgId} and je.status in ('posted', 'reversed')
-          and a.type in ('expense','expense_other','cogs') and coalesce(d.kind, '') <> 'project_charge' and jl.amount > 0), 0) as direct_costs,
+          and a.type in ('expense','expense_other','cogs') and coalesce(d.kind, '') <> 'project_charge'), 0) as direct_costs,
       coalesce((select sum(dsl.posted_amount) from equipment_units eu
         join depreciation_schedules ds on ds.asset_id = eu.fixed_asset_id and ds.org_id = eu.org_id
         join depreciation_schedule_lines dsl on dsl.schedule_id = ds.id and dsl.org_id = ds.org_id
