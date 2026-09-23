@@ -1,7 +1,12 @@
 {
   "database": {
     "budget": 0,
-    "reason": "The database partition HAS a database, so every `{ skip: !DB }` guard resolves to run. Measured 0 skipped across 314 tests in shard 1/16. A skip here means the DB wiring broke and the shard reported green having executed nothing — the exact hole that let a fixture violating an alpha-3 baseline constraint reach main."
+    "reason": "The database partition HAS a database, so every DB-gated skip guard resolves to run. A skip whose reason is not declared below means the wiring broke and the shard reported green having executed nothing: the exact hole that let a fixture violating an alpha-3 baseline constraint reach main. Measured across all 16 shards of CI run 35805321083 (9af6ddc91): 5 skips, every one declared below.",
+    "declared": {
+      "database user cannot disable enforcement triggers for the probe session": "KNOWN HOLE, not a design choice. engine/src/harness/scenario-kernel-mirror.integration.test.ts must SET session_replication_role (superuser) to simulate a non-enforcing kernel, and CI's constrained runtime role cannot, so the unbalanced-entry probe has never run in CI. Routed to the fleet coordinator 2026-09-22 to run the probe on the admin connection. Delete this entry when it runs.",
+      "annual settlement needs a December 2026 pay period to have begun": "Wall-clock gate in engine/src/payroll/annual-settlement-run.integration.test.ts (3 tests). They run by themselves from 2026-12-02, unreviewed on that day. Routed 2026-09-22 to pin the clock instead. Delete this entry when they no longer read the wall clock.",
+      "IE PRSI-boundary scenario needs pay periods through 2026-11-15 to have begun": "Wall-clock gate in engine/src/payroll/ie/filings.integration.test.ts. It runs by itself from 2026-11-15. Routed 2026-09-22 to pin the clock instead. Delete this entry when it no longer reads the wall clock."
+    }
   },
   "unit": {
     "budget": 2,
