@@ -72,6 +72,14 @@ test("subsidiary cash views attribute manual and formula categories", { skip: !p
         org.orgId, 4, SETTINGS, org.date, [branchId], null, false,
       );
       assert.deepEqual(ids(narrowed), ["cat-branch", "cat-formula", "cat-orgwide"]);
+      // The attribution picker offers exactly the caller's visible
+      // subsidiaries: the restricted caller sees only their branch (the UI
+      // cannot point a category somewhere the writer cannot see), while the
+      // unrestricted caller sees the whole org tree.
+      const optionIds = (position: { subsidiaryOptions: Array<{ id: string }> }) =>
+        position.subsidiaryOptions.map((s) => s.id).sort();
+      assert.deepEqual(optionIds(restricted), [branchId]);
+      assert.deepEqual(optionIds(consolidated), [org.subsidiaryId, branchId].sort());
     });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));

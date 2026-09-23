@@ -129,6 +129,7 @@ export async function loadBankingCash(
     apSettings,
     vendorOptions: [],
     accountOptions: [],
+    subsidiaryOptions: [],
   }
   const data = position
     ? { ...position, weeks: withoutWeekEntries(position.weeks) }

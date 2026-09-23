@@ -85,10 +85,13 @@ function MultiPick({
 export function CategoryManager({
   vendorOptions,
   accountOptions,
+  subsidiaryOptions = [],
   initialCategories = [],
 }: {
   vendorOptions: CatOption[]
   accountOptions: AccountOption[]
+  /** Subsidiaries the caller may see — the manual/formula attribution picker. Empty = no subsidiary UI. */
+  subsidiaryOptions?: CatOption[]
   initialCategories?: ForecastCategory[]
 }) {
   const router = useRouter()
@@ -345,31 +348,49 @@ export function CategoryManager({
               </div>
             </>
           ) : draft.method === 'manual_recurring' ? (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>{tForm('amount')}</label>
-                <input type="number" min={0} step="0.0001" value={draft.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} className={numCls} />
+            <>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>{tForm('amount')}</label>
+                  <input type="number" min={0} step="0.0001" value={draft.amount ?? ''} onChange={(e) => set({ amount: e.target.value })} className={numCls} />
+                </div>
+                <div>
+                  <label className={labelCls}>{tForm('frequency')}</label>
+                  <Select value={draft.frequency ?? 'weekly'} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} triggerClassName="h-8 text-sm">
+                    <option value="weekly">{tForm('frequencyWeekly')}</option>
+                    <option value="biweekly">{tForm('frequencyBiweekly')}</option>
+                    <option value="monthly">{tForm('frequencyMonthly')}</option>
+                  </Select>
+                </div>
+                <div>
+                  <label className={labelCls}>{tForm('anchorDate')}</label>
+                  <input type="date" value={draft.anchorDate ?? ''} onChange={(e) => set({ anchorDate: e.target.value || undefined })} className={inputCls} />
+                  <span className={helpCls}>{tForm('anchorDateHelp')}</span>
+                </div>
               </div>
-              <div>
-                <label className={labelCls}>{tForm('frequency')}</label>
-                <Select value={draft.frequency ?? 'weekly'} onChange={(e) => set({ frequency: e.target.value as ForecastCategory['frequency'] })} triggerClassName="h-8 text-sm">
-                  <option value="weekly">{tForm('frequencyWeekly')}</option>
-                  <option value="biweekly">{tForm('frequencyBiweekly')}</option>
-                  <option value="monthly">{tForm('frequencyMonthly')}</option>
-                </Select>
-              </div>
-              <div>
-                <label className={labelCls}>{tForm('anchorDate')}</label>
-                <input type="date" value={draft.anchorDate ?? ''} onChange={(e) => set({ anchorDate: e.target.value || undefined })} className={inputCls} />
-                <span className={helpCls}>{tForm('anchorDateHelp')}</span>
-              </div>
-            </div>
+              {subsidiaryOptions.length ? (
+                <div>
+                  <label className={labelCls}>{tForm('subsidiaries')}</label>
+                  <MultiPick options={subsidiaryOptions.map((s) => ({ id: s.id, label: s.name }))} selected={draft.subsidiaryIds ?? []} onChange={(subsidiaryIds) => set({ subsidiaryIds })} placeholder={tForm('searchSubsidiaries')} />
+                  <span className={helpCls}>{tForm('subsidiariesHelp')}</span>
+                </div>
+              ) : null}
+            </>
           ) : draft.method === 'formula_expression' ? (
-            <div>
-              <label className={labelCls}>{tForm('formula')}</label>
-              <textarea rows={4} value={draft.formula ?? ''} onChange={(e) => set({ formula: e.target.value })} placeholder="{AR_IN} * 0.02 + IF({IS_MONTH_END}, 5000, 0)" className={cn(inputCls, 'h-auto py-1.5 font-mono text-xs')} />
-              <span className={helpCls}>{t('formulaHelp', { vars: FORMULA_VARS, funcs: FORMULA_FUNCS })}</span>
-            </div>
+            <>
+              <div>
+                <label className={labelCls}>{tForm('formula')}</label>
+                <textarea rows={4} value={draft.formula ?? ''} onChange={(e) => set({ formula: e.target.value })} placeholder="{AR_IN} * 0.02 + IF({IS_MONTH_END}, 5000, 0)" className={cn(inputCls, 'h-auto py-1.5 font-mono text-xs')} />
+                <span className={helpCls}>{t('formulaHelp', { vars: FORMULA_VARS, funcs: FORMULA_FUNCS })}</span>
+              </div>
+              {subsidiaryOptions.length ? (
+                <div>
+                  <label className={labelCls}>{tForm('subsidiaries')}</label>
+                  <MultiPick options={subsidiaryOptions.map((s) => ({ id: s.id, label: s.name }))} selected={draft.subsidiaryIds ?? []} onChange={(subsidiaryIds) => set({ subsidiaryIds })} placeholder={tForm('searchSubsidiaries')} />
+                  <span className={helpCls}>{tForm('subsidiariesHelp')}</span>
+                </div>
+              ) : null}
+            </>
           ) : draft.method === 'bank_register_history' ? (
             <>
               <div>

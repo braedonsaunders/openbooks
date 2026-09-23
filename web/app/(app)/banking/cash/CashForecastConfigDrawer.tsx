@@ -28,6 +28,7 @@ export function CashForecastConfigDrawer({
   restrictToSafe,
   vendorOptions,
   accountOptions,
+  subsidiaryOptions,
   initialCategories,
 }: {
   onClose: () => void
@@ -41,6 +42,7 @@ export function CashForecastConfigDrawer({
   restrictToSafe: boolean
   vendorOptions: CatOption[]
   accountOptions: AccountOption[]
+  subsidiaryOptions: CatOption[]
   initialCategories?: ForecastCategory[]
 }) {
   const { money } = useMoney()
@@ -56,7 +58,7 @@ export function CashForecastConfigDrawer({
   return (
     <Drawer open onClose={onClose} size="xl" title={title} description={description} bodyClassName="overflow-y-auto">
       <div className="space-y-5">
-        <CategoryManager vendorOptions={vendorOptions} accountOptions={accountOptions} initialCategories={initialCategories} />
+        <CategoryManager vendorOptions={vendorOptions} accountOptions={accountOptions} subsidiaryOptions={subsidiaryOptions} initialCategories={initialCategories} />
 
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Panel title="Forecast Model" icon={SlidersHorizontal} bodyClassName="p-0">

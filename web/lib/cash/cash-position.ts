@@ -179,6 +179,11 @@ export interface CashPosition {
   vendorOptions: { id: string; name: string }[];
   /** All postable accounts with their type — the editor filters GL / card / bank. */
   accountOptions: { id: string; number: string | null; name: string; type: string }[];
+  /** Subsidiaries the CALLER may see (their allowed set, active and
+   * non-elimination) — the editor's attribution picker. Restricted callers
+   * receive only their own scope, so attribution can never point a category
+   * at a subsidiary the writer cannot see (the API re-checks on save). */
+  subsidiaryOptions: { id: string; name: string }[];
 }
 
 /**
@@ -223,7 +228,7 @@ export async function cashPosition(
   const asOfIso = await resolveAsOf(orgId, asOfDate);
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
-  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
+  const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows, subsidiaryRows] = await Promise.all([
     openItems(orgId, "ar", asOfIso, subIds),
     openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso, subIds),
@@ -251,6 +256,15 @@ export async function cashPosition(
              ${vendorDocScope(visible, includeNullSubsidiary === true)}
         )
       order by 2
+    `),
+    // Attribution picker scope: the caller's own allowed set (not the
+    // narrowed view — attributing beyond the current view is legitimate),
+    // active non-elimination subsidiaries, like the report picker.
+    db.execute<{ id: string; name: string }>(sql`
+      select s.id, s.name from subsidiaries s
+      where s.org_id = ${orgId} and s.is_active and not s.is_elimination
+        ${subsidiaryVisibleFilter(sql`s.id`, allowedSubsidiaryIds)}
+      order by s.name
     `),
   ]);
 
@@ -325,5 +339,6 @@ export async function cashPosition(
     apSettings: { ...apSettings, weeklyCap: normalizeMoneyValue(apSettings.weeklyCap) },
     vendorOptions: vendorRows.rows.map((v) => ({ id: v.id, name: v.name })),
     accountOptions: accountRows.rows.map((a) => ({ id: a.id, number: a.number ?? null, name: a.name, type: a.type })),
+    subsidiaryOptions: subsidiaryRows.rows.map((s) => ({ id: s.id, name: s.name })),
   };
 }
