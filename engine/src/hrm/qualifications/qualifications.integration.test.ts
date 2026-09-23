@@ -696,6 +696,70 @@ test("dispatch gate refuses ambiguous employments and wrong-entity rows by name"
   });
 });
 
+test("dispatch gate answers for the task's project, even for shared-pool resources", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Pool Hand");
+    const typeId = await seedType(h.org.orgId, h.adminId);
+    const today = await businessToday(h.org.orgId);
+    const gatedProject = await seedProject(h.org.orgId, "Gated Tower");
+    const openProject = await seedProject(h.org.orgId, "Open Field");
+    await setRequirement(db, {
+      orgId: h.org.orgId, actorId: h.adminId, subjectKind: "project", subjectId: gatedProject, typeId, severity: "block",
+    });
+    const seedTask = async (projectId: string): Promise<string> => {
+      const taskId = randomUUID();
+      await db.execute(sql`
+        insert into project_tasks (id, org_id, project_id, name)
+        values (${taskId}, ${h.org.orgId}, ${projectId}, 'Foundation pour')
+      `);
+      return taskId;
+    };
+    const gatedTask = await seedTask(gatedProject);
+    const sharedId = randomUUID();
+    await db.execute(sql`
+      insert into schedule_resources (id, org_id, project_id, name, kind, party_id)
+      values (${sharedId}, ${h.org.orgId}, null, 'Pool Hand', 'crew', ${worker.partyId})
+    `);
+    // The shared-pool resource on a gated task is gated against THAT
+    // project — previously it passed through because its own project_id
+    // is null.
+    const gated = await gateScheduleAssignment(db, {
+      orgId: h.org.orgId, actorId: h.adminId, resourceId: sharedId, taskId: gatedTask, on: today,
+    });
+    assert.equal(gated.gated, true);
+    assert.equal(gated.employmentId, worker.employmentId);
+    assert.equal(gated.verdict.ok, false);
+    if (gated.verdict.ok) throw new Error("expected a blocked verdict");
+    assert.equal(gated.verdict.blocking[0]?.reason, "missing");
+    // Without a task the shared resource still passes through (no scope
+    // to gate against); a resource scoped to this project gates as before.
+    const unscoped = await gateScheduleAssignment(db, { orgId: h.org.orgId, actorId: h.adminId, resourceId: sharedId, on: today });
+    assert.equal(unscoped.gated, false);
+    const scopedId = await seedResource(h.org.orgId, gatedProject, worker.partyId, "Tower Hand");
+    const scoped = await gateScheduleAssignment(db, {
+      orgId: h.org.orgId, actorId: h.adminId, resourceId: scopedId, taskId: gatedTask, on: today,
+    });
+    assert.equal(scoped.gated, true);
+    assert.equal(scoped.verdict.ok, false);
+    // A resource scoped to ANOTHER project than the task refuses instead
+    // of gating the wrong project's requirements.
+    const foreignId = await seedResource(h.org.orgId, openProject, worker.partyId, "Field Hand");
+    await assert.rejects(
+      gateScheduleAssignment(db, {
+        orgId: h.org.orgId, actorId: h.adminId, resourceId: foreignId, taskId: gatedTask, on: today,
+      }),
+      /belongs to another project/,
+    );
+    // A task outside this org refuses instead of gating a phantom.
+    await assert.rejects(
+      gateScheduleAssignment(db, {
+        orgId: h.org.orgId, actorId: h.adminId, resourceId: sharedId, taskId: randomUUID(), on: today,
+      }),
+      /not found in this organization/,
+    );
+  });
+});
+
 test("dispatch gate: feature-off never calls the gate, resourceless rows pass through", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "Bypass Hand");
