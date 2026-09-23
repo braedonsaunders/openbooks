@@ -588,3 +588,187 @@ test(
     }
   },
 );
+
+/**
+ * PA1: postDocument is atomic by default, whatever the caller does. The
+ * prepare phase used to run outside the posting transaction: an UNWRAPPED
+ * direct call (the expenses actions route `post` branch, payment acceptance)
+ * committed the before_post script's document mutation, and a later
+ * period/GL refusal rolled back only the journal work — leaving the approved
+ * document mutated by a post that never happened. postDocument now opens the
+ * transaction itself when the caller has none, so this case exercises the
+ * unwrapped call shape: scoped (withOrgContext) but deliberately NOT wrapped
+ * in withOrgTransaction.
+ */
+test(
+  "an unwrapped direct post rolls its script mutation back with a refused commit",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Expense poster", "admin"),
+      );
+      const employeePayable = randomUUID();
+      const employeeReceivable = randomUUID();
+      const employeeId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${employeePayable}, ${org.orgId}, '2110', 'Employee Reimbursements Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${employeeReceivable}, ${org.orgId}, '1400', 'Employee Advances', 'asset_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+        await db.execute(sql`
+          update orgs
+             set settings = jsonb_set(
+               jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,employeePayable}', to_jsonb(${employeePayable}::text), true),
+               '{controlAccounts,employeeReceivable}', to_jsonb(${employeeReceivable}::text), true)
+           where id = ${org.orgId}`);
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${employeeId}, ${org.orgId}, 'employee', 'Avery Approver', true, '{}'::jsonb)`);
+        await db.execute(sql`
+          insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${org.orgId}, ${employeeId})`);
+        await db.execute(sql`
+          update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true')
+           where id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into user_scripts
+            (org_id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
+          values (
+            ${org.orgId}, 'stamp memo', 'before_post', 'expense_report',
+            ${'function main(ctx) { return { set: { memo: "scripted-memo" } }; }'},
+            2000, 100, true
+          )
+        `);
+      });
+      const deps = {
+        control: {
+          ar: org.accounts.ar,
+          ap: org.accounts.ap,
+          bank: org.accounts.bank,
+          employeePayable,
+          employeeReceivable,
+        },
+      };
+
+      const documentId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, document_date, party_id, subsidiary_id,
+             currency, subtotal, tax_total, total, custom, created_by)
+          values (
+            ${documentId}, ${org.orgId}, 'expense_report', 'draft', 'EXP-ATOMIC-1',
+            ${org.date}, ${employeeId}, ${org.subsidiaryId},
+            'CAD', '42.00', '0', '42.00', '{}'::jsonb, ${actorId}
+          )
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, description,
+             amount, quantity, unit_price, tax_amount, settlement_type)
+          values
+            (${org.orgId}, ${documentId}, 1, ${org.accounts.cogs},
+             'Mileage', '42.00', '1', '42.00', '0', 'out_of_pocket')
+        `);
+        await db.execute(sql`
+          update documents set status = 'approved'
+           where id = ${documentId} and org_id = ${org.orgId}
+        `);
+        await db.execute(sql`
+          insert into period_locks
+            (org_id, period_id, book_id, subsidiary_id, module, state,
+             locked_at, locked_by, reason, created_by, updated_by)
+          values (
+            ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId},
+            'gl', 'closed', now(), ${actorId}, 'Unwrapped atomicity probe',
+            ${actorId}, ${actorId}
+          )
+        `);
+      });
+
+      // No withOrgTransaction: the post must still refuse AND leave the
+      // script's memo mutation, the status, and the evidence behind.
+      await assert.rejects(
+        withOrgContext(org.orgId, () =>
+          postDocument(documentId, deps, { deferEffects: true }),
+        ),
+        /period .*closed|closed.*period/i,
+      );
+      const rolledBack = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          memo: string | null;
+          custom: Record<string, unknown>;
+          script_runs: number;
+          entry_count: number;
+        }>(sql`
+          select d.status, d.memo, d.custom,
+                 (select count(*)::int from script_runs r
+                   where r.target_id = ${documentId}) as script_runs,
+                 (select count(*)::int from journal_entries
+                   where source_document_id = ${documentId}) as entry_count
+            from documents d where d.id = ${documentId}
+        `)),
+      );
+      assert.deepEqual(
+        rolledBack.rows[0],
+        {
+          status: "approved",
+          memo: null,
+          custom: {},
+          script_runs: 0,
+          entry_count: 0,
+        },
+        "the refused unwrapped post must not leave the script mutation or its evidence behind",
+      );
+
+      // Reopen the period so the commit side can post — still unwrapped, with
+      // effects: the mutation commits WITH the posting, exactly once.
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          delete from period_locks
+           where org_id = ${org.orgId} and reason = 'Unwrapped atomicity probe'
+        `);
+      });
+      const entryId = await withOrgContext(org.orgId, () =>
+        postDocument(documentId, deps, { audit: { actorId, source: "test" } }),
+      );
+      assert.ok(entryId);
+      const committed = await withOrgContext(org.orgId, async () =>
+        (await db.execute<{
+          status: string;
+          memo: string | null;
+          script_runs: number;
+          entry_count: number;
+          effects: string;
+        }>(sql`
+          select d.status, d.memo,
+                 (select count(*)::int from script_runs r
+                   where r.target_id = ${documentId}) as script_runs,
+                 (select count(*)::int from journal_entries
+                   where source_document_id = ${documentId}) as entry_count,
+                 (select status from posting_effects
+                   where document_id = ${documentId}) as effects
+            from documents d where d.id = ${documentId}
+        `)),
+      );
+      assert.deepEqual(
+        committed.rows[0],
+        {
+          status: "posted",
+          memo: "scripted-memo",
+          script_runs: 1,
+          entry_count: 1,
+          effects: "succeeded",
+        },
+        "a committed unwrapped post carries the script mutation, one entry, and drained effects",
+      );
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
