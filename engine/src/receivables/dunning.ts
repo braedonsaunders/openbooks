@@ -3,7 +3,7 @@ import { db, withBypass, withOrg } from "../platform/db.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { documentBalanceDueLateral } from "../records/balance-due.ts";
 import { cmp } from "../money/money.ts";
-import { enqueueFlowEmail } from "../scheduling/outbox.ts";
+import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../scheduling/outbox.ts";
 
 /**
  * Dunning — automated collections over the AR subledger. For each active policy
@@ -13,15 +13,21 @@ import { enqueueFlowEmail } from "../scheduling/outbox.ts";
  * and fires the single highest un-fired ladder stage whose offset the document
  * has crossed, on that stage's exact configured day. Firing opens a 'staged'
  * claim row in dunning_log and defers one reminder email through the durable
- * scheduler_outbox; both ride this org's single transaction, so the send is
- * atomic with the claim, and the unique (document, stage) index arbitrates
+ * scheduler_outbox; both ride this org's single transaction, so the deferral
+ * is atomic with the claim, and the unique (document, stage) index arbitrates
  * concurrent ticks onto the one row — re-running the scheduler never
- * double-sends. The send attempt then moves the claim to its outcome (sent,
- * failed, or suppressed when the customer has no billing email), and a later
- * tick re-arms failed and suppressed claims back to staged for retry once
- * the cause is fixed. 'sent' rows are terminal delivery evidence; the
- * storage guard (dunning_log_guard) refuses every other transition, so the
- * log reconciles exactly with what the customer was sent.
+ * double-sends. Queueing is not delivery: the claim stays 'staged' after a
+ * successful deferral, and the email worker moves it to its outcome from the
+ * provider's verdict (acceptance → sent, rejection → failed, uncertainty →
+ * stays staged). A deferral that throws settles the claim to 'failed'
+ * in-tick; an unsendable notice (no billing email) settles to 'suppressed'.
+ * A later tick re-arms failed and suppressed claims back to staged for retry
+ * once the cause is fixed, each round deferring under a FRESH occurrence key
+ * so the retry never collapses onto a dead outbox row; a staged claim older
+ * than the outbox retry horizon is abandoned and re-armed by name. 'sent'
+ * rows are terminal delivery evidence; the storage guard (dunning_log_guard)
+ * refuses every other transition, so the log reconciles exactly with what
+ * the customer was sent — never with what was merely queued.
  *
  * Collections never touches the ledger — it is a communications layer, so it
  * lives outside the posting kernel entirely.
@@ -130,9 +136,32 @@ function daysBetween(fromIso: string, toIsoDate: string): number {
 
 export interface DunningRunResult {
   scanned: number;
+  /**
+   * Letters this tick accepted into the durable scheduler_outbox. Each one's
+   * claim stays 'staged' until the email worker records the provider's
+   * verdict — this counts queued letters, not delivered ones. Only the
+   * dunning_log claim, settled asynchronously, says what the customer got.
+   */
   sent: number;
   failed: number;
   notices: { documentId: string; stageId: string; toEmail: string | null; status: string }[];
+}
+
+/**
+ * A staged claim is abandoned when no delivery outcome can still be in
+ * flight: its age exceeds the outbox's worst-case drain horizon, so its
+ * letter's outbox row is terminal or long dead and the worker will never
+ * settle it. An unreadable timestamp fails closed (not abandoned) with a
+ * warning rather than re-sending on no evidence.
+ */
+function isAbandonedStagedClaim(updatedAt: Date | string | null): boolean {
+  if (!updatedAt) return false;
+  const claimedAt = new Date(updatedAt).getTime();
+  if (Number.isNaN(claimedAt)) {
+    console.warn(`[dunning] staged claim carries an unreadable updated_at — leaving it staged`);
+    return false;
+  }
+  return Date.now() - claimedAt > SCHEDULER_OUTBOX_RETRY_HORIZON_MS;
 }
 
 /**
@@ -321,9 +350,14 @@ async function runDunningInternal(
             returning id
           `);
           let claimId = claimed.rows[0]?.id;
+          // Fresh claims defer under the rung's base identity; every re-arm
+          // rotates the key with its own re-arm time, so a retry never
+          // collapses onto a dead outbox row from an earlier round and
+          // reports delivery without sending anything.
+          let occurrenceKey = `dunning:${doc.id}:${stage.id}`;
           if (!claimId) {
-            const existing = (await db.execute<{ id: string; status: string }>(sql`
-              select id, status from dunning_log
+            const existing = (await db.execute<{ id: string; status: string; updatedAt: Date | string }>(sql`
+              select id, status, updated_at as "updatedAt" from dunning_log
                where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
             `)).rows[0];
             if (!existing) {
@@ -338,25 +372,47 @@ async function runDunningInternal(
               // Terminal delivery evidence (or settled history): never re-fire.
               continue;
             }
-            if (existing.status === "staged") {
-              // A rival tick owns this rung right now: its transaction will
-              // settle the claim (commit or roll back together with its
-              // deferral). Leave it alone; this tick contributes nothing.
+            if (existing.status === "staged" && !isAbandonedStagedClaim(existing.updatedAt)) {
+              // A rival tick owns this rung right now: its deferred letter is
+              // still awaiting the email worker's verdict. Leave it alone;
+              // this tick contributes nothing.
               console.warn(
                 `[dunning] ${doc.documentNumber} stage ${stage.id} is claimed by an in-flight tick — skipping`,
               );
               continue;
             }
-            // A failed or suppressed claim from an earlier tick: re-arm it for
-            // this attempt, refreshing the evidence to the retry's inputs
-            // (the customer may have gained a billing email since). The guard
-            // admits exactly this transition and refuses every other one.
-            const rearmed = await db.execute<{ id: string }>(sql`
+            // Re-arm this attempt: a failed or suppressed claim from an
+            // earlier tick, or a staged claim abandoned past the outbox retry
+            // horizon (its letter's outbox row is terminal or long dead, so
+            // the worker will never settle it). Either way the evidence is
+            // refreshed to the retry's inputs (the customer may have gained
+            // a billing email since); the abandonment names itself on the
+            // re-armed row as the audit trail. The guard admits exactly
+            // these transitions and refuses every other one.
+            const rearmNote =
+              existing.status === "staged"
+                ? `staged claim abandoned: no email-worker delivery outcome within the outbox retry horizon; re-armed for retry`
+                : null;
+            if (existing.status === "staged") {
+              // Hop through failed so the guard sees only legal transitions —
+              // staged rows are never updated in place.
+              const abandoned = await db.execute<{ id: string }>(sql`
+                update dunning_log set status = 'failed', detail = ${rearmNote}, updated_at = now()
+                 where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
+                 returning id
+              `);
+              if (!abandoned.rows[0]) {
+                throw new Error(
+                  `[dunning] ${doc.documentNumber} stage ${stage.id} abandonment matched zero rows — refusing to send unclaimed`,
+                );
+              }
+            }
+            const rearmed = await db.execute<{ id: string; updatedAt: Date | string }>(sql`
               update dunning_log
-                 set status = 'staged', detail = null, party_id = ${doc.partyId}, to_email = ${to},
-                     amount_due = ${doc.balanceDue}, currency_code = ${doc.currency}
-               where id = ${existing.id} and org_id = ${orgId}
-               returning id
+                 set status = 'staged', detail = ${rearmNote}, party_id = ${doc.partyId}, to_email = ${to},
+                     amount_due = ${doc.balanceDue}, currency_code = ${doc.currency}, updated_at = now()
+               where id = ${existing.id} and org_id = ${orgId} and status in ('failed', 'suppressed')
+               returning id, updated_at as "updatedAt"
             `);
             claimId = rearmed.rows[0]?.id;
             if (!claimId) {
@@ -364,15 +420,17 @@ async function runDunningInternal(
                 `[dunning] ${doc.documentNumber} stage ${stage.id} re-arm matched zero rows — refusing to send unclaimed`,
               );
             }
+            occurrenceKey = `dunning:${doc.id}:${stage.id}:${new Date(rearmed.rows[0]!.updatedAt).getTime()}`;
           }
 
-          // Move the claim to its outcome. Every path below settles the row
-          // it opened: a committed 'staged' row is never left behind, so a
-          // later tick always finds either terminal evidence or a claim worth
-          // re-arming. The update names its row back — a write matching zero
-          // rows is a failure, never a reported send.
+          // In-tick outcomes for claims that never reach the worker: only a
+          // deferral that throws ('failed') and an unsendable notice
+          // ('suppressed'). A successfully deferred letter stays 'staged' —
+          // the email worker alone moves it to its outcome from the
+          // provider's verdict. The update names its row back — a write
+          // matching zero rows is a failure, never a reported outcome.
           const settleClaim = async (
-            status: "sent" | "failed" | "suppressed",
+            status: "failed" | "suppressed",
             detail: string | null,
           ): Promise<void> => {
             const moved = await db.execute<{ id: string }>(sql`
@@ -399,23 +457,24 @@ async function runDunningInternal(
             // Defer through the durable outbox instead of handing the letter
             // straight to Redis. The deferral insert rides THIS org's pinned
             // transaction, so it commits — or rolls back — together with the
-            // claim's outcome above. A direct BullMQ enqueue commits outside
+            // staged claim above. A direct BullMQ enqueue commits outside
             // Postgres: a crash or a later statement error in this tick left
             // mail queued against a claim that no longer existed, and the
             // next tick fired the same rung again — the customer got the
             // letter twice. subject_id carries the document id for operator
-            // traceability; the deterministic occurrence key is this rung's
-            // identity, so a replayed tick collapses onto one row.
+            // traceability; the occurrence key is this round's identity, so a
+            // replayed tick collapses onto one row, and meta carries the
+            // claim id the email worker settles from the provider verdict.
             const deferred = await enqueueFlowEmail({
               orgId,
               runId: doc.id,
-              occurrenceKey: `dunning:${doc.id}:${stage.id}`,
+              occurrenceKey,
               payload: {
                 to: [to],
                 subject,
                 html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
                 text: body,
-                meta: { category: "dunning" },
+                meta: { category: "dunning", dunningLogId: claimId },
                 // The policy's configured reply-to; absent means the org's
                 // default transport reply-to. An empty string is not an
                 // address — it must not reach the payload.
@@ -423,25 +482,29 @@ async function runDunningInternal(
               },
             });
             if (!deferred) {
-              // A prior deferral owns this rung's delivery (the deterministic
-              // occurrence key collided): the pair is complete without us, so
-              // the claim settles sent and this tick counts nothing twice.
-              await settleClaim("sent", null);
+              // A rival deferral owns this round's delivery under our key:
+              // the letter is already durable, so the claim stays staged for
+              // the worker's verdict and this tick counts nothing twice.
+              console.warn(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} deferral already owned — leaving staged`,
+              );
               continue;
             }
           } catch (e) {
             // A transient queue or validation failure is evidence, not an
             // empty slot: the failed claim stays queryable, stays out of the
-            // fired set (only 'sent' fires), and re-arms on a later tick.
+            // fired set (only 'sent' fires), and re-arms on a later tick
+            // under a fresh occurrence key.
             await settleClaim("failed", e instanceof Error ? e.message : String(e));
             result.failed += 1;
             result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "failed" });
             continue;
           }
 
-          await settleClaim("sent", null);
+          // Deferred, not delivered: the claim stays staged for the email
+          // worker's verdict, and this tick counts the queued letter.
           result.sent += 1;
-          result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "sent" });
+          result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "staged" });
         }
       }
     });

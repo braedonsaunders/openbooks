@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
+  SCHEDULER_OUTBOX_RETRY_HORIZON_MS,
+  STALE_SCHEDULER_OUTBOX_MS,
   deliverFlowEmail,
   parseFlowEmailPayload,
   schedulerOutboxBackoffMs,
@@ -17,6 +19,18 @@ test("scheduler outbox backoff doubles then caps at one hour", () => {
   assert.equal(schedulerOutboxBackoffMs(2), 120_000);
   assert.equal(schedulerOutboxBackoffMs(3), 240_000);
   assert.equal(schedulerOutboxBackoffMs(MAX_SCHEDULER_OUTBOX_ATTEMPTS), 60 * 60_000);
+});
+
+test("the retry horizon covers the full outbox drain budget", () => {
+  // Independently written literals (not a recomputation through
+  // schedulerOutboxBackoffMs): the stale-lock window plus each of the eight
+  // capped backoffs — about 3.3 hours. A dunning claim staged longer than
+  // this can never still be awaiting its letter, so the runner re-arms it.
+  // Changing the backoff shape must consciously re-pin this number.
+  const expected =
+    STALE_SCHEDULER_OUTBOX_MS +
+    (60_000 + 120_000 + 240_000 + 480_000 + 960_000 + 1_920_000 + 3_600_000 + 3_600_000);
+  assert.equal(SCHEDULER_OUTBOX_RETRY_HORIZON_MS, expected);
 });
 
 test("terminal failures are stamped durably on the poison row itself", () => {

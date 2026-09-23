@@ -39,6 +39,8 @@ export type EmailJobData = {
     reportDeliveryId?: string
     /** Payment remittance row completed by the email worker after provider acceptance. */
     paymentRemittanceId?: string
+    /** Dunning claim row settled by the email worker from the provider verdict. */
+    dunningLogId?: string
   }
 }
 

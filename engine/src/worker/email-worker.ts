@@ -13,6 +13,8 @@ import {
   markEmailSent,
   markEmailSuppressed,
   markEmailUncertain,
+  markDunningClaimFailed,
+  markDunningClaimSent,
   markPaymentRemittanceAttempt,
   markPaymentRemittanceFailed,
   markPaymentRemittanceSent,
@@ -59,6 +61,31 @@ export function createEmailWorker(): Worker<EmailJobData> {
       return await withOrgContext(d.orgId, async () => {
       const reportDeliveryId = d.meta?.reportDeliveryId;
       const paymentRemittanceId = d.meta?.paymentRemittanceId;
+      // A dunning letter's claim id travels in the outbox payload meta (the
+      // runner stamps it at deferral). The runner leaves the claim 'staged';
+      // the worker below is the only writer that settles it, from the
+      // provider's verdict — acceptance moves staged→sent, an exhausted
+      // rejection moves staged→failed, and uncertainty leaves it staged.
+      const dunningClaimId =
+        typeof d.meta?.dunningLogId === "string" && d.meta.dunningLogId.trim()
+          ? d.meta.dunningLogId
+          : null;
+      // Each settle is a guarded staged-only UPDATE naming its row back. A
+      // false return (row missing, already settled, or re-armed by a later
+      // dunning tick) is logged as a failure — never thrown (the email_log
+      // verdict above already stands) and never a silent success.
+      const settleDunningClaim = async (outcome: "sent" | "failed", detail: string | null): Promise<void> => {
+        if (!dunningClaimId) return;
+        const settled =
+          outcome === "sent"
+            ? await markDunningClaimSent(d.orgId, dunningClaimId)
+            : await markDunningClaimFailed(d.orgId, dunningClaimId, detail ?? "email delivery failed");
+        if (!settled) {
+          console.error(
+            `[worker] dunning claim ${dunningClaimId} was not marked ${outcome} — confirming the row exists and is still staged before treating the verdict as recorded`,
+          );
+        }
+      };
       const queueAttempt = job.attemptsMade + 1;
       // Staged attachment bytes are dropped once the delivery reaches a
       // terminal state. Best-effort by design: a failed delete must never
@@ -112,6 +139,10 @@ export function createEmailWorker(): Worker<EmailJobData> {
         if (reportDeliveryId) {
           await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "sandbox environment — email egress blocked");
         }
+        // A dunning claim stays staged here: the letter was never attempted,
+        // so there is no verdict to settle — the evidence names the sandbox
+        // block on the email_log row above, and the runner re-arms the claim
+        // once delivery can really be attempted.
         return { suppressed: true, sandbox: true };
       }
 
@@ -140,6 +171,8 @@ export function createEmailWorker(): Worker<EmailJobData> {
         if (reportDeliveryId) {
           await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "email provider not configured");
         }
+        // As above: never attempted, so the dunning claim stays staged with
+        // the cause named on the email_log row, not settled as a verdict.
         return { suppressed: true };
       }
 
@@ -168,6 +201,9 @@ export function createEmailWorker(): Worker<EmailJobData> {
         });
         await confirmEmailSentGuarded(d.orgId, canonical.id, decision.providerMessageId);
         await dropStagedAttachments();
+        // An earlier attempt was accepted by the provider: that acceptance
+        // settles the dunning claim even though this execution sent nothing.
+        await settleDunningClaim("sent", null);
         if (paymentRemittanceId) {
           await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
         }
@@ -229,6 +265,8 @@ export function createEmailWorker(): Worker<EmailJobData> {
           });
           await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
           await dropStagedAttachments();
+          // Provider acceptance moves the staged dunning claim to sent.
+          await settleDunningClaim("sent", null);
           if (paymentRemittanceId) {
             await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
           }
@@ -244,6 +282,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
           detail: outcome.reason,
         });
         await markEmailUncertain(d.orgId, canonical.id, outcome.reason);
+        // Unresolved acceptance stays staged: re-arming now would defer a
+        // second letter while the first may already have been accepted. The
+        // detail is recorded on the email_log lineage above, and the
+        // reconciliation gate turns retries into blocked evidence instead of
+        // another transmission — the staged claim keeps blocking the runner
+        // from enqueueing a duplicate in the meantime.
         if (paymentRemittanceId) {
           await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, outcome.reason, queueAttempt, true);
         }
@@ -267,6 +311,13 @@ export function createEmailWorker(): Worker<EmailJobData> {
           await markEmailFailed(d.orgId, canonical.id, message);
           if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
             await dropStagedAttachments();
+          }
+          // Rejection settles the dunning claim only once BullMQ's own
+          // retries are exhausted: settling earlier would let the runner
+          // re-arm (with a fresh delivery identity) while this delivery is
+          // still retrying, sending the customer two letters for one rung.
+          if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+            await settleDunningClaim("failed", message);
           }
           if (paymentRemittanceId) {
             await markPaymentRemittanceFailed(
