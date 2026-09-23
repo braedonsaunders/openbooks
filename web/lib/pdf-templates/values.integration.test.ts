@@ -114,6 +114,51 @@ test('loadPdfRecordValues enforces the caller scope in the load itself', { skip:
 })
 
 /**
+ * Field-ticket hours print at the exact stored quantity: 0.04 + 0.10 + 0.20
+ * prints "0.34", never "0.3" rounded from a float and never "0.0" while the
+ * billed amount beside it is nonzero. The day cells reconcile the same way.
+ */
+test('field-ticket hours print exact decimals that reconcile to the billed amount', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+  const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+  const { createFieldTicket } = await import('../field-tickets')
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,fieldTickets}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      const actor = (await seedFlowActors(org.orgId)).adminId
+      const projectId = randomUUID()
+      await db.execute(sql`insert into projects
+        (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+        values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'HRS-1', 'Hours job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+      const created = await createFieldTicket(org.orgId, actor, { projectId, date: org.date })
+      const employee = randomUUID()
+      await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id)
+        values (${employee}, ${org.orgId}, 'employee', 'Exact Worker', ${org.subsidiaryId})`)
+      const timeType = randomUUID()
+      await db.execute(sql`insert into time_types(id, org_id, name) values (${timeType}, ${org.orgId}, 'Regular')`)
+      // 0.34 h at $250/h bills $85.00: every printed figure must reconcile.
+      for (const hours of ['0.0400', '0.1000', '0.2000']) {
+        await db.execute(sql`insert into time_entries
+          (org_id, employee_party_id, time_type_id, worked_on, hours, field_ticket_id, bill_rate, is_billable, status)
+          values (${org.orgId}, ${employee}, ${timeType}, ${org.date}, ${hours}, ${created.id}, '250.0000', true, 'approved')`)
+      }
+
+      const record = await loadPdfRecordValues('field_ticket', org.orgId, created.id, null)
+      const lines = record?.values.crew as { reg_hours: string; total_hours: string; amount: string }[]
+      assert.equal(lines?.length, 1, 'one crew row for the single employee')
+      assert.equal(lines[0]!.reg_hours, '0.34')
+      assert.equal(lines[0]!.total_hours, '0.34')
+      assert.ok(lines[0]!.amount.includes('85'), `billed $85.00 beside 0.34 h, got ${lines[0]!.amount}`)
+      const dayCells = Object.entries(lines[0] ?? {}).filter(([k]) => /^day\d+_reg$/.test(k)).map(([, v]) => v)
+      assert.ok(dayCells.includes('0.34'), `a day cell carries the exact 0.34 h, got ${JSON.stringify(dayCells)}`)
+    } finally {
+      await dropScratchOrg(org.orgId)
+    }
+  })
+})
+
+/**
  * The field-ticket template catalog advertises a party address merge field.
  * It must print the customer's default billing address like every sibling
  * record type — never a silent blank.
