@@ -153,13 +153,18 @@ export type ReportRenderer = (orgId: string, definitionId: string, runId: string
 
 /** Render once, retain immutable bytes/hash, and create recipient outbox rows atomically. */
 export async function processScheduledReportRun(runId: string, render: ReportRenderer): Promise<{ skipped?: true; deliveries?: number }> {
-  const claimed = (await db.execute<{ org_id: string; definition_id: string; recipient_emails: string[]; attempt_count: number }>(sql`
+  // The claim below is a lease: locked_at names this renderer's ownership and
+  // the stale-run sweep (dispatchQueuedReportRuns) may reassign it after
+  // STALE_RUN_MS. Every terminal write below is conditional on still holding
+  // that lease — a renderer whose lease was stolen stands down instead of
+  // letting a late failure overwrite another renderer's success.
+  const claimed = (await db.execute<{ org_id: string; definition_id: string; recipient_emails: string[]; attempt_count: number; locked_at: Date | string }>(sql`
     update report_runs
        set status='running', attempt_count=attempt_count+1, started_at=coalesce(started_at,now()),
            locked_at=now(), error=null, updated_at=now()
      where id=${runId} and trigger='scheduled' and status in ('queued','failed')
        and attempt_count < ${MAX_RUN_ATTEMPTS}
-     returning org_id, definition_id, recipient_emails, attempt_count
+     returning org_id, definition_id, recipient_emails, attempt_count, locked_at
   `));
   const row = claimed.rows[0];
   if (!row) {
@@ -191,7 +196,12 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         const hash = createHash("sha256").update(pdf).digest("hex");
         const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
 
-        await db.transaction(async (tx) => {
+        // The artifact and delivery inserts are idempotent (conflict no-ops),
+        // so a superseded renderer's transaction is harmless — but only the
+        // lease holder's status write may land. A stolen lease (locked_at no
+        // longer ours) means the sweep reassigned this run; stand down and
+        // let the current owner drive it to terminal.
+        const completed = await db.transaction(async (tx) => {
           await tx.execute(sql`
             insert into report_run_artifacts
               (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
@@ -205,11 +215,16 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
               on conflict (run_id, recipient) do nothing
             `);
           }
-          await tx.execute(sql`
+          const stamped = (await tx.execute<{ id: string }>(sql`
             update report_runs set status='succeeded', finished_at=now(), locked_at=null,
-                   next_attempt_at=null, updated_at=now() where id=${runId} and org_id=${row.org_id}
-          `);
+                   next_attempt_at=null, updated_at=now()
+             where id=${runId} and org_id=${row.org_id}
+               and status='running' and locked_at=${row.locked_at}
+             returning id
+          `));
+          return stamped.rows.length > 0;
         });
+        if (!completed) return { skipped: true };
         recordOutboxAttempt("report_runs", "scheduled_report", "succeeded", Date.now() - startedAt);
         return { deliveries: recipients.length };
       } catch (error) {
@@ -221,6 +236,9 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         const terminal = row.attempt_count >= MAX_RUN_ATTEMPTS;
         const failedAt = new Date();
         const delay = Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, row.attempt_count - 1));
+        // Conditional on the lease for the same reason as the success path:
+        // a late failure from a superseded renderer must not overwrite the
+        // current owner's outcome (in particular, another renderer's success).
         const marked = (await db.execute<{ becameTerminal: boolean }>(sql`
           update report_runs set status='failed', error=${message.slice(0, 1000)}, finished_at=${failedAt},
                  locked_at=null, next_attempt_at=${new Date(failedAt.getTime() + delay)},
@@ -232,11 +250,16 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
                                           else terminal_failed_by end,
                  updated_at=${failedAt}
            where id=${runId} and org_id=${row.org_id}
+             and status='running' and locked_at=${row.locked_at}
            returning (${terminal}
                      and terminal_failed_by = ${REPORT_RUN_WORKER_IDENTITY}
                      and terminal_failed_at = ${failedAt}) as "becameTerminal"
         `));
-        if (marked.rows[0]?.becameTerminal) {
+        // No row: the lease moved on (stale sweep reassigned or another
+        // renderer finished). The current owner drives the outcome; this
+        // render's failure is stale evidence, not a new failure.
+        if (!marked.rows[0]) return { skipped: true };
+        if (marked.rows[0].becameTerminal) {
           logTerminalFailure({
             surface: "report_runs",
             id: runId,
