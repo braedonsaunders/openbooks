@@ -1000,22 +1000,23 @@ async function postTaxJournal(
   org: ScratchOrg,
   userId: string,
   taxCodeId: string,
-  opts: { number: string; taxAmount: string; date?: string },
+  opts: { number: string; taxAmount: string; date?: string; subsidiaryId?: string },
 ): Promise<void> {
   const entryId = randomUUID();
   const date = opts.date ?? org.date;
+  const subsidiaryId = opts.subsidiaryId ?? org.subsidiaryId;
   await db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
-    values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${opts.number}, ${date},
+    values (${entryId}, ${org.orgId}, ${org.bookId}, ${subsidiaryId}, ${opts.number}, ${date},
             ${org.periodId}, 'test tax activity', 'draft', 'manual', ${userId}, ${userId})`);
   await db.execute(sql`
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, memo, tax_code_id)
     values
-      (${org.orgId}, ${entryId}, 1, ${org.accounts.taxOutput}, ${org.subsidiaryId}, ${opts.taxAmount},
+      (${org.orgId}, ${entryId}, 1, ${org.accounts.taxOutput}, ${subsidiaryId}, ${opts.taxAmount},
        'CAD', ${opts.taxAmount}, 1, 'gst collected', ${taxCodeId}),
-      (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${`-${opts.taxAmount}`},
+      (${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${subsidiaryId}, ${`-${opts.taxAmount}`},
        'CAD', ${`-${opts.taxAmount}`}, 1, 'gst collected offset', null)`);
   await db.execute(sql`
     update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
@@ -1029,16 +1030,35 @@ async function postTaxJournal(
 async function prepareFiling(
   org: ScratchOrg,
   userId: string,
-  opts: { snapshotVersion?: 1 | 2 } = {},
+  opts: {
+    snapshotVersion?: 1 | 2;
+    filingEntity?: { subsidiaryIds: string[]; registrationId?: string };
+    /**
+     * Stored scope override, simulating rows the live route can no longer
+     * write (snapshots are immutable, so no UPDATE path exists): NULL for a
+     * pre-snapshot legacy row, or foreign ids for a scope that stopped
+     * resolving. Absent means the computed scope, exactly as the route
+     * stores it. The hash stays as computed at prepare time.
+     */
+    storedSubsidiaryIds?: string[] | null;
+  } = {},
 ): Promise<{ id: string; snapshotHash: string }> {
   const snapshotVersion = opts.snapshotVersion ?? TAX_FILING_SNAPSHOT_VERSION;
-  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', {});
+  const result = await computeTaxReturn(org.orgId, 'FP_GST', '2026-07-01', '2026-07-31', {}, {
+    ...(opts.filingEntity ? { filingEntity: opts.filingEntity } : {}),
+  });
   const { snapshot, snapshotHash } = buildTaxFilingSnapshot(result, {}, snapshotVersion);
   const filingId = randomUUID();
   const versions = (await db.execute<{ version: number }>(sql`
     select coalesce(max(version), 0)::int + 1 as version from tax_filings
      where org_id = ${org.orgId} and form_code = ${result.formCode}
        and period_from = ${result.from} and period_to = ${result.to}`)).rows[0]!;
+  const storedScope =
+    opts.storedSubsidiaryIds === undefined
+      ? `{${result.subsidiaryIds.join(",")}}`
+      : opts.storedSubsidiaryIds === null
+        ? null
+        : `{${opts.storedSubsidiaryIds.join(",")}}`;
   await db.execute(sql`
     insert into tax_filings
       (id, org_id, form_code, form_name, country, period_from, period_to, version, status,
@@ -1051,7 +1071,7 @@ async function prepareFiling(
             ${JSON.stringify(snapshot.boxes)}::jsonb, '{}'::jsonb, ${snapshotHash},
             ${result.functionalCurrency}, ${result.translation?.presentationCurrency ?? null},
             ${result.translation ? JSON.stringify(result.translation) : null}::jsonb,
-            ${`{${result.subsidiaryIds.join(',')}}`}::uuid[],
+            ${storedScope}::uuid[],
             ${result.registrationId}, ${result.registrationNumber}, ${snapshotVersion},
             ${userId}, ${userId})`);
   return { id: filingId, snapshotHash };
@@ -1081,6 +1101,18 @@ function closeCoveredPeriod(org: ScratchOrg): Promise<void> {
         insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
         values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, null, ${module},
                 'closed', now(), 'test: governed close')`);
+    }
+  });
+}
+
+/** Close the covered period for one legal entity only (gl + tax). */
+function closeEntityPeriod(org: ScratchOrg, subsidiaryId: string): Promise<void> {
+  return db.transaction(async (tx) => {
+    for (const module of ["gl", "tax"] as const) {
+      await tx.execute(sql`
+        insert into period_locks (id, org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
+        values (${randomUUID()}, ${org.orgId}, ${org.periodId}, ${org.bookId}, ${subsidiaryId}, ${module},
+                'closed', now(), 'test: entity-scope close')`);
     }
   });
 }
@@ -1316,6 +1348,130 @@ test("mark-filed accepts complete subsidiary closure without implying an org-wid
     );
     assert.equal((await filingState(org.orgId, second.id)).status, "prepared");
     assert.equal((await filingAudits(org.orgId, second.id)).rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mark-filed fences the filing's frozen scope, not every subsidiary", { skip: !DB }, async () => {
+  // TR4: the governance fence covers the exact subsidiary set the return
+  // summed. Closing the root's periods certifies the root filing while an
+  // unrelated open entity cannot alter its fenced source or hash — and the
+  // still-open entity's own filing refuses.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-SC1", taxAmount: "13.00" });
+    await postTaxJournal(org, userId, taxCodeId, {
+      number: "JE-FP-SC2", taxAmount: "7.00", subsidiaryId: childId,
+    });
+    const rootFiling = await prepareFiling(org, userId, {
+      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+    });
+    const childFiling = await prepareFiling(org, userId, {
+      filingEntity: { subsidiaryIds: [childId] },
+    });
+
+    await closeEntityPeriod(org, org.subsidiaryId);
+
+    const filed = await markTaxFilingFiled(org.orgId, rootFiling.id, userId, "GOV-SC-1");
+    assert.equal(filed.id, rootFiling.id);
+    assert.equal((await filingState(org.orgId, rootFiling.id)).status, "filed");
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, childFiling.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, childFiling.id)).status, "prepared");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an open planning calendar does not block mark-filed", { skip: !DB }, async () => {
+  // TR4: the fence resolves the window through the shared posting-calendar
+  // resolver. An alternate (non-default) calendar with an overlapping period
+  // left open must not hold the certification hostage.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-PC", taxAmount: "13.00" });
+    const planningCalendarId = randomUUID();
+    await db.execute(sql`
+      insert into fiscal_calendars (id, org_id, name, is_default, is_active)
+      values (${planningCalendarId}, ${org.orgId}, 'Planning', false, true)`);
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, 2026, 7, '2026-07-plan',
+              '2026-07-01', '2026-07-31', false, ${planningCalendarId})`);
+    const prepared = await prepareFiling(org, userId);
+    await closeCoveredPeriod(org);
+
+    const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-PC-1");
+    assert.equal(filed.id, prepared.id);
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a legacy filing without a frozen scope still needs every entity closed", { skip: !DB }, async () => {
+  // TR4: a pre-snapshot row (NULL subsidiary_ids) is the org-wide return and
+  // keeps the all-entity fence — closing one entity must not certify it.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const childId = await createSubsidiary(org.orgId, "Filing Child", "CAD", org.subsidiaryId);
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-LEG", taxAmount: "13.00" });
+    const prepared = await prepareFiling(org, userId, {
+      snapshotVersion: 1,
+      storedSubsidiaryIds: null,
+    });
+
+    await closeEntityPeriod(org, org.subsidiaryId);
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+      (error: unknown) => error instanceof TaxFilingError && error.code === "period-not-closed",
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
+
+    await closeEntityPeriod(org, childId);
+    const filed = await markTaxFilingFiled(org.orgId, prepared.id, userId, "GOV-LEG-1");
+    assert.equal(filed.id, prepared.id);
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "filed");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("mark-filed refuses a filing whose frozen scope names unknown subsidiaries", { skip: !DB }, async () => {
+  // TR4: a frozen scope that no longer resolves fails closed by name (stale),
+  // never by silently certifying against org-wide locks alone.
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Filing Tester", "admin");
+    const taxCodeId = await seedFilingFingerprintFixture(org);
+    await postTaxJournal(org, userId, taxCodeId, { number: "JE-FP-BAD", taxAmount: "13.00" });
+    const ghostId = randomUUID();
+    const prepared = await prepareFiling(org, userId, {
+      filingEntity: { subsidiaryIds: [org.subsidiaryId] },
+      storedSubsidiaryIds: [ghostId],
+    });
+    await closeCoveredPeriod(org);
+
+    await assert.rejects(
+      () => markTaxFilingFiled(org.orgId, prepared.id, userId, null),
+      (error: unknown) =>
+        error instanceof TaxFilingError &&
+        error.code === "stale" &&
+        error.message.includes(ghostId),
+    );
+    assert.equal((await filingState(org.orgId, prepared.id)).status, "prepared");
   } finally {
     await dropScratchOrg(org.orgId);
   }
