@@ -69,7 +69,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
   }
   try {
-    const id = new URL(req.url).searchParams.get('id')
+    const params = new URL(req.url).searchParams
+    const id = params.get('id')
     if (id) {
       if (!isUuid(id)) return NextResponse.json({ error: 'count required' }, { status: 422 })
       // Fence restricted callers against the count's own subsidiary, resolved
@@ -84,7 +85,20 @@ export async function GET(req: Request) {
       }
       return NextResponse.json({ ok: true, ...(await getStockCountDetail(user.orgId, id)) })
     }
-    return NextResponse.json({ ok: true, counts: await listStockCounts(user.orgId) })
+    // Pages are cursor-bounded — count #501+ is reachable, never truncated.
+    const limitParam = params.get('limit')
+    let limit: number | undefined
+    if (limitParam !== null) {
+      limit = Number(limitParam)
+      if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+        return NextResponse.json({ error: 'limit must be an integer between 1 and 500' }, { status: 422 })
+      }
+    }
+    const page = await listStockCounts(user.orgId, {
+      limit,
+      cursor: params.get('cursor'),
+    })
+    return NextResponse.json({ ok: true, ...page })
   } catch (e: unknown) {
     return refusal(e)
   }

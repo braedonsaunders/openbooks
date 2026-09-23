@@ -220,6 +220,10 @@
       "noLines": "No lines on this count.",
       "postedBadge": "Posted",
       "unpostedBadge": "Not posted"
+    },
+    "list": {
+      "showMore": "Show more ({loaded} of {total})",
+      "loadingMore": "Loading…"
     }
   }
 }

@@ -60,6 +60,8 @@ function StatusBadge({ status, label }: { status: string; label: string }) {
 
 export function CountsList({
   counts,
+  totalCount,
+  nextCursor,
   locations,
   subsidiaries,
   items,
@@ -70,6 +72,8 @@ export function CountsList({
   selectedCountId,
 }: {
   counts: StockCountSummary[]
+  totalCount: number
+  nextCursor: string | null
   locations: { id: string; name: string | null }[]
   subsidiaries: { id: string; name: string | null }[]
   items: { id: string; code: string | null; name: string | null }[]
@@ -85,6 +89,35 @@ export function CountsList({
   const [selectedId, setSelectedId] = useState<string | null>(selectedCountId ?? null)
   const [detail, setDetail] = useState<StockCountDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
+  // Server-paged rows: the first page renders with the page; older counts
+  // load on demand so count #501+ stays reachable instead of truncated.
+  const [rows, setRows] = useState(counts)
+  const [cursor, setCursor] = useState<string | null>(nextCursor)
+  const [loadedTotal, setLoadedTotal] = useState(totalCount)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
+
+  async function loadMore(): Promise<void> {
+    if (!cursor || loadingMore) return
+    setLoadingMore(true)
+    setListError(null)
+    try {
+      const res = await fetch(`/api/inventory/counts?limit=500&cursor=${encodeURIComponent(cursor)}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setListError(
+          typeof data.error === 'string' && data.error.trim() ? data.error.trim() : t('counts.failed'),
+        )
+        return
+      }
+      const data = (await res.json()) as { counts: StockCountSummary[]; totalCount: number; nextCursor: string | null }
+      setRows((prev) => [...prev, ...data.counts])
+      setCursor(data.nextCursor)
+      setLoadedTotal(data.totalCount)
+    } finally {
+      setLoadingMore(false)
+    }
+  }
 
   const locationOptions = locations.map((l) => ({ value: l.id, label: l.name ?? l.id }))
   const subsidiaryOptions = subsidiaries.map((s) => ({ value: s.id, label: s.name ?? s.id }))
@@ -174,7 +207,7 @@ export function CountsList({
   return (
     <>
       <PagedTable
-        rows={counts}
+        rows={rows}
         columns={columns}
         searchable
         empty={t('counts.empty')}
@@ -187,6 +220,18 @@ export function CountsList({
         }}
         emptyAsRow
       />
+      {listError ? (
+        <p role="alert" className="text-sm text-red-800 dark:text-red-300">
+          {t('counts.failed')}: {listError}
+        </p>
+      ) : null}
+      {cursor ? (
+        <div className="flex justify-center py-2">
+          <Button variant="secondary" size="sm" disabled={loadingMore} onClick={() => void loadMore()}>
+            {loadingMore ? t('counts.list.loadingMore') : t('counts.list.showMore', { loaded: rows.length, total: loadedTotal })}
+          </Button>
+        </div>
+      ) : null}
       {createOpen ? (
         <CreateCountDrawer
           locationOptions={locationOptions}

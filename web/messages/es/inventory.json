@@ -202,6 +202,10 @@
       "noLines": "Sin líneas en este conteo.",
       "postedBadge": "Contabilizado",
       "unpostedBadge": "Sin contabilizar"
+    },
+    "list": {
+      "showMore": "Mostrar más ({loaded} de {total})",
+      "loadingMore": "Cargando…"
     }
   }
 }

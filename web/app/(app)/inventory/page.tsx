@@ -177,7 +177,9 @@ export default async function Inventory({
       {view === 'counts' && countData ? (
         <CountsList
           key={pickString(sp.countId) ?? (pickString(sp.count) === 'new' ? 'new' : 'list')}
-          counts={countData[0]}
+          counts={countData[0].counts}
+          totalCount={countData[0].totalCount}
+          nextCursor={countData[0].nextCursor}
           locations={countData[1].rows}
           subsidiaries={countData[2].rows}
           items={countData[3].rows}

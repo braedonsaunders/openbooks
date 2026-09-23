@@ -202,6 +202,10 @@
       "noLines": "该盘点单暂无行。",
       "postedBadge": "已过账",
       "unpostedBadge": "未过账"
+    },
+    "list": {
+      "showMore": "显示更多（共{total}条，已加载{loaded}条）",
+      "loadingMore": "正在加载…"
     }
   }
 }
