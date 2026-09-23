@@ -204,7 +204,11 @@
     "revoke": "Revogar",
     "revokeTitle": "Revogar esta exceção",
     "revokeReason": "Por que está sendo revogada?",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "Aprovação pendente",
+    "approve": "Aprovar",
+    "requestFiled": "Solicitação registrada. Ela só vale após a aprovação de outra pessoa.",
+    "requestHint": "Uma solicitação só vale após a aprovação de outra pessoa."
   },
   "lienWaivers": {
     "title": "Quitações",

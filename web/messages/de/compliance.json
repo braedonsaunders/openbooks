@@ -204,7 +204,11 @@
     "revoke": "Widerrufen",
     "revokeTitle": "Diese Ausnahme widerrufen",
     "revokeReason": "Warum wird sie widerrufen?",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "Ausstehende Genehmigung",
+    "approve": "Genehmigen",
+    "requestFiled": "Anfrage erfasst. Sie gilt erst, wenn eine andere Person sie genehmigt.",
+    "requestHint": "Eine Anfrage gilt erst, wenn eine andere Person sie genehmigt."
   },
   "lienWaivers": {
     "title": "Verzichtserklärungen",

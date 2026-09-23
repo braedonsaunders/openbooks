@@ -389,6 +389,8 @@ export type ExceptionRow = {
   expiresOn: string
   /** Pending requests are listed so approvers can see them; they are not in force. */
   status: 'pending_approval' | 'approved'
+  /** Who requested the exception — the one person who may not approve it. */
+  requestedById: string | null
   approvedByName: string | null
   approvedAt: string | null
 }
@@ -404,6 +406,7 @@ export async function loadVendorWaivers(
                 else coalesce(pj.code || ' · ' || pj.name, pj.name) end as "projectName",
            w.reason, w.effective_from as "effectiveFrom", w.expires_on as "expiresOn",
            case when w.approved_at is null then 'pending_approval' else 'approved' end as "status",
+           w.requested_by as "requestedById",
            u.name as "approvedByName", w.approved_at as "approvedAt"
       from compliance_waivers w
       join parties party on party.id = w.party_id and party.org_id = w.org_id

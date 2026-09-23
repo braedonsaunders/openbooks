@@ -204,7 +204,11 @@
     "revoke": "Revoke",
     "revokeTitle": "Revoke this exception",
     "revokeReason": "Why is it being revoked?",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "Pending approval",
+    "approve": "Approve",
+    "requestFiled": "Request filed. It covers nothing until a different person approves it.",
+    "requestHint": "A request covers nothing until a different person approves it."
   },
   "lienWaivers": {
     "title": "Lien waivers",

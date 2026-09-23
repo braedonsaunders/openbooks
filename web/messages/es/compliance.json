@@ -204,7 +204,11 @@
     "revoke": "Revocar",
     "revokeTitle": "Revocar esta excepción",
     "revokeReason": "¿Por qué motivo?",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "Aprobación pendiente",
+    "approve": "Aprobar",
+    "requestFiled": "Solicitud registrada. No aplica hasta que otra persona la apruebe.",
+    "requestHint": "Una solicitud no aplica hasta que otra persona la apruebe."
   },
   "lienWaivers": {
     "title": "Renuncias de gravamen",
