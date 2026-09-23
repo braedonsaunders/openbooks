@@ -2527,6 +2527,16 @@
         "singularTitle": "プロセステンプレートの手順",
         "description": "プロセステンプレートの順序付き手順。担当者、期限オフセット、証跡ルールを持ちます。"
       },
+      "hrm-pipeline-templates": {
+        "title": "採用パイプラインテンプレート",
+        "singularTitle": "採用パイプラインテンプレート",
+        "description": "組織の採用ファネル。求人が開かれる名前付きの段階順序を定義します。無効化しても履歴は保持され、求人を開いたテンプレートは削除されません。"
+      },
+      "hrm-pipeline-stages": {
+        "title": "採用パイプラインの段階",
+        "singularTitle": "採用パイプラインの段階",
+        "description": "パイプラインテンプレートの順序付き段階。スクリーニング、面接、評価、オファー、採用、却下のいずれかです。"
+      },
       "hrm-review-templates": {
         "title": "レビューテンプレート",
         "singularTitle": "レビューテンプレート",

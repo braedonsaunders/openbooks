@@ -2414,6 +2414,16 @@
         "singularTitle": "Paso de plantilla de proceso",
         "description": "Un paso ordenado de una plantilla de proceso con su responsable, plazo y regla de evidencia."
       },
+      "hrm-pipeline-templates": {
+        "title": "Plantillas de contratación",
+        "singularTitle": "Plantilla de contratación",
+        "description": "Los embudos de contratación de la organización: órdenes de etapas nombrados sobre los que se abren las requisiciones. La desactivación conserva el historial; una plantilla que abrió requisiciones nunca se elimina."
+      },
+      "hrm-pipeline-stages": {
+        "title": "Etapas de contratación",
+        "singularTitle": "Etapa de contratación",
+        "description": "Una etapa ordenada de una plantilla: criba, entrevista, evaluación, oferta, contratado o rechazado."
+      },
       "hrm-review-templates": {
         "title": "Plantillas de evaluación",
         "singularTitle": "Plantilla de evaluación",

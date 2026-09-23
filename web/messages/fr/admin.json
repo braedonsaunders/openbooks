@@ -2414,6 +2414,16 @@
         "singularTitle": "Étape de modèle de processus",
         "description": "Une étape ordonnée d'un modèle de processus avec son responsable, son délai et sa règle de preuve."
       },
+      "hrm-pipeline-templates": {
+        "title": "Modèles de recrutement",
+        "singularTitle": "Modèle de recrutement",
+        "description": "Les entonnoirs de recrutement de l'organisation : des ordres d'étapes nommés sur lesquels les réquisitions s'ouvrent. La désactivation préserve l'historique ; un modèle qui a ouvert des réquisitions n'est jamais supprimé."
+      },
+      "hrm-pipeline-stages": {
+        "title": "Étapes de recrutement",
+        "singularTitle": "Étape de recrutement",
+        "description": "Une étape ordonnée d'un modèle : présélection, entretien, évaluation, offre, embauché ou refusé."
+      },
       "hrm-review-templates": {
         "title": "Modèles d’évaluation",
         "singularTitle": "Modèle d’évaluation",

@@ -2459,6 +2459,16 @@
         "singularTitle": "流程模板步骤",
         "description": "流程模板中的一个有序步骤，含负责人、到期偏移和证据规则。"
       },
+      "hrm-pipeline-templates": {
+        "title": "招聘流程模板",
+        "singularTitle": "招聘流程模板",
+        "description": "组织的招聘漏斗：以命名阶段顺序接受需求。停用保留历史；已开过需求的模板永不删除。"
+      },
+      "hrm-pipeline-stages": {
+        "title": "招聘流程阶段",
+        "singularTitle": "招聘流程阶段",
+        "description": "流程模板中的一个有序阶段：筛选、面试、测评、录用、已入职或已拒绝。"
+      },
       "hrm-review-templates": {
         "title": "评审模板",
         "singularTitle": "评审模板",
