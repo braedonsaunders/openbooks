@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
 import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { submitAndReleaseIfUngated, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
 import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
@@ -125,11 +125,16 @@ export async function POST(req: Request) {
         // gated submission evidences the document row there (human approvals
         // evidence through their own gate decisions), so the route records
         // the lifecycle transition itself: submit always, plus the approval
-        // the auto-release performed on the submitter's behalf.
-        if (!result.gated && !result.flowError) {
+        // the auto-release performed on the submitter's behalf. The approve
+        // row carries the reason every auto-release happened without an
+        // approver — no approval flow was configured for the kind.
+        if (result.approvalRequired) {
+          await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
+        } else if (!result.gated && !result.flowError) {
           await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'approved', auto_approved: true })}::jsonb, ${user.id}),
-                   (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true })}::jsonb, ${user.id})`)
+                   (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true, reason: 'released without approval: no approval flow configured' })}::jsonb, ${user.id})`)
         } else if (result.gated) {
           await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
             values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'pending_approval', run_id: result.runId })}::jsonb, ${user.id})`)
@@ -138,6 +143,11 @@ export async function POST(req: Request) {
       })
       if (submission.kind === 'invalid_status') {
         return NextResponse.json({ error: `document is ${submission.status}, not draft` }, { status: 422 })
+      }
+      // A policy-refused release is answered by name: the bill stays
+      // submitted (the refusal audit above stands), never released.
+      if (submission.approvalRequired) {
+        return NextResponse.json({ error: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }, { status: 422 })
       }
       if (submission.gated) {
         return NextResponse.json({ ok: true, requestId: submission.runId })
@@ -175,12 +185,20 @@ export async function POST(req: Request) {
             values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'pending_approval', run_id: submission.runId })}::jsonb, ${user.id})`)
           return { kind: 'pending' as const, requestId: submission.runId }
         }
+        // A policy-refused release refuses the whole post: nothing is
+        // released and nothing posts. The refusal itself is evidenced so the
+        // trail shows why the bill never moved.
+        if (submission.approvalRequired) {
+          await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'draft', approval_required: true, reason: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE })}::jsonb, ${user.id})`)
+          return { kind: 'refused' as const }
+        }
         // Same lifecycle evidence as the submit branch: the auto-release the
         // direct post performs must show in the audit trail (postDocument
         // evidences the post itself through its audit option below).
         await db.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${user.orgId}, 'documents', ${doc.id}, 'submit', ${JSON.stringify({ from: 'draft', to: 'approved', auto_approved: true })}::jsonb, ${user.id}),
-                 (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true })}::jsonb, ${user.id})`)
+                 (${user.orgId}, 'documents', ${doc.id}, 'approve', ${JSON.stringify({ from: 'draft', to: 'approved', auto: true, reason: 'released without approval: no approval flow configured' })}::jsonb, ${user.id})`)
       } else if (previousStatus !== 'approved') {
         return { kind: 'invalid_status' as const, status: previousStatus }
       }
@@ -206,6 +224,9 @@ export async function POST(req: Request) {
         { ok: true, pendingApproval: true, requestId: outcome.requestId },
         { status: 202 },
       )
+    }
+    if (outcome.kind === 'refused') {
+      return NextResponse.json({ error: VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE }, { status: 422 })
     }
     if (outcome.kind === 'invalid_status') {
       return NextResponse.json(

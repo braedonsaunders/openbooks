@@ -28,6 +28,12 @@ export {
   type SubmissionReleaseResult,
 } from "./submit.ts";
 export {
+  hasVendorBillApprovalFlow,
+  isVendorBillApprovalRequired,
+  VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE,
+  VENDOR_BILL_KIND,
+} from "./vendor-bill-approval.ts";
+export {
   decideGate,
   delegateGate,
   processGateTimers,
