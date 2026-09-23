@@ -6,6 +6,7 @@ import {
   CONVERSION_TARGETS,
   convertOrder,
   createOrderDraft,
+  OrderDraftConflictError,
   OrderDraftError,
   type OrderKind,
 } from "../order-cycle";
@@ -14,7 +15,7 @@ import { isUuid } from "../list-params";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
-import { ApplicationError, invalidInput, notFound } from "./errors";
+import { ApplicationError, conflict, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 export const ORDER_TYPE_KIND = {
@@ -77,9 +78,12 @@ export async function createApplicationOrder(
     request: { kind: input.kind, subsidiaryId },
     execute: async () => {
       try {
-        const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind, subsidiaryId);
+        const draft = await createOrderDraft(context.authz.user.orgId, context.authz.user.id, input.kind, input.idempotencyKey, subsidiaryId);
         return { id: draft.id, documentNumber: draft.document_number };
       } catch (error) {
+        if (error instanceof OrderDraftConflictError) {
+          throw conflict(error.message);
+        }
         if (error instanceof OrderDraftError) {
           throw invalidInput(error.message);
         }

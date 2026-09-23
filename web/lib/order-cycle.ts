@@ -4,6 +4,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { nextDocumentNumber, persistLineTaxComponents } from "./bills.ts";
+import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
+import { claimIdempotentCreate, resolveIdempotentReplay } from "./api/idempotency";
 import {
   ORDER_KINDS,
   PURCHASE_RECEIPT_KIND,
@@ -103,8 +105,30 @@ const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
   purchase_order: { kind: 'purchase_order', prefix: 'PO-' },
 }
 
-/** Create an empty draft order document and return its id + number. */
-export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind, subsidiaryId: string | null = null) {
+/**
+ * Create an empty draft order document and return its id + number — the one
+ * draft factory every instant-create surface uses (the three legacy draft
+ * routes and the v1 order create).
+ *
+ * Idempotent under the canonical order-create contract
+ * (web/app/api/_order/create.ts): the caller's `Idempotency-Key` header is a
+ * required UUID that becomes the document id, so a lost-response retry
+ * replays the same order instead of minting a second one and burning a
+ * second number. A reused key with different request-controlled details, or
+ * a key minted for another org's row, is a 409, never the older order
+ * returned as though it matched.
+ */
+export async function createOrderDraft(
+  orgId: string,
+  userId: string,
+  kind: OrderKind,
+  idempotencyKey: string,
+  subsidiaryId: string | null = null,
+): Promise<{ id: string; document_number: string; replayed: boolean }> {
+  // One system for every caller: the document id derives deterministically
+  // from the key (verbatim for UUID keys, namespaced hash for opaque v1
+  // keys), so claim, replay, insert, and audit all join on the same id.
+  const draftId = draftDocumentId(idempotencyKey)
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
   const org = (await db.execute<{ base_currency: string | null }>(
@@ -118,15 +142,63 @@ export async function createOrderDraft(orgId: string, userId: string, kind: Orde
   if (!baseCurrency) {
     throw new OrderDraftError('this organization has no base currency configured — set one before creating orders')
   }
-  const documentNumber = await nextDocumentNumber(orgId, cfg.kind, cfg.prefix)
   const today = await businessToday(orgId)
-  const row = (await db.execute<{ id: string; document_number: string }>(sql`
-    insert into documents (org_id, kind, document_number, document_date, currency, subsidiary_id, subtotal, tax_total, total, created_by)
-    values (${orgId}, ${kind}, ${documentNumber}, ${today},
-            ${baseCurrency}, ${subsidiaryId}, '0', '0', '0', ${userId})
-    returning id, document_number
+  // The request-controlled image a retry must equal: the kind plus the
+  // subsidiary this call drafts under. Derived values (number, date,
+  // currency, totals) are excluded so an identical retry still replays
+  // after midnight or a configuration change.
+  const match = { kind, subsidiary_id: subsidiaryId }
+
+  let replayed = false
+  const outcome = await db.transaction(async (tx) => {
+    // Same-key fence first: two concurrent first-clicks with one key
+    // serialize so the loser replays instead of racing past the prior-row
+    // check and dying on the insert conflict.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${draftId}, 0))`)
+    // The lookup never reads another org's row: a key minted elsewhere
+    // misses here, hits the insert conflict below, and refuses as 409.
+    if ((await claimIdempotentCreate(tx, { orgId, table: 'documents', key: draftId })) === 'exists') {
+      const verdict = await resolveIdempotentReplay(tx, {
+        orgId,
+        table: 'documents',
+        key: draftId,
+        match,
+      })
+      if (verdict !== 'replay') throw new OrderDraftConflictError()
+      return { replayed: true }
+    }
+    // The number allocates HERE, inside the successful draft transaction:
+    // a retried click never reaches this statement, so it burns neither
+    // a row nor a sequence value.
+    const documentNumber = await allocateDocumentNumber(tx, orgId, cfg.kind, cfg.prefix)
+    const inserted = (await tx.execute<{ id: string }>(sql`
+      insert into documents (id, org_id, kind, document_number, document_date, currency, subsidiary_id, subtotal, tax_total, total, created_by)
+      values (${draftId}, ${orgId}, ${kind}, ${documentNumber}, ${today},
+              ${baseCurrency}, ${subsidiaryId}, '0', '0', '0', ${userId})
+      on conflict (id) do nothing
+      returning id
+    `))
+    if (!inserted.rows[0]) throw new OrderDraftConflictError()
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${orgId}, 'documents', ${draftId}, 'insert',
+              ${JSON.stringify({ before: null, after: { ...match, status: 'draft' } })}::jsonb,
+              ${userId}, ${draftId})
+    `)
+    return { replayed: false }
+  })
+  replayed = outcome.replayed
+
+  const doc = (await db.execute<{ id: string; document_number: string }>(sql`
+    select id, document_number from documents
+     where id = ${draftId} and org_id = ${orgId} and kind = ${kind}
   `))
-  return row.rows[0]!
+  // A write that matches zero rows is a failure, not a success: the replay
+  // above verified this org's row, so a missing row here is never a
+  // legitimate empty — refuse instead of returning an unobservable draft.
+  if (!doc.rows[0]) throw new OrderDraftError('Draft order not found', 404)
+  return { ...doc.rows[0], replayed }
 }
 
 /**
@@ -142,6 +214,48 @@ export class OrderDraftError extends Error {
     super(message)
     this.name = 'OrderDraftError'
   }
+}
+
+/**
+ * Refusal when a draft idempotency key cannot mint or replay: a changed
+ * payload, a key colliding with another org's row, or a key this factory
+ * did not create. Surfaces as 409 through the same mapper as every other
+ * draft refusal — fail closed, never the older order as though it matched.
+ */
+export class OrderDraftConflictError extends OrderDraftError {
+  constructor() {
+    super('invalid_idempotency_key', 409)
+    this.name = 'OrderDraftConflictError'
+  }
+}
+
+/**
+ * Namespace the draft factory hashes opaque idempotency keys under (RFC 4122
+ * name-based UUIDs). Fixed for the life of the product: the same key must
+ * always resolve to the same document id, or a retry would mint a second
+ * draft instead of replaying.
+ */
+const DRAFT_ID_NAMESPACE = '8f2c3a90-5b1e-4d6f-a7c8-e9f0a1b2c3d4'
+
+/**
+ * The document id for an idempotency key. UUID keys are used verbatim (the
+ * UI contract requires them); any other non-empty key — the v1 API accepts
+ * opaque keys — hashes to a stable UUID under the draft namespace, so every
+ * caller shares the one claim/replay/insert system and a retry still
+ * replays. Empty keys refuse: they cannot name a document.
+ */
+export function draftDocumentId(idempotencyKey: string): string {
+  if (isUuid(idempotencyKey)) return idempotencyKey
+  if (!idempotencyKey.trim()) throw new OrderDraftError('invalid_idempotency_key', 400)
+  const namespace = Buffer.from(DRAFT_ID_NAMESPACE.replaceAll('-', ''), 'hex')
+  const digest = createHash('sha1')
+    .update(namespace)
+    .update(idempotencyKey, 'utf8')
+    .digest()
+  digest[6] = (digest[6]! & 0x0f) | 0x50
+  digest[8] = (digest[8]! & 0x3f) | 0x80
+  const hex = digest.subarray(0, 16).toString('hex')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 export class ConversionError extends Error {
