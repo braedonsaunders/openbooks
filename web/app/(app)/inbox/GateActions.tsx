@@ -34,6 +34,9 @@ export function GateActions({
   const tc = useTranslations('common')
   const [busy, setBusy] = useState(false)
   const [delegating, setDelegating] = useState(false)
+  // A refused decision pins to the row until the next action — a toast
+  // alone vanishes, and a refresh would wipe the explanation away.
+  const [refusal, setRefusal] = useState<string | null>(null)
   const router = useRouter()
 
   async function decide(decision: 'approved' | 'rejected') {
@@ -57,69 +60,98 @@ export function GateActions({
       signature = signed.trim()
     }
     setBusy(true)
+    setRefusal(null)
     const res = await fetch('/api/flows/gates/decide', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gateId, decision, comment, signature }),
     })
-    const data = await res.json().catch(() => ({}))
+    // Error bodies are checked before they are parsed: a refusal is a
+    // message for the operator, never a parse error.
     if (!res.ok) {
-      toast.error(data.error ?? t('decide.decisionFailed'))
-    } else if (data.resumed === null) {
-      toast.success(t('gates.waitingOthers'))
+      const data = await res.json().catch(() => ({} as { error?: unknown }))
+      const message = typeof data.error === 'string' && data.error
+        ? data.error
+        : t('decide.decisionFailed')
+      // Pin the refusal beside the row's actions and do NOT refresh: the
+      // decision was not recorded and the approval is still pending, so
+      // the explanation must stay where the next attempt happens. It is
+      // never turned into an approval — only the ok branch toasts one.
+      setRefusal(message)
+      toast.error(message)
     } else {
-      toast.success(decision === 'approved' ? tc('status.approved') : tc('status.rejected'))
+      const data = await res.json().catch(() => ({} as { resumed?: unknown }))
+      if (data.resumed === null) {
+        toast.success(t('gates.waitingOthers'))
+      } else {
+        toast.success(decision === 'approved' ? tc('status.approved') : tc('status.rejected'))
+      }
+      router.refresh()
     }
     setBusy(false)
-    router.refresh()
   }
 
   async function delegate(toUserId: string) {
     if (!toUserId) return
     setBusy(true)
+    setRefusal(null)
     const res = await fetch('/api/flows/gates/delegate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ gateId, toUserId }),
     })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) toast.error(data.error ?? t('decide.decisionFailed'))
-    else toast.success(t('gates.delegated'))
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({} as { error?: unknown }))
+      const message = typeof data.error === 'string' && data.error
+        ? data.error
+        : t('decide.decisionFailed')
+      setRefusal(message)
+      toast.error(message)
+    } else {
+      toast.success(t('gates.delegated'))
+      router.refresh()
+    }
     setBusy(false)
     setDelegating(false)
-    router.refresh()
   }
 
   return (
-    <span className="inline-flex items-center gap-2">
-      <Button size="sm" disabled={busy} onClick={() => decide('approved')}>
-        {tc('actions.approve')}
-      </Button>
-      <Button size="sm" variant="outline" disabled={busy} onClick={() => decide('rejected')}>
-        {tc('actions.reject')}
-      </Button>
-      {canDelegate && users.length > 0 ? (
-        delegating ? (
-          <span className="inline-flex items-center gap-1">
-            <span className="w-44">
-              <Select disabled={busy} defaultValue="" onChange={(e) => delegate(e.target.value)}>
-                <option value="">{t('gates.delegatePlaceholder')}</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name}
-                  </option>
-                ))}
-              </Select>
+    <span className="inline-flex flex-col items-start gap-2">
+      <span className="inline-flex items-center gap-2">
+        <Button size="sm" disabled={busy} onClick={() => decide('approved')}>
+          {tc('actions.approve')}
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => decide('rejected')}>
+          {tc('actions.reject')}
+        </Button>
+        {canDelegate && users.length > 0 ? (
+          delegating ? (
+            <span className="inline-flex items-center gap-1">
+              <span className="w-44">
+                <Select disabled={busy} defaultValue="" onChange={(e) => delegate(e.target.value)}>
+                  <option value="">{t('gates.delegatePlaceholder')}</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </Select>
+              </span>
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDelegating(false)}>
+                {tc('actions.cancel')}
+              </Button>
             </span>
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDelegating(false)}>
-              {tc('actions.cancel')}
+          ) : (
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDelegating(true)}>
+              {t('gates.delegate')}
             </Button>
-          </span>
-        ) : (
-          <Button size="sm" variant="ghost" disabled={busy} onClick={() => setDelegating(true)}>
-            {t('gates.delegate')}
-          </Button>
-        )
+          )
+        ) : null}
+      </span>
+      {refusal ? (
+        <span role="alert" className="max-w-md rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
+          {refusal}
+        </span>
       ) : null}
     </span>
   )
