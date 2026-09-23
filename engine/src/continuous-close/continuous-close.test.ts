@@ -148,24 +148,52 @@ test("the occurrence claim shares one transaction with the run row, closing the 
   // with no run record, permanently skipping the occurrence. The fix claims
   // INSIDE the agent's transaction, matching the recurring and subscription
   // schedulers, so either both commit or neither does.
+  //
+  // This asserts the transaction STRUCTURE, not statement order: the fenced
+  // feature recheck writes its skipped row BEFORE the claim in the same
+  // transaction, so "the first insert follows the claim" is no longer true
+  // and must not be assumed. The crash itself is proved on a live database by
+  // "a crash at the claimed occurrence loses nothing" in
+  // continuous-close.integration.test.ts; here the composition guard pins the
+  // shape that proof depends on — one transaction holding both writes.
   const source = readFileSync(new URL("./continuous-close.ts", import.meta.url), "utf8");
   const run = source.indexOf("export async function runContinuousCloseAgent");
-  const orgTxn = source.indexOf("await withOrg(args.orgId, async (): Promise<PreparedRun>", run);
-  const claim = source.indexOf("set next_run_at = ${occurrence.nextRunAt}", run);
-  const runInsert = source.indexOf(".insert(schema.aiAgentRuns)", run);
   assert.notEqual(run, -1, "runContinuousCloseAgent exists");
-  assert.ok(orgTxn > run, "the scan runs in one pinned org transaction");
-  assert.ok(claim > orgTxn, "the occurrence is claimed inside that same transaction");
-  assert.ok(runInsert > claim, "the durable run row follows the claim within it");
-  const claimSql = source.slice(claim, source.indexOf("returning id", claim));
+  const body = source.slice(run, source.indexOf("export async function runDueContinuousCloseAgents"));
+  // One transaction: exactly one withOrg scan, and no nested transaction that
+  // could commit the claim apart from the run row.
+  assert.equal(body.split("await withOrg(").length - 1, 1, "the scan runs in exactly one pinned org transaction");
+  const txnStart = body.indexOf("await withOrg(");
+  const txnEnd = body.indexOf('if (prepared.kind === "unclaimed")');
+  assert.ok(txnEnd > txnStart, "the claimed transaction ends before post-commit enrichment");
+  const txn = body.slice(txnStart, txnEnd);
+  assert.doesNotMatch(txn, /db\.transaction\(/, "no nested transaction splits the claim from the run row");
+  const claim = txn.indexOf("set next_run_at = ${occurrence.nextRunAt}");
+  assert.ok(claim !== -1, "the occurrence is claimed inside that same transaction");
+  // The ordinary run row — the `const [run]` insert whose id the detector
+  // section and every durable outcome build on — is written in the same
+  // transaction too. Skip-path inserts (`const [skipped]`) live here by
+  // design; what matters is that the claimed branch's row shares the claim's
+  // commit, not which insert comes first in the file.
+  const ordinaryInsert = txn.indexOf("const [run] = await db");
+  assert.ok(ordinaryInsert !== -1, "the durable run row is written inside that same transaction");
+  assert.match(
+    txn.slice(ordinaryInsert, ordinaryInsert + 400),
+    /\.insert\(schema\.aiAgentRuns\)/,
+    "the ordinary run row is an ai_agent_runs insert",
+  );
+  const claimSql = txn.slice(claim, txn.indexOf("returning id", claim));
   assert.match(
     claimSql,
     /where id = \$\{occurrence\.policyId\} and org_id = \$\{args\.orgId\}\s+and next_run_at = \$\{occurrence\.claimedNextRunAt\}/,
     "the claim stays compare-and-swap and org-scoped: one tick wins an occurrence",
   );
   // The claimed fire time rides on every durable outcome, so the run record
-  // keeps the occurrence's scheduled-for timestamp after a crash-gap resume.
-  assert.match(source.slice(claim, source.indexOf("export async function runDueContinuousCloseAgents")), /scheduled_for: scheduledFor/);
+  // keeps the occurrence's scheduled-for timestamp after a crash-gap resume:
+  // the fire time is bound into occurrenceStats once, and every stats write in
+  // the transaction spreads it.
+  assert.match(txn, /scheduled_for: scheduledFor/, "the fire time is bound into the occurrence stats");
+  assert.match(txn, /\.\.\.occurrenceStats/, "every durable outcome in the transaction carries it");
 });
 
 test("nothing may claim an occurrence outside the agent transaction anymore", () => {
