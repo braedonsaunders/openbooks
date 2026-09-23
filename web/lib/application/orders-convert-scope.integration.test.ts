@@ -26,7 +26,6 @@ const { convertApplicationOrder } = await import("./orders.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function insertOrder(orgId: string, actor: string, kind: string, subsidiaryId: string | null, number: string): Promise<string> {
   const id = randomUUID();
@@ -48,7 +47,7 @@ function contextFor(orgId: string, actor: string, allowed: Set<string> | null): 
   };
 }
 
-test("convert refuses a sibling-kind id on the wrong route", { skip: !DB }, async () => {
+test("convert refuses a sibling-kind id on the wrong route", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));
@@ -73,7 +72,7 @@ test("convert refuses a sibling-kind id on the wrong route", { skip: !DB }, asyn
   }
 });
 
-test("convert refuses an out-of-scope subsidiary PO for a restricted caller", { skip: !DB }, async () => {
+test("convert refuses an out-of-scope subsidiary PO for a restricted caller", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));
@@ -100,7 +99,7 @@ test("convert refuses an out-of-scope subsidiary PO for a restricted caller", { 
   }
 });
 
-test("convert passes the guards for a matching kind in scope", { skip: !DB }, async () => {
+test("convert passes the guards for a matching kind in scope", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Converter", "order_converter"));

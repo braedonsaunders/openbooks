@@ -25,7 +25,6 @@ const { createApplicationOrder } = await import("./orders.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
 
 function contextFor(orgId: string, actor: string, allowed: Set<string> | null): ApplicationContext {
   return {
@@ -46,7 +45,7 @@ async function subsidiaryOf(orgId: string, id: string): Promise<string | null> {
   return row?.subsidiary_id ?? null;
 }
 
-test("restricted create derives the single visible subsidiary", { skip: !DB }, async () => {
+test("restricted create derives the single visible subsidiary", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Creator", "order_creator"));
@@ -58,7 +57,7 @@ test("restricted create derives the single visible subsidiary", { skip: !DB }, a
   }
 });
 
-test("restricted create without a subsidiary is refused when scope is ambiguous", { skip: !DB }, async () => {
+test("restricted create without a subsidiary is refused when scope is ambiguous", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Creator", "order_creator"));
@@ -79,7 +78,7 @@ test("restricted create without a subsidiary is refused when scope is ambiguous"
   }
 });
 
-test("restricted create refuses an out-of-scope subsidiary and accepts an in-scope one", { skip: !DB }, async () => {
+test("restricted create refuses an out-of-scope subsidiary and accepts an in-scope one", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Creator", "order_creator"));
@@ -101,7 +100,7 @@ test("restricted create refuses an out-of-scope subsidiary and accepts an in-sco
   }
 });
 
-test("restricted create refuses a malformed subsidiary id", { skip: !DB }, async () => {
+test("restricted create refuses a malformed subsidiary id", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Creator", "order_creator"));
@@ -120,7 +119,7 @@ test("restricted create refuses a malformed subsidiary id", { skip: !DB }, async
   }
 });
 
-test("unrestricted create keeps the established null subsidiary", { skip: !DB }, async () => {
+test("unrestricted create keeps the established null subsidiary", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Creator", "order_creator"));
