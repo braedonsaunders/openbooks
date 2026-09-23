@@ -559,6 +559,7 @@ async function measure(
   actorId: string,
   input: LossOfControlInput,
   s: Scope,
+  currentChangeId: string | null,
 ) {
   const ownershipRun = await runOwnershipConsolidationIn(
     orgId,
@@ -627,7 +628,18 @@ async function measure(
     amount: string;
     sourceAmount: string;
   }[] = [];
-  for (const inputLine of input.additionalConsolidationLines) {
+  // One elimination line backs at most its own amount across EVERY disposal:
+  // lock each source line in a stable order, then cap the cumulative absolute
+  // attribution (this request plus every other pending, approved or
+  // applied-and-active loss-of-control change) at the source amount (L3).
+  // Reversal and rejection release the reservation because only active
+  // changes count below; the serializable source transaction turns a
+  // concurrent over-attribution into a conflict retry instead of a double
+  // derecognition.
+  const attributed = [...input.additionalConsolidationLines].sort((a, b) =>
+    a.lineId < b.lineId ? -1 : a.lineId > b.lineId ? 1 : 0,
+  );
+  for (const inputLine of attributed) {
     if (canonicalDecimal(inputLine.amount, 4) === null)
       throw new Error(
         "attributed consolidation amounts must be exact signed decimals",
@@ -635,12 +647,13 @@ async function measure(
     const line = (
       await tx.execute<{
         entry_id: string;
+        entry_number: string;
         account_id: string;
         type: string;
         name: string;
         amount: string;
       }>(
-        sql`${consolidationHistory(orgId)} select e.id as entry_id,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
+        sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
       )
     ).rows[0];
     if (!line)
@@ -655,6 +668,21 @@ async function measure(
     )
       throw new Error(
         "the attributed portion must have the source line sign and cannot exceed its amount",
+      );
+    await tx.execute(
+      sql`select id from journal_lines where org_id=${orgId} and id=${inputLine.lineId} for update`,
+    );
+    const prior = (
+      await tx.execute<{ used: string }>(
+        sql`with prior as(select abs((e->>'amount')::numeric) as amount from consolidation_control_losses c,jsonb_array_elements(c.measurement->'manualEvidence') e where c.org_id=${orgId} and c.reversed_by_change_id is null and e->>'lineId'=${inputLine.lineId} union all select abs((e->>'amount')::numeric) from financial_changes f,jsonb_array_elements(coalesce(f.payload->'additionalConsolidationLines','[]'::jsonb)) e where f.org_id=${orgId} and f.domain='consolidation' and f.operation='loss_of_control' and f.status in('pending','approved') and e->>'lineId'=${inputLine.lineId} and (${currentChangeId}::uuid is null or f.id!=${currentChangeId}::uuid)) select coalesce(sum(amount),0)::text as used from prior`,
+      )
+    ).rows[0]!.used;
+    const sourceAbs = source < 0n ? -source : source,
+      portionAbs = portion < 0n ? -portion : portion,
+      remaining = sourceAbs - toUnits(prior);
+    if (portionAbs > remaining)
+      throw new Error(
+        `elimination line "${line.name}" (entry ${line.entry_number}) already attributes ${prior} to other disposals against a ${line.amount} source; attribute at most the remaining balance`,
       );
     owned.push({
       ...line,
@@ -864,13 +892,16 @@ async function preview(
   actorId: string,
   input: LossOfControlInput,
   s: Scope,
+  currentChangeId: string | null,
 ) {
   // Reuse the real ownership/asset accounting, including first-acquisition and
   // current-period NCI logic, under a rollback-only savepoint. No provisional
   // journal, audit row, close generation or notification can commit here.
   try {
     await withTransactionSavepoint(tx, async () => {
-      throw new PreviewRollback(await measure(tx, orgId, actorId, input, s));
+      throw new PreviewRollback(
+        await measure(tx, orgId, actorId, input, s, currentChangeId),
+      );
     });
   } catch (e) {
     if (e instanceof PreviewRollback) {
@@ -945,7 +976,7 @@ export async function proposeLossOfControl(
       };
     const old = await existingFinancialChange(tx, args);
     if (old) return old;
-    const calculated = await preview(tx, orgId, actorId, input, s);
+    const calculated = await preview(tx, orgId, actorId, input, s, null);
     return proposeFinancialChange(tx, {
       ...args,
       beforeState: { ...s, ...calculated },
@@ -1023,7 +1054,7 @@ export async function applyLossOfControl(
     const input = change.payload as unknown as LossOfControlInput;
     validate(input);
     const s = await scope(tx, orgId, change.subject_id, actorId, input),
-      calculated = await preview(tx, orgId, actorId, input, s);
+      calculated = await preview(tx, orgId, actorId, input, s, changeId);
     assertFinancialChangeApproved(change, {
       domain: "consolidation",
       subjectId: change.subject_id,
@@ -1046,7 +1077,7 @@ export async function applyLossOfControl(
     );
     if (closed.rows.length !== 1)
       throw new Error("ownership window could not be closed");
-    const measured = await measure(tx, orgId, actorId, input, s);
+    const measured = await measure(tx, orgId, actorId, input, s, changeId);
     if (
       canonicalJson(measured.preview) !== canonicalJson(calculated.preview) ||
       canonicalJson(measured.parentLines) !==
