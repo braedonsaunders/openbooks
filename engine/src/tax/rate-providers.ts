@@ -968,6 +968,14 @@ export async function quoteViaTaxJar(
     "an origin country",
   );
   const destinationCountry = requiredCountry(req.shipTo.country, "TaxJar", "a destination country");
+  // One request quotes one document line, so the line amount doubles as the
+  // line-item price: a coded line must travel as a classified line item,
+  // because TaxJar treats an omitted product_tax_code as fully taxable and a
+  // reduced/zero-rated item would otherwise be quoted (and posted) as fully
+  // taxable. Every product classification the request carries is a plain
+  // string, so any itemCode the draft holds can be expressed — nothing is
+  // silently dropped.
+  const lineAmount = wireAmountOrThrow(req.taxableAmount);
   const body = {
     from_country: originCountry,
     from_zip: req.shipFrom.postalCode ?? req.shipTo.postalCode,
@@ -976,8 +984,11 @@ export async function quoteViaTaxJar(
     to_zip: req.shipTo.postalCode,
     to_state: req.shipTo.region,
     to_city: req.shipTo.city,
-    amount: wireAmountOrThrow(req.taxableAmount),
+    amount: lineAmount,
     shipping: 0,
+    ...(req.itemCode
+      ? { line_items: [{ id: "1", quantity: 1, unit_price: lineAmount, product_tax_code: req.itemCode }] }
+      : {}),
   };
   const res = await taxProviderFetch(
     `${String(config.baseUrl ?? "https://api.taxjar.com")}/v2/taxes`,
