@@ -106,11 +106,13 @@ test("a mid-term currency change on a billed subscription is refused at activati
     const first = await billSubscriptionNow(subscriptionId, "2026-01-15", { actorId: actor });
     assert.equal(await invoiceCurrency(org.orgId, first.invoiceId), "USD");
     const versionId = await seedVersion(org, actor, planId, "EUR");
+    // The new term starts at the unbilled boundary so the activation
+    // exercises the currency guard, not the billed-service overlap guard.
     await assert.rejects(
       activateLifecycle(org.orgId, actor, {
         subscriptionId,
         planVersionId: versionId,
-        termStartsOn: "2026-01-01",
+        termStartsOn: "2026-02-01",
         renewalPolicy: "none",
       }),
       /cannot change mid-contract/,
@@ -131,7 +133,7 @@ test("activating the same-currency version on a billed subscription still works"
     await activateLifecycle(org.orgId, actor, {
       subscriptionId,
       planVersionId: versionId,
-      termStartsOn: "2026-01-01",
+      termStartsOn: "2026-02-01",
       renewalPolicy: "none",
     });
   });
