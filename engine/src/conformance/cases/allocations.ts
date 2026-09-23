@@ -531,6 +531,14 @@ async function seedPeriodRule(
 ): Promise<{ ruleId: string; versionId: string }> {
   const ledger = ctx.ledger!;
   const orgId = ledger.orgId;
+  // Posting cases run the engine directly (no route gate): opt the org into
+  // the `allocations` switch the engine fences posting behind.
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(
+      settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
+    where id = ${orgId}
+  `);
   const ruleId = randomUUID();
   const versionId = randomUUID();
   const key = `alloc-${ruleId.slice(0, 8)}`;

@@ -173,6 +173,7 @@ test("allocation_run is a registered flow subject with no writable fields", { sk
 
 test("post with an approval flow opens the flow and waits — no journal", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     const { flowId } = await seedApprovalFlow(org.orgId, {
@@ -216,6 +217,7 @@ test("post with an approval flow opens the flow and waits — no journal", { ski
 
 test("flow approval posts the run with journal + lineage as the approver", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     const { flowId } = await seedApprovalFlow(org.orgId, {
@@ -254,6 +256,7 @@ test("flow approval posts the run with journal + lineage as the approver", { ski
 
 test("flow rejection records failure with no journal and untouched lineage", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     const { flowId } = await seedApprovalFlow(org.orgId, {
@@ -299,6 +302,7 @@ test("flow rejection records failure with no journal and untouched lineage", { s
 
 test("post refuses when the configured flow gates but another allocation flow fails", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     const good = await seedApprovalFlow(org.orgId, {
@@ -352,9 +356,9 @@ test("post refuses when the configured flow gates but another allocation flow fa
 
 test("scheduler auto_post with a flow waits in pending_approval, never posts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
-    await enableAllocations(org.orgId);
     const { flowId } = await seedApprovalFlow(org.orgId, {
       subjectKind: "allocation_run",
       assignees: [{ type: "user", userId: actors.approver1Id }],
@@ -390,6 +394,7 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
 
 test("version without a flow posts directly — behaviour unchanged", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     await seedSourceEntry(org, actors.adminId, "1000.0000");
@@ -417,6 +422,7 @@ test("version without a flow posts directly — behaviour unchanged", { skip: !D
 
 test("misconfigured approval flow fails closed — the run stays previewed", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     await seedSourceEntry(org, actors.adminId, "1000.0000");
@@ -446,6 +452,7 @@ test("misconfigured approval flow fails closed — the run stays previewed", { s
 
 test("a period closed after approval was requested refuses at approval time", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   const actors = await seedFlowActors(org.orgId);
   try {
     const { flowId } = await seedApprovalFlow(org.orgId, {
