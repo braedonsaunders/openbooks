@@ -4,6 +4,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import ssh2 from "ssh2";
 
 /**
  * Real-route, live-PostgreSQL regression for the SFTP access-audit boundary:
@@ -309,8 +310,10 @@ test(
     const fixture = await seed();
     try {
       authorize(fixture);
-      const authorizedKeysBody =
-        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFORCEDKEYMATERIAL0000000000000000000000000000000000000000000 sftp@openbooks.test";
+      // A REAL generated key: fabricated base64 parses leniently but can
+      // never complete a signed login, so the fixture must carry material a
+      // partner could actually authenticate with.
+      const authorizedKeysBody = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
       const created = await post(fixture, {
         name: "Main Bank Feed",
         authorizedKeys: authorizedKeysBody,
@@ -493,6 +496,41 @@ test(
           `audit evidence must never contain secret material (found ${secret.slice(0, 12)}…)`,
         );
       }
+    } finally {
+      routeState.authz = null;
+      routeState.identity = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
+
+test(
+  "malformed authorizedKeys are refused at creation, naming the bad lines, and store nothing",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const good = `${ssh2.utils.generateKeyPairSync("ed25519").public.trim()} sftp@openbooks.test`;
+      const refused = await post(fixture, {
+        name: "Bad Keys Bank",
+        authorizedKeys: [good, "hello world", "ssh-ed25519 not-base64!!!"].join("\n"),
+      });
+      assert.equal(refused.status, 400);
+      const body = (await refused.json()) as { error: string };
+      assert.match(body.error, /line 2: /);
+      assert.match(body.error, /line 3: /);
+
+      const empty = await post(fixture, { name: "Empty Keys Bank", authorizedKeys: "  \n# nothing here\n" });
+      assert.equal(empty.status, 400);
+      assert.match(((await empty.json()) as { error: string }).error, /contains no public keys/);
+
+      const rows = await withOrgContext(fixture.orgId, async () => {
+        const r = await db.execute<{ count: number }>(sql`
+          select count(*)::int as count from sftp_servers where org_id = ${fixture.orgId}`);
+        return r.rows[0]!.count;
+      });
+      assert.equal(rows, 0, "a refused save must leave no login behind");
     } finally {
       routeState.authz = null;
       routeState.identity = null;
