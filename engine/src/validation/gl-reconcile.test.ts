@@ -21,6 +21,24 @@ test("GL reconciliation excludes unposted journal entries from ledger totals", (
   );
 });
 
+test("GL reconciliation filters the source on transaction date, not period start", () => {
+  assert.doesNotMatch(
+    source,
+    /ap\.startdate\s*>=/,
+    "a mid-period --since must cover the same transaction population on both sides",
+  );
+  assert.match(
+    source,
+    /sourcePlQuery\(SINCE\)/,
+    "source P&L must come from the shared transaction-date query builder",
+  );
+  assert.match(
+    source,
+    /sourceInvoiceQuery\(SINCE\)/,
+    "source invoices must come from the shared transaction-date query builder",
+  );
+});
+
 test("GL reconciliation excludes unposted journal entries from project detail", () => {
   const jobQuery = queryFor("job");
   assert.match(
