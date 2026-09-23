@@ -316,3 +316,72 @@ test('receipt directory comparison accepts two-digit shard names and still rejec
     assert.throws(() => check(assert, [...dirs, dirs[0]].sort(), count, 'coverage'))
   }
 })
+
+test('a skipped control is an unrun control: both partitions audit their own skips', () => {
+  // The hazard this pins: every DB-backed test is written `{ skip: !DB }`, so a
+  // partition whose database wiring breaks reports green having executed
+  // nothing. The canary proves ONE known file ran; these prove the shard that
+  // actually matters did not quietly skip.
+  for (const partition of ['unit', 'database']) {
+    const job = topLevelJob(partition)
+    assert.match(
+      job,
+      new RegExp(`assert-skip-budget\\.mjs ${partition} `),
+      `${partition} must audit its own skip count`,
+    )
+  }
+  // `if: always()` matters: a shard that FAILED must still be audited, or a red
+  // shard hides a partition that also stopped running things.
+  const audits = workflow.split('- name: Skips are declared, not silent')
+  assert.equal(audits.length, 3, 'both partitions declare the audit step')
+  for (const audit of audits.slice(1)) {
+    assert.match(audit.slice(0, 400), /if: always\(\)/)
+  }
+})
+
+test('scoping main is safe only because a scoped run cannot clear a release', () => {
+  const scope = topLevelJob('scope')
+  // Fails toward FULL on every unknown: non-push events, force pushes, a base
+  // that is not in history, and anything touching the build's own inputs.
+  assert.match(scope, /github\.event_name \}\}" != "push" \]; then full=true/)
+  assert.match(scope, /0000000000000000000000000000000000000000/)
+  assert.match(scope, /git cat-file -e "\$base\^\{commit\}"/)
+  assert.match(scope, /\\\.github\/workflows\/\|package-lock\\\.json/)
+
+  // The expensive matrices are gated; the cheap gate never is.
+  for (const job of ['unit', 'database', 'simulation']) {
+    assert.match(topLevelJob(job), /if: needs\.scope\.outputs\.code == 'true'/, job)
+  }
+  for (const job of ['e2e-app', 'e2e-workflows']) {
+    assert.match(topLevelJob(job), /if: needs\.scope\.outputs\.browser == 'true'/, job)
+  }
+  assert.doesNotMatch(topLevelJob('typecheck'), /^\s+if:/m)
+
+  // The keystone. It must NOT be always() — its entire value is that it cannot
+  // exist unless everything it needs really passed.
+  const full = topLevelJob('full-verification')
+  assert.match(full, /if: needs\.scope\.outputs\.full == 'true'/)
+  // The DIRECTIVE, not the prose — the comment above it names `if: always()`
+  // precisely to warn the next person off adding one.
+  assert.doesNotMatch(full, /^\s*if: always\(\)/m)
+  for (const needed of ['unit', 'database', 'simulation', 'integration', 'e2e-app', 'e2e-workflows']) {
+    assert.ok(
+      new RegExp(`needs: \\[[^\\]]*\\b${needed}\\b`).test(full),
+      `full-verification must depend on ${needed}`,
+    )
+  }
+
+  // And publish must actually require it, or scoping silently weakens the gate.
+  const publish = readFileSync(
+    new URL('../.github/workflows/publish-container.yml', import.meta.url),
+    'utf8',
+  )
+  assert.match(publish, /select\(\.name == "full-verification"\)/)
+  assert.match(publish, /No EXHAUSTIVE 'test' run/)
+})
+
+test('the aggregator only tolerates a skipped partition on a scoped run', () => {
+  const integration = topLevelJob('integration')
+  assert.match(integration, /FULL: \$\{\{ needs\.scope\.outputs\.full \}\}/)
+  assert.match(integration, /full \? \["success"\] : \["success", "skipped"\]/)
+})

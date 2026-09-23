@@ -24,7 +24,65 @@ env:
   ORG_CURRENCY: USD
 
 jobs:
+  scope:
+    # What this push could possibly have broken.
+    #
+    # Work lands directly on main here, many times an hour, so there is no PR
+    # tier to be fast in — the scoping has to happen on main itself. That is
+    # only safe because a scoped run cannot clear a release: the
+    # `full-verification` job below runs ONLY in full mode, and
+    # publish-container refuses any commit whose green `test` run lacks it.
+    # Fast on the way in, exhaustive on what ships.
+    #
+    # Fails toward FULL. An unknown event, a force push, a missing base, or
+    # anything touching the build's own inputs runs everything.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      full: ${{ steps.decide.outputs.full }}
+      code: ${{ steps.decide.outputs.code }}
+      browser: ${{ steps.decide.outputs.browser }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - id: decide
+        shell: bash
+        run: |
+          set -euo pipefail
+          full=false
+          base="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" != "push" ]; then full=true; fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then full=true; fi
+          if [ "$full" != true ] && ! git cat-file -e "$base^{commit}" 2>/dev/null; then full=true; fi
+          if [ "$full" != true ] && git log -1 --format=%B "${{ github.sha }}" | grep -qF '[full-ci]'; then full=true; fi
+
+          if [ "$full" = true ]; then
+            changed=""
+          else
+            changed="$(git diff --name-only "$base" "${{ github.sha }}")"
+            # The build's own inputs: a change here can move any result, so
+            # nothing about it is scopable.
+            if grep -qE '^(\.github/workflows/|package-lock\.json|package\.json|schema/|scripts/)' <<< "$changed"; then
+              full=true
+            fi
+          fi
+
+          if [ "$full" = true ]; then
+            code=true; browser=true
+          else
+            code=false; browser=false
+            grep -qE '^(engine/|web/|packages/|integrations/)' <<< "$changed" && code=true
+            grep -qE '^(e2e/|web/|packages/ui/)' <<< "$changed" && browser=true
+          fi
+          {
+            echo "full=$full"; echo "code=$code"; echo "browser=$browser"
+          } >> "$GITHUB_OUTPUT"
+          echo "full=$full code=$code browser=$browser"
+          echo "$changed" | head -40
+
   typecheck:
+    needs: scope
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -46,8 +104,14 @@ jobs:
         # Fails the job if any workspace with a `typecheck` script errors;
         # workspaces without one are skipped by --if-present.
         run: npm run typecheck --workspaces --if-present
+      - name: Lint
+        # Cheap, and it used to surface only after sixteen Postgres containers
+        # had already started. The zero-warning ceiling is the gate.
+        run: npm run lint
 
   unit:
+    needs: [scope, typecheck]
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -77,6 +141,12 @@ jobs:
         run: |
           set -o pipefail
           timeout --signal=TERM --kill-after=10s 16m npm run test:unit 2>&1 | tee unit.txt
+      - name: Skips are declared, not silent
+        # A skipped control is an unrun control. Runs even when the shard
+        # failed, so a red shard cannot hide a partition that also stopped
+        # executing things.
+        if: always()
+        run: node scripts/assert-skip-budget.mjs unit unit.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -88,6 +158,8 @@ jobs:
             .local/test-timings.json
 
   database:
+    needs: [scope, typecheck]
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     # 15 was enough until the payroll and tax packs landed: ten installable
     # countries and 41 tax packs added real work to every shard, and 11 and 16
@@ -217,6 +289,12 @@ jobs:
           fi
           npm run test:integration -- "${coverage[@]}" \
             --test-reporter=spec --test-reporter-destination=stdout 2>&1 | tee coverage.txt
+      - name: Skips are declared, not silent
+        # This partition HAS a database, so every `{ skip: !DB }` guard must
+        # resolve to run. A skip means the wiring broke and the shard reported
+        # green having executed nothing.
+        if: always()
+        run: node scripts/assert-skip-budget.mjs database coverage.txt
 
       - name: Verify bounded fixture lifecycle receipt
         # The single aggregator owner emits one immutable receipt after every
@@ -273,6 +351,8 @@ jobs:
           if-no-files-found: ignore
 
   simulation:
+    needs: [scope, typecheck]
+    if: needs.scope.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     services:
@@ -393,7 +473,7 @@ jobs:
 
   integration:
     # Preserve the required check name and verify complete, disjoint execution.
-    needs: [unit, database, simulation]
+    needs: [scope, unit, database, simulation]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -401,8 +481,26 @@ jobs:
       - name: Require every test partition
         env:
           RESULTS: ${{ toJSON(needs) }}
+          FULL: ${{ needs.scope.outputs.full }}
         run: |
-          node -e 'const jobs=JSON.parse(process.env.RESULTS); if(Object.values(jobs).some(job=>job.result!=="success")) process.exit(1)'
+          # A partition may be SKIPPED only on a scoped run. On a full run —
+          # which is the only kind that can clear a release — every partition
+          # must have executed and succeeded. Treating 'skipped' as acceptable
+          # unconditionally is how a release gate quietly stops gating.
+          node -e '
+            const jobs = JSON.parse(process.env.RESULTS);
+            const full = process.env.FULL === "true";
+            const allowed = full ? ["success"] : ["success", "skipped"];
+            const bad = Object.entries(jobs).filter(([, j]) => !allowed.includes(j.result));
+            if (bad.length) {
+              console.error(`partitions not ${allowed.join("/")}: ` +
+                bad.map(([n, j]) => `${n}=${j.result}`).join(", "));
+              process.exit(1);
+            }
+            console.log(full
+              ? "every partition executed and passed (full run)"
+              : "scoped run: " + Object.entries(jobs).map(([n, j]) => `${n}=${j.result}`).join(", "));
+          '
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -504,6 +602,8 @@ jobs:
   # build is ~3.5 minutes, so funnelling the shards through a single build job
   # would add a dependency edge longer than the fan-out removes.
   e2e-app:
+    needs: [scope, typecheck]
+    if: needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -621,6 +721,8 @@ jobs:
   # serial workers — exactly as when they were steps. Pairs are balanced on
   # measured runtime so no job is left holding the two slowest suites.
   e2e-workflows:
+    needs: [scope, typecheck]
+    if: needs.scope.outputs.browser == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -771,3 +873,21 @@ jobs:
             test-results/
             e2e-server.log
           if-no-files-found: ignore
+
+  full-verification:
+    # The release keystone, and the only reason scoping main is safe.
+    #
+    # Runs ONLY on a full run, and only if every partition and both browser
+    # tiers actually succeeded. publish-container refuses to release any
+    # commit whose green `test` run does not carry this job, so a scoped run
+    # is fast feedback and can never be mistaken for a release verification.
+    #
+    # Do not add `if: always()`. Its whole value is that it cannot exist
+    # unless everything it needs really passed.
+    needs: [scope, typecheck, unit, database, simulation, integration, e2e-app, e2e-workflows]
+    if: needs.scope.outputs.full == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Record exhaustive verification
+        run: echo "full matrix executed for ${{ github.sha }}"

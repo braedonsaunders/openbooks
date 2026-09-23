@@ -88,15 +88,37 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          conclusions=$(gh api \
+          # A green `test` run is necessary but NOT sufficient: ordinary pushes
+          # to main run a matrix scoped to what changed. Only a FULL run emits
+          # the `full-verification` job, which exists solely to prove every
+          # partition and both browser tiers executed and passed. Requiring the
+          # run id AND that job together is what keeps scoping honest — without
+          # this, a docs-only push could green `test` and clear a release.
+          runs=$(gh api \
             "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${SOURCE_COMMIT}&status=success" \
-            --jq '[.workflow_runs[] | select(.name == "test") | .conclusion] | join(" ")')
-          if ! grep -qw success <<< "$conclusions"; then
+            --jq '[.workflow_runs[] | select(.name == "test") | .id] | join(" ")')
+          if [ -z "$runs" ]; then
             echo "No successful 'test' run for ${SOURCE_COMMIT}." >&2
             echo "The merge gate must pass on the exact commit being released." >&2
             exit 1
           fi
-          echo "Merge gate is green for ${SOURCE_COMMIT}; running release-only checks."
+          verified=
+          for run in $runs; do
+            if gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run}/jobs" --paginate \
+                 --jq '.jobs[] | select(.name == "full-verification") | .conclusion' \
+               | grep -qw success; then
+              verified=$run
+              break
+            fi
+          done
+          if [ -z "$verified" ]; then
+            echo "No EXHAUSTIVE 'test' run for ${SOURCE_COMMIT}." >&2
+            echo "Runs found: ${runs}. None carried a successful 'full-verification' job," >&2
+            echo "so the matrix was scoped to the change and did not verify the artifact." >&2
+            echo "Re-run test.yml on this commit via workflow_dispatch (always full), then retry." >&2
+            exit 1
+          fi
+          echo "Merge gate is green and EXHAUSTIVE for ${SOURCE_COMMIT} (run ${verified}).""
       - name: Refuse to release a commit that is not on main
         # Checking out an explicit ref leaves HEAD detached, so the local `main`
         # branch does not exist even with full history. Materialize it, then
