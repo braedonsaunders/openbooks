@@ -3,6 +3,7 @@ import { db, withMaintenanceTransaction } from "../platform/db.ts";
 import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 import { rebaseClonedJsonReferences } from "./json-references.ts";
+import { MASKED_STORAGE_KIND } from "../platform/file-storage.ts";
 
 /**
  * The deterministic UUID-rebase clone engine. Copies one org's rows into a
@@ -79,10 +80,21 @@ function generateCopySql(
   const prod = assertUuid(opts.productionOrgId);
   const tableMask = opts.masked ? masking.get(t.name) : undefined;
 
+  // A masked sandbox never receives production file bytes: the blob table is
+  // not copied at all, and version/file rows carry the tombstone storage
+  // kind instead of 'db'/'s3'. Every download path refuses the tombstone by
+  // name (see MASKED_STORAGE_KIND); metadata (names, sizes, hashes) stays so
+  // the cabinet remains browsable test data.
+  if (opts.masked && t.name === "file_blobs") return null;
+
   const cols: string[] = [];
   const exprs: string[] = [];
   for (const c of t.columns) {
     cols.push(`"${c.name}"`);
+    if (opts.masked && (t.name === "files" || t.name === "file_versions") && c.name === "storage_kind") {
+      exprs.push(`'${MASKED_STORAGE_KIND}'`);
+      continue;
+    }
     const fkTarget = t.fks[c.name];
     if (c.name === "id" && t.hasId) {
       exprs.push(`ob_rebase("id", '${seed}')`);

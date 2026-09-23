@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getFileBlob, type FileViewer } from './file-cabinet'
+import { isMaskedFileContentError } from './file-storage'
 
 /** Guardrails — zipping fetches every blob (often from object storage), so cap
  *  the work per request. Bulk selections and folder subtrees both go through
@@ -97,8 +98,13 @@ export async function buildZip(
   let sourceBytes = 0
   for (const e of entries) {
     // A single unreadable blob (missing object, storage hiccup) must not sink
-    // the whole archive — skip it.
-    const blob = await getFileBlob(orgId, e.id, viewer).catch(() => null)
+    // the whole archive — skip it. A masked-clone tombstone is NOT skippable:
+    // it is a named refusal, so it propagates and fails the archive with its
+    // reason instead of silently dropping the file.
+    const blob = await getFileBlob(orgId, e.id, viewer).catch((err: unknown) => {
+      if (isMaskedFileContentError(err)) throw err
+      return null
+    })
     if (!blob) continue
     if (sourceBytes + blob.bytes.length > MAX_ZIP_BYTES) throw new ZipSizeLimitError()
     sourceBytes += blob.bytes.length

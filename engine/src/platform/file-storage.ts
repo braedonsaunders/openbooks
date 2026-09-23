@@ -129,6 +129,48 @@ export async function deleteEmailAttachmentBlobs(ids: string[]): Promise<void> {
   }
 }
 
+/**
+ * Tombstone storage kind written onto cloned file/files_versions rows by a
+ * masked sandbox clone INSTEAD of the production bytes (engine/src/sandbox).
+ * It is not a readable location: every download path must refuse it by name
+ * via refuseMaskedStorageKind below, so masked bytes can never be fetched.
+ */
+export const MASKED_STORAGE_KIND = "masked";
+
+/** Named refusal for tombstoned (masked-clone) file content. Carries the
+ * remedy in the message: the bytes were never copied, so nothing can be
+ * "fixed" from inside the sandbox — re-upload or use an unmasked tier. */
+export class MaskedFileContentError extends Error {
+  readonly name = "MaskedFileContentError";
+  readonly code = "masked_content_unavailable";
+
+  constructor() {
+    super(
+      "file content is unavailable: masked sandboxes never receive production file bytes " +
+        "(re-upload the file here, or clone an unmasked tier)",
+    );
+  }
+}
+
+/** Throw the named masked-content refusal when a version row carries the
+ * tombstone kind. Call at every bytes-dispatch site (DB and S3 alike) BEFORE
+ * attempting the read, so a tombstoned row can never fall through to a
+ * bytea/S3 fetch. */
+export function refuseMaskedStorageKind(storageKind: string | null | undefined): void {
+  if (storageKind === MASKED_STORAGE_KIND) throw new MaskedFileContentError();
+}
+
+/**
+ * Identify the masked-content refusal across module-graph boundaries: the
+ * web layer may instantiate the engine through both the workspace alias and
+ * a relative import (see engine/src/platform/db.ts), which defeats
+ * instanceof — so match the stable error name as well.
+ */
+export function isMaskedFileContentError(err: unknown): boolean {
+  return err instanceof MaskedFileContentError
+    || (err as { name?: string } | null | undefined)?.name === "MaskedFileContentError";
+}
+
 export async function deleteS3Blobs(versionIds: string[]): Promise<void> {
   for (let index = 0; index < versionIds.length; index += 1_000) {
     const chunk = versionIds.slice(index, index + 1_000);

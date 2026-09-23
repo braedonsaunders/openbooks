@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { activeStorageKind, getS3Blob, putS3Blob } from "../platform/file-storage.ts";
+import { activeStorageKind, getS3Blob, putS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { add, cmp, sum } from "../money/money.ts";
 import { assertPayRunApprovalReleased, payRunApprovalState } from "./approval.ts";
 import {
@@ -1027,6 +1027,8 @@ export async function releasePayRunBankFile(
   const row = rows.rows[0];
   if (!row) throw new PayrollError("payroll bank file not found");
 
+  // Masked-clone tombstone: refuse by name before the byte fetch.
+  refuseMaskedStorageKind(row.storageKind);
   const bytes = row.storageKind === "s3" ? await getS3Blob(row.versionId) : row.dbBytes;
   if (!bytes) throw new PayrollError("payroll bank file bytes are missing from storage");
   const hash = createHash("sha256").update(bytes).digest("hex");

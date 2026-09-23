@@ -15,7 +15,7 @@ import {
 } from "./ap-capture.ts";
 import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
-import { getS3Blob } from "../platform/file-storage.ts";
+import { getS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { runRecordFlows } from "../flows/index.ts";
 
 type CaptureRow = {
@@ -51,6 +51,8 @@ async function loadCaptureBlob(orgId: string, fileId: string): Promise<{ bytes: 
   `));
   const row = result.rows[0];
   if (!row) throw new Error("Capture source file is missing");
+  // Masked-clone tombstone: refuse by name before the byte fetch.
+  refuseMaskedStorageKind(row.storage_kind);
   const bytes = row.storage_kind === "s3" ? await getS3Blob(row.version_id) : row.bytes;
   if (!bytes) throw new Error("Capture source bytes are missing");
   return { bytes, contentType: row.content_type };

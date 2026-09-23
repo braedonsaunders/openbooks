@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, can } from '../../../../../lib/authz'
+import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../lib/blob-response'
 import { isUuid } from '../../../../../lib/list-params'
@@ -37,11 +38,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   `))
   const fileId = capture.rows[0]?.file_id
   if (!fileId) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const blob = await getFileBlob(gate.user.orgId, fileId, {
-    userId: gate.user.id,
-    isAdmin: can(gate, '*'),
-    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-  })
+  let blob: Awaited<ReturnType<typeof getFileBlob>>
+  try {
+    blob = await getFileBlob(gate.user.orgId, fileId, {
+      userId: gate.user.id,
+      isAdmin: can(gate, '*'),
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
+  } catch (err) {
+    // Masked-clone tombstone: refuse by name, never as an anonymous 500.
+    if (isMaskedFileContentError(err)) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+    }
+    throw err
+  }
   if (!blob) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   return blobResponse(request, blob, { fallbackName: 'document' })
 }

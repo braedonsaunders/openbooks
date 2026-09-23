@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payments/operations.ts'
+import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
 
@@ -18,18 +19,23 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
 
   try {
-    const result = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
-      select pf.id, pf.filename, pf.content_type, fb.bytes
+    const result = (await db.execute<{ id: string; filename: string; content_type: string; storage_kind: string; bytes: Buffer | null }>(sql`
+      select pf.id, pf.filename, pf.content_type, fv.storage_kind, fb.bytes
         from payment_files pf
         join files fi on fi.id = pf.file_id and fi.org_id = ${gate.user.orgId}
         join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
-        join file_blobs fb on fb.version_id = fv.id
+        left join file_blobs fb on fb.version_id = fv.id
        where pf.payment_run_id = ${id} and pf.org_id = ${gate.user.orgId}
          and pf.status in ('approved', 'delivered')
        order by pf.sequence_number desc limit 1
     `))
     const file = result.rows[0]
     if (!file) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
+    // Masked-clone tombstone: the artifact row exists but its bytes were
+    // never copied — refuse by name (403 via paymentErrorResponse), never as
+    // a misleading 409 'no approved file'.
+    refuseMaskedStorageKind(file.storage_kind)
+    if (!file.bytes) return NextResponse.json({ error: 'no approved payment file is available' }, { status: 409 })
     await recordPaymentFileDownload(file.id, gate.user.orgId, gate.user.id)
     return new NextResponse(new Uint8Array(file.bytes), {
       headers: {

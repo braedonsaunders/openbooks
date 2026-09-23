@@ -5,6 +5,7 @@ import {
   HrmOrgChartError,
   HrmSurveysError,
 } from "@openbooks/engine/src/hrm/documents/errors.ts";
+import { isMaskedFileContentError } from "@openbooks/engine/src/platform/file-storage.ts";
 
 /**
  * Shared error mapping for /api/hrm/document-templates, /api/hrm/documents,
@@ -17,6 +18,15 @@ import {
  * `res.ok` first (the refusal message lives in the error body).
  */
 export function hrmDocumentsErrorResponse(e: unknown): NextResponse {
+  // Masked-sandbox file tombstone: a computed refusal with its remedy in the
+  // message. It must reach the caller intact — the generic branch below would
+  // bury it as a bare 500 'internal error' no operator has ever seen.
+  if (isMaskedFileContentError(e)) {
+    return NextResponse.json(
+      { error: (e as Error).message },
+      { status: 403 },
+    );
+  }
   if (
     e instanceof HrmDocumentsError ||
     e instanceof HrmSurveysError ||

@@ -9,6 +9,7 @@ import {
 } from "../platform/db.ts";
 import { fromUnits, sum, toUnits } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
+import { refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { decryptAccountNumber, isValidBic, isValidIban } from "./rail-settings.ts";
 import { lockRunBankEvidence } from "./run-readiness.ts";
@@ -797,17 +798,23 @@ async function findLiveRunArtifact(
   runId: string,
   orgId: string,
 ): Promise<{ id: string; filename: string; contentType: string; content: Buffer } | null> {
-  const existing = (await db.execute<{ id: string; filename: string; content_type: string; bytes: Buffer }>(sql`
-    select pf.id, pf.filename, pf.content_type, fb.bytes
+  const existing = (await db.execute<{ id: string; filename: string; content_type: string; storage_kind: string; bytes: Buffer | null }>(sql`
+    select pf.id, pf.filename, pf.content_type, fv.storage_kind, fb.bytes
       from payment_files pf
       join files fi on fi.id = pf.file_id and fi.org_id = ${orgId}
       join file_versions fv on fv.id = pf.file_version_id and fv.file_id = fi.id
-      join file_blobs fb on fb.version_id = fv.id
+      left join file_blobs fb on fb.version_id = fv.id
      where pf.payment_run_id = ${runId} and pf.org_id = ${orgId} and pf.status not in ('superseded', 'voided', 'rejected')
      order by pf.sequence_number desc limit 1
   `));
   const row = existing.rows[0];
-  return row ? { id: row.id, filename: row.filename, contentType: row.content_type, content: row.bytes } : null;
+  // Masked-clone tombstone: refuse by name. The left join keeps the row
+  // visible so the tombstone (not a missing blob) decides the outcome.
+  if (row) refuseMaskedStorageKind(row.storage_kind);
+  // A row without blob bytes (e.g. an S3-backed version has no file_blobs
+  // row) is "no live artifact", exactly as the old inner join reported it.
+  if (!row || !row.bytes) return null;
+  return { id: row.id, filename: row.filename, contentType: row.content_type, content: row.bytes };
 }
 
 export async function generatePaymentFileArtifact(
