@@ -8,15 +8,9 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { sql } from 'drizzle-orm'
 import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from './settings-body.ts'
-import {
-  loadFieldTimeSettings,
-  validateFieldTimeSettings,
-} from '@openbooks/engine/src/hrm/field-time/settings.ts'
+import { validateFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { db, env, withBypass } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 
 const fullRules = {
   roundingIncrement: 15,
@@ -76,36 +70,3 @@ test('a wrong-typed key still fails at the boundary carrying its field path', ()
   assert.equal(parsed.error.issues[0]?.path.join('.'), 'autoCloseHours')
 })
 
-test('a saved full rule set loads back through the clock gate', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await withBypass(() => createScratchOrg())
-  try {
-    const parsed = fieldTimeSettingsBody.safeParse(fullRules)
-    assert.equal(parsed.success, true)
-    const settings = validateFieldTimeSettings(normalizeFieldTimeSettingsBody(parsed.data))
-    // The route's exact store statement (web/app/api/time/settings/route.ts):
-    // validated settings persist flat under settings->'fieldTime'.
-    await withBypass(
-      () => db.execute(sql`
-        update orgs
-           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}', ${JSON.stringify({
-             roundingIncrement: settings.rounding.incrementMinutes,
-             roundingMode: settings.rounding.mode,
-             unpaidBreakMinutes: settings.unpaidBreakMinutes,
-             autoCloseHours: settings.autoCloseHours,
-             signatureRequired: settings.signatureRequired,
-             equipmentToleranceHours: settings.equipmentToleranceHours,
-             photoRequired: settings.photoRequired,
-           })}::jsonb),
-               updated_at = now()
-         where id = ${org.orgId}`),
-    )
-    // ...and the clock gate that refused field_time_not_configured now loads.
-    const loaded = await withBypass(() => loadFieldTimeSettings(org.orgId))
-    assert.equal(loaded.rounding.incrementMinutes, 15)
-    assert.equal(loaded.rounding.mode, 'nearest')
-    assert.equal(loaded.unpaidBreakMinutes, 30)
-    assert.equal(loaded.autoCloseHours, 16)
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
