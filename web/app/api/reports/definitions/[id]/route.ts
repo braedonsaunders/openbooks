@@ -4,6 +4,7 @@ import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -110,20 +111,40 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const layout =
     body.layout !== undefined ? validateReportLayout(body.layout) : existing.layout
 
-  const updated = await db.execute<{ id: string }>(sql`
-    update report_definitions set
-      name = ${name},
-      slug = ${slug},
-      description = ${body.description !== undefined ? body.description?.trim() || null : existing.description},
-      query = ${queryJson}::jsonb,
-      layout = ${layout ? JSON.stringify(layout) : null}::jsonb,
-      updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
-    where id = ${id} and org_id = ${user.orgId}
-      and ${REPORT_DEFINITION_REVISION} = ${expectedUpdatedAt}
-    returning id
-  `)
+  // The definition mutation and its audit evidence commit atomically: the
+  // audit insert runs inside the same transaction, so a failed audit rolls
+  // the definition change back instead of leaving an unevidenced edit.
+  const updated = await db.transaction(async (tx) => {
+    const result = await tx.execute<Record<string, unknown>>(sql`
+      update report_definitions set
+        name = ${name},
+        slug = ${slug},
+        description = ${body.description !== undefined ? body.description?.trim() || null : existing.description},
+        query = ${queryJson}::jsonb,
+        layout = ${layout ? JSON.stringify(layout) : null}::jsonb,
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
+      where id = ${id} and org_id = ${user.orgId}
+        and ${REPORT_DEFINITION_REVISION} = ${expectedUpdatedAt}
+      returning id, kind, report_type, slug, name, description, query, statement,
+                system, layout, created_at, updated_at, created_by, updated_by
+    `)
+    const after = result.rows[0]
+    if (!after) return null
+    await auditSetupChange(
+      {
+        orgId: user.orgId,
+        table: 'report_definitions',
+        rowId: id,
+        action: 'update',
+        changes: { before: existing, after },
+        actorId: user.id,
+      },
+      tx,
+    )
+    return after
+  })
 
-  if (!updated.rows[0]) {
+  if (!updated) {
     return NextResponse.json(
       { error: 'this report definition changed after you opened it; reload and review the latest revision' },
       { status: 409 },
