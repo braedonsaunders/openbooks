@@ -39,21 +39,17 @@ const mockSources = new Map<string, string>([
   [
     'pdf',
     `
+      // Thin re-export-plus-override of the real @openbooks/pdf surface: the
+      // star carries every name this double does not stub — notably the REAL
+      // RendererUnavailableError, which the route under test maps through the
+      // REAL lib/api/pdf-renderer, so the mock produces the refusal the real
+      // pool would throw instead of a hand-written mirror that can drift. A
+      // future export added to the package rides the star instead of breaking
+      // this double's link. Importing the real index never launches Chromium.
+      export * from '../../../../../packages/pdf/src/index.ts'
+      export { RendererUnavailableError } from '../../../../../packages/pdf/src/index.ts'
       export function compileTemplateHtml(source) { return { sanitizedSource: source, compiledHtml: source } }
       export function sanitizeTokenizedFragment(fragment) { return fragment }
-      // Faithful mirror of the real RendererUnavailableError contract (name,
-      // executablePath, message naming the path and the remedy): the route
-      // under test maps it through the REAL lib/api/pdf-renderer, so the
-      // mock must produce the refusal the real pool would throw.
-      export class RendererUnavailableError extends Error {
-        constructor(executablePath) {
-          super(executablePath
-            ? \`PDF renderer is unavailable: Chromium was not found at \${executablePath}. Install Chromium on the app server or set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.\`
-            : 'PDF renderer is unavailable: no Chromium executable is configured.')
-          this.name = 'RendererUnavailableError'
-          this.executablePath = executablePath
-        }
-      }
       export function pdfRendererStatus() { return { available: true, executablePath: '/usr/bin/chromium', message: 'available' } }
     `,
   ],

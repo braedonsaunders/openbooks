@@ -4,6 +4,12 @@ import { resolve } from 'node:path'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
 
+// Absolute file URL of the real @openbooks/pdf surface, interpolated into the
+// mock below. A bare or relative specifier cannot be used there: the mock
+// module's base is the opaque `mock:` URL, so only an absolute URL reaches
+// the real file without being re-intercepted by these same hooks.
+const pdfIndexUrl = pathToFileURL(resolve(process.cwd(), 'packages/pdf/src/index.ts')).href
+
 // Regression coverage for direct document email delivery attribution: every
 // email_log row a direct send produces must name its sender in audit evidence.
 // An interactive delivery attributes the canonical created_by column to the
@@ -153,8 +159,13 @@ const mockSources = new Map<string, string>([
     `export function appBaseUrl() { return 'https://openbooks.example' }`,
   ],
   [
+    // Thin re-export-plus-override of the real @openbooks/pdf surface: a
+    // future export added to the package rides the star instead of breaking
+    // this double's link. Importing the real index never launches Chromium.
     'mock:openbooks-pdf',
-    `export async function verifyPdfEncryption() {}`,
+    `export * from '${pdfIndexUrl}'
+      export { RendererUnavailableError } from '${pdfIndexUrl}'
+      export async function verifyPdfEncryption() {}`,
   ],
   [
     'mock:features',

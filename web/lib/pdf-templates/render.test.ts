@@ -28,6 +28,13 @@ function readCapturedInput(): CapturedPdfInput {
 const templateUrl = pathToFileURL(
   `${process.cwd()}/packages/pdf/src/template.ts`,
 ).href
+// Absolute file URL of the real @openbooks/pdf surface, interpolated into the
+// mock below. A bare or relative specifier cannot be used there: the mock
+// module's base is the opaque `mock:` URL, so only an absolute URL reaches
+// the real file without being re-intercepted by these same hooks.
+const pdfIndexUrl = pathToFileURL(
+  `${process.cwd()}/packages/pdf/src/index.ts`,
+).href
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
@@ -40,7 +47,13 @@ registerHooks({
     if (url === 'mock:openbooks-pdf') {
       return {
         format: 'module',
+        // Thin re-export-plus-override of the real @openbooks/pdf surface: a
+        // future export added to the package rides the star instead of
+        // breaking this double's link. Importing the real index never
+        // launches Chromium.
         source: `
+          export * from ${JSON.stringify(pdfIndexUrl)}
+          export { RendererUnavailableError } from ${JSON.stringify(pdfIndexUrl)}
           import { renderTemplate, sanitizeRenderedHtml, sanitizeTokenizedFragment } from ${JSON.stringify(templateUrl)}
           const state = globalThis[Symbol.for('openbooks.pdf-render-sanitization-test')]
           export { renderTemplate, sanitizeRenderedHtml, sanitizeTokenizedFragment }

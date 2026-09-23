@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
+import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+
+// Absolute file URL of the real @openbooks/pdf surface, interpolated into the
+// mock below. A bare or relative specifier cannot be used there: the mock
+// module's base is the opaque `mock:` URL, so only an absolute URL reaches
+// the real file without being re-intercepted by these same hooks.
+const pdfIndexUrl = pathToFileURL(
+  `${process.cwd()}/packages/pdf/src/index.ts`,
+).href
 
 const stateKey = Symbol.for('openbooks.account-register-route-test')
 const routeState = { accountRegisterCalls: 0, lastBook: undefined as string | undefined, permissions: ['gl.read'] }
@@ -75,8 +84,13 @@ const mockSources = new Map<string, string>([
     `export async function businessToday() { return '2026-08-28' }`,
   ],
   [
+    // Thin re-export-plus-override of the real @openbooks/pdf surface: a
+    // future export added to the package rides the star instead of breaking
+    // this double's link. Importing the real index never launches Chromium.
     'mock:pdf',
-    `export function resolvePdfPageSetup() { return {} }`,
+    `export * from '${pdfIndexUrl}'
+      export { RendererUnavailableError } from '${pdfIndexUrl}'
+      export function resolvePdfPageSetup() { return {} }`,
   ],
 ])
 
