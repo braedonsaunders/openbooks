@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { obligationPeriodForForm } from './TaxFilingsView.tsx'
+import { buildPrepareBody, obligationPeriodForForm } from './TaxFilingsView.tsx'
 
 const viewSource = readFileSync(
   new URL('./TaxFilingsView.tsx', import.meta.url),
@@ -47,6 +47,55 @@ test('a form without an obligation does not inherit the last response entry', ()
 test('changing forms starts from the neutral business-month bounds', () => {
   assert.match(viewSource, /setFrom\(bounds\.from\)/)
   assert.match(viewSource, /setTo\(bounds\.to\)/)
+})
+
+// TR2: prepare freezes exactly what was previewed — the clamped window plus
+// the preview's own filing scope — so an entity-scoped or translated preview
+// is what gets filed, not the org-wide default.
+test('prepare carries the preview window and filing scope', () => {
+  assert.deepEqual(
+    buildPrepareBody(
+      'GST-Q',
+      {
+        from: '2026-07-16',
+        to: '2026-07-31',
+        subsidiaryIds: ['sub-a'],
+        registrationId: 'reg-1',
+        translation: { presentationCurrency: 'CAD', rateType: 'spot', rateDate: '2026-07-31' },
+      },
+      {},
+    ),
+    {
+      code: 'GST-Q',
+      from: '2026-07-16',
+      to: '2026-07-31',
+      adjustments: {},
+      filingEntity: { subsidiaryIds: ['sub-a'], registrationId: 'reg-1' },
+      translation: { presentationCurrency: 'CAD', rateType: 'spot', rateDate: '2026-07-31' },
+    },
+  )
+})
+
+test('prepare of an org-wide preview keeps the historical body shape', () => {
+  assert.deepEqual(
+    buildPrepareBody(
+      'GST-Q',
+      {
+        from: '2026-07-01',
+        to: '2026-07-31',
+        subsidiaryIds: [],
+        registrationId: null,
+        translation: null,
+      },
+      { '101': '12.50' },
+    ),
+    {
+      code: 'GST-Q',
+      from: '2026-07-01',
+      to: '2026-07-31',
+      adjustments: { '101': '12.50' },
+    },
+  )
 })
 
 test('tax filing box display preserves exact decimal values', () => {

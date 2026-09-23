@@ -20,8 +20,11 @@ interface EngineCall {
 
 interface RouteState {
   permissions: Set<string>
+  allowedSubsidiaryIds: Set<string> | null
   permissionChecks: string[]
+  scopeChecks: (string | null)[]
   engineCalls: EngineCall[]
+  computeOpts: unknown[]
   markFiledError: unknown
   filingInserts: string[]
 }
@@ -29,8 +32,11 @@ interface RouteState {
 const stateKey = Symbol.for('openbooks.tax-filing-route-test')
 const routeState: RouteState = {
   permissions: new Set(),
+  allowedSubsidiaryIds: null,
   permissionChecks: [],
+  scopeChecks: [],
   engineCalls: [],
+  computeOpts: [],
   markFiledError: null,
   filingInserts: [],
 }
@@ -69,16 +75,19 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
       const NextResponse = globalThis.openbooksTaxFilingNextResponse
-      export function guardSubsidiaryScope(authz) {
-        if (authz.allowedSubsidiaryIds !== null) throw new Error('unexpected scoped fixture')
-        return null
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        state.scopeChecks.push(subsidiaryId ?? null)
+        const allowed = authz.allowedSubsidiaryIds
+        if (allowed === null) return null
+        if (subsidiaryId !== null && subsidiaryId !== undefined && allowed.has(subsidiaryId)) return null
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
       export async function guardPermission(permission) {
         state.permissionChecks.push(permission)
         if (!state.permissions.has(permission)) {
           return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
         }
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
     `,
   ],
@@ -129,15 +138,26 @@ const mockSources = new Map<string, string>([
     'mock:tax-return',
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
-      export async function computeTaxReturn(orgId, code, from, to) {
+      export async function computeTaxReturn(orgId, code, from, to, adjustments, opts) {
         state.engineCalls.push({ op: 'compute', orgId, userId: 'user-1' })
+        state.computeOpts.push(opts ?? null)
         // The double must produce the full return identity the prepare path
         // freezes: a double that cannot produce it would let the insert
-        // silently persist NULL posture without any test noticing.
+        // silently persist NULL posture without any test noticing. It echoes
+        // the requested scope so pass-through is observable.
+        const filingEntity = opts?.filingEntity
         return {
           formCode: code, formName: 'Form ' + code, from, to, submissionChannel: 'paper', boxes: [],
-          registrationNumber: '123456789RT0001', registrationId: '33333333-3333-4333-8333-333333333333',
-          functionalCurrency: 'CAD', subsidiaryIds: [], translation: null,
+          registrationNumber: '123456789RT0001',
+          registrationId: filingEntity?.registrationId ?? '33333333-3333-4333-8333-333333333333',
+          functionalCurrency: opts?.translation?.presentationCurrency ?? 'CAD',
+          subsidiaryIds: filingEntity ? [...filingEntity.subsidiaryIds] : [],
+          translation: opts?.translation ? {
+            presentationCurrency: opts.translation.presentationCurrency,
+            rateType: opts.translation.rateType ?? 'spot',
+            rateDate: opts.translation.rateDate ?? to,
+            entities: [],
+          } : null,
         }
       }
     `,
@@ -191,20 +211,23 @@ function taxFilingError(code: string, message: string): unknown {
   return factory ? factory(code, message) : Object.assign(new Error(message), { code })
 }
 
-function reset(permissions: string[]): void {
+function reset(permissions: string[], allowedSubsidiaryIds: string[] | null = null): void {
   routeState.permissions = new Set(permissions)
+  routeState.allowedSubsidiaryIds = allowedSubsidiaryIds === null ? null : new Set(allowedSubsidiaryIds)
   routeState.permissionChecks.length = 0
+  routeState.scopeChecks.length = 0
   routeState.engineCalls.length = 0
+  routeState.computeOpts.length = 0
   routeState.markFiledError = null
   routeState.filingInserts.length = 0
 }
 
-function post(): Promise<Response> {
+function post(body: unknown = { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31' }): Promise<Response> {
   return POST(
     new Request('http://openbooks.test/api/tax/filings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ code: 'GST-Q', from: '2026-01-01', to: '2026-03-31' }),
+      body: JSON.stringify(body),
     }),
   )
 }
@@ -262,6 +285,66 @@ test('POST prepare freezes the return identity and snapshot version', async () =
   ]) {
     assert.match(insert, new RegExp(column), `prepare insert must freeze ${column}`)
   }
+})
+
+// TR2: prepare accepts the same filing scope the preview GET does and hands
+// it to the engine verbatim, so an entity-scoped or translated preview can
+// be frozen as prepared.
+test('POST prepare passes the filing scope and translation to the engine', async () => {
+  reset(['compliance.file'])
+
+  const response = await post({
+    code: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+    filingEntity: { subsidiaryIds: ['sub-a'], registrationId: 'reg-1' },
+    translation: { presentationCurrency: 'CAD', rateType: 'spot', rateDate: '2026-03-31' },
+  })
+
+  assert.equal(response.status, 201)
+  assert.deepEqual(routeState.scopeChecks, ['sub-a'])
+  assert.deepEqual(routeState.computeOpts, [{
+    filingEntity: { subsidiaryIds: ['sub-a'], registrationId: 'reg-1' },
+    translation: { presentationCurrency: 'CAD', rateType: 'spot', rateDate: '2026-03-31' },
+  }])
+})
+
+test('POST prepare refuses a malformed filing scope without reaching the engine', async () => {
+  reset(['compliance.file'])
+
+  for (const body of [
+    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: 'sub-a' } },
+    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: [], } },
+    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', translation: { presentationCurrency: 7 } },
+  ]) {
+    const response = await post(body)
+    assert.equal(response.status, 422)
+  }
+  assert.deepEqual(routeState.engineCalls, [], 'refused scopes never reach the engine')
+})
+
+test('POST prepare keeps restricted callers inside their allowed subsidiaries', async () => {
+  reset(['compliance.file'], ['sub-a'])
+
+  const scoped = await post({
+    code: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+    filingEntity: { subsidiaryIds: ['sub-a'] },
+  })
+  assert.equal(scoped.status, 201)
+
+  const foreign = await post({
+    code: 'GST-Q',
+    from: '2026-01-01',
+    to: '2026-03-31',
+    filingEntity: { subsidiaryIds: ['sub-nope'] },
+  })
+  assert.equal(foreign.status, 404)
+
+  const orgWide = await post()
+  assert.equal(orgWide.status, 404, 'the org-wide return keeps its historical denial')
+  assert.equal(routeState.engineCalls.length, 1, 'only the in-scope prepare reached the engine')
 })
 
 test('PATCH mark-filed demands compliance.file, not the report authority', async () => {

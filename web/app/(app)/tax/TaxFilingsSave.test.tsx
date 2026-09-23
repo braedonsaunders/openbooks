@@ -13,3 +13,9 @@ test('the computed filing offers save as a first-class button beside export', ()
   assert.doesNotMatch(popover, /saveSnapshot/, 'save must not hide inside the export menu')
   assert.match(source, /<Button[^>]*onClick=\{\(\) => void saveSnapshot\(\)\}/)
 })
+
+// TR2: the prepare POST must freeze the preview it came from — its clamped
+// window plus its filing scope — never a rebuilt org-wide body.
+test('save posts the preview-derived prepare body', () => {
+  assert.match(source, /JSON\.stringify\(buildPrepareBody\(code, result, adjustments\)\)/)
+})

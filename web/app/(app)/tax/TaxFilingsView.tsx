@@ -41,11 +41,52 @@ type Result = {
   submissionChannel: string
   watermark: string | null
   boxes: Box[]
+  subsidiaryIds: string[]
+  registrationId: string | null
+  translation: { presentationCurrency: string; rateType: string; rateDate: string } | null
 }
 type FilingObligation = {
   returnFormCode: string | null
   reportableFrom: string
   reportableTo: string
+}
+
+/**
+ * Build the prepare-POST body for a previewed return. The prepare freezes
+ * exactly what was previewed: the engine-clamped window (not the requested
+ * range) plus the preview's own filing scope — the subsidiary set, the pinned
+ * registration and the translation policy the engine echoed. An org-wide,
+ * untranslated preview carries no filing entity or translation, preserving
+ * the historical prepare shape byte-for-byte.
+ */
+export function buildPrepareBody(
+  code: string,
+  result: Pick<Result, 'from' | 'to' | 'subsidiaryIds' | 'registrationId' | 'translation'>,
+  adjustments: Record<string, string>,
+): Record<string, unknown> {
+  return {
+    code,
+    from: result.from,
+    to: result.to,
+    adjustments,
+    ...(result.registrationId || result.subsidiaryIds.length > 0
+      ? {
+          filingEntity: {
+            subsidiaryIds: result.subsidiaryIds,
+            ...(result.registrationId ? { registrationId: result.registrationId } : {}),
+          },
+        }
+      : {}),
+    ...(result.translation
+      ? {
+          translation: {
+            presentationCurrency: result.translation.presentationCurrency,
+            rateType: result.translation.rateType,
+            rateDate: result.translation.rateDate,
+          },
+        }
+      : {}),
+  }
 }
 
 /** Return a reportable window only when the obligation belongs to this form. */
@@ -146,7 +187,7 @@ export function TaxFilingsView({
       const response = await fetch('/api/tax/filings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, from, to, adjustments }),
+        body: JSON.stringify(buildPrepareBody(code, result, adjustments)),
       })
       if (!response.ok) throw new Error()
       toast.success(t('history.saved'))

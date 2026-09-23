@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { parseReturnScopeQuery, returnScopeOpts } from '@/lib/tax-return-scope'
 import { parseAdjustments } from './tax-return-params'
 
 export const runtime = 'nodejs'
@@ -22,12 +23,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
     return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
   }
-  const subsidiaryIds = p.getAll('subsidiary').flatMap((v) => v.split(',')).map((v) => v.trim()).filter(Boolean)
-  // An explicitly empty subsidiary list is a caller error, not the org-wide
-  // return: fail closed rather than silently widening the scope.
-  if (p.has('subsidiary') && subsidiaryIds.length === 0 && !p.get('registration')?.trim()) {
-    return NextResponse.json({ error: 'subsidiary filter is empty' }, { status: 422 })
+  // Scope + translation parse exactly as the prepare POST does (shared
+  // parser): a scope the preview accepts but prepare rejects would strand
+  // the filer between two disagreeing surfaces.
+  const parsed = parseReturnScopeQuery(p)
+  if (parsed.error || !parsed.scope) {
+    return NextResponse.json({ error: parsed.error ?? 'invalid scope' }, { status: 422 })
   }
+  const { subsidiaryIds } = parsed.scope
   if (subsidiaryIds.length > 0) {
     for (const id of subsidiaryIds) {
       const denied = guardSubsidiaryScope(gate, id)
@@ -37,25 +40,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     const scopeDenied = guardSubsidiaryScope(gate, null)
     if (scopeDenied) return scopeDenied
   }
-  const registration = p.get('registration')?.trim() || undefined
-  const presentationCurrency = p.get('presentationCurrency')?.trim() || undefined
-  const rateType = p.get('rateType')?.trim() || undefined
-  const rateDate = p.get('rateDate')?.trim() || undefined
-  const filingEntity = subsidiaryIds.length > 0 || registration ? {
-    subsidiaryIds,
-    ...(registration ? { registrationId: registration } : {}),
-  } : undefined
   try {
-    const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p), {
-      ...(filingEntity ? { filingEntity } : {}),
-      ...(presentationCurrency || rateType || rateDate ? {
-        translation: {
-          presentationCurrency: presentationCurrency ?? '',
-          ...(rateType ? { rateType } : {}),
-          ...(rateDate ? { rateDate } : {}),
-        },
-      } : {}),
-    })
+    const result = await computeTaxReturn(gate.user.orgId, code, from, to, parseAdjustments(p), returnScopeOpts(parsed.scope))
     return NextResponse.json(result)
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'compute failed' }, { status: 422 })
