@@ -42,16 +42,14 @@ async function fixture(status = 'draft') {
   return { org, unitId }
 }
 
-async function call(id: string, method: string, body?: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+async function call(id: string): Promise<{ status: number; json: Record<string, unknown> }> {
   try {
-    const response = await withOrgContext(state.orgId, () => (method === 'DELETE' ? DELETE : PATCH)(
-      new Request(`http://equipment.test/api/equipment/${id}`, {
-        method,
-        headers: { 'content-type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      }) as Request,
-      { params: Promise.resolve({ id }) },
-    ))
+    const response: Response = await withOrgContext(state.orgId, () =>
+      DELETE(
+        new Request(`http://equipment.test/api/equipment/${id}`, { method: 'DELETE' }),
+        { params: Promise.resolve({ id }) },
+      ),
+    )
     return { status: response.status, json: (await response.json().catch(() => null)) as Record<string, unknown> }
   } catch (error) {
     return { status: 500, json: { thrown: error instanceof Error ? error.message : String(error) } }
@@ -71,7 +69,7 @@ async function audits(orgId: string, unitId: string, action: string) {
 test('DELETE removes a draft unit and audits the locked before-image', async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await call(unitId, 'DELETE')
+    const result = await call(unitId)
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.equal((await unit(unitId)), undefined)
     const rows = await audits(org.orgId, unitId, 'delete')
@@ -85,7 +83,7 @@ test('DELETE removes a draft unit and audits the locked before-image', async () 
 test('DELETE refuses a live unit without touching it or auditing success', async () => {
   const { org, unitId } = await fixture('active')
   try {
-    const result = await call(unitId, 'DELETE')
+    const result = await call(unitId)
     assert.equal(result.status, 409, JSON.stringify(result.json))
     assert.equal(result.json.error, 'draft_only_delete')
     assert.equal((await unit(unitId))!.status, 'active')
