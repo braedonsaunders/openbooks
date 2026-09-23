@@ -392,7 +392,13 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
 // outcome is always a refused disable or a refused activation, never both
 // applied. Transaction-scoped like every advisory lock in this codebase.
 
-/** Stable fence identity for one org's feature switchboard. */
+/**
+ * Stable fence identity for one org's feature switchboard. Engine creators
+ * take the same lock through `acquireOrgFeatureGateLock` in
+ * `engine/src/organization/org-feature-lock.ts`, which must hash this
+ * identical string — a key-parity test in the construction route fence
+ * suite guards the equality.
+ */
 export function featureGateLockKey(orgId: string): string {
   return `openbooks:feature-gate:${orgId}`
 }
