@@ -20,6 +20,7 @@ import {
 } from "./scope.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { businessTimeZone } from "../platform/business-date.ts";
 import { nachaFileIdModifierForSequence } from "../payments/rail-nacha.ts";
 
 /**
@@ -848,6 +849,11 @@ export async function generatePayRunBankFile(
     const bacsFileNumber = payrollBacsFileNumberFor(format, sequenceValue);
     const cnabNsa = payrollCnabNsaFor(format, sequenceValue);
 
+    // The org's business time zone, resolved ONCE here: every date label in
+    // the file derives from this one zone value, so the same run at the same
+    // instant renders byte-identical files on servers in any host zone.
+    const timeZone = await businessTimeZone(orgId);
+
     // --- render (pure) -----------------------------------------------------
     const rendered = renderPayRunBankFile(inputs, {
       orgId,
@@ -862,6 +868,7 @@ export async function generatePayRunBankFile(
       cnabNsa,
       fundsDate: entitlement.payDate,
       createdAt: now,
+      timeZone,
     });
 
     // Second, independent tie-out against the run's own net total, using the

@@ -61,8 +61,8 @@ const NACHA: NachaSettings = {
 function nachaFile(accountNumber: string): string {
   return buildNachaFile({
     settings: NACHA,
-    effectiveDate: new Date(2026, 2, 5),
-    creationDate: new Date(2026, 2, 3),
+    effectiveDate: "2026-03-05",
+    creationDateTime: "2026-03-03T00:00:00",
     fileIdModifier: "A",
     entries: [{
       transactionCode: "22",
@@ -79,11 +79,11 @@ function cpa005Run(overrides: Partial<Cpa005Run> = {}): Cpa005Run {
   return {
     settings: EFT,
     fileCreationNumber: 7,
-    fileCreationDate: new Date(2026, 2, 3),
+    fileCreationDate: "2026-03-03",
     payments: [
       {
         amountCents: 125_00n,
-        fundsDate: new Date(2026, 2, 5),
+        fundsDate: "2026-03-05",
         institution: "004",
         transit: "10231",
         accountNumber: "998877",
@@ -92,7 +92,7 @@ function cpa005Run(overrides: Partial<Cpa005Run> = {}): Cpa005Run {
       },
       {
         amountCents: 4_999n,
-        fundsDate: new Date(2026, 2, 5),
+        fundsDate: "2026-03-05",
         institution: "001",
         transit: "20044",
         accountNumber: "112233",
@@ -279,8 +279,8 @@ test("the NACHA credit file refuses to write without an allocated file ID modifi
       () =>
         buildNachaFile({
           settings: NACHA,
-          effectiveDate: new Date(2026, 2, 5),
-          creationDate: new Date(2026, 2, 3),
+          effectiveDate: "2026-03-05",
+          creationDateTime: "2026-03-03T00:00:00",
           fileIdModifier,
           entries: [{
             transactionCode: "22",
@@ -300,8 +300,8 @@ test("the NACHA credit file refuses to write without an allocated file ID modifi
 test("the NACHA credit file carries its allocated modifier and real creation time in the header", () => {
   const content = buildNachaFile({
     settings: NACHA,
-    effectiveDate: new Date(2026, 2, 5),
-    creationDate: new Date(2026, 2, 3, 14, 5),
+    effectiveDate: "2026-03-05",
+    creationDateTime: "2026-03-03T14:05:00",
     fileIdModifier: "B",
     entries: [{
       transactionCode: "22",
@@ -334,16 +334,16 @@ test("the NACHA modifier allocator advances one letter per file and wraps the al
   );
 });
 
-test("the NACHA creation stamp renders in the explicit zone, not the server clock", () => {
-  // 2026-03-03T04:05Z is March 3rd 04:05 in UTC but March 2nd 23:05 in New
-  // York. A server-local stamp would render whichever the box runs in.
-  const instant = new Date("2026-03-03T04:05:00Z");
-  const file = (timeZone: string) =>
+test("the NACHA creation stamp renders the caller's zoned stamp verbatim", () => {
+  // The rail takes an already-zoned `YYYY-MM-DDTHH:MM:SS` stamp — the caller
+  // converts the instant in the org's zone once, so no server clock is read
+  // here. A string stamp renders the same header on every host by
+  // construction; the two-host proof lives in bank-file-civil-dates.test.ts.
+  const file = (creationDateTime: string) =>
     buildNachaFile({
       settings: NACHA,
-      effectiveDate: new Date(2026, 2, 5),
-      creationDate: instant,
-      timeZone,
+      effectiveDate: "2026-03-05",
+      creationDateTime,
       fileIdModifier: "B",
       entries: [{
         transactionCode: "22",
@@ -354,18 +354,43 @@ test("the NACHA creation stamp renders in the explicit zone, not the server cloc
         individualName: "FIRST PAYEE",
       }],
     }).split("\n")[0]!;
-  assert.ok(file("UTC").includes("2603030405B094"), `UTC stamp: ${file("UTC")}`);
-  assert.ok(file("America/New_York").includes("2603022305B094"), `New York stamp: ${file("America/New_York")}`);
+  // 2026-03-03T04:05Z is March 3rd 04:05 in UTC but March 2nd 23:05 in New
+  // York: each zoned stamp renders exactly its own day and time.
+  assert.ok(file("2026-03-03T04:05:00").includes("2603030405B094"), `UTC stamp: ${file("2026-03-03T04:05:00")}`);
+  assert.ok(file("2026-03-02T23:05:00").includes("2603022305B094"), `New York stamp: ${file("2026-03-02T23:05:00")}`);
 });
 
-test("the NACHA builder refuses an invalid creation time zone instead of guessing", () => {
+test("the NACHA builder refuses a malformed creation stamp instead of guessing", () => {
+  for (const creationDateTime of ["2026-03-03 04:05:00", "2026-13-03T04:05:00", "not-a-stamp"] as const) {
+    assert.throws(
+      () =>
+        buildNachaFile({
+          settings: NACHA,
+          effectiveDate: "2026-03-05",
+          creationDateTime,
+          fileIdModifier: "B",
+          entries: [{
+            transactionCode: "22",
+            routingNumber: "021000021",
+            accountNumber: "998877",
+            amountCents: 12500n,
+            individualId: "BILL-0001",
+            individualName: "FIRST PAYEE",
+          }],
+        }),
+      (error: Error) => error instanceof PaymentError && /YYYY-MM-DDTHH:MM:SS zoned timestamp/.test(error.message),
+      `stamp ${JSON.stringify(creationDateTime)} must not reach the bank`,
+    );
+  }
+});
+
+test("the NACHA builder refuses a non-calendar effective date instead of emitting it", () => {
   assert.throws(
     () =>
       buildNachaFile({
         settings: NACHA,
-        effectiveDate: new Date(2026, 2, 5),
-        creationDate: new Date("2026-03-03T04:05:00Z"),
-        timeZone: "Not/AZone",
+        effectiveDate: "2026-02-30",
+        creationDateTime: "2026-03-03T04:05:00",
         fileIdModifier: "B",
         entries: [{
           transactionCode: "22",
@@ -376,18 +401,25 @@ test("the NACHA builder refuses an invalid creation time zone instead of guessin
           individualName: "FIRST PAYEE",
         }],
       }),
-    (error: Error) => error instanceof PaymentError && /not a valid IANA time zone/.test(error.message),
+    (error: Error) => error instanceof PaymentError && /effective date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
   );
 });
 
-test("the CPA-005 creation date renders in the explicit zone, not the server clock", () => {
-  // Same instant: March 3rd in UTC (julian day 62 of 2026) but March 2nd in
-  // New York (day 61).
-  const instant = new Date("2026-03-03T04:05:00Z");
-  const aRecord = (timeZone: string) =>
-    buildCpa005File(cpa005Run({ fileCreationDate: instant, timeZone })).split("\r\n")[0]!;
-  assert.ok(aRecord("UTC").includes("026062"), `UTC creation date: ${aRecord("UTC")}`);
-  assert.ok(aRecord("America/New_York").includes("026061"), `New York creation date: ${aRecord("America/New_York")}`);
+test("the CPA-005 creation date renders the caller's civil day verbatim", () => {
+  // Same coverage as the NACHA stamp test above: the rail takes an
+  // already-zoned civil day, so the A record carries exactly that day's
+  // 0YYDDD on every host. March 3rd 2026 is julian day 62, March 2nd day 61.
+  const aRecord = (fileCreationDate: string) =>
+    buildCpa005File(cpa005Run({ fileCreationDate })).split("\r\n")[0]!;
+  assert.ok(aRecord("2026-03-03").includes("026062"), `March 3rd creation date: ${aRecord("2026-03-03")}`);
+  assert.ok(aRecord("2026-03-02").includes("026061"), `March 2nd creation date: ${aRecord("2026-03-02")}`);
+});
+
+test("the CPA-005 builder refuses a non-calendar creation day instead of emitting it", () => {
+  assert.throws(
+    () => buildCpa005File(cpa005Run({ fileCreationDate: "2026-02-30" })),
+    (error: Error) => error instanceof PaymentError && /file creation date "2026-02-30" is not a valid YYYY-MM-DD civil day/.test(error.message),
+  );
 });
 
 test("the NACHA credit file refuses an amount that does not fit its field instead of truncating it", () => {
@@ -397,8 +429,8 @@ test("the NACHA credit file refuses an amount that does not fit its field instea
     () =>
       buildNachaFile({
         settings: NACHA,
-        effectiveDate: new Date(2026, 2, 5),
-        creationDate: new Date(2026, 2, 3),
+        effectiveDate: "2026-03-05",
+        creationDateTime: "2026-03-03T00:00:00",
         fileIdModifier: "A",
         entries: [{
           transactionCode: "22",

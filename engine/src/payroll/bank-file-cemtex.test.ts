@@ -102,7 +102,8 @@ const renderCemtex = (inputs = cemtexInputs(), originator = CEMTEX_ORIGINATOR) =
     originator,
     // The release date: the run's pay date backs the DDMMYY processing date.
     fundsDate: "2026-08-21",
-    createdAt: new Date(2026, 7, 14, 9, 30, 0),
+    createdAt: new Date("2026-08-14T09:30:00Z"),
+    timeZone: "UTC",
   });
 
 /* ------------------------------------------------------------------ */
@@ -211,7 +212,7 @@ test("the published worked example matches at every offset but the payroll-fixed
       traceAccount: "12341234",
       remitterName: "Mr John Smith",
     },
-    processingDate: new Date("2013-04-07T00:00:00"),
+    processingDate: "2013-04-07",
     payments: [{
       amountCents: 1n,
       bsb: "062-692",
@@ -246,7 +247,7 @@ test("payroll's Cemtex output equals the shared AP builder's output for the same
   // forks its own 120-column writer, this diverges.
   const viaSharedBuilder = buildCemtexFile({
     settings: CEMTEX_ORIGINATOR.cemtex!,
-    processingDate: new Date("2026-08-21T00:00:00"),
+    processingDate: "2026-08-21",
     payments: [
       {
         amountCents: 250000n,

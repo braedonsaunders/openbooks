@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
-import { businessTimeZone, businessToday, formatTimestampInZone } from "../platform/business-date.ts";
+import { businessTimeZone, businessToday, formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "./payment-errors.ts";
@@ -30,18 +30,20 @@ export interface RunFileOptions {
 }
 
 /**
- * Resolve the creation instant a file renders: the run's stamped instant in
- * the org's explicit zone when the artifact flow provides one, otherwise the
- * caller's legacy fallback with no zone (server-local rendering, exactly as
- * before — direct/test callers keep byte-identical output).
+ * Resolve the creation labels a file renders: the run's stamped instant (or
+ * the caller's fallback) expressed in the org's EXPLICIT zone — the civil
+ * day and the zoned `YYYY-MM-DDTHH:MM:SS` stamp. The zone is always resolved,
+ * never inherited from the server: a server-local fallback rendered the same
+ * instant as different header bytes on servers in different zones.
  */
 async function creationStamp(
   orgId: string,
   fallback: Date,
   fileCreatedAt?: Date,
-): Promise<{ date: Date; timeZone?: string }> {
-  if (!fileCreatedAt) return { date: fallback };
-  return { date: fileCreatedAt, timeZone: await businessTimeZone(orgId) };
+): Promise<{ day: string; stamp: string }> {
+  const timeZone = await businessTimeZone(orgId);
+  const instant = fileCreatedAt ?? fallback;
+  return { day: formatInZone(instant, timeZone), stamp: formatTimestampInZone(instant, timeZone) };
 }
 
 export async function loadCpa005RunFile(
@@ -74,7 +76,9 @@ export async function loadCpa005RunFile(
   const evidence = await lockRunBankEvidence("eft", runId, orgId);
 
   const today = await businessToday(orgId);
-  const fundsDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
+  // The pay date is already a civil day (scheduled-for or the org's today) —
+  // passed through, never rebuilt as a host-local midnight.
+  const fundsDate = run.scheduledFor ?? today;
   const payments: Cpa005Payment[] = evidence.map((e) => {
     const units = toUnits(e.amount);
     if (units % 100n !== 0n) {
@@ -98,8 +102,7 @@ export async function loadCpa005RunFile(
   const content = buildCpa005File({
     settings: eft.settings,
     fileCreationNumber,
-    fileCreationDate: stamp.date,
-    timeZone: stamp.timeZone,
+    fileCreationDate: stamp.day,
     payments,
   });
   return { filename: `CPA005-${run.runNumber}.txt`, content, runNumber: run.runNumber };
@@ -141,7 +144,9 @@ export async function loadNachaRunFile(
     };
   });
   const today = await businessToday(orgId);
-  const effectiveDate = new Date(`${run.scheduledFor ?? today}T00:00:00`);
+  // The effective date is the run's pay date — already a civil day, never
+  // rebuilt as a host-local midnight.
+  const effectiveDate = run.scheduledFor ?? today;
   // The modifier is allocated from the run number (shared with payroll's
   // derivation), so a second file the same day carries the next letter
   // instead of colliding on "A" and drawing a bank duplicate-file rejection.
@@ -151,8 +156,7 @@ export async function loadNachaRunFile(
   const content = buildNachaFile({
     settings: settings.settings,
     effectiveDate,
-    creationDate: stamp.date,
-    timeZone: stamp.timeZone,
+    creationDateTime: stamp.stamp,
     fileIdModifier: nachaFileIdModifierForRunNumber(run.runNumber),
     entries,
   });
@@ -194,9 +198,9 @@ export async function loadSepaRunFile(
   const content = buildSepaFile({
     settings: settings.settings,
     messageId: `MSG-${run.runNumber}`,
-    creationDateTime: stamp.timeZone
-      ? formatTimestampInZone(stamp.date, stamp.timeZone)
-      : `${today}T00:00:00`,
+    // The creation stamp in the org's zone — always zoned now, never the
+    // server-local fallback the old branch emitted without a stamp.
+    creationDateTime: stamp.stamp,
     executionDate: run.scheduledFor ?? today,
     payments,
   });
