@@ -153,6 +153,7 @@
     "createEstimate": "Angebot erstellen",
     "estimateCreated": "Angebot erstellt",
     "estimateFailed": "Das Angebot konnte nicht erstellt werden.",
+    "estimateItemlessLines": "Angebot nicht erstellt: Die Zeilen {lines} haben keinen Artikel. Fügen Sie jeder Zeile einen Artikel hinzu und wandeln Sie dann erneut um.",
     "estimateNeedsAccount": "Legen Sie vor der Angebotserstellung einen Kunden fest",
     "saveFirstForEstimate": "Speichern Sie diese Opportunität zuerst — Angebote übernehmen den gespeicherten Kunden und die gespeicherten Positionen.",
     "statuses": {

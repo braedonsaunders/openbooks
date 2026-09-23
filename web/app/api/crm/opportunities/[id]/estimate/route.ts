@@ -10,6 +10,7 @@ import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
+import { getTranslations } from 'next-intl/server'
 
 export const runtime = 'nodejs'
 
@@ -94,6 +95,22 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     const op = opportunity.rows[0]
     if (!op) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
+    // Every source line must be represented on the quote: document lines
+    // require an item or an account (doc_lines_target), and opportunity
+    // lines carry no account, so an itemless line has nowhere to post —
+    // inventing an account would be a silent financial fallback. Refuse by
+    // name, listing the lines, before the number is consumed or anything is
+    // written. (A non-null item_id always joins: the line FK is composite on
+    // (org_id, item_id), so the item exists in this org by construction.)
+    const t = await getTranslations('crm')
+    const itemless = (await tx.execute<{ line_number: number }>(sql`
+      select line_number from crm_opportunity_lines
+       where org_id = ${user.orgId} and opportunity_id = ${id} and item_id is null
+       order by line_number`)).rows
+    if (itemless.length) {
+      return NextResponse.json({ error: t('opportunities.estimateItemlessLines',
+        { lines: itemless.map((row) => String(row.line_number)).join(', ') }) }, { status: 422 })
+    }
     const sequence = (await tx.execute<{ prefix: string; next_number: number; padding: number }>(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${user.orgId}, 'quote', null, 'EST-')

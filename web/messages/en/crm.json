@@ -153,6 +153,7 @@
     "createEstimate": "Create estimate",
     "estimateCreated": "Estimate created",
     "estimateFailed": "The estimate could not be created.",
+    "estimateItemlessLines": "Estimate not created: lines {lines} have no item. Add an item to each line, then convert again.",
     "estimateNeedsAccount": "Set an account before creating an estimate",
     "saveFirstForEstimate": "Save this opportunity first — estimates convert the saved customer and lines.",
     "statuses": {
