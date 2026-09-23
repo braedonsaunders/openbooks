@@ -27,7 +27,7 @@ import { computeBillTotals, computeBillTotalsWithProvider, nextDocumentNumber, p
 import { canonicalDecimal } from './exact-decimal'
 import { activeStockLocations, profiledItemIds } from './stock-locations'
 import { DOC_KIND_FEATURE, docKindConfig, isDocumentCreateKind, type DocKindConfig } from './document-kinds'
-import { featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
+import { checkProjectsWriteEnabled, featureEnabled, isFeatureEnabled, orgFeatureState } from './features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { resolveOrgId } from './org-scope'
@@ -1412,6 +1412,16 @@ export async function applyDocumentEdit(
          for update
       `)).rows[0] ?? null,
     mutate: async (tx, locked) => {
+      // Attaching a project makes this draft a Projects disable-blocker
+      // (open project documents), so a disable racing this edit must refuse
+      // one side or the other. Fenced inside the write transaction, before
+      // any write: clearing the project or editing anything else needs no
+      // gate.
+      if (body.projectId !== undefined && body.projectId !== null) {
+        if (!(await checkProjectsWriteEnabled(orgId, tx))) {
+          throw new DocumentEditError(422, 'Projects feature is disabled')
+        }
+      }
       if (locked.kind !== current.kind) throw new DocumentEditError(409, DOCUMENT_EDIT_REVISION_CONFLICT)
       if (locked.status !== 'draft') {
         throw new DocumentEditError(
