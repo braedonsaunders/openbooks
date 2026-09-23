@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
 import {
   BANK_ACCOUNT_TYPE,
@@ -224,6 +224,11 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  // Cashflow categories are one org-wide forecasting policy stored on orgs;
+  // their subsidiary references constrain inputs, not which entities the
+  // replacement governs.
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { categories?: unknown[]; expectedRevision?: unknown } | null;

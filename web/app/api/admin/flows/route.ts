@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'
 
 export const runtime = 'nodejs'
@@ -58,6 +59,7 @@ export async function GET() {
     gate.user.orgId,
     gate.allowedSubsidiaryIds,
     runs.rows,
+    gate,
   )
   const byFlow = new Map<string, typeof runs.rows>()
   for (const run of visible) {
@@ -82,6 +84,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const user = gate.user
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

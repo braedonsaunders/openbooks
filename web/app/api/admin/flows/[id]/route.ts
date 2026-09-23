@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { automationGraphSchema } from '@openbooks/forms-core'
 import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -58,6 +59,7 @@ export async function GET(_req: Request, { params }: Params) {
       id: String(row.subject_id),
       row,
     })),
+    gate,
   )
   return NextResponse.json({ flow, runs: visibleRuns.map((subject) => subject.row) })
 }
@@ -65,6 +67,8 @@ export async function GET(_req: Request, { params }: Params) {
 export async function PATCH(req: Request, { params }: Params) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -154,6 +158,8 @@ function revisionConflict() {
 export async function DELETE(req: Request, { params }: Params) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

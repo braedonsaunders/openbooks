@@ -68,6 +68,11 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.cashflow-categories-route-test')]
       const NextResponse = globalThis.openbooksCashflowCategoriesNextResponse
+      export function guardUnrestrictedScope(authz) {
+        return authz.allowedSubsidiaryIds === null
+          ? null
+          : NextResponse.json({ error: 'unrestricted subsidiary scope required' }, { status: 403 })
+      }
       export async function guardPermission(permission) {
         state.permissionChecks.push(permission)
         if (!state.permissions.has(permission)) {
@@ -239,6 +244,17 @@ test('replacement rejects malformed entries atomically instead of dropping them'
   assert.equal(state.transactions, 0, 'invalid replacement never opens a transaction')
   assert.equal(state.committedQueries.length, 0, 'invalid replacement creates no audit or write')
   assert.deepEqual(state.permissionChecks, ['admin.setup.manage'])
+})
+
+test('restricted setup manager cannot replace org-wide cashflow policy', async () => {
+  reset()
+  state.allowedSubs = new Set(['sub-a'])
+
+  const response = await put([validCategory])
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(state.committedQueries, [])
+  assert.equal(state.transactions, 0)
 })
 
 test('an over-limit manual amount refuses naming the limit instead of clamping', async () => {
@@ -478,18 +494,14 @@ test('a customer-kind party holding a vendor role saves', async () => {
   assert.equal(body.revision, 8)
 })
 
-test('a reference outside the caller subsidiaries refuses', async () => {
+test('restricted user cannot replace org-wide policy even with an out-of-scope reference', async () => {
   reset()
   state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
   state.allowedSubs = new Set([SUB_B])
   const response = await put([
     { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
   ])
-  assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 0',
-    message: `accountIds "${ACCT}" is outside your subsidiaries`,
-  })
+  assert.equal(response.status, 403)
   assert.equal(state.transactions, 0)
 })
 
@@ -497,7 +509,7 @@ test('references in visible subsidiaries and org-wide rows persist', async () =>
   reset()
   state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
   state.accounts.set(GHOST, { type: 'expense', is_summary: false, subsidiary_id: null })
-  state.allowedSubs = new Set([SUB_A])
+  state.allowedSubs = null
   const response = await put([
     { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT, GHOST] },
   ])
