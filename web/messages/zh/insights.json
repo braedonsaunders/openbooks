@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "所有更改已保存",
     "unsaved": "有未保存的更改…",
-    "failed": "自动保存失败"
+    "failed": "自动保存失败",
+    "missingRevision": "无法保存——卡片尚无修订版本。请重新加载卡片并继续编辑。",
+    "unusableRevision": "无法确认保存——请重新加载卡片并继续编辑。"
   },
   "errors": {
     "queryFailed": "查询失败",
@@ -100,7 +102,11 @@
     "draftToast": "卡片已退回草稿",
     "deleteConfirm": "删除此卡片？它将从所有仪表板中移除。",
     "deleteFailed": "无法删除卡片",
-    "deletedToast": "卡片已删除"
+    "deletedToast": "卡片已删除",
+    "retrySave": "重试",
+    "reloadLatest": "重新加载最新版本",
+    "overwriteSave": "仍要保存",
+    "reloadConfirm": "重新加载最新已保存的版本？未保存的更改将被丢弃。"
   },
   "vizSettings": {
     "category": "类别",

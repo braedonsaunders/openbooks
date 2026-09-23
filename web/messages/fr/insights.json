@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "Toutes les modifications sont enregistrées",
     "unsaved": "Modifications non enregistrées…",
-    "failed": "Échec de l’enregistrement automatique"
+    "failed": "Échec de l’enregistrement automatique",
+    "missingRevision": "Enregistrement impossible — la fiche n'a pas encore de révision. Rechargez la fiche et continuez.",
+    "unusableRevision": "Enregistrement non confirmé — rechargez la fiche et continuez."
   },
   "errors": {
     "queryFailed": "Échec de la requête",
@@ -100,7 +102,11 @@
     "draftToast": "Carte remise en brouillon",
     "deleteConfirm": "Supprimer cette carte? Elle sera retirée de tous les tableaux de bord.",
     "deleteFailed": "Impossible de supprimer la carte",
-    "deletedToast": "Carte supprimée"
+    "deletedToast": "Carte supprimée",
+    "retrySave": "Réessayer",
+    "reloadLatest": "Recharger",
+    "overwriteSave": "Enregistrer quand même",
+    "reloadConfirm": "Recharger la dernière version enregistrée ? Les modifications non enregistrées seront perdues."
   },
   "vizSettings": {
     "category": "Catégorie",

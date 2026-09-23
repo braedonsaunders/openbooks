@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Filter, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { confirmDialog } from '../../../lib/confirm'
 import {
   INITIAL_CARD_SAVE,
   cardSaveReducer,
@@ -307,8 +308,8 @@ export function CardStudio({
   /** Reload path for a revision conflict: adopt the server state, discarding
    *  the local edit by explicit choice (confirmed — this is the only path
    *  that drops an edit, and it never runs silently). */
-  function reloadLatest() {
-    if (!confirm(t('cardStudio.reloadConfirm'))) return
+  async function reloadLatest() {
+    if (!(await confirmDialog({ message: t('cardStudio.reloadConfirm') }))) return
     window.location.reload()
   }
 

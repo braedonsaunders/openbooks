@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "Todos los cambios guardados",
     "unsaved": "Cambios sin guardar…",
-    "failed": "El guardado automático falló"
+    "failed": "El guardado automático falló",
+    "missingRevision": "No se pudo guardar: la tarjeta aún no tiene revisión. Recarga la tarjeta y sigue editando.",
+    "unusableRevision": "No se pudo confirmar el guardado: recarga la tarjeta y sigue editando."
   },
   "errors": {
     "queryFailed": "La consulta falló",
@@ -100,7 +102,11 @@
     "draftToast": "La tarjeta volvió a borrador",
     "deleteConfirm": "¿Eliminar esta tarjeta? Se quitará de todos los paneles.",
     "deleteFailed": "No se pudo eliminar la tarjeta",
-    "deletedToast": "Tarjeta eliminada"
+    "deletedToast": "Tarjeta eliminada",
+    "retrySave": "Reintentar",
+    "reloadLatest": "Recargar última",
+    "overwriteSave": "Guardar igualmente",
+    "reloadConfirm": "¿Recargar la última versión guardada? Se descartarán los cambios sin guardar."
   },
   "vizSettings": {
     "category": "Categoría",

@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "すべての変更を保存しました",
     "unsaved": "未保存の変更があります…",
-    "failed": "自動保存に失敗しました"
+    "failed": "自動保存に失敗しました",
+    "missingRevision": "保存できませんでした — カードのリビジョンがありません。カードを再読み込みして編集を続けてください。",
+    "unusableRevision": "保存を確認できませんでした — カードを再読み込みして編集を続けてください。"
   },
   "errors": {
     "queryFailed": "クエリに失敗しました",
@@ -100,7 +102,11 @@
     "draftToast": "カードを下書きに戻しました",
     "deleteConfirm": "このカードを削除しますか？すべてのダッシュボードから削除されます。",
     "deleteFailed": "カードを削除できませんでした",
-    "deletedToast": "カードを削除しました"
+    "deletedToast": "カードを削除しました",
+    "retrySave": "再試行",
+    "reloadLatest": "最新を再読み込み",
+    "overwriteSave": "上書き保存",
+    "reloadConfirm": "最新の保存済みバージョンを再読み込みしますか？未保存の変更は破棄されます。"
   },
   "vizSettings": {
     "category": "カテゴリ",
