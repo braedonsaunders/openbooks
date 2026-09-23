@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -185,6 +185,54 @@ function mkdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
 function rmdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
   return new Promise((resolveRmdir, reject) => {
     sftp.rmdir(path, (error) => error ? reject(error) : resolveRmdir());
+  });
+}
+
+function unlink(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
+  return new Promise((resolveUnlink, reject) => {
+    sftp.unlink(path, (error) => error ? reject(error) : resolveUnlink());
+  });
+}
+
+function rename(sftp: ssh2.SFTPWrapper, from: string, to: string): Promise<void> {
+  return new Promise((resolveRename, reject) => {
+    sftp.rename(from, to, (error) => error ? reject(error) : resolveRename());
+  });
+}
+
+function stat(sftp: ssh2.SFTPWrapper, path: string): Promise<ssh2.Stats> {
+  return new Promise((resolveStat, reject) => {
+    sftp.stat(path, (error, stats) => error ? reject(error) : resolveStat(stats));
+  });
+}
+
+function readdir(sftp: ssh2.SFTPWrapper, location: string | Buffer): Promise<ssh2.FileEntry[]> {
+  return new Promise((resolveList, reject) => {
+    sftp.readdir(location, (error, list) => error ? reject(error) : resolveList(list));
+  });
+}
+
+function realpath(sftp: ssh2.SFTPWrapper, path: string): Promise<string> {
+  return new Promise((resolvePath, reject) => {
+    sftp.realpath(path, (error, absPath) => error ? reject(error) : resolvePath(absPath));
+  });
+}
+
+function fstat(sftp: ssh2.SFTPWrapper, handle: Buffer): Promise<ssh2.Stats> {
+  return new Promise((resolveFstat, reject) => {
+    sftp.fstat(handle, (error, stats) => error ? reject(error) : resolveFstat(stats));
+  });
+}
+
+function symlink(sftp: ssh2.SFTPWrapper, target: string, link: string): Promise<void> {
+  return new Promise((resolveLink, reject) => {
+    sftp.symlink(target, link, (error) => error ? reject(error) : resolveLink());
+  });
+}
+
+function readlink(sftp: ssh2.SFTPWrapper, path: string): Promise<string> {
+  return new Promise((resolveTarget, reject) => {
+    sftp.readlink(path, (error, target) => error ? reject(error) : resolveTarget(target));
   });
 }
 
@@ -448,6 +496,55 @@ test("a held connection can no longer read or write after credential rotation", 
   }, lively.resolver);
 });
 
+test("a disabled login refuses RMDIR and every other operation class", async () => {
+  const lively = livelyResolver();
+  await withServer(async () => {
+    const clients: ssh2.Client[] = [];
+    const freshSftp = async (): Promise<ssh2.SFTPWrapper> => {
+      // A refused operation ends the connection, so every post-revocation
+      // probe reconnects: each operation class below is fenced on its own.
+      const client = await connectPassword(config.username, "test-password");
+      clients.push(client);
+      return sftpSession(client);
+    };
+    try {
+      const setup = await freshSftp();
+      await mkdir(setup, "sweep-empty");
+      await mkdir(setup, "sweep-full");
+      const writer = await open(setup, "sweep-full/file.txt", "w");
+      await write(setup, writer, Buffer.from("x"), 0);
+      await close(setup, writer);
+      // Held handles across the revocation: the fence must stop the NEXT
+      // operation on them too, not just fresh requests.
+      const dirHandle = await opendir(setup, "/");
+      const fileHandle = await open(setup, "sweep-full/file.txt", "r");
+
+      lively.kill("sftp login 'sftp-test' is disabled — ask your administrator to re-enable it, then reconnect");
+
+      // RED before the fix: RMDIR skipped the fence, so the empty folder
+      // removed cleanly after the disable.
+      await assert.rejects(rmdir(await freshSftp(), "sweep-empty"), /is disabled/);
+      await assert.rejects(unlink(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
+      await assert.rejects(mkdir(await freshSftp(), "sweep-nope"), /is disabled/);
+      await assert.rejects(rename(await freshSftp(), "sweep-full/file.txt", "sweep-full/moved.txt"), /is disabled/);
+      await assert.rejects(stat(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
+      await assert.rejects(opendir(await freshSftp(), "/"), /is disabled/);
+      await assert.rejects(readdir(await freshSftp(), dirHandle), /is disabled/);
+      await assert.rejects(open(await freshSftp(), "sweep-full/file.txt", "r"), /is disabled/);
+      await assert.rejects(readChunk(await freshSftp(), fileHandle, 0, 1), /is disabled/);
+      await assert.rejects(write(await freshSftp(), fileHandle, Buffer.from("y"), 0), /is disabled/);
+      await assert.rejects(fstat(await freshSftp(), fileHandle), /is disabled/);
+      await assert.rejects(close(await freshSftp(), fileHandle), /is disabled/);
+      await assert.rejects(setstat(await freshSftp(), "sweep-full/file.txt", { mode: 0o644 }), /is disabled/);
+      await assert.rejects(realpath(await freshSftp(), "/"), /is disabled/);
+      await assert.rejects(symlink(await freshSftp(), "sweep-full/file.txt", "sweep-link"), /is disabled/);
+      await assert.rejects(readlink(await freshSftp(), "sweep-full/file.txt"), /is disabled/);
+    } finally {
+      for (const client of clients) client.end();
+    }
+  }, lively.resolver);
+});
+
 test("revoke ends only the revoked server's live sessions", async () => {
   const serverA: SftpServerConfig = { ...config, id: "server-a", username: "login-a" };
   const serverB: SftpServerConfig = { ...config, id: "server-b", username: "login-b" };
@@ -547,6 +644,28 @@ test("RMDIR of a populated folder fails with the refusal instead of a phantom su
       client.end();
     }
   });
+});
+
+test("every SFTP operation handler is registered through the liveness fence", () => {
+  const source = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
+  const session = source.slice(source.indexOf('session.on("sftp"'), source.indexOf('client.on("error"'));
+  const registrations = [...session.matchAll(/sftp\.on\("([A-Z]+)",\s*([A-Za-z(]+)/g)];
+  assert.ok(registrations.length >= 10, `expected a full handler table, found ${registrations.length}`);
+  for (const [, op, via] of registrations) {
+    assert.ok(
+      via === "doStat" || (via ?? "").startsWith("fenced(") || (via ?? "").startsWith("wrap("),
+      `${op} must be registered through fenced(), doStat, or wrap() — a bare handler skips the session-liveness check`,
+    );
+  }
+  // ssh2 answers unhandled request types itself (OP_UNSUPPORTED) without
+  // ever calling into our code: these need explicit fenced handlers so a
+  // revoked session cannot probe request types past the fence.
+  for (const op of ["SYMLINK", "READLINK", "EXTENDED"]) {
+    assert.ok(
+      registrations.some(([, name]) => name === op),
+      `${op} needs an explicit fenced handler`,
+    );
+  }
 });
 
 test.after(() => {
