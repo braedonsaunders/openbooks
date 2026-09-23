@@ -1,9 +1,11 @@
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { parseFormSchema } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../../lib/authz'
+import { auditSetupChange } from '../../../../../../lib/setup/audit'
 import { getTemplateByKey } from '../../../_lib'
 
 export const runtime = 'nodejs'
@@ -75,18 +77,57 @@ export async function POST(
     const hasField = parsed.data.sections.some((s) => s.fields.length > 0)
     if (!hasField) return { kind: 'no-fields' as const }
 
-    await tx.execute(sql`
+    const stamped = await tx.execute(sql`
       update form_template_versions
          set published_at = now(), published_by = ${user.id},
              changelog = ${body.changelog?.trim() || null},
              updated_at = now(), updated_by = ${user.id}
        where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
+       returning id
     `)
+    // A write that matches zero rows is a failure, not a success: the draft
+    // was published (or removed) after the lock was taken.
+    if (stamped.rows.length === 0) return { kind: 'already-published' as const, version: latest.version }
     await tx.execute(sql`
       update form_templates
          set status = 'published', updated_at = now(), updated_by = ${user.id}
        where id = ${template.id} and org_id = ${user.orgId}
     `)
+
+    // The publication is the immutable evidence: who, when (row timestamps),
+    // the status transition, and a hash of the exact schema that froze.
+    const schemaHash = createHash('sha256').update(JSON.stringify(parsed.data)).digest('hex')
+    await auditSetupChange(
+      {
+        orgId: user.orgId,
+        table: 'form_template_versions',
+        rowId: latest.id,
+        action: 'update',
+        changes: {
+          event: 'publish',
+          version: latest.version,
+          before: { published_at: null },
+          after: { changelog: body.changelog?.trim() || null, schemaHash },
+        },
+        actorId: user.id,
+      },
+      tx,
+    )
+    await auditSetupChange(
+      {
+        orgId: user.orgId,
+        table: 'form_templates',
+        rowId: template.id,
+        action: 'update',
+        changes: {
+          event: 'publish',
+          before: { status: template.status },
+          after: { status: 'published' },
+        },
+        actorId: user.id,
+      },
+      tx,
+    )
 
     return { kind: 'published' as const, version: latest.version }
   })
