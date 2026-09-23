@@ -122,6 +122,24 @@ test("an arrears component added mid-interval bills only its served slice", () =
   assert.equal(lines[0]!.unitPrice, prorateDays("310.0000", 16, 31));
 });
 
+test("arrears windowing keeps civil years 1-99 (0096 splits 14/29 and 15/29)", () => {
+  // Date.UTC maps years 0-99 onto 1900-1999; a 0096 window end rendered
+  // through it lands in 1996, the lexical clamp then swallows the period
+  // boundary, and the whole month bills instead of the served slice.
+  // February 0096 is a 29-day leap month, like the 1996 control.
+  for (const century of ["0096", "1996"]) {
+    const lines = arrearsLinesForInterval(`${century}-02-01`, `${century}-03-01`, [
+      arrearsWindow({ componentKey: "fee", unitPrice: "290.0000", effectiveFrom: `${century}-02-01`, effectiveTo: `${century}-02-14` }),
+      arrearsWindow({ componentKey: "fee", unitPrice: "290.0000", effectiveFrom: `${century}-02-15`, effectiveTo: null }),
+    ]);
+    assert.equal(lines.length, 2);
+    assert.equal(lines[0]!.unitPrice, "140.0000");
+    assert.equal(lines[1]!.unitPrice, "150.0000");
+    assert.match(lines[0]!.description, new RegExp(`${century}-02-01.*${century}-02-14`));
+    assert.match(lines[1]!.description, new RegExp(`${century}-02-15.*${century}-02-29`));
+  }
+});
+
 test("arrears windowing is degenerate-safe", () => {
   assert.deepEqual(arrearsLinesForInterval("2026-02-01", "2026-02-01", [arrearsWindow({ componentKey: "fee" })]), []);
   assert.deepEqual(arrearsLinesForInterval("2026-01-01", "2026-02-01", []), []);
