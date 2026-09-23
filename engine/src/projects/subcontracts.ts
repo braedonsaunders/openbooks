@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -344,14 +345,21 @@ export function revisedSubcontractSovValue(
 }
 
 async function assertFeatureEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
-  const result = (await tx.execute<{ projects: boolean; subcontracts: boolean }>(sql`
-    select coalesce((settings->'features'->>'projects')::boolean, true) as projects,
-           coalesce((settings->'features'->>'subcontracts')::boolean, false) as subcontracts
-      from orgs where id = ${orgId}
-  `));
-  const row = result.rows[0];
-  if (!row?.projects) throw new SubcontractError("Projects feature is disabled");
-  if (!row.subcontracts) throw new SubcontractError("Subcontracts feature is disabled");
+  // Fenced recheck inside the write transaction. The advisory fence
+  // serializes this creator against a concurrent feature disable's blocker
+  // checks (a new subcontract, vendor pay application, or payment control IS
+  // a disable blocker), and the shared org-row locks serialize the gate
+  // reads against the disable's exclusive flag write — so neither the
+  // blocker counts nor the gate answers can go stale between this check and
+  // the inserts below. A disabled gate refuses by name instead of committing
+  // a hidden subcontract record.
+  await acquireOrgFeatureGateLock(tx, orgId);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+    throw new SubcontractError("Projects feature is disabled");
+  }
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "subcontracts"))) {
+    throw new SubcontractError("Subcontracts feature is disabled");
+  }
 }
 
 async function audit(
