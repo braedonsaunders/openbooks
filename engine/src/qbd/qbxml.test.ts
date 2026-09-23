@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
+import { assertQbdResponsePayload, buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
@@ -49,6 +49,34 @@ test("status and report parsers handle qbXML attributes and column ids", () => {
   const xml = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK" iteratorID="abc" iteratorRemainingCount="2"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ColDesc colID="2"><ColType>Amount</ColType></ColDesc><ReportData><DataRow><ColData colID="1" value="TXN-1"/><ColData colID="2" value="12.34"/></DataRow></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
   assert.deepEqual(responseStatus(xml), { code: 0, severity: "Info", message: "Status OK", iteratorId: "abc", iteratorRemaining: 2, kind: "GeneralDetailReportQueryRs", requestId: null });
   assert.deepEqual(parseReportRows(xml), [{ rowType: "DataRow", columns: { TxnID: "TXN-1", Amount: "12.34" } }]);
+});
+
+test("a success response without its payload is refused, never read as empty", () => {
+  const truncated = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
+  assert.throws(
+    () => assertQbdResponsePayload({ family: "ledger:2024-01", requestKind: "GeneralLedger", expectedRs: "GeneralDetailReportQueryRs", responseXml: truncated }),
+    /GeneralLedger capture for ledger:2024-01.*carries no report/,
+  );
+
+  // ReportRet and column descriptors present but zero data rows: a genuinely
+  // empty month, still accepted.
+  const emptyMonth = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ReportData></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
+  assert.doesNotThrow(
+    () => assertQbdResponsePayload({ family: "ledger:2024-01", requestKind: "GeneralLedger", expectedRs: "GeneralDetailReportQueryRs", responseXml: emptyMonth }),
+  );
+  assert.deepEqual(parseReportRows(emptyMonth), []);
+
+  // Lists get the same missing-container validation: no answering Rs node is
+  // refused, while a present-but-empty list stays valid.
+  const noContainer = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs></QBXMLMsgsRs></QBXML>`;
+  assert.throws(
+    () => assertQbdResponsePayload({ family: "customer", requestKind: "CustomerQuery", expectedRs: "CustomerQueryRs", responseXml: noContainer }),
+    /CustomerQuery capture for customer.*carries no CustomerQueryRs payload/,
+  );
+  const emptyList = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CustomerQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"></CustomerQueryRs></QBXMLMsgsRs></QBXML>`;
+  assert.doesNotThrow(
+    () => assertQbdResponsePayload({ family: "customer", requestKind: "CustomerQuery", expectedRs: "CustomerQueryRs", responseXml: emptyList }),
+  );
 });
 
 test("requestID correlation stamps the request element, never the envelope", () => {

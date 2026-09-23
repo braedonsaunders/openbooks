@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import { buildCapturePlan, continueRequestXml, MalformedQbxmlResponseError, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
+import { assertQbdResponsePayload, buildCapturePlan, continueRequestXml, MalformedQbxmlResponseError, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
 
 const CAPTURE_TTL_MS = 12 * 60 * 60 * 1_000;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1_000;
@@ -522,6 +522,20 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
       await tx.execute(sql`update qbd_captures set status = 'failed', error_message = ${error}, finished_at = now(), updated_at = now() where id = ${request.captureId} and org_id = ${request.orgId}`);
       await tx.execute(sql`update qbd_requests set status = 'cancelled', updated_at = now() where capture_id = ${request.captureId} and org_id = ${request.orgId} and status in ('queued', 'sent') and id <> ${request.id}`);
       await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
+      return -101;
+    }
+    // A statusCode=0 response with no payload is a truncated response, never
+    // an empty month: storing it complete would build zero documents and mark
+    // every prior document for the month deleted. Fail the capture by family
+    // with a named error instead.
+    try {
+      assertQbdResponsePayload({ family: request.family, requestKind: request.requestKind, expectedRs, responseXml });
+    } catch (error) {
+      const message = (error as Error).message;
+      await tx.execute(sql`update qbd_requests set status = 'failed', error_message = ${message}, completed_at = now(), updated_at = now() where id = ${request.id} and org_id = ${request.orgId}`);
+      await tx.execute(sql`update qbd_captures set status = 'failed', error_message = ${message}, finished_at = now(), updated_at = now() where id = ${request.captureId} and org_id = ${request.orgId}`);
+      await tx.execute(sql`update qbd_requests set status = 'cancelled', updated_at = now() where capture_id = ${request.captureId} and org_id = ${request.orgId} and status in ('queued', 'sent') and id <> ${request.id}`);
+      await tx.execute(sql`update qbd_sessions set last_error = ${message}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
       return -101;
     }
     const hash = createHash("sha256").update(responseXml).digest("hex");

@@ -351,6 +351,57 @@ function asArray(value: unknown): unknown[] {
   return value == null ? [] : Array.isArray(value) ? value : [value];
 }
 
+function exactNode(root: unknown, key: string): Record<string, unknown> | null {
+  let found: Record<string, unknown> | null = null;
+  const collect = (value: unknown): void => {
+    if (found) return;
+    if (Array.isArray(value)) { for (const child of value) collect(child); return; }
+    if (!value || typeof value !== "object") return;
+    for (const [childKey, child] of Object.entries(value as Record<string, unknown>)) {
+      if (childKey === key && child && typeof child === "object" && !Array.isArray(child)) {
+        found = child as Record<string, unknown>;
+        return;
+      }
+      collect(child);
+    }
+  };
+  collect(root);
+  return found;
+}
+
+/** Response elements whose success payload is a column-based report. */
+const REPORT_RESPONSE_ELEMENTS = new Set(["GeneralDetailReportQueryRs", "GeneralSummaryReportQueryRs"]);
+
+/**
+ * Structural payload check for a statusCode=0 response. A successful ledger
+ * or trial-balance response must carry a structurally present report
+ * (ReportRet plus the column descriptors) — a missing ReportRet is a
+ * truncated response, never an empty month, and storing it as complete would
+ * let the next sync reverse every prior document for that month as a
+ * source deletion. List and account families get the same missing-container
+ * validation on their answering `*Rs` node, while a genuinely empty list or
+ * report (container present, zero rows) stays valid.
+ */
+export function assertQbdResponsePayload(input: {
+  family: string;
+  requestKind: string;
+  expectedRs: string;
+  responseXml: string;
+}): void {
+  const parsed = parseXml(input.responseXml);
+  const rs = exactNode(parsed, input.expectedRs);
+  if (!rs) {
+    throw new Error(`QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no ${input.expectedRs} payload; the response was not stored — resubmit the outstanding request and check the company file`);
+  }
+  if (REPORT_RESPONSE_ELEMENTS.has(input.expectedRs)) {
+    const report = exactNode(rs, "ReportRet");
+    const columns = report ? asArray(report.ColDesc).filter((d) => d && typeof d === "object") : [];
+    if (!report || columns.length === 0) {
+      throw new Error(`QuickBooks ${input.requestKind} capture for ${input.family} returned success but carries no report (ReportRet with column descriptors is absent); the response was not stored — a missing report is never an empty month, resubmit the outstanding request`);
+    }
+  }
+}
+
 /** Parse the column-id based report format into stable ColType-keyed rows. */
 export function parseReportRows(xml: string): QbdReportRow[] {
   const parsed = parseXml(xml);
