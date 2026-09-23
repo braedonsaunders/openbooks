@@ -206,6 +206,18 @@ export async function generateAccountingPeriods(
       from fiscal_calendars where id = ${calendarId} and org_id = ${orgId} and is_active`));
   const calendar = calendarRes.rows[0];
   if (!calendar) throw new CloseError("active fiscal calendar not found");
+  // Periods that can never receive postings are stranded rows:
+  // date-derived resolution only reads the org's ACTIVE DEFAULT calendar.
+  // Refuse to mint periods while no active default exists anywhere in the
+  // org — promote one from the close calendars screen first. A default
+  // living on another calendar is fine: secondary calendars stay legal.
+  const defaultRes = await db.execute(sql`
+    select 1 from fiscal_calendars
+     where org_id = ${orgId} and is_default and is_active limit 1`);
+  if (!defaultRes.rows[0])
+    throw new CloseError(
+      "cannot generate periods: the organization has no active default fiscal calendar, so these periods could never receive postings; save one active calendar with the default flag switched on first",
+    );
   const periods = generatedPeriods(calendar, fiscalYear);
 
   type ExistingPeriod = {
