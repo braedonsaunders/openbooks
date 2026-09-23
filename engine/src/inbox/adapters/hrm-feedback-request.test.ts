@@ -10,14 +10,14 @@ import test from "node:test";
 const stateKey = Symbol.for("openbooks.hrm-feedback-adapter-test");
 
 interface FeedbackAdapterState {
-  hrmOn: boolean;
+  featuresOn: boolean;
   service: "requests" | "no-identity" | "boom";
   serviceCalls: number;
   HrmAuthorizationError?: new (message?: string) => Error;
 }
 
 const adapterState: FeedbackAdapterState = {
-  hrmOn: true,
+  featuresOn: true,
   service: "requests",
   serviceCalls: 0,
 };
@@ -46,18 +46,12 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:guard",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-feedback-adapter-test')]
-      export async function hrmOn() {
-        return state.hrmOn
-      }
-    `,
-  ],
-  [
     "mock:feedback",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-feedback-adapter-test')]
+      export async function feedbackFeatureEnabled() {
+        return state.featuresOn
+      }
       export async function listOpenRequestsForParty() {
         state.serviceCalls += 1
         if (state.service === 'no-identity') {
@@ -78,12 +72,10 @@ const hooks = registerHooks({
     if (specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
-    // Resolved without a parentURL condition: the adapter reaches these
-    // through relative specifiers, and the test file itself imports
-    // neither, so there is nothing else to collide with.
-    if (specifier === "../guard.ts") {
-      return { url: "mock:guard", shortCircuit: true };
-    }
+    // Resolved without a parentURL condition: the adapter reaches the
+    // service through a relative specifier, and the test file itself
+    // imports it only dynamically below, so there is nothing to collide
+    // with.
     if (specifier === "../../hrm/performance/feedback.ts") {
       return { url: "mock:feedback", shortCircuit: true };
     }
@@ -112,7 +104,7 @@ hooks.deregister();
 const CTX = { orgId: "org-1", actorId: "user-1", asOf: "2026-08-01T00:00:00Z" };
 
 function reset(service: FeedbackAdapterState["service"]): void {
-  adapterState.hrmOn = true;
+  adapterState.featuresOn = true;
   adapterState.service = service;
   adapterState.serviceCalls = 0;
 }
@@ -136,9 +128,9 @@ test("open requests map to link-only items", async () => {
   assert.deepEqual(items[0]!.actions, []);
 });
 
-test("a disabled feature short-circuits before the service", async () => {
+test("any disabled surface feature short-circuits before the service", async () => {
   reset("requests");
-  adapterState.hrmOn = false;
+  adapterState.featuresOn = false;
   assert.deepEqual(await hrmFeedbackRequestAdapter.list(CTX), []);
   assert.equal(adapterState.serviceCalls, 0);
 });
