@@ -10,8 +10,10 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
+import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
+import { createGoal } from "./goals.ts";
 import { listFeedback, writeFeedback } from "./feedback.ts";
 
 /**
@@ -306,6 +308,43 @@ test("a restricted HR moves only the cycles they cover", { skip: !DB }, async ()
     );
     const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrA, cycleId });
     assert.equal(closed.status, "closed");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("goal creation refuses a cycle whose scope excludes the subject employment", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const cycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      templateId,
+      name: "FY26 A-scope",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+      appliesTo: { employer_subsidiary_id: h.org.subsidiaryId, department_id: null },
+    });
+    // Worker B sits in subsidiary B: linking their goal to the A cycle is refused by name.
+    await assert.rejects(
+      createGoal({
+        orgId: h.org.orgId, actorId: h.hrFull, employmentId: h.b.employmentId,
+        title: "Ship the widget", cycleId: cycle.id,
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "REFUSED");
+        assert.match(e.message, /outside the scope of review cycle/);
+        return true;
+      },
+    );
+    // Worker A sits inside it: the same call lands.
+    const goal = await createGoal({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: h.a.employmentId,
+      title: "Ship the widget", cycleId: cycle.id,
+    });
+    assert.equal(goal.cycleId, cycle.id);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }

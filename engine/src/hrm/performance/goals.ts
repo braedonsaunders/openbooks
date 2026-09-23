@@ -5,7 +5,12 @@ import { loadApprovalPerson, loadManagedEmploymentIds, requireHrmPerformanceOnEm
 import { businessToday } from "../../platform/business-date.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
-import { assertProgressPercent, parseCivilDay } from "./performance-math.ts";
+import {
+  assertProgressPercent,
+  parseAppliesScope,
+  parseCivilDay,
+  scopeMatchesEmployment,
+} from "./performance-math.ts";
 
 /**
  * Governed HRM goals (0196, HR-7): create, progress, achieve, miss, cancel.
@@ -167,13 +172,45 @@ export async function createGoal(args: {
     await assertPerformanceFeature(db, orgId);
     await requireGoalAuthority(db, orgId, actorId, employmentId);
     if (cycleId !== null) {
-      const cycle = (await db.execute<{ id: string }>(sql`
-        select id from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+      const cycle = (await db.execute<{ id: string; appliesTo: unknown }>(sql`
+        select id, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
       `)).rows[0];
       if (!cycle) {
         throw new HrmPerformanceError(
           "NOT_FOUND",
           `review cycle ${cycleId} is not visible in this organization — set the goal without a cycle, or check the id`,
+        );
+      }
+      // The cycle must actually cover the subject employment: linking a
+      // goal to a cycle scoped to another legal entity (or department)
+      // would report the goal in a review run that never evaluates it.
+      const scope = mathRefusal("REFUSED", () => parseAppliesScope(cycle.appliesTo));
+      const subject = (await db.execute<{ employerSubsidiaryId: string }>(sql`
+        select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
+         where org_id = ${orgId} and id = ${employmentId}
+      `)).rows[0]!;
+      const today = await businessToday(orgId);
+      const department = (await db.execute<{ departmentId: string | null }>(sql`
+        select department_id as "departmentId"
+          from employment_assignment_versions
+         where org_id = ${orgId}
+           and employment_id = ${employmentId}
+           and is_primary
+           and recorded_until is null
+           and effective_from <= ${today}::date
+           and (effective_to is null or effective_to > ${today}::date)
+         order by version_no desc
+         limit 1
+      `)).rows[0];
+      if (
+        !scopeMatchesEmployment(scope, {
+          employerSubsidiaryId: subject.employerSubsidiaryId,
+          departmentId: department?.departmentId ?? null,
+        })
+      ) {
+        throw new HrmPerformanceError(
+          "REFUSED",
+          `employment ${employmentId} sits outside the scope of review cycle ${cycleId} — set the goal without a cycle, or pick a cycle covering its legal entity and department`,
         );
       }
     }
