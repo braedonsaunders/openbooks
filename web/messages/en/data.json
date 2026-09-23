@@ -85,7 +85,12 @@
       "error": "The sample company could not be prepared",
       "firstGeneration": "The first copy may take a few minutes while its verified template is generated",
       "safety": "Sample data is copied into a separate, clearly marked workspace. It never enters your live books, and email, payment, API, and integration side effects remain disabled.",
-      "orFile": "or import your own file"
+      "orFile": "or import your own file",
+      "createFailed": "Sample company could not be created. Nothing was created; you can retry.",
+      "createFailedTemplate": "Sample company could not be created: preparing the verified template failed. Nothing was created; you can retry.",
+      "createFailedClone": "Sample company could not be created: copying the template's posted history failed. Nothing was created; you can retry.",
+      "createFailedFinalize": "Sample company could not be created: finalizing the new company failed. Nothing was created; you can retry.",
+      "createFailedNumbering": "Sample company could not be created: reconciling document numbering failed. Nothing was created; you can retry."
     }
   },
   "history": {

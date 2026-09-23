@@ -14,10 +14,18 @@ import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
 import { reconcileDocumentSequences } from "../records/numbering.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
+import {
+  SampleCompanyError,
+  runProvisioningStage,
+} from "./provisioning-failures.ts";
 
-export class SampleCompanyError extends Error {
-  readonly name = "SampleCompanyError";
-}
+export { SampleCompanyError } from "./provisioning-failures.ts";
+export {
+  SampleCompanyProvisioningError,
+  sampleCompanyStageMessage,
+  SAMPLE_COMPANY_STAGE_CODES,
+} from "./provisioning-failures.ts";
+export type { SampleCompanyProvisioningStage } from "./provisioning-failures.ts";
 
 export interface SampleCompanyStatus {
   industryKey: string;
@@ -758,12 +766,6 @@ async function finalizePreview(args: {
       `);
     });
   });
-  // Sample-to-live handoff (OM-01): the clone carries the template's
-  // documents, so advance its canonical sequences past the highest cloned
-  // number per kind even if the copy did not carry the reconciled counters.
-  // Forward-only and idempotent — a no-op when the counters already lead.
-  await withOrgContext(args.sandboxOrgId, () =>
-    reconcileDocumentSequences(db, args.sandboxOrgId));
 }
 
 export async function createSampleCompany(
@@ -784,7 +786,11 @@ export async function createSampleCompany(
   // Template preparation has its own profile-wide lock. Complete it before
   // taking the member lock so a burst of first-use requests cannot exhaust the
   // connection pool while holding one advisory lock and waiting for another.
-  const prepared = await prepareSampleCompanyTemplate(input.industryKey);
+  // OM-14: every unexpected failure below is reported by its pipeline stage
+  // with a stable code and a fixed operator-facing message — never SQL text.
+  const prepared = await runProvisioningStage("template", () =>
+    prepareSampleCompanyTemplate(input.industryKey),
+  );
 
   const lockKey = `openbooks:sample-company:${input.memberUserId}:${input.industryKey}`;
   let lockClient = await pool.connect();
@@ -823,14 +829,16 @@ export async function createSampleCompany(
       return { orgId: existing.id, name: existing.name, created: false, templateGenerated: false };
     }
 
-    const cloned = await withBypassContext(() =>
-      createSandbox({
-        productionOrgId: prepared.templateOrgId,
-        name: profile.companyName,
-        tier: "full",
-        masked: false,
-        createdBy: null,
-      }),
+    const cloned = await runProvisioningStage("clone", () =>
+      withBypassContext(() =>
+        createSandbox({
+          productionOrgId: prepared.templateOrgId,
+          name: profile.companyName,
+          tier: "full",
+          masked: false,
+          createdBy: null,
+        }),
+      ),
     );
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
@@ -843,13 +851,24 @@ export async function createSampleCompany(
         templateGenerated: false,
       };
     }
-    await finalizePreview({
-      sandboxOrgId: cloned.sandboxOrgId,
-      templateOrgId: prepared.templateOrgId,
-      input,
-      companyName: profile.companyName,
-      profileId: profile.profileId,
-    });
+    await runProvisioningStage("finalize", () =>
+      finalizePreview({
+        sandboxOrgId: cloned.sandboxOrgId,
+        templateOrgId: prepared.templateOrgId,
+        input,
+        companyName: profile.companyName,
+        profileId: profile.profileId,
+      }),
+    );
+    // Sample-to-live handoff (OM-01): the clone carries the template's
+    // documents, so advance its canonical sequences past the highest cloned
+    // number per kind even if the copy did not carry the reconciled counters.
+    // Forward-only and idempotent — a no-op when the counters already lead.
+    await runProvisioningStage("numbering", () =>
+      withOrgContext(cloned.sandboxOrgId, () =>
+        reconcileDocumentSequences(db, cloned.sandboxOrgId),
+      ),
+    );
     if (!lockHealthy) {
       await reacquireLockIfNeeded();
       const winner = await existingFor(input.memberUserId, input.industryKey);

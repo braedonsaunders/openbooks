@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   SampleCompanyError,
+  SampleCompanyProvisioningError,
   createSampleCompany,
   sampleCompanyStatuses,
 } from '@openbooks/engine/src/sample-companies/service.ts'
@@ -70,6 +71,18 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {
+    // OM-14: a staged provisioning failure is a named, actionable refusal —
+    // the fixed per-stage code and message reach the operator while the full
+    // cause stays in the server log. Anything else keeps the previous shape:
+    // known validation refusals stay 409, unknown failures stay a generic
+    // 500 with no internal detail in the body.
+    if (error instanceof SampleCompanyProvisioningError) {
+      console.error(`[sample-company] provisioning failed at stage ${error.stage}`, error.cause ?? error)
+      return NextResponse.json(
+        { error: error.code, stage: error.stage, message: error.message },
+        { status: 500 },
+      )
+    }
     console.error('[sample-company] provisioning failed', error)
     return NextResponse.json(
       {

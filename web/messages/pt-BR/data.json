@@ -84,7 +84,12 @@
       "error": "Não foi possível preparar a empresa de exemplo",
       "firstGeneration": "A primeira cópia pode levar alguns minutos enquanto seu modelo verificado é gerado",
       "safety": "Os dados de exemplo são copiados para um espaço de trabalho separado e claramente marcado. Nunca entram nos seus livros reais, e efeitos de e-mail, pagamento, API e integração ficam desativados.",
-      "orFile": "ou importe seu próprio arquivo"
+      "orFile": "ou importe seu próprio arquivo",
+      "createFailed": "Não foi possível criar a empresa de exemplo. Nada foi criado; você pode tentar novamente.",
+      "createFailedTemplate": "Não foi possível criar a empresa de exemplo: a preparação do modelo verificado falhou. Nada foi criado; você pode tentar novamente.",
+      "createFailedClone": "Não foi possível criar a empresa de exemplo: a cópia do histórico contabilizado do modelo falhou. Nada foi criado; você pode tentar novamente.",
+      "createFailedFinalize": "Não foi possível criar a empresa de exemplo: a finalização da nova empresa falhou. Nada foi criado; você pode tentar novamente.",
+      "createFailedNumbering": "Não foi possível criar a empresa de exemplo: a conciliação da numeração de documentos falhou. Nada foi criado; você pode tentar novamente."
     },
     "loadFailed": "Não foi possível carregar os tipos de registro importáveis."
   },

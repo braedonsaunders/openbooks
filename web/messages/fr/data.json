@@ -84,7 +84,12 @@
       "error": "La société exemple n’a pas pu être préparée",
       "firstGeneration": "La première copie peut prendre quelques minutes pendant la génération de son modèle vérifié",
       "safety": "Les données exemple sont copiées dans un espace de travail distinct et clairement identifié. Elles n’entrent jamais dans vos livres réels, et les effets courriel, paiement, API et intégration restent désactivés.",
-      "orFile": "ou importez votre propre fichier"
+      "orFile": "ou importez votre propre fichier",
+      "createFailed": "La société exemple n’a pas pu être créée. Rien n’a été créé ; vous pouvez réessayer.",
+      "createFailedTemplate": "La société exemple n’a pas pu être créée : la préparation du modèle vérifié a échoué. Rien n’a été créé ; vous pouvez réessayer.",
+      "createFailedClone": "La société exemple n’a pas pu être créée : la copie de l’historique comptabilisé du modèle a échoué. Rien n’a été créé ; vous pouvez réessayer.",
+      "createFailedFinalize": "La société exemple n’a pas pu être créée : la finalisation de la nouvelle société a échoué. Rien n’a été créé ; vous pouvez réessayer.",
+      "createFailedNumbering": "La société exemple n’a pas pu être créée : le rapprochement de la numérotation des documents a échoué. Rien n’a été créé ; vous pouvez réessayer."
     },
     "loadFailed": "Impossible de charger les types d'enregistrement importables."
   },

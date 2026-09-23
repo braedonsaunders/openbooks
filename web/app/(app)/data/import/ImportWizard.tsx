@@ -41,6 +41,41 @@ interface SampleCompanyProfile {
   existingOrgId: string | null
 }
 
+interface SampleCompanyRefusal {
+  code?: string
+  stage?: string
+  message?: string
+}
+
+// OM-14: the provisioning API reports failures by pipeline stage with a
+// stable code. The wizard renders the matching localized copy so the
+// operator reads the failure in their own locale; an unknown code falls
+// back to the server message, then to the generic localized copy.
+export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
+  'sample-company-template-failed': 'import.sample.createFailedTemplate',
+  'sample-company-clone-failed': 'import.sample.createFailedClone',
+  'sample-company-finalize-failed': 'import.sample.createFailedFinalize',
+  'sample-company-numbering-failed': 'import.sample.createFailedNumbering',
+}
+
+async function readSampleCompanyRefusal(res: Response): Promise<SampleCompanyRefusal> {
+  try {
+    const body: unknown = await res.json()
+    if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
+      const record = body as Record<string, unknown>
+      return {
+        code: typeof record.error === 'string' ? record.error : undefined,
+        stage: typeof record.stage === 'string' ? record.stage : undefined,
+        message: typeof record.message === 'string' ? record.message : undefined,
+      }
+    }
+  } catch {
+    // Non-JSON error body (proxy page, empty 502): fall through to the
+    // generic copy rather than surfacing a SyntaxError.
+  }
+  return {}
+}
+
 type Step = 'source' | 'mapping' | 'preview' | 'result'
 type Format = 'csv' | 'xlsx' | 'json'
 
@@ -71,6 +106,14 @@ export function ImportWizard() {
   const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
   const [sampleIndustry, setSampleIndustry] = useState('')
   const [sampleBusy, setSampleBusy] = useState(false)
+  const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
+
+  const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
+    const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
+    if (copyKey) return t(copyKey)
+    if (refusal.message && refusal.message.trim() !== '') return refusal.message
+    return t('import.sample.createFailed')
+  }
 
   useEffect(() => {
     fetch('/api/data/resources')
@@ -105,6 +148,9 @@ export function ImportWizard() {
   const createOrOpenSample = async () => {
     if (!selectedSample) return
     setSampleBusy(true)
+    // A retry starts clean, but the chosen company and profile stay selected
+    // below: nothing was created by the failed attempt, so retry is safe.
+    setSampleError(null)
     let orgId = selectedSample.existingOrgId
     try {
       if (!orgId) {
@@ -113,9 +159,16 @@ export function ImportWizard() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ industry: selectedSample.industryKey }),
         })
-        const data = await response.json().catch(() => ({}))
-        if (!response.ok || typeof data.orgId !== 'string') {
-          throw new Error(data.error ?? t('import.sample.error'))
+        if (!response.ok) {
+          const refusal = await readSampleCompanyRefusal(response)
+          setSampleError(refusal)
+          throw new Error(sampleErrorText(refusal))
+        }
+        const data = (await response.json()) as { orgId?: unknown; created?: unknown }
+        if (typeof data.orgId !== 'string') {
+          const refusal: SampleCompanyRefusal = {}
+          setSampleError(refusal)
+          throw new Error(sampleErrorText(refusal))
         }
         orgId = data.orgId
         toast.success(data.created ? t('import.sample.created') : t('import.sample.ready'))
@@ -340,6 +393,15 @@ export function ImportWizard() {
                   <p className="text-xs text-muted-foreground">
                     {selectedSample.focus.join(' · ')}
                     {!selectedSample.templateReady && !selectedSample.existingOrgId ? ` · ${t('import.sample.firstGeneration')}` : ''}
+                  </p>
+                )}
+                {sampleError && (
+                  <p
+                    id="sample-company-error"
+                    role="alert"
+                    className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
+                  >
+                    {sampleErrorText(sampleError)}
                   </p>
                 )}
               </div>

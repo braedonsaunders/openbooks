@@ -84,7 +84,12 @@
       "error": "Das Beispielunternehmen konnte nicht vorbereitet werden",
       "firstGeneration": "Die erste Kopie kann einige Minuten dauern, während ihre geprüfte Vorlage erzeugt wird",
       "safety": "Beispieldaten werden in einen separaten, klar gekennzeichneten Arbeitsbereich kopiert. Sie gelangen nie in Ihre echten Bücher; E-Mail-, Zahlungs-, API- und Integrationswirkungen bleiben deaktiviert.",
-      "orFile": "oder eigene Datei importieren"
+      "orFile": "oder eigene Datei importieren",
+      "createFailed": "Das Beispielunternehmen konnte nicht erstellt werden. Es wurde nichts erstellt; Sie können es erneut versuchen.",
+      "createFailedTemplate": "Das Beispielunternehmen konnte nicht erstellt werden: Die geprüfte Vorlage konnte nicht vorbereitet werden. Es wurde nichts erstellt; Sie können es erneut versuchen.",
+      "createFailedClone": "Das Beispielunternehmen konnte nicht erstellt werden: Das Kopieren des gebuchten Verlaufs der Vorlage ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen.",
+      "createFailedFinalize": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abschluss des neuen Unternehmens ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen.",
+      "createFailedNumbering": "Das Beispielunternehmen konnte nicht erstellt werden: Der Abgleich der Belegnummerierung ist fehlgeschlagen. Es wurde nichts erstellt; Sie können es erneut versuchen."
     },
     "loadFailed": "Importierbare Datensatztypen konnten nicht geladen werden."
   },
