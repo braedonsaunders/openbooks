@@ -34,6 +34,7 @@ registerHooks({
       export async function isFeatureEnabled() { return true }
       export function featureEnabled() { return true }
       export async function orgFeatureState() { return {} }
+      export async function checkProjectsWriteEnabled() { return true }
     `)
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     // Pin the engine to THIS checkout: the environment shares node_modules
