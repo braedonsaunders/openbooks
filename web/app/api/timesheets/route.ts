@@ -10,6 +10,7 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
 import { runTimeApprovalEffects } from '../../../lib/time-approval'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
+import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
 import { isIsoDate, loadWeek, pinTimesheetEmployee, pinTimesheetLineRefs, weekStart, weekWindow } from './_lib'
 
 export const runtime = 'nodejs'
@@ -226,45 +227,157 @@ async function save(req: Request) {
     }
   }
 
-  // Replace-in-place, but only over editable (draft/rejected) entries. We wipe
-  // this employee+week's draft/rejected rows, then re-insert from the grid.
-  // Approved/submitted entries are untouched — the grid already reflected them
-  // read-only when the week wasn't a draft.
+  // Reconcile-in-place, keyed by line identity (day × hours × refs × memo ×
+  // billable × custom). A replayed grid resolves to the stored rows instead of
+  // inserting a second copy of the week's hours with fresh financial effects:
+  // lines already held by surviving (immutable or consumed) entries are
+  // dropped, lines matching a replaceable entry keep that row, and only
+  // genuinely new lines insert. Only editable (draft/rejected) entries are
+  // ever deleted — approved and submitted entries are left intact so a save
+  // never silently overwrites an approval (or an in-flight submission).
   await withOrgTransaction(orgId, async () => {
     const tx = db
     // When approval is not required, saved entries land already approved, so
-    // the replaceable set has to include those too — otherwise every save would
-    // insert a second copy of the week's hours alongside the first. Entries any
-    // downstream document has consumed stay put regardless: they are evidence
-    // for an invoice, pay run or ledger entry that already exists.
+    // the replaceable set has to include those too — otherwise every save
+    // would insert a second copy of the week's hours alongside the first.
+    // Entries any downstream document has consumed stay put regardless: they
+    // are evidence for an invoice, pay run or ledger entry that already
+    // exists.
     //
     // An amendment offset points at its original by id, so a referenced
     // original stays put even when it would otherwise be deletable: removing
     // it — through a direct or stale save — orphans the offset into phantom
     // negative hours. Amendment history is append-only; correct such weeks
     // with a new amendment instead.
-    await tx.execute(sql`
-      delete from time_entries
+    //
+    // The row lock serializes concurrent saves of this week so two writers
+    // cannot interleave their diffs.
+    const stored = (await tx.execute<{
+      id: string
+      worked_on: string
+      hours: string
+      project_id: string | null
+      item_id: string | null
+      time_type_id: string | null
+      department_id: string | null
+      memo: string | null
+      is_billable: boolean
+      status: string
+      custom: Record<string, unknown> | null
+      invoiced_by_line_id: string | null
+      payroll_batch_ref: string | null
+      cost_journal_entry_id: string | null
+      overhead_journal_entry_id: string | null
+      field_ticket_id: string | null
+      billing_status: 'unbilled' | 'billed'
+      amends_entry_id: string | null
+      has_contra: boolean
+    }>(sql`
+      select id, worked_on, hours::text as hours, project_id, item_id,
+             time_type_id, department_id, memo, is_billable, status, custom,
+             invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
+             overhead_journal_entry_id, field_ticket_id, billing_status,
+             amends_entry_id,
+             exists (
+               select 1 from time_entries contra
+                where contra.org_id = time_entries.org_id
+                  and contra.amends_entry_id = time_entries.id
+             ) as has_contra
+        from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${ownedEmployee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and amends_entry_id is null
-         and not exists (
-           select 1 from time_entries contra
-            where contra.org_id = time_entries.org_id
-              and contra.amends_entry_id = time_entries.id
-         )
-         and (
-           status in ('draft', 'rejected')
-           or (${!policy.requireApproval} and status = 'approved'
-               and invoiced_by_line_id is null and payroll_batch_ref is null
-               and cost_journal_entry_id is null and overhead_journal_entry_id is null
-               and field_ticket_id is null
-               and billing_status = 'unbilled')
-         )
-    `)
-    const savedIds: string[] = []
+       for update
+    `)).rows
+    const replaceable = (row: (typeof stored)[number]): boolean => {
+      if (row.amends_entry_id != null || row.has_contra) return false
+      if (row.status === 'draft' || row.status === 'rejected') return true
+      return (
+        !policy.requireApproval &&
+        row.status === 'approved' &&
+        row.invoiced_by_line_id == null &&
+        row.payroll_batch_ref == null &&
+        row.cost_journal_entry_id == null &&
+        row.overhead_journal_entry_id == null &&
+        row.field_ticket_id == null &&
+        row.billing_status === 'unbilled'
+      )
+    }
+    const lineKey = (v: {
+      workedOn: string
+      hours: string
+      projectId: string | null
+      itemId: string | null
+      timeTypeId: string | null
+      departmentId: string | null
+      memo: string | null
+      isBillable: boolean
+      custom: Record<string, unknown>
+    }): string =>
+      [
+        v.workedOn,
+        normalizeMoney(v.hours),
+        v.projectId ?? '',
+        v.itemId ?? '',
+        v.timeTypeId ?? '',
+        v.departmentId ?? '',
+        v.memo ?? '',
+        v.isBillable ? '1' : '0',
+        canonicalJson(v.custom ?? {}),
+      ].join('|')
+    // Multiset of replaceable row ids by line identity; survivors are dropped
+    // from the payload before they can duplicate immutable hours.
+    const survivorCounts = new Map<string, number>()
+    const replaceableIds = new Map<string, string[]>()
+    for (const row of stored) {
+      const key = lineKey({
+        workedOn: row.worked_on,
+        hours: row.hours,
+        projectId: row.project_id,
+        itemId: row.item_id,
+        timeTypeId: row.time_type_id,
+        departmentId: row.department_id,
+        memo: row.memo,
+        isBillable: row.is_billable,
+        custom: row.custom ?? {},
+      })
+      if (replaceable(row)) {
+        const ids = replaceableIds.get(key) ?? []
+        ids.push(row.id)
+        replaceableIds.set(key, ids)
+      } else {
+        survivorCounts.set(key, (survivorCounts.get(key) ?? 0) + 1)
+      }
+    }
+    const toInsert: Persist[] = []
     for (const p of toPersist) {
+      const key = lineKey(p)
+      const survivors = survivorCounts.get(key) ?? 0
+      if (survivors > 0) {
+        // Already stored on an entry this save must not touch: a replay of
+        // the original result, not a new line.
+        survivorCounts.set(key, survivors - 1)
+        continue
+      }
+      const kept = replaceableIds.get(key)
+      if (kept && kept.length > 0) {
+        // The stored row already carries this line: keep it (and its effects)
+        // instead of churning it into a new id.
+        kept.pop()
+        continue
+      }
+      toInsert.push(p)
+    }
+    const deleteIds = Array.from(replaceableIds.values()).flat()
+    if (deleteIds.length > 0) {
+      await tx.execute(sql`
+        delete from time_entries
+         where org_id = ${orgId}
+           and id = any(${`{${deleteIds.join(',')}}`}::uuid[])
+      `)
+    }
+    const savedIds: string[] = []
+    for (const p of toInsert) {
       const saved = await tx.execute<{ id: string }>(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
@@ -281,6 +394,8 @@ async function save(req: Request) {
     }
     // Disabling the manual sign-off changes who authorizes availability, not
     // the rate evidence or accounting required when hours become usable.
+    // Effects run only for freshly inserted lines: replayed lines already
+    // carry theirs.
     if (newStatus === 'approved') await runTimeApprovalEffects(orgId, user.id, savedIds)
   })
 

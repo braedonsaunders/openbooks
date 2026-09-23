@@ -102,6 +102,37 @@ test('saving immediately approved hours captures rates and posts configured labo
   } finally { await f.close() }
 })
 
+test('replaying an identical save returns the stored week without duplicating hours or effects', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // With automatic approval the first save leaves approved entries behind.
+  // A replayed grid must resolve to those rows — not insert a second copy of
+  // the week's hours alongside fresh financial effects.
+  const f = await fixture(false)
+  try {
+    assert.equal((await f.save({})).status, 200)
+    const first = (await f.snapshot()).rows
+    assert.equal(first.length, 1)
+    const journalsBefore = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.n
+    const replay = await f.save({})
+    assert.equal(replay.status, 200, await replay.clone().text())
+    const second = (await f.snapshot()).rows
+    assert.deepEqual(second.map((row) => row.id), first.map((row) => row.id), 'replay must reuse the stored rows')
+    assert.deepEqual(second, first)
+    const journalsAfter = (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${f.org.orgId}`)).rows[0]!.n
+    assert.equal(journalsAfter, journalsBefore, 'replay must not post fresh financial effects')
+  } finally { await f.close() }
+})
+
+test('replaying a draft grid reuses the stored rows instead of churning them', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await fixture(true)
+  try {
+    assert.equal((await f.save({})).status, 200)
+    const first = (await f.snapshot()).rows
+    assert.equal(first.length, 1)
+    assert.equal((await f.save({})).status, 200)
+    assert.deepEqual((await f.snapshot()).rows, first)
+  } finally { await f.close() }
+})
+
 test('an hours cell wider than the ledger column fails closed without writing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   // time_entries.hours is numeric(19,4): a pasted 20-digit cell cleared the
   // exact-decimal check and died in Postgres with a storage error. Fail
