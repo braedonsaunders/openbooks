@@ -17,15 +17,6 @@ const failuresUrl = new URL(
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       export async function getAuthz() {
@@ -84,13 +75,17 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
+// '@/lib/api/json' is deliberately NOT mocked: a parseJsonBody stub taking only
+// (request) and returning { ok: true } unconditionally would hollow every
+// malformed-body case behind it, and the real boundary loads cleanly.
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/sample-companies/service.ts', '@openbooks/engine/src/sample-companies/service.ts'],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real '@/lib/api/json' imports 'server-only', which is inert here.
+    if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     if (specifier.endsWith('lib/authz')) return { url: 'mock:authz', shortCircuit: true }
