@@ -31,7 +31,9 @@ import { withIdempotencyKey } from "./idempotency";
  * whenever the warehouse choice is ambiguous, so the suite names its own
  * warehouse explicitly on the PO line. Reconciliation sign-off is
  * date-monotonic on the suite's settlement account, so local re-runs
- * against a warm DB must re-bootstrap first.
+ * against a warm DB must re-bootstrap first; the core flow still floors
+ * its through date the day after any prior sign-off, so a retried attempt
+ * clears the fence instead of colliding with the earlier session.
  *
  * Flow (core test): vendor with approved bank account (second-user approval)
  * → purchase order → goods receipt → vendor bill (3-way match: bills only
@@ -103,6 +105,13 @@ function fromUnits(units: bigint): string {
 }
 function grouped(intPart: string): string {
   return intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+/** ISO calendar date plus whole days (UTC): floors a reconciliation through-date past a prior sign-off. */
+function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const t = new Date(Date.UTC(y!, m! - 1, d!));
+  t.setUTCDate(t.getUTCDate() + days);
+  return t.toISOString().slice(0, 10);
 }
 /** UI money cell in USD: 250000n cents -> '$2,500.00', negatives parenthesized. */
 function fmtUSD(cents: bigint): string {
@@ -769,9 +778,21 @@ test.describe("procure-to-pay workflows", () => {
       expect(profileRows.find((p) => p.id === shared.profileId)?.auto_remittance, "profile queues automatic remittance").toBe(true);
 
       // Bank reconciliation in the UI: statement in, match the outflow to the
-      // payment journal, sign off with confirmation.
+      // payment journal, sign off with confirmation. The through date is
+      // floored the day after any prior sign-off on the suite's settlement
+      // account: the date-monotonic fence (requireCutoffAfterSignedHistory)
+      // is right, so a retried file or a warm-DB re-run that already signed
+      // off must start a new session past it rather than collide with it.
+      // On a pristine tenant there is no history and this is exactly CUTOFF.
+      const priorRecs = await api(page, "GET", `/api/banking/reconciliations?accountId=${acct["1099"]}`);
+      const signedThrough = ((req(priorRecs, "GET reconciliations").reconciliations ?? []) as Array<{ status?: unknown; through_date?: unknown }>)
+        .filter((r) => r.status === "signed_off" && typeof r.through_date === "string")
+        .map((r) => r.through_date as string)
+        .sort();
+      const lastSigned = signedThrough[signedThrough.length - 1];
+      const reconThrough = lastSigned && lastSigned >= CUTOFF ? addDays(lastSigned, 1) : CUTOFF;
       const rec = await api(page, "POST", "/api/banking/reconciliations", {
-        accountId: acct["1099"], throughDate: CUTOFF, statementBalance: "-2500.00",
+        accountId: acct["1099"], throughDate: reconThrough, statementBalance: "-2500.00",
       });
       const recId = str(req(rec, "POST reconciliations").id, "reconciliation id");
       const imp = await api(page, "POST", "/api/banking/import", {
