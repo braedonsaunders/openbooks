@@ -129,6 +129,16 @@ export interface PayrollStatutoryComputeContext {
   pensionable: string;
   insurable: string;
   /**
+   * The pensionable-flagged share of the period's non-periodic one-offs — a
+   * subset of `pensionable` (and, for taxable one-offs, of `nonPeriodic`).
+   * `pensionable` itself carries every pensionable period line INCLUDING a
+   * one-off, so a pack that annualises the leg and adds the one-off again
+   * counts it periodsPerYear + 1 times. Absent (undefined) only on
+   * unit-constructed contexts, where it defaults to "0" (legacy math,
+   * bit-identical); the engine always provides it.
+   */
+  pensionableNonPeriodic?: string;
+  /**
    * Each base above less the deduction lines carrying a treatment the pack
    * declares as reducing that base (`reduceTaxBases` over the pack's
    * `deductionTreatments`). An engine whose levy is assessed on income after

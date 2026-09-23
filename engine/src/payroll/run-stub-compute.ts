@@ -355,6 +355,11 @@ export async function calculateStub(
   const nonPeriodic = earning((l) => (l.taxable ?? true) && (l.nonPeriodic ?? false));
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
+  // The one-off share of the pensionable leg, for packs that annualise the
+  // leg: annualising the whole leg and adding the one-off again counts it
+  // periodsPerYear + 1 times. No taxable filter — a non-taxable erogazione
+  // still contributes to the contributory base exactly once.
+  const pensionableNonPeriodic = earning((l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false));
 
   // Pack-declared pre-tax treatments, computed generically: each base less
   // the deduction lines carrying a treatment the pack declares as reducing
@@ -399,7 +404,7 @@ export async function calculateStub(
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
-      income, nonPeriodic, pensionable, insurable,
+      income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
       reducedBases: reducedBases(),
       deduction,
       pushStatutory, storedCertificates, certificateFor, bool,
