@@ -228,6 +228,11 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_review_answers", columnName: "text", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "destination", transform: "redact" },
   { tableName: "hrm_exit_records", columnName: "notes", transform: "redact" },
+  // Correction evidence (0281) mirrors the exit row it corrects, so its
+  // images and reason carry the same notes/destination the parent masks.
+  { tableName: "hrm_exit_record_events", columnName: "reason", transform: "redact" },
+  { tableName: "hrm_exit_record_events", columnName: "before_snapshot", transform: "null_out" },
+  { tableName: "hrm_exit_record_events", columnName: "after_snapshot", transform: "null_out" },
   // HR-17 begin: 1:1 agenda prose, feedback bodies, calibration
   // justifications and talent notes assess named people in free text —
   // same redact as review answers above.
