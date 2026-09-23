@@ -22,15 +22,15 @@ const baseParty = {
 }
 
 const arSections = {
-  aging: { current: 1000, days1To30: 0, days31To60: 0, days61To90: 0, days90Plus: 0, totalOpen: 1000, totalOverdue: 0 },
-  credit: { creditLimit: 10000, openArBalance: 1000, unbilledOrdersBalance: 0, remainingCredit: 9000, creditUtilizationPercent: 10 },
+  aging: { current: '1000.0000', days1To30: '0.0000', days31To60: '0.0000', days61To90: '0.0000', days90Plus: '0.0000', totalOpen: '1000.0000', totalOverdue: '0.0000' },
+  credit: { creditLimit: '10000.0000', openArBalance: '1000.0000', unbilledOrdersBalance: '0.0000', remainingCredit: '9000.0000', creditUtilizationPercent: 10 },
   paymentMetrics: { dso: 30, partyAvgDaysToPay: 28, orgAvgDaysToPay: 32, settlementsCount: 4 },
 }
 
 const crmSections = {
   pipeline: {
     totalOpportunities: 2, openOpportunities: 1, wonOpportunities: 1, lostOpportunities: 0,
-    projectedPipeline: 5000, weightedPipeline: 3000, wonAmount: 4000, winRatePercent: 100,
+    projectedPipeline: '5000.0000', weightedPipeline: '3000.0000', wonAmount: '4000.0000', winRatePercent: 100,
   },
 }
 
@@ -68,12 +68,12 @@ test('pulse panel names withheld sections instead of rendering zeros', () => {
   assert.ok(markup.includes('discovery call'))
 
   const arOnly: CustomerPulseData = {
-    party: { ...baseParty, paymentTermsName: 'Net 30', isOnHold: false, holdReason: null, creditLimit: 10000, hasCreditLimit: true },
+    party: { ...baseParty, paymentTermsName: 'Net 30', isOnHold: false, holdReason: null, creditLimit: '10000.0000', hasCreditLimit: true },
     sections: { ar: true, crm: false, projects: false },
     ...arSections,
     timeline: [{
       id: 'd1', type: 'invoice', title: 'INV-1 (customer invoice)', description: null,
-      amount: 1000, currency: 'CAD', status: 'posted', timestamp: '2026-07-09', reference: 'INV-1',
+      amount: '1000.0000', currency: 'CAD', status: 'posted', timestamp: '2026-07-09', reference: 'INV-1',
     }],
   }
   const arMarkup = render(arOnly)
@@ -84,13 +84,13 @@ test('pulse panel names withheld sections instead of rendering zeros', () => {
 
 test('pulse panel with full access shows every section and no restriction', () => {
   const full: CustomerPulseData = {
-    party: { ...baseParty, paymentTermsName: 'Net 30', isOnHold: false, holdReason: null, creditLimit: 10000, hasCreditLimit: true },
+    party: { ...baseParty, paymentTermsName: 'Net 30', isOnHold: false, holdReason: null, creditLimit: '10000.0000', hasCreditLimit: true },
     sections: { ar: true, crm: true, projects: true },
     ...arSections,
     ...crmSections,
     projects: {
-      enabled: true, totalCount: 1, activeCount: 1, totalContractValue: 20000,
-      totalBilled: 5000, totalCost: 0, grossProfit: 5000, grossMarginPercent: 100,
+      enabled: true, totalCount: 1, activeCount: 1, totalContractValue: '20000.0000',
+      totalBilled: '5000.0000', totalCost: '0.0000', grossProfit: '5000.0000', grossMarginPercent: 100,
     },
     timeline: [],
   }
@@ -104,8 +104,8 @@ test('pulse panel reports a withheld timeline instead of no activity', () => {
     party: baseParty,
     sections: { ar: false, crm: false, projects: true },
     projects: {
-      enabled: true, totalCount: 1, activeCount: 1, totalContractValue: 20000,
-      totalBilled: 5000, totalCost: 0, grossProfit: 5000, grossMarginPercent: 100,
+      enabled: true, totalCount: 1, activeCount: 1, totalContractValue: '20000.0000',
+      totalBilled: '5000.0000', totalCost: '0.0000', grossProfit: '5000.0000', grossMarginPercent: 100,
     },
     timeline: [],
   }
