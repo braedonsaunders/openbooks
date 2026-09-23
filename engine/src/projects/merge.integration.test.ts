@@ -185,6 +185,33 @@ test("a committing merge takes both project row locks before planning", async ()
   }
 });
 
+test("project merge refuses cross-subsidiary pairs", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const otherSubsidiary = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Other entity', 'CAD', 'CA')`);
+    const survivor = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-S1", "Home job");
+    const duplicate = await seedProject(org.orgId, otherSubsidiary, org.customerId, "JOB-S2", "Away job");
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: survivor, duplicateId: duplicate, actorId: actor }),
+      /cannot merge projects from different subsidiaries/,
+    );
+    await assert.rejects(
+      previewProjectMerge(org.orgId, survivor, duplicate),
+      /cannot merge projects from different subsidiaries/,
+    );
+    // Same-subsidiary pairs still merge.
+    const same = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-S3", "Home twin");
+    const result = await mergeProjects(org.orgId, { survivorId: survivor, duplicateId: same, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
