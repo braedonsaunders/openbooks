@@ -45,12 +45,20 @@ async function main(): Promise<void> {
        where n.nspname = 'public'
        order by coalesce(c.conrelid::regclass::text, ''), c.conname
     `),
+    // Validity is part of the catalog. An interrupted CREATE INDEX CONCURRENTLY
+    // leaves an INVALID index whose definition matches the real one exactly.
+    // Compared on definition alone, a half-built upgrade reads as equivalent
+    // to a fresh install while the planner ignores the index.
     indexes: await rows(sql`
-      select tablename as table_name, indexname as index,
-             regexp_replace(indexdef, ' TABLESPACE [^ ]+$', '') as definition
-        from pg_indexes
-       where schemaname = 'public'
-       order by tablename, indexname
+      select x.tablename as table_name, x.indexname as index,
+             regexp_replace(x.indexdef, ' TABLESPACE [^ ]+$', '') as definition,
+             i.indisvalid as valid, i.indisready as ready
+        from pg_indexes x
+        join pg_namespace n on n.nspname = x.schemaname
+        join pg_class c on c.relname = x.indexname and c.relnamespace = n.oid
+        join pg_index i on i.indexrelid = c.oid
+       where x.schemaname = 'public'
+       order by x.tablename, x.indexname
     `),
     triggers: await rows(sql`
       select c.relname as relation, t.tgname as trigger,
