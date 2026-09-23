@@ -197,7 +197,15 @@ test('legacy lot-recall entry fails closed and forwards only its allowlisted con
   // statically cached, and every gate below resolves before any redirect.
   assert.match(legacy, /export const dynamic = 'force-dynamic'/)
   assert.match(legacy, /requirePermission\('reports\.read'\)/)
-  assert.match(legacy, /!\(await isFeatureEnabled\(authz\.user\.orgId, 'inventory'\)\)\) notFound\(\)/)
+  // Fail-closed inventory gating through the shared page boundary: the
+  // permission and the feature gate both resolve before the definition
+  // lookup and the redirect, so a gated-out caller never reaches either.
+  assert.match(legacy, /await requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
+  assert.match(
+    legacy,
+    /requirePermission\('reports\.read'\)[\s\S]*requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)[\s\S]*builtInReportDefinitionId\(authz\.user\.orgId, 'lot-recall'\)[\s\S]*redirect\(`/,
+    'both gates resolve before the definition lookup and the handoff redirect',
+  )
   assert.match(
     legacy,
     /if \(!definitionId\) notFound\(\)/,
