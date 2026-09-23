@@ -720,7 +720,16 @@ export async function removeSuccessionCandidate(args: {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     // The fence first: a scoped actor never touches a plan they cannot see.
-    await loadScopedPlan(db, orgId, planId, allowed);
+    const plan = await loadScopedPlan(db, orgId, planId, allowed);
+    // Only draft plans shed candidates: an active or archived plan is
+    // evidence, and deleting from it would erase history. Move the plan
+    // back to draft to edit its candidates.
+    if (plan.status !== "draft") {
+      throw new HrmPerformanceError(
+        "REFUSED",
+        `a ${plan.status} succession plan keeps its candidates as evidence — move the plan back to draft to edit its candidates`,
+      );
+    }
     // Draft candidates may be removed; the plan itself is retained
     // history. A delete that matches zero rows is a failure.
     const deleted = (await db.execute<{ id: string }>(sql`
