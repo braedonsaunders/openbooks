@@ -6,7 +6,8 @@ import { resolveInvoicingPreference } from "./invoicing-preference.ts";
 import { loadProjectType } from "./project-type";
 import { canonicalDecimal } from "./exact-decimal";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { isFeatureEnabled } from "./features";
+import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
 
 /** CRUD for project billing requests + milestone schedules. */
@@ -139,6 +140,13 @@ export async function createBillingRequest(
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${`billing-request-number:${orgId}`}, 0))
     `);
+    // Fenced gate recheck inside the write transaction: the preflight above
+    // may be stale by the time this write lands, and a Projects disable
+    // racing this insert must refuse one side or the other.
+    await acquireFeatureGateLock(orgId, tx);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+      throw new Error("Projects feature is disabled");
+    }
     // Re-check and lock the project at the write boundary. The preflight above
     // keeps hidden projects out of the preference/type lookups, while this
     // transaction-scoped read prevents a concurrent subsidiary reassignment
