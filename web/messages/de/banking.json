@@ -791,7 +791,9 @@
         "bindingPlaceholder": "erwartete Konto-ID",
         "bindingUnset": "kein Konto gebunden",
         "bindingEdit": "Erwartetes Konto festlegen",
-        "bindingSave": "Speichern"
+        "bindingSave": "Speichern",
+        "bindingPaused": "Pausiert: erwartetes Konto nicht festgelegt",
+        "bindingPausedHint": "Identifizierte Kontoauszüge werden abgewiesen, bis das erwartete Bankkonto in den Einstellungen dieser Route hinterlegt ist."
       },
       "sftpEndpoint": {
         "title": "SFTP-Empfangsendpunkt",

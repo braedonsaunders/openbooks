@@ -688,6 +688,28 @@ test('psp settlement import copy ships localized in every locale', () => {
   }
 })
 
+test('sftp unbound-schedule paused copy ships localized in every locale', () => {
+  // U7: an unbound identifying schedule reads "Paused: expected account not
+  // set" with a remedy hint — absent outside en it falls back to English
+  // inside otherwise translated Bank Feeds cards. Every leaf must exist and
+  // be localized.
+  const source = flattenCatalog('en')
+  const keys = [
+    'banking.bankFeeds.client.sftpCard.bindingPaused',
+    'banking.bankFeeds.client.sftpCard.bindingPausedHint',
+  ]
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+})
+
 test('journal memo/reference hints ship localized in every locale', () => {
   // UX-18: the journal drawer explains Reference vs Memo beside each field —
   // absent outside en they fall back to English inside otherwise translated
@@ -4222,7 +4244,7 @@ test('I9 banking rules/feeds and ap cockpit copy ships translated in every local
   const I9_wanted = [...I9_source.keys()].filter(
     (I9_key) => I9_prefixes.some((I9_prefix) => I9_key.startsWith(I9_prefix)) || I9_extra.includes(I9_key),
   )
-  assert.equal(I9_wanted.length, 301, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
+  assert.equal(I9_wanted.length, 303, 'banking/ap source inventory changed; translate the new keys in every locale and re-pin')
   const I9_tokens = (I9_value: string): Set<string> =>
     new Set(I9_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I9_arms = (I9_value: string): string[] => I9_value.match(/, +(plural|select)/g) ?? []

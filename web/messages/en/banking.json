@@ -766,7 +766,9 @@
         "bindingPlaceholder": "expected account id",
         "bindingUnset": "no account bound",
         "bindingEdit": "Set expected account",
-        "bindingSave": "Save"
+        "bindingSave": "Save",
+        "bindingPaused": "Paused: expected account not set",
+        "bindingPausedHint": "Identified statements refuse until the expected bank account is bound in this schedule's settings."
       },
       "sftpEndpoint": {
         "title": "SFTP receiving endpoint",
