@@ -130,6 +130,87 @@ export interface AlignedBucket {
   theirs: string;
 }
 
+export interface BucketVerdict {
+  label: string;
+  ours: string;
+  theirs: string;
+  delta: string;
+  status: "ok" | "DIFFERS";
+}
+
+/** Canonical display for an exact decimal: the house 4dp money shape. */
+export function formatMoney(value: unknown): string {
+  return fromUnits(toUnits(String(value ?? "0")));
+}
+
+/**
+ * Exact decimal verdict for one bucket. There is no materiality threshold:
+ * no named policy authorises one, so any nonzero delta differs — including
+ * a delta far below the old 0.5%-of-source tolerance that could hide a
+ * million-scale misstatement behind a large source base.
+ */
+export function compareMoneyBucket(
+  label: string,
+  ours: unknown,
+  theirs: unknown,
+): BucketVerdict {
+  const ourUnits = toUnits(String(ours ?? "0"));
+  const theirUnits = toUnits(String(theirs ?? "0"));
+  const delta = ourUnits - theirUnits;
+  return {
+    label,
+    ours: fromUnits(ourUnits),
+    theirs: fromUnits(theirUnits),
+    delta: fromUnits(delta),
+    status: delta === 0n ? "ok" : "DIFFERS",
+  };
+}
+
+/**
+ * Exact integer verdict for one population count. Counts are whole by
+ * construction; a fractional count refuses by name instead of rounding into
+ * agreement.
+ */
+export function compareCountBucket(
+  label: string,
+  ours: unknown,
+  theirs: unknown,
+): BucketVerdict {
+  const toCount = (value: unknown): bigint => {
+    const text = String(value ?? "0").trim();
+    try {
+      return BigInt(text);
+    } catch {
+      throw new Error(
+        `refusing to compare a fractional population count for ${label}: ${JSON.stringify(text)}`,
+      );
+    }
+  };
+  const ourCount = toCount(ours);
+  const theirCount = toCount(theirs);
+  const delta = ourCount - theirCount;
+  return {
+    label,
+    ours: String(ourCount),
+    theirs: String(theirCount),
+    delta: String(delta),
+    status: delta === 0n ? "ok" : "DIFFERS",
+  };
+}
+
+/** Single-line rendering of a verdict; comparison already happened above. */
+export function formatVerdict(verdict: BucketVerdict): string {
+  return (
+    `  ${verdict.label.padEnd(22)} ours ${verdict.ours.padStart(16)}` +
+    `   source ${verdict.theirs.padStart(16)}   ${verdict.delta.padStart(15)}  ${verdict.status}`
+  );
+}
+
+/** The run disagrees with the source system when any verdict differs. */
+export function verdictsDiffer(verdicts: readonly BucketVerdict[]): boolean {
+  return verdicts.some((verdict) => verdict.status !== "ok");
+}
+
 /**
  * Align two bucketed populations on the union of their currency labels,
  * zero-filling a currency one side lacks so a missing bucket reads as a

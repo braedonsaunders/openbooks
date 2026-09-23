@@ -60,6 +60,19 @@ test("GL reconciliation compares currency buckets, never a mixed scalar", () => 
   );
 });
 
+test("GL reconciliation compares exactly and gates automation on the exit code", () => {
+  assert.doesNotMatch(
+    source,
+    /0\.005/,
+    "no percentage tolerance may hide a delta",
+  );
+  assert.doesNotMatch(source, /process\.exit\(0\)/, "differences must not exit 0");
+  assert.match(source, /compareMoneyBucket\(/, "decimals compare to the unit");
+  assert.match(source, /compareCountBucket\(/, "counts compare to the integer");
+  assert.match(source, /process\.exitCode = 1/, "any DIFFERS exits nonzero");
+  assert.match(source, /verdictsDiffer\(verdicts\)/, "the exit follows the verdicts");
+});
+
 test("GL reconciliation excludes unposted journal entries from project detail", () => {
   const jobQuery = queryFor("job");
   assert.match(
