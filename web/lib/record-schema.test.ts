@@ -9,6 +9,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { FormSection } from '@openbooks/forms-core'
 import {
+  findUnknownDataKeys,
   formatFieldValue,
   lintRecordFields,
   normalizeSectionsInput,
@@ -165,6 +166,17 @@ test('stripUnknownData drops unknown header keys, unknown row fields, and bad ro
   }
   const clean = stripUnknownData(SECTIONS, dirty)
   assert.deepEqual(clean, { name: 'ok', lines: [{ qty: 1, price: 2 }, {}] })
+})
+
+test('findUnknownDataKeys names undeclared ids before stripping can hide them', () => {
+  // Declared ids (header fields, the lines section, row fields) pass clean.
+  assert.deepEqual(findUnknownDataKeys(SECTIONS, { name: 'ok', lines: [{ qty: 1, price: 2 }] }), [])
+  assert.deepEqual(findUnknownDataKeys(SECTIONS, { removed_header: 1 }), ['removed_header'])
+  assert.deepEqual(findUnknownDataKeys(SECTIONS, { ghost_section: [] }), ['ghost_section'])
+  assert.deepEqual(findUnknownDataKeys(SECTIONS, { lines: [{ qty: 1, ghost: 9 }] }), ['lines[0].ghost'])
+  // A non-array under a repeating id is a shape error for the validator,
+  // not an unknown key.
+  assert.deepEqual(findUnknownDataKeys(SECTIONS, { lines: 'oops' }), [])
 })
 
 test('validateRecordData enforces repeating minRows only at submit', () => {

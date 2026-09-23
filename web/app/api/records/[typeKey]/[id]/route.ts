@@ -17,6 +17,7 @@ import {
   retainStoredSubsidiaryId,
 } from '../../../../../lib/records'
 import {
+  findUnknownDataKeys,
   lintRecordFields,
   stripUnknownData,
   validateRecordData,
@@ -246,6 +247,23 @@ export async function PATCH(
       }
       if (typeof body.data !== 'object' || body.data === null || Array.isArray(body.data)) {
         return { kind: 'response' as const, response: NextResponse.json({ error: 'data must be an object' }, { status: 422 }) }
+      }
+      // Unknown ids are refused BEFORE stripping: strip-then-validate
+      // silently drops them with success and the validator never sees them.
+      // (Values under ids the designer removed are still tolerated on the
+      // STORED row — strippedData below — only newly supplied data refuses.)
+      const unknownFields = findUnknownDataKeys(sections, body.data as FieldValueMap)
+      if (unknownFields.length > 0) {
+        return {
+          kind: 'response' as const,
+          response: NextResponse.json(
+            {
+              error: `Unknown field${unknownFields.length === 1 ? '' : 's'} ${unknownFields.map((f) => `"${f}"`).join(', ')}: remove ${unknownFields.length === 1 ? 'it' : 'them'} from data or ask the designer to add ${unknownFields.length === 1 ? 'the field' : 'the fields'} to the record type`,
+              unknownFields,
+            },
+            { status: 422 },
+          ),
+        }
       }
       nextData = withComputedFormulas(sections, stripUnknownData(sections, body.data as FieldValueMap))
     }

@@ -34,6 +34,7 @@ import {
   retainStoredSubsidiaryId,
 } from "../records";
 import {
+  findUnknownDataKeys,
   lintRecordFields,
   recordNumberPrefix,
   stripUnknownData,
@@ -172,6 +173,16 @@ async function applyCustomRecord(
       Array.isArray(body.data)
     ) {
       return err(422, "data must be an object");
+    }
+    // Unknown ids are refused BEFORE stripping (same contract as the
+    // interactive PATCH route): strip-then-validate drops them with success.
+    const unknownFields = findUnknownDataKeys(sections, body.data as FieldValueMap);
+    if (unknownFields.length > 0) {
+      return err(
+        422,
+        `Unknown field${unknownFields.length === 1 ? "" : "s"} ${unknownFields.map((f) => `"${f}"`).join(", ")}: remove ${unknownFields.length === 1 ? "it" : "them"} from data or ask the designer to add ${unknownFields.length === 1 ? "the field" : "the fields"} to the record type`,
+        { unknownFields },
+      );
     }
     nextData = withComputedFormulas(
       sections,

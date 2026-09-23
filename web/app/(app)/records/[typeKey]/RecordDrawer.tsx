@@ -13,7 +13,7 @@ import { confirmDialog } from '@/lib/confirm'
 import { runClientScripts } from '@/lib/client-scripts'
 import { useAppAction } from '@/lib/use-app-action'
 import { RecordFields, RecordPreviewOptions } from '../../../../components/record-fields'
-import type { RecordStatus } from '../../../../lib/record-schema'
+import { stripUnknownData, type RecordStatus } from '../../../../lib/record-schema'
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   active: 'success',
@@ -125,12 +125,17 @@ export function RecordDrawer({
       return
     }
     for (const w of gate.warnings) toast.warning(w)
+    // Values round-trip the stored row, which may still carry ids the
+    // designer removed since: send only declared ids. The server refuses
+    // unknown ids outright, so an unstripped resave of a pre-removal row
+    // would 422 on every edit.
+    const declared = stripUnknownData(sections, values)
     const ok = await execute(
       () =>
         fetchAction(`/api/records/${typeKey}/${record.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ data: values, expectedUpdatedAt: revision }),
+          body: JSON.stringify({ data: declared, expectedUpdatedAt: revision }),
         }),
       {
         fallbackMessage: t('autosaveFailed'),
@@ -171,7 +176,8 @@ export function RecordDrawer({
           // Send the latest values with an activation so a just-typed required
           // field counts even if its debounce hadn't fired yet. A data-bearing
           // activation carries the revision token like any other data save.
-          body: JSON.stringify(withValues ? { data: values, status: next, expectedUpdatedAt: revision } : { status: next }),
+          // Declared ids only (see save()): stored rows may carry removed ids.
+          body: JSON.stringify(withValues ? { data: stripUnknownData(sections, values), status: next, expectedUpdatedAt: revision } : { status: next }),
         }),
       {
         fallbackMessage: t('actionFailed'),
