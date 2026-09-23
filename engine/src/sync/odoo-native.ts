@@ -187,13 +187,17 @@ export function buildNativeFromOdoo(
   if (out.length === 0) return { skip: "no detail lines" };
 
   // Odoo's ACTUAL tax per tax id → attach to the first detail line carrying it.
+  // Tax lines carry the same debit/credit sign as the detail lines, so they
+  // convert with the kind's DETAIL_SIGN exactly like the details: a −10 line
+  // with a +2 reduction line nets to −8 (stored +8), while abs()'ing each
+  // line posted 12 and overstated the control.
   const taxByTaxId = new Map<number, bigint>();
   for (const l of lines) {
     if (l.display_type !== "tax") continue;
     const taxId = Number(m2oId(l.tax_line_id) ?? 0);
     const cur = taxByTaxId.get(taxId) ?? 0n;
     const b = num(l.balance);
-    taxByTaxId.set(taxId, cur + (b < 0n ? -b : b));
+    taxByTaxId.set(taxId, cur + b * BigInt(sign));
   }
   for (const [taxId, amt] of taxByTaxId) {
     if (amt === 0n) continue;
