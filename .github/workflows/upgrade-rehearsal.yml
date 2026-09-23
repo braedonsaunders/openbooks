@@ -1,0 +1,167 @@
+name: upgrade-rehearsal
+
+# RELEASE GATE ONLY. This never runs on ordinary commits: no pull_request, no
+# push to main, no schedule. Spinning up every dataset for every source release
+# is a release cost, not a per-commit cost (owner directive, 2026-09-23). Start
+# it for a release candidate in one of two ways:
+#
+#   git push origin "${SHA}:refs/heads/upgrade-rehearsal/<short>"   # push trigger
+#   gh workflow run upgrade-rehearsal.yml --ref <branch-at-SHA>     # once on main
+#
+# The candidate is always the commit the run was started on (github.sha), so
+# publish-container.yml can find this run by head_sha. It refuses a release
+# whose exact commit has no successful `upgrade-verification` job here.
+#
+# What one cell proves: scripts/upgrade-rehearsal/rehearse.mjs (header).
+# What the matrix covers: scripts/upgrade-rehearsal/rehearsal.json.
+# Pinned by scripts/upgrade-rehearsal/workflow.test.mjs.
+
+on:
+  push:
+    branches:
+      - "upgrade-rehearsal/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upgrade-rehearsal-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  SESSION_SECRET: openbooks-upgrade-rehearsal-secret-not-production
+  OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  ORG_COUNTRY: US
+  ORG_CURRENCY: USD
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - id: plan
+        # Fails closed on a required dataset class with no dataset, an unknown
+        # step kind, or a malformed source tag.
+        run: node scripts/upgrade-rehearsal/plan.mjs --github-output "$GITHUB_OUTPUT"
+
+  rehearse:
+    needs: plan
+    name: rehearse (${{ matrix.source }}, ${{ matrix.dataset }})
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_upgrade_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_upgrade_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      # A separate cluster for the fresh-install reference: database roles are
+      # cluster-wide, so a second database on the same server would share the
+      # runtime role the upgraded install already created.
+      reference:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_reference_test
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_reference_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_upgrade_test
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_upgrade_test
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_REFERENCE_DB_URL: postgres://openbooks:openbooks@localhost:5434/openbooks_reference_test
+      OPENBOOKS_REFERENCE_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5434/openbooks_reference_test
+      OPENBOOKS_REDIS_URL: redis://localhost:6379/0
+      UPGRADE_SOURCE_TAG: ${{ matrix.source }}
+      UPGRADE_CANDIDATE_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: candidate
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: refs/tags/${{ matrix.source }}
+          path: source
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            candidate/package-lock.json
+            source/package-lock.json
+      - name: Install the source release
+        working-directory: source
+        run: npm ci
+      - name: Install the candidate
+        working-directory: candidate
+        run: npm ci
+      - name: Rehearse the upgrade
+        working-directory: candidate
+        run: >-
+          node scripts/upgrade-rehearsal/rehearse.mjs
+          --dataset "${{ matrix.dataset }}"
+          --source-dir ../source
+          --report-dir ../upgrade-report
+      - name: Publish the rehearsal summary
+        if: always()
+        run: |
+          if [ -f upgrade-report/summary.md ]; then
+            cat upgrade-report/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: upgrade-${{ matrix.source }}-${{ matrix.dataset }}
+          path: upgrade-report/
+          if-no-files-found: error
+
+  upgrade-verification:
+    # The single job publish-container.yml requires. It exists so a partial
+    # matrix (a cancelled leg, or a plan that emitted nothing) can never read
+    # as a pass.
+    needs: [plan, rehearse]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every rehearsal cell to pass
+        env:
+          PLAN: ${{ needs.plan.result }}
+          REHEARSE: ${{ needs.rehearse.result }}
+          MATRIX: ${{ needs.plan.outputs.matrix }}
+        run: |
+          set -euo pipefail
+          cells=$(printf '%s' "$MATRIX" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const m=JSON.parse(s||"{}");console.log((m.include??[]).length)})')
+          echo "plan=${PLAN} rehearse=${REHEARSE} cells=${cells}"
+          if [ "$PLAN" != success ] || [ "$REHEARSE" != success ] || [ "$cells" -lt 1 ]; then
+            echo "Upgrade rehearsal did not pass on ${GITHUB_SHA}." >&2
+            exit 1
+          fi
+          echo "Every source release upgraded to ${GITHUB_SHA} across ${cells} rehearsal cells."

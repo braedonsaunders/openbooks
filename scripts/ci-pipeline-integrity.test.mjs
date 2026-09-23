@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { MAX_EXPLICIT_ANY, measuredExplicitAnys } from './check-explicit-any.mjs'
@@ -44,7 +44,7 @@ function runBlocks(source) {
     if (!opener) continue
     const [, indent, folded, inline] = opener
     if (!folded) {
-      if (inline.trim()) blocks.push({ line: i + 1, body: inline })
+      if (inline.trim()) blocks.push({ line: i + 1, body: inline, style: 'inline' })
       continue
     }
     const body = []
@@ -54,7 +54,7 @@ function runBlocks(source) {
       body.push(text)
       i = j
     }
-    blocks.push({ line: i + 1, body: body.join('\n') })
+    blocks.push({ line: i + 1, body: body.join('\n'), style: folded })
   }
   return blocks
 }
@@ -638,4 +638,42 @@ test('the release job proves the commit it releases is on main', () => {
     /merge-base --is-ancestor/,
     'the release must refuse a commit that is not on main',
   )
+})
+
+/**
+ * The shell text GitHub hands to bash for one run block: YAML strips the block
+ * indentation, a folded scalar (`>`, `>-`) joins its lines with spaces, and
+ * `${{ }}` expressions are substituted before bash sees them.
+ */
+function scriptText(block) {
+  const lines = block.body.split('\n')
+  const indents = lines.filter((line) => line.trim()).map((line) => /^ */.exec(line)[0].length)
+  const strip = indents.length > 0 ? Math.min(...indents) : 0
+  const dedented = lines.map((line) => line.slice(strip))
+  const text = block.style === '>' || block.style === '>-'
+    ? dedented.map((line) => line.trim()).filter(Boolean).join(' ')
+    : dedented.join('\n')
+  return text.replace(/\$\{\{[^}]*\}\}/g, 'GHA_EXPRESSION')
+}
+
+test('every workflow run block is syntactically valid bash', () => {
+  // publish-container.yml's release gate once ended in `(run ${verified}).""`.
+  // bash executes a script command by command, so every check above that line
+  // ran and passed, and then the stray quote hit EOF and exited 2. That refused
+  // every release, however green its gate. `bash -n` parses without executing.
+  const broken = []
+  for (const file of workflowFiles()) {
+    const source = readFileSync(file, 'utf8')
+    for (const block of runBlocks(source)) {
+      const result = spawnSync('bash', ['-n'], { input: scriptText(block), encoding: 'utf8' })
+      if (result.status !== 0) broken.push(`${file}:${block.line}: ${result.stderr.trim()}`)
+    }
+  }
+  assert.deepEqual(broken, [], `workflow run blocks bash cannot parse:\n${broken.join('\n')}`)
+})
+
+test('the syntax check refuses an unterminated quote in a run block', () => {
+  const [block] = runBlocks('      - run: |\n          echo ok\n          echo "done.""\n')
+  const result = spawnSync('bash', ['-n'], { input: scriptText(block), encoding: 'utf8' })
+  assert.notEqual(result.status, 0)
 })
