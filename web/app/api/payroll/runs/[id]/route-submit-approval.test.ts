@@ -121,6 +121,8 @@ const mockSources = new Map<string, string>([
     `
       export function canonicalAdjustmentHours() { throw new Error('not under test') }
       export async function mutatePayRunAdjustment() { throw new Error('not under test') }
+      export class PayRunAdjustmentIdempotencyConflict extends Error {}
+      export function payRunBulkAdjustmentId(batchKey, employeePartyId) { return batchKey + ':' + employeePartyId }
     `,
   ],
   [

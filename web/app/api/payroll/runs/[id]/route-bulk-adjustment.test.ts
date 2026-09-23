@@ -78,6 +78,8 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.payroll-run-bulk-adjustment-test')]
       export function canonicalAdjustmentHours() { throw new Error('not under test') }
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { ok: true } }
+      export class PayRunAdjustmentIdempotencyConflict extends Error {}
+      export function payRunBulkAdjustmentId(batchKey, employeePartyId) { return batchKey + ':' + employeePartyId }
     `,
   ],
   [

@@ -103,6 +103,8 @@ const mockSources = new Map<string, string>([
       export { canonicalAdjustmentHours } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/payroll/run-adjustments.ts'))}
       const state = globalThis[Symbol.for('openbooks.payroll-run-id-refusals-test')]
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { changed: true } }
+      export class PayRunAdjustmentIdempotencyConflict extends Error {}
+      export function payRunBulkAdjustmentId(batchKey, employeePartyId) { return batchKey + ':' + employeePartyId }
     `,
   ],
   [
