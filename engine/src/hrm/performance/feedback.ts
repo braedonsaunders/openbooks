@@ -155,12 +155,21 @@ async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<vo
   }
 }
 
-async function hasPerformanceRead(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+/**
+ * The actor's HR read scope for feedback visibility: the allowed employer
+ * set (null = unrestricted), or undefined when the actor holds no HR read
+ * grant at all. A legal-entity-restricted HR reads only the feedback whose
+ * subject sits inside their scope — never the whole org.
+ */
+async function performanceReadScope(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null | undefined> {
   try {
-    await requireAggregatePerformanceRead(db, orgId, actorId);
-    return true;
+    return await requireAggregatePerformanceRead(db, orgId, actorId);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
@@ -190,6 +199,7 @@ type StoredFeedback = {
   id: string;
   subject_employment_id: string;
   subject_party_id: string | null;
+  subject_employer_subsidiary_id: string | null;
   subject_name: string;
   author_party_id: string;
   kind: FeedbackKind;
@@ -256,7 +266,15 @@ async function toDTO(
   actorId: string,
   row: StoredFeedback,
 ): Promise<FeedbackDTO | null> {
-  const hr = await hasPerformanceRead(db, orgId, actorId);
+  const scope = await performanceReadScope(db, orgId, actorId);
+  // The HR grant widens visibility only inside the actor's legal-entity
+  // scope: unrestricted HR reads everything, a restricted HR reads the
+  // subjects they cover, and anyone else reads through authorship or the
+  // subject/manager matrix below.
+  const hr =
+    scope !== undefined &&
+    (scope === null ||
+      (row.subject_employer_subsidiary_id !== null && scope.has(row.subject_employer_subsidiary_id)));
   const person = await loadApprovalPerson(db, orgId, actorId);
   const manages = await isManagerOf(db, orgId, actorId, row.subject_employment_id);
   if (
@@ -394,6 +412,7 @@ export async function writeFeedback(args: {
     }
     const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -417,6 +436,7 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
     await assertFeedbackFeature(db, orgId);
     const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -468,6 +488,7 @@ export async function listFeedback(args: {
     const subjectFilter = args.subjectEmploymentId ? sql` and f.subject_employment_id = ${args.subjectEmploymentId}` : sql``;
     const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -506,6 +527,7 @@ export async function listOpenRequestsForParty(args: {
     if (!person.partyId) return [];
     const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -569,6 +591,7 @@ export async function fulfillRequest(args: {
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
         left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
        where f.org_id = ${orgId} and f.id = ${requestId} and f.kind = 'request'
+       for update of f
     `)).rows[0];
     if (!req) throw new HrmPerformanceError("NOT_FOUND", "feedback request was not found — it may already be retracted");
     const hidden = await retractedIds(db, orgId);
