@@ -15,6 +15,7 @@ test("organization defaults are installed by explicit setup commands", () => {
   assert.match(features, /await provisionFeatureDefaults\(orgId, actorId, key\)/);
   assert.match(provisioner, /ensureCustomizationDefaults/);
   assert.match(provisioner, /ensureBuiltInPaymentFormats/);
+  assert.match(provisioner, /ensureAccountGroupDefaults/);
   assert.match(provisioner, /ensureCrmDefaults/);
   assert.match(provisioner, /seedProjectTypes/);
   assert.match(provisioner, /ensureCloseDefaults/);
