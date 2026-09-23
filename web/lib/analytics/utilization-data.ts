@@ -3,6 +3,7 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
@@ -180,7 +181,8 @@ async function fetchTimeStats(orgId: string, from: string, to: string, allowed: 
 }
 
 const ymd = (d: Date) =>
-  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  // Year zero-padded so the YYYY-MM-DD contract holds below year 1000 too.
+  `${String(d.getUTCFullYear()).padStart(4, "0")}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 
 function calcStat(hours: number, billable: number, cost: number): UStat {
   return {
@@ -289,8 +291,10 @@ export async function utilizationData(
   const histPlans: { start: string; end: string; label: string }[] = [];
   const seen = new Set<string>();
   for (let i = 1; i <= 5; i++) {
-    const pEnd = new Date(Date.UTC(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0));
-    const pStart = new Date(Date.UTC(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1));
+    // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would
+    // remap onto 1900-1999.
+    const pEnd = utcDateFromParts(rangeEnd.getUTCFullYear(), rangeEnd.getUTCMonth() - i * periodMonths + 1, 0);
+    const pStart = utcDateFromParts(pEnd.getUTCFullYear(), pEnd.getUTCMonth() - periodMonths + 1, 1);
     const ym = `${pEnd.getUTCFullYear()}-${String(pEnd.getUTCMonth() + 1).padStart(2, "0")}`;
     const label = strings.monthLabel(ym);
     if (seen.has(label)) continue;

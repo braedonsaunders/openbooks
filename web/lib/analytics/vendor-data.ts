@@ -5,7 +5,7 @@ import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { englishVendorStrings, type VendorStrings } from "./vendor-strings";
 
@@ -131,7 +131,9 @@ export async function vendorData(
   const today = await businessToday(orgId);
   const ref = to < today ? to : today;
   const end = new Date(to + "T00:00:00Z");
-  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1));
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999.
+  const start = utcDateFromParts(end.getUTCFullYear(), end.getUTCMonth() - 11, 1);
   const startIso = start.toISOString().slice(0, 10);
 
   const [spendRows, billRows, monthRows, payRows] = await Promise.all([
@@ -342,7 +344,7 @@ export async function vendorData(
 
   const monthly: MonthSpend[] = [];
   for (let i = 0; i < 12; i++) {
-    const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+    const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
     const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
     monthly.push({ month: ym, label: strings.monthLabel(ym), spend: Number(spendByMonth.get(ym) ?? 0) });
   }

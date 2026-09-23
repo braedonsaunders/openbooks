@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, businessToday, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 import { listFindings } from '@openbooks/engine/src/hrm/construction/findings.ts'
 import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
 import { listRuns, listFormats } from '@openbooks/engine/src/hrm/construction/certified.ts'
@@ -133,10 +133,12 @@ function statusVariant(status: string): ComplianceFindingRow['statusVariant'] {
 }
 
 function weekEndingSunday(today: string): string {
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; addCalendarDays renders the result.
   const [y, m, d] = today.split('-').map(Number)
-  const date = new Date(Date.UTC(y!, m! - 1, d!))
+  const date = utcDateFromParts(y!, m! - 1, d!)
   const add = (7 - date.getUTCDay()) % 7
-  return new Date(date.getTime() + add * 86_400_000).toISOString().slice(0, 10)
+  return addCalendarDays(today, add)
 }
 
 export async function loadCompliancePage(

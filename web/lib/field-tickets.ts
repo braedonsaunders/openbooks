@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrg } from '@openbooks/engine/src/platform/db.ts'
+import { utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import {
@@ -92,9 +93,11 @@ const iso = (d: Date) => d.toISOString().slice(0, 10)
 
 /** Sunday-start week window (matches timesheets), or the single day. */
 export function ticketWindow(period: TicketPeriod, anchorIso: string): { start: string; end: string } {
-  const [y, m, d] = anchorIso.split('-').map(Number)
   if (period !== 'weekly') return { start: anchorIso, end: anchorIso }
-  const date = new Date(Date.UTC(y!, m! - 1, d!, 12))
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the Sunday-start shift is unchanged.
+  const [y, m, d] = anchorIso.split('-').map(Number)
+  const date = utcDateFromParts(y!, m! - 1, d!, 12)
   date.setUTCDate(date.getUTCDate() - date.getUTCDay())
   const start = iso(date)
   date.setUTCDate(date.getUTCDate() + 6)

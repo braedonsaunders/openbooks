@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
+import { civilDateFromParts, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
@@ -44,11 +45,15 @@ function monthStart(d: string): string {
 function nextMonthStart(d: string): string {
   const y = Number(d.slice(0, 4))
   const m = Number(d.slice(5, 7))
-  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+  // civilDateFromParts keeps literal years and zero-pads, which the old
+  // template strings did not below year 1000.
+  return m === 12 ? civilDateFromParts(y + 1, 1, 1) : civilDateFromParts(y, m + 1, 1)
 }
 
 const isMonthEnd = (d: string) => {
-  const next = new Date(Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)) + 1))
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the day+1 overflow probe is unchanged.
+  const next = utcDateFromParts(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)) + 1)
   return next.getUTCDate() === 1
 }
 

@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
 import { advanceAnchoredMonth, lastDayOfMonth } from "@openbooks/engine/src/billing/cadence.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, daysInCivilMonth, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { evaluateFormula } from "./formula";
@@ -481,7 +481,9 @@ export function parseAnchorDate(value: unknown): string | null {
   const [y, m, d] = value.split("-").map(Number);
   if (m! < 1 || m! > 12 || d! < 1 || d! > 31) return null;
   if (d! > lastDayOfMonth(y!, m!)) return null;
-  const roundTrip = new Date(Date.UTC(y!, m! - 1, d!));
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999 (an 0096 anchor used to fail validation as "not real").
+  const roundTrip = utcDateFromParts(y!, m! - 1, d!);
   if (
     roundTrip.getUTCFullYear() !== y! ||
     roundTrip.getUTCMonth() !== m! - 1 ||
@@ -517,7 +519,9 @@ export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, t
   }
   return out;
 }
-const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+// daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
+// onto 1900-1999.
+const daysInMonthUTC = (d: Date): number => daysInCivilMonth(d.getUTCFullYear(), d.getUTCMonth() + 1);
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**

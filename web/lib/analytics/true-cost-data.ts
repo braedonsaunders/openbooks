@@ -4,6 +4,7 @@ import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, div, mulDecimal, mulRatio, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import {
   deriveOverheadCategoryDeptRates,
@@ -1096,7 +1097,9 @@ export async function trueCostData(
     const lastIdx = monthly.length - 1;
     const [ly, lm] = last.split("-").map(Number);
     for (let i = 1; i <= 3; i++) {
-      const d = new Date(Date.UTC(ly!, lm! - 1 + i, 1));
+      // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would
+      // remap onto 1900-1999.
+      const d = utcDateFromParts(ly!, lm! - 1 + i, 1);
       const ym = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
       forecast.push({ month: ym, label: strings.monthLabel(ym), rate: Math.max(0, intercept + slope * (lastIdx + i)) });
     }

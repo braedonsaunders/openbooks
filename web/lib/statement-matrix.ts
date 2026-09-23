@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { calendarDaysBetween } from '@openbooks/engine/src/platform/business-date.ts'
 import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
@@ -190,9 +191,9 @@ type AmountColumn = {
 }
 
 function daysBetween(from: string, to: string): number {
-  const a = Date.UTC(+from.slice(0, 4), +from.slice(5, 7) - 1, +from.slice(8, 10))
-  const b = Date.UTC(+to.slice(0, 4), +to.slice(5, 7) - 1, +to.slice(8, 10))
-  return Math.round((b - a) / 86_400_000)
+  // calendarDaysBetween parses the ISO strings (exact for years 0001-0099)
+  // instead of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  return calendarDaysBetween(from, to)
 }
 
 /** Report-level dimension filter as a SQL fragment (AND-combined). */
