@@ -1597,9 +1597,11 @@ test(
       assert.equal(winners.length, 1,
         `exactly one of two racing commits may spend one employee's tax-year YTD (${observed})`);
       assert.equal(losers.length, 1);
+      // The loser names every stale arm: the employee-year YTD moved AND the
+      // employer-levy YTD the EHT exemption prices from moved with it.
       assert.match(
         ((losers[0]!.outcome as PromiseRejectedResult).reason as Error).message,
-        /inputs changed after it was last calculated \(ytd\)/,
+        /inputs changed after it was last calculated \(ytd, employerLevyYtd\)/,
       );
       const winner = winners[0]!.documentId;
       const loser = losers[0]!.documentId;
