@@ -7,7 +7,7 @@ export const quickBooksDesktopConnector: DocArticle = {
   order: 3,
   summary:
     'Install and operate the read-only QuickBooks Web Connector bridge for migrations, historical mirrors, and ledger reconciliation.',
-  updated: '2026-07-19',
+  updated: '2026-09-23',
   keywords: ['QuickBooks Desktop', 'Web Connector', 'QWC', 'qbXML', 'migration', 'mirror', 'trial balance', 'Windows'],
   body: `# QuickBooks Desktop Connector
 
@@ -85,9 +85,13 @@ The run succeeds only after both gates pass:
 - the account-by-account accrual trial balance matches; and
 - debit-positive activity matches for every account and posting month.
 
-An unmapped account, a transaction with fewer than two mapped lines, or any
-out-of-balance transaction is refused and listed in the run diagnostics. The
-connector never rounds a source imbalance into balance.
+A transaction is refused and listed in the run diagnostics when any of its
+legs posts to an account with no mapping (naming the account and TxnID), when
+a line on the receivables or payables control account carries a customer or
+vendor name with no mapping (naming the party, account, and TxnID), when it
+has fewer than two mapped lines, or when the mapped legs do not balance. The
+connector never rounds a source imbalance into balance and never imports a
+journal with a leg missing.
 
 ## Mirrors and historical changes
 
@@ -98,9 +102,24 @@ to transactions dated before the last successful run.
 
 Existing imported transactions are compared idempotently. Open-period changes
 are amended through the audited transaction engine; closed-period impact remains
-immutable. Source deletions are reported for review and are never silently
-voided. Keep automated mirrors disabled until you have measured the full-capture
-duration for the company file.
+immutable. When a previously imported transaction disappears at the source, the
+mirror does not leave it standing and does not ask first: it reverses the
+imported entry in its original period and voids the document automatically,
+under a system actor identity, with the source reference and the complete
+before/after evidence recorded in the transaction audit log. Payment
+applications touching the entry are softly unapplied, never erased. A
+controller-closed period blocks the automatic correction, and the run fails
+verification honestly instead.
+
+A controller can disposition a source deletion before the next mirror takes
+it: the connection card on the Migrations and Mirror page lists unresolved
+source deletions with **Retain** and **Void** actions (API: POST
+/api/platform/connections/[id]/source-deletions/[ref] with action retain or
+void). Retain records an acknowledged divergence that later mirrors never
+auto-correct; Void applies the same audited reversal and void at once under
+the controller's own identity, and refuses while active payment applications
+still touch the entry. Keep automated mirrors disabled until you have measured
+the full-capture duration for the company file.
 
 ## Security and retention
 
