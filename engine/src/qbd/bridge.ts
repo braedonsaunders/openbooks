@@ -240,13 +240,13 @@ export async function authenticateWebConnector(connectionId: string, username: s
     return { ticket, companyFile: pending.rows[0]?.pending ? String(conn.config.companyFile ?? "") : "none" };
   });
 }
-type SessionRow = { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null };
+type SessionRow = { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null; connectionStatus: string | null };
 
 async function session(ticket: string): Promise<SessionRow | null> {
   return withBypassContext(async () => {
     const result = (await db.execute<SessionRow>(sql`
       select s.id, s.org_id as "orgId", s.connection_id as "connectionId", s.status,
-             c.config->>'region' as "expectedRegion"
+             c.config->>'region' as "expectedRegion", c.status as "connectionStatus"
         from qbd_sessions s
           join connections c on c.id = s.connection_id and c.org_id = s.org_id
        where s.id = ${ticket} and s.expires_at > now() limit 1`));
@@ -268,7 +268,7 @@ type BridgeTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function lockedSession(tx: BridgeTx, ticket: string): Promise<SessionRow | null> {
   const result = (await tx.execute<SessionRow>(sql`
     select s.id, s.org_id as "orgId", s.connection_id as "connectionId", s.status,
-           c.config->>'region' as "expectedRegion"
+           c.config->>'region' as "expectedRegion", c.status as "connectionStatus"
       from qbd_sessions s
         join connections c on c.id = s.connection_id and c.org_id = s.org_id
      where s.id = ${ticket} and s.expires_at > now() limit 1 for update of s`));
@@ -282,7 +282,13 @@ async function lockedSession(tx: BridgeTx, ticket: string): Promise<SessionRow |
  * instead of reporting "No error recorded".
  */
 async function recordStaleSessionRefusal(tx: BridgeTx, locked: SessionRow): Promise<void> {
-  const reason = `QuickBooks Web Connector session is no longer open (status: ${locked.status}); the request was not claimed — authenticate again to open a new session`;
+  // A ticket whose connection stopped being active (paused) is refused with
+  // the remedy that fixes it — resume the connection — not the generic
+  // re-authentication wording. The connection status is re-read under the
+  // ticket lock, so a pause that commits between auth and send is observed.
+  const reason = locked.connectionStatus !== null && locked.connectionStatus !== "active"
+    ? `QuickBooks connection is ${locked.connectionStatus}; the request was not claimed — resume the connection and authenticate again to open a new session`
+    : `QuickBooks Web Connector session is no longer open (status: ${locked.status}); the request was not claimed — authenticate again to open a new session`;
   await tx.execute(sql`update qbd_sessions set last_error = coalesce(last_error, ${reason}), last_seen_at = now() where id = ${locked.id} and org_id = ${locked.orgId}`);
 }
 
@@ -309,12 +315,12 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
     try {
       return await withBypassContext(async () => db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
-        // Authoritative state check: a close or connection error may have
-        // committed after the pre-transaction lookup above. Claiming here
-        // would strand the request in 'sent' on a closed ticket, with no open
-        // session left to settle it (receive refuses closed tickets).
+        // Authoritative state check: a close, a connection error, or a pause
+        // may have committed after the pre-transaction lookup above. Claiming
+        // here would strand the request in 'sent' on a dead ticket, or keep a
+        // paused connection's ticket working for up to 2 h.
         const locked = await lockedSession(tx, ticket);
-        if (!locked || locked.status !== "open") {
+        if (!locked || locked.status !== "open" || locked.connectionStatus !== "active") {
           if (locked) await recordStaleSessionRefusal(tx, locked);
           return "";
         }
@@ -458,10 +464,11 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
   return withBypassContext(async () => db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
     // Authoritative state check: settle nothing for a ticket that stopped
-    // being open after the pre-transaction lookup — same answer as a closed
-    // ticket (-101), with the reason recorded for getLastError.
+    // being open — or whose connection stopped being active — after the
+    // pre-transaction lookup. Same answer as a closed ticket (-101), with the
+    // reason recorded for getLastError.
     const locked = await lockedSession(tx, ticket);
-    if (!locked || locked.status !== "open") {
+    if (!locked || locked.status !== "open" || locked.connectionStatus !== "active") {
       if (locked) await recordStaleSessionRefusal(tx, locked);
       return -101;
     }
@@ -615,6 +622,42 @@ export async function closeWebConnectorSession(ticket: string): Promise<string> 
       ? "QuickBooks Web Connector session closed"
       : "QuickBooks Web Connector session was already closed";
   });
+}
+
+/**
+ * Pause/stop hook: terminate every open Web Connector session of a connection
+ * and re-queue their in-flight requests — the same shape as
+ * closeWebConnectorSession, but for the whole connection. The connections API
+ * calls this when the owner pauses, so a ticket issued before the pause
+ * claims and submits nothing afterwards. Re-queued requests keep their
+ * correlation identity and are claimed by the next session after resume.
+ */
+export async function terminateConnectionSessions(orgId: string, connectionId: string): Promise<number> {
+  return withBypassContext(async () => db.transaction(async (tx) => {
+    const open = (await tx.execute<{ id: string }>(sql`
+      select id from qbd_sessions
+       where connection_id = ${connectionId} and org_id = ${orgId} and status = 'open'
+       for update`));
+    // Same ticket advisory lock as send/receive/close: a send that read
+    // 'open' before this terminates must lose the race in its in-lock
+    // re-read instead of claiming onto a terminated ticket.
+    for (const row of open.rows) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + row.id}, 0))`);
+    }
+    const reason = "QuickBooks connection was paused and its session terminated — resume the connection and authenticate again to open a new session";
+    await tx.execute(sql`
+      update qbd_sessions set status = 'closed', closed_at = now(),
+             last_error = coalesce(last_error, ${reason}), last_seen_at = now()
+       where connection_id = ${connectionId} and org_id = ${orgId} and status = 'open'`);
+    await tx.execute(sql`
+      update qbd_requests r set
+        status = case when c.status in ('queued', 'running') and c.expires_at > now() then 'queued' else 'cancelled' end,
+        session_id = null, sent_at = null, updated_at = now()
+        from qbd_captures c
+       where c.id = r.capture_id and c.org_id = r.org_id
+         and r.connection_id = ${connectionId} and r.org_id = ${orgId} and r.status = 'sent'`);
+    return open.rows.length;
+  }));
 }
 
 export async function recordConnectionError(ticket: string, hresult: string, message: string): Promise<string> {

@@ -9,6 +9,7 @@ import {
   validateSourceConfig,
   validateSourceSecret,
 } from "@openbooks/engine/src/sync/connection.ts";
+import { terminateConnectionSessions } from "@openbooks/engine/src/qbd/bridge.ts";
 import { nextMirrorAt } from "@openbooks/engine/src/sync/mirror-schedule.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
@@ -214,6 +215,14 @@ export async function PATCH(
     throw e;
   });
   if (result instanceof NextResponse) return result;
+  // Pausing must stop an already-authenticated ticket: terminate the
+  // connection's open Web Connector sessions and re-queue their in-flight
+  // requests (same shape as close), so a ticket issued before the pause
+  // claims and submits nothing afterwards. Termination is idempotent — a
+  // repeat pause with no open sessions touches nothing.
+  if (body.status === "paused" && result && result.source === "qbd") {
+    await terminateConnectionSessions(orgId, id);
+  }
   return NextResponse.json({ ok: true });
 }
 
