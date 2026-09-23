@@ -18,6 +18,7 @@ import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsim
 import { taxReturnToJsonString } from '../../../../../../lib/tax-return-structured'
 import { fillOfficialTaxPdf } from '../../../../../../lib/tax-official-pdf'
 import { getFileBlob } from '../../../../../../lib/file-cabinet'
+import { isMaskedFileContentError } from '../../../../../../lib/file-storage'
 import { csvResponse, jsonResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { parseAdjustments } from '../tax-return-params'
 
@@ -56,7 +57,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
          where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
       const fileId = f.rows[0]?.official_pdf_file_id
       if (!fileId) return NextResponse.json({ error: 'no official PDF uploaded for this form' }, { status: 422 })
-      const blob = await getFileBlob(gate.user.orgId, fileId, { userId: gate.user.id, isAdmin: true })
+      let blob: Awaited<ReturnType<typeof getFileBlob>>
+      try {
+        blob = await getFileBlob(gate.user.orgId, fileId, { userId: gate.user.id, isAdmin: true })
+      } catch (err) {
+        // Masked-clone tombstone: refuse by name, never as a 422 export error.
+        if (isMaskedFileContentError(err)) {
+          return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+        }
+        throw err
+      }
       if (!blob) return NextResponse.json({ error: 'official PDF not found' }, { status: 404 })
       const { bytes } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
       return pdfResponse(Buffer.from(bytes), `${filename}-official`)

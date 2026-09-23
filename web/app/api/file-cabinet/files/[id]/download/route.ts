@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { isMaskedFileContentError } from '../../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../../lib/blob-response'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -46,7 +47,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (versionId && !isUuid(versionId)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const blob = await getFileBlob(gate.user.orgId, id, viewer, versionId)
+  // A masked-clone tombstone refuses by name. Per the repo rule, the error
+  // body is produced from the checked refusal, never parsed out of a 500.
+  let blob: Awaited<ReturnType<typeof getFileBlob>>
+  try {
+    blob = await getFileBlob(gate.user.orgId, id, viewer, versionId)
+  } catch (err) {
+    if (isMaskedFileContentError(err)) {
+      return NextResponse.json({ error: (err as Error).message }, { status: 403 })
+    }
+    throw err
+  }
   if (!blob) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   return blobResponse(req, blob, { immutable: versionId != null })

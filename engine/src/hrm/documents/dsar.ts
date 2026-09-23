@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
 import { requireHrmDocumentsRead } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmDocumentsError } from "./errors.ts";
@@ -368,14 +369,18 @@ export async function buildExport(orgId: string, exportId: string): Promise<void
       let n = 0;
       for (const doc of docs) {
         if (!doc.file_id) continue;
-        const blob = (await db.execute<{ bytes: Buffer }>(sql`
-          select b.bytes
+        const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
+          select v.storage_kind, b.bytes
             from files f
             join file_versions v on v.id = f.current_version_id
-            join file_blobs b on b.version_id = v.id
+            left join file_blobs b on b.version_id = v.id
            where f.id = ${doc.file_id} and f.org_id = ${orgId}
         `)).rows[0];
-        if (!blob) continue;
+        // A masked-clone tombstone refuses by name: a subject-access export
+        // must never silently omit the file (that would certify a complete
+        // export that is missing documents).
+        if (blob) refuseMaskedStorageKind(blob.storage_kind);
+        if (!blob?.bytes) continue;
         n += 1;
         entries.push({
           name: `documents/${String(n).padStart(2, "0")}-${doc.title.replace(/[^\w\- ]+/g, "").trim().slice(0, 60) || "document"}.pdf`,
@@ -505,14 +510,18 @@ export async function downloadExport(query: {
       }
     }
     if (!row.file_id) throw new HrmDocumentsError("NOT_FOUND", "this export has no file yet");
-    const blob = (await db.execute<{ bytes: Buffer }>(sql`
-      select b.bytes
+    const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
+      select v.storage_kind, b.bytes
         from files f
         join file_versions v on v.id = f.current_version_id
-        join file_blobs b on b.version_id = v.id
+        left join file_blobs b on b.version_id = v.id
        where f.id = ${row.file_id} and f.org_id = ${query.orgId}
     `)).rows[0];
     if (!blob) throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
+    // Masked-clone tombstone: refuse by name (mapped to 403 downstream),
+    // never as a missing file or a bare 500.
+    refuseMaskedStorageKind(blob.storage_kind);
+    if (!blob.bytes) throw new HrmDocumentsError("NOT_FOUND", "the export file is missing from the cabinet");
     if (row.status === "ready") {
       await db.execute(sql`
         update hrm_data_subject_exports set status = 'delivered', updated_at = now()

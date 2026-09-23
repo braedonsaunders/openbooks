@@ -7,6 +7,7 @@ import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts"
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
+import { isMaskedFileContentError } from '@/lib/file-storage'
 import { isUuid } from '../../../lib/list-params'
 
 /** ap.pay for vendor payments, ar.pay for customer receipts. */
@@ -20,6 +21,11 @@ export function isPaymentKind(kind: unknown): kind is PaymentKind {
 
 /** Uniform error mapping: domain errors are 422, everything else 500. */
 export function paymentErrorResponse(e: unknown): NextResponse {
+  // Masked-sandbox file tombstone: a computed refusal, never a 500. The
+  // remedy lives in the message and must reach the operator intact.
+  if (isMaskedFileContentError(e)) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 403 })
+  }
   const status = e instanceof PaymentError || e instanceof PostingError ? 422 : 500
   return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
 }

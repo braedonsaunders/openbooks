@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmDocumentsError } from "@openbooks/engine/src/hrm/documents/errors.ts";
+import { MaskedFileContentError } from "@openbooks/engine/src/platform/file-storage.ts";
 import { hrmDocumentsErrorResponse } from "./_lib.ts";
 
 test("computed refusals map to statuses with the message intact", async () => {
@@ -20,6 +21,14 @@ test("authorization failures distinguish probing from missing grants", async () 
   assert.equal(probed.status, 404);
   const denied = await hrmDocumentsErrorResponse(new HrmAuthorizationError("needs the grant"));
   assert.equal(denied.status, 403);
+});
+
+test("a masked-sandbox file tombstone reaches the caller as a named 403, never a bare 500", async () => {
+  const res = await hrmDocumentsErrorResponse(new MaskedFileContentError());
+  assert.equal(res.status, 403);
+  const body = (await res.json()) as { error: string };
+  assert.match(body.error, /masked sandboxes never receive/);
+  assert.match(body.error, /re-upload the file here/);
 });
 
 test("unknown failures are a bare 500, never a leaked refusal", async () => {

@@ -6,7 +6,7 @@ import { allocateProportionally } from '@openbooks/engine/src/compliance/informa
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { add, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { renderHtmlDocumentPdf } from '@openbooks/pdf'
-import { deleteS3Blobs, getS3Blob } from './file-storage'
+import { deleteS3Blobs, getS3Blob, refuseMaskedStorageKind } from './file-storage'
 import { listAttachments, uploadAndAttach } from './file-cabinet'
 import { recordFileEvent } from './file-audit'
 import { resolvePdfTemplate } from './pdf-templates/store'
@@ -110,8 +110,8 @@ function backupManifestScopeFilter(allowedSubsidiaryIds: ReadonlySet<string> | n
 
 /** Read a stored file's bytes (db blob or S3), by file id. */
 async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string } | null> {
-  const r = (await db.execute<{ content_type: string; version_id: string | null; bytes: Buffer | null }>(sql`
-    select fi.content_type, fv.id as version_id, fb.bytes
+  const r = (await db.execute<{ content_type: string; version_id: string | null; storage_kind: string; bytes: Buffer | null }>(sql`
+    select fi.content_type, fv.id as version_id, fv.storage_kind, fb.bytes
       from files fi
       join file_versions fv on fv.id = fi.current_version_id and fv.file_id = fi.id
       left join file_blobs fb on fb.version_id = fv.id
@@ -119,6 +119,8 @@ async function readFileBytes(orgId: string, fileId: string): Promise<{ bytes: Bu
   `))
   const row = r.rows[0]
   if (!row) return null
+  // Masked-clone tombstone: refuse by name before the byte fetch.
+  refuseMaskedStorageKind(row.storage_kind)
   if (row.bytes) return { bytes: Buffer.from(row.bytes), contentType: row.content_type }
   if (row.version_id) {
     const s3 = await getS3Blob(row.version_id)

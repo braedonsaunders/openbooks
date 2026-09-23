@@ -11,6 +11,7 @@ import {
   requireHrmDocumentsRead,
 } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { hashHrmToken, mintDocumentSignerToken, verifyDocumentSignerToken } from "./tokens.ts";
 import { appendCabinetVersion, storeCabinetFile } from "./cabinet.ts";
@@ -769,14 +770,23 @@ async function currentFileBytes(
   orgId: string,
   fileId: string,
 ): Promise<{ bytes: Buffer; hash: string }> {
-  const row = (await exec.execute<{ bytes: Buffer }>(sql`
-    select b.bytes
+  const row = (await exec.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
+    select v.storage_kind, b.bytes
       from files f
       join file_versions v on v.id = f.current_version_id
-      join file_blobs b on b.version_id = v.id
+      left join file_blobs b on b.version_id = v.id
      where f.id = ${fileId} and f.org_id = ${orgId}
   `)).rows[0];
   if (!row) {
+    throw new HrmDocumentsError(
+      "NOT_FOUND",
+      "the document file is missing from the cabinet — regenerate the document instead of signing a ghost",
+    );
+  }
+  // Masked-clone tombstone: refuse by name (mapped to 403 downstream), never
+  // by signing an empty file or failing as a missing one.
+  refuseMaskedStorageKind(row.storage_kind);
+  if (!row.bytes) {
     throw new HrmDocumentsError(
       "NOT_FOUND",
       "the document file is missing from the cabinet — regenerate the document instead of signing a ghost",

@@ -2,7 +2,7 @@ import 'server-only'
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
 import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob } from './file-storage'
+import { activeStorageKind, deleteS3Blobs, getS3Blob, putS3Blob, refuseMaskedStorageKind } from './file-storage'
 import { recordFileEvent } from './file-audit'
 
 /**
@@ -2290,6 +2290,9 @@ export async function getFileBlob(
   `))
   if (r.rows.length === 0) return null
   const row = r.rows[0]!
+  // Masked-clone tombstone: refuse by name BEFORE any byte fetch, so a
+  // tombstoned row can never fall through to the bytea/S3 branches below.
+  refuseMaskedStorageKind(row.storageKind)
   const bytes = row.storageKind === 's3' ? await getS3Blob(row.versionId) : row.bytes
   if (!bytes) return null
   // The resolved version id is an immutable validator: a file_versions row's

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { getS3Blob, putS3Blob, s3Enabled } from "../platform/file-storage.ts";
+import { getS3Blob, putS3Blob, refuseMaskedStorageKind, s3Enabled } from "../platform/file-storage.ts";
 import {
   netsuiteRestlet,
   netsuiteSoapFileGet,
@@ -611,6 +611,10 @@ async function verifyImport(
 
   for (const sourceFileId of sourceFileIds) {
     const row = filesBySourceId.get(sourceFileId);
+    // A masked-clone tombstone refuses by name: without this the generic
+    // S3 check below would misreport masked rows as "no current S3 version".
+    refuseMaskedStorageKind(row?.storageKind);
+    refuseMaskedStorageKind(row?.versionStorageKind);
     if (!row?.currentVersionId || row.storageKind !== "s3" || row.versionStorageKind !== "s3") {
       throw new Error(`verification failed: source file ${sourceFileId} has no current S3 version`);
     }
