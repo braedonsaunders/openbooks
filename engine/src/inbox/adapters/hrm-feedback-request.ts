@@ -6,10 +6,13 @@
  * Fulfilment writing stays in the feedback surface (link-only with the
  * remedy named) — the adapter never writes feedback itself.
  *
- * While the hrmFeedback feature is off the service refuses, so the
- * adapter lists nothing (fail-closed) — the inbox stays up for every org.
+ * While the hrm feature is off the adapter lists nothing (fail-closed) —
+ * the inbox stays up for every org. Past that probe only a missing person
+ * identity lists nothing; any other service failure propagates with its
+ * message intact rather than masquerading as "no work".
  */
 
+import { HrmAuthorizationError } from "../../hrm/authorization.ts";
 import { listOpenRequestsForParty } from "../../hrm/performance/feedback.ts";
 import { db } from "../../platform/db.ts";
 import { hrmOn } from "../guard.ts";
@@ -24,9 +27,14 @@ export const hrmFeedbackRequestAdapter: InboxAdapter = {
     let requests;
     try {
       requests = await listOpenRequestsForParty({ orgId: ctx.orgId, actorId: ctx.actorId });
-    } catch {
-      // Feature off or no person identity: fail closed, list nothing.
-      return [];
+    } catch (error) {
+      // No person identity for the actor means no personal rows — the same
+      // rule as guard.actorPartyId. Every other failure (feature race,
+      // database outage, refusal from the service) propagates with its
+      // message intact so the inbox surfaces it instead of silently
+      // listing nothing: an empty leg is indistinguishable from "no work".
+      if (error instanceof HrmAuthorizationError) return [];
+      throw error;
     }
     return requests.map(
       (request): InboxItem => ({
