@@ -4,11 +4,12 @@
 -- Deterministic rule (also named in the preflight remedy text): an operator
 -- holding the live observation re-records the true physical count, which no
 -- SQL can invent. This file takes the lost-observation branch: delete the
--- DRAFT counts holding negative lines — identified by the same predicate
--- the preflight uses, never by ids — and recount afterwards. Posted counts
--- are immutable (U14) and are never touched; their grandfathered notice
--- stands. Lines go first (the count FK is NO ACTION), then the counts.
--- Idempotent: a second run matches no count.
+-- counts still open for correction holding negative lines — identified by
+-- the same predicate the preflight uses, never by ids — and recount
+-- afterwards. Posted and cancelled counts are immutable (U14 restaged) and
+-- are never touched; their grandfathered notice stands. Lines go first (the
+-- count FK is NO ACTION), then the counts. Idempotent: a second run matches
+-- no count.
 --
 -- Self-contained for the rehearsal runner: one transaction as the migration
 -- owner with the RLS bypass the forced-RLS catalog otherwise denies.
@@ -21,7 +22,7 @@ set local app.bypass_rls = 'on';
 WITH target AS (
   SELECT c.id, c.org_id
     FROM public.stock_counts c
-   WHERE c.status IS DISTINCT FROM 'posted'
+   WHERE c.status NOT IN ('posted', 'cancelled')
      AND EXISTS (SELECT 1 FROM public.stock_count_lines neg
                   WHERE neg.org_id = c.org_id
                     AND neg.stock_count_id = c.id

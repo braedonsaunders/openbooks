@@ -1,6 +1,7 @@
 -- OpenBooks upgrade preflight for 0293_stock_count_line_subject_unique.
 --
--- Two branches on the stock-count lifecycle (U13, restaged bytes fb31914e6).
+-- Two branches on the stock-count lifecycle (U13, restaged bytes 25a7fc0ef,
+-- 38eaf276, via fb31914e6).
 -- Posted and cancelled counts are immutable in the engine ("correct with a
 -- new count"), so no operator can merge their lines: duplicates on counts
 -- still open for correction REFUSE with a remediable merge remedy, while
