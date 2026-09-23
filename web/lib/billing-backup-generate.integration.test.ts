@@ -16,10 +16,13 @@ const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingBackupGenerateSession: session })
 Object.assign(globalThis, { __billingBackupGenerateStubPdf: null as Buffer | null })
+// Flipped by the failure test to make the renderer throw, proving the
+// failure path end to end.
+Object.assign(globalThis, { __billingBackupFailRender: false })
 const pdfStub = {
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent([
-    'export async function renderHtmlDocumentPdf() { return globalThis.__billingBackupGenerateStubPdf }',
+    'export async function renderHtmlDocumentPdf() { if (globalThis.__billingBackupFailRender) throw new Error("renderer unavailable"); return globalThis.__billingBackupGenerateStubPdf }',
     'export function compileTemplateHtml(sourceHtml) { return { compiledHtml: sourceHtml } }',
     'export function renderTemplate(tpl) { return tpl }',
     'export function sanitizeRenderedHtml(html) { return html }',
@@ -48,8 +51,10 @@ const { PDFDocument } = await import('pdf-lib')
   Object.assign(globalThis, { __billingBackupGenerateStubPdf: Buffer.from(await onePage.save()) })
 }
 const { createBillingRequest } = await import('./billing-requests')
-const { GET } = await import('../app/api/billing-requests/[id]/backup/route')
+const { GET, POST: POST_BACKUP } = await import('../app/api/billing-requests/[id]/backup/route')
 const { POST: POST_INVOICE } = await import('../app/api/billing-requests/[id]/create-invoice/route')
+const { advanceDocumentLifecycle } = await import('./application/documents')
+const { applicationContextFromSession } = await import('./application/context')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 test('a backup-required request is downloadable the moment it is invoiced', { skip: !DB }, async () => {
@@ -80,6 +85,69 @@ test('a backup-required request is downloadable the moment it is invoiced', { sk
     assert.equal(download.status, 200)
     assert.equal(download.headers.get('content-type'), 'application/pdf')
     assert.ok((await download.arrayBuffer()).byteLength > 0)
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('a failed assembly is reported, Generate succeeds, and submit then passes', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
+      return createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+    })
+    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`))
+    session.user = {
+      id: actor, orgId: org.orgId, name: 'Billing controller', email: 'backup@scratch.test',
+      roles: [], isSuperAdmin: false, envKind: 'production' as const,
+      productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor,
+    }
+    const project = randomUUID()
+    await withBypassContext(() => db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'BACKUP-FAIL', 'Backup failure path', ${org.customerId}, 'active', true)`))
+    const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+      projectId: project, basis: 'draw_amount', drawAmount: '100', backupRequired: true, backupType: 'costed_timesheets',
+    }))
+    // The renderer fails: create-invoice still succeeds, but says so —
+    // the draft stands with no packet.
+    ;(globalThis as unknown as { __billingBackupFailRender: boolean }).__billingBackupFailRender = true
+    try {
+      const invoiced = await withOrgContext(org.orgId, () =>
+        POST_INVOICE(new Request('http://audit.local/api/create-invoice', { method: 'POST' }), { params: Promise.resolve({ id: request.id }) }))
+      assert.equal(invoiced.status, 200)
+      const body = (await invoiced.json()) as { documentId: string; backup: { status: string; error?: string } }
+      assert.equal(body.backup.status, 'failed')
+      assert.match(String(body.backup.error), /generate it from the billing request/)
+    } finally {
+      ;(globalThis as unknown as { __billingBackupFailRender: boolean }).__billingBackupFailRender = false
+    }
+    // The operator's remedy — Generate — now succeeds through the same POST
+    // the project tab calls.
+    const generated = await withOrgContext(org.orgId, () =>
+      POST_BACKUP(new Request('http://audit.local/api/backup', { method: 'POST' }), { params: Promise.resolve({ id: request.id }) }))
+    assert.equal(generated.status, 200)
+    // And the issue gate, which refused without a packet, now lets the
+    // invoice through.
+    const documentId = (await withBypassContext(() => db.execute<{ invoice_document_id: string }>(sql`
+      select invoice_document_id from billing_requests where id = ${request.id}`))).rows[0]?.invoice_document_id
+    assert.ok(documentId)
+    const context = applicationContextFromSession(
+      {
+        user: {
+          id: actor, orgId: org.orgId, name: 'Billing controller', email: 'backup@scratch.test',
+          roles: [], isSuperAdmin: false, envKind: 'production' as const,
+          productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor,
+        },
+        permissions: new Set(['*']),
+        allowedSubsidiaryIds: null,
+      },
+      'api',
+      randomUUID(),
+    )
+    const outcome = await withOrgContext(org.orgId, () =>
+      advanceDocumentLifecycle(context, { documentId, action: 'submit', idempotencyKey: randomUUID() }))
+    assert.equal((outcome.result as { status: string }).status, 'approved')
   } finally {
     session.user = null
     await dropScratchOrg(org.orgId)
