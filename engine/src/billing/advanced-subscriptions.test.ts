@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import {
+  activationBillingCursors,
   AdvancedSubscriptionError,
   addMonths,
   arrearsLinesForInterval,
@@ -160,6 +161,32 @@ function ledgerAmendment(overrides: Partial<EffectiveLifecycleAmendment> & { typ
     ...overrides,
   };
 }
+
+test("a never-billed subscription activates at its term dates as before", () => {
+  assert.deepEqual(
+    activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-01-01", billed: false }),
+    { nextBillOn: "2026-01-01", currentPeriodStart: "2026-01-01" },
+  );
+});
+
+test("a term start inside billed service refuses naming the boundary and the opt-in", () => {
+  assert.throws(
+    () => activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-02-01", billed: true }),
+    /already-billed service through 2026-02-01.*billFromUnbilledBoundary/,
+  );
+});
+
+test("the controlled transition bills only from the unbilled boundary", () => {
+  assert.deepEqual(
+    activationBillingCursors({ termStartsOn: "2026-01-01", firstBillOn: "2026-01-01", anchor: "2026-01-01", boundary: "2026-02-01", billed: true, billFromUnbilledBoundary: true }),
+    { nextBillOn: "2026-02-01", currentPeriodStart: "2026-02-01" },
+  );
+  // A term starting at the boundary needs no transition.
+  assert.deepEqual(
+    activationBillingCursors({ termStartsOn: "2026-02-01", firstBillOn: "2026-02-01", anchor: "2026-02-01", boundary: "2026-02-01", billed: true }),
+    { nextBillOn: "2026-02-01", currentPeriodStart: "2026-02-01" },
+  );
+});
 
 test("lifecycle state with no amendments is the activation state", () => {
   assert.deepEqual(

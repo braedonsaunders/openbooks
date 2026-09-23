@@ -112,6 +112,44 @@ export interface ActivateLifecycleInput {
   trialEndsOn?: string | null;
   renewalPolicy?: RenewalPolicy;
   renewalTermMonths?: number | null;
+  /**
+   * Explicit, controlled transition onto already-billed service: the contract
+   * keeps the given term dates, but billing cursors start at the unbilled
+   * boundary instead of rewinding into posted periods. Without it, a
+   * termStartsOn inside billed service is refused.
+   */
+  billFromUnbilledBoundary?: boolean;
+}
+
+/**
+ * Resolve the billing cursors an activation writes. A termStartsOn inside
+ * already-billed service would rewind next_bill_on into posted periods and
+ * bill them twice (period guards dedupe only exact period end + revision),
+ * so it is refused by name — naming the unbilled boundary and the opt-in —
+ * unless the caller explicitly takes the controlled transition, which bills
+ * only from the boundary. Pure.
+ */
+export function activationBillingCursors(input: {
+  termStartsOn: string;
+  firstBillOn: string;
+  anchor: string;
+  boundary: string | null;
+  billed: boolean;
+  billFromUnbilledBoundary?: boolean;
+}): { nextBillOn: string; currentPeriodStart: string } {
+  if (!input.billed || !input.boundary || input.termStartsOn >= input.boundary) {
+    return { nextBillOn: input.firstBillOn, currentPeriodStart: input.anchor };
+  }
+  if (!input.billFromUnbilledBoundary) {
+    throw new AdvancedSubscriptionError(
+      `term start ${input.termStartsOn} overlaps already-billed service through ${input.boundary} — ` +
+      `start the term on or after ${input.boundary}, or repeat with billFromUnbilledBoundary to bill only from ${input.boundary}`,
+    );
+  }
+  return {
+    nextBillOn: input.firstBillOn > input.boundary ? input.firstBillOn : input.boundary,
+    currentPeriodStart: input.anchor > input.boundary ? input.anchor : input.boundary,
+  };
 }
 
 export interface AmendmentRequest {
@@ -688,6 +726,26 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     const renewalPolicy = input.renewalPolicy ?? "auto";
     assertRenewalPolicy(renewalPolicy);
     const firstBillOn = firstLifecycleBillOn({ termStartsOn, trialEndsOn, billingTiming: version.billingTiming, interval: version.interval, intervalCount: version.intervalCount });
+    // Never rewind into posted service: the unbilled boundary is the later
+    // of the subscription's own cursor (advanced atomically with every
+    // billed invoice) and the latest guarded period end (bill-now invoices
+    // post guards without moving the cursor).
+    const prior = (await db.execute<{ nextBillOn: string; lastInvoiceId: string | null; guardedThrough: string | null }>(sql`
+      select s.next_bill_on as "nextBillOn", s.last_invoice_id as "lastInvoiceId",
+             (select max(pi.period_ends_on)::text from subscription_period_invoices pi
+               where pi.org_id = ${orgId} and pi.subscription_id = ${input.subscriptionId}) as "guardedThrough"
+        from subscriptions s where s.id = ${input.subscriptionId} and s.org_id = ${orgId}
+    `)).rows[0];
+    const boundary = prior && prior.guardedThrough && prior.guardedThrough > prior.nextBillOn ? prior.guardedThrough : prior?.nextBillOn ?? null;
+    const billed = Boolean(prior?.lastInvoiceId ?? prior?.guardedThrough);
+    const cursors = activationBillingCursors({
+      termStartsOn,
+      firstBillOn,
+      anchor: trialEndsOn ?? termStartsOn,
+      boundary,
+      billed,
+      billFromUnbilledBoundary: input.billFromUnbilledBoundary,
+    });
     await db.execute(sql`
       insert into subscription_lifecycles
         (org_id, subscription_id, plan_version_id, term_starts_on, term_ends_on, trial_ends_on,
@@ -705,7 +763,7 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
        where org_id = ${orgId} and version_id = ${input.planVersionId} and not is_optional
     `);
     await db.execute(sql`
-      update subscriptions set next_bill_on = ${firstBillOn}, current_period_start = ${trialEndsOn ?? termStartsOn},
+      update subscriptions set next_bill_on = ${cursors.nextBillOn}, current_period_start = ${cursors.currentPeriodStart},
              updated_at = now(), updated_by = ${actorId}
        where id = ${input.subscriptionId} and org_id = ${orgId}
     `);
