@@ -246,7 +246,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let featureRefused = false
   let scopeRefused = false
-  let customRefused: NextResponse | null = null
+  let txRefused: NextResponse | null = null
   await withOrgTransaction(user.orgId, async () => {
     // Serialize against feature toggles, then re-ask the gate the entry guard
     // already asked: its answer may be stale by the time this write lands.
@@ -276,6 +276,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return
     }
     const before = locked.rows[0]
+    // Activation re-validates the name on the locked row: the entry check
+    // above ran on a pre-lock read, so a concurrent blank-name PATCH could
+    // otherwise land in between and this write would activate a nameless
+    // project. The locked row is authoritative; the entry check stays as a
+    // fast path only.
+    const lockedWillBeActive = body.isActive ?? before.is_active
+    const lockedEffectiveName = name ?? before.name.trim()
+    if (lockedWillBeActive && (!lockedEffectiveName || lockedEffectiveName === 'New project')) {
+      txRefused = bad(
+        body.isActive === true ? 'Give the project a real name before activating it' : 'An active project needs a name',
+      )
+      return
+    }
     // Custom jsonb merges under the row lock (read-modify-write on the
     // locked bag): concurrent PATCHes for distinct keys all read the same
     // pre-lock bag outside, so merging here — after this writer holds the
@@ -288,7 +301,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // omitted required field can be satisfied by its stored value.
       const result = validateCustomValues(defs, { ...base, ...body.custom })
       if (!result.ok) {
-        customRefused = bad(Object.values(result.errors)[0]!, result.errors)
+        txRefused = bad(Object.values(result.errors)[0]!, result.errors)
         return
       }
       // Reference custom values are uuid-SHAPED at this point but nothing
@@ -301,7 +314,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }
       const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
       if (unowned.length > 0) {
-        customRefused = bad(`${unowned[0]!.label} not found in this organization`)
+        txRefused = bad(`${unowned[0]!.label} not found in this organization`)
         return
       }
       for (const d of defs) delete base[d.key]
@@ -362,7 +375,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
   }
   if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (customRefused) return customRefused
+  if (txRefused) return txRefused
 
   const payload = await loadProject(id, user.orgId)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
