@@ -4,7 +4,7 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
 import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
@@ -71,6 +71,12 @@ test("valid inventory requests retain omission defaults and exact idempotent rep
     const actor = (await seedFlowActors(org.orgId)).adminId;
     state.user = { orgId: org.orgId, id: actor };
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
+    // The transfer defaults to the deterministic transit warehouse among
+    // active transit locations admitting its subsidiary. The scratch org
+    // ships none, so seed one org-wide location (null subsidiary restriction
+    // admits every entity) before the replay run below.
+    await withBypassContext(() => db.execute(sql`insert into stock_locations (id, org_id, location_id, code, kind, is_active)
+      values (${randomUUID()}, ${org.orgId}, ${org.locationId}, 'TRANSIT', 'transit', true)`));
     const { POST: basic } = await import("../app/api/inventory/actions/route");
     const { POST: advanced } = await import("../app/api/inventory/advanced/route");
     const requests = [
