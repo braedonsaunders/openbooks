@@ -462,6 +462,7 @@
       "description": "SFTP intake and delivery for bank and payment files.",
       "dependsOn": [
         "banking",
+        "organization",
         "payments",
         "platform"
       ]

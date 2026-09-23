@@ -62,6 +62,14 @@ async function seedTwoTenants(): Promise<LoginSeed> {
       insert into sftp_servers (id, org_id, name, username, authorized_keys, backend, bucket, root_prefix, is_active)
       values (${serverB}, ${orgB.orgId}, 'M42 F1 key login', ${usernameB}, ${openSshLine(keyB)}, 'local', null, ${`sftp/${orgB.orgId}/m42-f1`}, true)
     `);
+    // The daemon gates every login on the owning org's Bank Feeds feature
+    // (F11) — a scratch org defaults it off, so the seed enables it for
+    // both tenants, exactly like the banking/sftp route seed does.
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'true'::jsonb)
+       where id in (${orgA.orgId}, ${orgB.orgId})
+    `);
   });
   return { orgA, orgB, usernameA, passwordA, serverA, usernameB, serverB, keyB, keyBPem };
 }
@@ -192,6 +200,37 @@ test(
         assert.ok(await lastConnectedAt(s.serverA), "tenant A touch landed on exactly its row");
         assert.ok(await lastConnectedAt(s.serverB), "tenant B touch landed on exactly its row");
       });
+    } finally {
+      await dropScratchOrg(s.orgA.orgId);
+      await dropScratchOrg(s.orgB.orgId);
+    }
+  },
+);
+
+test(
+  "a valid login is refused while Bank Feeds is off for its own org",
+  { skip: !DB },
+  async () => {
+    const s = await seedTwoTenants();
+    try {
+      // The seed enables the feature for both tenants; switching org A off
+      // refuses even its correct password — while org B's key login, whose
+      // own org still has the feature, keeps working. The gate follows the
+      // login's org, never the ambient scope.
+      await withBypassContext(() =>
+        db.execute(sql`
+          update orgs
+             set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,bankFeeds}', 'false'::jsonb)
+           where id = ${s.orgA.orgId}`),
+      );
+      assert.equal(
+        await dbResolver.password(s.usernameA, s.passwordA),
+        null,
+        "a correct password refuses while its org's Bank Feeds is off (F11)",
+      );
+      const byKey = await dbResolver.publicKey?.(s.usernameB, s.keyB.type, s.keyB.getPublicSSH());
+      assert.ok(byKey, "the other tenant's login is unaffected by org A's feature");
+      assert.equal(byKey.orgId, s.orgB.orgId);
     } finally {
       await dropScratchOrg(s.orgA.orgId);
       await dropScratchOrg(s.orgB.orgId);
