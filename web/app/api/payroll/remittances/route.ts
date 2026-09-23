@@ -1,5 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll/remittance.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
@@ -32,6 +33,12 @@ export async function GET(req: Request) {
   const to = url.searchParams.get('to') ?? ''
   if (!DATE.test(from) || !DATE.test(to) || from > to) {
     return NextResponse.json({ error: 'invalid period' }, { status: 422 })
+  }
+  // Shape alone admits impossible dates ('2026-02-30', month 13) that the
+  // summary would otherwise hand to PostgreSQL as a driver error: refuse by
+  // name before any row is read.
+  if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to)) {
+    return NextResponse.json({ error: `invalid period "${from}" – "${to}": pass real YYYY-MM-DD calendar dates` }, { status: 422 })
   }
   const denied = await guardRemittancePeriod(gate, from, to)
   if (denied) return denied
@@ -68,6 +75,15 @@ export async function POST(req: Request) {
   }
   if (typeof to !== 'string' || !DATE.test(to)) {
     return NextResponse.json({ error: `to must be a date "YYYY-MM-DD" — got "${suppliedValue(to)}"; pass the period end as a date` }, { status: 422 })
+  }
+  // Shape alone admits impossible dates ('2026-02-30', month 13) that the
+  // engine would otherwise hand to PostgreSQL as a driver error: refuse each
+  // by name before the bill path reads a row.
+  if (!isIsoCalendarDate(from)) {
+    return NextResponse.json({ error: `from "${from}" is not a real calendar date — pass the period start as a date that exists` }, { status: 422 })
+  }
+  if (!isIsoCalendarDate(to)) {
+    return NextResponse.json({ error: `to "${to}" is not a real calendar date — pass the period end as a date that exists` }, { status: 422 })
   }
   if (from > to) {
     return NextResponse.json({ error: `from "${from}" is after to "${to}" — the period must start on or before it ends` }, { status: 422 })

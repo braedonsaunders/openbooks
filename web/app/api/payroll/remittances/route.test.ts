@@ -168,6 +168,29 @@ test('create-bill accepts a one-day period', async () => {
   assert.equal(routeState.billCalls.length, 1)
 })
 
+test('create-bill refuses an impossible from date naming the value', async () => {
+  reset()
+  const { status, error } = await errorOf(valid({ from: '2026-02-30' }))
+  assert.equal(status, 422)
+  assert.match(error, /from "2026-02-30" is not a real calendar date/)
+  assert.equal(routeState.billCalls.length, 0)
+})
+
+test('create-bill refuses an impossible to date naming the value', async () => {
+  reset()
+  const { status, error } = await errorOf(valid({ to: '2026-13-01' }))
+  assert.equal(status, 422)
+  assert.match(error, /to "2026-13-01" is not a real calendar date/)
+  assert.equal(routeState.billCalls.length, 0)
+})
+
+test('create-bill accepts a real leap day', async () => {
+  reset()
+  const res = await post(valid({ from: '2024-02-29', to: '2024-02-29' }))
+  assert.equal(res.status, 200)
+  assert.equal(routeState.billCalls.length, 1)
+})
+
 test('create-bill refuses a malformed filingAccountId naming the value', async () => {
   reset()
   const { status, error } = await errorOf(valid({ filingAccountId: 'nope' }))

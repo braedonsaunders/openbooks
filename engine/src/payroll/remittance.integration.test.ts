@@ -14,6 +14,7 @@ import {
   remittanceFenceLockKey,
   RemittanceSourceIntegrityError,
 } from "./remittance.ts";
+import { PayrollError } from "./error.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -908,6 +909,41 @@ test(
          where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
            and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
            and status <> 'voided'
+      `)).rows[0]!;
+      assert.equal(bills.n, 0, "a refused billing creates no bill");
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "an impossible calendar date refuses as a domain error, never a driver error",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      // No accruals are seeded: the refusal must fire before any row is
+      // read, so even an empty scope cannot turn February 30th into a
+      // Postgres cast failure.
+      await assert.rejects(
+        payrollRemittanceSummary(fixture.org.orgId, {
+          from: "2026-02-30", to: "2026-03-31",
+        }),
+        (error: unknown) =>
+          error instanceof PayrollError && /invalid from/.test(error.message),
+      );
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-13-01",
+        }),
+        (error: unknown) =>
+          error instanceof PayrollError && /invalid to/.test(error.message),
+      );
+      const bills = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n
+          from documents
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
       `)).rows[0]!;
       assert.equal(bills.n, 0, "a refused billing creates no bill");
     } finally {
