@@ -8,9 +8,11 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { recordPayRunPayment } from "./payment.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import {
+  assertRemittanceBillEdit,
   createRemittanceBill,
   payrollRemittanceSummary,
   remittanceFenceLockKey,
+  RemittanceSourceIntegrityError,
 } from "./remittance.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -174,6 +176,131 @@ test(
           select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
         "approved",
         "a stale remittance bill remains unposted for review/voiding",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a remittance bill posts while newer accruals wait for the next bill",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      // Scope growth after the bill is not staleness: the bill consumed
+      // exactly its own lines, and the fresh accrual waits for the next
+      // incremental bill rather than blocking this one's posting.
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-20", amount: "50.00",
+      });
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await postDocument(bill.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+        "posted",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a remittance bill whose total was hand-edited cannot post",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      // The source never moved, but the bill no longer states what it
+      // consumed: the header and its lines still tie out (so the storage
+      // tie-out trigger passes), yet the total is not what the coverage
+      // accounts for. The posting receipt must fail closed.
+      await db.execute(sql`
+        update document_lines set amount = '90.00', unit_price = '90.00'
+         where org_id = ${fixture.org.orgId} and document_id = ${bill.documentId}`);
+      await db.execute(sql`
+        update documents set total = '90.00', subtotal = '90.00'
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await assert.rejects(
+        postDocument(bill.documentId, {
+          control: {
+            ar: fixture.org.accounts.ar,
+            ap: fixture.org.accounts.ap,
+            bank: fixture.org.accounts.bank,
+          },
+        }),
+        /payroll remittance bill .* no longer matches its committed source/,
+      );
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+        "approved",
+        "a tampered remittance bill remains unposted for review/voiding",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "remittance bill lines refuse edits while header saves pass",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      // Replacing the generated lines would break the receipt the posting
+      // check reconciles: refuse by name with the regenerate remedy.
+      await assert.rejects(
+        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, [{}]),
+        (error: unknown) =>
+          error instanceof RemittanceSourceIntegrityError
+          && /its lines cannot be edited/.test(error.message)
+          && /raise a fresh bill/.test(error.message),
+      );
+      // A header-only save keeps the stored lines and proceeds.
+      assert.equal(
+        await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null),
+        true,
+      );
+      // Ordinary bills are untouched by this guard.
+      assert.equal(
+        await assertRemittanceBillEdit(db, fixture.org.orgId, randomUUID(), null),
+        false,
       );
     } finally {
       await dropScratchOrgReporting(fixture.org.orgId);
