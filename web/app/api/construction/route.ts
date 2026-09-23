@@ -20,6 +20,8 @@ import { projectCostSummary } from "../../../lib/project-costing";
 import { add, cmp, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
+import { acquireFeatureGateLock } from "../../../lib/features";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 
@@ -288,6 +290,13 @@ export async function POST(req: Request) {
         if (!Number.isInteger(sortOrder) || sortOrder > 2147483647 || sortOrder < -2147483648) throw new ConstructionBillingError("Sort order must be a whole number the schedule can store");
         const incomeAccountId = await pinIncomeAccount(db, orgId, body.incomeAccountId);
         const id = await db.transaction(async (tx) => {
+          // Fenced recheck inside the write transaction: the entry guard
+          // above may be stale by the time this write lands, and a Projects
+          // disable racing this insert must refuse one side or the other.
+          await acquireFeatureGateLock(orgId, tx);
+          if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+            throw new ConstructionBillingError("Projects feature is disabled");
+          }
           const prior = (await tx.execute(sql`select 1 from pay_applications where org_id = ${orgId} and project_id = ${body.projectId} limit 1`));
           if (prior.rows.length) throw new ConstructionBillingError("After billing begins, contract value must change through an approved change order");
           const created = (await tx.execute<{ id: string }>(sql`
@@ -399,6 +408,13 @@ export async function POST(req: Request) {
         if (!number || cmp(amount, "0") === 0) throw new ConstructionBillingError("Change-order number and a non-zero amount are required");
         if (cmp(amount, "0") < 0 && !targetSovLineId) throw new ConstructionBillingError("A deductive change order must identify the schedule line it reduces");
         const id = await db.transaction(async (tx) => {
+          // Fenced recheck inside the write transaction: the entry guard
+          // above may be stale by the time this write lands, and a Projects
+          // disable racing this insert must refuse one side or the other.
+          await acquireFeatureGateLock(orgId, tx);
+          if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+            throw new ConstructionBillingError("Projects feature is disabled");
+          }
           // Numbers are unique per project in storage: fail closed with the
           // domain error here so a double submit or retry never escapes as
           // a unique violation (the route maps the residual race below).
@@ -434,6 +450,14 @@ export async function POST(req: Request) {
           ? await businessToday(orgId)
           : requireIsoDate(body.approvedOn, "Approval date");
         await db.transaction(async (tx) => {
+          // Fenced recheck inside the write transaction: approval lands a
+          // new SOV line (and flips a draft blocker to approved), so a
+          // Projects disable racing this commit must refuse one side or the
+          // other — like addSov and addChangeOrder above.
+          await acquireFeatureGateLock(orgId, tx);
+          if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+            throw new ConstructionBillingError("Projects feature is disabled");
+          }
           const co = (await tx.execute<{ project_id: string; number: string; description: string | null; amount: string; target_sov_line_id: string | null; income_account_id: string | null; created_by: string | null }>(sql`
             select project_id, number, description, amount, target_sov_line_id, income_account_id, created_by from change_orders
              where id = ${body.id} and org_id = ${orgId} and status = 'draft' for update
