@@ -243,7 +243,7 @@ export async function POST(req: Request) {
         if (body.countedQuantity === undefined) {
           return NextResponse.json({ error: 'counted quantity required' }, { status: 422 })
         }
-        const input = { countId, lineId: body.lineId, countedQuantity: body.countedQuantity }
+        const input = { countId, lineId: body.lineId, countedQuantity: body.countedQuantity, reason: body.memo ?? null }
         return NextResponse.json(
           await keyed('inventory.stock-count.record', input, () =>
             recordCountedQuantity(user.orgId, user.id, input),
@@ -254,7 +254,7 @@ export async function POST(req: Request) {
         if (!body.lineId || !isUuid(body.lineId)) {
           return NextResponse.json({ error: 'count line required' }, { status: 422 })
         }
-        const input = { countId, lineId: body.lineId }
+        const input = { countId, lineId: body.lineId, reason: body.memo ?? null }
         return NextResponse.json(
           await keyed('inventory.stock-count.recount', input, () =>
             recountStockCountLine(user.orgId, user.id, input),

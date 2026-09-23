@@ -2,36 +2,38 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, orgContext } from "../platform/db.ts";
 import { add, cmp, isZero, neg } from "../money/money.ts";
-import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
-import { loadSubsidiaryContext, uuidArray, type SubsidiaryContext } from "../organization/subsidiaries.ts";
-import { assertInventoryFeature, assertStockLocationAdmitsSubsidiary } from "./profile-policy.ts";
-import { InventoryError, InventoryOwnershipError, type Runner } from "./contracts.ts";
-import { getOnHandWith, lockInventoryPosition, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
+import { loadSubsidiaryContext, uuidArray } from "../organization/subsidiaries.ts";
+import { assertInventoryFeature } from "./profile-policy.ts";
+import { InventoryError, type Runner } from "./contracts.ts";
+import { getOnHandWith, lockInventoryPosition, primaryBookId } from "./position.ts";
+import {
+  assertCountedNonNegative,
+  assertCountedOn,
+  assertCountTransition,
+  assertCountWarehouses,
+  assertPeriodCovers,
+  countVariance,
+  loadCountHeader,
+  parseCountQuantity,
+  requireAllLinesCounted,
+  transitionCount,
+} from "./stock-count-gates.ts";
+import type { CountLine, StockCountStatus } from "./stock-count-gates.ts";
+import { auditCountedChange, countedChangeReason } from "./stock-count-observations.ts";
 
-/**
- * Exact-quantity gate for the stock-count lifecycle. Count quantities land in
- * the same numeric(19,4) columns as every other movement, so they take the
- * same fail-closed shape-and-range gate (InventoryError naming the label,
- * never a bare Error or a storage failure). The rule itself lives in
- * position.ts, once — this is only the count-side name for it.
- */
-const parseCountQuantity = persistReceiptMoney;
-
-/**
- * A physical count is never negative: accepting -1 would review and post a
- * negative variance, and with allow_negative_inventory the position itself
- * could go negative while the count reads posted. Refuse at the engine
- * boundary (record AND variance math), with storage as the backstop (0299).
- */
-function assertCountedNonNegative(counted: string): void {
-  if (cmp(counted, "0") < 0) {
-    throw new InventoryError(
-      "counted quantity cannot be negative — record what was physically on hand (zero or more)",
-    );
-  }
-}
+// The validation gates live in stock-count-gates.ts and the observation
+// audit in stock-count-observations.ts (the inventory file-size bound).
+// The public names stay importable from here so callers do not move.
+export {
+  assertCountTransition,
+  assertCountedNonNegative,
+  countVariance,
+  loadCountHeader,
+  parseCountStatus,
+} from "./stock-count-gates.ts";
+export type { CountHeader, CountLine, StockCountStatus } from "./stock-count-gates.ts";
 
 /**
  * Count-basis on-hand for one stock-count line: the SAME layer math as every
@@ -87,239 +89,6 @@ function getCountBasisQuantity(
  * to the post; no movement can slip between the re-read and the
  * adjustments.
  */
-
-export type StockCountStatus = "draft" | "counting" | "review" | "posted" | "cancelled";
-
-const COUNT_TRANSITIONS: Record<StockCountStatus, StockCountStatus[]> = {
-  draft: ["counting", "cancelled"],
-  counting: ["review", "cancelled"],
-  review: ["counting", "posted", "cancelled"],
-  posted: [],
-  cancelled: [],
-};
-
-const TRANSITION_REMEDY: Record<string, string> = {
-  "draft:review": "start the count first (draft → counting), record every line, then submit for review",
-  "draft:posted": "start the count first (draft → counting), record every line, submit for review, then post",
-  "counting:posted": "submit the count for review first (counting → review), then post",
-  "counting:counting": "the count is already open for counting",
-  "review:review": "the count is already awaiting review",
-  "posted:posted": "the count is already posted — counts are immutable once posted; correct with a new count",
-  "cancelled:counting": "the count is cancelled — open a new count instead of reusing a cancelled one",
-  "posted:counting": "the count is already posted — counts are immutable once posted; correct with a new count",
-  "cancelled:review": "the count is cancelled — open a new count instead of reusing a cancelled one",
-  "posted:review": "the count is already posted — counts are immutable once posted; correct with a new count",
-};
-
-/**
- * Pure transition guard: throws a remedy-naming InventoryError when `to` is
- * not reachable from `from`. Pure so the unit partition can prove every
- * refusal fires without a database.
- */
-export function assertCountTransition(from: StockCountStatus, to: StockCountStatus): void {
-  if (from === to && (to === "posted" || to === "cancelled")) {
-    // Posting twice / cancelling twice are the refusals operators hit most;
-    // name them directly rather than falling through to the generic message.
-    if (to === "posted") {
-      throw new InventoryError(
-        "stock count is already posted — counts are immutable once posted; correct with a new count",
-      );
-    }
-    throw new InventoryError("stock count is already cancelled — open a new count instead of reusing a cancelled one");
-  }
-  if (COUNT_TRANSITIONS[from].includes(to)) return;
-  const remedy = TRANSITION_REMEDY[`${from}:${to}`] ?? `move the count from ${from} first`;
-  throw new InventoryError(`cannot move stock count from ${from} to ${to} — ${remedy}`);
-}
-
-/** Variance is counted − expected, in exact decimal arithmetic (never floats). */
-export function countVariance(countedQuantity: string, expectedQuantity: string): string {
-  const counted = parseCountQuantity(countedQuantity, "counted quantity");
-  assertCountedNonNegative(counted);
-  const expected = parseCountQuantity(expectedQuantity, "expected quantity");
-  return add(counted, neg(expected));
-}
-
-export function parseCountStatus(value: unknown): StockCountStatus {
-  if (
-    value === "draft" ||
-    value === "counting" ||
-    value === "review" ||
-    value === "posted" ||
-    value === "cancelled"
-  ) {
-    return value;
-  }
-  throw new InventoryError(`unknown stock count status: ${String(value)}`);
-}
-
-export type CountHeader = {
-  id: string;
-  status: StockCountStatus;
-  locationId: string;
-  subsidiaryId: string;
-  countedOn: string;
-  memo: string | null;
-};
-
-export type CountLine = {
-  id: string;
-  itemId: string;
-  stockLocationId: string;
-  lotId: string | null;
-  expectedQuantity: string;
-  countedQuantity: string | null;
-  adjustmentMovementId: string | null;
-};
-
-export async function loadCountHeader(
-  runner: Pick<typeof db, "execute">,
-  orgId: string,
-  countId: string,
-  forUpdate: boolean,
-): Promise<CountHeader> {
-  const lock = forUpdate ? sql` for update` : sql``;
-  const r = (await runner.execute<{
-    id: string;
-    status: string;
-    location_id: string;
-    subsidiary_id: string;
-    counted_on: string;
-    memo: string | null;
-  }>(sql`select id, status, location_id, subsidiary_id, counted_on::text, memo
-            from stock_counts where org_id = ${orgId} and id = ${countId}${lock}`));
-  const row = r.rows[0];
-  if (!row) {
-    // Under RLS an unscoped read silently returns nothing, so a missing row
-    // is either a wrong id or another org's count — say both, not "not found".
-    throw new InventoryError(
-      "stock count not found in this organization — check the count id, or open a new count",
-    );
-  }
-  return {
-    id: row.id,
-    status: parseCountStatus(row.status),
-    locationId: row.location_id,
-    subsidiaryId: row.subsidiary_id,
-    countedOn: row.counted_on,
-    memo: row.memo,
-  };
-}
-
-async function loadCountLines(
-  runner: Pick<typeof db, "execute">,
-  orgId: string,
-  countId: string,
-): Promise<CountLine[]> {
-  const r = (await runner.execute<{
-    id: string;
-    item_id: string;
-    stock_location_id: string;
-    lot_id: string | null;
-    expected_quantity: string;
-    counted_quantity: string | null;
-    adjustment_movement_id: string | null;
-  }>(sql`select id, item_id, stock_location_id, lot_id,
-                expected_quantity::text, counted_quantity::text, adjustment_movement_id
-           from stock_count_lines
-          where org_id = ${orgId} and stock_count_id = ${countId}
-          order by item_id, stock_location_id, lot_id nulls first, id`));
-  return r.rows.map((row) => ({
-    id: row.id,
-    itemId: row.item_id,
-    stockLocationId: row.stock_location_id,
-    lotId: row.lot_id,
-    expectedQuantity: row.expected_quantity,
-    countedQuantity: row.counted_quantity,
-    adjustmentMovementId: row.adjustment_movement_id,
-  }));
-}
-
-/** Every UPDATE names its row; a zero-row write is a failure, never success. */
-async function transitionCount(
-  runner: Pick<typeof db, "execute">,
-  orgId: string,
-  actorId: string | null,
-  count: CountHeader,
-  to: StockCountStatus,
-): Promise<void> {
-  assertCountTransition(count.status, to);
-  const updated = (await runner.execute<{ id: string }>(sql`
-    update stock_counts set status = ${to}, updated_at = now(), updated_by = ${actorId}
-     where org_id = ${orgId} and id = ${count.id} and status = ${count.status}
-    returning id`));
-  if (updated.rows.length === 0) {
-    throw new InventoryError(
-      `stock count ${count.id} changed while this action was in flight — reload the count and try again`,
-    );
-  }
-}
-
-function assertCountedOn(value: string): void {
-  if (!isIsoCalendarDate(value)) {
-    throw new InventoryError("count date must be a valid YYYY-MM-DD date");
-  }
-}
-
-async function assertPeriodCovers(
-  runner: Pick<typeof db, "execute">,
-  orgId: string,
-  countedOn: string,
-): Promise<string> {
-  const periodId = await periodForDate(orgId, countedOn, runner);
-  if (!periodId) {
-    throw new InventoryError(
-      `no accounting period covers ${countedOn} — set the count date to a date inside an open accounting period`,
-    );
-  }
-  return periodId;
-}
-
-/**
- * The warehouse side of count validity: every warehouse on the count must be
- * ACTIVE and admit the count's legal entity — the same gate every movement
- * passes through `assertStockLocationAdmitsSubsidiary`. Without it a draft
- * saves against a dead or foreign warehouse and only dies later inside
- * adjustInventory, or a zero-variance count posts against one silently.
- * The row is locked FOR SHARE and held to the caller's commit, so a
- * deactivation or restriction edit racing create/submit/post serializes
- * against the validation instead of slipping past it.
- */
-async function assertCountWarehouses(
-  tx: Runner,
-  orgId: string,
-  ctx: SubsidiaryContext,
-  subsidiaryId: string,
-  stockLocationIds: string[],
-): Promise<void> {
-  for (const stockLocationId of [...new Set(stockLocationIds)].sort()) {
-    const row = (await tx.execute<{ code: string | null; is_active: boolean }>(sql`
-      select code, is_active
-        from stock_locations
-       where org_id = ${orgId} and id = ${stockLocationId}
-       for share`)).rows[0];
-    if (!row) {
-      throw new InventoryError(
-        "count line stock location not found in this organization — choose an active stock location",
-      );
-    }
-    if (!row.is_active) {
-      throw new InventoryError(
-        `stock location "${row.code ?? stockLocationId}" is inactive — reactivate the warehouse, or move the count lines to an active one`,
-      );
-    }
-    try {
-      await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, stockLocationId, subsidiaryId);
-    } catch (error) {
-      if (error instanceof InventoryOwnershipError) {
-        throw new InventoryError(
-          `${error.message} — count under an admitted subsidiary, or widen the warehouse's subsidiary restriction`,
-        );
-      }
-      throw error;
-    }
-  }
-}
 
 export interface NewCountLineInput {
   itemId: string;
@@ -484,7 +253,7 @@ export async function startStockCount(
 export async function recordCountedQuantity(
   orgId: string,
   actorId: string | null,
-  input: { countId: string; lineId: string; countedQuantity: string },
+  input: { countId: string; lineId: string; countedQuantity: string; reason?: string | null },
 ): Promise<{ lineId: string; variance: string }> {
   const counted = parseCountQuantity(input.countedQuantity, "counted quantity");
   assertCountedNonNegative(counted);
@@ -499,8 +268,13 @@ export async function recordCountedQuantity(
       }
       assertCountTransition(count.status, "counting");
     }
-    const line = (await tx.execute<{ id: string; expected_quantity: string; adjustment_movement_id: string | null }>(sql`
-      select id, expected_quantity::text, adjustment_movement_id
+    const line = (await tx.execute<{
+      id: string;
+      expected_quantity: string;
+      counted_quantity: string | null;
+      adjustment_movement_id: string | null;
+    }>(sql`
+      select id, expected_quantity::text, counted_quantity::text, adjustment_movement_id
         from stock_count_lines
        where org_id = ${orgId} and id = ${input.lineId} and stock_count_id = ${count.id}
        for update`)).rows[0];
@@ -519,6 +293,20 @@ export async function recordCountedQuantity(
     if (updated.rows.length === 0) {
       throw new InventoryError("count line changed while this action was in flight — reload the count and try again");
     }
+    // Overwriting an observation destroys evidence of what the first
+    // counter saw: the before/after trail (with the correction reason)
+    // commits atomically with the change, and survives posting.
+    await auditCountedChange(tx, orgId, actorId, {
+      lineId: line.id,
+      countId: count.id,
+      operation: "record",
+      reason: countedChangeReason(
+        input.reason,
+        line.counted_quantity === null ? null : "correction of the prior observation",
+      ),
+      before: { countedQuantity: line.counted_quantity, expectedQuantity: line.expected_quantity },
+      after: { countedQuantity: counted, expectedQuantity: line.expected_quantity },
+    });
     return { lineId: line.id, variance: add(counted, neg(line.expected_quantity)) };
   });
 }
@@ -531,7 +319,7 @@ export async function recordCountedQuantity(
 export async function recountStockCountLine(
   orgId: string,
   actorId: string | null,
-  input: { countId: string; lineId: string },
+  input: { countId: string; lineId: string; reason?: string | null },
 ): Promise<{ lineId: string; expectedQuantity: string }> {
   return db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
@@ -546,9 +334,12 @@ export async function recountStockCountLine(
       item_id: string;
       stock_location_id: string;
       lot_id: string | null;
+      expected_quantity: string;
+      counted_quantity: string | null;
       adjustment_movement_id: string | null;
     }>(sql`
-      select id, item_id, stock_location_id, lot_id, adjustment_movement_id
+      select id, item_id, stock_location_id, lot_id, expected_quantity::text, counted_quantity::text,
+             adjustment_movement_id
         from stock_count_lines
        where org_id = ${orgId} and id = ${input.lineId} and stock_count_id = ${count.id}
        for update`)).rows[0];
@@ -573,33 +364,18 @@ export async function recountStockCountLine(
     if (updated.rows.length === 0) {
       throw new InventoryError("count line changed while this action was in flight — reload the count and try again");
     }
+    // A recount clears the prior observation: the discarded before-image
+    // commits its audit row atomically with the clear, and survives posting.
+    await auditCountedChange(tx, orgId, actorId, {
+      lineId: line.id,
+      countId: count.id,
+      operation: "recount",
+      reason: countedChangeReason(input.reason, "recount: re-snapshotted the baseline, prior observation cleared"),
+      before: { countedQuantity: line.counted_quantity, expectedQuantity: line.expected_quantity },
+      after: { countedQuantity: null, expectedQuantity: basis.quantity },
+    });
     return { lineId: line.id, expectedQuantity: basis.quantity };
   });
-}
-
-async function requireAllLinesCounted(
-  runner: Pick<typeof db, "execute">,
-  orgId: string,
-  countId: string,
-): Promise<CountLine[]> {
-  const lines = await loadCountLines(runner, orgId, countId);
-  if (lines.length === 0) {
-    throw new InventoryError("a stock count needs at least one line — add the items to count");
-  }
-  const missing = lines.filter((l) => l.countedQuantity === null);
-  if (missing.length > 0) {
-    const first = missing[0]!;
-    const detail = (await runner.execute<{ code: string | null; loc: string | null }>(sql`
-      select (select code from items where org_id = ${orgId} and id = ${first.itemId}) as code,
-             (select code from stock_locations where org_id = ${orgId} and id = ${first.stockLocationId}) as loc`)).rows[0];
-    const where = `item ${detail?.code ?? first.itemId} at ${detail?.loc ?? first.stockLocationId}`;
-    throw new InventoryError(
-      missing.length === 1
-        ? `cannot submit: 1 line is still uncounted (${where}) — record its counted quantity first`
-        : `cannot submit: ${missing.length} lines are still uncounted (first: ${where}) — record every line's counted quantity first`,
-    );
-  }
-  return lines;
 }
 
 export async function submitStockCountForReview(
