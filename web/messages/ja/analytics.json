@@ -46,6 +46,12 @@
       "ratios": "比率",
       "configuration": "設定"
     },
+    "forecast": {
+      "domainCaveatTitle": "予測が指標の範囲を外れています",
+      "domainCaveat": "{metric}はマイナスになりませんが、{model}予測は{month}以降ゼロを下回ります。モデルが直近の減少を先へ延長するためです。以降の月は到達可能な{metric}ではなく、トレンドの示唆として扱ってください。減衰トレンドETSは減少を延長せず収束させます。",
+      "domainTableNote": "{month}以降の月はゼロを下回り、この指標の範囲外です。",
+      "domainGrowthNote": "予測成長率は{metric}の範囲外の値から計算されています。上記の注意を参照してください。"
+    },
     "kpi": {
       "revenue": "売上高",
       "grossMargin": "売上総利益率",

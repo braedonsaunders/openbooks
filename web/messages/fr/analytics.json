@@ -46,6 +46,12 @@
       "ratios": "Ratios",
       "configuration": "Configuration"
     },
+    "forecast": {
+      "domainCaveatTitle": "La projection sort de la plage de l'indicateur",
+      "domainCaveat": "{metric} ne peut pas être négatif, mais la projection {model} passe sous zéro à partir de {month}, car le modèle prolonge la baisse récente. Les mois suivants montrent ce qu'implique la tendance, pas des {metric} atteignables ; la variante ETS à tendance amortie atténue la baisse au lieu de la prolonger.",
+      "domainTableNote": "Les mois à partir de {month} se projettent sous zéro, hors de la plage de cet indicateur.",
+      "domainGrowthNote": "La croissance projetée est calculée à partir de valeurs hors de la plage de {metric} — voir l'avertissement ci-dessus."
+    },
     "kpi": {
       "revenue": "Chiffre d'affaires",
       "grossMargin": "Marge brute",

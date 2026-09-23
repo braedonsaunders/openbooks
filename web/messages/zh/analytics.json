@@ -46,6 +46,12 @@
       "ratios": "比率",
       "configuration": "配置"
     },
+    "forecast": {
+      "domainCaveatTitle": "预测超出指标取值范围",
+      "domainCaveat": "{metric}不能为负，但{model}预测自{month}起跌破零，因为模型将近期的下降延续下去。请将之后的月份视为趋势含义，而非可达到的{metric}；阻尼趋势ETS变体使下降趋平，而非延续。",
+      "domainTableNote": "自{month}起的月份预测为负，超出本指标的取值范围。",
+      "domainGrowthNote": "预测增长率基于超出{metric}范围的值计算——见上文警示。"
+    },
     "kpi": {
       "revenue": "收入",
       "grossMargin": "毛利率",

@@ -1,19 +1,49 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { LineChart, Cog, Stethoscope, Table2 } from 'lucide-react'
+import { LineChart, Cog, Stethoscope, Table2, TriangleAlert } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { EmptyState, Select } from '@openbooks/ui'
 import type { HealthData } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { ForecastChart } from '../../_ui/charts'
 import { useAnalyticsMoney } from '../../_ui/format'
-import { applyForecastMethod, applyForecastAdjustment, diagnostics, type ForecastMethod, type Seasonality } from '../../_ui/forecast'
+import { applyForecastMethod, applyForecastAdjustment, checkSignDomain, diagnostics, type ForecastMethod, type Seasonality, type SignDomain } from '../../_ui/forecast'
 
 type Metric = 'revenue' | 'gm' | 'opinc'
 const METRIC_KEY: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> = {
   revenue: 'revenue',
   gm: 'grossProfit',
   opinc: 'operatingIncome',
+}
+/**
+ * Each metric declares the sign domain its projection may take. Revenue is
+ * nonnegative: a projection below zero is the model's trend carried past the
+ * domain's edge, never attainable revenue, and must carry the caveat below.
+ * Margins and operating income can genuinely print negative, so they never
+ * breach.
+ */
+const METRIC_DOMAIN: Record<Metric, SignDomain> = {
+  revenue: 'nonnegative',
+  gm: 'any',
+  opinc: 'any',
+}
+/** Translated metric name for the caveat copy (kpi catalog). */
+const METRIC_KPI: Record<Metric, 'revenue' | 'grossProfit' | 'operatingIncome'> = {
+  revenue: 'revenue',
+  gm: 'grossProfit',
+  opinc: 'operatingIncome',
+}
+/** Display name of each model, named in the caveat so the reader knows what
+ * extrapolated past the domain. (The settings options below are hardcoded
+ * English like the rest of this tab's chrome.) */
+const METHOD_LABEL: Record<ForecastMethod, string> = {
+  ets: 'ETS',
+  ets_damped: 'damped-trend ETS',
+  linear: 'Linear Regression',
+  seasonal: 'Seasonal Decomposition',
+  moving_avg: 'Moving Average',
+  arima: 'ARIMA-style',
 }
 
 function futureLabels(lastMonth: string, horizon: number): string[] {
@@ -30,6 +60,8 @@ const SELECT = 'h-8 w-full text-sm'
 
 export function ForecastTab({ data }: { data: HealthData }) {
   const fmtMoney = useAnalyticsMoney()
+  const t = useTranslations('analytics.financialHealth.forecast')
+  const tk = useTranslations('analytics.financialHealth.kpi')
   const [metric, setMetric] = useState<Metric>('revenue')
   const [method, setMethod] = useState<ForecastMethod>('ets')
   const [horizon, setHorizon] = useState(6)
@@ -49,6 +81,13 @@ export function ForecastTab({ data }: { data: HealthData }) {
     return r
   }, [series, method, horizon, seasonality, confidence, adjustment])
 
+  // The caveat input: whether the DISPLAYED (post-adjustment) central
+  // projection leaves the metric's sign domain, and where it first does.
+  const breach = useMemo(
+    () => checkSignDomain(result?.values ?? [], METRIC_DOMAIN[metric]),
+    [result, metric],
+  )
+
   if (series.length < 3 || !result) {
     return <EmptyState icon={<LineChart size={28} />} title="Not enough history" description="Forecasting needs at least 3 months of activity in the selected period." />
   }
@@ -67,6 +106,11 @@ export function ForecastTab({ data }: { data: HealthData }) {
   const endValue = result.values[horizon - 1]!
   const lastActual = series[N - 1]!
   const growth = lastActual !== 0 ? (endValue - lastActual) / Math.abs(lastActual) : 0
+  // Attached to every forecast surface below: the first out-of-domain month
+  // and the translated metric name for the caveat copy.
+  const breachMonth = breach.breached ? futLabels[breach.firstIndex]! : ''
+  const metricName = tk(METRIC_KPI[metric])
+  const modelName = METHOD_LABEL[method]
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
@@ -86,12 +130,26 @@ export function ForecastTab({ data }: { data: HealthData }) {
             />
           }
         >
+          {breach.breached ? (
+            <p className="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+              <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden />
+              <span>
+                <strong className="font-semibold">{t('domainCaveatTitle')}</strong>
+                {' '}{t('domainCaveat', { metric: metricName, model: modelName, month: breachMonth })}
+              </span>
+            </p>
+          ) : null}
           <ForecastChart labels={labels} history={history} forecast={forecast} low={low} high={high} height={320} />
           <div className="mt-3 grid grid-cols-3 gap-3 text-center">
             <Stat label={`${horizon}-mo Total`} value={fmtMoney(totalForecast, { compact: true })} />
             <Stat label={`Month ${horizon}`} value={fmtMoney(endValue, { compact: true })} />
-            <Stat label="Projected Growth" value={`${(growth * 100).toFixed(1)}%`} tone={growth >= 0 ? 'pos' : 'neg'} />
+            <Stat label="Projected Growth" value={breach.breached ? `${(growth * 100).toFixed(1)}% *` : `${(growth * 100).toFixed(1)}%`} tone={growth >= 0 ? 'pos' : 'neg'} />
           </div>
+          {breach.breached ? (
+            <p className="mt-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+              {`* ${t('domainGrowthNote', { metric: metricName })}`}
+            </p>
+          ) : null}
         </Panel>
 
         <Panel title="Monthly Forecast Detail" icon={Table2} bodyClassName="p-0">
@@ -107,18 +165,26 @@ export function ForecastTab({ data }: { data: HealthData }) {
                 </tr>
               </thead>
               <tbody>
-                {result.values.map((v, i) => (
-                  <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
-                    <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{futLabels[i]}</td>
-                    <td className="px-4 py-2 text-right font-medium tabular-nums text-slate-800 dark:text-slate-200">{fmtMoney(v)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</td>
-                    <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</td>
-                  </tr>
-                ))}
+                {result.values.map((v, i) => {
+                  const outOfDomain = breach.breached && i >= breach.firstIndex
+                  return (
+                    <tr key={i} className="border-b border-slate-50 last:border-0 dark:border-slate-800/60">
+                      <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{outOfDomain ? `⚠ ${futLabels[i]}` : futLabels[i]}</td>
+                      <td className={`px-4 py-2 text-right font-medium tabular-nums ${outOfDomain ? 'text-amber-700 dark:text-amber-300' : 'text-slate-800 dark:text-slate-200'}`}>{fmtMoney(v)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.low[i]!)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtMoney(result.high[i]!)}</td>
+                      <td className="px-4 py-2 text-right tabular-nums text-slate-400 dark:text-slate-500">{confidence}%</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
+          {breach.breached ? (
+            <p className="px-4 py-2 text-[11px] leading-snug text-slate-400 dark:text-slate-500">
+              {`⚠ ${t('domainTableNote', { month: breachMonth })}`}
+            </p>
+          ) : null}
         </Panel>
       </div>
 
@@ -128,6 +194,7 @@ export function ForecastTab({ data }: { data: HealthData }) {
             <Field label="Method">
               <Select value={method} onChange={(e) => setMethod(e.target.value as ForecastMethod)} triggerClassName={SELECT}>
                 <option value="ets">Exponential Smoothing (ETS)</option>
+                <option value="ets_damped">ETS, damped trend</option>
                 <option value="linear">Linear Regression</option>
                 <option value="seasonal">Seasonal Decomposition</option>
                 <option value="moving_avg">Moving Average</option>

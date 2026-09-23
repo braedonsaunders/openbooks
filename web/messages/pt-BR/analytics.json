@@ -46,6 +46,12 @@
       "ratios": "Índices",
       "configuration": "Configuração"
     },
+    "forecast": {
+      "domainCaveatTitle": "A projeção sai do intervalo da métrica",
+      "domainCaveat": "{metric} não pode ser negativo, mas a projeção {model} cai abaixo de zero a partir de {month} porque o modelo prolonga a queda recente. Os meses seguintes mostram o que a tendência implica, não {metric} atingíveis; a variante ETS de tendência amortecida suaviza a queda em vez de prolongá-la.",
+      "domainTableNote": "Os meses a partir de {month} projetam abaixo de zero, fora do intervalo desta métrica.",
+      "domainGrowthNote": "O crescimento projetado é calculado com valores fora do intervalo de {metric} — veja o aviso acima."
+    },
     "kpi": {
       "revenue": "Receita",
       "grossMargin": "Margem bruta",
