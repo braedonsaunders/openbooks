@@ -57,12 +57,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!req) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (!req.invoice_document_id) return NextResponse.json({ error: 'No invoice to back up' }, { status: 404 })
   try {
-    let backup = await loadInvoiceBackup(gate.user.orgId, req.invoice_document_id, gate.allowedSubsidiaryIds)
+    const backup = await loadInvoiceBackup(gate.user.orgId, req.invoice_document_id, gate.allowedSubsidiaryIds)
     if (!backup) {
-      await assembleInvoiceBackup(gate.user.orgId, gate.user.id, req.invoice_document_id, req.backup_type as BackupType, gate.allowedSubsidiaryIds)
-      backup = await loadInvoiceBackup(gate.user.orgId, req.invoice_document_id, gate.allowedSubsidiaryIds)
+      return NextResponse.json(
+        { error: 'No backup has been generated for this invoice yet — generate it from the billing request first' },
+        { status: 404 },
+      )
     }
-    if (!backup) return NextResponse.json({ error: 'Backup could not be assembled' }, { status: 500 })
     return pdfResponse(backup.bytes, safeName(backup.filename))
   } catch (e) {
     if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
