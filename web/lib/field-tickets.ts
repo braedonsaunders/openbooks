@@ -143,8 +143,17 @@ export async function createFieldTicket(
   userId: string,
   input: { projectId?: string | null; date?: string; period?: TicketPeriod; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<{ id: string; documentNumber: string }> {
-  await assertFieldTicketsEnabled(orgId)
   return withOrg(orgId, async () => {
+    // Fenced recheck inside the creation transaction (`withOrg` pins `db`
+    // to it, so the default runners below execute on the writer's
+    // connection): the shared org-row lock serializes this insert against a
+    // concurrent Field Tickets disable, which takes the row exclusively
+    // before writing the flag. A pre-transaction check alone could go stale
+    // and commit a ticket hidden behind a disabled gate.
+    await acquireFeatureGateLock(orgId)
+    if (!(await lockAndCheckOrgFeature(db, orgId, 'fieldTickets'))) {
+      throw new FieldTicketNotFoundError('Ticket not found')
+    }
     const proj = input.projectId
       ? (
           (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
