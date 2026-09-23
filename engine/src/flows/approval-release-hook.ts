@@ -43,6 +43,11 @@ export function registerFlowApprovalReleaseHandler(
   handlers.set(subjectKind, handler);
 }
 
+/** Whether a release handler is registered for this subject kind. */
+export function hasFlowApprovalReleaseHandler(subjectKind: string): boolean {
+  return handlers.has(subjectKind);
+}
+
 export async function releaseFlowApproval(
   args: FlowApprovalReleaseArgs,
 ): Promise<void> {

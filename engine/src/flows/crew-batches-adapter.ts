@@ -99,6 +99,9 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter = {
   subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
   profile: crewBatchSubjectProfile,
   writableFields: new Set<string>(),
+  // releaseApproval below delegates to the web hook: this kind needs a
+  // handler registered at web boot (see webHookReleasedSubjectKinds).
+  releaseViaWebHook: true,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const batch = await loadBatchSummary(subjectId);
