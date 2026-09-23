@@ -510,6 +510,7 @@
     "tax": {
       "description": "Indirect tax: rates and providers, persistence, nexus and registrations, US economic nexus, tax pack provisioning and form seeding.",
       "dependsOn": [
+        "connectors",
         "country-tax-packs",
         "money",
         "organization",

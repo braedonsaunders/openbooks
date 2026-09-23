@@ -1512,6 +1512,10 @@ test('provider failure during API document create leaves no document or dependen
       org.orgId,
       { provider: 'custom_http', isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/quote` } },
       actorId,
+      // Local stub on loopback: the explicit per-call test switch. The
+      // document writer below still uses the production path, so its fetch
+      // is refused and the failure must leave zero partial rows.
+      { allowPrivateEndpoints: true },
     ))
 
     const result = await createRecord(

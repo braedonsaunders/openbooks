@@ -4,6 +4,7 @@ import { fromUnits, mulPercent, mulRatio, normalizeDecimal, normalizeMoney, toUn
 import type { ComputedTaxComponent } from "./tax.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
+import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 
@@ -215,7 +216,69 @@ function persistableTaxProviderSettings(
   }
 }
 
-export interface SaveTaxRateProviderOptions {
+/**
+ * Outbound options for tax-provider HTTP. `allowPrivateEndpoints` is the
+ * single deliberate test switch for local stub servers: it skips the
+ * public-address guard and the HTTPS requirement. It is never persisted,
+ * never read from settings, and no production caller (the settings route,
+ * the document writers) passes it — so production cannot enable it silently.
+ * `lookup` overrides DNS for the guard so tests can prove refusals without
+ * owning public DNS.
+ */
+export interface TaxProviderOutboundOptions {
+  allowPrivateEndpoints?: boolean;
+  lookup?: AddressLookup;
+  timeoutMs?: number;
+}
+
+/**
+ * Validate the configured outbound endpoint for a provider: Avalara/TaxJar
+ * read settings.baseUrl, custom_http reads settings.quoteUrl, manual reads
+ * none. Unset means the vendor's built-in public https origin, which the
+ * fetch layer still verifies at connect time. Anything explicitly configured
+ * must be https and resolve entirely to public unicast — loopback, RFC1918,
+ * link-local/metadata, ULA and IPv6 non-public addresses are refused here at
+ * save, and again on every fetch (a hostname that rebinds later fails there).
+ */
+export async function validateTaxProviderEndpointUrl(
+  provider: TaxRateProviderKey,
+  settings: Record<string, unknown>,
+  options: TaxProviderOutboundOptions = {},
+): Promise<void> {
+  if (options.allowPrivateEndpoints) return;
+  const key = provider === "custom_http" ? "quoteUrl" : provider === "manual" ? null : "baseUrl";
+  if (key === null) return;
+  const raw = settings[key];
+  if (raw == null || (typeof raw === "string" && raw.trim() === "")) return;
+  if (typeof raw !== "string") {
+    throw new TaxRateProviderError(
+      `settings.${key} must be an https URL string — point it at the provider's public endpoint`,
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new TaxRateProviderError(
+      `settings.${key} is not a URL — point it at the provider's public https endpoint`,
+    );
+  }
+  if (url.protocol !== "https:") {
+    throw new TaxRateProviderError(
+      `tax provider endpoint ${url.origin} must use HTTPS — point settings.${key} at the provider's public https endpoint`,
+    );
+  }
+  try {
+    await resolveVerifiedAddresses(url, options.lookup);
+  } catch (error) {
+    throw new TaxRateProviderError(
+      `tax provider endpoint ${url.hostname} did not resolve to a public address — point settings.${key} at the provider's public endpoint`,
+      { cause: error },
+    );
+  }
+}
+
+export interface SaveTaxRateProviderOptions extends TaxProviderOutboundOptions {
   /**
    * Optimistic-concurrency token: the `updatedAt` revision the caller read
    * before editing. If another administrator committed a write since then, the
@@ -303,6 +366,11 @@ export async function saveTaxRateProviderConfig(
     // exactly what booking will read — no silent drift between setup and use.
     const normalizedMapping = await validateJurisdictionTaxCodes(orgId, settings);
     if (normalizedMapping) settings = { ...settings, jurisdictionTaxCodes: normalizedMapping };
+    // An admin-controlled outbound URL is the SSRF sink: refuse internal
+    // endpoints here at save (and again on every fetch, which catches
+    // hostnames that rebind after the save). The audited after-state below
+    // records exactly what the fetch layer will read.
+    await validateTaxProviderEndpointUrl(input.provider, settings, options);
 
     const before: TaxProviderConfigAuditState | null = existing
       ? {
@@ -503,8 +571,49 @@ async function secretsOf(row: TaxRateProviderConfigRow): Promise<Record<string, 
  * the Location names. Every credential-bearing tax call goes through here so
  * a redirect fails closed instead of leaking.
  */
-function taxProviderFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(url, { ...init, redirect: "error" });
+async function taxProviderFetch(
+  url: string | URL,
+  init: RequestInit,
+  options: TaxProviderOutboundOptions & { providerLabel: string },
+): Promise<Response> {
+  const target = url instanceof URL ? url : new URL(url);
+  if (!options.allowPrivateEndpoints) {
+    if (target.protocol !== "https:") {
+      throw new TaxRateProviderError(
+        `${options.providerLabel} endpoint ${target.origin} must use HTTPS — point the provider at its public https endpoint`,
+      );
+    }
+    try {
+      await resolveVerifiedAddresses(target, options.lookup);
+    } catch (error) {
+      if (error instanceof TaxRateProviderError) throw error;
+      throw new TaxRateProviderError(
+        `${options.providerLabel} endpoint ${target.hostname} did not resolve to a public address — refusing rather than sending credentials to an internal host`,
+        { cause: error },
+      );
+    }
+  }
+  // The shared guard re-verifies at connect time and pins the socket to a
+  // checked address, so a hostname that resolves public at save and rebinds
+  // to an internal address before the connect still fails closed without the
+  // credentials travelling. Redirects are refused, never followed.
+  const runFetch: typeof fetch = options.allowPrivateEndpoints
+    ? (input, fetchInit) => fetch(input, { ...fetchInit, redirect: "error" })
+    : (input, fetchInit) => guardedFetch(input, fetchInit ?? {}, { lookup: options.lookup });
+  try {
+    return await runFetch(target, { ...init, redirect: "error" });
+  } catch (error) {
+    // A computed refusal must reach the operator as the module error the
+    // route maps to 422 — never a bare transport fault. This also covers the
+    // rebind window: the pre-check above passed on public DNS, then the
+    // shared guard refused the rebound address at connect time.
+    if (error instanceof TaxRateProviderError) throw error;
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new TaxRateProviderError(
+      `${options.providerLabel} tax quote refused: ${detail} — point the provider at its public https endpoint and retry`,
+      { cause: error },
+    );
+  }
 }
 
 export interface AvalaraQuoteConfig {
@@ -520,6 +629,7 @@ export interface AvalaraQuoteConfig {
 export async function quoteViaAvalara(
   req: TaxQuoteRequest,
   config: AvalaraQuoteConfig,
+  options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
   const body = {
     type: "SalesOrder",
@@ -553,6 +663,7 @@ export async function quoteViaAvalara(
       headers: { Authorization: `Basic ${auth}`, "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
+    { ...options, providerLabel: "Avalara" },
   );
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`Avalara ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
@@ -584,23 +695,32 @@ export async function quoteViaAvalara(
   };
 }
 
-async function quoteAvalara(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+async function quoteAvalara(
+  row: TaxRateProviderConfigRow,
+  req: TaxQuoteRequest,
+  options: TaxProviderOutboundOptions = {},
+): Promise<TaxQuoteResult> {
   await assertNotSandbox(row.orgId, "avalara tax quote");
   const secrets = await secretsOf(row);
   if (!secrets.accountId || !secrets.licenseKey) throw new TaxRateProviderError("Avalara accountId and licenseKey required");
-  return quoteViaAvalara(req, {
-    accountId: secrets.accountId,
-    licenseKey: secrets.licenseKey,
-    baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
-    companyCode: row.settings.companyCode == null ? undefined : String(row.settings.companyCode),
-    quotedOn: req.quotedOn ?? (await businessToday(row.orgId)),
-  });
+  return quoteViaAvalara(
+    req,
+    {
+      accountId: secrets.accountId,
+      licenseKey: secrets.licenseKey,
+      baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
+      companyCode: row.settings.companyCode == null ? undefined : String(row.settings.companyCode),
+      quotedOn: req.quotedOn ?? (await businessToday(row.orgId)),
+    },
+    options,
+  );
 }
 
 /** Wire-level TaxJar quote: bearer API key, JSON v2/taxes. */
 export async function quoteViaTaxJar(
   req: TaxQuoteRequest,
   config: { apiKey: string; baseUrl?: string },
+  options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
   const body = {
     from_country: req.shipFrom.country ?? req.shipTo.country ?? "US",
@@ -613,11 +733,15 @@ export async function quoteViaTaxJar(
     amount: wireAmountOrThrow(req.taxableAmount),
     shipping: 0,
   };
-  const res = await taxProviderFetch(`${String(config.baseUrl ?? "https://api.taxjar.com")}/v2/taxes`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const res = await taxProviderFetch(
+    `${String(config.baseUrl ?? "https://api.taxjar.com")}/v2/taxes`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${config.apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+    { ...options, providerLabel: "TaxJar" },
+  );
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`TaxJar ${res.status}: ${JSON.stringify(raw).slice(0, 400)}`);
   const tax = (raw as { tax?: Record<string, unknown> }).tax ?? {};
@@ -656,14 +780,22 @@ export async function quoteViaTaxJar(
   };
 }
 
-async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+async function quoteTaxJar(
+  row: TaxRateProviderConfigRow,
+  req: TaxQuoteRequest,
+  options: TaxProviderOutboundOptions = {},
+): Promise<TaxQuoteResult> {
   await assertNotSandbox(row.orgId, "taxjar tax quote");
   const secrets = await secretsOf(row);
   if (!secrets.apiKey) throw new TaxRateProviderError("TaxJar apiKey required");
-  return quoteViaTaxJar(req, {
-    apiKey: secrets.apiKey,
-    baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
-  });
+  return quoteViaTaxJar(
+    req,
+    {
+      apiKey: secrets.apiKey,
+      baseUrl: row.settings.baseUrl == null ? undefined : String(row.settings.baseUrl),
+    },
+    options,
+  );
 }
 
 /** Wire-level custom hook quote: optional bearer API key, JSON request echo.
@@ -679,17 +811,22 @@ async function quoteTaxJar(row: TaxRateProviderConfigRow, req: TaxQuoteRequest):
 export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,
   config: { url: string; apiKey?: string },
+  options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
   const wireRequest = { ...req };
   delete wireRequest.documentLineId;
-  const res = await taxProviderFetch(config.url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+  const res = await taxProviderFetch(
+    config.url,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
+      },
+      body: JSON.stringify(wireRequest),
     },
-    body: JSON.stringify(wireRequest),
-  });
+    { ...options, providerLabel: "custom tax hook" },
+  );
   const raw = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw new TaxRateProviderError(`custom tax hook ${res.status}`);
   const components = (Array.isArray(raw.components) ? raw.components : []) as TaxComponentQuote[];
@@ -710,12 +847,16 @@ export async function quoteViaCustomHttp(
   };
 }
 
-async function quoteCustomHttp(row: TaxRateProviderConfigRow, req: TaxQuoteRequest): Promise<TaxQuoteResult> {
+async function quoteCustomHttp(
+  row: TaxRateProviderConfigRow,
+  req: TaxQuoteRequest,
+  options: TaxProviderOutboundOptions = {},
+): Promise<TaxQuoteResult> {
   await assertNotSandbox(row.orgId, "custom tax quote");
   const url = String(row.settings.quoteUrl ?? "");
   if (!url) throw new TaxRateProviderError("custom_http requires settings.quoteUrl");
   const secrets = await secretsOf(row);
-  return quoteViaCustomHttp(req, { url, apiKey: secrets.apiKey || undefined });
+  return quoteViaCustomHttp(req, { url, apiKey: secrets.apiKey || undefined }, options);
 }
 
 /**
@@ -793,11 +934,12 @@ async function resolveConfiguredTax(
   orgId: string,
   req: TaxQuoteRequest,
   cfg: TaxRateProviderConfigRow,
+  options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
   let result: TaxQuoteResult;
-  if (cfg.provider === "avalara") result = await quoteAvalara(cfg, req);
-  else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req);
-  else if (cfg.provider === "custom_http") result = await quoteCustomHttp(cfg, req);
+  if (cfg.provider === "avalara") result = await quoteAvalara(cfg, req, options);
+  else if (cfg.provider === "taxjar") result = await quoteTaxJar(cfg, req, options);
+  else if (cfg.provider === "custom_http") result = await quoteCustomHttp(cfg, req, options);
   else {
     // A missing default is NOT zero-rated: quoting would post statutory-looking
     // evidence at 0%. Only a profile that explicitly declares 0 stays legal.
@@ -1256,7 +1398,7 @@ export async function quoteExternalTax(
     persist?: boolean;
     /** Provider row selected by the caller; avoids a config-change race between planning and quoting. */
     config?: TaxRateProviderConfigRow;
-  } = {},
+  } & TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult & { quoteId: string | null }> {
   const runner = options.runner ?? db;
   const cfg = options.config ?? await readTaxRateProviderConfig(orgId, runner);
@@ -1266,7 +1408,7 @@ export async function quoteExternalTax(
   const persist = options.persist ?? true;
   if (!persist) {
     return {
-      ...(await resolveConfiguredTax(orgId, req, cfg)),
+      ...(await resolveConfiguredTax(orgId, req, cfg, options)),
       quoteId: null,
     };
   }
@@ -1274,7 +1416,7 @@ export async function quoteExternalTax(
     update tax_rate_provider_configs set last_attempt_at = now(), last_error = null where id = ${cfg.id} and org_id = ${orgId}
   `);
   try {
-    const result = await resolveConfiguredTax(orgId, req, cfg);
+    const result = await resolveConfiguredTax(orgId, req, cfg, options);
 
     const quoteId = await persistTaxQuote(orgId, cfg.id, req, result, actorId, runner);
 
