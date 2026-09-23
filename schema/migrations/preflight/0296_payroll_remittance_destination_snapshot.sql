@@ -13,14 +13,15 @@
 -- coverage backfill cannot hit a generic cast error.
 --
 -- U4 (NOTICE): read-only mirror of g24's pack-aware reconciliation (final
--- bytes 96d038a4 after PR6b, superseding a24896ea in 99247664, which
--- supersedes the U2 line-matching predicate; PR6b is trigger-only — the
--- paired amend+migration authority bypass in
--- pay_stub_line_remittance_guard() — so the mirrored marker precheck,
--- party check, multiset account check, app-row scoping, voided cleanup
--- and 50-capped NOTICE are unchanged. REFUSE unchanged from U1; U5
--- (indexes, NOT VALID/VALIDATE, timing) still pending — expect one more
--- bytes move). A live structured-marker bill gains coverage only
+-- bytes 126d6d89 after U5, superseding 96d038a4 after PR6b, which supersedes
+-- a24896ea in 99247664, which supersedes the U2 line-matching predicate;
+-- PR6b is trigger-only (the paired amend+migration authority bypass in
+-- pay_stub_line_remittance_guard()) and U5 is lock-only (no-transaction
+-- declaration, INVALID-index guard, snapshot FK NOT VALID plus VALIDATE,
+-- CONCURRENTLY index builds) — so the mirrored marker precheck, party
+-- check, multiset account check, app-row scoping, voided cleanup and
+-- 50-capped NOTICE are unchanged. REFUSE unchanged from U1). A live
+-- structured-marker bill gains coverage only
 -- when its recorded party equals the marker party AND its non-zero lines
 -- per (account, net) equal the committed window/party/filing/entity
 -- accrual groups per (liability, net with credits negated) in both
@@ -103,9 +104,9 @@ scoped AS (
 ),
 pack_default_vendor AS (
   -- 0296-era pack-declared vendor settings keys (non-null only), frozen:
-  -- copied verbatim from the migration (96d038a4 after PR6b; PR6b is
-  -- trigger-only so the map is unchanged from a24896ea), parity-pinned
-  -- there against engine/src/payroll/packs.ts statutoryRemittanceDeclaration.
+  -- copied verbatim from the migration (126d6d89 after U5; PR6b is
+  -- trigger-only and U5 lock-only, so the map is unchanged from a24896ea),
+  -- parity-pinned there against engine/src/payroll/packs.ts statutoryRemittanceDeclaration.
   SELECT * FROM (VALUES
     ('AU', 'payg_withholding', 'atoRemittancePartyId'),
     ('CA', 'income_tax', 'craRemittancePartyId'),
@@ -120,7 +121,7 @@ pack_default_vendor AS (
   ) AS t(country, system_key, settings_key)
 ),
 pack_regional_vendor AS (
-  -- Copied verbatim from the migration (96d038a4; unchanged from a24896ea).
+  -- Copied verbatim from the migration (126d6d89; unchanged from a24896ea).
   SELECT * FROM (VALUES
     ('CA', 'cpp', 'QC', 'rqRemittancePartyId'),
     ('CA', 'cpp2', 'QC', 'rqRemittancePartyId'),
