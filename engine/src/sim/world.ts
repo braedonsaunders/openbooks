@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { daysInCivilMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
@@ -212,8 +213,11 @@ function openingBalanceLines(accounts: Record<string, string>, s: number): { acc
 }
 
 function lastDayOfMonth(year: number, month: number): string {
-  const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; the year renders zero-padded so the YYYY-MM-DD contract
+  // holds below year 1000 too.
+  const day = daysInCivilMonth(year, month);
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 /** Enumerate (year, month) pairs from the start month through the end month. */

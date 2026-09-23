@@ -218,6 +218,7 @@ export async function saveFxProviderConfig(
 
 export function computeNextSyncAt(schedule: FxSyncSchedule, hourUtc: number, now = new Date()): Date | null {
   if (schedule === "manual") return null;
+  // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
   const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hourUtc, 0, 0));
   if (schedule === "weekly") {
     next.setUTCDate(next.getUTCDate() + 7);

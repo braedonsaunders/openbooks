@@ -252,6 +252,27 @@ function requireTimeZone(timeZone: string): string {
  * (rather than importing the platform formatter) so this database-free
  * module never loads the db-backed platform stack in unit tests.
  */
+/**
+ * UTC-midnight epoch milliseconds for civil (year, monthIndex, day[, time])
+ * parts. Local copy of the platform/business-date.ts utcDateFromParts idiom
+ * (`new Date(0)` + setUTCFullYear, which keeps literal years 0001-0099 that
+ * Date.UTC would remap onto 1900-1999): this database-free module never loads
+ * the db-backed platform stack in unit tests (see zoneDateParts below).
+ */
+function utcCivilMs(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+): number {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  date.setUTCHours(hour, minute, second, 0);
+  return date.getTime();
+}
+
 function zoneDateParts(instantMs: number, timeZone: string): { y: number; mo: number; d: number; date: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -264,7 +285,9 @@ function zoneDateParts(instantMs: number, timeZone: string): { y: number; mo: nu
     y: Number(value("year")),
     mo: Number(value("month")),
     d: Number(value("day")),
-    date: `${value("year")}-${value("month")}-${value("day")}`,
+    // `year: "numeric"` renders years below 1000 unpadded ("96"), which would
+    // break the YYYY-MM-DD contract downstream — pad to 4 digits.
+    date: `${value("year").padStart(4, "0")}-${value("month")}-${value("day")}`,
   };
 }
 
@@ -288,7 +311,7 @@ function zoneOffsetMs(instantMs: number, timeZone: string): number {
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   // en-CA midnight formats as "24" on some runtimes; normalize to 00.
   const hour = value("hour") === "24" ? "00" : value("hour");
-  const asUTC = Date.UTC(
+  const asUTC = utcCivilMs(
     Number(value("year")),
     Number(value("month")) - 1,
     Number(value("day")),
@@ -301,9 +324,9 @@ function zoneOffsetMs(instantMs: number, timeZone: string): number {
 
 /** Epoch milliseconds of 00:00 on a zone-local date. Deterministic. */
 function startOfZoneDayMs(y: number, mo: number, d: number, timeZone: string): number {
-  let guess = Date.UTC(y, mo - 1, d, 12);
+  let guess = utcCivilMs(y, mo - 1, d, 12);
   for (let i = 0; i < 4; i++) {
-    const next = Date.UTC(y, mo - 1, d) - zoneOffsetMs(guess, timeZone);
+    const next = utcCivilMs(y, mo - 1, d) - zoneOffsetMs(guess, timeZone);
     if (next === guess) return next;
     guess = next;
   }
@@ -334,7 +357,7 @@ export function splitZoneDays(fromMs: number, toMs: number, timeZone: string): D
   const end = Math.floor(toMs);
   while (cursor < end) {
     const here = zoneDateParts(cursor, zone);
-    const morrow = new Date(Date.UTC(here.y, here.mo - 1, here.d) + 86_400_000);
+    const morrow = new Date(utcCivilMs(here.y, here.mo - 1, here.d) + 86_400_000);
     const nextMidnight = startOfZoneDayMs(
       morrow.getUTCFullYear(), morrow.getUTCMonth() + 1, morrow.getUTCDate(), zone,
     );

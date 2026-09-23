@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import type { MigrationSource } from "./source.ts";
 
@@ -43,7 +44,9 @@ export interface TrueUpControlContext {
 
 const MONTH_END = (m: string): string => {
   const [y, mo] = m.split("-").map(Number);
-  return new Date(Date.UTC(y!, mo!, 0)).toISOString().slice(0, 10);
+  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999.
+  return civilDateFromParts(y!, mo!, daysInCivilMonth(y!, mo!));
 };
 
 export async function trueUpResidualGl(

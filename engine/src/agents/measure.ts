@@ -18,6 +18,7 @@ export function moneyAbs(value: string): string {
 export function dateAgeDays(value: string, now = new Date()): number {
   const date = Date.parse(`${value}T00:00:00Z`);
   if (!Number.isFinite(date)) return 0;
+  // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
   return Math.max(0, Math.floor((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - date) / 86_400_000));
 }
 

@@ -54,18 +54,30 @@ function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
+ * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
+ * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
+ * remap onto 1900-1999): this connector module loads no platform stack.
+ */
+function utcCivilDate(year: number, monthIndex: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date;
+}
+
 function endOfMonth(year: number, month: number): Date {
-  return new Date(Date.UTC(year, month + 1, 0));
+  return utcCivilDate(year, month + 1, 0);
 }
 
 export function calendarMonths(from: string, through: Date): Array<{ month: string; from: string; to: string }> {
   const start = new Date(`${from}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime())) throw new Error(`invalid QuickBooks history start date: ${from}`);
-  const stop = new Date(Date.UTC(through.getUTCFullYear(), through.getUTCMonth(), through.getUTCDate()));
+  const stop = utcCivilDate(through.getUTCFullYear(), through.getUTCMonth(), through.getUTCDate());
   if (start > stop) throw new Error("QuickBooks history start date is after the capture date");
   const out: Array<{ month: string; from: string; to: string }> = [];
   for (let y = start.getUTCFullYear(), m = start.getUTCMonth(); y < stop.getUTCFullYear() || (y === stop.getUTCFullYear() && m <= stop.getUTCMonth()); ) {
-    const first = new Date(Date.UTC(y, m, 1));
+    const first = utcCivilDate(y, m, 1);
     const last = endOfMonth(y, m);
     const rangeFrom = first < start ? start : first;
     const rangeTo = last > stop ? stop : last;
