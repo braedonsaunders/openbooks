@@ -229,6 +229,42 @@ test(
 );
 
 test(
+  "two simultaneous first creates on one root give one success and one refusal",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      // No servers exist yet, so sibling row locks cover nothing: without
+      // the per-org advisory lock several requests pass the overlap read
+      // before any insert commits. Six contenders make that interleaving
+      // near-certain; the gate must still serialize them into exactly one
+      // server. The pool is warmed first so connection setup cannot stagger
+      // the racers into an accidental sequence before the gate is reached.
+      await Promise.all(
+        Array.from({ length: 6 }, () =>
+          withOrgContext(fixture.orgId, () => db.execute(sql`select 1`)),
+        ),
+      );
+      const root = `sftp/${fixture.orgId}/race`;
+      const responses = await Promise.all(
+        Array.from({ length: 6 }, (_, i) => post(fixture, { name: `Racer ${i}`, rootPrefix: root })),
+      );
+      const winners = responses.filter((r) => r.status === 200);
+      const losers = responses.filter((r) => r.status === 409);
+      assert.equal(winners.length, 1, `expected exactly one winner, got ${winners.length}`);
+      assert.equal(losers.length, 5);
+      for (const loser of losers) {
+        assert.equal(((await loser.json()) as { code: string }).code, "sftp_root_overlap");
+      }
+      assert.equal(await serverCount(fixture), 1);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
   "an inactive server does not block creation, but reactivation into an overlap refuses",
   { skip: !DB },
   async () => {

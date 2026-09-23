@@ -80,12 +80,15 @@ export async function POST(req: Request) {
       ? assertTenantRootPrefix(requestedPrefix, user.orgId)
       : assertTenantRootPrefix(`sftp/${user.orgId}/${username}`, user.orgId)
     created = await db.transaction(async (tx) => {
-      // Overlap gate: lock every server row of this org and refuse a root
-      // that is equal to, inside, or containing an ACTIVE sibling's root —
-      // two bank logins must never share a folder. The row lock serializes
-      // concurrent creates so two requests cannot pass the check with the
-      // same folder and both insert. Inactive servers do not block: they
+      // Overlap gate: refuse a root that is equal to, inside, or containing
+      // an ACTIVE sibling's root — two bank logins must never share a
+      // folder. The per-org advisory lock serializes concurrent creates
+      // (row locks alone cover nothing when the org has no servers yet, so
+      // two simultaneous first creates would both pass and both insert);
+      // the sibling-row lock then holds the serialization against writers
+      // that do not take this gate. Inactive servers do not block: they
       // serve no login, and reactivating into an overlap refuses on toggle.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
       const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
         select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} for update
       `))
