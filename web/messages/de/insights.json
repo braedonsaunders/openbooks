@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "Alle Änderungen gespeichert",
     "unsaved": "Nicht gespeicherte Änderungen…",
-    "failed": "Automatisches Speichern fehlgeschlagen"
+    "failed": "Automatisches Speichern fehlgeschlagen",
+    "missingRevision": "Speichern nicht möglich — die Karte hat noch keine Revision. Lade die Karte neu und bearbeite weiter.",
+    "unusableRevision": "Speichern konnte nicht bestätigt werden — lade die Karte neu und bearbeite weiter."
   },
   "errors": {
     "queryFailed": "Abfrage fehlgeschlagen",
@@ -100,7 +102,11 @@
     "draftToast": "Karte in den Entwurf zurückgesetzt",
     "deleteConfirm": "Diese Karte löschen? Sie wird von allen Dashboards entfernt.",
     "deleteFailed": "Die Karte konnte nicht gelöscht werden",
-    "deletedToast": "Karte gelöscht"
+    "deletedToast": "Karte gelöscht",
+    "retrySave": "Wiederholen",
+    "reloadLatest": "Neueste laden",
+    "overwriteSave": "Trotzdem speichern",
+    "reloadConfirm": "Die neueste gespeicherte Version laden? Ungespeicherte Änderungen gehen verloren."
   },
   "vizSettings": {
     "category": "Kategorie",

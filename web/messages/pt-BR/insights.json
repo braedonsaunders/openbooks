@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "Todas as alterações salvas",
     "unsaved": "Alterações não salvas…",
-    "failed": "Falha no salvamento automático"
+    "failed": "Falha no salvamento automático",
+    "missingRevision": "Não foi possível salvar — o cartão ainda não tem revisão. Recarregue o cartão e continue editando.",
+    "unusableRevision": "Não foi possível confirmar o salvamento — recarregue o cartão e continue editando."
   },
   "errors": {
     "queryFailed": "A consulta falhou",
@@ -100,7 +102,11 @@
     "draftToast": "Cartão retornado a rascunho",
     "deleteConfirm": "Excluir este cartão? Ele será removido de todos os painéis.",
     "deleteFailed": "Não foi possível excluir o cartão",
-    "deletedToast": "Cartão excluído"
+    "deletedToast": "Cartão excluído",
+    "retrySave": "Tentar novamente",
+    "reloadLatest": "Recarregar última",
+    "overwriteSave": "Salvar mesmo assim",
+    "reloadConfirm": "Recarregar a última versão salva? As alterações não salvas serão descartadas."
   },
   "vizSettings": {
     "category": "Categoria",
