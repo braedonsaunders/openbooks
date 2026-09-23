@@ -50,15 +50,15 @@ function bookPost(body: Record<string, unknown>) {
   }))
 }
 
-function tiers(itemId: string) {
+function tiers(itemId: string, premiums: Record<string, unknown> = {}) {
   return [
     {
       itemId, unitCode: 'one', unitName: 'One', baseQuantity: '1', costRate: '10', billRate: '10',
-      baseUnit: 'hour', pricingPolicy: 'capped_ladder', invoicePresentation: 'summary', timeTypeBillRates: {},
+      baseUnit: 'hour', pricingPolicy: 'capped_ladder', invoicePresentation: 'summary', timeTypeBillRates: premiums,
     },
     {
       itemId, unitCode: 'four', unitName: 'Four', baseQuantity: '4', costRate: '30', billRate: '30',
-      baseUnit: 'hour', pricingPolicy: 'capped_ladder', invoicePresentation: 'summary', timeTypeBillRates: {},
+      baseUnit: 'hour', pricingPolicy: 'capped_ladder', invoicePresentation: 'summary', timeTypeBillRates: premiums,
     },
   ]
 }
@@ -148,6 +148,44 @@ test('an empty replacement refuses without the flag and clears with it', { skip:
       select effective_to::text from item_rate_versions
        where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`)).rows[0]
     assert.equal(String(closed!.effective_to).slice(0, 10), '2026-01-31')
+  } finally {
+    routeState.gate = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+/**
+ * PRC5 wiring: the replacement writer validates premiums through the shared
+ * validator, so an unknown time type or an invalid premium value refuses by
+ * row and key with the prior version intact.
+ */
+test('unknown time types and premium values refuse with the version intact', { skip: !DB }, async () => {
+  const { org, book } = await fixture()
+  try {
+    const timeType = randomUUID()
+    await db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
+      values (${timeType}, ${org.orgId}, 'Night', '1.25', true)`)
+    const first = await bookPost({ id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-01-01', lines: tiers(org.items.service) })
+    assert.equal(first.status, 200, await first.text())
+
+    const unknown = randomUUID()
+    const refused = await bookPost({
+      id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-02-01',
+      lines: tiers(org.items.service, { [unknown]: '50' }),
+    })
+    assert.equal(refused.status, 422)
+    assert.match(String((await refused.json()).error), new RegExp(`Row 1: labor premium "${unknown}" is not an active time type`))
+
+    const badValue = await bookPost({
+      id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-02-01',
+      lines: tiers(org.items.service, { [timeType]: 'fifty' }),
+    })
+    assert.equal(badValue.status, 422)
+    assert.match(String((await badValue.json()).error), new RegExp(`Row 1: labor premium for time type "${timeType}" must be a non-negative amount`))
+
+    const versions = await activeVersions(org.orgId, book)
+    assert.equal(versions.length, 1)
+    assert.equal(String(versions[0]!.effective_from).slice(0, 10), '2026-01-01')
   } finally {
     routeState.gate = null
     await dropScratchOrg(org.orgId)

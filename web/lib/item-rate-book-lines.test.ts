@@ -51,10 +51,24 @@ test('excess precision and over-wide amounts name the row', () => {
   assert.match((validateRateBookLines([{ ...line(), billRate: '9999999999999999.0000' }]) as { error: string }).error, /^Row 1: rate amounts may contain at most 15 whole-number digits/)
 })
 
-test('missing units, base unit and premiums name the row', () => {
+test('missing units, base unit and premium shapes name the row', () => {
   assert.match((validateRateBookLines([{ ...line(), unitCode: '', unitName: '' }]) as { error: string }).error, /^Row 1: every rate line needs a unit code/)
   assert.match((validateRateBookLines([{ ...line(), baseUnit: '' }]) as { error: string }).error, /^Row 1: every rate line needs a base unit/)
   assert.match((validateRateBookLines([{ ...line(), timeTypeBillRates: 'hourly' }]) as { error: string }).error, /^Row 1: labor premiums must map/)
   const badKey = validateRateBookLines([{ ...line(), timeTypeBillRates: { nope: '5' } }]) as { error: string }
   assert.match(badKey.error, /^Row 1: labor premium "nope" is not a valid time type/)
+})
+
+test('premium values pass structural validation for the shared validator', () => {
+  // Org membership and amounts are the shared validator's job (route-level,
+  // DB-backed); the line validator only checks the map shape.
+  const result = validateRateBookLines([line({ timeTypeBillRates: { [ITEM]: 'fifty' } })])
+  assert.ok('lines' in result)
+  assert.deepEqual(result.lines[0]!.timeTypeBillRates, {})
+})
+
+test('a non-object rate line is refused, never skipped', () => {
+  const result = validateRateBookLines(['oops'])
+  assert.ok('error' in result)
+  assert.match(result.error, /^Row 1: rate line must be an object/)
 })
