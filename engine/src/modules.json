@@ -147,6 +147,7 @@
       "description": "The continuous-close runner: scheduling agent packs, work items and proposals.",
       "dependsOn": [
         "agents",
+        "organization",
         "platform"
       ]
     },

@@ -22,11 +22,22 @@ export async function POST(request: Request) {
   if (!isContinuousCloseAgentKey(body.agentKey)) {
     return NextResponse.json({ error: "invalid_agent" }, { status: 422 });
   }
-  const result = await runContinuousCloseAgent({
-    orgId: gate.user.orgId,
-    agentKey: body.agentKey,
-    trigger: "manual",
-    initiatedBy: gate.user.id,
-  });
+  let result;
+  try {
+    result = await runContinuousCloseAgent({
+      orgId: gate.user.orgId,
+      agentKey: body.agentKey,
+      trigger: "manual",
+      initiatedBy: gate.user.id,
+    });
+  } catch (error) {
+    // The scan rechecks the continuousClose switch inside its own write
+    // transaction: a disable landing after this route's preflight refuses by
+    // name here instead of surfacing as an anonymous 500.
+    if ((error as Error).message === "feature_disabled") {
+      return NextResponse.json({ error: "feature_disabled" }, { status: 409 });
+    }
+    throw error;
+  }
   return NextResponse.json(result, { status: result.status === "failed" ? 500 : result.status === "skipped" ? 409 : 200 });
 }
