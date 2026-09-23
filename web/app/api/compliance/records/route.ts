@@ -108,6 +108,43 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'coverage figures are out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
   }
 
+  // project_id casts straight to uuid in the queries below: refuse a
+  // malformed id with a named 400 before any write is attempted.
+  if (body.projectId !== undefined && body.projectId !== null && body.projectId !== '' && !isUuid(body.projectId)) {
+    return NextResponse.json({ error: 'projectId must be a valid project id' }, { status: 400 })
+  }
+  // A renewal names the certificate it replaces. Name a certificate that is
+  // not this vendor's, not this requirement's, or already history, and the
+  // supersession quietly matches nothing while the POST still reports {id} —
+  // so validate the link before any write, and refuse it by name.
+  const rawSupersedesId = body.supersedesId ?? null
+  if (rawSupersedesId !== null && rawSupersedesId !== '') {
+    if (!isUuid(rawSupersedesId)) {
+      return NextResponse.json({ error: 'supersedesId must be a valid certificate id' }, { status: 400 })
+    }
+    const prior = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from compliance_records
+       where org_id = ${orgId} and id = ${rawSupersedesId}
+         and party_id = ${body.partyId} and requirement_id = ${body.requirementId}
+         and project_id is not distinct from ${body.projectId ?? null}::uuid
+    `)).rows[0]
+    if (!prior) {
+      return NextResponse.json(
+        { error: 'supersedesId does not identify a certificate for this vendor, requirement and project' },
+        { status: 422 },
+      )
+    }
+    if (prior.status === 'superseded') {
+      return NextResponse.json({ error: 'that certificate was already superseded' }, { status: 422 })
+    }
+    if (prior.status !== 'pending_review' && prior.status !== 'active') {
+      return NextResponse.json(
+        { error: `a ${prior.status} certificate cannot be superseded` },
+        { status: 422 },
+      )
+    }
+  }
+
   try {
     const id = await db.transaction(async (tx) => {
       const inserted = (await tx.execute<{ id: string }>(sql`
@@ -127,16 +164,24 @@ export async function POST(req: Request) {
         returning id
       `))
       const newId = inserted.rows[0]!.id
-      if (body.supersedesId && isUuid(body.supersedesId)) {
+      if (rawSupersedesId !== null && rawSupersedesId !== '') {
         // Renewal: the prior certificate keeps its dates and verification trail
         // and points forward, so the history of what was on file when survives.
-        await tx.execute(sql`
+        // The predicate repeats the pre-write validation so a concurrent
+        // supersede cannot silently redirect this one; zero rows means the
+        // prior certificate stopped being current between the two statements.
+        const superseded = (await tx.execute<{ id: string }>(sql`
           update compliance_records
              set status = 'superseded', superseded_by_id = ${newId},
                  updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${body.supersedesId}
+           where org_id = ${orgId} and id = ${rawSupersedesId}
              and party_id = ${body.partyId} and requirement_id = ${body.requirementId}
-        `)
+             and status in ('pending_review', 'active')
+          returning id
+        `))
+        if (superseded.rows.length === 0) {
+          throw new Error('the certificate to supersede is no longer current — reload and try again')
+        }
       }
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
