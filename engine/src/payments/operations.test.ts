@@ -477,9 +477,16 @@ test("delivery recording refuses a file that is no longer approved at write time
     /update payment_files set status = 'delivered'[\s\S]*?returning id/g,
   ) ?? [];
   assert.equal(statements.length, 2, "download and sftp delivery must both use guarded updates");
-  for (const statement of statements) {
-    assert.match(statement, /status in \('approved', 'delivered'\)/);
-  }
+  const download = statements.find((s) => !s.includes("delivery_claim_token"));
+  const sftp = statements.find((s) => s.includes("delivery_claim_token"));
+  assert.ok(download, "the download path must keep its guarded update");
+  assert.ok(sftp, "the sftp path must keep its guarded update");
+  assert.match(download, /status in \('approved', 'delivered'\)/);
+  // The SFTP record is claim-conditional (delivering under the presented
+  // token) — strictly stronger than the approval predicate it replaces: a
+  // void, supersede, or rejection that lands after the claim refuses the
+  // record instead of delivering a disallowed file.
+  assert.match(sftp, /status = 'delivering' and delivery_claim_token/);
 });
 
 async function seedPaymentRun(

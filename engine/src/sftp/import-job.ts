@@ -15,7 +15,7 @@ import {
   type ParsedStatementLine,
   type StatementSourceContent,
 } from "../banking/banking.ts";
-import { generatePaymentFileArtifact, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery } from "../payments/operations.ts";
+import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
 import { backendFor } from "./backend.ts";
 import { resolveOutboundPath } from "./delivery-path.ts";
 
@@ -199,24 +199,48 @@ export async function deliverRunToSftp(runId: string, sftpServerId: string, orgI
   `));
   if (!svr.rows[0]) throw new Error("SFTP server not found or inactive");
   const file = await generatePaymentFileArtifact(runId, orgId, userId, { now });
-  const approval = (await db.execute<{ status: string }>(sql`select status from payment_files where id = ${file.id} and org_id = ${orgId}`));
-  if (!approval.rows[0] || !["approved", "delivered"].includes(approval.rows[0].status)) {
-    throw new Error("the generated payment file requires approval before SFTP delivery");
-  }
   const backend = backendFor({ backend: svr.rows[0].backend, bucket: svr.rows[0].bucket, rootPrefix: svr.rows[0].root_prefix, orgId: svr.rows[0].org_id });
   const folder = svr.rows[0].payment_folder.replace(/^\/+|\/+$/g, "");
   if (!folder || folder.split("/").some((part) => part === ".." || part === ".")) throw new Error("payment profile SFTP folder is invalid");
   // Defence in depth: the artifact name is validated at creation, but rows
   // stored before that guard must still fail closed at publish time — and the
   // joined path must provably stay inside the configured folder, because the
-  // backend normalizes dot segments on write.
+  // backend normalizes dot segments on write. Validated BEFORE the claim so
+  // no failure here can strand a held lease.
   const path = resolveOutboundPath(folder, file.filename);
+  const targetRef = `${sftpServerId}:${path}`;
+  // Claim the delivery BEFORE the external write, in one transaction: the
+  // row is locked and must be approved (or a live re-delivery) — a void,
+  // supersede, rejection, or rollback that committed first refuses here, so
+  // a disallowed file can never reach the endpoint. The claim's lease also
+  // makes concurrent lifecycle moves refuse while the publish is in flight.
+  const claim = await claimPaymentFileDelivery({ fileId: file.id, orgId, userId, owner: `sftp:${sftpServerId}` });
   try {
     await backend.write(path, file.content);
   } catch (error) {
-    await recordPaymentFileDeliveryFailure({ fileId: file.id, orgId, userId, channel: "sftp", targetRef: `${sftpServerId}:${path}`, error: error instanceof Error ? error.message : String(error) });
+    // Nothing was published: record the failure evidence, then release the
+    // claim so the file is deliverable again.
+    await recordPaymentFileDeliveryFailure({ fileId: file.id, orgId, userId, channel: "sftp", targetRef, error: error instanceof Error ? error.message : String(error) });
+    await releaseDeliveryClaim({ fileId: file.id, orgId, userId, token: claim.token });
     throw error;
   }
-  await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef: `${sftpServerId}:${path}`, response: { path } });
-  return { filename: file.filename, path };
+  // The bytes are published: the file must end this function recorded as
+  // delivered (never as undelivered). A bounded record retry absorbs a
+  // transient commit failure; if the record still fails, the file is parked
+  // as delivery_uncertain — published but unconfirmed, re-delivery blocked,
+  // operator-visible — and the throw says exactly that.
+  let recordError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await recordPaymentFileSftpDelivery({ fileId: file.id, orgId, userId, targetRef, claimToken: claim.token, response: { path } });
+      return { filename: file.filename, path };
+    } catch (error) {
+      recordError = error;
+    }
+  }
+  const recordMessage = recordError instanceof Error ? recordError.message : String(recordError);
+  await markDeliveryUncertain({ fileId: file.id, orgId, userId, token: claim.token, error: recordMessage });
+  throw new Error(
+    `the bank file was published to ${path} but recording the delivery failed (${recordMessage}); the file is parked as delivery-uncertain — resolve it before re-delivering`,
+  );
 }
