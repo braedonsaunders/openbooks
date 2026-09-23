@@ -101,6 +101,8 @@
     "other": "その他"
   },
   "targetTypes": {
+    "labor": "労務（すべて）",
+    "material": "材料（すべて）",
     "item": "品目",
     "item_kind": "品目種別",
     "item_category": "品目カテゴリ",

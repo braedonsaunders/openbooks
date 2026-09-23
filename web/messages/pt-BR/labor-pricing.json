@@ -101,6 +101,8 @@
     "other": "Outro"
   },
   "targetTypes": {
+    "labor": "Mão de obra (toda)",
+    "material": "Materiais (todos)",
     "item": "Item",
     "item_kind": "Tipo de item",
     "item_category": "Categoria de item",

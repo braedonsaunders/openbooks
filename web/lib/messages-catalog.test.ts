@@ -5437,7 +5437,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "dashboard": 203,
   "data": 90,
   "journal": 60,
-  "labor-pricing": 128,
+  "labor-pricing": 130,
   "nav": 109,
   "parties": 221,
   "payments": 273,
@@ -5521,6 +5521,27 @@ test('I14 items/inventory/reports/sync/login/small-catalog copy ships translated
         return I14_expected !== I14_actual
       })
       assert.deepEqual(I14_armsDrift, [], `${I14_locale} i14 translations drop ICU plural/select arms`)
+    }
+  }
+})
+
+test('rate-card labor/material selector labels ship localized in every locale', () => {
+  // PRC10: the card target picker offers all-labor / all-materials
+  // selectors, so their labels must resolve in every locale instead of
+  // rendering the raw key path on the picker.
+  const source = flattenCatalog('en')
+  const keys = ['labor-pricing.targetTypes.labor', 'labor-pricing.targetTypes.material']
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
     }
   }
 })

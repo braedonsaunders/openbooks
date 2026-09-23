@@ -111,6 +111,8 @@
     "other": "Autre"
   },
   "targetTypes": {
+    "labor": "Main-d'œuvre (toute)",
+    "material": "Matériaux (tous)",
     "item": "Article",
     "item_kind": "Type d’article",
     "item_category": "Catégorie d’article",
