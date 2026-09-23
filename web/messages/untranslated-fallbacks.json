@@ -2,44 +2,11 @@
   "_generated": "Run node --import tsx scripts/i18n-catalog-completeness.ts --write-manifest. Listed keys render from English and do not count as translated.",
   "sourceLocale": "en",
   "fallbacks": {
-    "de": [
-      "entities.propertyManagement.detail.description",
-      "entities.propertyManagement.detail.fields.name",
-      "entities.propertyManagement.detail.fields.status",
-      "entities.propertyManagement.detail.leases.table.status",
-      "entities.propertyManagement.detail.units.table.status",
-      "entities.propertyManagement.leaseSections.escalations.table.status",
-      "entities.propertyManagement.list.columns.code",
-      "entities.propertyManagement.list.columns.status"
-    ],
-    "es": [
-      "entities.propertyManagement.detail.description"
-    ],
-    "fr": [
-      "entities.propertyManagement.detail.actions",
-      "entities.propertyManagement.detail.description",
-      "entities.propertyManagement.detail.units.table.type",
-      "entities.propertyManagement.leaseSections.charges.labels.description",
-      "entities.propertyManagement.leaseSections.charges.labels.type",
-      "entities.propertyManagement.leaseSections.charges.table.charge",
-      "entities.propertyManagement.leaseSections.deposits.labels.date",
-      "entities.propertyManagement.leaseSections.deposits.labels.transaction",
-      "entities.propertyManagement.list.columns.code",
-      "entities.propertyManagement.list.columns.propertyType"
-    ],
-    "ja": [
-      "entities.propertyManagement.detail.description"
-    ],
-    "pt-BR": [
-      "entities.propertyManagement.detail.description",
-      "entities.propertyManagement.detail.fields.status",
-      "entities.propertyManagement.detail.leases.table.status",
-      "entities.propertyManagement.detail.units.table.status",
-      "entities.propertyManagement.leaseSections.escalations.table.status",
-      "entities.propertyManagement.list.columns.status"
-    ],
-    "zh": [
-      "entities.propertyManagement.detail.description"
-    ]
+    "de": [],
+    "es": [],
+    "fr": [],
+    "ja": [],
+    "pt-BR": [],
+    "zh": []
   }
 }

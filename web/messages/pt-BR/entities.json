@@ -77,7 +77,8 @@
         "location": "Localização",
         "propertyType": "Tipo",
         "occupancy": "Ocupação",
-        "currency": "Moeda"
+        "currency": "Moeda",
+        "status": "Status"
       }
     },
     "leaseSections": {
@@ -120,7 +121,8 @@
           "effective": "Vigência",
           "method": "Método",
           "value": "Valor",
-          "result": "Resultado"
+          "result": "Resultado",
+          "status": "Status"
         },
         "apply": "Aplicar",
         "emptyTitle": "Sem reajustes de aluguel",
@@ -188,6 +190,7 @@
         "name": "Nome",
         "code": "Código",
         "propertyType": "Tipo de imóvel",
+        "status": "Status",
         "subsidiary": "Subsidiária",
         "location": "Localização",
         "fixedAsset": "Ativo imobilizado",
@@ -211,6 +214,7 @@
         "cam": "Despesas comuns"
       },
       "tabsAria": "Detalhes do imóvel",
+      "description": "{subsidiary} · {location}",
       "noLocation": "Sem localização",
       "cancel": "Cancelar",
       "saving": "Salvando…",
@@ -231,7 +235,8 @@
           "unit": "Unidade",
           "type": "Tipo",
           "rentableArea": "Área locável",
-          "bedrooms": "Quartos"
+          "bedrooms": "Quartos",
+          "status": "Status"
         },
         "emptyTitle": "Ainda não há unidades",
         "emptyDetail": "Adicione a primeira unidade alugável a partir deste registro de imóvel."
@@ -244,7 +249,8 @@
           "lease": "Locação",
           "unit": "Unidade",
           "tenant": "Inquilino",
-          "term": "Prazo"
+          "term": "Prazo",
+          "status": "Status"
         },
         "wholeProperty": "Imóvel inteiro",
         "openTerm": "Em aberto",

@@ -62,10 +62,65 @@ export function readFallbackManifest(): FallbackManifest {
 }
 
 /**
+ * I18N1 reviewed identicals: source-English values whose correct translation
+ * is spelled exactly the same in that locale, so presence in the locale file
+ * counts as translated and the key leaves the untranslated-fallback manifest.
+ * Each entry is `locale:key|term` and pins the exact term: a rewording must
+ * update the pin, and a removed key must leave this list. Reasons:
+ * - German/Portuguese "Status", German "Code"/"Name", French
+ *   "Code"/"Type"/"Charge"/"Description"/"Transaction"/"Date"/"Actions" and
+ *   French accounting "Consolidation" are the ordinary nouns in those
+ *   languages, already used verbatim across the shipped catalogs.
+ * - `propertyManagement.detail.description` is placeholders plus a middle
+ *   dot (`{subsidiary} · {location}`) — identical by construction in every
+ *   locale, with no prose to translate.
+ */
+export const I18N1_IDENTICAL_BY_FACT: ReadonlySet<string> = new Set([
+  'de:accounting.lifecycle.status|Status',
+  'de:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+  'de:entities.propertyManagement.detail.fields.name|Name',
+  'de:entities.propertyManagement.detail.fields.status|Status',
+  'de:entities.propertyManagement.detail.leases.table.status|Status',
+  'de:entities.propertyManagement.detail.units.table.status|Status',
+  'de:entities.propertyManagement.leaseSections.escalations.table.status|Status',
+  'de:entities.propertyManagement.list.columns.code|Code',
+  'de:entities.propertyManagement.list.columns.status|Status',
+  'es:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+  'fr:accounting.lifecycle.description|Description',
+  'fr:accounting.lifecycle.domains.consolidation|Consolidation',
+  'fr:entities.propertyManagement.detail.actions|Actions',
+  'fr:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+  'fr:entities.propertyManagement.detail.units.table.type|Type',
+  'fr:entities.propertyManagement.leaseSections.charges.labels.description|Description',
+  'fr:entities.propertyManagement.leaseSections.charges.labels.type|Type',
+  'fr:entities.propertyManagement.leaseSections.charges.table.charge|Charge',
+  'fr:entities.propertyManagement.leaseSections.deposits.labels.date|Date',
+  'fr:entities.propertyManagement.leaseSections.deposits.labels.transaction|Transaction',
+  'fr:entities.propertyManagement.list.columns.code|Code',
+  'fr:entities.propertyManagement.list.columns.propertyType|Type',
+  'ja:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+  'pt-BR:accounting.lifecycle.status|Status',
+  'pt-BR:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+  'pt-BR:entities.propertyManagement.detail.fields.status|Status',
+  'pt-BR:entities.propertyManagement.detail.leases.table.status|Status',
+  'pt-BR:entities.propertyManagement.detail.units.table.status|Status',
+  'pt-BR:entities.propertyManagement.leaseSections.escalations.table.status|Status',
+  'pt-BR:entities.propertyManagement.list.columns.status|Status',
+  'zh:entities.propertyManagement.detail.description|{subsidiary} · {location}',
+])
+
+function isReviewedIdentical(locale: string, key: string, value: string | undefined): boolean {
+  return value !== undefined && I18N1_IDENTICAL_BY_FACT.has(`${locale}:${key}|${value}`)
+}
+
+/**
  * Generate the explicit inventory for the bulk property-management fallback.
- * Missing values and source-identical copies are both untranslated. The guard
- * test separately rejects source copies so locale overlays use the runtime's
- * real English fallback rather than pretending the copies are translations.
+ * Missing values and UNREVIEWED source-identical copies are both
+ * untranslated. Copies pinned in I18N1_IDENTICAL_BY_FACT are reviewed
+ * translations that happen to share English spelling, so they leave the
+ * manifest. The guard test still rejects any identical copy outside that
+ * list, so locale overlays use the runtime's real English fallback rather
+ * than pretending unreviewed copies are translations.
  */
 export function generateFallbackManifest(): FallbackManifest {
   const source = flattenCatalog(SOURCE_LOCALE)
@@ -77,7 +132,9 @@ export function generateFallbackManifest(): FallbackManifest {
   for (const locale of messageLocales().filter((candidate) => candidate !== SOURCE_LOCALE)) {
     const catalog = flattenCatalog(locale)
     fallbacks[locale] = propertyKeys.filter(
-      (key) => !catalog.has(key) || catalog.get(key) === source.get(key),
+      (key) =>
+        !catalog.has(key) ||
+        (catalog.get(key) === source.get(key) && !isReviewedIdentical(locale, key, catalog.get(key))),
     )
   }
 

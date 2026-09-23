@@ -72,8 +72,10 @@
       "notMapped": "Non associé",
       "columns": {
         "property": "Immeuble",
+        "code": "Code",
         "subsidiary": "Entité",
         "location": "Emplacement",
+        "propertyType": "Type",
         "occupancy": "Occupation",
         "currency": "Devise",
         "status": "Statut"
@@ -82,6 +84,7 @@
     "leaseSections": {
       "charges": {
         "table": {
+          "charge": "Charge",
           "frequency": "Fréquence",
           "effective": "En vigueur",
           "amount": "Montant",
@@ -89,6 +92,8 @@
         },
         "addTitle": "Ajouter une charge récurrente",
         "labels": {
+          "type": "Type",
+          "description": "Description",
           "amount": "Montant",
           "frequency": "Fréquence",
           "effectiveFrom": "En vigueur à partir du",
@@ -150,6 +155,8 @@
         "postReversal": "Comptabiliser la contrepassation",
         "recordTitle": "Enregistrer une écriture de dépôt",
         "labels": {
+          "transaction": "Transaction",
+          "date": "Date",
           "amount": "Montant",
           "bankAccount": "Compte bancaire",
           "tenantInvoice": "Facture du locataire",
@@ -207,11 +214,13 @@
         "cam": "Charges communes"
       },
       "tabsAria": "Détails de l'immeuble",
+      "description": "{subsidiary} · {location}",
       "noLocation": "Aucun emplacement",
       "cancel": "Annuler",
       "saving": "Enregistrement…",
       "save": "Enregistrer",
       "edit": "Modifier",
+      "actions": "Actions",
       "customForm": "Formulaire personnalisé",
       "customizeForm": "Personnaliser le formulaire",
       "deactivate": "Désactiver l'immeuble",
@@ -224,6 +233,7 @@
         "addUnit": "Ajouter un logement",
         "table": {
           "unit": "Logement",
+          "type": "Type",
           "rentableArea": "Surface louable",
           "bedrooms": "Chambres",
           "status": "Statut"
