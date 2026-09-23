@@ -19,7 +19,8 @@
  *   idempotent         a second candidate bootstrap applies nothing
  *   ledger-parity      trial balance, documents, open balances, applications
  *                      and row counts are identical before and after
- *   candidate-harness  golden harness (candidate code) on every active org
+ *   candidate-harness  golden harness (candidate code) on every seeded org and
+ *                      every org with posted activity
  *   catalog            the upgraded schema equals a fresh install's
  *
  * Environment:
@@ -38,7 +39,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { loadConfig, validateConfig } from "./plan.mjs";
-import { activeOrgIds, compareSnapshots, snapshotLedger } from "./ledger.mjs";
+import { candidateHarnessOrgIds, compareSnapshots, fingerprintColumnsOf, snapshotLedger } from "./ledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CANDIDATE = resolve(HERE, "..", "..");
@@ -299,7 +300,8 @@ async function main() {
       }
     });
 
-    const after = await phase("snapshot-after", () => withClient(dbUrl, snapshotLedger));
+    const after = await phase("snapshot-after", () =>
+      withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
     writeFileSync(join(reportDir, "ledger-after.json"), `${JSON.stringify(after, null, 2)}\n`);
     await phase("ledger-parity", async () => {
       const differences = compareSnapshots(before, after);
@@ -309,7 +311,8 @@ async function main() {
       }
     });
 
-    await phase("candidate-harness", () => harness("candidate-harness", CANDIDATE, activeOrgIds(after)));
+    await phase("candidate-harness", () =>
+      harness("candidate-harness", CANDIDATE, candidateHarnessOrgIds(report.seededOrgs, after)));
 
     await phase("catalog", async () => {
       const actual = await catalogSnapshot("catalog", {});

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { compareSnapshots, activeOrgIds } from "./ledger.mjs";
+import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
 import { summarize } from "./rehearse.mjs";
 
@@ -67,8 +67,8 @@ function snapshot(overrides = {}) {
     orgs: ["o1"],
     entryStatus: [{ org_id: "o1", status: "posted", entries: "2" }],
     trialBalance: [
-      { org_id: "o1", book_id: "b", status: "posted", account_id: "a1", currency: "USD", lines: "2", amount: "100.0000", txn_amount: "100.0000" },
-      { org_id: "o1", book_id: "b", status: "posted", account_id: "a2", currency: "USD", lines: "2", amount: "-100.0000", txn_amount: "-100.0000" },
+      { org_id: "o1", book_id: "b", status: "posted", subsidiary_id: "s", account_id: "a1", currency: "USD", lines: "2", amount: "100.0000", txn_amount: "100.0000" },
+      { org_id: "o1", book_id: "b", status: "posted", subsidiary_id: "s", account_id: "a2", currency: "USD", lines: "2", amount: "-100.0000", txn_amount: "-100.0000" },
     ],
     unbalancedEntries: [],
     documents: [{ org_id: "o1", kind: "customer_invoice", status: "posted", currency: "USD", documents: "2", total: "100.0000", open_balance: "40.0000" }],
@@ -105,8 +105,11 @@ test("an unbalanced posted entry is refused on either side of the upgrade", () =
   assert.deepEqual(compareSnapshots(snapshot(), broken).map((d) => d.section), ["unbalanced-after"]);
 });
 
-test("the golden harness runs on every org with posted activity", () => {
+test("the candidate harness runs on every seeded org, even one that never posted", () => {
   assert.deepEqual(activeOrgIds(snapshot()), ["o1"]);
+  // o2 was seeded with drafts and configuration only, so it has no posted line.
+  assert.deepEqual(candidateHarnessOrgIds(["o2"], snapshot()), ["o1", "o2"]);
+  assert.deepEqual(candidateHarnessOrgIds([], snapshot()), ["o1"]);
 });
 
 test("the summary names a refusal and the slowest migrations", () => {
@@ -142,4 +145,17 @@ test("publish refuses a release whose exact commit has no passing upgrade-verifi
   assert.match(verify, /select\(\.name == "upgrade-verification"\)/);
   assert.match(verify, /exit 1/);
   assert.match(WORKFLOW, /\n {2}upgrade-verification:\n/);
+});
+
+test("row hashes cover every source column, quote identifiers, and refuse unexpected names", () => {
+  const query = rowHashQuery("public", "documents", ["id", "org_id", "party_id"]);
+  assert.match(query, /md5\(row\(t\."id", t\."org_id", t\."party_id"\)::text\)/);
+  assert.match(query, /from "public"\."documents" t/);
+  assert.throws(() => rowHashQuery("public", "documents", ['id"; drop table x; --']), /unexpected identifier/);
+});
+
+test("a per-record hash difference is refused even when every aggregate matches", () => {
+  const before = snapshot({ rowHashes: { documents: { columns: ["id"], dropped: [], perOrg: [{ org_id: "o1", rows: "2", hash: "10" }] } } });
+  const after = snapshot({ rowHashes: { documents: { columns: ["id"], dropped: [], perOrg: [{ org_id: "o1", rows: "2", hash: "11" }] } } });
+  assert.deepEqual(compareSnapshots(before, after).map((d) => d.section), ["rowHashes.documents"]);
 });
