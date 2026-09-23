@@ -1105,6 +1105,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "item_inventory_profiles.negative_cost_basis",
   "item_inventory_profiles.tracking",
   "item_inventory_profiles.unit_conversions",
+  "item_price_schedules.change_reason",
   "item_price_schedules.currency",
   "item_price_schedules.quantity_basis",
   "item_rate_book_assignments.date_basis",
