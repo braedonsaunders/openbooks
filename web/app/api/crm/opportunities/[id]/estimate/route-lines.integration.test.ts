@@ -3,6 +3,7 @@ import test from 'node:test';
 import { registerHooks } from 'node:module';
 import { resolveAppModule } from '../../../../../../lib/test-module-hooks'
 import { pathToFileURL } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import type { SessionUser } from '../../../../../../lib/auth';
 
 // C4: opportunity → estimate silently dropped itemless lines. The per-line
@@ -33,7 +34,11 @@ const { POST } = await import('./route');
 const { NextRequest } = await import('next/server');
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const post = () => new NextRequest('http://audit.local', { method: 'POST', body: JSON.stringify({}) });
+const post = () => new NextRequest('http://audit.local', {
+  method: 'POST',
+  body: JSON.stringify({}),
+  headers: { 'Idempotency-Key': randomUUID() },
+});
 const paramsOf = (id: string) => ({ params: Promise.resolve({ id }) });
 
 async function fixture(itemless: boolean) {
@@ -72,7 +77,7 @@ test('itemized lines convert with matching counts, amounts and total', { skip: !
   const { org, opp } = await fixture(false);
   try {
     const response = await POST(post(), paramsOf(opp));
-    assert.equal(response.status, 200, await response.clone().text());
+    assert.equal(response.status, 201, await response.clone().text());
     const quoteId = (await response.json() as { id: string }).id;
     const quote = (await db.execute(sql`select total from documents where id=${quoteId}`)).rows[0]!;
     const quoteLines = (await db.execute(sql`select line_number, amount from document_lines where document_id=${quoteId} order by line_number`)).rows as { line_number: number; amount: string }[];

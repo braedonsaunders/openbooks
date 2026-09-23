@@ -154,6 +154,8 @@
     "estimateCreated": "Orçamento criado",
     "estimateFailed": "Não foi possível criar o orçamento.",
     "estimateItemlessLines": "Orçamento não criado: as linhas {lines} não têm item. Adicione um item a cada linha e converta novamente.",
+    "estimateKeyRequired": "Criar um orçamento exige um cabeçalho Idempotency-Key com um id novo para cada ação.",
+    "estimateKeyConflict": "Esta ação de orçamento já foi registrada com outros detalhes — tente novamente com um Idempotency-Key novo.",
     "estimateNeedsAccount": "Defina uma conta antes de criar uma estimativa",
     "saveFirstForEstimate": "Salve esta oportunidade primeiro — os orçamentos convertem o cliente e as linhas salvos.",
     "statuses": {
