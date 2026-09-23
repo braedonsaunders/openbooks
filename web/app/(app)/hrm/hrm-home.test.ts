@@ -43,8 +43,8 @@ test("cockpit renders through ModuleView with a loader-owned spec", () => {
 
 test("cockpit gates on the hrm feature switch plus the employment read grant", () => {
   assert.match(view, /requirePermission\('hrm\.employment\.read'\)/, "page requires the employment read grant");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page checks the Company Settings Features switch");
-  assert.match(view, /notFound\(\)/, "a disabled switch 404s instead of rendering a gated cockpit");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a disabled switch redirects to the feature remedy instead of rendering a gated cockpit");
   assert.match(loader, /loadHrmHome\(authz: Authz\)/, "loader takes the authorized session, never re-gates");
 });
 

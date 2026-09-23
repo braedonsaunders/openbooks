@@ -21,7 +21,7 @@ const templatePage = readFileSync(new URL("./templates/page.tsx", import.meta.ur
 
 test("processes page carries the gate where the route-gate scanner reads it", () => {
   assert.match(view, /requirePermission\('hrm\.process\.read'\)/, "the page enforces the process read grant, not the employment one");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "the page enforces the hrm switch with a 404");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
   assert.match(page, /loadProcessesRoute\(sp\)/, "the page renders only after the view gate resolves");
   assert.match(page, /searchParams=\{sp\}/, "the query string reaches the loader and the spec host");
   assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");

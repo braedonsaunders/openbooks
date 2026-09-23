@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -20,7 +19,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import type { ComplianceData } from '../../../../lib/hrm/compliance'
 
 /**
@@ -279,8 +278,8 @@ export function complianceSpec(data: ComplianceData, basePath: string = '/hrm/co
 export async function loadCompliancePageData(sp: Record<string, string | undefined>) {
   const authz = await requirePermission('hrm.construction.read')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'hrmConstructionCompliance'))) notFound()
-  if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(orgId, 'hrmConstructionCompliance')
+  await requireFeatureEnabled(orgId, 'hrm')
   const { loadCompliancePage } = await import('../../../../lib/hrm/compliance')
   return loadCompliancePage(authz, sp)
 }

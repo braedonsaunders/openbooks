@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -19,6 +18,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
@@ -65,7 +65,7 @@ const f = ref<ClockPageData>()
 
 export async function loadClockPage(): Promise<ClockPageData> {
   const authz = await requirePermission('time.clock')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'fieldTime'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
   const orgId = authz.user.orgId
   const partyId = await resolveOwnParty(orgId, authz.user.id)

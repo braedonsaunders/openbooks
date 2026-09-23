@@ -25,7 +25,7 @@ import {
 } from '@openbooks/engine/src/hrm/performance/one-on-ones.ts'
 import { listOpenRequestsForParty } from '@openbooks/engine/src/hrm/performance/feedback.ts'
 import { getAuthz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { meTabs } from '../../../../lib/hrm/self-service'
 
 /**
@@ -212,9 +212,9 @@ export async function loadMeOneOnOnesPage(
 ): Promise<MeOneOnOnesData> {
   const authz = await getAuthz()
   if (!authz) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmPerformance'))) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
   const t = await getTranslations('hrm')
   const tabs = await meTabs(authz, '/me/one-on-ones')
 

@@ -31,7 +31,7 @@ import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { continuousBlocks, continuousTabChips, loadContinuousTab, type ContinuousData } from './continuous-view'
 
 /**
@@ -405,8 +405,8 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   // grants.
   const authz = await getAuthz()
   if (!authz) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmPerformance'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz, '/hrm/performance')
 

@@ -3,7 +3,8 @@ import 'server-only'
 import { notFound } from 'next/navigation'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
-import { isDocKindEnabled } from "../../../../../lib/documents.ts";
+import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../lib/pdf-templates/catalog'
 import { getPdfTemplate } from '../../../../../lib/pdf-templates/store'
 import { customMergeFields } from '../../../../../lib/pdf-templates/values'
@@ -16,12 +17,11 @@ import type PdfTemplateEditor from './PdfTemplateEditor'
  * drag-and-drop, a merge-field palette and save/preview mutations. Nothing
  * here is decomposable into blocks, so the spec places one widget.
  *
- * The loader keeps THREE separate 404s, and they are three because they mean
- * three different things: the template does not exist in this org, its record
- * type is not in the catalog, or that document kind is switched off for this
- * tenant. Collapsing them would be tidier and would lose the last one — a
- * disabled kind must be indistinguishable from a missing template, which is
- * exactly what three `notFound()`s buy.
+ * The loader keeps separate refusals because they mean different things: the
+ * template does not exist in this org (404), its record type is not in the
+ * catalog (404), or that document kind is switched off for this tenant (the
+ * feature-required remedy naming the switch — the template exists, so a bare
+ * 404 would strand the author with no path to enable it).
  *
  * `customMergeFields` is org-scoped, so the palette a template author sees is
  * fenced to their own tenant's custom fields. That happens in the loader; the
@@ -42,7 +42,10 @@ export async function loadPdfTemplateEditor(id: string): Promise<PdfTemplateEdit
   if (!row) notFound()
   const meta = PDF_RECORD_TYPE_BY_KEY[row.recordType]
   if (!meta) notFound()
-  if (!(await isDocKindEnabled(authz.user.orgId, row.recordType))) notFound()
+  // A kind whose Features switch is off names the switch: the template
+  // exists, so "not found" would strand the author with no remedy.
+  const kindFeature = DOC_KIND_FEATURE[row.recordType]
+  if (kindFeature) await requireFeatureEnabled(authz.user.orgId, kindFeature)
 
   const custom = await customMergeFields(row.recordType, authz.user.orgId)
   const mergeFields = [...meta.fields, ...custom].map((f) => ({ key: f.key, label: f.label }))

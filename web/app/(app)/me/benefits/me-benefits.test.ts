@@ -38,5 +38,5 @@ test("the primary action lives in the page header through the shared button", ()
 test("the benefits loader scopes every row to the login and computes nothing", () => {
   assert.match(loader, /getMyBenefitsWorkspace\(\{\s*orgId/, "the page reads the self-service workspace, never an org list");
   assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page requires the hrm feature");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
 });

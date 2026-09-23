@@ -8,7 +8,7 @@ import { getSurveyResults } from '@openbooks/engine/src/hrm/surveys/responses.ts
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { hrmTalentViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * Surveys home loader (0230, HR-19).
@@ -17,7 +17,8 @@ import { isFeatureEnabled } from '../features'
  * getSurvey, getSurveyResults); participation comes from the results
  * reader so the list and the results panel never disagree. Renders
  * only when hrm and hrmSurveys are on and the actor holds
- * hrm.surveys.manage — the loader 404s otherwise. Responding rides
+ * hrm.surveys.manage — a switched-off feature redirects to its remedy
+ * instead. Responding rides
  * invitation tokens on the public route, never a grant, so it lives
  * nowhere here.
  */
@@ -37,8 +38,8 @@ export async function surveysAuthz(): Promise<SurveysHomeAuthz | null> {
   } catch {
     return null
   }
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrmSurveys'))) return null
+  await requireFeatureEnabled(gate.user.orgId, 'hrm')
+  await requireFeatureEnabled(gate.user.orgId, 'hrmSurveys')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
 

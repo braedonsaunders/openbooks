@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { builtInReportDefinitionId } from '../../../../lib/custom-reports'
-import { isFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,7 +26,7 @@ export default async function LotRecallReport({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('reports.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'inventory'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'inventory')
 
   const definitionId = await builtInReportDefinitionId(authz.user.orgId, 'lot-recall')
   if (!definitionId) notFound()

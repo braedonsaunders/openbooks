@@ -1,9 +1,8 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 
 /**
  * The SQL console, split into a loader and a spec.
@@ -32,7 +31,7 @@ export type QueryData = Record<string, unknown>
 export async function loadQuery(): Promise<QueryData> {
   // layout.tsx gates, verbatim: permission first, then feature flag.
   const authz = await requirePermission('sql.execute')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'queryConsole'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'queryConsole')
   return {}
 }
 

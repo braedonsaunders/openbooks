@@ -96,8 +96,8 @@ test("the calendar stays a component — it is not a list", () => {
 
 test("leave gates on the hrm feature switch plus the leave read grant", () => {
   assert.match(view, /requirePermission\('hrm\.leave\.read'\)/, "page requires the leave read grant");
-  assert.match(view, /isFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "page checks the Company Settings Features switch");
-  assert.match(view, /notFound\(\)/, "a disabled switch 404s instead of rendering a gated queue");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
+  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a disabled switch redirects to the feature remedy instead of rendering a gated queue");
   assert.match(loader, /loadLeaveQueue\(\s*authz/, "loader takes the authorized session, never re-gates");
 });
 

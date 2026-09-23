@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -14,7 +13,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
@@ -54,7 +53,7 @@ const f = ref<FieldSetupData>()
 
 export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   const authz = await requirePermission('time.manage')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'fieldTime'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
   const orgId = authz.user.orgId
   const settings = (await db.execute<{ settings: unknown }>(sql`

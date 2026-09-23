@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { listOwnInvitations } from '@openbooks/engine/src/hrm/surveys/responses.ts'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
+import { requireFeatureEnabled } from '../feature-gates'
 
 /**
  * Me open-surveys loader (0230, HR-19): the actor's unanswered
@@ -12,7 +12,8 @@ import { isFeatureEnabled } from '../features'
  * invitation token to the public /survey/[token] page — the raw
  * token is never stored anywhere, so the island reissues it
  * in-session and navigates. Renders when hrm and hrmSurveys are on
- * and the actor holds hrm.self.read — the loader 404s otherwise.
+ * and the actor holds hrm.self.read — a switched-off feature redirects to
+ * its remedy instead.
  */
 
 export interface MeSurveysAuthz {
@@ -24,8 +25,8 @@ export interface MeSurveysAuthz {
 export async function meSurveysAuthz(): Promise<MeSurveysAuthz | null> {
   const gate = await getAuthz()
   if (!gate) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrm'))) return null
-  if (!(await isFeatureEnabled(gate.user.orgId, 'hrmSurveys'))) return null
+  await requireFeatureEnabled(gate.user.orgId, 'hrm')
+  await requireFeatureEnabled(gate.user.orgId, 'hrmSurveys')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
 

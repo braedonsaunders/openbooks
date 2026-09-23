@@ -1,11 +1,10 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadFieldTicketDrawerData } from '../../../lib/field-ticket-drawer-data'
 import type { FieldTicketDrawer } from './FieldTicketDrawer'
 import type { DrawerMode } from '../../../lib/drawer-mode'
@@ -59,7 +58,7 @@ export async function loadFieldTickets(
 ): Promise<FieldTicketsData> {
   const authz = await requirePermission('time.read')
   const orgId = authz.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) notFound()
+  await requireFeatureEnabled(orgId, 'fieldTickets')
   const canManage = can(authz, 'time.manage')
   const t = await getTranslations('fieldTickets')
   const openId = pickString(sp[PARAM])

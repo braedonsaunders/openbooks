@@ -10,7 +10,7 @@ import { SearchInput } from '../../../../../components/search-input'
 import { hrmGroupTabs } from '../../../../../components/module-home/group-tabs'
 import { hrmPeopleViewTabs } from '../../../../../lib/hrm/workspace-tabs'
 import { requirePermission } from '../../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { loadRefOptions } from '../../../../../lib/setup/ref-options'
@@ -25,7 +25,7 @@ export default async function ProcessTemplatesPage({
 }) {
   const sp = await searchParams
   const authz = await requirePermission('hrm.process.manage')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   const [t, templates, tabs, peopleTabs, templateRefs, stepRefs] = await Promise.all([
     getTranslations('hrm.processes.templates'),
     listProcessTemplates({ orgId: authz.user.orgId, actorId: authz.user.id }),

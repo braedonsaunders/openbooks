@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -21,7 +20,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadMeReviews, type MeReviewsData } from '../../../../lib/hrm/self-service'
 
 /**
@@ -165,7 +164,7 @@ export async function loadMeReviewsPage(
   sp: Record<string, string | undefined> = {},
 ): Promise<MeReviewsData> {
   const authz = await requirePermission('hrm.self.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'hrm')
   return loadMeReviews(authz, sp)
 }
 

@@ -1,12 +1,12 @@
 import 'server-only'
 
-import { redirect, notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, frame, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { PspSettlementRow, PspSubsidiaryOption } from './sections'
@@ -93,7 +93,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   if (!authz) redirect('/login')
   // Same gate as GET /api/psp/settlements: a disabled banking feature 404s
   // the surface, and banking.read guards the read model.
-  if (!(await isFeatureEnabled(authz.user.orgId, 'banking'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'banking')
   if (!can(authz, 'banking.read')) redirect('/')
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('banking.pspSettlements')

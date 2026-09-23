@@ -1,6 +1,5 @@
 import 'server-only'
 
-import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -17,7 +16,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { listAutomations } from '@openbooks/engine/src/automations/services.ts'
@@ -104,7 +103,7 @@ export async function loadAutomations(
   searchParams: Record<string, string | string[] | undefined>,
 ): Promise<AutomationsData> {
   const authz = await requirePermission('automations.read')
-  if (!(await isFeatureEnabled(authz.user.orgId, 'automations'))) notFound()
+  await requireFeatureEnabled(authz.user.orgId, 'automations')
   const t = await getTranslations('admin.automations')
   const status = pickString(searchParams.status)
 
