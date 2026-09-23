@@ -24,6 +24,7 @@ import {
   cn,
 } from "@openbooks/ui";
 import { AppWorkspaceTabs } from "./sections";
+import { StarterTitleHint } from "./StarterTitleHint";
 import { AppScreens } from "./AppScreens";
 import { AppDefinitions } from "./AppDefinitions";
 import { CodeEditor } from "@/components/code-editor";
@@ -360,6 +361,7 @@ export function AppPackageEditor({
                     value={manifest.name}
                     onChange={(e) => patchManifest({ name: e.target.value })}
                   />
+                  <StarterTitleHint files={files} manifest={manifest} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="app-key">{t("key")}</Label>
