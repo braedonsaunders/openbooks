@@ -38,16 +38,27 @@ export async function storeEmailAttachments(
   if (!attachments || attachments.length === 0) return [];
   assertValidEmailAttachmentPayloads(attachments);
   const stored: EmailAttachmentRef[] = [];
-  for (const attachment of attachments) {
-    const bytes = Buffer.from(attachment.content, "base64");
-    const contentType = attachment.contentType ?? "application/octet-stream";
-    if (s3Enabled) {
-      const id = randomUUID();
-      await putEmailAttachmentBlob(id, bytes, contentType);
-      stored.push({ filename: attachment.filename, contentType: attachment.contentType, storageKey: id });
-    } else {
-      stored.push({ filename: attachment.filename, contentType: attachment.contentType, sealed: sealSecret(attachment.content) });
+  const writtenStorageKeys: string[] = [];
+  try {
+    for (const attachment of attachments) {
+      const bytes = Buffer.from(attachment.content, "base64");
+      const contentType = attachment.contentType ?? "application/octet-stream";
+      if (s3Enabled) {
+        const id = randomUUID();
+        await putEmailAttachmentBlob(id, bytes, contentType);
+        writtenStorageKeys.push(id);
+        stored.push({ filename: attachment.filename, contentType: attachment.contentType, storageKey: id });
+      } else {
+        stored.push({ filename: attachment.filename, contentType: attachment.contentType, sealed: sealSecret(attachment.content) });
+      }
     }
+  } catch (error) {
+    // The caller never receives partial refs, so a mid-loop failure must
+    // delete every key this call already wrote before rethrowing —
+    // otherwise the orphaned blobs sit in object storage unreferenced
+    // forever (no TTL covers them).
+    await deleteEmailAttachmentBlobs(writtenStorageKeys);
+    throw error;
   }
   return stored;
 }
