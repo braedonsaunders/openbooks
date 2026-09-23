@@ -108,6 +108,23 @@ export async function createBillingRequest(
     throw new Error("Field Ticket billing is disabled");
   }
   const basis = requestedBasis;
+  const selectedTimeEntryIds = [
+    ...new Set((input.selectedTimeEntryIds ?? []).map(String)),
+  ].sort();
+  if (basis === "time_selection") {
+    // An explicitly empty selection refuses: without this the generator sees
+    // no filter and bills EVERY eligible entry on the project. Omitting the
+    // field keeps the legacy "bill all eligible" request the project UI
+    // relies on; sending [] is never what the caller meant.
+    if (input.selectedTimeEntryIds !== undefined && input.selectedTimeEntryIds !== null && selectedTimeEntryIds.length === 0)
+      throw new Error("Select at least one time entry to bill — an empty selection would bill every eligible entry");
+    if (selectedTimeEntryIds.some((id) => !UUID.test(id)))
+      throw new Error("A selected time entry is invalid");
+  } else if (selectedTimeEntryIds.length > 0) {
+    throw new Error(
+      "Time entries may be selected only for time-selection billing",
+    );
+  }
   const fieldTicketIds = [
     ...new Set((input.fieldTicketIds ?? []).map(String)),
   ].sort();
@@ -266,7 +283,7 @@ export async function createBillingRequest(
         ${drawAmount}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
         ${input.invoiceDescription ?? null}, ${input.customerPo ?? lockedProject.rows[0]!.customer_po_number},
         ${projectType.billingMethod}, ${backupRequired}, ${backupType},
-        ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
+        ${selectedTimeEntryIds.length ? JSON.stringify(selectedTimeEntryIds) : null},
         ${input.notes ?? null}, 'open', ${userId}, ${userId})
       returning id, request_number
     `);
