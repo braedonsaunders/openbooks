@@ -492,6 +492,11 @@ export async function refreshSandbox(
       const target = new Set(
         [...rebaseSet].filter((t) => !(keep && CUSTOMIZATION_LAYER.has(t))),
       );
+      // New default policies reach existing tenants here, not just on create:
+      // a masked sandbox created before a default existed would otherwise
+      // refresh without it. Idempotent — an org's deliberate deactivation is
+      // left untouched.
+      if (s.masked) await seedDefaultMaskingPolicies(s.production_org_id);
 
       await inRefreshTransaction(async () => {
         const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
