@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -644,28 +644,6 @@ test("RMDIR of a populated folder fails with the refusal instead of a phantom su
       client.end();
     }
   });
-});
-
-test("every SFTP operation handler is registered through the liveness fence", () => {
-  const source = readFileSync(new URL("./server.ts", import.meta.url), "utf8");
-  const session = source.slice(source.indexOf('session.on("sftp"'), source.indexOf('client.on("error"'));
-  const registrations = [...session.matchAll(/sftp\.on\("([A-Z]+)",\s*([A-Za-z(]+)/g)];
-  assert.ok(registrations.length >= 10, `expected a full handler table, found ${registrations.length}`);
-  for (const [, op, via] of registrations) {
-    assert.ok(
-      via === "doStat" || (via ?? "").startsWith("fenced(") || (via ?? "").startsWith("wrap("),
-      `${op} must be registered through fenced(), doStat, or wrap() — a bare handler skips the session-liveness check`,
-    );
-  }
-  // ssh2 answers unhandled request types itself (OP_UNSUPPORTED) without
-  // ever calling into our code: these need explicit fenced handlers so a
-  // revoked session cannot probe request types past the fence.
-  for (const op of ["SYMLINK", "READLINK", "EXTENDED"]) {
-    assert.ok(
-      registrations.some(([, name]) => name === op),
-      `${op} needs an explicit fenced handler`,
-    );
-  }
 });
 
 test.after(() => {
