@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
-import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, type AdjustmentCharge } from './rate-adjustments'
+import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, resolveRateAdjustmentWindow, type AdjustmentCharge, type RateAdjustmentWindow } from './rate-adjustments'
 import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/fx/currencies.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
@@ -800,44 +800,89 @@ export async function generateInvoiceFromBillingRequest(
       try {
         charges = mergeCharges(
           (await Promise.all([...partitions.values()].map(async (partition) => {
-          // A lapse is per partition, so each is asked separately: one
-          // partition's card running out says nothing about another's.
-          const lapsed = await findLapsedRateCard({
-            orgId, projectId: req.project_id, onDate: rateDate,
+          const scope = {
+            orgId, projectId: req.project_id,
             departmentId: partition.departmentId,
             locationId: partition.locationId, classId: partition.classId,
-          })
-          // Carry-forward needs an earlier agreement to carry. A future-only
-          // card is not evidence of terms for this work and must still fail
-          // closed rather than silently pricing the adjustment at zero.
-          if (lapsed && (invoicing.rateCardLapse !== 'carry_forward' || !lapsed.lastEffectiveTo)) {
-            throw new BillingError(
-              `This customer's rate card ${lapsed.lastEffectiveTo ? `expired on ${lapsed.lastEffectiveTo}` : 'has no version in force on or before this work'} and none covers ${rateDate}. ` +
-              'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
+          }
+          // Each partition prices as of its OWN work: a combined invoice
+          // must not reprice August work at September's card. Work crossing
+          // a card effective-date boundary splits by the card in force, so
+          // each slice prices under its own window.
+          const dates = [...new Set(
+            partition.lines.map((l) => l.workedOn).filter((d): d is string => !!d),
+          )].sort()
+          const windows = new Map<string, RateAdjustmentWindow>()
+          for (const date of dates) {
+            windows.set(date, await resolveRateAdjustmentWindow({ ...scope, onDate: date }))
+          }
+          const slices = new Map<string, { onDate: string; window: RateAdjustmentWindow; lines: typeof built }>()
+          for (const date of dates) {
+            const window = windows.get(date)!
+            const key = window.versionId ?? 'none'
+            const slice = slices.get(key)
+            if (slice) {
+              if (date > slice.onDate) slice.onDate = date
+            } else {
+              slices.set(key, { onDate: date, window, lines: [] })
+            }
+          }
+          const undated = partition.lines.filter((l) => !l.workedOn)
+          if (undated.length) {
+            // Lines with no work date join the latest slice; a partition
+            // with no dates at all prices as of the invoice, as before.
+            const latest = [...slices.values()].sort((a, b) => (a.onDate < b.onDate ? -1 : 1)).pop()
+            if (latest) latest.lines.push(...undated)
+            else {
+              slices.set('none', {
+                onDate: rateDate,
+                window: await resolveRateAdjustmentWindow({ ...scope, onDate: rateDate }),
+                lines: undated,
+              })
+            }
+          }
+          for (const [date, window] of windows) {
+            slices.get(window.versionId ?? 'none')!.lines.push(
+              ...partition.lines.filter((l) => l.workedOn === date),
             )
           }
-          // Carrying forward prices the work at the last card in force, never at
-          // a later one: a card that starts after the work was done was not the deal.
-          const cardDate = lapsed?.lastEffectiveTo ?? rateDate
-          return priceAdjustments(
-            partition.lines.map((l) => ({
-              amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
-              itemCategory: l.itemCategory ?? null,
-              tradeIds: l.tradeIds ?? null, jobTitles: l.jobTitles ?? null,
-              departmentId: partition.departmentId,
-              customerId: project.customer_id, projectId: req.project_id,
-              subsidiaryId: l.subsidiaryId ?? null,
-              locationId: partition.locationId, classId: partition.classId,
-              quantity: l.billableQuantity ?? null, workedOn: l.workedOn ?? null,
-              isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
-            })),
-            await resolveRateAdjustments({
-              orgId, projectId: req.project_id, onDate: cardDate,
-              departmentId: partition.departmentId,
-              locationId: partition.locationId, classId: partition.classId,
-            }),
-            invoicing.surchargeRounding ?? 'half_up',
-          )
+          const sliceCharges: AdjustmentCharge[] = []
+          for (const slice of slices.values()) {
+            // A lapse is per slice, so each is asked separately: one
+            // slice's card running out says nothing about another's.
+            const lapsed = await findLapsedRateCard({ ...scope, onDate: slice.onDate })
+            // Carry-forward needs an earlier agreement to carry. A future-only
+            // card is not evidence of terms for this work and must still fail
+            // closed rather than silently pricing the adjustment at zero.
+            if (lapsed && (invoicing.rateCardLapse !== 'carry_forward' || !lapsed.lastEffectiveTo)) {
+              throw new BillingError(
+                `This customer's rate card ${lapsed.lastEffectiveTo ? `expired on ${lapsed.lastEffectiveTo}` : 'has no version in force on or before this work'} and none covers ${slice.onDate}. ` +
+                'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
+              )
+            }
+            // Carrying forward prices the work at the last card in force, never at
+            // a later one: a card that starts after the work was done was not the deal.
+            const cardDate = lapsed?.lastEffectiveTo ?? slice.onDate
+            const adjustments = lapsed?.lastEffectiveTo
+              ? await resolveRateAdjustments({ ...scope, onDate: cardDate })
+              : slice.window.adjustments
+            sliceCharges.push(...priceAdjustments(
+              slice.lines.map((l) => ({
+                amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
+                itemCategory: l.itemCategory ?? null,
+                tradeIds: l.tradeIds ?? null, jobTitles: l.jobTitles ?? null,
+                departmentId: partition.departmentId,
+                customerId: project.customer_id, projectId: req.project_id,
+                subsidiaryId: l.subsidiaryId ?? null,
+                locationId: partition.locationId, classId: partition.classId,
+                quantity: l.billableQuantity ?? null, workedOn: l.workedOn ?? null,
+                isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
+              })),
+              adjustments,
+              invoicing.surchargeRounding ?? 'half_up',
+            ))
+          }
+          return sliceCharges
         }))).flat(),
           invoicing.surchargeRounding ?? 'half_up',
         )

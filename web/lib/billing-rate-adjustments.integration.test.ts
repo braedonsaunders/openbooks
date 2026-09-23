@@ -83,19 +83,28 @@ async function seedCard(
   fx: Fixture,
   target: { targetType: string; targetValueId: string | null; targetValueText?: string | null },
   value = '10.0000',
-  opts: { assignmentLocationId?: string | null; effectiveFrom?: string; effectiveTo?: string | null; calculation?: string; unit?: string | null } = {},
+  opts: { assignmentLocationId?: string | null; assignmentDepartmentId?: string | null; effectiveFrom?: string; effectiveTo?: string | null; calculation?: string; unit?: string | null; name?: string; code?: string } = {},
 ): Promise<void> {
   const { org, project } = fx
   const book = randomUUID(), version = randomUUID(), adjustment = randomUUID()
+  const bookCode = `ADJ-${randomUUID().slice(0, 8)}`
   await withBypassContext(async () => {
-    await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_active) values (${book}, ${org.orgId}, 'ADJ-RATES', 'Adjustment rates', 'CAD', true)`)
+    await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_active) values (${book}, ${org.orgId}, ${bookCode}, 'Adjustment rates', 'CAD', true)`)
     await db.execute(sql`insert into item_rate_versions (id, org_id, rate_book_id, effective_from, effective_to, status) values (${version}, ${org.orgId}, ${book}, ${opts.effectiveFrom ?? '2026-07-01'}, ${opts.effectiveTo ?? null}, 'draft')`)
     await db.execute(sql`insert into labor_rate_version_policies (org_id, version_id, derivation_policy) values (${org.orgId}, ${version}, 'explicit')`)
-    await db.execute(sql`insert into labor_rate_adjustments (id, org_id, version_id, code, name, category, calculation, value, unit, presentation) values (${adjustment}, ${org.orgId}, ${version}, 'SURCH', 'Probe surcharge', 'surcharge', ${opts.calculation ?? 'percent'}, ${value}, ${opts.unit ?? null}, 'separate')`)
+    await db.execute(sql`insert into labor_rate_adjustments (id, org_id, version_id, code, name, category, calculation, value, unit, presentation) values (${adjustment}, ${org.orgId}, ${version}, ${opts.code ?? 'SURCH'}, ${opts.name ?? 'Probe surcharge'}, 'surcharge', ${opts.calculation ?? 'percent'}, ${value}, ${opts.unit ?? null}, 'separate')`)
     await db.execute(sql`insert into labor_rate_adjustment_targets (org_id, adjustment_id, target_type, target_value_id, target_value_text) values (${org.orgId}, ${adjustment}, ${target.targetType}, ${target.targetValueId}, ${target.targetValueText ?? null})`)
     await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
-    await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, location_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, ${opts.assignmentLocationId ?? null}, 'usage_date', true)`)
+    await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, department_id, location_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, ${opts.assignmentDepartmentId ?? null}, ${opts.assignmentLocationId ?? null}, 'usage_date', true)`)
   })
+}
+
+async function seedDepartment(fx: Fixture, name: string): Promise<string> {
+  const id = randomUUID()
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into departments (id, org_id, name, is_active) values (${id}, ${fx.org.orgId}, ${name}, true)`)
+  })
+  return id
 }
 
 async function seedLocation(fx: Fixture, name: string): Promise<string> {
@@ -146,12 +155,12 @@ async function invoiceProject(fx: Fixture): Promise<{ description: string | null
   return rows.rows
 }
 
-async function seedTime(fx: Fixture, hours: string, rate: string, workedOn?: string): Promise<{ entry: string; employee: string }> {
+async function seedTime(fx: Fixture, hours: string, rate: string, workedOn?: string, departmentId?: string): Promise<{ entry: string; employee: string }> {
   const { org, project } = fx
   const employee = randomUUID(), entry = randomUUID()
   await withBypassContext(async () => {
     await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id) values (${employee}, ${org.orgId}, 'employee', 'Billable worker', ${org.subsidiaryId})`)
-    await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${workedOn ?? org.date}, ${hours}, ${project}, ${org.items.service}, true, 'approved', 'unbilled', ${rate})`)
+    await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, department_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${workedOn ?? org.date}, ${hours}, ${project}, ${org.items.service}, ${departmentId ?? null}, true, 'approved', 'unbilled', ${rate})`)
   })
   return { entry, employee }
 }
@@ -429,6 +438,58 @@ test('a per-day allowance counts the invoiced work dates', { skip: !DB }, async 
     assert.equal(allowance[0]!.amount, '100.0000')
     assert.equal(allowance[0]!.quantity, '2.00000000')
     assert.equal(allowance[0]!.unitPrice, '50.00000000')
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('each department prices as of its own work dates', { skip: !DB }, async () => {
+  // PRC14: August work under an August card and September work under a
+  // September card. One global rate date repriced August at September's
+  // terms (or falsely reported the August card lapsed).
+  const fx = await setup()
+  try {
+    const deptA = await seedDepartment(fx, 'Electrical')
+    const deptB = await seedDepartment(fx, 'Mechanical')
+    const laborTarget = { targetType: 'labor', targetValueId: null, targetValueText: 'labor' }
+    await seedCard(fx, laborTarget, '10.0000', {
+      effectiveFrom: '2026-08-01', effectiveTo: '2026-08-31', name: 'August surcharge', code: 'aug',
+    })
+    await seedCard(fx, laborTarget, '20.0000', {
+      effectiveFrom: '2026-09-01', effectiveTo: null, name: 'September surcharge', code: 'sep',
+    })
+    const august = await seedTime(fx, '10', '100', '2026-08-15', deptA)
+    const september = await seedTime(fx, '10', '100', '2026-09-02', deptB)
+    const lines = await invoiceLines(fx, [august.entry, september.entry])
+    const charges = lines
+      .filter((l) => l.description === 'August surcharge' || l.description === 'September surcharge')
+      .map((l) => `${l.description}=${l.amount}`)
+      .sort()
+    assert.deepEqual(charges, ['August surcharge=100.0000', 'September surcharge=200.0000'])
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('work crossing a card boundary splits by effective window', { skip: !DB }, async () => {
+  // Same department, August and September work: one partition, two slices.
+  const fx = await setup()
+  try {
+    const laborTarget = { targetType: 'labor', targetValueId: null, targetValueText: 'labor' }
+    await seedCard(fx, laborTarget, '10.0000', {
+      effectiveFrom: '2026-08-01', effectiveTo: '2026-08-31', name: 'August surcharge', code: 'aug',
+    })
+    await seedCard(fx, laborTarget, '20.0000', {
+      effectiveFrom: '2026-09-01', effectiveTo: null, name: 'September surcharge', code: 'sep',
+    })
+    const august = await seedTime(fx, '10', '100', '2026-08-15')
+    const september = await seedTime(fx, '10', '100', '2026-09-02')
+    const lines = await invoiceLines(fx, [august.entry, september.entry])
+    const charges = lines
+      .filter((l) => l.description === 'August surcharge' || l.description === 'September surcharge')
+      .map((l) => `${l.description}=${l.amount}`)
+      .sort()
+    assert.deepEqual(charges, ['August surcharge=100.0000', 'September surcharge=200.0000'])
   } finally {
     await dropScratchOrg(fx.org.orgId)
   }
