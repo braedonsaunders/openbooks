@@ -19,7 +19,7 @@ registerHooks({
 const { computeBillTotalsWithProvider, taxProfileMap } = await import('./bills.ts')
 const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax/rate-providers.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 
@@ -50,26 +50,32 @@ async function close(server: Server): Promise<void> {
 }
 
 test('vendor bills ship from the vendor to the receiving entity; invoices ship from the entity to the customer', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
-  let calls = 0
-  let provider: Server | null = null
-  const seenBodies: Array<Record<string, unknown>> = []
-  try {
+  // Fixture writes, not product calls: bills.ts eagerly loads request-org,
+  // which replaces the test bypass resolver process-wide, so bare writes run
+  // RLS-enforced file-alone (the pooled runner masks it).
+  const org = await withBypassContext(async () => {
+    const created = await createScratchOrg()
     const codeId = randomUUID()
     await db.execute(sql`
       insert into tax_codes
         (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
-      values (${codeId}, ${org.orgId}, 'GST', 'GST', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`)
+      values (${codeId}, ${created.orgId}, 'GST', 'GST', '100', ${created.accounts.taxOutput}, ${created.accounts.taxInput}, true)`)
     await db.execute(sql`
       insert into tax_rates (id, org_id, tax_code_id, rate_percent, effective_from)
-      values (${randomUUID()}, ${org.orgId}, ${codeId}, '5', ${org.date})`)
+      values (${randomUUID()}, ${created.orgId}, ${codeId}, '5', ${created.date})`)
     await db.execute(sql`
       insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
-      values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, '1 Yonge St', 'Toronto', 'ON', 'M5E 1E5', 'CA', true, true)`)
+      values (${randomUUID()}, ${created.orgId}, ${created.vendorId}, '1 Yonge St', 'Toronto', 'ON', 'M5E 1E5', 'CA', true, true)`)
     await db.execute(sql`
       insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
-      values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '5 King St W', 'Toronto', 'ON', 'M5V 1B2', 'CA', true, true)`)
-
+      values (${randomUUID()}, ${created.orgId}, ${created.customerId}, '5 King St W', 'Toronto', 'ON', 'M5V 1B2', 'CA', true, true)`)
+    return { ...created, codeId }
+  })
+  const { codeId } = org
+  let calls = 0
+  let provider: Server | null = null
+  const seenBodies: Array<Record<string, unknown>> = []
+  try {
     provider = createServer(async (req, res) => {
       calls += 1
       seenBodies.push(JSON.parse(await readBody(req)) as Record<string, unknown>)
