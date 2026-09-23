@@ -286,7 +286,10 @@ test.describe("subscription to revenue", () => {
           recognitionRuleId: ruleId,
           isActive: true,
         }, { "Idempotency-Key": crypto.randomUUID() }),
+        // A fresh item create returns 201; only an idempotent replay of a
+        // seen Idempotency-Key returns 200 (web/app/api/items/route.ts).
         "item create",
+        201,
       );
       S.itemId = str((createdItem.item as Record<string, unknown>).id, "item id");
 
