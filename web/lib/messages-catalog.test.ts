@@ -5462,7 +5462,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "customization": 185,
   "dashboard": 203,
   "data": 90,
-  "journal": 60,
+  "journal": 61,
   "labor-pricing": 130,
   "nav": 109,
   "parties": 221,
