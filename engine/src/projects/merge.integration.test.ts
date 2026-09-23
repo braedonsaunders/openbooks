@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
@@ -210,6 +211,52 @@ test("project merge refuses cross-subsidiary pairs", async () => {
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("merge enforces the caller subsidiary scope inside the locked transaction", async () => {
+  // The route used to scope-check in a pre-transaction SELECT while the
+  // engine merged later without caller scope — a narrowing mid-flight
+  // merged out-of-scope rows. The allowlist is now enforced on the locked
+  // rows inside the merge transaction itself.
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G1", "Scoped one");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G2", "Scoped two");
+    // A scope covering the pair merges.
+    const ok = await mergeProjects(org.orgId, {
+      survivorId: a, duplicateId: b, actorId: actor, allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    });
+    assert.equal(ok.alreadyMerged, false);
+    // A scope excluding the pair refuses before anything moves.
+    const c = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G3", "Hidden one");
+    const d = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-G4", "Hidden two");
+    const excluded = new Set([randomUUID()]);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: c, duplicateId: d, actorId: actor, allowedSubsidiaryIds: excluded }),
+      /outside the caller subsidiary scope/,
+    );
+    await assert.rejects(
+      previewProjectMerge(org.orgId, c, d, excluded),
+      /outside the caller subsidiary scope/,
+    );
+    const marker = await db.execute<{ is_active: boolean }>(sql`
+      select is_active from projects where id = ${d} and org_id = ${org.orgId}`);
+    assert.equal(marker.rows[0]?.is_active, true, "a refused merge deactivates nothing");
+    // Unrestricted callers still merge.
+    const unrestricted = await mergeProjects(org.orgId, {
+      survivorId: c, duplicateId: d, actorId: actor, allowedSubsidiaryIds: null,
+    });
+    assert.equal(unrestricted.alreadyMerged, false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("merge routes pass the caller scope into the locked merge", () => {
+  const route = readFileSync(new URL("../../../web/app/api/projects/merge/route.ts", import.meta.url), "utf8");
+  assert.match(route, /previewProjectMerge\(gate\.user\.orgId, survivorId, duplicateId, gate\.allowedSubsidiaryIds\)/);
+  assert.match(route, /allowedSubsidiaryIds: gate\.allowedSubsidiaryIds,/);
 });
 
 test("project merge refuses cycles, collisions, and spent duplicates", { skip: !DB }, async () => {
