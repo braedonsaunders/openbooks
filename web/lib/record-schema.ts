@@ -276,6 +276,42 @@ export function stripUnknownData(sections: FormSection[], data: FieldValueMap): 
 // --- Record value validation + formulas --------------------------------------
 
 /**
+ * Keys in a client payload that no current section declares — header ids,
+ * repeating-section ids, and row-field ids (`lines[0].rate`). Callers must
+ * run this on the RAW client payload BEFORE stripUnknownData: stripping
+ * first silently drops the evidence and the validator's unknown-key refusal
+ * never fires. Stored rows re-saved after a designer removed a field keep
+ * their strip path; only newly supplied data is refused here.
+ */
+export function findUnknownDataKeys(sections: FormSection[], data: FieldValueMap): string[] {
+  const headerIds = new Set<string>()
+  const repeating = new Map<string, Set<string>>()
+  for (const s of sections) {
+    if (s.repeating) repeating.set(s.id, new Set(s.fields.map((f) => f.id)))
+    else for (const f of s.fields) headerIds.add(f.id)
+  }
+  const unknown: string[] = []
+  for (const [k, v] of Object.entries(data)) {
+    if (headerIds.has(k)) continue
+    const rowIds = repeating.get(k)
+    if (rowIds === undefined) {
+      unknown.push(k)
+      continue
+    }
+    // A non-array under a repeating id is a shape error for the validator,
+    // not an unknown key.
+    if (!Array.isArray(v)) continue
+    v.forEach((row, i) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return
+      for (const rk of Object.keys(row as FieldValueMap)) {
+        if (!rowIds.has(rk)) unknown.push(`${k}[${i}].${rk}`)
+      }
+    })
+  }
+  return unknown
+}
+
+/**
  * Validate a record's data payload against the type's sections via the
  * forms-core response validator. `stage: 'draft'` relaxes required checks
  * (autosave); `'submit'` enforces them (activation, incl. repeating minRows).

@@ -205,6 +205,23 @@ const mockSources = new Map<string, string>([
       export function stripUnknownData(_sections, data) { return data }
       export function withComputedFormulas(_sections, data) { return data }
       export function validateRecordData() { return [] }
+      export function findUnknownDataKeys(sections, data) {
+        const ids = new Set(sections.filter((s) => !s.repeating).flatMap((s) => s.fields.map((f) => f.id)))
+        const repeating = new Map(sections.filter((s) => s.repeating).map((s) => [s.id, new Set(s.fields.map((f) => f.id))]))
+        const unknown = []
+        for (const key of Object.keys(data ?? {})) {
+          if (ids.has(key)) continue
+          const rowIds = repeating.get(key)
+          if (rowIds === undefined) { unknown.push(key); continue }
+          const rows = data[key]
+          if (!Array.isArray(rows)) continue
+          rows.forEach((row, i) => {
+            if (!row || typeof row !== 'object' || Array.isArray(row)) return
+            for (const rk of Object.keys(row)) if (!rowIds.has(rk)) unknown.push(key + '[' + i + '].' + rk)
+          })
+        }
+        return unknown
+      }
     `,
   ],
   [
@@ -341,6 +358,21 @@ test('a data save without a revision token refuses before touching the row', asy
   const response = await patch({ data: { name: 'Tokenless writer' }, reason: 'no token' })
 
   assert.equal(response.status, 409)
+  assert.deepEqual(state.record, initialRecord(), 'no write was attempted')
+  assert.equal(state.audits.length, 0)
+  assert.ok(!state.calls.some((call) => call.text.includes('update custom_records')), 'the mutation never reached storage')
+})
+
+test('unknown field ids are refused by name instead of silently dropped', async () => {
+  reset()
+
+  const response = await patch({ data: { name: 'Renewed certification', retired_field: 'stale' }, expectedUpdatedAt: REVISION })
+
+  assert.equal(response.status, 422)
+  const payload = (await response.json()) as { error: string; unknownFields: string[] }
+  assert.match(payload.error, /"retired_field"/)
+  assert.match(payload.error, /remove it from data/)
+  assert.deepEqual(payload.unknownFields, ['retired_field'])
   assert.deepEqual(state.record, initialRecord(), 'no write was attempted')
   assert.equal(state.audits.length, 0)
   assert.ok(!state.calls.some((call) => call.text.includes('update custom_records')), 'the mutation never reached storage')
