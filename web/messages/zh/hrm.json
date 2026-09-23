@@ -405,7 +405,8 @@
       "reason": "原因",
       "reasonPlaceholder": "设立此职位的原因（随首个版本一并记录）",
       "submit": "创建职位",
-      "failed": "无法创建职位。"
+      "failed": "无法创建职位。",
+      "noEmployer": "没有可用的雇主子公司 — 请先向管理员申请子公司访问权限，再创建职位。"
     },
     "segmentsLabel": "状态"
   },
@@ -611,7 +612,8 @@
       "headcount": "人数",
       "targetStart": "目标到岗",
       "submit": "创建需求",
-      "failed": "无法创建需求。"
+      "failed": "无法创建需求。",
+      "noEmployer": "没有可用的雇主子公司 — 请先向管理员申请子公司访问权限，再创建需求。"
     },
     "lifecycle": {
       "title": "生命周期",

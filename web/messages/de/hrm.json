@@ -405,7 +405,8 @@
       "reason": "Begründung",
       "reasonPlaceholder": "Warum diese Stelle besteht – wird mit der ersten Version erfasst",
       "submit": "Stelle anlegen",
-      "failed": "Die Stelle konnte nicht angelegt werden."
+      "failed": "Die Stelle konnte nicht angelegt werden.",
+      "noEmployer": "Keine anstellende Gesellschaft verfügbar — bitten Sie einen Administrator um Zugriff auf eine Gesellschaft, bevor Sie eine Stelle anlegen."
     },
     "segmentsLabel": "Status"
   },
@@ -611,7 +612,8 @@
       "headcount": "Planstellen",
       "targetStart": "Zielstart",
       "submit": "Anfrage erstellen",
-      "failed": "Die Anfrage konnte nicht erstellt werden."
+      "failed": "Die Anfrage konnte nicht erstellt werden.",
+      "noEmployer": "Keine anstellende Gesellschaft verfügbar — bitten Sie einen Administrator um Zugriff auf eine Gesellschaft, bevor Sie eine Anfrage erstellen."
     },
     "lifecycle": {
       "title": "Lebenszyklus",

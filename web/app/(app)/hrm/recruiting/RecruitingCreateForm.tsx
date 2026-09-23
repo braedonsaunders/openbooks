@@ -15,6 +15,11 @@ export interface RecruitingCreateProps {
   basePath: string
   /** Visible employer subsidiaries; one entry renders as a fixed value, never a picker. */
   employers: RecruitingCreateOption[]
+  /**
+   * Set when the caller may see no legal entity: the form names the remedy
+   * instead of offering an unauthorized employer. Null in the normal case.
+   */
+  employerRefusal: string | null
   departments: RecruitingCreateOption[]
   labels: {
     title: string
@@ -35,7 +40,7 @@ export interface RecruitingCreateProps {
  * API clients use — with its refusals rendered as the error, never
  * swallowed. On success the URL moves to the new requisition's own drawer.
  */
-export function RecruitingCreateForm({ basePath, employers, departments, labels }: RecruitingCreateProps) {
+export function RecruitingCreateForm({ basePath, employers, employerRefusal, departments, labels }: RecruitingCreateProps) {
   const router = useRouter()
   const [title, setTitle] = useState('')
   const [employer, setEmployer] = useState(employers[0]?.value ?? '')
@@ -89,8 +94,12 @@ export function RecruitingCreateForm({ basePath, employers, departments, labels 
       </div>
       <div>
         <Label htmlFor="recruiting-employer">{labels.employer}</Label>
-        {employers.length === 1 ? (
-          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{employers[0]?.label || employers[0]?.value}</p>
+        {employerRefusal ? (
+          <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+            {employerRefusal}
+          </p>
+        ) : employers.length === 1 ? (
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{employers[0]?.label}</p>
         ) : (
           <Select id="recruiting-employer" value={employer} onChange={(event) => setEmployer(event.target.value)}>
             {employers.map((option) => (
@@ -131,7 +140,7 @@ export function RecruitingCreateForm({ basePath, employers, departments, labels 
           {error}
         </p>
       ) : null}
-      <Button type="submit" disabled={busy}>
+      <Button type="submit" disabled={busy || employerRefusal !== null}>
         {labels.submit}
       </Button>
     </form>

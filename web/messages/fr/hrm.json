@@ -405,7 +405,8 @@
       "reason": "Motif",
       "reasonPlaceholder": "Pourquoi ce poste existe — enregistré avec sa première version",
       "submit": "Créer le poste",
-      "failed": "Le poste n'a pas pu être créé."
+      "failed": "Le poste n'a pas pu être créé.",
+      "noEmployer": "Aucune société employeuse disponible — demandez l'accès à une société à un administrateur avant de créer le poste."
     },
     "segmentsLabel": "Statut"
   },
@@ -611,7 +612,8 @@
       "headcount": "Postes",
       "targetStart": "Début visé",
       "submit": "Créer la réquisition",
-      "failed": "La réquisition n'a pas pu être créée."
+      "failed": "La réquisition n'a pas pu être créée.",
+      "noEmployer": "Aucune société employeuse disponible — demandez l'accès à une société à un administrateur avant de créer la réquisition."
     },
     "lifecycle": {
       "title": "Cycle de vie",

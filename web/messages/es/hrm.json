@@ -405,7 +405,8 @@
       "reason": "Motivo",
       "reasonPlaceholder": "Por qué existe este puesto; se registra con su primera versión",
       "submit": "Crear puesto",
-      "failed": "No se pudo crear el puesto."
+      "failed": "No se pudo crear el puesto.",
+      "noEmployer": "No hay ninguna empresa empleadora disponible: pida acceso a una empresa a un administrador antes de crear el puesto."
     },
     "segmentsLabel": "Estado"
   },
@@ -611,7 +612,8 @@
       "headcount": "Plazas",
       "targetStart": "Inicio previsto",
       "submit": "Crear requisición",
-      "failed": "No se pudo crear la requisición."
+      "failed": "No se pudo crear la requisición.",
+      "noEmployer": "No hay ninguna empresa empleadora disponible: pida acceso a una empresa a un administrador antes de crear la requisición."
     },
     "lifecycle": {
       "title": "Ciclo de vida",

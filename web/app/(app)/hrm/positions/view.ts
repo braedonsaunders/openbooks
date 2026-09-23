@@ -28,7 +28,7 @@ import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { depthTabOptions } from '../recruiting/depth-view'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
 import type { PositionCreateProps } from './PositionCreateForm'
 
@@ -395,9 +395,18 @@ export async function loadPositionsPage(
   if (creating) {
     const visible = await subsidiaryUiOptions(authz.user.orgId)
     const scoped = visible.filter((option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id))
-    const employers = scoped.length > 0
-      ? scoped.map((option) => ({ value: option.id, label: option.name }))
-      : [{ value: await rootSubsidiaryId(), label: '' }]
+    // Names, never ids: a single-entity org creates against its named root,
+    // while a caller scoped out of every visible entity is refused by name.
+    let employers = scoped.map((option) => ({ value: option.id, label: option.name }))
+    let employerRefusal: string | null = null
+    if (employers.length === 0) {
+      if (visible.length === 0) {
+        const root = await rootSubsidiary()
+        employers = [{ value: root.id, label: root.name }]
+      } else {
+        employerRefusal = t('positions.create.noEmployer')
+      }
+    }
     const departmentRows = (await db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from departments
        where org_id = ${authz.user.orgId}::uuid and is_active
@@ -406,6 +415,7 @@ export async function loadPositionsPage(
       basePath: '/hrm/positions',
       effectiveDate,
       employers,
+      employerRefusal,
       departments: departmentRows.map((row) => ({ value: row.id, label: row.name })),
       statuses: (['planned', 'open', 'frozen'] as const).map((value) => ({ value, label: statusLabel(value) })),
       labels: {

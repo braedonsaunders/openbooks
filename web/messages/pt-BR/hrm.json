@@ -405,7 +405,8 @@
       "reason": "Motivo",
       "reasonPlaceholder": "Por que esta posição existe — registrado com a primeira versão",
       "submit": "Criar posição",
-      "failed": "Não foi possível criar a posição."
+      "failed": "Não foi possível criar a posição.",
+      "noEmployer": "Nenhuma subsidiária empregadora disponível — peça acesso a uma subsidiária a um administrador antes de criar a posição."
     },
     "segmentsLabel": "Status"
   },
@@ -611,7 +612,8 @@
       "headcount": "Vagas",
       "targetStart": "Início previsto",
       "submit": "Criar requisição",
-      "failed": "Não foi possível criar a requisição."
+      "failed": "Não foi possível criar a requisição.",
+      "noEmployer": "Nenhuma subsidiária empregadora disponível — peça acesso a uma subsidiária a um administrador antes de criar a requisição."
     },
     "lifecycle": {
       "title": "Ciclo de vida",

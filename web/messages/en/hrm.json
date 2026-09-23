@@ -406,7 +406,8 @@
       "reason": "Reason",
       "reasonPlaceholder": "Why this position exists — recorded with its first version",
       "submit": "Create position",
-      "failed": "The position could not be created."
+      "failed": "The position could not be created.",
+      "noEmployer": "No employing subsidiary is available — ask an administrator for subsidiary access before creating the position."
     },
     "segmentsLabel": "Status"
   },
@@ -669,7 +670,8 @@
       "headcount": "Headcount",
       "targetStart": "Target start",
       "submit": "Create requisition",
-      "failed": "The requisition could not be created."
+      "failed": "The requisition could not be created.",
+      "noEmployer": "No employing subsidiary is available — ask an administrator for subsidiary access before creating the requisition."
     },
     "lifecycle": {
       "title": "Lifecycle",
