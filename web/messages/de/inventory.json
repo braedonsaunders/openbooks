@@ -202,6 +202,10 @@
       "noLines": "Keine Zeilen in dieser Zählung.",
       "postedBadge": "Verbucht",
       "unpostedBadge": "Nicht verbucht"
+    },
+    "list": {
+      "showMore": "Mehr anzeigen ({loaded} von {total})",
+      "loadingMore": "Wird geladen…"
     }
   }
 }

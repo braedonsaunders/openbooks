@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, neg } from "../money/money.ts";
+import { InventoryError } from "./contracts.ts";
 import {
   loadCountHeader,
   parseCountStatus,
@@ -32,13 +33,60 @@ export interface StockCountSummary {
   variance: string;
 }
 
-export async function listStockCounts(orgId: string): Promise<StockCountSummary[]> {
+export interface StockCountListQuery {
+  /** Page size, 1..500 (default 500). */
+  limit?: number;
+  /** Opaque cursor from a previous page's nextCursor. */
+  cursor?: string | null;
+}
+
+export interface StockCountListPage {
+  counts: StockCountSummary[];
+  totalCount: number;
+  /** Opaque cursor for the next page, or null past the end. */
+  nextCursor: string | null;
+}
+
+const LIST_ORDER = sql`c.counted_on desc, c.created_at desc, c.id`;
+
+interface ListCursor {
+  countedOn: string;
+  createdAt: string;
+  id: string;
+}
+
+function parseListCursor(cursor: string): ListCursor {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+  } catch {
+    throw new InventoryError("stock count page cursor is invalid — reload the list from the first page");
+  }
+  const p = parsed as Partial<ListCursor>;
+  if (typeof p?.countedOn !== "string" || typeof p?.createdAt !== "string" || typeof p?.id !== "string") {
+    throw new InventoryError("stock count page cursor is invalid — reload the list from the first page");
+  }
+  return { countedOn: p.countedOn, createdAt: p.createdAt, id: p.id };
+}
+
+export async function listStockCounts(orgId: string, query: StockCountListQuery = {}): Promise<StockCountListPage> {
+  const wanted = Math.floor(Number(query.limit ?? 500));
+  const limit = Number.isFinite(wanted) ? Math.min(Math.max(wanted, 1), 500) : 500;
+  const after = query.cursor ? parseListCursor(query.cursor) : null;
+  const cursorScope = after
+    ? sql`and (c.counted_on < ${after.countedOn}::date
+            or (c.counted_on = ${after.countedOn}::date and c.created_at < ${after.createdAt}::timestamptz)
+            or (c.counted_on = ${after.countedOn}::date and c.created_at = ${after.createdAt}::timestamptz and c.id > ${after.id}))`
+    : sql``;
+  const total = (await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from stock_counts c where c.org_id = ${orgId}`)).rows[0]!.n;
   const r = (await db.execute<{
     id: string;
     status: string;
     location_id: string;
     location_name: string | null;
     counted_on: string;
+    created_at: string;
     memo: string | null;
     line_count: string;
     uncounted_count: string;
@@ -46,7 +94,7 @@ export async function listStockCounts(orgId: string): Promise<StockCountSummary[
   }>(sql`
     select c.id, c.status, c.location_id,
            (select name from locations where org_id = ${orgId} and id = c.location_id) as location_name,
-           c.counted_on::text, c.memo,
+           c.counted_on::text, c.created_at::text, c.memo,
            (select count(*)::text from stock_count_lines l
              where l.org_id = ${orgId} and l.stock_count_id = c.id) as line_count,
            (select count(*)::text from stock_count_lines l
@@ -54,20 +102,30 @@ export async function listStockCounts(orgId: string): Promise<StockCountSummary[
            (select sum(l.counted_quantity - l.expected_quantity)::text from stock_count_lines l
              where l.org_id = ${orgId} and l.stock_count_id = c.id and l.counted_quantity is not null) as variance
       from stock_counts c
-     where c.org_id = ${orgId}
-     order by c.counted_on desc, c.created_at desc, c.id
-     limit 500`));
-  return r.rows.map((row) => ({
-    id: row.id,
-    status: parseCountStatus(row.status),
-    locationId: row.location_id,
-    locationName: row.location_name,
-    countedOn: row.counted_on,
-    memo: row.memo,
-    lineCount: Number(row.line_count),
-    uncountedCount: Number(row.uncounted_count),
-    variance: row.variance ?? "0",
-  }));
+     where c.org_id = ${orgId} ${cursorScope}
+     order by ${LIST_ORDER}
+     limit ${limit + 1}`));
+  const hasMore = r.rows.length > limit;
+  const rows = hasMore ? r.rows.slice(0, limit) : r.rows;
+  const last = rows[rows.length - 1];
+  return {
+    counts: rows.map((row) => ({
+      id: row.id,
+      status: parseCountStatus(row.status),
+      locationId: row.location_id,
+      locationName: row.location_name,
+      countedOn: row.counted_on,
+      memo: row.memo,
+      lineCount: Number(row.line_count),
+      uncountedCount: Number(row.uncounted_count),
+      variance: row.variance ?? "0",
+    })),
+    totalCount: Number(total),
+    nextCursor:
+      hasMore && last
+        ? Buffer.from(JSON.stringify({ countedOn: last.counted_on, createdAt: last.created_at, id: last.id })).toString("base64url")
+        : null,
+  };
 }
 
 export interface StockCountLineDetail extends CountLine {
