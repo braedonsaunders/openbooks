@@ -742,14 +742,25 @@ export interface ComponentWindow extends AdvancedBillingLine, Record<string, unk
   effectiveTo: string | null;
 }
 
-/** Whole-day index of an ISO date (UTC), for window overlap arithmetic. */
+/**
+ * Whole-day index of an ISO date (UTC), for window overlap arithmetic.
+ * Date.UTC maps years 0-99 onto 1900-1999, so civil days go through the
+ * `new Date(0)` + setUTCFullYear idiom (the same one advanceLifecycleDate
+ * uses), which keeps the literal year.
+ */
 function dayIndex(isoDate: string): number {
   const [year, month, day] = isoDate.split("-").map(Number);
-  return Math.round(Date.UTC(year!, month! - 1, day!) / 86_400_000);
+  const date = new Date(0);
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCFullYear(year!, month! - 1, day!);
+  return Math.round(date.getTime() / 86_400_000);
 }
 
 function isoFromDayIndex(day: number): string {
-  return new Date(day * 86_400_000).toISOString().slice(0, 10);
+  // Year rendered from UTC getters, never toISOString: the getters report
+  // the civil year with no 1900 offset.
+  const date = new Date(day * 86_400_000);
+  return `${String(date.getUTCFullYear()).padStart(4, "0")}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
 }
 
 /**
