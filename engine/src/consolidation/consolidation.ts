@@ -3,6 +3,7 @@ import { periodLockBlocksPosting } from "../close/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
+import { addCalendarDays } from "../platform/business-date.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import {
@@ -289,12 +290,9 @@ export async function runOwnershipConsolidationIn(
     list.push(row);
     byChain.set(key, list);
   }
-  const nextDay = (iso: string): string => {
-    const [y, m, d] = iso.split("-").map(Number);
-    return new Date(Date.UTC(y!, m! - 1, d!) + 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-  };
+  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
+  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  const nextDay = (iso: string): string => addCalendarDays(iso, 1);
   // select * returns DATE columns as Date objects; the chain rows above are
   // ::text. Normalize before keying so the lookup cannot silently miss.
   const isoDate = (value: string | Date): string =>

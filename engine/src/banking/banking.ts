@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
+import { utcDateFromParts } from "../platform/business-date.ts";
 import { fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 
@@ -352,7 +353,9 @@ function ofxDate(raw: string): string {
 
 function assertRealDate(y: string, mo: string, d: string, label: string): string {
   const year = Number(y), month = Number(mo), day = Number(d);
-  const dt = new Date(Date.UTC(year, month - 1, day));
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999 (an 0096 OFX date used to fail validation as "not real").
+  const dt = utcDateFromParts(year, month - 1, day);
   if (
     dt.getUTCFullYear() !== year ||
     dt.getUTCMonth() !== month - 1 ||

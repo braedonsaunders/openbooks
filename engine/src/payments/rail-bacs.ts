@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { addCalendarDays, parseIsoDate } from "../platform/business-date.ts";
+import { addCalendarDays, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
@@ -279,9 +279,10 @@ export function buildBacsFile(run: BacsRun): string {
     } catch {
       throw new PaymentError(`Bacs ${what} "${iso}" is not a valid YYYY-MM-DD civil day`);
     }
-    const start = Date.UTC(year, 0, 1);
+    // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap.
+    const start = utcDateFromParts(year, 0, 1).getTime();
     const day =
-      Math.floor((Date.UTC(year, month - 1, dayOfMonth) - start) / 86_400_000) + 1;
+      Math.floor((utcDateFromParts(year, month - 1, dayOfMonth).getTime() - start) / 86_400_000) + 1;
     return ` ${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
   };
 

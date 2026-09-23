@@ -1,6 +1,7 @@
 import { sql, type SQL } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { addCalendarDays } from "../platform/business-date.ts";
 import { withTickClaim } from "../scheduling/lock.ts";
 import { schedulerOutboxBackoffMs } from "../scheduling/outbox.ts";
 import { lastCronOccurrenceBetween } from "../flows/scheduled.ts";
@@ -94,10 +95,9 @@ export function orgCivilDate(now: Date, timezone: string): string {
 }
 
 export function addDaysCivil(dateISO: string, days: number): string {
-  const [y, m, d] = dateISO.split("-").map(Number);
-  const dt = new Date(Date.UTC(y!, m! - 1, d!));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
+  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
+  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  return addCalendarDays(dateISO, days);
 }
 
 async function orgTimezone(orgId: string): Promise<string> {
