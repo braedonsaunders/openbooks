@@ -35,7 +35,17 @@
       "dirty": "未保存の変更…",
       "error": "保存に失敗しました — 修正して再試行してください"
     },
-    "totals": "小計 {subtotal} · 税 {tax} · <strong>合計 {total}</strong>"
+    "totals": "小計 {subtotal} · 税 {tax} · <strong>合計 {total}</strong>",
+    "settlement": {
+      "label": "支払者",
+      "outOfPocket": "自費立替",
+      "companyPaid": "コーポレートカード",
+      "personal": "個人負担（精算対象外）"
+    },
+    "cardLabel": "コーポレートカード",
+    "cardPlaceholder": "カードを選択…",
+    "noCard": "カードなし",
+    "splits": "精算対象 {oop} · コーポレートカード {card} · 従業員負担 {personal}"
   },
   "toasts": {
     "submitted": "承認のために提出しました",

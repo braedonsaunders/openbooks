@@ -35,7 +35,17 @@
       "dirty": "有未保存的更改…",
       "error": "保存失败 — 请修正后重试"
     },
-    "totals": "小计 {subtotal} · 税 {tax} · <strong>合计 {total}</strong>"
+    "totals": "小计 {subtotal} · 税 {tax} · <strong>合计 {total}</strong>",
+    "settlement": {
+      "label": "支付方",
+      "outOfPocket": "个人垫付",
+      "companyPaid": "公司卡",
+      "personal": "个人承担（不予报销）"
+    },
+    "cardLabel": "公司卡",
+    "cardPlaceholder": "选择卡…",
+    "noCard": "无卡",
+    "splits": "可报销 {oop} · 公司卡 {card} · 员工欠款 {personal}"
   },
   "toasts": {
     "submitted": "已提交审批",

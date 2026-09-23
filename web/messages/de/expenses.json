@@ -35,7 +35,17 @@
       "dirty": "Nicht gespeicherte Änderungen…",
       "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen"
     },
-    "totals": "Zwischensumme {subtotal} · Steuer {tax} · <strong>Gesamt {total}</strong>"
+    "totals": "Zwischensumme {subtotal} · Steuer {tax} · <strong>Gesamt {total}</strong>",
+    "settlement": {
+      "label": "Gezahlt von",
+      "outOfPocket": "Aus eigener Tasche",
+      "companyPaid": "Firmenkarte",
+      "personal": "Privat (keine Erstattung)"
+    },
+    "cardLabel": "Firmenkarte",
+    "cardPlaceholder": "Karte auswählen…",
+    "noCard": "Keine Karte",
+    "splits": "Erstattungsfähig {oop} · Firmenkarte {card} · Vom Mitarbeiter geschuldet {personal}"
   },
   "toasts": {
     "submitted": "Zur Genehmigung eingereicht",

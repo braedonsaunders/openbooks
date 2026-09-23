@@ -35,7 +35,17 @@
       "dirty": "Modifications non enregistrées…",
       "error": "Échec de l’enregistrement — corrigez et réessayez"
     },
-    "totals": "Sous-total {subtotal} · Taxe {tax} · <strong>Total {total}</strong>"
+    "totals": "Sous-total {subtotal} · Taxe {tax} · <strong>Total {total}</strong>",
+    "settlement": {
+      "label": "Payé par",
+      "outOfPocket": "Frais avancés",
+      "companyPaid": "Carte d'entreprise",
+      "personal": "Personnel (ne pas rembourser)"
+    },
+    "cardLabel": "Carte d'entreprise",
+    "cardPlaceholder": "Sélectionner une carte…",
+    "noCard": "Aucune carte",
+    "splits": "Remboursable {oop} · Carte d'entreprise {card} · Dû par l'employé {personal}"
   },
   "toasts": {
     "submitted": "Soumis pour approbation",
