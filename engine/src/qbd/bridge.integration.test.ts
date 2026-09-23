@@ -643,6 +643,125 @@ test("pausing between auth and send stops the ticket from claiming or submitting
   }
 });
 
+test("authenticate does not reclaim an aged request whose session is still open", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    // A large QuickBooks report can legitimately take more than 10 minutes:
+    // age the request past the reclaim window while its session is open.
+    await db.execute(sql`update qbd_requests set sent_at = now() - interval '11 minutes' where id = ${idA}`);
+    // Another poll authenticates meanwhile. The aged request still belongs to
+    // the open session, so it must not be stripped from ticket A.
+    const other = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(other.ticket);
+    const kept = (await db.execute<{ status: string; session: string | null }>(sql`
+      select status, session_id as session from qbd_requests where id = ${idA}`));
+    assert.equal(kept.rows[0]?.status, "sent");
+    assert.equal(kept.rows[0]?.session, ticket);
+    // A's late response for the request it still owns is accepted, not -101.
+    const progress = await acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+    assert.ok(progress > 0 && progress < 100, `late response on an open session is accepted, got ${progress}`);
+    await closeWebConnectorSession(ticket);
+    await closeWebConnectorSession(other.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("after the owning ticket expires, a new session reclaims the aged request exactly once", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  const meta = { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 };
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, meta);
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    await db.execute(sql`update qbd_requests set sent_at = now() - interval '11 minutes' where id = ${idA}`);
+    // The owner can no longer answer: its ticket expired (close would have
+    // re-queued through its own path, so expiry isolates the auth reclaim).
+    await db.execute(sql`update qbd_sessions set expires_at = now() - interval '1 minute' where id = ${ticket}`);
+    const reclaimed = (await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password));
+    assert.ok(reclaimed.ticket);
+    const queued = (await db.execute<{ status: string; session: string | null }>(sql`
+      select status, session_id as session from qbd_requests where id = ${idA}`));
+    assert.equal(queued.rows[0]?.status, "queued");
+    assert.equal(queued.rows[0]?.session, null);
+    // The new session claims the reclaimed request with its correlation
+    // identity intact, and a further authenticate leaves it alone: the
+    // reclaim happened exactly once.
+    const retry = await nextWebConnectorRequest(reclaimed.ticket, meta);
+    assert.match(retry, new RegExp(`requestID="${idA}"`));
+    const later = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(later.ticket);
+    const held = (await db.execute<{ status: string; session: string | null }>(sql`
+      select status, session_id as session from qbd_requests where id = ${idA}`));
+    assert.equal(held.rows[0]?.status, "sent");
+    assert.equal(held.rows[0]?.session, reclaimed.ticket);
+    await closeWebConnectorSession(reclaimed.ticket);
+    await closeWebConnectorSession(later.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a concurrent authenticate and accept on an aged request serialize under the ticket lock", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  const meta = { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 };
+  try {
+    const { ticket } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, meta);
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    await db.execute(sql`update qbd_requests set sent_at = now() - interval '11 minutes' where id = ${idA}`);
+    const holder = await holdTicketLock(ticket);
+    try {
+      // The accept arrives first and parks on the ticket lock; the
+      // authenticate must queue behind it on the same lock instead of
+      // stealing the request out from under the response.
+      const acceptPromise = acceptWebConnectorResponse(ticket, companyResponse(idA), "", "");
+      await sleep(500);
+      const authPromise = authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+      await sleep(500);
+      holder.release();
+      const [progress, other] = await Promise.all([acceptPromise, authPromise]);
+      assert.ok(other.ticket);
+      assert.ok(progress > 0 && progress < 100, `racy accept still stores its response, got ${progress}`);
+    } finally {
+      holder.release();
+      await holder.done;
+    }
+    // Whichever waiter won the lock, the end state is the same: the valid
+    // response was stored under the session that owned the request, and the
+    // request was never re-queued for a duplicate execution.
+    const stored = (await db.execute<{ status: string; session: string | null; xml: string | null }>(sql`
+      select status, session_id as session, response_xml as xml from qbd_requests where id = ${idA}`));
+    assert.equal(stored.rows[0]?.status, "complete");
+    assert.equal(stored.rows[0]?.session, ticket);
+    assert.equal(stored.rows[0]?.xml, companyResponse(idA));
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
 test("storage refuses a second in-flight request on one ticket", { skip: !DB }, async () => {
   const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
   const orgId = orgs.rows[0]?.id;

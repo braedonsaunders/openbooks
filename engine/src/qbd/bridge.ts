@@ -202,6 +202,56 @@ async function recordQbwcGuessFailure(connectionId: string): Promise<void> {
   });
 }
 
+/**
+ * Reclaim long-'sent' requests whose owner can no longer accept their
+ * response (Q17). A large QuickBooks report can legitimately take more than
+ * 10 minutes, so age alone must never strip a request from its ticket:
+ * each owning session is reclaimed only when that session is expired or no
+ * longer open, and the check and the re-queue run inside one transaction
+ * holding that session's ticket advisory lock — the same
+ * `qbd-web-connector:<ticket>` lock the send, accept, close, and error paths
+ * take. A concurrent send/accept on the owning ticket therefore commits
+ * either entirely before the reclaim (which then sees a live owner and
+ * touches nothing) or entirely after it (and observes the re-queue), but
+ * never interleaves with it. One owner per transaction, so this path never
+ * holds two ticket locks at once and cannot deadlock the multi-session
+ * terminate path. Rows with no owning session are stranded — no ticket can
+ * correlate a response to them — and are re-queued unconditionally.
+ *
+ * Re-execution safety: every request this bridge emits is a read-only
+ * `*QueryRq` (see buildCapturePlan), so a reclaimed request is re-read by
+ * the next session, never re-written to QuickBooks. There is no mutating
+ * (Add/Mod) request to make idempotent; the capture-plan unit test pins
+ * that invariant, and adding a mutating kind must reconcile its reclaim
+ * path (idempotency marker or operator reconciliation) before it can ship.
+ */
+async function reclaimAgedRequests(connectionId: string, orgId: string): Promise<void> {
+  const owners = (await db.execute<{ id: string }>(sql`
+    select distinct r.session_id as id
+      from qbd_requests r
+     where r.connection_id = ${connectionId} and r.org_id = ${orgId}
+       and r.status = 'sent' and r.sent_at < now() - interval '10 minutes'
+       and r.session_id is not null
+     order by 1`));
+  for (const owner of owners.rows) {
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + owner.id}, 0))`);
+      await tx.execute(sql`
+        update qbd_requests r set status = 'queued', session_id = null, sent_at = null, updated_at = now()
+         where r.connection_id = ${connectionId} and r.org_id = ${orgId}
+           and r.status = 'sent' and r.sent_at < now() - interval '10 minutes'
+           and r.session_id = ${owner.id}
+           and not exists (select 1 from qbd_sessions s
+                            where s.id = ${owner.id} and s.org_id = r.org_id
+                              and s.status = 'open' and s.expires_at > now())`);
+    });
+  }
+  await db.execute(sql`
+    update qbd_requests set status = 'queued', session_id = null, sent_at = null, updated_at = now()
+     where connection_id = ${connectionId} and org_id = ${orgId}
+       and status = 'sent' and sent_at < now() - interval '10 minutes' and session_id is null`);
+}
+
 export async function authenticateWebConnector(connectionId: string, username: string, password: string): Promise<QbdAuthResult> {
   const conn = await publicConnection(connectionId);
   if (!conn || conn.status === "paused") return { ticket: "", companyFile: "nvu" };
@@ -219,10 +269,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
     // cycle, so clearing the bucket here would hand out a fresh 30 guesses
     // per legitimate poll. Expiry is by window age only (qbwcGuessesTripped).
     await db.execute(sql`delete from qbd_sessions where expires_at < now() - interval '30 days'`);
-    await db.execute(sql`
-      update qbd_requests set status = 'queued', session_id = null, sent_at = null, updated_at = now()
-       where connection_id = ${connectionId} and org_id = ${conn.orgId}
-         and status = 'sent' and sent_at < now() - interval '10 minutes'`);
+    await reclaimAgedRequests(connectionId, conn.orgId);
     const pending = (await db.execute<{ pending: boolean }>(sql`
       select exists(
         select 1 from qbd_requests r

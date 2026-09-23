@@ -18,6 +18,23 @@ test("capture plan splits the ledger into bounded calendar months", () => {
   assert.deepEqual(calendarMonths("2024-02-29", through)[0], { month: "2024-02", from: "2024-02-29", to: "2024-02-29" });
 });
 
+test("the capture plan issues only read-only query requests", () => {
+  // The auth-time reclaim re-queues an aged 'sent' request for a later
+  // session to execute again. That is safe only because every request the
+  // bridge emits is a read (*QueryRq): re-execution re-reads, it never
+  // duplicates a QuickBooks write, so no idempotency marker is needed. If a
+  // mutating (Add/Mod) request is ever added to the plan, this test fails to
+  // force its reclaim path to be reconciled first.
+  const through = new Date("2024-03-12T19:20:00Z");
+  const plan = buildCapturePlan("2024-01-15", through);
+  assert.ok(plan.length > 0);
+  for (const request of plan) {
+    const element = requestElementName(request.requestXml);
+    assert.ok(element, `${request.family} carries a request element`);
+    assert.match(element, /QueryRq$/, `${request.family} must be a read-only query, got ${element}`);
+  }
+});
+
 test("report dates normalize from QuickBooks display format to ISO", () => {
   assert.equal(parseQbdReportDate("01/31/2024"), "2024-01-31");
   assert.equal(parseQbdReportDate("1/5/2024"), "2024-01-05");
