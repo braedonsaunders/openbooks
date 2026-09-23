@@ -235,7 +235,8 @@
       "outstanding": "Em aberto",
       "glLines": "Linhas do razão"
     },
-    "noPartyOnLines": "(sem parte nas linhas)"
+    "noPartyOnLines": "(sem parte nas linhas)",
+    "noPartyDrillLabel": "Linhas de contas de controle sem contraparte"
   },
   "aging": {
     "receivablesTitle": "Aging de Contas a Receber",
@@ -244,6 +245,7 @@
     "receivables": "Contas a receber",
     "payables": "Contas a pagar",
     "noParty": "(sem parte)",
+    "noPartyNote": "Sem contraparte registrada — por exemplo, um lançamento de saldos iniciais.",
     "empty": "Nenhum item em aberto nesta data.",
     "columns": {
       "total": "Total",

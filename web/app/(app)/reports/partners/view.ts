@@ -80,6 +80,8 @@ export interface PartnersData {
   total: string
   totalDrill: ReportDrillTarget
   noPartyLabel: string
+  /** Provenance title for the partyless row's drill: the ledger lines behind it. */
+  noPartyDrillLabel: string
   columnParty: string
   columnOutstanding: string
   columnGlLines: string
@@ -125,6 +127,13 @@ export async function loadPartners(
   const asOf = await businessToday(await resolveOrgId())
   const accountTypes = [kind === 'payable' ? 'liability_payable' : 'asset_receivable']
   const noPartyLabel = t('noPartyOnLines')
+  // OM-06: the partyless row is control-account GL lines with no
+  // counterparty — on a sample tenant the opening-balance journal. The cell
+  // keeps its established label; the drill (which opens exactly those JE
+  // lines) carries the provenance title instead of repeating the bare
+  // placeholder, so the origin is legible without asserting every such row
+  // is an opening balance.
+  const noPartyDrillLabel = t('noPartyDrillLabel')
   const totalLabel = t('totalOutstanding')
 
   return {
@@ -142,6 +151,7 @@ export async function loadPartners(
     total: m(total),
     totalDrill: { kind: 'ledger', bookId: selectedBook.id, label: totalLabel, accountTypes, to: asOf, mode: 'balance' },
     noPartyLabel,
+    noPartyDrillLabel,
     columnParty: tc('labels.party'),
     columnOutstanding: t('columns.outstanding'),
     columnGlLines: t('columns.glLines'),
@@ -158,7 +168,7 @@ export async function loadPartners(
         lineCount: row.line_count,
         drill: {
           kind: 'ledger', bookId: selectedBook.id,
-          label: row.display_name ?? noPartyLabel,
+          label: row.display_name ?? noPartyDrillLabel,
           accountTypes,
           partyIds: row.id ? [row.id] : undefined,
           to: asOf,

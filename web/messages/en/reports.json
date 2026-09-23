@@ -235,7 +235,8 @@
       "outstanding": "Outstanding",
       "glLines": "GL lines"
     },
-    "noPartyOnLines": "(no party on lines)"
+    "noPartyOnLines": "(no party on lines)",
+    "noPartyDrillLabel": "Control-account lines with no counterparty"
   },
   "aging": {
     "receivablesTitle": "AR Aging",
@@ -244,6 +245,7 @@
     "receivables": "Receivables",
     "payables": "Payables",
     "noParty": "(no party)",
+    "noPartyNote": "No counterparty recorded — for example an opening-balance journal.",
     "empty": "No open items as of this date.",
     "columns": {
       "total": "Total",

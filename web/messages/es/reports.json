@@ -235,7 +235,8 @@
       "outstanding": "Pendiente",
       "glLines": "Líneas del mayor"
     },
-    "noPartyOnLines": "(sin tercero en las líneas)"
+    "noPartyOnLines": "(sin tercero en las líneas)",
+    "noPartyDrillLabel": "Líneas de cuentas de control sin contraparte"
   },
   "aging": {
     "receivablesTitle": "Antigüedad de CxC",
@@ -244,6 +245,7 @@
     "receivables": "Cuentas por cobrar",
     "payables": "Cuentas por pagar",
     "noParty": "(sin tercero)",
+    "noPartyNote": "Sin contraparte registrada — por ejemplo, un asiento de saldos iniciales.",
     "empty": "No hay partidas abiertas a esta fecha.",
     "columns": {
       "total": "Total",

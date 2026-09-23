@@ -235,7 +235,8 @@
       "outstanding": "Offen",
       "glLines": "Hauptbuchzeilen"
     },
-    "noPartyOnLines": "(kein Geschäftspartner in den Zeilen)"
+    "noPartyOnLines": "(kein Geschäftspartner in den Zeilen)",
+    "noPartyDrillLabel": "Kontrollkonten-Zeilen ohne Gegenpartei"
   },
   "aging": {
     "receivablesTitle": "Fälligkeitsanalyse Forderungen",
@@ -244,6 +245,7 @@
     "receivables": "Forderungen",
     "payables": "Verbindlichkeiten",
     "noParty": "(kein Geschäftspartner)",
+    "noPartyNote": "Keine Gegenpartei erfasst — zum Beispiel ein Eröffnungsbilanz-Journal.",
     "empty": "Keine offenen Posten zu diesem Stichtag.",
     "columns": {
       "total": "Gesamt",
