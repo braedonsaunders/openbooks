@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
+import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
 import { advanceAnchoredMonth, lastDayOfMonth } from "@openbooks/engine/src/billing/cadence.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -550,28 +551,23 @@ export function fullWindowWeeklyAverage(
   return divideMoney(total, String(historyWindowDivisor(historyWeeks, windowStartIso, dataStartIso)));
 }
 
-/** Account types whose increases are debits (assets, costs). */
-const DEBIT_NORMAL_TYPES = new Set([
-  "asset_bank",
-  "asset_receivable",
-  "asset_current_other",
-  "asset_fixed",
-  "asset_other",
-  "cogs",
-  "expense",
-  "expense_other",
-  "expense_deferred",
+/**
+ * Normal-balance conventions, DERIVED from the canonical class map in
+ * engine/src/records/account-types.ts — never a second handwritten list.
+ * A type the map gains tomorrow joins a convention here automatically; a
+ * handwritten copy would silently miss it (or throw and break every
+ * forecast for the org).
+ */
+const DEBIT_NORMAL_TYPES: ReadonlySet<string> = new Set([
+  ...ACCOUNT_CLASS_TYPES.asset,
+  ...ACCOUNT_CLASS_TYPES.expense,
 ]);
 
-/** Account types whose increases are credits (liabilities, equity, revenue). */
-const CREDIT_NORMAL_TYPES = new Set([
-  "liability_payable",
-  "liability_card",
-  "liability_current_other",
-  "liability_long_term",
-  "equity",
-  "income",
-  "income_other",
+/** Credit-normal classes from the same canonical map. */
+const CREDIT_NORMAL_TYPES: ReadonlySet<string> = new Set([
+  ...ACCOUNT_CLASS_TYPES.liability,
+  ...ACCOUNT_CLASS_TYPES.equity,
+  ...ACCOUNT_CLASS_TYPES.income,
 ]);
 
 /**
