@@ -13,7 +13,9 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 // currency with the USD reference thresholds translated at a declared policy
 // rate — never an org-wide USD blend across entities.
 
-/** Posted-document shell the nexus query reads (documents + addresses only). */
+/** Posted-document shell the nexus query reads (stamped US/CA like a
+ *  backfilled row: these tests prove currency measurement, so their fixture
+ *  carries a captured destination and attributes under the post-0265 ledger). */
 async function seedPostedSale(
   org: ScratchOrg,
   opts: { subsidiaryId: string; number: string; currency: string; fxRate: string; subtotal: string },
@@ -28,11 +30,11 @@ async function seedPostedSale(
     insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, posting_date, currency, fx_rate, subtotal, tax_total, total,
-       posted_entry_id, posting_period_id)
+       posted_entry_id, posting_period_id, ship_to_country, ship_to_region)
     values (${randomUUID()}, ${org.orgId}, 'customer_invoice', 'posted', ${opts.number},
             ${opts.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
             ${opts.currency}, ${opts.fxRate}, ${opts.subtotal}, '0.0000', ${opts.subtotal},
-            ${entryId}, ${org.periodId})`);
+            ${entryId}, ${org.periodId}, 'US', 'CA')`);
 }
 
 async function seedTwoEntityNexusOrg(): Promise<{ org: ScratchOrg; usSub: string }> {

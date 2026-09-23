@@ -25,7 +25,7 @@ import type { prepareDocumentPosting } from "./posting-prepare.ts";
 
 /** Owns the accounting transaction; every journal, stock effect, audit and outbox write uses its executor. */
 export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
-  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate } = prepared;
+  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot } = prepared;
   return await inDbTransaction(async (tx) => {
     // Setup wizard mutations and posting both serialize on the organization
     // aggregate root. This makes the wizard's accounting-foundation probe and
@@ -269,6 +269,14 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     // (1 by definition). The posted-document financial guard is not in play
     // here: this UPDATE matches only 'approved' rows and that guard fires
     // solely for posted/reversed ones.
+    //
+    // The same flip stamps the ship-to destination snapshot (0265): the
+    // jurisdiction the sale was taxed/posted with, resolved in prepare from
+    // quote evidence (else the party's shipping address as of posting). The
+    // nexus ledger attributes the sale to this stamp forever; an uncaptured
+    // destination stays NULL (unattributed), never re-homed to a live
+    // address. Only sales kinds resolve a snapshot, so other documents keep
+    // whatever the columns hold (NULL on native paths).
     const flipped = await tx
       .update(schema.documents)
       .set({
@@ -278,6 +286,12 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         postingPeriodId: period.id,
         ...(subApplied.originBaseCurrency !== effectiveDoc.currency
           ? { fxRate: subApplied.originFxRate }
+          : {}),
+        ...(shipToSnapshot
+          ? {
+              shipToCountry: shipToSnapshot.country,
+              shipToRegion: shipToSnapshot.region,
+            }
           : {}),
       })
       .where(

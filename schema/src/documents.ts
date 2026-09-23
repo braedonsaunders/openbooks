@@ -85,6 +85,18 @@ export const documents = pgTable(
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),
 
+    /**
+     * Frozen sale destination (0265): the jurisdiction the document was taxed
+     * and posted with (country + region, e.g. US + CA). Stamped by the posting
+     * kernel from provider-quote evidence — else the party's default shipping
+     * address at posting — for customer invoices/credits only. NULL means the
+     * destination was never captured: readers must report unattributed, never
+     * fall back to the live address book (which would retroactively move
+     * historical sales across states when an address changes).
+     */
+    shipToCountry: text("ship_to_country"),
+    shipToRegion: text("ship_to_region"),
+
     /** Lifecycle only — approval state lives in approvals.*, not here. */
     status: text("status", { enum: ["draft", "pending_approval", "approved", "posted", "voided"] })
       .notNull()

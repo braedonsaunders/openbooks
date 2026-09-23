@@ -40,9 +40,9 @@
 -- ledger rewrite land with the D1 commit — this file only carries the DDL so
 -- the shard's schema ships in one ordinal).
 --
--- SHIP-TO DESTINATION SNAPSHOT (documents half lands with the D1 commit in
--- this same file: ship_to_country / ship_to_region DDL, comments and the
--- evidence-only backfill — the shard's schema ships in one ordinal).
+-- SHIP-TO DESTINATION SNAPSHOT (documents half below: ship_to_country /
+-- ship_to_region DDL, comments and the evidence-only backfill — the shard's
+-- schema ships in one ordinal).
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -100,3 +100,59 @@ UPDATE public.tax_filings f
   ) src
  WHERE f.org_id = src.org_id
    AND f.functional_currency IS NULL;
+
+-- -- documents ship-to destination snapshot (D1) -----------------------------
+--
+-- The US nexus ledger attributed every historical sale to the customer's
+-- CURRENT default shipping address, so editing an address retroactively moved
+-- prior sales across states (and deleting it unattributed them). Going
+-- forward the posting kernel stamps the jurisdiction the sale was taxed and
+-- posted with on the document itself (immutable posted history); the ledger
+-- reads the stamp, then provider-quote evidence, and reports anything else
+-- as unattributed — it never falls back to the live address book.
+--
+-- Backfill rule (evidence only): the first line's provider-quote destination,
+-- which is the destination the tax was actually computed for. Rows without
+-- quote evidence keep NULL (unattributed by the new ledger) rather than
+-- inheriting today's addresses — backfilling those would repeat the defect
+-- this column exists to end. Only untouched rows (both columns NULL) are
+-- backfilled, so a kernel stamp is never overwritten; when a document's
+-- lines disagree, the first line wins, matching the ledger's read order.
+
+ALTER TABLE public.documents
+  ADD COLUMN IF NOT EXISTS ship_to_country text,
+  ADD COLUMN IF NOT EXISTS ship_to_region text;
+
+COMMENT ON COLUMN public.documents.ship_to_country IS
+  'Frozen sale destination country (0265): the jurisdiction the document was taxed/posted with. Stamped by the posting kernel for customer invoices/credits; the nexus ledger reads this (then quote evidence) and reports the rest as unattributed — never the live address book.';
+COMMENT ON COLUMN public.documents.ship_to_region IS
+  'Frozen sale destination region/state (0265): see ship_to_country.';
+
+WITH first_evidence AS (
+  -- One row per document: its first line's provider-quote destination (the
+  -- same read order the ledger and the posting stamp use).
+  SELECT DISTINCT ON (dl.document_id)
+         dl.org_id,
+         dl.document_id,
+         q.ship_to->>'country' AS country,
+         q.ship_to->>'region' AS region
+    FROM public.document_lines dl
+    JOIN public.tax_rate_quotes q
+      ON q.org_id = dl.org_id
+     AND q.document_line_id = dl.id
+   ORDER BY dl.document_id, dl.line_number, dl.id
+)
+UPDATE public.documents d
+   SET ship_to_country = fe.country,
+       ship_to_region = fe.region
+  FROM first_evidence fe
+ WHERE fe.org_id = d.org_id
+   AND fe.document_id = d.id
+   AND d.kind IN ('customer_invoice', 'customer_credit')
+   AND d.status = 'posted'
+   AND d.ship_to_country IS NULL
+   AND d.ship_to_region IS NULL
+   AND (
+     nullif(trim(fe.country), '') IS NOT NULL
+     OR nullif(trim(fe.region), '') IS NOT NULL
+   );
