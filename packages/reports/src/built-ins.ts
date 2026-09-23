@@ -10,6 +10,7 @@
 // export, drill, scheduled) funnels through that executor.
 
 import { defaultRowsQuery } from './custom-query'
+import { utcCivilDate } from './fiscal-calendar'
 import { HRM_REPORT_ENTITIES, REPORT_ENTITY_MAP, entityColumn } from './entities'
 import type { ReportCustomQuery, ReportFilterOperator, ReportRule } from './types'
 
@@ -629,7 +630,9 @@ function isIsoDate(value: string): boolean {
   const year = Number(match[1])
   const month = Number(match[2])
   const day = Number(match[3])
-  const date = new Date(Date.UTC(year, month - 1, day))
+  // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto
+  // 1900-1999 (an 0096 filter value used to fail validation as "not a date").
+  const date = utcCivilDate(year, month - 1, day)
   return date.getUTCFullYear() === year
     && date.getUTCMonth() === month - 1
     && date.getUTCDate() === day

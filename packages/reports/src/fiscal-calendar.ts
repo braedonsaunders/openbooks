@@ -14,7 +14,32 @@
 export type DateRange = { from: string; to: string; label: string }
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const iso = (y: number, m: number, d: number) => `${y}-${pad(m)}-${pad(d)}`
+// Year zero-padded so the YYYY-MM-DD contract holds below year 1000 too.
+const iso = (y: number, m: number, d: number) => `${String(y).padStart(4, '0')}-${pad(m)}-${pad(d)}`
+
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day) parts — the package's
+ * single civil-date constructor. Same `new Date(0)` + setUTCFullYear idiom as
+ * the engine's platform/business-date.ts utcDateFromParts (which keeps
+ * literal years 0001-0099 that Date.UTC would remap onto 1900-1999): this
+ * package sits below the engine and must not import it.
+ */
+export function utcCivilDate(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  ms = 0,
+): Date {
+  // Year/month/day first, time second: an out-of-range time carries into the
+  // date (hour 24 is the next day), and the reverse order would overwrite it.
+  const date = new Date(0)
+  date.setUTCFullYear(year, monthIndex, day)
+  date.setUTCHours(hour, minute, second, ms)
+  return date
+}
 
 /** [year, month(1-12), day] from an ISO `yyyy-mm-dd` string. */
 function parts(dateIso: string): [number, number, number] {
@@ -23,8 +48,8 @@ function parts(dateIso: string): [number, number, number] {
 
 /** Last calendar day of month `m` (1-12) in year `y`. */
 export function lastDayOfMonth(y: number, m: number): number {
-  // Date.UTC month arg is 0-based, so month `m` day 0 == last day of month m.
-  return new Date(Date.UTC(y, m, 0)).getUTCDate()
+  // Month arg is 0-based, so month `m` day 0 == last day of month m.
+  return utcCivilDate(y, m, 0).getUTCDate()
 }
 
 export function startOfMonth(y: number, m: number): string {
@@ -43,7 +68,7 @@ export function addMonths(y: number, m: number, n: number): [number, number] {
 /** Add `n` days to an ISO date (UTC-safe; crosses month/year boundaries). */
 export function addDays(dateIso: string, n: number): string {
   const [y, m, d] = parts(dateIso)
-  const dt = new Date(Date.UTC(y, m - 1, d + n))
+  const dt = utcCivilDate(y, m - 1, d + n)
   return iso(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate())
 }
 
