@@ -149,8 +149,11 @@ export function diffFindingKeys(actual, expected) {
  * is tenant writes, and the migration login is a superuser in CI, which
  * FORCE ROW LEVEL SECURITY cannot bind. The source sim runs its harness as a
  * month-end invariant, and under that login the tagged rls-org-isolation
- * probe halts any multi-org seed (R1.13). Installs and upgrades keep the
- * migration login.
+ * probe halts any multi-org seed (R1.13). Installs, upgrades, remedies, and
+ * the source-harness PHASE keep the migration login. The tagged harness CLI
+ * never sets an org context, so as the runtime role it can't read its own
+ * org row and crashes before any check (R1.14). Its multi-org rls probe
+ * failure there is a declared source defect instead.
  */
 function sourceRuntimeEnv() {
   return { OPENBOOKS_SIM: "1", OPENBOOKS_DB_URL: requireEnv("OPENBOOKS_RUNTIME_DB_URL") };
@@ -517,7 +520,7 @@ async function main() {
     const sourceEntry = config.sources.find((candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG);
     const toleratedAtSource = new Set((sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check));
     report.toleratedSourceHarness = await phase("source-harness", () =>
-      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource, sourceRuntimeEnv()));
+      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource));
 
     const before = await phase("snapshot-before", () => withClient(dbUrl, snapshotLedger));
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
@@ -537,7 +540,7 @@ async function main() {
         withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
       writeFileSync(join(reportDir, "ledger-after-remedies.json"), `${JSON.stringify(baseline, null, 2)}\n`);
       await phase("source-harness-after-remedies", () =>
-        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource, sourceRuntimeEnv()));
+        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
     }
 
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));

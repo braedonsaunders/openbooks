@@ -7,6 +7,10 @@
         {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
+        },
+        {
+          "check": "rls-org-isolation",
+          "reason": "The tagged harness CLI runs on the migration login (a superuser in CI, which FORCE ROW LEVEL SECURITY cannot bind) because as the runtime role it cannot read its own org row; its base-table probe therefore sees other orgs' rows whenever two or more orgs hold documents. Fixed on main (R1.11); the candidate harness re-probes as the runtime role with no tolerance."
         }
       ]
     },
@@ -16,6 +20,10 @@
         {
           "check": "open-balance-fresh",
           "reason": "The tagged harness recomputes open_balance in functional currency (sum of abs(amount) minus application amount), but since migration 0100 the stored balance is in the document's own currency, so every foreign-currency document reads as stale. Fixed on main (R1.10)."
+        },
+        {
+          "check": "rls-org-isolation",
+          "reason": "The tagged harness CLI runs on the migration login (a superuser in CI, which FORCE ROW LEVEL SECURITY cannot bind) because as the runtime role it cannot read its own org row; its base-table probe therefore sees other orgs' rows whenever two or more orgs hold documents. Fixed on main (R1.11); the candidate harness re-probes as the runtime role with no tolerance."
         }
       ]
     }
