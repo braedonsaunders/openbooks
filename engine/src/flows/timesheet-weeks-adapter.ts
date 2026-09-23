@@ -142,6 +142,9 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
 export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
   subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
   profile: timesheetWeekSubjectProfile,
+  // releaseApproval below delegates to the web hook: this kind needs a
+  // handler registered at web boot (see webHookReleasedSubjectKinds).
+  releaseViaWebHook: true,
   // Nothing on a week is a flow-writable header field: the hours are the
   // record, and a flow must not rewrite the thing it is approving.
   writableFields: new Set<string>(),

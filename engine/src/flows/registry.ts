@@ -101,6 +101,20 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   return adapter;
 }
 
+/**
+ * Subject kinds whose approval release delegates to a web-registered hook
+ * (adapter.releaseApproval → releaseFlowApproval). Derived from the subject
+ * registry: every authorable kind whose adapter declares releaseViaWebHook.
+ * The web boot registration must cover exactly this set — a kind here
+ * without a handler strands its approval gates pending forever (decideGate
+ * throws, the transaction rolls back, the gate never resolves).
+ */
+export function webHookReleasedSubjectKinds(): string[] {
+  return listFlowSubjectProfiles()
+    .map((profile) => profile.subjectKind)
+    .filter((kind) => getFlowAdapter(kind)?.releaseViaWebHook === true);
+}
+
 /** Every subject kind flows can be authored over, with its profile (builder UI). */
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [

@@ -121,6 +121,9 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter = {
   subjectKind: FIELD_TICKET_SUBJECT_KIND,
   profile: fieldTicketSubjectProfile,
   writableFields: new Set<string>(),
+  // releaseApproval below delegates to the web hook: this kind needs a
+  // handler registered at web boot (see webHookReleasedSubjectKinds).
+  releaseViaWebHook: true,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const ticket = await loadTicket(subjectId);

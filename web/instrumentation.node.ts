@@ -34,46 +34,14 @@ export async function registerNodeInstrumentation() {
   // fills at boot; the standalone worker has no renderer and degrades to
   // sending without the attachment.
   const {
-    registerFlowApprovalReleaseHandler,
     registerFlowPdfRenderer,
   } = await import('@openbooks/engine/src/flows/index.ts')
 
-  // Field-ticket approval policy is tenant-authored in Flows. The engine owns
-  // routing and gate decisions; this web hook supplies the product service
-  // that atomically materializes ticket-owned project charges, provenance,
-  // status, and audit evidence when the gate resolves. Time-entry approval and
-  // payroll posting remain an independent lifecycle.
-  registerFlowApprovalReleaseHandler('field_ticket', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('field-ticket approval needs an acting user')
-    const { releaseFieldTicketApproval } = await import('./lib/field-tickets')
-    await releaseFieldTicketApproval(
-      ctx.orgId,
-      ctx.userId,
-      subjectId,
-      outcome,
-      comment,
-    )
-  })
-
-  // Timesheet approval routing is tenant-authored in Flows too. The engine
-  // decides WHO approves and when the gates resolve; this supplies what
-  // approval means for hours — stamping the approver across the week, or
-  // returning it with the approver's reason attached.
-  registerFlowApprovalReleaseHandler('timesheet_week', async ({
-    subjectId,
-    outcome,
-    comment,
-    ctx,
-  }) => {
-    if (!ctx.userId) throw new Error('timesheet approval needs an acting user')
-    const { releaseTimesheetWeekApproval } = await import('./lib/timesheet-approval-release')
-    await releaseTimesheetWeekApproval(ctx.orgId, ctx.userId, subjectId, outcome, comment)
-  })
+  // Web-owned approval releases (field tickets, timesheet weeks, crew time
+  // batches): the engine owns routing and gate decisions; these web hooks
+  // supply what approval means for each record. See web/lib/flow-approval-releases.ts.
+  const { registerFlowApprovalReleaseHandlers } = await import('./lib/flow-approval-releases')
+  await registerFlowApprovalReleaseHandlers()
 
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')

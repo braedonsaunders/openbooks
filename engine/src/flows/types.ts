@@ -81,6 +81,14 @@ export interface FlowSubjectAdapter {
     detail?: { comment?: string | null },
   ): Promise<void>;
   /**
+   * True when this adapter's releaseApproval delegates to the web-registered
+   * hook (releaseFlowApproval) instead of releasing inside the engine — i.e.
+   * the subject kind needs a handler registered at web boot, or its gates
+   * strand pending forever. The web guard test derives the full set from
+   * the subject registry via webHookReleasedSubjectKinds().
+   */
+  releaseViaWebHook?: boolean;
+  /**
    * Park the subject awaiting approval after a (re-)driven run created gates.
    * submitForApproval owns this transition on the first attempt; retryFlowRun
    * owns it on retries — without it the subject sits in its pre-approval
