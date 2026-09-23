@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
 import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
 import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
 import { convertBillRate } from './item-rate-currency'
@@ -18,6 +19,14 @@ export interface ResolvedItemRate {
   rateVersionId: string
   baseUnit: string
   policy: PricingPolicy
+  /**
+   * Where the pricing policy came from: the version's own pin ('pinned'),
+   * a backfilled pin whose governing policy at version time was never
+   * recorded ('inferred' — 0326 legacy, shown in the UI so the operator
+   * verifies before billing), or the live profile for versions that carry
+   * no pin ('live').
+   */
+  policyProvenance: 'pinned' | 'inferred' | 'live'
   invoicePresentation: 'summary' | 'rate_components'
   sourceCurrency: string
   targetCurrency: string
@@ -216,11 +225,19 @@ export async function resolveItemRate(input: {
     // version's month. The live profile above is only the participation gate
     // (and the defaults for new versions). Versions without a pin — labor
     // rate-card versions, which carry no item policy — resolve as before.
-    const pin = (await db.execute<{ base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
-      select base_unit, pricing_policy, invoice_presentation from item_rate_version_profiles
+    // A backfilled pin (0298 copied the live profile because historical
+    // policy was never recorded) prices on, but says so: legacy pins read
+    // 'inferred' so the UI can show the operator what they are trusting.
+    const pin = (await db.execute<{ id: string; base_unit: string; pricing_policy: PricingPolicy; invoice_presentation: 'summary' | 'rate_components' }>(sql`
+      select id, base_unit, pricing_policy, invoice_presentation from item_rate_version_profiles
        where org_id = ${input.orgId} and version_id = ${rateVersionId} and item_id = ${input.itemId}
     `)).rows[0]
     const behavior = pin ?? p
+    const policyProvenance: ResolvedItemRate['policyProvenance'] = pin
+      ? (await isLegacyProvenance(db, input.orgId, 'item_rate_version_profiles', pin.id, { fallback: true }))
+        ? 'inferred'
+        : 'pinned'
+      : 'live'
     const lines = (await db.execute<{ id: string; unit_code: string; unit_name: string; base_quantity: string; cost_rate: string | null; bill_rate: string | null }>(sql`
       select id, unit_code, unit_name, base_quantity, cost_rate, bill_rate
         from item_rate_lines
@@ -251,6 +268,7 @@ export async function resolveItemRate(input: {
       rateVersionId,
       baseUnit: behavior.base_unit,
       policy: behavior.pricing_policy,
+      policyProvenance,
       invoicePresentation: behavior.invoice_presentation,
       sourceCurrency,
       targetCurrency:ctx.target_currency,

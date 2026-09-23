@@ -78,6 +78,9 @@ export async function GET(req: Request) {
     transactionUnitName: resolved?.transactionUnitName ?? item.rows[0].unit ?? 'Unit',
     rateUnits: resolved?.rateUnits ?? [],
     source: resolved ? 'rate_book' : 'item_default',
+    // 'inferred' when the version's pin was backfilled from the live profile
+    // (0326 legacy): the drawer names it so the operator verifies before billing.
+    policyProvenance: resolved?.policyProvenance ?? null,
     components: resolved?.bill.components ?? [],
   })
 }
