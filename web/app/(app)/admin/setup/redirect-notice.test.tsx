@@ -28,32 +28,10 @@ const keys = [
   'setup.wizard.skipped',
 ] as const
 
-// UX-17: the redirect notice and the Skip toast must read natively
-// everywhere — a missing key renders the raw path mid-navigation.
-for (const locale of locales) {
-  test(`setup redirect copy exists in ${locale}`, () => {
-    for (const key of keys) {
-      const value = at(catalog(locale), key)
-      assert.equal(typeof value, 'string', `${locale} ${key} must exist`)
-      assert.ok((value as string).trim().length > 0, `${locale} ${key} must not be empty`)
-    }
-  })
-}
-
-for (const locale of locales.filter((candidate) => candidate !== 'en')) {
-  test(`setup redirect copy is translated in ${locale}`, () => {
-    for (const key of keys) {
-      assert.notEqual(
-        at(catalog(locale), key),
-        at(catalog('en'), key),
-        `${locale} ${key} must not be the English fallback`,
-      )
-    }
-  })
-}
-
-// The notice renders the movedFrom source's sentence and nothing otherwise —
-// real component, scripted search params, real en catalog.
+// Every top-level await settles BEFORE the first test() registers (see
+// scripts/test-registration-order.test.mjs): the notice renders the movedFrom
+// source's sentence and nothing otherwise — real component, scripted search
+// params, real en catalog.
 const { registerHooks } = await import('node:module')
 registerHooks({
   resolve(specifier, context, next) {
@@ -77,6 +55,30 @@ const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { SetupRedirectNotice } = await import('./RedirectNotice')
+
+// UX-17: the redirect notice and the Skip toast must read natively
+// everywhere — a missing key renders the raw path mid-navigation.
+for (const locale of locales) {
+  test(`setup redirect copy exists in ${locale}`, () => {
+    for (const key of keys) {
+      const value = at(catalog(locale), key)
+      assert.equal(typeof value, 'string', `${locale} ${key} must exist`)
+      assert.ok((value as string).trim().length > 0, `${locale} ${key} must not be empty`)
+    }
+  })
+}
+
+for (const locale of locales.filter((candidate) => candidate !== 'en')) {
+  test(`setup redirect copy is translated in ${locale}`, () => {
+    for (const key of keys) {
+      assert.notEqual(
+        at(catalog(locale), key),
+        at(catalog('en'), key),
+        `${locale} ${key} must not be the English fallback`,
+      )
+    }
+  })
+}
 
 function renderNotice(movedFrom: string | null): string {
   ;(globalThis as Record<string, unknown>).__redirectNoticeSearch = movedFrom
