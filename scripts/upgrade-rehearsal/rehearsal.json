@@ -61,6 +61,14 @@
       ]
     },
     {
+      "id": "perf-1m",
+      "class": "perf-1m",
+      "description": "~1,020,000 journal_lines over 36 months plus payroll volume for 0296 (24 runs x 40 stubs), inventory volume for 0293/0299 (600 counts x 500 lines), and small volumes for every other pending migration that rewrites or validates a table. Seeded by the source release's own posting kernel through the bulk path (draft entries, posted header-only documents, one flip to posted, applications last, one timeout-free maintenance transaction per month).",
+      "steps": [
+        { "kind": "seeder", "name": "perf-1m", "args": ["--seed", "upgrade-perf-1"] }
+      ]
+    },
+    {
       "id": "samples",
       "class": "samples",
       "description": "Every sample-company template the source release can prepare.",
