@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Truck, DollarSign, Trophy, Layers, PieChart as PieIcon, BarChart3, Table2, Clock, TimerReset, HandCoins, ClipboardList, Grid2x2, Star, Info, Download } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { VendorData, VendorRow, SpendTier, Grade, Quadrant } from '../../../../lib/analytics/vendor-data'
+import { concentrationVerdict } from '../../../../lib/analytics/vendor-concentration'
 import { Gauge } from '../_ui/Gauge'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'
@@ -65,13 +66,17 @@ export function VendorView({ data }: { data: VendorData }) {
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const totals = data.totals
   const diversification = Math.max(0, Math.min(100, (1 - totals.hhi) * 100))
+  // OM-04: the gauge word shares its band with the HHI card below (one
+  // threshold source) — the score stays a 0–100 diversification number, but
+  // the word can never contradict the card's concentration verdict again.
+  const verdict = concentrationVerdict(totals.hhiScaled)
   const openVendor = (r: VendorRow) => setDrill({ kind: 'party', id: r.id, name: r.name, sub: t('drill.billsSpend', { bills: r.bills, spend: money(r.spend) }) })
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <div className="flex items-center justify-center rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <Gauge value={diversification} label={t(diversification >= 85 ? 'gauge.diversified' : diversification >= 70 ? 'gauge.balanced' : 'gauge.concentrated')} size={132} thickness={12} showTicks={false} />
+          <Gauge value={diversification} label={t(verdict.gaugeKey)} size={132} thickness={12} showTicks={false} />
         </div>
         <KpiCard icon={Truck} accent="sky" label={t('kpi.activeVendors')} value={String(totals.vendors)} sub={t('sub.inPeriod')} />
         <KpiCard icon={DollarSign} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={totals.yoyPct === null ? t('sub.inPeriod') : t('sub.yoy', { pct: fmtPct(totals.yoyPct) })} tone={(totals.yoyPct ?? 0) <= 0 ? 'positive' : 'negative'} />
@@ -109,13 +114,15 @@ function OverviewTab({ data }: { data: VendorData }) {
   const money = (n: number) => fmtMoney(n, { compact: true })
   const totals = data.totals
   const top = data.rows.slice(0, 10)
+  // Same band as the overview gauge above — one threshold source for both words.
+  const verdict = concentrationVerdict(totals.hhiScaled)
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={DollarSign} accent="violet" label={t('kpi.totalSpend')} value={money(totals.spend)} sub={t('sub.billsCount', { count: totals.bills })} />
         <KpiCard icon={Trophy} accent="teal" label={t('kpi.topVendor')} value={top[0] ? money(top[0].spend) : '—'} sub={top[0]?.name ?? '—'} />
         <KpiCard icon={BarChart3} accent="sky" label={t('kpi.avgBill')} value={money(totals.avgBill)} sub={t('sub.perBill')} />
-        <KpiCard icon={Layers} accent="amber" label={t('kpi.hhi')} value={totals.hhiScaled.toString()} sub={totals.hhiScaled > 2500 ? t('sub.highlyConcentrated') : totals.hhiScaled > 1500 ? t('sub.moderate') : t('sub.diversified')} />
+        <KpiCard icon={Layers} accent="amber" label={t('kpi.hhi')} value={totals.hhiScaled.toString()} sub={t(verdict.subKey)} />
       </div>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2">
