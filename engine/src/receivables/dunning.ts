@@ -11,12 +11,17 @@ import { enqueueFlowEmail } from "../scheduling/outbox.ts";
  * for negative-offset courtesy stages, documents approaching their due date —
  * computes each one's signed distance from its due date (negative before it),
  * and fires the single highest un-fired ladder stage whose offset the document
- * has crossed, on that stage's exact configured day. Firing defers one
- * reminder email through the durable scheduler_outbox and writes an
- * append-only dunning_log row; both inserts ride this org's single
- * transaction, so the send is atomic with the sent claim, and the unique
- * (document, stage) index on the log makes the whole thing idempotent —
- * re-running the scheduler never double-sends.
+ * has crossed, on that stage's exact configured day. Firing opens a 'staged'
+ * claim row in dunning_log and defers one reminder email through the durable
+ * scheduler_outbox; both ride this org's single transaction, so the send is
+ * atomic with the claim, and the unique (document, stage) index arbitrates
+ * concurrent ticks onto the one row — re-running the scheduler never
+ * double-sends. The send attempt then moves the claim to its outcome (sent,
+ * failed, or suppressed when the customer has no billing email), and a later
+ * tick re-arms failed and suppressed claims back to staged for retry once
+ * the cause is fixed. 'sent' rows are terminal delivery evidence; the
+ * storage guard (dunning_log_guard) refuses every other transition, so the
+ * log reconciles exactly with what the customer was sent.
  *
  * Collections never touches the ledger — it is a communications layer, so it
  * lives outside the posting kernel entirely.
@@ -284,12 +289,14 @@ async function runDunningInternal(
           const body = renderTemplate(stage.bodyTemplate, vars);
           const to = doc.partyEmail;
 
-          // Serialize concurrent ticks over THIS ladder rung before doing
-          // anything observable. `dunning_log` is append-only (dunning_log_guard)
-          // and its status CHECK admits no in-flight state, so the log itself
-          // cannot serve as a claim; the advisory lock does, and it costs no
-          // schema change. It is held until this org's transaction commits, at
-          // which point the loser's re-read below sees the winner's row.
+          // Serialize concurrent ticks over THIS ladder rung before claiming
+          // it. The claim lives IN the log now: the runner opens one 'staged'
+          // row per (document, stage) and the unique index arbitrates rivals
+          // onto it, so the log reconciles exactly with what ran — including
+          // attempts, not just successes. The advisory lock stays as the
+          // second arbiter: it serializes the claim-then-defer sequence so a
+          // loser reads the winner's settled row instead of racing its
+          // in-flight one. It is held until this org's transaction commits.
           //
           // These locks accumulate across the org's whole tick, so the document
           // scan above is ORDERED BY d.id: two ticks that took them in whatever
@@ -299,88 +306,142 @@ async function runDunningInternal(
           await db.execute(
             sql`select pg_advisory_xact_lock(hashtextextended(${`dunning:${doc.id}:${stage.id}`}, 0))`,
           );
-          const alreadyLogged = (await db.execute(sql`
-            select 1 from dunning_log
-             where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
-               and status = 'sent'
-             limit 1
-          `));
-          if (alreadyLogged.rows.length > 0) continue;
 
-          let status: "sent" | "failed" | "skipped" = "sent";
-          let detail: string | null = null;
-          if (!to) {
-            status = "skipped";
-            detail = "no billing email on the customer record";
-          } else {
-            try {
-              // Defer through the durable outbox instead of handing the letter
-              // straight to Redis. The deferral insert rides THIS org's pinned
-              // transaction, so it commits — or rolls back — together with the
-              // dunning_log row below. A direct BullMQ enqueue commits outside
-              // Postgres: a crash or a later statement error in this tick left
-              // mail queued against a claim that no longer existed, and the
-              // next tick fired the same rung again — the customer got the
-              // letter twice. subject_id carries the document id for operator
-              // traceability; the deterministic occurrence key is this rung's
-              // identity, so a replayed tick collapses onto one row.
-              const deferred = await enqueueFlowEmail({
-                orgId,
-                runId: doc.id,
-                occurrenceKey: `dunning:${doc.id}:${stage.id}`,
-                payload: {
-                  to: [to],
-                  subject,
-                  html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
-                  text: body,
-                  meta: { category: "dunning" },
-                  // The policy's configured reply-to; absent means the org's
-                  // default transport reply-to. An empty string is not an
-                  // address — it must not reach the payload.
-                  ...(policy.replyTo ? { replyTo: policy.replyTo } : {}),
-                },
-              });
-              if (!deferred) {
-                // Unreachable through this path — a committed attempt always
-                // pairs the outbox row with its log row, which the re-check
-                // above would have caught — but if storage ever says otherwise
-                // the safe move is to let the existing deferral own delivery
-                // rather than double-claiming the rung.
-                continue;
-              }
-            } catch (e) {
-              status = "failed";
-              detail = e instanceof Error ? e.message : String(e);
+          // Claim the rung. A conflict means a rival tick already owns this
+          // slot — the insert is skipped (not an error) and the winner's row
+          // below decides what this tick does: this is the expected
+          // concurrent-tick shape, which is why `do nothing` is correct here
+          // rather than a failure.
+          const claimed = await db.execute<{ id: string }>(sql`
+            insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
+                                     amount_due, currency_code, channel, status, detail)
+            values (${orgId}, ${doc.id}, ${policy.id}, ${stage.id}, ${doc.partyId}, ${to},
+                    ${doc.balanceDue}, ${doc.currency}, 'email', 'staged', null)
+            on conflict (document_id, stage_id) do nothing
+            returning id
+          `);
+          let claimId = claimed.rows[0]?.id;
+          if (!claimId) {
+            const existing = (await db.execute<{ id: string; status: string }>(sql`
+              select id, status from dunning_log
+               where org_id = ${orgId} and document_id = ${doc.id} and stage_id = ${stage.id}
+            `)).rows[0];
+            if (!existing) {
+              // Unreachable under the advisory lock held above: a conflict
+              // proves a rival row exists, and no rival can delete one (the
+              // guard refuses DELETE). Fail closed rather than send unclaimed.
+              throw new Error(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} claim vanished under its lock — refusing to send unclaimed`,
+              );
+            }
+            if (existing.status === "sent" || existing.status === "skipped") {
+              // Terminal delivery evidence (or settled history): never re-fire.
+              continue;
+            }
+            if (existing.status === "staged") {
+              // A rival tick owns this rung right now: its transaction will
+              // settle the claim (commit or roll back together with its
+              // deferral). Leave it alone; this tick contributes nothing.
+              console.warn(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} is claimed by an in-flight tick — skipping`,
+              );
+              continue;
+            }
+            // A failed or suppressed claim from an earlier tick: re-arm it for
+            // this attempt, refreshing the evidence to the retry's inputs
+            // (the customer may have gained a billing email since). The guard
+            // admits exactly this transition and refuses every other one.
+            const rearmed = await db.execute<{ id: string }>(sql`
+              update dunning_log
+                 set status = 'staged', detail = null, party_id = ${doc.partyId}, to_email = ${to},
+                     amount_due = ${doc.balanceDue}, currency_code = ${doc.currency}
+               where id = ${existing.id} and org_id = ${orgId}
+               returning id
+            `);
+            claimId = rearmed.rows[0]?.id;
+            if (!claimId) {
+              throw new Error(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} re-arm matched zero rows — refusing to send unclaimed`,
+              );
             }
           }
 
-          // Record the notice ONLY when its delivery is durably staged. The log
-          // is the record of what the customer was sent, and it doubles as the
-          // "this rung has fired" marker via its unique (document, stage) index.
-          //
-          // Writing a 'failed' or 'skipped' row into that same slot would retire
-          // the rung permanently: one transient queue error, or one customer who
-          // happened to have no billing email on file the first time the stage
-          // came due, and that step of the collections ladder never ran again —
-          // silently, for the life of the invoice. Leaving the slot empty lets a
-          // later tick retry once the cause is fixed.
-          if (status === "sent") {
-            await db.execute(sql`
-              insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
-                                       amount_due, currency_code, channel, status, detail)
-              values (${orgId}, ${doc.id}, ${policy.id}, ${stage.id}, ${doc.partyId}, ${to},
-                      ${doc.balanceDue}, ${doc.currency}, 'email', 'sent', null)
-              on conflict (document_id, stage_id) do nothing
+          // Move the claim to its outcome. Every path below settles the row
+          // it opened: a committed 'staged' row is never left behind, so a
+          // later tick always finds either terminal evidence or a claim worth
+          // re-arming. The update names its row back — a write matching zero
+          // rows is a failure, never a reported send.
+          const settleClaim = async (
+            status: "sent" | "failed" | "suppressed",
+            detail: string | null,
+          ): Promise<void> => {
+            const moved = await db.execute<{ id: string }>(sql`
+              update dunning_log set status = ${status}, detail = ${detail}
+               where id = ${claimId} and org_id = ${orgId}
+               returning id
             `);
-          } else {
-            console.warn(
-              `[dunning] ${doc.documentNumber} stage ${stage.id} not sent (${status}): ${detail ?? "unknown"} — will retry on a later tick`,
-            );
+            if (!moved.rows[0]) {
+              throw new Error(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} outcome ${status} matched zero rows — refusing to report an unrecorded outcome`,
+              );
+            }
+          };
+
+          if (!to) {
+            // Unsendable, but no longer invisible: the suppressed claim is the
+            // durable evidence of the attempt, and the re-arm above retries it
+            // once the customer gains a billing email.
+            await settleClaim("suppressed", "no billing email on the customer record");
+            result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "suppressed" });
+            continue;
+          }
+          try {
+            // Defer through the durable outbox instead of handing the letter
+            // straight to Redis. The deferral insert rides THIS org's pinned
+            // transaction, so it commits — or rolls back — together with the
+            // claim's outcome above. A direct BullMQ enqueue commits outside
+            // Postgres: a crash or a later statement error in this tick left
+            // mail queued against a claim that no longer existed, and the
+            // next tick fired the same rung again — the customer got the
+            // letter twice. subject_id carries the document id for operator
+            // traceability; the deterministic occurrence key is this rung's
+            // identity, so a replayed tick collapses onto one row.
+            const deferred = await enqueueFlowEmail({
+              orgId,
+              runId: doc.id,
+              occurrenceKey: `dunning:${doc.id}:${stage.id}`,
+              payload: {
+                to: [to],
+                subject,
+                html: `<p>${escapeHtml(body).replace(/\n/g, "<br/>")}</p>`,
+                text: body,
+                meta: { category: "dunning" },
+                // The policy's configured reply-to; absent means the org's
+                // default transport reply-to. An empty string is not an
+                // address — it must not reach the payload.
+                ...(policy.replyTo ? { replyTo: policy.replyTo } : {}),
+              },
+            });
+            if (!deferred) {
+              // A prior deferral owns this rung's delivery (the deterministic
+              // occurrence key collided): the pair is complete without us, so
+              // the claim settles sent and this tick counts nothing twice.
+              await settleClaim("sent", null);
+              continue;
+            }
+          } catch (e) {
+            // A transient queue or validation failure is evidence, not an
+            // empty slot: the failed claim stays queryable, stays out of the
+            // fired set (only 'sent' fires), and re-arms on a later tick.
+            await settleClaim("failed", e instanceof Error ? e.message : String(e));
+            result.failed += 1;
+            result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "failed" });
+            continue;
           }
 
-          if (status === "sent") result.sent += 1;
-          else if (status === "failed") result.failed += 1;
-          result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status });
+          await settleClaim("sent", null);
+          result.sent += 1;
+          result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "sent" });
         }
       }
     });

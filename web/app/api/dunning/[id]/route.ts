@@ -150,8 +150,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     let afterStages: Record<string, unknown>[] | undefined;
     if (stages) {
-      // Replace the ladder as one unit. dunning_log rows are append-only and
-      // keep their own copy of what was sent, so pruning stages is safe.
+      // Replace the ladder as one unit. dunning_log sent rows are terminal
+      // and never mutated or deleted (the guard refuses every transition out
+      // of sent), and each row keeps its own copy of what was sent, so
+      // pruning stages is safe.
       await tx.execute(sql`delete from dunning_stages where policy_id = ${id} and org_id = ${authz.user.orgId}`);
       afterStages = [];
       for (const s of stages) {

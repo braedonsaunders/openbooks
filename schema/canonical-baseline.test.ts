@@ -607,6 +607,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // Storage now refuses a second line per subject (NULLS NOT DISTINCT so
     // NULL-lot duplicates collide too); the engine preflights the same key.
     "0293_stock_count_line_subject_unique.sql",
+    // Dunning wrote a log row only for a deferred letter, so failed and
+    // unsendable sends left no evidence and the log could not serve as the
+    // concurrent-tick claim. The status CHECK gains staged/suppressed and
+    // the guard becomes the lifecycle state machine (staged to an outcome,
+    // failed/suppressed re-arm to staged, sent terminal).
+    "0294_dunning_delivery_state_machine.sql",
     // A sendRequestXML retry before the first response claimed a second
     // request on the same ticket, and the next response was stored under the
     // wrong request. The engine re-sends the outstanding request with a
