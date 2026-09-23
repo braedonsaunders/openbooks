@@ -169,6 +169,33 @@ interface SourceSnapshotManifest {
   artifacts: Record<string, { path: string; sha256: string }>;
 }
 
+/**
+ * Every source artifact the comparison below consumes, keyed by its entry in
+ * `paths`. This ONE list drives capture (refreshSource hashes every entry),
+ * verification (sourceSnapshotCoherence binds every entry), and the
+ * hash-bound claim — never a hand-kept subset. sourceSnapshot and out are
+ * deliberately excluded: the manifest cannot bind itself and the certificate
+ * output proves nothing about origin.
+ */
+const CONSUMED_SOURCE_ARTIFACT_KEYS = [
+  "sourceProjects",
+  "sourceInvoices",
+  "sourceInvoiceLines",
+  "sourceProjectGl",
+  "sourceProjectFinancials",
+  "fieldTicketHeaders",
+  "fieldTicketCrew",
+] as const;
+
+function consumedArtifactFiles(
+  artifactPaths: Record<string, string>,
+): Array<{ key: string; path: string; sha256: string | null }> {
+  return CONSUMED_SOURCE_ARTIFACT_KEYS.map((key) => {
+    const path = artifactPaths[key]!;
+    return { key, path, sha256: fileHash(path) };
+  });
+}
+
 function readJson(path: string): JsonRow[] | null {
   if (!existsSync(path)) return null;
   const parsed = JSON.parse(readFileSync(path, "utf8"));
@@ -399,17 +426,13 @@ async function refreshSource(): Promise<void> {
   );
   writeFileSync(paths.sourceInvoiceLines, JSON.stringify(invoiceLines));
   const sourceAccountingBook = await refreshProjectGlSource(client);
-  const artifacts = Object.fromEntries(
-    [
-      ["sourceProjects", paths.sourceProjects],
-      ["sourceInvoices", paths.sourceInvoices],
-      ["sourceInvoiceLines", paths.sourceInvoiceLines],
-      ["sourceProjectGl", paths.sourceProjectGl],
-    ].map(([key, path]) => [
-      key,
-      { path, sha256: fileHash(path!)! },
-    ]),
-  );
+  // Hash every consumed artifact as captured, including inputs this refresh
+  // does not write (project financials, field-ticket TSVs): their bytes as
+  // observed now are the provenance baseline the certificate binds against.
+  const artifacts: SourceSnapshotManifest["artifacts"] = {};
+  for (const { key, path, sha256 } of consumedArtifactFiles(paths)) {
+    if (sha256 !== null) artifacts[key] = { path, sha256 };
+  }
   const manifest: SourceSnapshotManifest = {
     schemaVersion: 1,
     source: "configured_accounting_source",
@@ -803,12 +826,12 @@ const gates: Record<string, GateResult> = {};
 }
 
 {
-  const requiredArtifactKeys = [
-    "sourceProjects",
-    "sourceInvoices",
-    "sourceInvoiceLines",
-    "sourceProjectGl",
-  ] as const;
+  // Every file the comparison consumes must be hash-bound to the capture
+  // manifest before any number is trusted — including the project-financial
+  // export and the field-ticket TSVs, whose amounts and hours enter verdicts
+  // directly. An artifact with no capture hash refuses by name.
+  const consumed = consumedArtifactFiles(paths);
+  const verifiedArtifacts: string[] = [];
   const snapshotTimes = sourceSnapshot
     ? [Date.parse(sourceSnapshot.startedAt), Date.parse(sourceSnapshot.completedAt)]
     : [Number.NaN, Number.NaN];
@@ -822,13 +845,29 @@ const gates: Record<string, GateResult> = {};
     ) {
       artifactProblems.push("invalid source snapshot identity");
     }
-    for (const key of requiredArtifactKeys) {
+    for (const { key, path, sha256 } of consumed) {
       const artifact = sourceSnapshot.artifacts?.[key];
-      const expectedPath = paths[key];
-      if (!artifact || artifact.path !== expectedPath) {
+      if (sha256 === null) {
+        // Not consumed: the layer's own gate reports the missing input.
+        // A capture entry for a file that has since vanished is tampering,
+        // not absence.
+        if (artifact) {
+          artifactProblems.push(
+            `${key} was captured at ${artifact.path} but is now missing`,
+          );
+        }
+        continue;
+      }
+      if (!artifact) {
+        artifactProblems.push(
+          `${key} (${path}) has no capture hash; re-run with --refresh-source while the artifact is present`,
+        );
+      } else if (artifact.path !== path) {
         artifactProblems.push(`${key} path is not bound to this certificate`);
-      } else if (artifact.sha256 !== fileHash(expectedPath)) {
+      } else if (artifact.sha256 !== sha256) {
         artifactProblems.push(`${key} hash changed after source capture`);
+      } else {
+        verifiedArtifacts.push(key);
       }
     }
     if (
@@ -898,19 +937,21 @@ const gates: Record<string, GateResult> = {};
       );
     }
   }
-  const boundArtifactCount =
-    requiredArtifactKeys.length + (sourceProjectFinancials ? 1 : 0);
+  // Both counts derive from the same consumed list the comparison reads —
+  // never a hand-kept subset — so the claim below cannot drift from it.
+  const consumedCount = consumed.filter(
+    (file) => file.sha256 !== null,
+  ).length;
   gates.sourceSnapshotCoherence = {
     status: artifactProblems.length === 0 ? "exact" : "unproven",
-    sourceCount: boundArtifactCount,
-    targetCount:
-      requiredArtifactKeys.filter((key) => fileHash(paths[key]) !== null).length +
-      (sourceProjectFinancials ? 1 : 0),
-    exactCount: artifactProblems.length === 0 ? boundArtifactCount : null,
+    sourceCount: consumedCount,
+    targetCount: verifiedArtifacts.length,
+    exactCount:
+      artifactProblems.length === 0 ? verifiedArtifacts.length : null,
     mismatchCount: artifactProblems.length,
     detail:
       artifactProblems.length === 0
-        ? `All live-source artifacts are hash-bound to one bounded observation window; project-financial identities exactly equal the source project population; connector watermark ${String(
+        ? `All ${verifiedArtifacts.length} consumed source artifacts (${verifiedArtifacts.join(", ")}) are hash-bound to one bounded observation window; project-financial identities exactly equal the source project population; connector watermark ${String(
             target.latestSuccessfulSync?.synced_through ?? "unavailable",
           )}`
         : artifactProblems.join("; "),
