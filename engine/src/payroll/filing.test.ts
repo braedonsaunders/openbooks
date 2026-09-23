@@ -148,6 +148,30 @@ test("one group carries one native-currency slice per legal entity", () => {
   );
 });
 
+test("one component across two historical liability accounts keeps two lines", () => {
+  // A setup change between runs must not merge the old account's accrual
+  // into the new account's line: the bill would debit one account for both.
+  const groups = group([
+    row({ amount: "100.00", liability_account_id: "gl-tax-old" }),
+    row({ amount: "50.00", liability_account_id: "gl-tax-new" }),
+  ]);
+  const [only] = [...groups.values()];
+  assert.equal(cmp(only!.total, "150"), 0);
+  assert.equal(only!.components.length, 2);
+  const byAccount = new Map(only!.components.map((c) => [c.liabilityAccountId, c]));
+  assert.equal(cmp(byAccount.get("gl-tax-old")!.amount, "100"), 0);
+  assert.equal(cmp(byAccount.get("gl-tax-new")!.amount, "50"), 0);
+  // Same component, same account still folds: provinces re-merge, accounts do not.
+  const merged = group([
+    row({ amount: "100.00", province: "ON" }),
+    row({ amount: "50.00", province: "QC" }),
+  ]);
+  assert.equal([...merged.values()][0]!.components.length, 1);
+  // The entity slice splits identically: one bill line per credited account.
+  const [slice] = only!.slices;
+  assert.equal(slice!.components.length, 2);
+});
+
 test("entityless accruals stay consolidated and flag the group", () => {
   const groups = group([
     row({ amount: "100.00", subsidiary_id: "sub-a" }),
