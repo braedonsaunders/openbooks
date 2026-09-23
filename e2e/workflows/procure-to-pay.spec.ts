@@ -1034,8 +1034,14 @@ test.describe("procure-to-pay workflows", () => {
         expiresOn: CERT_EXPIRES,
       });
       const recordId = str(req(recorded, "POST compliance/records").id, "record id");
-      const selfVerify = await api(page, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify" });
+      // The certificate fence (ce7abe514) requires the caller to echo the
+      // revision it read (400 without it). This record was just created, so
+      // its revision is the schema initial value (0282 DEFAULT 1), and this
+      // serial flow performs no write between the POST and this PATCH — the
+      // self-verification below is the first write the row ever sees.
+      const selfVerify = await api(page, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify", revision: 1 });
       expect(selfVerify.status, "self-verification refused").toBe(422);
+      expect(JSON.stringify(selfVerify.body), "self-verification names the control").toContain("someone other than the person who recorded it");
       const approverCtx = await approverContext(browser, baseURL);
       try {
         const approverPg = await approverCtx.newPage();
@@ -1044,7 +1050,9 @@ test.describe("procure-to-pay workflows", () => {
         // seeds through is already there, which is why only this call failed).
         await approverPg.goto("/");
         await dismissSetupWizard(approverPg);
-        req(await api(approverPg, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify" }), "PATCH verify as approver");
+        // The refused self-verification above writes nothing, so the
+        // certificate is still at its initial revision for the approver.
+        req(await api(approverPg, "PATCH", `/api/compliance/records/${recordId}`, { action: "verify", revision: 1 }), "PATCH verify as approver");
       } finally {
         await approverCtx.close();
       }
