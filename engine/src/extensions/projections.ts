@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { actorHasPermission } from '../organization/actor-permissions.ts';
 import { db, type SqlExecutor } from '../platform/db.ts';
 import { isCataloguePermission, permissionSetCovers } from '../organization/permissions.ts';
-import { defaultNavConfig, type NavGroupConfig, type OrgNavConfig } from '../navigation/nav-registry.ts';
+import { defaultNavConfig, type OrgNavConfig } from '../navigation/nav-registry.ts';
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {
@@ -80,21 +80,31 @@ function countNavRows(config: OrgNavConfig): number {
 
 /**
  * Reap extension-owned retired (hidden) link rows, oldest-first, until the
- * config fits NAV_CONFIG_TOTAL_ROW_CAP. Retired rows append at group end
- * when hidden (see the retire loop below), so traversal order IS retirement
- * order and the first hidden row met is the oldest. Never touches a visible
- * row or a user-hidden row: retired history can never block an install.
- * Returns the pruned count. Pure — unit-tested directly.
+ * config fits NAV_CONFIG_TOTAL_ROW_CAP. Oldest means smallest `retiredAt`
+ * across ALL groups — retirement appends within each group (see the retire
+ * loop below), so group traversal order is only per-group retirement order
+ * and cannot arbitrate across groups. Rows retired before the stamp existed
+ * carry none and sort oldest. Never touches a visible row or a user-hidden
+ * row: retired history can never block an install. Returns the pruned
+ * count. Pure — unit-tested directly.
  */
 export function reapRetiredNavLinks(config: OrgNavConfig): number {
   let pruned = 0;
   while (countNavRows(config) > NAV_CONFIG_TOTAL_ROW_CAP) {
-    let victim: { group: NavGroupConfig; index: number } | null = null;
-    for (const group of config.groups) {
-      const index = group.items.findIndex((item) => item.kind === 'link' && item.hidden && item.extensionKey != null);
-      if (index >= 0) { victim = { group, index }; break; }
-    }
-    if (!victim) return pruned;
+    // Every reapable row, ranked globally: an absent stamp ranks as the
+    // empty string, which sorts before any ISO timestamp (legacy oldest);
+    // otherwise the stamp itself, which sorts lexicographically in time
+    // order. The sort is stable, so equal ranks keep group traversal order.
+    const candidates = config.groups.flatMap((group) =>
+      group.items.flatMap((item, index) =>
+        item.kind === 'link' && item.hidden && item.extensionKey != null
+          ? [{ group, index, rank: item.retiredAt ?? '' }]
+          : [],
+      ),
+    );
+    if (!candidates.length) return pruned;
+    candidates.sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+    const victim = candidates[0]!;
     victim.group.items.splice(victim.index, 1);
     pruned += 1;
   }
@@ -133,13 +143,23 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   const config: OrgNavConfig = structuredClone(beforeNav ?? defaultNavConfig());
   let changed = false;
   // Retire this extension's live links by moving them to group end as hidden
-  // rows: their relative order is retirement order, which is what
-  // reapRetiredNavLinks prunes oldest-first. Visible order is untouched.
+  // rows, stamped with this write's retirement time: reapRetiredNavLinks
+  // prunes oldest-first ACROSS groups by that stamp, so a newer retirement
+  // in an earlier group never evicts an older one from a later group.
+  // Visible order is untouched; already-hidden rows keep their first stamp.
+  const retiringAny = config.groups.some((group) =>
+    group.items.some((item) => item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden),
+  );
+  const retiredAt = retiringAny ? new Date(await effectiveTimestamp(tx)).toISOString() : null;
   for (const group of config.groups) {
     const retiring = group.items.filter((item) => item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden);
     if (!retiring.length) continue;
     group.items = group.items.filter((item) => !(item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden));
-    for (const item of retiring) { item.hidden = true; group.items.push(item); }
+    for (const item of retiring) {
+      item.hidden = true;
+      if (item.kind === 'link' && retiredAt) item.retiredAt = retiredAt;
+      group.items.push(item);
+    }
     changed = true;
   }
   for (const contribution of navs) {
