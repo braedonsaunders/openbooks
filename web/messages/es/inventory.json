@@ -152,7 +152,7 @@
       "location": "Ubicación",
       "status": "Estado",
       "progress": "Avance",
-      "variance": "Diferencia",
+      "variance": "Discrepancias",
       "memo": "Nota",
       "item": "Artículo",
       "stockLocation": "Ubicación de stock",
