@@ -34,4 +34,15 @@ describe('information-return authorization boundaries', () => {
   it('refuses incomplete current-year filings', () => {
     assert.match(route, /if \(taxYear >= Number\(\(await businessToday\(orgId\)\)\.slice\(0, 4\)\)\)/)
   })
+
+  it('denominates the filing in the subsidiary-functional currency, never the org base', () => {
+    // The journal cash this filing sums is subsidiary-functional; labelling
+    // it with the org base mixed EUR amounts under a USD label with USD
+    // thresholds. The route passes no currency so the engine resolves the
+    // scoped/single functional denomination (or refuses a mixed org-wide
+    // filing with the scope-per-subsidiary remedy).
+    assert.doesNotMatch(route, /base_currency/)
+    assert.doesNotMatch(route, /currency: org/)
+    assert.match(route, /threshold: body\.threshold,/)
+  })
 })

@@ -287,6 +287,46 @@ test(
   },
 );
 
+test("ensureFiling denominates in the subsidiary-functional currency, never the org base", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    // Single-currency org: the unscoped filing resolves the shared
+    // functional (CAD here, whatever the org base claims).
+    const single = await ensureFiling({ orgId: org.orgId, taxYear: 2025, formType: "1099-NEC", actorId });
+    assert.equal(single.currency, "CAD");
+
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units)
+      values ('EUR', 'Euro', 2)
+      on conflict (code) do nothing`);
+    const eurSub = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${eurSub}, ${org.orgId}, ${org.subsidiaryId}, 'EU Ops', 'EUR', 'DE', '{}'::jsonb, false, true, '{}'::jsonb)`);
+
+    // A subsidiary filing is denominated in that subsidiary's currency, so
+    // EUR cash is judged by EUR thresholds — not relabelled USD/CAD.
+    const scoped = await ensureFiling({
+      orgId: org.orgId,
+      taxYear: 2025,
+      formType: "1099-NEC",
+      subsidiaryId: eurSub,
+      actorId,
+    });
+    assert.equal(scoped.currency, "EUR");
+
+    // An org-wide filing would now sum CAD and EUR cash under one label:
+    // refused with the scope-per-subsidiary remedy, never silently mixed.
+    await rejectsInfo(
+      () => ensureFiling({ orgId: org.orgId, taxYear: 2024, formType: "1099-NEC", actorId }),
+      /one filing per subsidiary/,
+    );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("the filing lifecycle refuses to cross finalize/file and leaves frozen storage untouched", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

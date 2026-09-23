@@ -78,10 +78,6 @@ export async function POST(req: Request) {
     if (!subsidiary) return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
-  const [org] = (
-    (await db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
-  ).rows
-
   // Threshold reaches a numeric(19,4) column raw: junk text or a pasted
   // 20-digit figure would otherwise die in Postgres as a raw storage failure
   // (HTTP 500 — only InformationReturnError maps to 422 below).
@@ -93,12 +89,16 @@ export async function POST(req: Request) {
   }
 
   try {
+    // No currency is passed: ensureFiling resolves the subsidiary-functional
+    // denomination (the units the ledger sums and the thresholds judge), and
+    // refuses an org-wide filing across unlike currencies with a
+    // scope-per-subsidiary remedy. Labelling with the org base here mixed EUR
+    // amounts under a USD label with USD thresholds.
     const filing = await ensureFiling({
       orgId,
       taxYear,
       formType: body.formType as FormType,
       subsidiaryId,
-      currency: org?.base_currency ?? 'USD',
       threshold: body.threshold,
       actorId,
     })
