@@ -1021,6 +1021,13 @@ export async function quoteViaTaxJar(
     to_city: req.shipTo.city,
     amount: lineAmount,
     shipping: 0,
+    // The same stable counterparty identity TP7 adds for Avalara: TaxJar
+    // keys synced customer exemptions off customer_id, so without it an
+    // exempt wholesale or government customer already known to TaxJar would
+    // be quoted (and posted) as taxable. OpenBooks itself records no
+    // sales-tax customer exemption (only payroll withholding elections),
+    // so there is no local-exemption-without-mapping case to refuse.
+    customer_id: req.counterpartyCode ?? undefined,
     ...(req.itemCode
       ? { line_items: [{ id: "1", quantity: 1, unit_price: lineAmount, product_tax_code: req.itemCode }] }
       : {}),

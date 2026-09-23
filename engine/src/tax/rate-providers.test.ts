@@ -323,6 +323,46 @@ test("Avalara keys each quote to its own counterparty code, so only the exempt o
   }
 });
 
+test("TaxJar keys each quote to its own customer_id, so only the exempt one is untaxed", async () => {
+  const local = { allowPrivateEndpoints: true } as const;
+  const seenIds: Array<unknown> = [];
+  const server = createServer(async (req, res) => {
+    const body = JSON.parse(await readBody(req)) as { customer_id?: unknown };
+    seenIds.push(body.customer_id);
+    const exempt = body.customer_id === "customer-exempt";
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        tax: exempt
+          ? { amount_to_collect: 0, rate: 0, breakdown: { state_tax_collectable: 0, state_tax_rate: 0 } }
+          : {
+              amount_to_collect: 8.25,
+              rate: 0.0825,
+              breakdown: { state_tax_collectable: 8.25, state_tax_rate: 0.0825 },
+            },
+      }),
+    );
+  });
+  const origin = await listen(server);
+  try {
+    const exempt = await quoteViaTaxJar(
+      { ...quoteRequest, counterpartyCode: "customer-exempt" },
+      { apiKey: TAXJAR_API_KEY, baseUrl: origin },
+      local,
+    );
+    const taxed = await quoteViaTaxJar(
+      { ...quoteRequest, counterpartyCode: "customer-ordinary" },
+      { apiKey: TAXJAR_API_KEY, baseUrl: origin },
+      local,
+    );
+    assert.deepEqual(seenIds, ["customer-exempt", "customer-ordinary"]);
+    assert.equal(exempt.taxAmount, "0.0000");
+    assert.equal(taxed.taxAmount, "8.2500");
+  } finally {
+    await close(server);
+  }
+});
+
 test("normal provider responses pass with credentials confined to the configured origin", async () => {
   interface SeenCall {
     pathname: string;
