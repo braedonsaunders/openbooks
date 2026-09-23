@@ -672,7 +672,9 @@ export async function categoryWeekly(
     const ids = sql.join(cat.accountIds.map((a) => sql`${a}`), sql`, `);
     const historyStart = addDays(tStart, -historyWeeks * 7);
     // Grouped by Sunday-start week AND account: weeks before the horizon feed
-    // the average, weeks inside it act as actuals ().
+    // the average, weeks inside it act as actuals (). History is cut at
+    // asOf: postings after the forecast date must not leak into a historical
+    // forecast, so only the current (partial) week can carry actuals.
     const r = (await db.execute<CashWeeklyHistoryRow>(sql`
       select (e.posting_date - extract(dow from e.posting_date)::int)::text as wk,
              a.number, a.name,
@@ -682,7 +684,7 @@ export async function categoryWeekly(
         and e.status in ('posted', 'reversed') and e.book_id = ${statementBookExpr(orgId)}
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and l.account_id in (${ids})
-        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${toISO(tEnd)}${subScope(sql`l.subsidiary_id`, context.subIds)}
+        and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1, a.number, a.name
     `));
     const weeklyHistory: Record<string, Money> = {};
