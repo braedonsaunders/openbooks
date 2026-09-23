@@ -558,3 +558,118 @@ test(
     }
   },
 );
+
+test(
+  "importing statement lines inside signed-off coverage is refused",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      await postBankJournal(org, actor, ["100"], "covered");
+      const statementInput = {
+        accountId: org.accounts.bank,
+        source: "manual" as const,
+        statementDate: org.date,
+        openingBalance: "0",
+        closingBalance: "100",
+        currency: "CAD",
+        lines: [
+          {
+            postedOn: org.date,
+            amount: "100",
+            description: "Covered deposit",
+            bankTransactionId: "covered-deposit",
+          },
+        ],
+      };
+      await importStatement(statementInput, ctx);
+      const reconciliation = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+        ctx,
+      );
+      assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
+      assert.deepEqual(await markReconciled(reconciliation.id, ctx), { journalLinesReconciled: 1 });
+
+      // A late-arriving but distinct transaction dated inside the signed
+      // coverage must refuse — signed-off history is immutable and the
+      // closed session could never clear the new unmatched line.
+      await assert.rejects(
+        importStatement(
+          {
+            accountId: org.accounts.bank,
+            source: "manual" as const,
+            statementDate: org.date,
+            currency: "CAD",
+            lines: [
+              {
+                postedOn: org.date,
+                amount: "7",
+                description: "Late fee inside signed coverage",
+                bankTransactionId: "late-fee-signed",
+              },
+            ],
+          },
+          ctx,
+        ),
+        /signed-off/,
+      );
+      // The preview refuses the same way — it must agree with the import.
+      await assert.rejects(
+        importStatement(
+          {
+            accountId: org.accounts.bank,
+            source: "manual" as const,
+            statementDate: org.date,
+            currency: "CAD",
+            dryRun: true,
+            lines: [
+              {
+                postedOn: org.date,
+                amount: "7",
+                description: "Late fee inside signed coverage",
+                bankTransactionId: "late-fee-signed",
+              },
+            ],
+          },
+          ctx,
+        ),
+        /signed-off/,
+      );
+      // Lines after the signed cutoff still import.
+      const dayAfter = new Date(Date.parse(`${org.date}T00:00:00Z`) + 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      const later = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: dayAfter,
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: dayAfter,
+              amount: "7",
+              description: "Next-day fee",
+              bankTransactionId: "next-day-fee",
+            },
+          ],
+        },
+        ctx,
+      );
+      assert.equal(later.imported, 1);
+      // And retrying the already-imported file stays idempotent —
+      // grandfathered duplicates never trip the cutoff.
+      const retry = await importStatement(statementInput, ctx);
+      assert.equal(retry.statementId, null);
+      assert.equal(retry.duplicates, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
