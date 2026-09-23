@@ -1,9 +1,11 @@
-import { consolidationHistory } from "@openbooks/engine/src/consolidation/consolidation-history.ts";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { proposeLossOfControl } from "@openbooks/engine/src/consolidation/loss-of-control.ts";
+import {
+  LossOfControlProposalError,
+  loadLossOfControlProposalData,
+  proposeLossOfControl,
+} from "@openbooks/engine/src/consolidation/loss-of-control.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardFeaturePermission } from "@/lib/feature-gates";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
@@ -64,83 +66,20 @@ export async function GET(
       { status: 422 },
     );
   const orgId = gate.user.orgId;
-  const interest = (
-    await db.execute<{
-      subsidiary_id: string;
-      parent_subsidiary_id: string;
-      investment_account_id: string;
-      equity_income_account_id: string;
-    }>(
-      sql`select * from subsidiary_ownership_interests where org_id=${orgId} and id=${id}`,
-    )
-  ).rows[0];
-  if (
-    !interest ||
-    (gate.allowedSubsidiaryIds &&
-      (!gate.allowedSubsidiaryIds.has(interest.subsidiary_id) ||
-        !gate.allowedSubsidiaryIds.has(interest.parent_subsidiary_id)))
-  )
+  try {
     return NextResponse.json(
-      { error: "ownership interest not found" },
-      { status: 404 },
+      await loadLossOfControlProposalData(
+        db,
+        orgId,
+        id,
+        gate.allowedSubsidiaryIds,
+      ),
     );
-  const subsidiaries = (
-    await db.execute<{
-      id: string;
-      name: string;
-      parent_id: string | null;
-      base_currency: string;
-      is_elimination: boolean;
-    }>(
-      sql`with recursive family as(select id,org_id,name,parent_id,base_currency,is_elimination from subsidiaries where org_id=${orgId} and id=${interest.subsidiary_id} union all select s.id,s.org_id,s.name,s.parent_id,s.base_currency,s.is_elimination from subsidiaries s join family f on f.org_id=s.org_id and s.parent_id=f.id where not s.is_elimination) select * from family order by name`,
-    )
-  ).rows;
-  if (
-    gate.allowedSubsidiaryIds &&
-    subsidiaries.some((s) => !gate.allowedSubsidiaryIds!.has(s.id))
-  )
-    return NextResponse.json(
-      { error: "this disposal includes an entity outside your authorization" },
-      { status: 403 },
-    );
-  const accounts = (
-    await db.execute<{
-      id: string;
-      number: string;
-      name: string;
-      type: string;
-    }>(
-      sql`select id,number,name,type from accounts where org_id=${orgId} and is_active and not is_summary order by number`,
-    )
-  ).rows;
-  const eliminations = (
-    await db.execute<{ id: string; name: string; base_currency: string }>(
-      sql`select id,name,base_currency from subsidiaries where org_id=${orgId} and is_active and is_elimination order by name`,
-    )
-  ).rows.filter(
-    (s) => !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
-  );
-  const adjustmentLines = eliminations.length
-    ? (
-        await db.execute<{
-          id: string;
-          entry_number: string;
-          posting_date: string;
-          account_name: string;
-          amount: string;
-          memo: string | null;
-        }>(
-          sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
-        )
-      ).rows
-    : [];
-  return NextResponse.json({
-    interest,
-    subsidiaries,
-    accounts,
-    eliminations,
-    adjustmentLines,
-  });
+  } catch (e) {
+    if (e instanceof LossOfControlProposalError)
+      return NextResponse.json({ error: e.message }, { status: e.status });
+    throw e;
+  }
 }
 export async function POST(
   req: Request,
