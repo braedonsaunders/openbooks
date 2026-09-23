@@ -2466,6 +2466,8 @@
       "frequency": "Fréquence",
       "frequencyBiweekly": "Toutes les 2 semaines",
       "frequencyMonthly": "Mensuelle",
+      "anchorDate": "Date d’ancrage",
+      "anchorDateHelp": "Une date de paiement connue à partir de laquelle l’échéancier se répète — déplacer la date de prévision ne la déplace jamais.",
       "frequencyWeekly": "Hebdomadaire",
       "glAccounts": "Comptes du grand livre",
       "historyMonths": "Mois d’historique",

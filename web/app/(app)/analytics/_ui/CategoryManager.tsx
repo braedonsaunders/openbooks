@@ -149,6 +149,12 @@ export function CategoryManager({
   const applyDraft = () => {
     if (!draft || !draft.name.trim()) return
     const clean: ForecastCategory = { ...draft, name: draft.name.trim() }
+    // The monthly/biweekly phase pins to the anchor: stamp today when the
+    // editor never set one (the API stamps it too, but the draft should show
+    // the phase the forecast will use before it saves).
+    if (clean.method === 'manual_recurring' && !clean.anchorDate) {
+      clean.anchorDate = new Date().toISOString().slice(0, 10)
+    }
     if (draft.method === 'vendor_payment_history' || draft.method === 'vendor_recurring_average') {
       clean.partyName = vendorOptions.find((v) => v.id === (clean.partyIds?.[0] ?? clean.partyId))?.name
     }
@@ -326,6 +332,11 @@ export function CategoryManager({
                   <option value="biweekly">{tForm('frequencyBiweekly')}</option>
                   <option value="monthly">{tForm('frequencyMonthly')}</option>
                 </Select>
+              </div>
+              <div>
+                <label className={labelCls}>{tForm('anchorDate')}</label>
+                <input type="date" value={draft.anchorDate ?? ''} onChange={(e) => set({ anchorDate: e.target.value || undefined })} className={inputCls} />
+                <span className={helpCls}>{tForm('anchorDateHelp')}</span>
               </div>
             </div>
           ) : draft.method === 'formula_expression' ? (

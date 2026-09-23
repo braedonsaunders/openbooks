@@ -573,6 +573,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // event: concurrent corrections lost one silently (0281 adds the
     // required revision plus the append-only correction evidence table).
     "0281_hrm_exit_record_revision_and_audit.sql",
+    // Manual monthly cashflow schedules stepped from the horizon's Sunday
+    // with no persisted payment anchor, so moving asOf rephased them (0288
+    // backfills anchorDate onto manual_recurring categories missing it).
+    "0288_cashflow_category_anchor_date.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

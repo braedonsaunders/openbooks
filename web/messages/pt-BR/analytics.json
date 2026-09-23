@@ -2466,6 +2466,8 @@
       "frequency": "Frequência",
       "frequencyBiweekly": "Quinzenal",
       "frequencyMonthly": "Mensal",
+      "anchorDate": "Data de ancoragem",
+      "anchorDateHelp": "Uma data de pagamento conhecida a partir da qual o cronograma se repete — mover a data da previsão nunca a move.",
       "frequencyWeekly": "Semanal",
       "glAccounts": "Contas contábeis",
       "historyMonths": "Meses de histórico",

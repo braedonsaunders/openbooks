@@ -2466,6 +2466,8 @@
       "frequency": "频率",
       "frequencyBiweekly": "每两周",
       "frequencyMonthly": "每月",
+      "anchorDate": "锚定日期",
+      "anchorDateHelp": "计划重复所依据的已知付款日期，移動预测日期不会改变它。",
       "frequencyWeekly": "每周",
       "glAccounts": "总账科目",
       "historyMonths": "历史月数",
