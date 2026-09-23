@@ -174,6 +174,88 @@ export function allocateShiftNetMs(
   return bases.map((b, i) => b - dealt[i]!);
 }
 
+/**
+ * The rounding quantum in ten-thousandths of an hour: 6 minutes is a
+ * tenth (1000), 15 minutes a quarter (2500), no rounding a single
+ * 0.0001h unit. Round-once dealing posts whole quanta per day piece so
+ * the posted entries sum to exactly the rounded shift total.
+ */
+export function roundingQuantumUnits(rule: RoundingRule): number {
+  if (rule.incrementMinutes === 0) return 1;
+  if (rule.incrementMinutes === 6) return 1000;
+  if (rule.incrementMinutes === 15) return 2500;
+  throw new FieldTimeError(
+    "invalid_rounding_rule",
+    `Rounding increment ${rule.incrementMinutes} is not a declared rule — set rounding to none, 6 or 15 minutes in Timesheets setup`,
+  );
+}
+
+/** Whole quanta in a rounded hours value (the exact output of roundHours). */
+export function hoursToQuantumUnits(hours: string, rule: RoundingRule): number {
+  const quantum = roundingQuantumUnits(rule);
+  const m = /^(\d+)\.(\d{4})$/.exec(hours.trim());
+  if (!m) {
+    throw new FieldTimeError(
+      "invalid_hours",
+      `Hours ${JSON.stringify(hours)} are not a rounded hours value — round the shift total before dealing it across days`,
+    );
+  }
+  const total = BigInt(m[1]!) * SCALE + BigInt(m[2]!);
+  if (total % BigInt(quantum) !== 0n) {
+    throw new FieldTimeError(
+      "invalid_hours",
+      `Hours ${JSON.stringify(hours)} are not a whole multiple of the rounding rule — round the shift total before dealing it across days`,
+    );
+  }
+  return Number(total / BigInt(quantum));
+}
+
+/** Back to a 4-decimal hours value from whole quanta. */
+export function quantumUnitsToHours(units: number, rule: RoundingRule): string {
+  if (!Number.isInteger(units) || units < 0) {
+    throw new FieldTimeError(
+      "invalid_hours",
+      `Quanta ${String(units)} are not a whole non-negative count — deal whole rounding units across days`,
+    );
+  }
+  return formatTenThousandths(BigInt(units) * BigInt(roundingQuantumUnits(rule)));
+}
+
+export interface UtcDayPiece {
+  date: string;
+  /** Whole milliseconds of the span falling on this UTC date. */
+  ms: number;
+}
+
+/**
+ * Split [fromMs, toMs) at UTC midnights. UTC is the boundary because
+ * the org model declares no business timezone and the rest of time
+ * tracking already days in UTC (week starts in sundayOf, crew
+ * worked_on dates). Integer-millisecond pieces sum to exactly the span.
+ */
+export function splitUtcDays(fromMs: number, toMs: number): UtcDayPiece[] {
+  for (const [name, value] of [["span start", fromMs], ["span end", toMs]] as const) {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new FieldTimeError(
+        "invalid_occurred_at",
+        `The day-split ${name} is not a valid instant — retry with the device time as ISO`,
+      );
+    }
+  }
+  const out: UtcDayPiece[] = [];
+  if (toMs <= fromMs) return out;
+  let from = Math.floor(fromMs);
+  const end = Math.floor(toMs);
+  while (from < end) {
+    const day = new Date(from);
+    const dayEnd = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate()) + 86_400_000;
+    const pieceEnd = Math.min(end, dayEnd);
+    out.push({ date: day.toISOString().slice(0, 10), ms: pieceEnd - from });
+    from = pieceEnd;
+  }
+  return out;
+}
+
 export interface LatLng {
   lat: number;
   lng: number;

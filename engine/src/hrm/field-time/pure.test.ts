@@ -4,10 +4,14 @@ import {
   allocateShiftNetMs,
   checkEquipmentTolerance,
   distributeProRata,
+  hoursToQuantumUnits,
   insideCircle,
   insidePolygon,
   netShiftMs,
+  quantumUnitsToHours,
   roundHours,
+  roundingQuantumUnits,
+  splitUtcDays,
   validateClockSequence,
   validateEventChronology,
   validateStages,
@@ -98,6 +102,43 @@ describe("shift-level break allocation", () => {
   });
   it("a break longer than the shift nets to zero, never negative", () => {
     assert.deepEqual(allocateShiftNetMs([4 * H], [0], 300), [0]);
+  });
+});
+
+describe("round-once dealing", () => {
+  const quarter = { incrementMinutes: 15, mode: "nearest" } as const;
+  it("quanta match the rounding rule", () => {
+    assert.equal(roundingQuantumUnits({ incrementMinutes: 0, mode: "nearest" }), 1);
+    assert.equal(roundingQuantumUnits({ incrementMinutes: 6, mode: "up" }), 1000);
+    assert.equal(roundingQuantumUnits(quarter), 2500);
+  });
+  it("hours round-trip through quanta", () => {
+    assert.equal(hoursToQuantumUnits("7.5000", quarter), 30);
+    assert.equal(quantumUnitsToHours(30, quarter), "7.5000");
+    assert.equal(quantumUnitsToHours(1, quarter), "0.2500");
+  });
+  it("a value that is not a whole multiple of the quantum refuses", () => {
+    refuses(() => hoursToQuantumUnits("7.1300", quarter));
+  });
+  it("UTC day splits are exact to the millisecond", () => {
+    const pieces = splitUtcDays(
+      Date.parse("2026-09-14T23:52:00.000Z"),
+      Date.parse("2026-09-15T00:08:00.000Z"),
+    );
+    assert.deepEqual(pieces.map((p) => p.date), ["2026-09-14", "2026-09-15"]);
+    assert.deepEqual(pieces.map((p) => p.ms), [8 * 60_000, 8 * 60_000]);
+  });
+  it("a single-day span is one piece", () => {
+    const pieces = splitUtcDays(
+      Date.parse("2026-09-14T08:00:00.000Z"),
+      Date.parse("2026-09-14T16:00:00.000Z"),
+    );
+    assert.deepEqual(pieces, [{ date: "2026-09-14", ms: 8 * 3_600_000 }]);
+  });
+  it("the 23:52-00:08 shift deals its single quarter deterministically", () => {
+    // 16 minutes round once to one quarter; the 8/8-minute tie breaks
+    // to the earlier day, and the posted entries sum to exactly 0.25.
+    assert.deepEqual(distributeProRata(1, [8 * 60_000, 8 * 60_000]), [1, 0]);
   });
 });
 

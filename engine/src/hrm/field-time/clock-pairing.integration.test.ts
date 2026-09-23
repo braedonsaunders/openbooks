@@ -5,6 +5,8 @@
  *   never marked paired around a missing entry.
  * - D7: the declared unpaid break is deducted once per shift, never once
  *   per project segment.
+ * - D8: rounding happens once per shift and the exact total is dealt
+ *   across UTC day pieces by largest remainder.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -135,6 +137,68 @@ test("a mid-shift project switch deducts the unpaid break once per shift", { ski
       // 7.5 paid hours, dealt 3.75 + 3.75 — never 7h from a per-segment deduction.
       assert.deepEqual(rows.map((r) => r.hours), ["3.7500", "3.7500"]);
       assert.deepEqual(rows.map((r) => r.project_id).sort(), [projectA, projectB].sort());
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a 23:52-00:08 shift rounds once, never once per midnight piece", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 });
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    await withOrg(org.orgId, async () => {
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T23:52:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      const result = await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-09-15T00:08:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      // 16 minutes round once to a single quarter — per-piece rounding
+      // paid 0.25 + 0.25 = 0.50 for the same 16 minutes.
+      assert.equal(result.entryIds.length, 1);
+      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+        select hours::text as hours, worked_on::text as worked_on from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows;
+      assert.deepEqual(rows.map((r) => r.hours), ["0.2500"]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an overnight shift deals its rounded total across both UTC days", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId, { unpaidBreakMinutes: 0 });
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    await withOrg(org.orgId, async () => {
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T22:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      await recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_out", occurredAt: "2026-09-15T02:00:00.000Z",
+        source: "mobile", projectId, clientEventId: randomUUID(),
+      });
+      const rows = (await db.execute<{ hours: string; worked_on: string }>(sql`
+        select hours::text as hours, worked_on::text as worked_on from time_entries
+         where org_id = ${org.orgId} and employee_party_id = ${worker}
+         order by worked_on`)).rows;
+      // 4 paid hours, dealt 2.00 + 2.00 across the UTC midnight.
+      assert.deepEqual(rows.map((r) => r.hours), ["2.0000", "2.0000"]);
+      assert.deepEqual(rows.map((r) => r.worked_on), ["2026-09-14", "2026-09-15"]);
     });
   } finally {
     await dropScratchOrg(org.orgId);

@@ -24,9 +24,13 @@ import {
 } from "./settings.ts";
 import {
   allocateShiftNetMs,
+  distributeProRata,
+  hoursToQuantumUnits,
   insideCircle,
   insidePolygon,
+  quantumUnitsToHours,
   roundHours,
+  splitUtcDays,
   validateClockSequence,
   validateEventChronology,
   type ClockKind,
@@ -192,31 +196,6 @@ interface Segment {
   costCodeRef: string | null;
 }
 
-/** Split a segment crossing UTC midnight into per-day pieces, pro-rata. */
-function splitMidnight(segment: Segment): Array<Segment & { date: string }> {
-  const out: Array<Segment & { date: string }> = [];
-  let from = segment.fromMs;
-  const total = segment.toMs - segment.fromMs;
-  if (total <= 0) return [];
-  while (from < segment.toMs) {
-    const dayStart = Date.UTC(
-      new Date(from).getUTCFullYear(), new Date(from).getUTCMonth(), new Date(from).getUTCDate(),
-    );
-    const dayEnd = dayStart + 86_400_000;
-    const pieceEnd = Math.min(segment.toMs, dayEnd);
-    const share = (pieceEnd - from) / total;
-    out.push({
-      ...segment,
-      fromMs: from,
-      toMs: pieceEnd,
-      breakMs: Math.round(segment.breakMs * share),
-      date: new Date(from).toISOString().slice(0, 10),
-    });
-    from = pieceEnd;
-  }
-  return out;
-}
-
 async function pairAndPostEntries(input: {
   orgId: string;
   actorUserId: string | null;
@@ -286,64 +265,85 @@ async function pairAndPostEntries(input: {
     segments.map((s) => s.breakMs),
     settings.unpaidBreakMinutes,
   );
-  const entryIds: string[] = [];
+  const noPayable = (): FieldTimeError =>
+    new FieldTimeError(
+      "no_payable_time",
+      `The shift from ${input.open.occurred_at} to ${input.closeOccurredAt} nets to zero hours after breaks and rounding — no entry was posted and the clock-in stays open; review the times in Timesheets and clock out again`,
+    );
+  // Round ONCE per shift: rounding each midnight piece separately paid
+  // 23:52-00:08 as 30 minutes under nearest-15m instead of the 15 the
+  // shift earned. The exact rounded total is dealt across day pieces by
+  // largest remainder, so posted entries sum to precisely the total.
+  const totalNetMs = shiftNets.reduce((a, b) => a + b, 0);
+  const shiftRounded = roundHours((totalNetMs / 3_600_000).toFixed(4), settings.rounding);
+  const totalUnits = hoursToQuantumUnits(shiftRounded, settings.rounding);
+  if (totalUnits <= 0) throw noPayable();
+  interface DayCell {
+    date: string;
+    ms: number;
+    refs: { projectId: string | null; projectTaskId: string | null; costCodeRef: string | null };
+  }
+  const cells: DayCell[] = [];
   for (let si = 0; si < segments.length; si++) {
     const segment = segments[si]!;
     const grossMs = Math.max(0, segment.toMs - segment.fromMs);
     if (grossMs <= 0) continue;
     const netMs = shiftNets[si]!;
-    const grossHours = (netMs / 3_600_000).toFixed(4);
-    const rounded = roundHours(grossHours, settings.rounding);
-    if (Number(rounded) <= 0) continue;
-    const refs = segment === segments[segments.length - 1] && segments.length > 1
+    if (netMs <= 0) continue;
+    const refs = si === segments.length - 1 && segments.length > 1
       ? input.closeRefs
       : { projectId: segment.projectId, projectTaskId: segment.projectTaskId, costCodeRef: segment.costCodeRef };
-    for (const piece of splitMidnight(segment)) {
-      const pieceGrossMs = Math.max(0, piece.toMs - piece.fromMs);
-      if (pieceGrossMs <= 0) continue;
-      // The piece inherits its share of the segment net, which already
-      // carries the once-per-shift break deduction: the declared rule
-      // is never re-applied here.
-      const pieceNet = (netMs * pieceGrossMs) / grossMs;
-      const pieceHours = roundHours((pieceNet / 3_600_000).toFixed(4), settings.rounding);
-      if (Number(pieceHours) <= 0) continue;
-      let wageRate: string | null = null;
-      let wageCurrency: string | null = null;
-      if (refs.projectId && input.actorUserId) {
-        try {
-          const priced = await prevailingWageForTimeEntry({
-            orgId: input.orgId,
-            actorId: input.actorUserId,
-            employeePartyId: input.employeePartyId,
-            projectId: refs.projectId,
-            workedOn: piece.date,
-          });
-          if (priced) {
-            wageRate = priced.wage;
-            wageCurrency = priced.currency;
-          }
-        } catch (e) {
-          // The resolver refuses in-scope-but-unresolvable days by name;
-          // that refusal must reach the caller, never a zero rate.
-          throw e;
+    // UTC midnights: the org model declares no business timezone, and
+    // the rest of time tracking already days in UTC.
+    const pieces = splitUtcDays(segment.fromMs, segment.toMs);
+    const dealt = distributeProRata(netMs, pieces.map((p) => p.ms));
+    pieces.forEach((piece, i) => {
+      if (dealt[i]! > 0) cells.push({ date: piece.date, ms: dealt[i]!, refs });
+    });
+  }
+  const cellUnits = distributeProRata(totalUnits, cells.map((c) => c.ms));
+  const entryIds: string[] = [];
+  for (let ci = 0; ci < cells.length; ci++) {
+    const cell = cells[ci]!;
+    if (cellUnits[ci]! <= 0) continue;
+    const pieceHours = quantumUnitsToHours(cellUnits[ci]!, settings.rounding);
+    const refs = cell.refs;
+    let wageRate: string | null = null;
+    let wageCurrency: string | null = null;
+    if (refs.projectId && input.actorUserId) {
+      try {
+        const priced = await prevailingWageForTimeEntry({
+          orgId: input.orgId,
+          actorId: input.actorUserId,
+          employeePartyId: input.employeePartyId,
+          projectId: refs.projectId,
+          workedOn: cell.date,
+        });
+        if (priced) {
+          wageRate = priced.wage;
+          wageCurrency = priced.currency;
         }
+      } catch (e) {
+        // The resolver refuses in-scope-but-unresolvable days by name;
+        // that refusal must reach the caller, never a zero rate.
+        throw e;
       }
-      await ensureWeek(input.orgId, input.employeePartyId, piece.date, input.actorUserId);
-      const inserted = (await db.execute<{ id: string }>(sql`
-        insert into time_entries
-          (org_id, employee_party_id, worked_on, hours, project_id, project_task_id,
-           cost_code_ref, status, started_at, wage_rate, wage_currency,
-           clock_pair_id, created_by, updated_by)
-        values
-          (${input.orgId}, ${input.employeePartyId}, ${piece.date}::date, ${pieceHours},
-           ${refs.projectId}, ${refs.projectTaskId}, ${refs.costCodeRef},
-           'submitted', ${input.open.occurred_at}::timestamptz,
-           ${wageRate}, ${wageCurrency}, ${pairId},
-           ${input.actorUserId}, ${input.actorUserId})
-        returning id`)).rows[0];
-      if (!inserted) throw new FieldTimeError("entry_not_stored", "The clock pairing produced no entry row — retry the clock-out");
-      entryIds.push(inserted.id);
     }
+    await ensureWeek(input.orgId, input.employeePartyId, cell.date, input.actorUserId);
+    const inserted = (await db.execute<{ id: string }>(sql`
+      insert into time_entries
+        (org_id, employee_party_id, worked_on, hours, project_id, project_task_id,
+         cost_code_ref, status, started_at, wage_rate, wage_currency,
+         clock_pair_id, created_by, updated_by)
+      values
+        (${input.orgId}, ${input.employeePartyId}, ${cell.date}::date, ${pieceHours},
+         ${refs.projectId}, ${refs.projectTaskId}, ${refs.costCodeRef},
+         'submitted', ${input.open.occurred_at}::timestamptz,
+         ${wageRate}, ${wageCurrency}, ${pairId},
+         ${input.actorUserId}, ${input.actorUserId})
+      returning id`)).rows[0];
+    if (!inserted) throw new FieldTimeError("entry_not_stored", "The clock pairing produced no entry row — retry the clock-out");
+    entryIds.push(inserted.id);
   }
   if (entryIds.length === 0) {
     // A pair with no entry is a vanished shift: the close stays refused
