@@ -143,9 +143,27 @@ BEGIN
 END;
 $classify$;
 
+-- Converge installs recorded at the old digest (reapply path): they hold the
+-- old FULL unique constraint under this same name. Drop it first — a
+-- metadata-only lock, no scan — so the concurrent build below recreates the
+-- guard in its staged partial form. Fresh installs and replays find nothing
+-- to drop. Dropping the constraint drops its backing index too, freeing the
+-- name for the concurrent build.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.stock_count_lines'::regclass
+       AND conname = 'stock_count_lines_no_duplicate_subject'
+  ) THEN
+    ALTER TABLE public.stock_count_lines DROP CONSTRAINT stock_count_lines_no_duplicate_subject;
+  END IF;
+END
+$$;
+
 -- Retry safety: drop our own INVALID index before rebuilding. A failed
 -- CONCURRENTLY build leaves the name present but unusable, and IF NOT
--- EXISTS below would then skip it forever.
+-- EXISTS below would then skip the name forever.
 DO $$
 DECLARE
   idx text;
@@ -169,3 +187,9 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS stock_count_lines_no_duplicate_su
 
 COMMENT ON INDEX public.stock_count_lines_no_duplicate_subject IS
   'One line per (count, item, stock location, lot) subject for all unmarked rows. Duplicate subjects double-applied the variance before 0293; recounts re-snapshot the one line. Rows marked is_pre_guard_legacy predate the guard on an immutable count and are preserved as evidence (0293, provenance in 0326).';
+
+-- Converge the governed view on reapply: installs recorded at the old digest
+-- built openbooks_query.stock_count_lines before the marker column existed,
+-- and no later migration rebuilds it for them. The refresh is idempotent, so
+-- fresh installs simply rebuild what they already have.
+SELECT public.openbooks_refresh_query_catalog();
