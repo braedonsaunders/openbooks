@@ -42,7 +42,7 @@ function walkFiles(dir: string, name: string): string[] {
 
 /** web/app/api/v1/vendors/route.ts -> /api/v1/vendors ; [id] -> x. */
 function routeSamplePath(file: string): string {
-  const rel = file.slice(webApp.length).replace(/\\/g, "/");
+  const rel = file.slice(webApp.length).replaceAll("\\", "/");
   return rel
     .replace(/\/route\.ts$/, "")
     .replace(/\[\.\.\.[^\]]+\]/g, "x")
@@ -51,7 +51,7 @@ function routeSamplePath(file: string): string {
 
 /** web/app/survey/[token]/page.tsx -> /survey/x. */
 function pageSamplePath(file: string): string {
-  const rel = file.slice(webApp.length).replace(/\\/g, "/");
+  const rel = file.slice(webApp.length).replaceAll("\\", "/");
   const withoutSuffix = rel.replace(/\/page\.tsx$/, "");
   const withoutGroup = withoutSuffix
     .split("/")

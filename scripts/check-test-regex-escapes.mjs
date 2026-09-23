@@ -163,6 +163,7 @@ export const ALLOWLIST = [
   { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "not ok \\\\d", reason: "pins the canary's TAP grep in test.yml, whose text really contains backslash escapes" },
   { file: "scripts/test-fixture-architecture.test.mjs", snippet: "\\$\\{receipt", reason: "pins owner source text that really contains backslash-n escape sequences" },
   { file: "engine/src/provisioning/bootstrap-safety.test.ts", snippet: "seed-project-types", reason: "pins the \\. stem escape inside isSeedProjectTypesCli's entrypoint regex (seed-project-types.ts:80), whose text really contains a backslash" },
+  { file: "scripts/test-workflow.test.mjs", snippet: "package-lock", reason: "pins the scope job's grep over the build's own inputs in test.yml:66, whose text really contains backslash escapes (\\.github, package-lock\\.json) so the minimal correct pattern carries \\\\ runs" },
 ];
 
 export function isAllowlisted(file, snippet) {
