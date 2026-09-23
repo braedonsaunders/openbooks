@@ -149,3 +149,24 @@ test("an exact replay is still idempotent", { skip: !DB }, async () => {
   }
 });
 
+
+test("one unmapped job refuses the whole import with zero writes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await project(org.orgId, "JOB-1");
+    const before = await counts(org.orgId);
+    await assert.rejects(
+      () =>
+        importFieldTickets({
+          orgId: org.orgId,
+          sourceSystem: "test-source",
+          tickets: [ticket(), ticket({ sourceId: "10", number: "FT-10", jobRef: "JOB-9" })],
+          apply: true,
+        }),
+      /unknown source projects: source ticket 10 \(number FT-10, job JOB-9\)/,
+    );
+    assert.deepEqual(await counts(org.orgId), before);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
