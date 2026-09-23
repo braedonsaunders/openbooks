@@ -4054,7 +4054,8 @@
         "legalNamePlaceholder": "注册法定实体名称",
         "country": "国家",
         "currency": "本位币",
-        "fiscalYear": "会计年度起始月"
+        "fiscalYear": "会计年度起始月",
+        "selectedSummary": "已选：{country} · {currency} · 财政年度自 {fiscalMonth} 开始。"
       },
       "industry": {
         "title": "您属于哪个行业？",
@@ -4252,7 +4253,9 @@
         "note": "这将创建核算基础与起始工作区。就绪指南会列出首次实际过账前尚需的事项。每项可选功能仍可在“公司设置 → 功能”下调整。",
         "notePreserved": "这将更新公司归类与工作区推荐，不改现有科目与已过账历史。每项可选功能仍可在“公司设置 → 功能”下调整。",
         "payrollPack": "工资国家包",
-        "payrollPackNone": "无——以后从工资设置安装"
+        "payrollPackNone": "无——以后从工资设置安装",
+        "defaultBadge": "默认",
+        "defaultsHint": "标为“默认”的字段保留了预选值。如需更改，请在应用前返回修改。"
       },
       "applying": {
         "title": "正在建账…",

@@ -4054,7 +4054,8 @@
         "legalNamePlaceholder": "Razão social registrada",
         "country": "País",
         "currency": "Moeda-base",
-        "fiscalYear": "Ano fiscal começa em"
+        "fiscalYear": "Ano fiscal começa em",
+        "selectedSummary": "Selecionado: {country} · {currency} · ano fiscal começa em {fiscalMonth}."
       },
       "industry": {
         "title": "Qual é seu setor?",
@@ -4252,7 +4253,9 @@
         "note": "Isto cria sua base contábil e workspace inicial. O guia de prontidão mostra o que ainda falta antes do primeiro lançamento real. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
         "notePreserved": "Isto atualiza classificação da empresa e recomendações de workspace sem mudar o plano existente nem o histórico lançado. Cada recurso opcional segue ajustável em Configurações da empresa → Funcionalidades.",
         "payrollPack": "Pacote de país da folha",
-        "payrollPackNone": "Nenhum — instale depois pela configuração da Folha"
+        "payrollPackNone": "Nenhum — instale depois pela configuração da Folha",
+        "defaultBadge": "Padrão",
+        "defaultsHint": "Os campos marcados como Padrão mantiveram o valor pré-selecionado. Volte para alterá-los antes de aplicar."
       },
       "applying": {
         "title": "Montando seus livros…",

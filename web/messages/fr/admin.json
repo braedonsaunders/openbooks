@@ -4044,7 +4044,8 @@
         "legalNamePlaceholder": "Nom de l'entité juridique enregistrée",
         "country": "Pays",
         "currency": "Devise de base",
-        "fiscalYear": "L'exercice commence en"
+        "fiscalYear": "L'exercice commence en",
+        "selectedSummary": "Sélection : {country} · {currency} · l’exercice commence en {fiscalMonth}."
       },
       "industry": {
         "title": "Quel est votre secteur d'activité ?",
@@ -4242,7 +4243,9 @@
         "note": "Ceci crée votre base comptable et votre espace de départ. Le guide de mise en service indiquera ce qui manque avant votre première écriture réelle. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
         "notePreserved": "Ceci met à jour la classification de l'entreprise et les recommandations d'espace sans modifier le plan existant ni l'historique comptabilisé. Chaque fonctionnalité facultative reste ajustable depuis Configuration → Fonctionnalités.",
         "payrollPack": "Module de paie par pays",
-        "payrollPackNone": "Aucun — à installer plus tard depuis la Paie"
+        "payrollPackNone": "Aucun — à installer plus tard depuis la Paie",
+        "defaultBadge": "Par défaut",
+        "defaultsHint": "Les champs marqués Par défaut ont conservé leur valeur présélectionnée. Revenez en arrière pour les modifier avant d’appliquer."
       },
       "applying": {
         "title": "Configuration de vos livres…",

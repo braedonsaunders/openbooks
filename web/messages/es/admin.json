@@ -4044,7 +4044,8 @@
         "legalNamePlaceholder": "Nombre de la entidad jurídica registrada",
         "country": "País",
         "currency": "Moneda base",
-        "fiscalYear": "El ejercicio empieza en"
+        "fiscalYear": "El ejercicio empieza en",
+        "selectedSummary": "Selección: {country} · {currency} · el año fiscal comienza en {fiscalMonth}."
       },
       "industry": {
         "title": "¿A qué sector pertenece?",
@@ -4242,7 +4243,9 @@
         "note": "Esto crea su base contable y su espacio inicial. La guía de puesta en marcha mostrará lo que falte antes de su primer apunte real. Cada función opcional sigue ajustable desde Configuración → Funciones.",
         "notePreserved": "Esto actualiza la clasificación de la empresa y las recomendaciones de espacio sin cambiar el plan existente ni el historial contabilizado. Cada función opcional sigue ajustable desde Configuración → Funciones.",
         "payrollPack": "Paquete de nómina por país",
-        "payrollPackNone": "Ninguno — instalar más tarde desde Nómina"
+        "payrollPackNone": "Ninguno — instalar más tarde desde Nómina",
+        "defaultBadge": "Predeterminado",
+        "defaultsHint": "Los campos marcados como Predeterminado conservaron su valor preseleccionado. Vuelva atrás para cambiarlos antes de aplicar."
       },
       "applying": {
         "title": "Configurando sus libros…",
