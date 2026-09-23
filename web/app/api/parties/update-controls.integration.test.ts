@@ -61,14 +61,17 @@ test('impossible hired-on dates are refused with 422 and store nothing', { skip:
   }
 })
 
-test('an edit echoing a stored role kind persists instead of 422ing (F-t05-002)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('an edit echoing a backed role kind persists instead of 422ing (F-t05-002, OM-16)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   // F-t05-002: the drawer echoes the stored kind back on every save, but
   // PATCH only accepted company|person — so every edit of an employee-kind
-  // party failed while the UI reported success. Real route, real row.
+  // party failed while the UI reported success. OM-16 narrows the round-trip
+  // to backed kinds, so the fixture carries the employee role. Real route,
+  // real rows.
   const { org } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update parties set kind = 'employee' where id = ${org.customerId} and org_id = ${org.orgId}`)
+      await db.execute(sql`insert into employee_roles (org_id, party_id) values (${org.orgId}, ${org.customerId})`)
       const res = await PATCH(
         patchRequest({ kind: 'employee', shortCode: 'DE-001', expectedUpdatedAt: await revision(org.orgId, org.customerId) }),
         params(org.customerId),
@@ -78,6 +81,32 @@ test('an edit echoing a stored role kind persists instead of 422ing (F-t05-002)'
         select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`)).rows[0]!
       assert.equal(stored.kind, 'employee')
       assert.equal(stored.short_code, 'DE-001')
+    })
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('an edit claiming an unbacked role kind is refused by name (OM-16)', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // OM-16: kind "vendor" with no vendor_roles row strands a "Kind: Vendor"
+  // the Compliance tab cannot back. The save must refuse, naming the role,
+  // and store nothing.
+  const { org } = await fixture()
+  try {
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`update parties set kind = 'vendor' where id = ${org.customerId} and org_id = ${org.orgId}`)
+      const res = await PATCH(
+        patchRequest({ kind: 'vendor', shortCode: 'VN-001', expectedUpdatedAt: await revision(org.orgId, org.customerId) }),
+        params(org.customerId),
+      )
+      assert.equal(res.status, 422, await res.clone().text())
+      assert.match((await res.json() as { error: string }).error, /kind "vendor" needs the vendor role/)
+      const stored = (await db.execute<{ kind: string; short_code: string | null }>(sql`
+        select kind, short_code from parties where id = ${org.customerId} and org_id = ${org.orgId}`)).rows[0]!
+      assert.equal(stored.kind, 'vendor')
+      assert.equal(stored.short_code, null)
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${org.customerId}`)).rows[0]!.n, '0')
     })
   } finally {
     session.user = null

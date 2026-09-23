@@ -320,6 +320,49 @@ test("payroll-gated and currency-gated writes fail closed when the switch is off
   assert.equal(currencyOff.status, 404);
 });
 
+test("a role kind without its role is refused by name before any write (OM-16)", async () => {
+  // OM-16: kind "vendor" with no vendor role strands a "Kind: Vendor" no
+  // read can back — the Compliance tab vanishes while the drawer still
+  // claims Vendor. The create must refuse the unbacked kind, naming the
+  // remedy, instead of persisting it.
+  for (const kind of ["customer", "vendor", "employee"]) {
+    reset();
+    const response = await post("00000000-0000-4000-8000-00000000b013", {
+      displayName: "Acme Corp",
+      kind,
+    });
+    assert.equal(response.status, 422, `kind ${kind} without its role must be refused`);
+    const body = (await response.json()) as { error: string; field?: string };
+    assert.ok(
+      body.error.includes(`kind "${kind}" needs the ${kind} role`),
+      `the refusal must name the missing role, got: ${body.error}`,
+    );
+    assert.equal(body.field, "kind");
+    assert.ok(
+      !state.transactionQueries.some((q) => q.includes("insert into parties")),
+      `no party row may be written for unbacked kind ${kind}`,
+    );
+  }
+});
+
+test("a role kind with its role enabled creates both rows atomically (OM-16)", async () => {
+  reset();
+  const response = await post("00000000-0000-4000-8000-00000000b014", {
+    displayName: "Acme Industrial Supply",
+    kind: "vendor",
+    roles: { vendor: { enabled: true } },
+  });
+  assert.equal(response.status, 201);
+  assert.ok(
+    state.transactionQueries.some((q) => q.includes("insert into parties")),
+    "the party row must be written",
+  );
+  assert.ok(
+    state.transactionQueries.some((q) => q.includes("insert into vendor_roles")),
+    "the backing vendor role must be written in the same request",
+  );
+});
+
 test("the create writes one audited insert carrying actor and request", async () => {
   reset();
   const key = "00000000-0000-4000-8000-00000000b012";

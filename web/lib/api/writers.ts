@@ -20,6 +20,7 @@ import {
   type FormSection,
 } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
+import { ensurePartyRoleRow } from "../party-roles";
 import { ApprovalRoutingError } from "../approval-routing-error";
 import { nextDocumentNumber } from "../bills.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
@@ -871,6 +872,18 @@ async function createEntity(
       returning *`);
     const created = r.rows[0] as Record<string, unknown> | undefined;
     if (!created) return err(422, `could not create record: no row returned`);
+    // OM-16: a role-kind parties kind names its role row — the generic
+    // record writer has no role inputs, so it backs the claim with the
+    // canonical row instead of stranding a Kind no read can observe.
+    if (table === "parties") {
+      await ensurePartyRoleRow(db, {
+        orgId: user.orgId,
+        partyId: String(created.id),
+        kind: created.kind,
+        isActive: created.is_active,
+        actorId: user.id,
+      });
+    }
     await auditSetupChange({
       orgId: user.orgId,
       table,
@@ -992,6 +1005,17 @@ async function updateEntity(
       returning *`);
     const written = r.rows[0] as Record<string, unknown> | undefined;
     if (!written) return err(404, "not found");
+    // OM-16: adopting a role-kind kind on update backs the claim the same
+    // way creation does (see above).
+    if (table === "parties") {
+      await ensurePartyRoleRow(db, {
+        orgId: user.orgId,
+        partyId: id,
+        kind: written.kind,
+        isActive: written.is_active,
+        actorId: user.id,
+      });
+    }
     await auditSetupChange({
       orgId: user.orgId,
       table,

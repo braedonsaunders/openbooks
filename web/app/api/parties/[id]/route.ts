@@ -210,6 +210,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = await db.execute<{
     display_name: string
     is_active: boolean
+    kind: string
+    has_customer_role: boolean
+    has_vendor_role: boolean
+    has_employee_role: boolean
     updated_at: string
     customer_hold: boolean
     customer_hold_reason: string | null
@@ -219,7 +223,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     custom: Record<string, unknown> | null
     before: Record<string, unknown>
   }>(sql`
-    select p.display_name, p.is_active, ${documentRevisionSql(sql`p.updated_at`)} as updated_at,
+    select p.display_name, p.is_active, p.kind, ${documentRevisionSql(sql`p.updated_at`)} as updated_at,
+           exists (select 1 from customer_roles cr2 where cr2.party_id = p.id and cr2.org_id = p.org_id and cr2.is_active) as has_customer_role,
+           exists (select 1 from vendor_roles vr2 where vr2.party_id = p.id and vr2.org_id = p.org_id and vr2.is_active) as has_vendor_role,
+           exists (select 1 from employee_roles er2 where er2.party_id = p.id and er2.org_id = p.org_id and er2.is_active) as has_employee_role,
            p.subsidiary_id as "subsidiaryId",
            p.custom,
            coalesce(cr.is_on_hold, false) as customer_hold,
@@ -310,6 +317,41 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // -- identity ------------------------------------------------------------
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {
     return bad('kind must be company, person, customer, vendor, or employee')
+  }
+  // A customer/vendor/employee kind is a claim about the role rows: the
+  // lists, the drawer tabs, and compliance all resolve the role, never the
+  // kind column. Refuse an unbacked claim by name instead of storing a Kind
+  // no read can observe (OM-16) — and refuse to strand one by dropping the
+  // role the stored kind names without renaming the kind alongside it.
+  const roleKindOf = (kind: unknown): 'customer' | 'vendor' | 'employee' | null =>
+    kind === 'customer' || kind === 'vendor' || kind === 'employee' ? kind : null
+  const hasActiveRole = (role: 'customer' | 'vendor' | 'employee'): boolean =>
+    role === 'customer'
+      ? existingParty.has_customer_role
+      : role === 'vendor'
+        ? existingParty.has_vendor_role
+        : existingParty.has_employee_role
+  if (body.kind !== undefined) {
+    const requested = roleKindOf(body.kind)
+    if (requested) {
+      const enabling =
+        (body.roles as Record<string, { enabled?: boolean } | undefined> | undefined)?.[requested]?.enabled === true
+      if (!enabling && !hasActiveRole(requested)) {
+        return bad(
+          `kind "${requested}" needs the ${requested} role — turn on the ${requested} role or use kind "company" or "person"`,
+        )
+      }
+    }
+  }
+  const effectiveKind = roleKindOf(body.kind ?? existingParty.kind)
+  if (effectiveKind) {
+    const disabling =
+      (body.roles as Record<string, { enabled?: boolean } | undefined> | undefined)?.[effectiveKind]?.enabled === false
+    if (disabling) {
+      return bad(
+        `this party's kind is "${effectiveKind}" — change kind to "company" or "person" to drop the ${effectiveKind} role`,
+      )
+    }
   }
   const willBeActive = body.isActive ?? (completesPlaceholder ? true : existingParty.is_active)
   const effectiveName = displayName ?? existingParty.display_name.trim()

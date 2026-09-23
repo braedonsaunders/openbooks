@@ -532,3 +532,96 @@ test(
     }
   },
 );
+
+test(
+  "generic record writes back a parties role kind with its role row (OM-16)",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // OM-16: the v1/MCP record writer persists parties.kind with no role
+    // inputs, so a kind "vendor" stranded a "Kind: Vendor" no read could
+    // back. The writer now ensures the canonical role row beside the party
+    // row; company/person kinds back nothing, and an existing role row is
+    // never flipped.
+    const org = await withBypass(() => createScratchOrg());
+    const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId;
+    const user = {
+      id: actorId,
+      email: "writers-party-roles@scratch.test",
+      name: "Writers Party Roles Test",
+      roles: [{ key: "admin", name: "Admin" }],
+      orgId: org.orgId,
+      envKind: "production" as const,
+      productionOrgId: org.orgId,
+      isSuperAdmin: false,
+      homeUserId: actorId,
+      homeOrgId: org.orgId,
+    };
+    const resolved: ResolvedApiType = {
+      key: "parties",
+      table: "parties",
+      searchColumn: "display_name",
+      readPermission: "parties.read",
+      writePermission: "parties.manage",
+      operations: ["list", "get", "create", "update", "delete"],
+      writer: { kind: "entity", table: "parties" },
+      dynamic: false,
+      documentKinds: null,
+    };
+    const fields: ApiField[] = [
+      { name: "kind", type: "string", required: true, writable: true, description: null, custom: false },
+      { name: "display_name", type: "string", required: true, writable: true, description: null, custom: false },
+    ];
+    const roleCount = (partyId: string) =>
+      withBypass(() =>
+        db.execute<{ n: string }>(sql`
+          select count(*)::text as n from vendor_roles where org_id = ${org.orgId} and party_id = ${partyId}
+        `),
+      ).then((result) => result.rows[0]?.n);
+
+    try {
+      const created = await withOrgContext(org.orgId, () =>
+        createRecord(
+          user,
+          resolved,
+          fields,
+          { kind: "vendor", display_name: "Record Vendor" },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(created.status, 201);
+      const vendorId = (created.body as { id: string }).id;
+      assert.equal(await roleCount(vendorId), "1");
+
+      // Renaming the kind away keeps the (now history) role row: the ensure
+      // is insert-only and never deactivates an existing role.
+      const renamed = await withOrgContext(org.orgId, () =>
+        updateRecord(user, resolved, fields, vendorId, { kind: "company" }, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(renamed.status, 200);
+      assert.equal(await roleCount(vendorId), "1");
+
+      // A company kind backs nothing …
+      const plain = await withOrgContext(org.orgId, () =>
+        createRecord(
+          user,
+          resolved,
+          fields,
+          { kind: "company", display_name: "Record Company" },
+          { allowedSubsidiaryIds: null },
+        ),
+      );
+      assert.equal(plain.status, 201);
+      const companyId = (plain.body as { id: string }).id;
+      assert.equal(await roleCount(companyId), "0");
+
+      // … until the kind names a role, on update as on create.
+      const adopted = await withOrgContext(org.orgId, () =>
+        updateRecord(user, resolved, fields, companyId, { kind: "vendor" }, { allowedSubsidiaryIds: null }),
+      );
+      assert.equal(adopted.status, 200);
+      assert.equal(await roleCount(companyId), "1");
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
