@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, orgContext } from "../platform/db.ts";
 import { add, cmp, isZero, neg } from "../money/money.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
@@ -54,15 +54,21 @@ function getCountBasisQuantity(
  * count is immutable, and a correction is a NEW count (or a movement
  * reversal through the existing reversal path), never an edit.
  *
- * Concurrency note: checks and the status flip run row-locked, but each
- * variance adjustment commits in its own movement transaction (that is what
- * "through the existing movement path" means). Two operators posting the
- * same count concurrently are serialized by the HTTP idempotency boundary
- * (`inventory.stock-count.post` keyed on the count); direct engine callers
- * must serialize post per count. A stock movement landing in the seconds-long
- * post window after the drift check is caught on the NEXT count, not this
- * one — counts are taken over a frozen area, and the drift refusal exists
- * to catch everything up to the post.
+ * Atomicity note: the whole post — checks, every variance adjustment,
+ * every line stamp, and the status flip — commits in ONE caller-owned
+ * transaction. The production path (`inventory.stock-count.post` through
+ * `executeIdempotentInventoryAction`, which runs inside `withOrgTransaction`)
+ * pins that unit, and nested `db.transaction` calls join it rather than
+ * opening their own, so a failure anywhere rolls every movement, stamp and
+ * flip back together: a reviewed count never half-posts, and a retry never
+ * double-applies. Two operators posting the same count concurrently are
+ * serialized by the HTTP idempotency boundary (keyed on the count); direct
+ * engine callers must run one post per count inside `withOrgTransaction` —
+ * called outside an ambient transaction, postStockCount refuses rather than
+ * post partially. A stock movement landing in the post window after the
+ * drift check is caught on the NEXT count, not this one — counts are taken
+ * over a frozen area, and the drift refusal exists to catch everything up
+ * to the post.
  */
 
 export type StockCountStatus = "draft" | "counting" | "review" | "posted" | "cancelled";
@@ -615,10 +621,13 @@ export interface PostStockCountResult {
 /**
  * Post a reviewed count. Every nonzero variance becomes one `adjustInventory`
  * movement dated on the count date; zero-variance lines post nothing. Lines
- * that already carry an adjustment (a resumed post after a partial failure)
- * are skipped, so retrying a half-posted count never double-applies.
+ * that already carry an adjustment (a rival post stamped first) are skipped,
+ * so a retry never double-applies — and a failure anywhere rolls the whole
+ * post back, so there is no half-posted count to resume.
  *
  * Refusals, each naming its remedy:
+ * - outside a caller-owned transaction → post through the inventory action
+ *   boundary (executeIdempotentInventoryAction), which pins the atomic unit;
  * - not in review → finish the lifecycle first (or: already posted, immutable);
  * - an uncounted line → record every line, then re-submit;
  * - count date in a closed period → reopen the period or move the count date;
@@ -630,8 +639,18 @@ export async function postStockCount(
   actorId: string | null,
   countId: string,
 ): Promise<PostStockCountResult> {
-  // Checks run row-locked; the adjustments that follow commit in their own
-  // movement transactions (see module note on concurrent posters).
+  // The checks, adjustments, stamps and status flip below must commit as one
+  // atomic unit. Nested db.transaction calls join the caller's pinned unit;
+  // without one they would open several independent commits and half-post.
+  // Refuse that shape by name instead of posting partially.
+  if (!orgContext.getStore()?.txDb) {
+    throw new InventoryError(
+      "stock count posting needs its caller's transaction — post through the inventory action boundary " +
+        "(executeIdempotentInventoryAction), which holds the checks, adjustments, stamps and status flip in one atomic unit",
+    );
+  }
+  // Checks run row-locked inside the caller's transaction; the adjustments,
+  // stamps and flip below join that same unit (see the module atomicity note).
   const prepared = await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
@@ -722,7 +741,7 @@ export async function postStockCount(
     } catch (error) {
       if (error instanceof InventoryError && /closed/i.test(error.message)) {
         throw new InventoryError(
-          `count date ${prepared.count.countedOn} falls in a closed period — reopen the period, or move the count date to an open period and post again (already-posted lines are kept and skipped on retry)`,
+          `count date ${prepared.count.countedOn} falls in a closed period — reopen the period, or move the count date to an open period and post again (nothing posted: the whole post rolls back together)`,
         );
       }
       throw error;
@@ -734,12 +753,11 @@ export async function postStockCount(
     if (stamped.rows.length === 0) {
       // A rival post stamped this line first: its adjustment stands, ours
       // would double-apply, so refuse rather than record a second movement.
-      // (Our movement already committed through the movement path; unwind it
-      // through the existing reversal path is the operator's remedy — the
-      // message says so.)
+      // Our adjustment joined this same transaction and rolls back with it —
+      // nothing stands and nothing needs unwinding; reload and retry.
       throw new InventoryError(
         `count line ${line.id} was posted by another action while this post was in flight — ` +
-          `reverse movement ${movementId} through the inventory reversal action if it should not stand, then reload the count`,
+          `reload the count and retry; this attempt's adjustment was rolled back with it`,
       );
     }
     if (firstEntryId === null) firstEntryId = entryId;
