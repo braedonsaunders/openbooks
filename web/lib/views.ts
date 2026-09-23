@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { auditSetupChange } from './setup/audit'
 import {
   REPORT_ENTITY_MAP,
   defaultRowsQuery,
@@ -83,7 +84,11 @@ function visiblePredicate(userId: string, vis: ViewVisibility): SQL {
           select 1 from jsonb_array_elements_text(coalesce(sv.allowed_roles,'[]'::jsonb)) k
            where k in (select jsonb_array_elements_text(${JSON.stringify(vis.roleKeys)}::jsonb))
         ))`
-  return sql`(sv.scope = 'shared' and ${allowedClause}) or (sv.scope = 'private' and sv.owner_id = ${userId})`
+  // The owner always retains access to their own views: without this, an
+  // owner sharing a view with roles that exclude their own role locks
+  // themselves out (every later GET/PATCH/DELETE 404s) while still holding
+  // the edit grant — visibility and mutation must agree on ownership.
+  return sql`(sv.owner_id = ${userId}) or (sv.scope = 'shared' and ${allowedClause})`
 }
 
 export async function loadViews(
@@ -127,9 +132,10 @@ async function assertCanMutate(
   id: string,
   userId: string,
   isAdmin: boolean,
+  runner: Pick<typeof db, 'execute'> = db,
 ): Promise<boolean> {
   if (isAdmin) return true
-  const r = (await db.execute(sql`
+  const r = (await runner.execute(sql`
     select 1 from saved_views
      where org_id = ${orgId} and id = ${id} and owner_id = ${userId}
      limit 1
@@ -160,38 +166,45 @@ export async function updateView(
   userId: string,
   isAdmin: boolean,
   patch: {
-    name?: string
-    slug?: string
-    description?: string | null
-    query?: ReportCustomQuery
-    layout?: Record<string, unknown> | null
-    scope?: ViewScope
-    allowedRoles?: string[] | null
+    name?: unknown
+    slug?: unknown
+    description?: unknown
+    query?: unknown
+    layout?: unknown
+    scope?: unknown
+    allowedRoles?: unknown
   },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const canMutate = await assertCanMutate(orgId, id, userId, isAdmin)
-  if (!canMutate) return { ok: false, error: 'You can only edit your own views.' }
-
-  const sets: SQL[] = []
-  if (patch.name !== undefined) sets.push(sql`name = ${patch.name.trim()}`)
-  if (patch.slug !== undefined) sets.push(sql`slug = ${patch.slug}`)
-  if (patch.description !== undefined) sets.push(sql`description = ${patch.description}`)
+  // Every field is validated by TYPE here, not just by shape upstream: the
+  // route parses a bare JSON object and type-asserts, so {"name": 42} would
+  // otherwise reach name.trim() and 500. Each refusal names its field.
+  if (patch.name !== undefined && (typeof patch.name !== 'string' || !patch.name.trim())) {
+    return { ok: false, error: 'Invalid name' }
+  }
+  if (patch.slug !== undefined && (typeof patch.slug !== 'string' || !patch.slug)) {
+    return { ok: false, error: 'Invalid slug' }
+  }
+  if (patch.description !== undefined && patch.description !== null && typeof patch.description !== 'string') {
+    return { ok: false, error: 'Invalid description' }
+  }
+  let validatedQuery: ReportCustomQuery | undefined
   if (patch.query !== undefined) {
     try {
-      const validated = validateCustomQuery(patch.query)
-      sets.push(sql`query = ${validated as unknown as Record<string, unknown>}`)
+      validatedQuery = validateCustomQuery(patch.query as ReportCustomQuery)
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : 'Invalid query' }
     }
   }
-  if (patch.layout !== undefined) sets.push(sql`layout = ${patch.layout}`)
+  if (patch.layout !== undefined && patch.layout !== null &&
+      (typeof patch.layout !== 'object' || Array.isArray(patch.layout))) {
+    return { ok: false, error: 'Invalid layout' }
+  }
   if (patch.scope !== undefined) {
     // The scope drives the visibility predicate — an unexpected value would
     // make the row invisible to everyone (including its owner). Whitelist it.
     if (patch.scope !== 'private' && patch.scope !== 'shared') {
       return { ok: false, error: 'Invalid scope' }
     }
-    sets.push(sql`scope = ${patch.scope}`)
   }
   if (patch.allowedRoles !== undefined) {
     // allowed_roles is a jsonb column: bind it as a JSON string (a bare JS
@@ -202,19 +215,59 @@ export async function updateView(
         return { ok: false, error: 'Invalid allowedRoles' }
       }
     }
-    sets.push(
-      patch.allowedRoles === null
-        ? sql`allowed_roles = null`
-        : sql`allowed_roles = ${JSON.stringify(patch.allowedRoles)}::jsonb`,
-    )
   }
-  if (sets.length === 0) return { ok: true }
-  sets.push(sql`updated_at = now()`, sql`updated_by = ${userId}`)
-  await db.execute(sql`
-    update saved_views set ${sql.join(sets, sql`, `)}
-     where org_id = ${orgId} and id = ${id}
-  `)
-  return { ok: true }
+
+  return db.transaction(async (tx) => {
+    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx)
+    if (!canMutate) return { ok: false, error: 'You can only edit your own views.' } as const
+    const before = (await tx.execute<ViewRow>(sql`
+      select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
+             sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
+        from saved_views sv
+       where sv.org_id = ${orgId} and sv.id = ${id}
+       for update
+    `)).rows[0]
+    if (!before) return { ok: false, error: 'You can only edit your own views.' } as const
+
+    const sets: SQL[] = []
+    if (patch.name !== undefined) sets.push(sql`name = ${(patch.name as string).trim()}`)
+    if (patch.slug !== undefined) sets.push(sql`slug = ${patch.slug as string}`)
+    if (patch.description !== undefined) sets.push(sql`description = ${patch.description as string | null}`)
+    if (validatedQuery !== undefined) {
+      sets.push(sql`query = ${validatedQuery as unknown as Record<string, unknown>}`)
+    }
+    if (patch.layout !== undefined) sets.push(sql`layout = ${patch.layout as Record<string, unknown> | null}`)
+    if (patch.scope !== undefined) sets.push(sql`scope = ${patch.scope as ViewScope}`)
+    if (patch.allowedRoles !== undefined) {
+      sets.push(
+        patch.allowedRoles === null
+          ? sql`allowed_roles = null`
+          : sql`allowed_roles = ${JSON.stringify(patch.allowedRoles)}::jsonb`,
+      )
+    }
+    if (sets.length === 0) return { ok: true } as const
+    sets.push(sql`updated_at = now()`, sql`updated_by = ${userId}`)
+    const after = (await tx.execute<ViewRow>(sql`
+      update saved_views set ${sql.join(sets, sql`, `)}
+       where org_id = ${orgId} and id = ${id}
+      returning id, org_id, slug, name, description, query, layout, scope,
+                owner_id, allowed_roles, created_at, updated_at
+    `)).rows[0]!
+    // The edit and its audit evidence commit atomically: a mutation with no
+    // audit row (or an audit row with no mutation) is a half-written history.
+    await auditSetupChange(
+      {
+        orgId,
+        table: 'saved_views',
+        rowId: id,
+        action: 'update',
+        changes: { before: normalize(before), after: normalize(after) },
+        actorId: userId,
+      },
+      tx,
+    )
+    return { ok: true } as const
+  })
 }
 
 export async function deleteView(
@@ -223,12 +276,35 @@ export async function deleteView(
   userId: string,
   isAdmin: boolean,
 ): Promise<boolean> {
-  const canMutate = await assertCanMutate(orgId, id, userId, isAdmin)
-  if (!canMutate) return false
-  await db.execute(sql`
-    delete from saved_views where org_id = ${orgId} and id = ${id}
-  `)
-  return true
+  return db.transaction(async (tx) => {
+    const canMutate = await assertCanMutate(orgId, id, userId, isAdmin, tx)
+    if (!canMutate) return false
+    // Snapshot the row before deleting: the audit trail keeps the deletion
+    // evidence, in the same transaction as the delete itself.
+    const before = (await tx.execute<ViewRow>(sql`
+      select sv.id, sv.org_id, sv.slug, sv.name, sv.description, sv.query, sv.layout,
+             sv.scope, sv.owner_id, sv.allowed_roles, sv.created_at, sv.updated_at
+        from saved_views sv
+       where sv.org_id = ${orgId} and sv.id = ${id}
+       for update
+    `)).rows[0]
+    if (!before) return false
+    await tx.execute(sql`
+      delete from saved_views where org_id = ${orgId} and id = ${id}
+    `)
+    await auditSetupChange(
+      {
+        orgId,
+        table: 'saved_views',
+        rowId: id,
+        action: 'delete',
+        changes: { before: normalize(before) },
+        actorId: userId,
+      },
+      tx,
+    )
+    return true
+  })
 }
 
 /** Execute a view's plan (fresh, current data) — the one shared executor. */
