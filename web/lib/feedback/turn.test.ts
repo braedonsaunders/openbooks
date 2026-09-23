@@ -77,6 +77,44 @@ test('answers keep only non-empty strings, trimmed and bounded', () => {
   assert.equal(parsed.data.answers.q5?.length, 1_000, 'one answer cannot carry a whole document')
 })
 
+test('an answers object that is large by construction is refused, not buffered', () => {
+  const tooMany: Record<string, string> = {}
+  for (let i = 0; i < 9; i += 1) tooMany[`q${i}`] = 'yes'
+  const keys = feedbackTurnBody.safeParse({ text: 'hi', answers: tooMany })
+  assert.equal(keys.success, false)
+  if (!keys.success) {
+    assert.ok(
+      keys.error.issues.some((issue) => issue.message.includes('at most 8 answers')),
+      `refusal must name the key limit, got: ${JSON.stringify(keys.error.issues)}`,
+    )
+  }
+
+  const longKey = feedbackTurnBody.safeParse({ text: 'hi', answers: { ['k'.repeat(129)]: 'yes' } })
+  assert.equal(longKey.success, false)
+
+  const bigValue = feedbackTurnBody.safeParse({
+    text: 'hi',
+    answers: { q1: 'x'.repeat(4_001) },
+  })
+  assert.equal(bigValue.success, false)
+  if (!bigValue.success) {
+    assert.ok(
+      bigValue.error.issues.some((issue) => issue.message.includes('at most 4000 characters')),
+      `refusal must name the value limit, got: ${JSON.stringify(bigValue.error.issues)}`,
+    )
+  }
+})
+
+test('answers at the raw ceilings still parse, then trim to the kept bounds', () => {
+  const atCeiling: Record<string, string> = {}
+  for (let i = 0; i < 8; i += 1) atCeiling[`q${i}`] = 'x'.repeat(4_000)
+  const parsed = feedbackTurnBody.safeParse({ text: 'hi', answers: atCeiling })
+  assert.equal(parsed.success, true)
+  if (!parsed.success) return
+  assert.equal(Object.keys(parsed.data.answers).length, 8)
+  assert.ok(Object.values(parsed.data.answers).every((answer) => answer.length === 1_000))
+})
+
 test('page context is dropped when the reporter removes it', () => {
   const parsed = feedbackTurnBody.safeParse({
     text: 'hi',

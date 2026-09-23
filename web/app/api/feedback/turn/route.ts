@@ -59,14 +59,15 @@ export async function POST(req: Request): Promise<Response> {
     message: t('unavailableBody'),
   })
 
-  // Refused before the body is read: an oversized report is a size problem,
-  // and answering it as a schema failure would tell the reporter to rewrite
-  // text that was never the issue.
-  const declaredBytes = Number(req.headers.get('content-length') ?? '')
-  if (Number.isFinite(declaredBytes) && declaredBytes > MAX_FEEDBACK_REQUEST_BYTES) {
-    return new Response('Report too large', { status: 413 })
-  }
-  const parsed = await parseJsonBody(req, feedbackTurnBody)
+  // Refused while the body is READ, not from the caller-controlled
+  // Content-Length header: a chunked upload has no header and a lying one is
+  // just bytes with an opinion. An oversized report is a size problem, and
+  // parseJsonBody answers it as a 413 (with a `message` the dialog surfaces)
+  // rather than a schema failure telling the reporter to rewrite text that
+  // was never the issue.
+  const parsed = await parseJsonBody(req, feedbackTurnBody, {
+    maxBodyBytes: MAX_FEEDBACK_REQUEST_BYTES,
+  })
   if (!parsed.ok) return parsed.response
   const request = parsed.data
 

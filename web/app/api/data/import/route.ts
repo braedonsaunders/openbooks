@@ -60,7 +60,12 @@ export async function POST(req: Request) {
   const authz = gate
   const orgId = authz.user.orgId
 
-  const parsedBody = await parseJsonBody(req, importBodySchema);
+  // Bulk rows and base64 workbooks ride this body (up to MAX_IMPORT_ROWS
+  // rows), so the house 1 MiB default would refuse legitimate imports — the
+  // 25 MiB ceiling matches the file-cabinet upload limit for the same bytes.
+  const parsedBody = await parseJsonBody(req, importBodySchema, {
+    maxBodyBytes: 25 * 1024 * 1024,
+  });
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   const mode = body.mode

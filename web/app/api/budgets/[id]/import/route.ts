@@ -76,7 +76,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  // Spreadsheet bytes ride this body, so the house 1 MiB default would
+  // refuse legitimate budget workbooks — 10 MiB matches the bank-import
+  // ceiling for the same class of payload.
+  const parsedBody = await parseJsonBody(req, jsonObject, { maxBodyBytes: 10 * 1024 * 1024 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   const format = FORMATS.includes(body.format as unknown as "csv" | "xlsx") ? body.format as ImportFormat : null

@@ -70,7 +70,10 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  // Browser-uploaded statement bytes ride this body as base64, so the house
+  // 1 MiB default would refuse legitimate statements — 10 MiB matches the
+  // provider-webhook ceiling for the same class of payload.
+  const parsedBody = await parseJsonBody(req, jsonObject, { maxBodyBytes: 10 * 1024 * 1024 });
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as ImportBody
   const mode = body.mode ?? 'preview'
