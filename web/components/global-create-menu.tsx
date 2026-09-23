@@ -121,11 +121,18 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
     }
     setBusy(action.key)
     try {
+      // Order drafts mint server-side under the canonical idempotent-create
+      // contract: every instant-create POST carries a caller UUID as its
+      // Idempotency-Key, so a lost-response retry replays the same draft
+      // instead of minting a second numbered document.
+      const idempotencyKey = crypto.randomUUID()
+      const headers: Record<string, string> = { 'Idempotency-Key': idempotencyKey }
       const response = await fetch(action.endpoint!, {
         method: 'POST',
-        ...(action.body
-          ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(action.body) }
-          : {}),
+        headers: action.body
+          ? { ...headers, 'content-type': 'application/json' }
+          : headers,
+        ...(action.body ? { body: JSON.stringify(action.body) } : {}),
       })
       const data = await response.json().catch(() => ({}))
       if (!response.ok || typeof data.id !== 'string') {
