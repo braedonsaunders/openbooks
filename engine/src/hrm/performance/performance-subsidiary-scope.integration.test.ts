@@ -15,7 +15,7 @@ import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import { createGoal } from "./goals.ts";
 import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
-import { getCycleDetail, getReviewDetail, listMyReviews } from "./performance-read.ts";
+import { getCycleDetail, getRetentionOverview, getReviewDetail, getTurnover, listMyReviews } from "./performance-read.ts";
 import { getExitRecord, listExitRecords, recordExit } from "./exits.ts";
 
 /**
@@ -70,7 +70,7 @@ async function mkHr(
   await linkPerson(orgId, userId);
   await db.execute(sql`
     update app_roles
-       set permissions = '["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read", "hrm.self.read"]'::jsonb,
+       set permissions = '["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read", "hrm.self.read", "hrm.employment.read"]'::jsonb,
            subsidiary_restriction = ${subsidiaryIds === null ? JSON.stringify({ mode: "all" }) : JSON.stringify({ mode: "list", subsidiaryIds })}::jsonb
      where org_id = ${orgId} and key = ${roleKey}`);
   return userId;
@@ -520,6 +520,52 @@ test("a divergent second fulfilment is refused, never silently dropped", { skip:
     assert.equal(stored.n, "1");
     assert.equal(stored.body, "They led the launch");
     assert.equal(first.body, "They led the launch");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("HR-A's turnover and overview count only A's leavers and gaps", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const leaverA = await mkLeaver(h, "t-a", h.org.subsidiaryId);
+    await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverA.employmentId,
+      reasonKind: "resignation", isVoluntary: true,
+      interviewHeldOn: "2026-02-01", interviewerPartyId: h.a.managerPartyId,
+    });
+    // B-side gaps HR-A must never see: a leaver with no exit record, and
+    // an exit record with no interview.
+    const leaverB1 = await mkLeaver(h, "t-b1", h.subB);
+    const leaverB2 = await mkLeaver(h, "t-b2", h.subB);
+    await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverB2.employmentId,
+      reasonKind: "redundancy", isVoluntary: false,
+    });
+    const periods = [{ start: "2025-01-01", end: "2027-01-01" }];
+    const aTurnover = await getTurnover({ orgId: h.org.orgId, actorId: h.hrA, periods });
+    assert.equal(
+      aTurnover.periods.reduce((n, row) => n + row.terminations, 0),
+      1,
+      "HR-A's turnover counts only the A-side leaver",
+    );
+    const fullTurnover = await getTurnover({ orgId: h.org.orgId, actorId: h.hrFull, periods });
+    assert.equal(
+      fullTurnover.periods.reduce((n, row) => n + row.terminations, 0),
+      3,
+      "unrestricted HR keeps the org-wide turnover",
+    );
+    const aOverview = await getRetentionOverview({ orgId: h.org.orgId, actorId: h.hrA });
+    assert.equal(aOverview.trailingTwelveMonths?.terminations, 1);
+    assert.deepEqual(aOverview.missingExitRecords, []);
+    assert.deepEqual(aOverview.exitRecordsWithoutInterview, []);
+    const fullOverview = await getRetentionOverview({ orgId: h.org.orgId, actorId: h.hrFull });
+    assert.equal(fullOverview.trailingTwelveMonths?.terminations, 3);
+    assert.deepEqual(
+      fullOverview.missingExitRecords.map((m) => m.employmentId),
+      [leaverB1.employmentId],
+    );
+    assert.equal(fullOverview.exitRecordsWithoutInterview.length, 1);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }

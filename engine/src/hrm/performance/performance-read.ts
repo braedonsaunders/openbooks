@@ -570,7 +570,7 @@ export async function getTurnover(args: {
     args.departmentId == null ? null : requireId("departmentId", args.departmentId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireHrmRetentionRead(db, orgId, actorId);
+    const allowed = await requireHrmRetentionRead(db, orgId, actorId);
     const out: TurnoverRowDTO[] = [];
     for (const period of periods) {
       // Each leg reads as known at its OWN date (end of day): a termination
@@ -590,7 +590,9 @@ export async function getTurnover(args: {
         effectiveDate: period.end,
         knownAt: `${period.end}T23:59:59Z`,
       });
-      const leavers = await loadLeavers(db, orgId, period.start, period.end, departmentId);
+      // The numerator stays over the actor's own headcount denominator
+      // below: a restricted HR counts only the leavers they cover.
+      const leavers = await loadLeavers(db, orgId, period.start, period.end, departmentId, allowed);
       // Department grain: headcount groups collapse (subsidiary,
       // department) to department; leavers group by termination
       // department. Null department is its own row ("unassigned").
@@ -652,13 +654,32 @@ type LeaverRow = {
   hasExit: boolean;
 };
 
+/**
+ * Legal-entity scope for retention aggregates, on the joined employment
+ * alias `e`: unrestricted HR keeps the org-wide numbers, a restricted HR
+ * counts only the employments they cover. Callers return [] early on an
+ * empty set — `in ()` is not valid SQL — so an empty scope matches nothing
+ * instead of everything.
+ */
+function retentionScopeCondition(allowed: Set<string> | null) {
+  if (allowed === null) return sql``;
+  // One parameter per id: bare JS arrays must never be interpolated into
+  // ANY() (they bind as row constructors, not PostgreSQL arrays).
+  return sql`and e.employer_subsidiary_id in (${sql.join(
+    [...allowed].map((id) => sql`${id}::uuid`),
+    sql`, `,
+  )})`;
+}
+
 async function loadLeavers(
   db: SqlExecutor,
   orgId: string,
   start: string,
   end: string,
   departmentId: string | null,
+  allowed: Set<string> | null,
 ): Promise<LeaverRow[]> {
+  if (allowed !== null && allowed.size === 0) return [];
   // Terminated versions starting inside (start, end]: the service ended in
   // this period. Recorded-live only for the termination itself — but the
   // first service date spans ALL versions: the opening version is
@@ -674,11 +695,14 @@ async function loadLeavers(
            (select min(effective_from)::text from worker_employment_versions
              where org_id = ${orgId} and employment_id = t.employment_id) as "firstFrom"
       from worker_employment_versions t
+      join worker_employments e
+        on e.org_id = t.org_id and e.id = t.employment_id
      where t.org_id = ${orgId}
        and t.status = 'terminated'
        and t.recorded_until is null
        and t.effective_from > ${start}::date
        and t.effective_from <= ${end}::date
+       ${retentionScopeCondition(allowed)}
   `)).rows;
   const out: LeaverRow[] = [];
   for (const row of rows) {
@@ -754,7 +778,7 @@ export async function getRetentionOverview(args: {
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireHrmRetentionRead(db, orgId, actorId);
+    const allowed = await requireHrmRetentionRead(db, orgId, actorId);
     const today = await businessToday(orgId);
     const start = shiftMonths(today, -12);
     // Start leg as known at its own date (a termination recorded since
@@ -772,7 +796,7 @@ export async function getRetentionOverview(args: {
       effectiveDate: today,
       knownAt: new Date().toISOString(),
     });
-    const leavers = await loadLeavers(db, orgId, start, today, null);
+    const leavers = await loadLeavers(db, orgId, start, today, null, allowed);
     const voluntary = leavers.filter((l) => l.isVoluntary).length;
     const regrettable = leavers.filter((l) => l.isRegrettable).length;
     const withExit = leavers.filter((l) => l.hasExit).length;
@@ -786,11 +810,16 @@ export async function getRetentionOverview(args: {
         tenureDays: leavers.map((l) => l.tenureDays),
       }),
     );
-    const missing = (await db.execute<{
-      employmentId: string;
-      workerPartyId: string;
-      terminatedFrom: string;
-    }>(sql`
+    // Exit gaps list only the employments the actor can open: a
+    // restricted HR never sees another legal entity's missing records or
+    // uninterviewed exits.
+    const missing = (allowed !== null && allowed.size === 0)
+      ? []
+      : (await db.execute<{
+          employmentId: string;
+          workerPartyId: string;
+          terminatedFrom: string;
+        }>(sql`
       select e.id as "employmentId",
              e.worker_party_id as "workerPartyId",
              v.effective_from::text as "terminatedFrom"
@@ -804,13 +833,19 @@ export async function getRetentionOverview(args: {
         left join hrm_exit_records x
           on x.org_id = e.org_id and x.employment_id = e.id
        where e.org_id = ${orgId} and x.id is null
+         ${retentionScopeCondition(allowed)}
        order by v.effective_from desc
     `)).rows;
-    const noInterview = (await db.execute<{ exitId: string; employmentId: string }>(sql`
-      select id as "exitId", employment_id as "employmentId"
-        from hrm_exit_records
-       where org_id = ${orgId} and interview_held_on is null
-       order by recorded_at desc
+    const noInterview = (allowed !== null && allowed.size === 0)
+      ? []
+      : (await db.execute<{ exitId: string; employmentId: string }>(sql`
+      select x.id as "exitId", x.employment_id as "employmentId"
+        from hrm_exit_records x
+        join worker_employments e
+          on e.org_id = x.org_id and e.id = x.employment_id
+       where x.org_id = ${orgId} and x.interview_held_on is null
+         ${retentionScopeCondition(allowed)}
+       order by x.recorded_at desc
     `)).rows;
     return {
       trailingTwelveMonths: {
