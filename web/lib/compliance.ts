@@ -25,6 +25,7 @@ import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
   INFORMATION_RETURN_FORMS,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
+import type { LienWaiverFormData } from './lien-waiver-form'
 import { isFeatureEnabled } from './features'
 
 /**
@@ -567,6 +568,115 @@ export async function loadLienWaivers(args: {
      limit ${args.limit ?? 300}
   `)
   return r.rows
+}
+
+/**
+ * One waiver's printable source: every value the executed release shows,
+ * with party/project/owner/document names already resolved. The sign
+ * transition freezes this row into executed_snapshot; the printable route
+ * serves the frozen image for executed waivers instead of re-reading it.
+ */
+export type LienWaiverPrintSource = {
+  status: string
+  waiverNumber: string
+  waiverType: LienWaiverType
+  direction: 'received' | 'issued'
+  throughDate: string
+  amount: string
+  currency: string
+  jurisdiction: string | null
+  notes: string | null
+  signedByName: string | null
+  signedByTitle: string | null
+  signedAt: string | null
+  notarized: boolean
+  signature: { method?: string; attestedAt?: string } | null
+  claimantName: string
+  projectName: string
+  projectSubsidiaryId: string | null
+  projectAddress: string | null
+  ownerName: string | null
+  billNumber: string | null
+  orgName: string
+  executedSnapshot: unknown | null
+}
+
+export async function loadLienWaiverPrintSource(
+  orgId: string,
+  id: string,
+): Promise<LienWaiverPrintSource | null> {
+  const r = await db.execute<LienWaiverPrintSource>(sql`
+    select lw.status,
+           lw.waiver_number as "waiverNumber", lw.waiver_type as "waiverType", lw.direction,
+           lw.through_date as "throughDate", lw.amount,
+           lw.currency, lw.jurisdiction, lw.notes, lw.signed_by_name as "signedByName",
+           lw.signed_by_title as "signedByTitle",
+           lw.signed_at as "signedAt", lw.notarized, lw.signature,
+           claimant.display_name as "claimantName",
+           coalesce(pj.code || ' · ' || pj.name, pj.name) as "projectName",
+           pj.subsidiary_id as "projectSubsidiaryId",
+           coalesce(nullif(concat_ws(', ', addr.line1, addr.city, addr.region, addr.postal_code), ''), null) as "projectAddress",
+           owner.display_name as "ownerName",
+           bill.document_number as "billNumber",
+           o.name as "orgName",
+           lw.executed_snapshot as "executedSnapshot"
+      from lien_waivers lw
+      join parties claimant on claimant.id = lw.party_id and claimant.org_id = lw.org_id
+      join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
+      join orgs o on o.id = lw.org_id
+      left join parties owner on owner.id = pj.customer_id and owner.org_id = lw.org_id
+      left join documents bill on bill.id = lw.bill_document_id and bill.org_id = lw.org_id
+      left join lateral (
+        select line1, city, region, postal_code from addresses
+         where org_id = lw.org_id and party_id = pj.customer_id
+         order by is_default_shipping desc, created_at limit 1
+      ) addr on true
+     where lw.org_id = ${orgId} and lw.id = ${id}
+  `)
+  return r.rows[0] ?? null
+}
+
+/**
+ * The single mapping from a printable source to the release the printer
+ * renders. The sign transition feeds it the live row and freezes the
+ * result; the printable route feeds it the live row for drafts and the
+ * frozen image for executed waivers — one mapping, so the frozen print
+ * can never drift from what a live print would have shown at signing.
+ */
+export function lienWaiverPrintData(source: LienWaiverPrintSource): {
+  data: LienWaiverFormData
+  orgName: string
+} {
+  // Who releases and who pays flips with direction: a waiver we RECEIVE is the
+  // subcontractor releasing us; one we ISSUE is us releasing the owner.
+  const claimantName = source.direction === 'received' ? source.claimantName : source.orgName
+  const payerName = source.direction === 'received' ? source.orgName : source.claimantName
+  return {
+    data: {
+      waiverNumber: source.waiverNumber,
+      waiverType: source.waiverType,
+      direction: source.direction,
+      claimantName,
+      payerName,
+      ownerName: source.ownerName,
+      projectName: source.projectName,
+      projectAddress: source.projectAddress,
+      throughDate: source.throughDate,
+      amount: source.amount,
+      currency: source.currency,
+      jurisdiction: source.jurisdiction,
+      billNumber: source.billNumber,
+      notes: source.notes,
+      signedByName: source.signedByName,
+      signedByTitle: source.signedByTitle,
+      signedAt: source.signedAt,
+      notarized: source.notarized,
+      signatureEvidence: source.signature?.method
+        ? `${source.signature.method} · recorded ${source.signature.attestedAt ?? ''}`.trim()
+        : null,
+    },
+    orgName: source.orgName,
+  }
 }
 
 // ---------------------------------------------------------------------------

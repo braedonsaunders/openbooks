@@ -54,6 +54,50 @@ export interface LienWaiverFormData {
   signatureEvidence?: string | null
 }
 
+/**
+ * The frozen print image of an executed waiver. The sign transition stamps
+ * every value the printable release shows — resolved names included — so
+ * later renames of a party, project or document cannot rewrite what the
+ * signatory released. The printable route serves this image for executed
+ * waivers instead of re-reading the live rows.
+ */
+export interface LienWaiverExecutedSnapshot {
+  version: 1
+  takenAt: string
+  takenBy: string | null
+  orgName: string
+  data: LienWaiverFormData
+}
+
+const WAIVER_TYPES: ReadonlySet<string> = new Set([
+  'conditional_progress',
+  'unconditional_progress',
+  'conditional_final',
+  'unconditional_final',
+])
+
+/** Fail-closed shape check for a snapshot read back from storage. */
+export function isLienWaiverExecutedSnapshot(value: unknown): value is LienWaiverExecutedSnapshot {
+  if (typeof value !== 'object' || value === null) return false
+  const snapshot = value as Record<string, unknown>
+  if (snapshot.version !== 1) return false
+  if (typeof snapshot.takenAt !== 'string' || typeof snapshot.orgName !== 'string') return false
+  const data = snapshot.data as Record<string, unknown> | null
+  if (typeof data !== 'object' || data === null) return false
+  return (
+    typeof data.waiverNumber === 'string' &&
+    typeof data.projectName === 'string' &&
+    typeof data.throughDate === 'string' &&
+    typeof data.amount === 'string' &&
+    typeof data.currency === 'string' &&
+    typeof data.claimantName === 'string' &&
+    typeof data.payerName === 'string' &&
+    typeof data.notarized === 'boolean' &&
+    (data.direction === 'received' || data.direction === 'issued') &&
+    WAIVER_TYPES.has(data.waiverType as string)
+  )
+}
+
 export function esc(value: string): string {
   return value.replace(/[&<>"']/g, (c) =>
     c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;',

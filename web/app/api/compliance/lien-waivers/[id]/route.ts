@@ -4,7 +4,12 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
-import { guardLienWaiverFeature } from '@/lib/compliance'
+import {
+  guardLienWaiverFeature,
+  lienWaiverPrintData,
+  loadLienWaiverPrintSource,
+} from '@/lib/compliance'
+import type { LienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
@@ -131,6 +136,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                  signed_at = ${`${signedAt}T00:00:00Z`}::timestamptz,
                  notarized = coalesce(${body.notarized ?? null}, notarized),
                  signature = ${JSON.stringify(evidence)}::jsonb,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id}`)
+        // Freeze the executed release: every value the printable waiver
+        // shows, resolved names included, as it stood at signing. Later
+        // renames cannot rewrite it, because the printable route serves
+        // this image instead of the live rows.
+        const source = await loadLienWaiverPrintSource(orgId, id)
+        if (!source) throw new Error('signed waiver vanished mid-transition')
+        const frozen = lienWaiverPrintData(source)
+        const snapshot: LienWaiverExecutedSnapshot = {
+          version: 1,
+          takenAt: new Date().toISOString(),
+          takenBy: actorId,
+          orgName: frozen.orgName,
+          data: frozen.data,
+        }
+        await db.execute(sql`
+          update lien_waivers
+             set executed_snapshot = ${JSON.stringify(snapshot)}::jsonb,
                  updated_at = now(), updated_by = ${actorId}
            where org_id = ${orgId} and id = ${id}`)
       } else if (action === 'reject') {
