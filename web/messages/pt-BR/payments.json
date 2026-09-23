@@ -204,6 +204,8 @@
     "approveFile": "Aprovar arquivo",
     "rejectFile": "Rejeitar arquivo",
     "reprocess": "Reprocessar",
+    "resolveDelivered": "Confirmar recebimento do banco",
+    "resolveApproved": "Liberar para reenvio",
     "rollback": "Reverter",
     "postPayments": "Lançar pagamentos",
     "paymentsSummary": "{count, plural, one {# pagamento} other {# pagamentos}} · <total>Total {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "estornada",
       "cancelled": "cancelada"
     },
-    "fileStatus": { "generated": "gerado", "pending_approval": "aguardando aprovação", "approved": "aprovado", "rejected": "rejeitado", "delivered": "entregue", "superseded": "substituído", "voided": "cancelado" },
+    "fileStatus": { "generated": "gerado", "pending_approval": "aguardando aprovação", "approved": "aprovado", "rejected": "rejeitado", "delivered": "entregue", "superseded": "substituído", "voided": "cancelado", "delivering": "enviando", "delivery_uncertain": "envio incerto" },
     "events": {
       "run_created": "Remessa de pagamento criada", "run_submitted": "Remessa de pagamento enviada", "run_approved": "Remessa de pagamento aprovada", "run_rejected": "Remessa de pagamento rejeitada",
       "file_generated": "Arquivo de pagamento gerado", "file_reprocessed": "Arquivo de pagamento reprocessado", "file_approved": "Arquivo de pagamento aprovado", "file_rejected": "Arquivo de pagamento rejeitado",
@@ -268,6 +270,7 @@
       ,"fileApproved": "Arquivo de pagamento aprovado"
       ,"fileRejected": "Arquivo de pagamento rejeitado"
       ,"fileReprocessed": "Arquivo de pagamento reprocessado"
+      ,"deliveryResolved": "Resolução registrada"
       ,"rolledBack": "Remessa de pagamento revertida"
       ,"outcomeFailed": "Não foi possível registrar o resultado bancário"
       ,"outcomeSaved": "Resultado bancário registrado"

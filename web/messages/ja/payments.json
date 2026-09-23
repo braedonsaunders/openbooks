@@ -204,6 +204,8 @@
     "approveFile": "ファイルを承認",
     "rejectFile": "ファイルを却下",
     "reprocess": "再処理",
+    "resolveDelivered": "銀行の受領を確認",
+    "resolveApproved": "再送のために解放",
     "rollback": "ロールバック",
     "postPayments": "支払を記帳",
     "paymentsSummary": "{count, plural, one {# 件の支払} other {# 件の支払}} · <total>合計 {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "逆仕訳済み",
       "cancelled": "取り消し済み"
     },
-    "fileStatus": { "generated": "生成済み", "pending_approval": "承認待ち", "approved": "承認済み", "rejected": "却下", "delivered": "送付済み", "superseded": "置換済み", "voided": "無効化済み" },
+    "fileStatus": { "generated": "生成済み", "pending_approval": "承認待ち", "approved": "承認済み", "rejected": "却下", "delivered": "送付済み", "superseded": "置換済み", "voided": "無効化済み", "delivering": "送信中", "delivery_uncertain": "送信結果不明" },
     "events": {
       "run_created": "支払処理を作成しました", "run_submitted": "支払処理を申請しました", "run_approved": "支払処理を承認しました", "run_rejected": "支払処理を却下しました",
       "file_generated": "支払ファイルを生成しました", "file_reprocessed": "支払ファイルを再処理しました", "file_approved": "支払ファイルを承認しました", "file_rejected": "支払ファイルを却下しました",
@@ -268,6 +270,7 @@
       ,"fileApproved": "支払ファイルを承認しました"
       ,"fileRejected": "支払ファイルを却下しました"
       ,"fileReprocessed": "支払ファイルを再処理しました"
+      ,"deliveryResolved": "配送の解決を記録しました"
       ,"rolledBack": "支払処理をロールバックしました"
       ,"outcomeFailed": "銀行の結果を記録できませんでした"
       ,"outcomeSaved": "銀行の結果を記録しました"

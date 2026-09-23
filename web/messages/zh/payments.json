@@ -204,6 +204,8 @@
     "approveFile": "批准文件",
     "rejectFile": "拒绝文件",
     "reprocess": "重新处理",
+    "resolveDelivered": "确认银行已接收",
+    "resolveApproved": "释放以重新投递",
     "rollback": "回滚",
     "postPayments": "过账付款",
     "paymentsSummary": "{count, plural, one {# 笔付款} other {# 笔付款}} · <total>合计 {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "已冲回",
       "cancelled": "已取消"
     },
-    "fileStatus": { "generated": "已生成", "pending_approval": "待审批", "approved": "已批准", "rejected": "已拒绝", "delivered": "已投递", "superseded": "已被替代", "voided": "已作废" },
+    "fileStatus": { "generated": "已生成", "pending_approval": "待审批", "approved": "已批准", "rejected": "已拒绝", "delivered": "已投递", "superseded": "已被替代", "voided": "已作废", "delivering": "投递中", "delivery_uncertain": "投递状态不明" },
     "events": {
       "run_created": "付款批次已创建", "run_submitted": "付款批次已提交", "run_approved": "付款批次已批准", "run_rejected": "付款批次已拒绝",
       "file_generated": "付款文件已生成", "file_reprocessed": "付款文件已重新处理", "file_approved": "付款文件已批准", "file_rejected": "付款文件已拒绝",
@@ -268,6 +270,7 @@
       ,"fileApproved": "付款文件已批准"
       ,"fileRejected": "付款文件已拒绝"
       ,"fileReprocessed": "付款文件已重新处理"
+      ,"deliveryResolved": "已记录投递处理结果"
       ,"rolledBack": "付款批次已回滚"
       ,"outcomeFailed": "无法记录银行结果"
       ,"outcomeSaved": "银行结果已记录"
