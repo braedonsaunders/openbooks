@@ -10,6 +10,8 @@
 // identifier is derived. Values ALWAYS bind as parameters. Pure types — no
 // runtime — safe to import from client bundles.
 
+import type { ReportBreakout, ReportMeasure } from '@openbooks/reports'
+
 // --- semantic vocabulary -----------------------------------------------------
 
 /** How a catalog field is interpreted — drives which role it can play and how
@@ -144,6 +146,26 @@ export type QueryResult = {
   durationMs: number
 }
 
+/** The denomination basis the compiler certified for one insight query: which
+ *  money dimensions the plan blends, what already certifies each one single,
+ *  and the inline census the executor enforces. The executor feeds this to
+ *  the report executor's resolveDenominations — one rule, both surfaces. */
+export type InsightDenominationBasis = {
+  breakouts: ReportBreakout[]
+  measures: ReportMeasure[]
+  txnCurrencyPinned: string | null
+  baseCurrencyPinned: string | null
+  bookPinned: string | null
+  bookSingleBasis: boolean
+  baseSingleSubsidiary: boolean
+  /** True when the SQL carries the inline `__denom` census for the executor
+   *  to enforce; false when every blended dimension is already certified
+   *  single (static pin or server clamp) or the plan blends no money. */
+  hasDenominationCensus: boolean
+  /** Census dimensions in txn/base/book order, driving enforcement. */
+  denominationDimensions: ('txn' | 'base' | 'book')[]
+}
+
 /** The compiled, ready-to-execute SQL + the column plan (so the executor can
  *  label + type results without re-deriving them). */
 export type CompiledQuery = {
@@ -152,4 +174,6 @@ export type CompiledQuery = {
   columns: ResultColumn[]
   /** The effective row cap applied to the SQL. */
   limit: number
+  /** The denomination basis for the executor to enforce. */
+  denomination: InsightDenominationBasis
 }

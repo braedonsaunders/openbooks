@@ -2,5 +2,5 @@
 // SERVER ONLY: imports node-postgres via the caller's pool. Never import from a
 // client bundle.
 
-export { runInsightQuery } from '../execute'
+export { runInsightQuery, InsightDenominationError } from '../execute'
 export type { QueryPool, PoolClient } from '../execute'
