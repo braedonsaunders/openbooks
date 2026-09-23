@@ -90,6 +90,16 @@ class AppInvocationClaimShapeError extends Error {
 }
 
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._:-]{8,200}$/;
+
+/**
+ * Boundary check for a caller-supplied invocation key (bridge clients mint
+ * one UUID per action; assistant callers pass a fresh key per call). Single
+ * definition shared by the bridge and the envelope so the two can never
+ * disagree on what a key looks like.
+ */
+export function isValidAppInvocationKey(key: unknown): key is string {
+  return typeof key === "string" && IDEMPOTENCY_KEY_RE.test(key);
+}
 // Mirrors application_idempotency_operation_format in the schema.
 const OPERATION_RE = /^apps\.[a-z][a-z0-9_.-]{2,94}$/;
 const REQUEST_HASH_RE = /^[0-9a-f]{64}$/;
@@ -97,11 +107,11 @@ const REQUEST_HASH_RE = /^[0-9a-f]{64}$/;
 const KEY_NAMESPACE = "app-invocation";
 
 /**
- * Derive the deterministic identity of one App invocation: sha256 over its
- * canonical parts (app/version/endpoint/payload). Server-side derivation means
- * byte-identical repeat requests collapse onto the first committed outcome —
- * the standard consequence of key derivation absent a client-supplied key —
- * while any changed input yields a fresh independent invocation.
+ * Derive a caller-supplied invocation identity: sha256 over opaque parts
+ * under a domain separator. The bridge passes the CLIENT's invocation key
+ * here (one key per intended action, preserved across that action's
+ * retries); identical repeats with different keys are independent
+ * invocations, and only the same key replays.
  */
 export function deriveAppInvocationKey(parts: Record<string, unknown>): string {
   const digest = createHash("sha256")
@@ -117,6 +127,7 @@ interface ClaimRow {
   requestHash: string;
   response: unknown;
   completedAt: Date | null;
+  expiresAt: Date | string;
 }
 
 async function readCommittedClaim(
@@ -130,21 +141,34 @@ async function readCommittedClaim(
     requestHash: string;
     response: unknown;
     completedAt: Date | null;
+    expiresAt: Date | string;
   }>(sql`
-    select id, request_hash as "requestHash", response, completed_at as "completedAt"
+    select id, request_hash as "requestHash", response, completed_at as "completedAt",
+           expires_at as "expiresAt"
       from application_idempotency_keys
      where org_id = ${orgId} and actor_id = ${actorId} and source = 'app'
        and operation = ${operation} and idempotency_key = ${idempotencyKey}
      limit 1`);
   const row = r.rows[0];
-  return row
-    ? {
-        id: String(row.id),
-        requestHash: String(row.requestHash),
-        response: row.response,
-        completedAt: row.completedAt,
-      }
-    : null;
+  if (!row) return null;
+  // Expiry is checked here, on the read path: an expired claim never replays,
+  // and its row is reaped (the storage guard explicitly permits deleting
+  // expired evidence) so the retry inserts a fresh claim instead of
+  // colliding with — or, worse, completing over — dead evidence. The caller
+  // holds the per-claim advisory lock, so no concurrent claim can interleave.
+  if (new Date(row.expiresAt).getTime() <= Date.now()) {
+    await db.execute(sql`
+      delete from application_idempotency_keys
+       where id = ${row.id} and expires_at <= now()`);
+    return null;
+  }
+  return {
+    id: String(row.id),
+    requestHash: String(row.requestHash),
+    response: row.response,
+    completedAt: row.completedAt,
+    expiresAt: row.expiresAt,
+  };
 }
 
 function assertSameRequest(row: ClaimRow, requestHash: string): void {

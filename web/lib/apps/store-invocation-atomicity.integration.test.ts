@@ -21,7 +21,6 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
-const { deriveAppInvocationKey } = await import('@openbooks/engine/src/apps/invocations.ts')
 
 const DB = !!env.OPENBOOKS_DB_URL
 
@@ -98,6 +97,10 @@ function callBridge(
   fx: Fixture,
   appKey: string,
   payload: unknown,
+  // One key per caller action: retries of one action share it, independent
+  // actions mint their own. Omitted only for single-shot calls, which mint a
+  // fresh key — never for a pair that must replay or stay independent.
+  invocationKey?: string,
 ): ReturnType<typeof runBridgeMethod> {
   // The bridge resolves the app and its audience from the ambient tenant
   // scope, exactly as a production request would carry it; without the
@@ -109,6 +112,7 @@ function callBridge(
       key: appKey,
       method: 'callBackend',
       payload,
+      invocationKey: invocationKey ?? randomUUID(),
       userCan: () => true,
       allowedSubsidiaryIds: null,
     }),
@@ -366,13 +370,16 @@ test(
     try {
       const appKey = await installProofApp(fx, financialHandler({ post: true }))
       const requestPayload = { documentDate: fx.org.date, amount: '25.00' }
+      // The lost result is retried with the SAME caller key: one action,
+      // one execution, replayed response.
+      const retryKey = randomUUID()
 
-      const first = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload })
+      const first = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload }, retryKey)
       assert.equal(first.ok, true)
       const firstJournal = String((first.result as { body?: { journal?: string } }).body?.journal)
       assert.match(firstJournal, /^JE-/)
 
-      const second = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload })
+      const second = await callBridge(fx, appKey, { endpoint: 'financial', payload: requestPayload }, retryKey)
       assert.equal(second.ok, true)
       assert.deepEqual(second.result, first.result)
 
@@ -383,18 +390,14 @@ test(
         storage: 1,
       })
 
-      const versionRow = await withBypass(() =>
-        db.execute<{ id: string }>(sql`select id from app_versions where org_id = ${fx.org.orgId}`),
-      )
+      // The claim identity is namespaced by app and version inside the
+      // stored key, so the test pins the observable property instead: one
+      // claim row for the operation after an execution plus its replay.
       const claims = await withOrgContext(fx.org.orgId, () =>
         db.execute<{ n: string }>(sql`
           select count(*)::text as n from application_idempotency_keys
            where org_id = ${fx.org.orgId} and source = 'app'
-             and idempotency_key = ${deriveAppInvocationKey({
-               versionId: versionRow.rows[0]!.id,
-               endpoint: 'financial',
-               body: requestPayload,
-             })}`),
+             and operation = 'apps.call_backend.financial'`),
       )
       assert.equal(Number(claims.rows[0]!.n), 1)
 
@@ -403,15 +406,72 @@ test(
       assert.equal(runs.length, 2)
       assert.match(JSON.stringify(runs[1]!.logs), /replayed/)
 
-      // Distinct input yields a distinct invocation — no false collision.
+      // A distinct action carries its own key and executes independently —
+      // identical repeats are independent invocations, never replays.
       const variant = await callBridge(fx, appKey, {
         endpoint: 'financial',
         payload: { ...requestPayload, amount: '40.00' },
-      })
+      }, randomUUID())
       assert.equal(variant.ok, true)
       const secondJournal = String((variant.result as { body?: { journal?: string } }).body?.journal)
       assert.notEqual(secondJournal, firstJournal)
       assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 2)
+    } finally {
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
+
+test(
+  'two intentional platform.create calls with identical bodies but different keys create two records; the same key replays',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    try {
+      const appKey = await installProofApp(fx, financialHandler({ post: false }))
+      const create = (invocationKey: string | undefined, body: unknown = { name: 'Repeat' }) =>
+        withOrgContext(fx.org.orgId, () =>
+          runBridgeMethod({
+            orgId: fx.org.orgId,
+            user: fx.user,
+            key: appKey,
+            method: 'platform.create',
+            payload: { typeKey: CUSTOM_TYPE_KEY, body },
+            invocationKey,
+            userCan: () => true,
+            allowedSubsidiaryIds: null,
+          }),
+        )
+      const keyA = randomUUID()
+      const keyB = randomUUID()
+      const first = await create(keyA)
+      assert.equal(first.ok, true)
+      // Same key, same body: a retried action replays the stored response.
+      const retry = await create(keyA)
+      assert.equal(retry.ok, true)
+      assert.deepEqual(retry.result, first.result)
+      // Same body, different key: an intentional repeat executes independently.
+      const repeat = await create(keyB)
+      assert.equal(repeat.ok, true)
+      assert.notDeepEqual(repeat.result, first.result)
+      const records = await withOrgContext(fx.org.orgId, () =>
+        db.execute<{ n: string }>(sql`select count(*)::text as n from custom_records
+           where org_id = ${fx.org.orgId} and type_key = ${CUSTOM_TYPE_KEY}`),
+      )
+      assert.equal(Number(records.rows[0]!.n), 2)
+
+      // Same key with a different body is key reuse, not a retry: 409.
+      const mismatch = await create(keyA, { name: 'Different' })
+      assert.equal(mismatch.ok, false)
+      if (mismatch.ok) throw new Error('unreachable')
+      assert.equal(mismatch.status, 409)
+
+      // A write with no key at all is refused by name before anything runs.
+      const keyless = await create(undefined)
+      assert.equal(keyless.ok, false)
+      if (keyless.ok) throw new Error('unreachable')
+      assert.equal(keyless.status, 400)
+      assert.match(keyless.error, /invocationKey/)
     } finally {
       await dropScratchOrg(fx.org.orgId)
     }
@@ -429,6 +489,9 @@ test(
         endpoint: 'financial',
         payload: { documentDate: fx.org.date, amount: '25.00' },
       }
+      // One action retried: the recovery takes over the refused attempt's
+      // uncompleted claim instead of starting a second identity.
+      const actionKey = randomUUID()
       const triggerName = 'app_runs_fail_closed_bridge'
       await withBypass(async () => {
         await db.execute(sql`
@@ -444,7 +507,7 @@ test(
             execute function fail_bridge_run_audit()`)
       })
       try {
-        const refused = await callBridge(fx, appKey, payload)
+        const refused = await callBridge(fx, appKey, payload, actionKey)
         assert.equal(refused.ok, false)
         assert.match(String(refused.error ?? ''), /app_runs unavailable/)
         assert.deepEqual(await committedCounts(fx.org.orgId), {
@@ -459,7 +522,7 @@ test(
         })
       }
       // Once evidence can be persisted again, the very same identity succeeds.
-      const recovered = await callBridge(fx, appKey, payload)
+      const recovered = await callBridge(fx, appKey, payload, actionKey)
       assert.equal(recovered.ok, true)
       assert.equal(await committedCounts(fx.org.orgId).then((c) => c.entries), 1)
     } finally {

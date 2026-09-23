@@ -374,3 +374,58 @@ test(
     }
   },
 );
+
+test(
+  "an expired claim never replays: the retry reaps it and executes fresh",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const audits: AppInvocationAuditRow[] = [];
+      let executions = 0;
+      const versionId = randomUUID();
+      const invoke = (key: string) =>
+        executeAppInvocation({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          appId: fx.appId,
+          versionId,
+          endpoint: "aging",
+          operation: "apps.call_backend_aging",
+          idempotencyKey: key,
+          requestHash: deriveAppInvocationKey({ requestHashOf: "aging-input" }),
+          run: async (): Promise<AppInvocationAttempt> => {
+            executions += 1;
+            return { status: "ok", response: { execution: executions } };
+          },
+          audit: auditingAgainst(fx, audits),
+        });
+      const key = randomUUID();
+      const requestHash = deriveAppInvocationKey({ requestHashOf: "aging-input" });
+      // Dead evidence the envelope itself would have written a month ago: a
+      // completed claim past its TTL. (Inserted directly because the storage
+      // guard forbids aging a live row by update — the point under test.)
+      await withBypass(() =>
+        db.execute(sql`
+          insert into application_idempotency_keys
+            (org_id, actor_id, source, operation, idempotency_key, request_hash,
+             response, completed_at, expires_at)
+          values (${fx.orgId}, ${fx.actorId}, 'app', 'apps.call_backend_aging',
+                  ${key},
+                  ${requestHash}, '{"execution":0}'::jsonb, now() - interval '31 days',
+                  now() - interval '1 day')`),
+      );
+      assert.equal(await claimCount(fx.orgId), 1);
+      // The identical call must run fresh (never replay dead evidence) and
+      // leave exactly one live claim row — the expired row is reaped, not
+      // completed over.
+      const retried = await invoke(key);
+      assert.equal(retried.replayed, false);
+      assert.equal(executions, 1);
+      assert.deepEqual(retried.attempt.response, { execution: 1 });
+      assert.equal(await claimCount(fx.orgId), 1);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);

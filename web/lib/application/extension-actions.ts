@@ -46,8 +46,11 @@ export async function runExtensionAction(context: ApplicationContext, key: strin
     const errors = validateRecordData(screen.fields, values, 'submit')
     if (errors.length) throw invalidInput(errors.map(error => error.message).join('; '))
     // Return the envelope's refusal normally: its failure audit must commit.
+    // The native submit reuses its invocationId as the bridge invocation key,
+    // so a double-submit retries into the stored result instead of re-running.
     return runBridgeMethod({ orgId, user: context.authz.user, key, method: 'callBackend',
       payload: { endpoint: screen.endpoint, payload: { input: values, invocationId: request.invocationId } },
+      invocationKey: request.invocationId,
       userCan: permission => can(context.authz, permission), allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
     })
   }))

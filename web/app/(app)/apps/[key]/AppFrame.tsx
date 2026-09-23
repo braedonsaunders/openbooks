@@ -49,7 +49,7 @@ export function AppFrame({
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ method: req.method, payload: req.payload, versionId: context.app.versionId }),
+          body: JSON.stringify({ method: req.method, payload: req.payload, versionId: context.app.versionId, invocationKey: req.invocationKey }),
         })
         // The status is checked before the body is parsed: a non-JSON error
         // body must surface the failure, never a SyntaxError from res.json()

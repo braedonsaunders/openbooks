@@ -106,6 +106,9 @@ function callBridge(
   appKey: string,
   body: Record<string, unknown>,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
+  // Independent single-shot posts mint a fresh key each: every call here is
+  // its own action, never a retry of another.
+  invocationKey: string = randomUUID(),
 ): ReturnType<typeof runBridgeMethod> {
   // getAppByKey predicates on org_id explicitly but still reads through RLS,
   // which the store import above leaves enforced with no ambient tenant: run
@@ -116,6 +119,7 @@ function callBridge(
     key: appKey,
     method: 'callBackend',
     payload: { endpoint: 'journal', payload: body },
+    invocationKey,
     userCan: () => true,
     allowedSubsidiaryIds,
   }))

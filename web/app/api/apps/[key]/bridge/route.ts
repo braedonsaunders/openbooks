@@ -9,10 +9,14 @@ export const runtime = 'nodejs'
 
 /**
  * POST — relay a single bridge call from a sandboxed App frontend. The AppFrame
- * forwards { method, payload } here; this route re-authenticates the real user,
- * enforces apps.use, and (for records) enforces app-granted ∩ user permissions
- * before running anything. The sandbox never reaches the DB except through the
- * org-scoped adapters wired in runBridgeMethod.
+ * forwards { method, payload, invocationKey } here; this route re-authenticates
+ * the real user, enforces apps.use, and (for records) enforces app-granted ∩
+ * user permissions before running anything. The sandbox never reaches the DB
+ * except through the org-scoped adapters wired in runBridgeMethod.
+ *
+ * The client generates one invocation key per action and reuses it across that
+ * action's retries; the bridge uses it (not the payload hash) as the
+ * idempotency key. Writes refuse without it — see requireBridgeInvocationKey.
  */
 export async function POST(
   req: Request,
@@ -27,9 +31,13 @@ export async function POST(
     method?: string
     payload?: unknown
     versionId?: string
+    invocationKey?: unknown
   }
   if (typeof body.method !== 'string') {
     return NextResponse.json({ error: 'method required' }, { status: 400 })
+  }
+  if (body.invocationKey !== undefined && typeof body.invocationKey !== 'string') {
+    return NextResponse.json({ error: 'invocationKey must be a string' }, { status: 400 })
   }
 
   if (
@@ -44,6 +52,7 @@ export async function POST(
     expectedVersionId: body.versionId,
     method: body.method,
     payload: body.payload ?? {},
+    invocationKey: typeof body.invocationKey === 'string' ? body.invocationKey : undefined,
     userCan: (perm) => can(gate, perm),
     allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
   })
