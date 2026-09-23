@@ -35,7 +35,17 @@
       "dirty": "Cambios sin guardar…",
       "error": "Error al guardar — corrija y reintente"
     },
-    "totals": "Subtotal {subtotal} · Impuesto {tax} · <strong>Total {total}</strong>"
+    "totals": "Subtotal {subtotal} · Impuesto {tax} · <strong>Total {total}</strong>",
+    "settlement": {
+      "label": "Pagado por",
+      "outOfPocket": "De su bolsillo",
+      "companyPaid": "Tarjeta de empresa",
+      "personal": "Personal (no reembolsar)"
+    },
+    "cardLabel": "Tarjeta corporativa",
+    "cardPlaceholder": "Seleccionar tarjeta…",
+    "noCard": "Sin tarjeta",
+    "splits": "Reembolsable {oop} · Tarjeta de empresa {card} · Adeudado por el empleado {personal}"
   },
   "toasts": {
     "submitted": "Enviado para aprobación",

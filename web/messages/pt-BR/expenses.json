@@ -35,7 +35,17 @@
       "dirty": "Alterações não salvas…",
       "error": "Falha ao salvar — corrija e tente novamente"
     },
-    "totals": "Subtotal {subtotal} · Imposto {tax} · <strong>Total {total}</strong>"
+    "totals": "Subtotal {subtotal} · Imposto {tax} · <strong>Total {total}</strong>",
+    "settlement": {
+      "label": "Pago por",
+      "outOfPocket": "Do próprio bolso",
+      "companyPaid": "Cartão corporativo",
+      "personal": "Pessoal (não reembolsar)"
+    },
+    "cardLabel": "Cartão corporativo",
+    "cardPlaceholder": "Selecionar cartão…",
+    "noCard": "Sem cartão",
+    "splits": "Reembolsável {oop} · Cartão corporativo {card} · Devido pelo funcionário {personal}"
   },
   "toasts": {
     "submitted": "Enviado para aprovação",
