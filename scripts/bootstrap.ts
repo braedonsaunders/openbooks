@@ -1451,10 +1451,10 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "65164ea1ba89df3dde63064a76bf931f3704ca0c8c802368247858d26d2f2c37",
-    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "corrective revisions U1+U2+U4+PR6b (payroll-remittance shard) supersede "
+      "corrective revisions U1+U2+U4+PR6b+U5 (payroll-remittance shard) supersede "
       + "every earlier 0296: U1 refuses first over unparseable legacy markers, naming "
       + "each bill and field. U2 replaces the grand-total backfill with an exact "
       + "reconciliation repair (recorded party equals the marker party, lines per "
@@ -1474,29 +1474,42 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "5589a8b5b31dfcabd8ccd74ce4d5d6eeca95b141844b6282bfdda4b6ce45f62b",
-    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
+      "same U1+U2+U4+PR6b+U5 revision as the entry above, for databases that recorded "
       + "the U1-only 5589a8b5.",
   },
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "097ed6dd7492562a23147fca19d013c22da682373c17c7793b008f123ab58704",
-    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
+      "same U1+U2+U4+PR6b+U5 revision as the entry above, for databases that recorded "
       + "the U1+U2 097ed6dd.",
   },
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "a24896ea622d91dde33b3dd8b25e47928618723d1eb60b08a9ab9f793c063ef3",
-    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
     strategy: "reapply",
     reason:
-      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
+      "same U1+U2+U4+PR6b+U5 revision as the entry above, for databases that recorded "
       + "the U1+U2+U4 a24896ea.",
+  },
+  {
+    filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
+    from: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    to: "126d6d8962862048241522d9862a7a9a72e3cf552f50aac3c5acbb00ba608bb7",
+    strategy: "reapply",
+    reason:
+      "U5 hot-table conversion (payroll-remittance shard): the file declares "
+      + "no-transaction and the runner applies it statement by statement, the "
+      + "snapshot index builds CONCURRENTLY behind an INVALID-drop guard, and "
+      + "the snapshot FK arrives NOT VALID with a separate VALIDATE step. "
+      + "Every statement stays idempotent against the PR6b state, so reapply, "
+      + "not restamp.",
   },
   {
     filename: "generated/0293_stock_count_line_subject_unique.sql",
