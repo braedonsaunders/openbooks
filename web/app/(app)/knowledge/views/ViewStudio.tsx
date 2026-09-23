@@ -66,7 +66,12 @@ export function ViewStudio({
   const [description, setDescription] = useState(view.description ?? '')
   const [query, setQuery] = useState<ReportCustomQuery>(view.query)
   const [scope, setScope] = useState<ViewScope>(view.scope)
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  // Create mode edits a blank in memory with no row to be saved into: the
+  // studio opens dirty, so the status never claims "All changes saved"
+  // before the first explicit Save reads back its id.
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>(
+    createMode ? 'dirty' : 'saved',
+  )
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
