@@ -88,3 +88,56 @@ test("unmapped or unbalanced QuickBooks transactions are refused, never rounded 
   assert.equal(built.documents.length, 0);
   assert.match(built.unbuildable[0]!.reason, /0\.0001/);
 });
+
+test("a balanced omitted pair on unmapped accounts is unbuildable and imports no journal", () => {
+  // Mapped AR Dr100 / Sales Cr100 plus an unmapped Expense Dr10 / Cash Cr10:
+  // the mapped legs net to zero, but the transaction is unbuildable — the
+  // unmapped pair must never be silently lost.
+  const built = buildQbdLedgerDocuments({
+    rows: [
+      { rowType: "DataRow", columns: { TxnID: "txn-bal", Date: "2024-03-01", Name: "Acme", Account: "Accounts Receivable", Debit: "100.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-bal", Date: "2024-03-01", Account: "Sales", Credit: "100.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-bal", Date: "2024-03-01", Account: "Unmapped Expense", Debit: "10.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-bal", Date: "2024-03-01", Account: "Unmapped Cash", Credit: "10.0000" } },
+    ],
+    accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+    partyRefByName: new Map([["Acme", "C:c1"]]),
+    ctx: context(), baseCurrency: "CAD",
+  });
+  assert.equal(built.documents.length, 0);
+  assert.equal(built.unbuildable.length, 1);
+  assert.equal(built.unbuildable[0]!.ref, "txn-bal");
+  assert.match(built.unbuildable[0]!.reason, /has 2 line\(s\) on unmapped account\(s\): Unmapped Expense, Unmapped Cash/);
+  assert.match(built.unbuildable[0]!.reason, /map them before import/);
+});
+
+test("a single unmapped nonzero leg is unbuildable", () => {
+  const built = buildQbdLedgerDocuments({
+    rows: [
+      { rowType: "DataRow", columns: { TxnID: "txn-leg", Date: "2024-03-01", Name: "Acme", Account: "Accounts Receivable", Debit: "100.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-leg", Date: "2024-03-01", Account: "Sales", Credit: "90.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-leg", Date: "2024-03-01", Account: "Unmapped Discount", Credit: "10.0000" } },
+    ],
+    accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+    partyRefByName: new Map([["Acme", "C:c1"]]),
+    ctx: context(), baseCurrency: "CAD",
+  });
+  assert.equal(built.documents.length, 0);
+  assert.equal(built.unbuildable.length, 1);
+  assert.match(built.unbuildable[0]!.reason, /has 1 line\(s\) on unmapped account\(s\): Unmapped Discount/);
+});
+
+test("a zero-amount row on an unmapped account is still skipped", () => {
+  const built = buildQbdLedgerDocuments({
+    rows: [
+      { rowType: "DataRow", columns: { TxnID: "txn-zero", Date: "2024-03-01", Name: "Acme", Account: "Accounts Receivable", Debit: "100.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-zero", Date: "2024-03-01", Account: "Sales", Credit: "100.0000" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-zero", Date: "2024-03-01", Account: "Unmapped Memo" } },
+    ],
+    accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+    partyRefByName: new Map([["Acme", "C:c1"]]),
+    ctx: context(), baseCurrency: "CAD",
+  });
+  assert.equal(built.unbuildable.length, 0);
+  assert.equal(built.documents.length, 1);
+});
