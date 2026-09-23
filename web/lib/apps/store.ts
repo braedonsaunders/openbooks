@@ -12,6 +12,7 @@ import {
 import {
   executeAppInvocation,
   deriveAppInvocationKey,
+  isValidAppInvocationKey,
   AppInvocationInFlightError,
   AppInvocationRequestMismatchError,
   type AppInvocationAuditRow,
@@ -817,6 +818,33 @@ function platformReadNeedsFreshInvocation(method: string): boolean {
   )
 }
 
+/**
+ * A bridge write (platform.create/update/delete, callBackend) is one caller
+ * action: it needs the caller's invocation key — one key per intended action,
+ * preserved across that action's retries — and refuses without it, naming the
+ * remedy. Reads mint their own nonce and never take a caller key.
+ */
+function requireBridgeInvocationKey(
+  method: string,
+  key: unknown,
+): { ok: true; key: string } | { ok: false; error: string; status: number } {
+  if (typeof key !== 'string' || key.length === 0) {
+    return {
+      ok: false,
+      error: `${method} requires an invocationKey: generate one key per action (for example a uuid) and send the same key when retrying that action`,
+      status: 400,
+    }
+  }
+  if (!isValidAppInvocationKey(key)) {
+    return {
+      ok: false,
+      error: `invalid invocationKey for ${method}: use 8-200 characters of letters, digits, dots, underscores, colons or dashes`,
+      status: 400,
+    }
+  }
+  return { ok: true, key }
+}
+
 export async function runBridgeMethod(opts: {
   orgId: string
   user: SessionUser
@@ -824,6 +852,8 @@ export async function runBridgeMethod(opts: {
   method: string
   payload: unknown
   expectedVersionId?: string
+  /** Client-generated invocation key (one per action; retries reuse it). Required for writes. */
+  invocationKey?: string
   userCan: (perm: string) => boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
@@ -914,10 +944,21 @@ export async function runBridgeMethod(opts: {
         }
       }
     }
+    // Writes run under the caller's invocation key (required here): two
+    // intentional repeats carry different keys and execute independently,
+    // while the same key retries into the stored response. Reads keep the
+    // derived key below, which mints a nonce per fetch.
+    const isWrite = opts.method === 'platform.create' || opts.method === 'platform.update' || opts.method === 'platform.delete'
+    let invocationKey: string | null = null
+    if (isWrite) {
+      const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey)
+      if (!keyed.ok) return keyed
+      invocationKey = keyed.key
+    }
     try {
       // Reads mint a nonce so a later identical fetch is a new claim, not a
-      // stale replay of the first committed page/schema/record. Writes keep
-      // the derived key so a byte-identical retry collapses.
+      // stale replay of the first committed page/schema/record. Writes run
+      // under the caller key selected above, never the payload hash.
       const outcome = await executeAppInvocation({
         orgId: opts.orgId,
         actorId: opts.user.id,
@@ -925,7 +966,7 @@ export async function runBridgeMethod(opts: {
         versionId: app.activeVersionId,
         endpoint: opts.method,
         operation: `apps.${opts.method.replaceAll('.', '_')}`,
-        idempotencyKey: deriveAppInvocationKey({
+        idempotencyKey: invocationKey ?? deriveAppInvocationKey({
           method: opts.method,
           typeKey,
           id,
@@ -963,6 +1004,8 @@ export async function runBridgeMethod(opts: {
 
   if (opts.method === 'callBackend') {
     const endpointName = String(payload.endpoint ?? '')
+    const keyed = requireBridgeInvocationKey(opts.method, opts.invocationKey)
+    if (!keyed.ok) return keyed
     return invokeAppEndpointHandler({
       orgId: opts.orgId,
       user: opts.user,
@@ -973,6 +1016,7 @@ export async function runBridgeMethod(opts: {
       allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
       operation: `apps.call_backend.${endpointName}`,
       auditEndpoint: endpointName,
+      idempotencyKey: keyed.key,
     })
   }
 
@@ -982,11 +1026,12 @@ export async function runBridgeMethod(opts: {
 /**
  * Run one backend endpoint file for an installed App inside the governed
  * invocation envelope (unit budget + app_runs evidence + idempotency claim).
- * Shared by the bridge callBackend path and by App-declared assistant tools —
- * the only difference is who derives the idempotency key: the bridge derives
- * it from (version, endpoint, body) so byte-identical retries collapse, while
- * assistant callers pass a fresh key per call (or a confirmation-token
- * derivative at commit time, so double-Applies replay instead of re-running).
+ * Shared by the bridge callBackend path and by App-declared assistant tools.
+ * Every caller passes its own invocation key — the bridge forwards the
+ * client's per-action key, assistant callers pass a fresh key per call (or a
+ * confirmation-token derivative at commit time, so double-Applies replay
+ * instead of re-running). Nothing here derives a key from the payload: two
+ * intentional repeats are two invocations, and only the same key replays.
  */
 export async function invokeAppEndpointHandler(opts: {
   orgId: string
@@ -998,8 +1043,8 @@ export async function invokeAppEndpointHandler(opts: {
   allowedSubsidiaryIds: ReadonlySet<string> | null
   operation: string
   auditEndpoint: string
-  /** Fresh caller key; when omitted the bridge derivation is used. */
-  idempotencyKey?: string
+  /** Caller key (bridge invocationKey, assistant per-call key). Always required. */
+  idempotencyKey: string
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
   const app = await getAppByKey(opts.orgId, opts.key)
   if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
@@ -1067,11 +1112,7 @@ export async function invokeAppEndpointHandler(opts: {
       versionId: app.activeVersionId,
       endpoint: opts.auditEndpoint,
       operation: opts.operation,
-      idempotencyKey: opts.idempotencyKey ?? deriveAppInvocationKey({
-        versionId: app.activeVersionId,
-        endpoint: opts.endpoint,
-        body: opts.body ?? null,
-      }),
+      idempotencyKey: opts.idempotencyKey,
       requestHash: requestHash({ endpoint: opts.endpoint, payload: opts.body ?? null }),
       run: () => runAppEndpoint({ source: handlerSource, request, adapters }),
       audit: insertAppRun,

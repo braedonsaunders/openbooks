@@ -42,6 +42,12 @@ export interface BridgeRequest {
   id: string
   method: string
   payload: unknown
+  /**
+   * Client-generated invocation key (one per intended action, preserved
+   * across that action's retries). The SDK always sends one; absent here
+   * only from a malformed envelope, which writes refuse downstream.
+   */
+  invocationKey?: string
 }
 
 export interface BridgeResult {
@@ -59,7 +65,14 @@ export function parseBridgeRequest(data: unknown): BridgeRequest | null {
   const d = data as Record<string, unknown>
   if (d[BRIDGE_MARKER] !== true || d.type !== 'call') return null
   if (typeof d.id !== 'string' || typeof d.method !== 'string') return null
-  return { [BRIDGE_MARKER]: true, type: 'call', id: d.id, method: d.method, payload: d.payload }
+  return {
+    [BRIDGE_MARKER]: true,
+    type: 'call',
+    id: d.id,
+    method: d.method,
+    payload: d.payload,
+    ...(typeof d.invocationKey === 'string' ? { invocationKey: d.invocationKey } : {}),
+  }
 }
 
 export function makeBridgeResult(id: string, ok: boolean, resultOrError: unknown): BridgeResult {
@@ -108,17 +121,27 @@ export function bridgeClientSource(context: BridgeContext): string {
     delete pending[d.id];
     if (d.ok) p.resolve(d.result); else p.reject(new Error(d.error || 'bridge error'));
   });
-  function call(method, payload){
+  function uuid(){
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+      var r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
+  }
+  function call(method, payload, invocationKey){
     return new Promise(function(resolve, reject){
       var id = 'c' + (++seq);
       pending[id] = { resolve: resolve, reject: reject };
-      window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'call', id: id, method: method, payload: payload }, '*');
+      window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'call', id: id, method: method, payload: payload, invocationKey: invocationKey || uuid() }, '*');
     });
   }
+  // Mutating calls accept an explicit invocation key so the action can be
+  // retried with the same key (same invocation replays); without one the SDK
+  // mints a fresh uuid per call, so every intentional repeat runs.
+  function actionKey(opts){ return opts && opts.invocationKey; }
   window.openbooks = {
     context: CTX,
     getContext: function(){ return Promise.resolve(CTX); },
-    callBackend: function(endpoint, payload){ return call('callBackend', { endpoint: endpoint, payload: payload }); },
+    callBackend: function(endpoint, payload, opts){ return call('callBackend', { endpoint: endpoint, payload: payload }, actionKey(opts)); },
     records: {
       list: function(typeKey, filters){ return call('records.list', { typeKey: typeKey, filters: filters || {} }); },
       get: function(typeKey, id){ return call('records.get', { typeKey: typeKey, id: id }); }
@@ -128,9 +151,9 @@ export function bridgeClientSource(context: BridgeContext): string {
       schema: function(){ return call('platform.schema', {}); },
       list: function(typeKey, options){ return call('platform.list', { typeKey: typeKey, options: options || {} }); },
       get: function(typeKey, id){ return call('platform.get', { typeKey: typeKey, id: id }); },
-      create: function(typeKey, body){ return call('platform.create', { typeKey: typeKey, body: body || {} }); },
-      update: function(typeKey, id, body){ return call('platform.update', { typeKey: typeKey, id: id, body: body || {} }); },
-      delete: function(typeKey, id){ return call('platform.delete', { typeKey: typeKey, id: id }); }
+      create: function(typeKey, body, opts){ return call('platform.create', { typeKey: typeKey, body: body || {} }, actionKey(opts)); },
+      update: function(typeKey, id, body, opts){ return call('platform.update', { typeKey: typeKey, id: id, body: body || {} }, actionKey(opts)); },
+      delete: function(typeKey, id, opts){ return call('platform.delete', { typeKey: typeKey, id: id }, actionKey(opts)); }
     }
   };
   window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'ready' }, '*');

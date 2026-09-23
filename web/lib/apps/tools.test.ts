@@ -113,21 +113,27 @@ test('platform schema/list/get mint a fresh readInvocation nonce like query', ()
   assert.match(store, /method === 'platform\.list'/)
   assert.match(store, /method === 'platform\.get'/)
   assert.match(body, /platformReadNeedsFreshInvocation\(opts\.method\)\s*\n\s*\? \{ readInvocation: crypto\.randomUUID\(\) \}/)
-  // Writes keep a derived key so byte-identical retries still collapse.
+  // Writes run under the caller's invocation key, never the payload hash:
+  // two intentional repeats carry different keys and execute independently.
+  assert.match(body, /idempotencyKey: invocationKey \?\? deriveAppInvocationKey\(\{/)
   assert.doesNotMatch(body, /opts\.method === 'platform\.query' \? \{ readInvocation/)
 })
 
-test('the bridge callBackend path keeps its exact derivation through the shared invoker', () => {
+test('the bridge callBackend path forwards the caller key through the shared invoker', () => {
   const start = store.indexOf('export async function invokeAppEndpointHandler')
   assert.notEqual(start, -1, 'invokeAppEndpointHandler must remain defined')
   const body = store.slice(start, store.indexOf('\nfunction platformBridgeUnits'))
   assert.match(body, /operation: opts\.operation/)
-  assert.match(body, /idempotencyKey: opts\.idempotencyKey \?\? deriveAppInvocationKey\(\{/)
+  // The invoker takes a required caller key and never derives from payload.
+  assert.match(body, /idempotencyKey: opts\.idempotencyKey,/)
+  assert.doesNotMatch(body, /deriveAppInvocationKey/)
   assert.match(body, /audit: insertAppRun/)
   assert.match(body, /adapters\.platform = platform/)
-  // The bridge delegate passes no caller key, so byte-identical retries collapse as before.
+  // The bridge delegate passes the client's invocation key (required, named
+  // refusal without it) so a retried action replays instead of re-running.
   const bridge = store.slice(store.indexOf("if (opts.method === 'callBackend')"), store.indexOf('return { ok: false, error: `unknown method'))
   assert.match(bridge, /return invokeAppEndpointHandler\(\{/)
   assert.match(bridge, /operation: `apps\.call_backend\.\$\{endpointName\}`/)
-  assert.doesNotMatch(bridge, /idempotencyKey/)
+  assert.match(bridge, /requireBridgeInvocationKey\(opts\.method, opts\.invocationKey\)/)
+  assert.match(bridge, /idempotencyKey: keyed\.key/)
 })
