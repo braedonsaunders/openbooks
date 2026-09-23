@@ -191,13 +191,22 @@ export async function sendRecordPdfEmail(args: {
     paymentUrl,
   })
 
+  // The email_log row is the immutable evidence of this issuance: which
+  // template design produced the attached PDF, pinned by id + revision +
+  // content hash so a later redesign cannot rewrite what was sent.
   const logId = await insertEmailLog({
     orgId: args.orgId,
     recipients: [to],
     subject: body.subject,
     status: 'queued',
     categoryKey: 'document',
-    meta: { recordType: args.recordType, recordId: args.id },
+    meta: {
+      recordType: args.recordType,
+      recordId: args.id,
+      templateId: tpl.provenance.templateId,
+      templateRevision: tpl.provenance.revision,
+      templateHash: tpl.provenance.contentHash,
+    },
     actor,
   })
   let uncertaintyRecorded = false

@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { compileTemplateHtml } from '@openbooks/pdf'
@@ -62,6 +63,27 @@ export type ResolvedPdfTemplate = {
   marginMm: number
   headerHtml: string | null
   footerHtml: string | null
+  /**
+   * Immutable evidence of which design produced the PDF: the saved
+   * template's id + revision plus the sha256 of the compiled HTML actually
+   * printed. A starter fallback has no id or revision — its content hash
+   * still identifies the design byte-for-byte. Every issuance channel
+   * (download headers, email_log meta, backup manifest) records this.
+   */
+  provenance: PdfTemplateProvenance
+}
+
+/** Which template design produced an issued PDF. */
+export type PdfTemplateProvenance = {
+  /** Null for the built-in starter (no saved row, no revision). */
+  templateId: string | null
+  revision: number | null
+  /** sha256 hex of the compiled HTML actually printed. */
+  contentHash: string
+}
+
+function contentHash(compiledHtml: string): string {
+  return createHash('sha256').update(compiledHtml, 'utf8').digest('hex')
 }
 
 /**
@@ -80,7 +102,12 @@ export async function resolvePdfTemplate(
   if (templateId != null) {
     if (!isUuid(templateId)) return null
     const tpl = await getPdfTemplate(orgId, templateId)
-    if (tpl && tpl.recordType === recordType && tpl.isActive) return tpl
+    if (tpl && tpl.recordType === recordType && tpl.isActive) {
+      return {
+        ...tpl,
+        provenance: { templateId: tpl.id, revision: tpl.revision, contentHash: contentHash(tpl.compiledHtml) },
+      }
+    }
     return null
   }
 
@@ -90,7 +117,12 @@ export async function resolvePdfTemplate(
      order by is_default desc, name limit 1
   `))
   const found = r.rows.find((t) => t.isDefault) ?? r.rows[0]
-  if (found) return found
+  if (found) {
+    return {
+      ...found,
+      provenance: { templateId: found.id, revision: found.revision, contentHash: contentHash(found.compiledHtml) },
+    }
+  }
 
   // Built-in fallback: compile the starter on the fly with the org accent.
   const org = (await db.execute<{ brand_primary: string | null }>(sql`
@@ -105,5 +137,6 @@ export async function resolvePdfTemplate(
     marginMm: 14,
     headerHtml: starter.headerHtml || null,
     footerHtml: starter.footerHtml || null,
+    provenance: { templateId: null, revision: null, contentHash: contentHash(compiledHtml) },
   }
 }

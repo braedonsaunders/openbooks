@@ -18,7 +18,7 @@ import {
 } from "./targets.ts";
 import { emailActionUrls } from "./email-tokens.ts";
 import { lockRecord, unlockRecord } from "./locks.ts";
-import { renderFlowPdf } from "./pdf-hook.ts";
+import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 
@@ -170,6 +170,7 @@ export async function executeFlowPlan(
         // remittance email without its PDF beats no email.
         let attachments: Array<{ filename: string; content: string; contentType: string }> = [];
         let pdfNote = "";
+        let pdfTemplateMeta: Record<string, string> = {};
         if (action.attachPdf) {
           try {
             const pdf = await renderFlowPdf({
@@ -186,6 +187,9 @@ export async function executeFlowPlan(
                   contentType: pdf.contentType,
                 },
               ];
+              // The outbox payload is the durable issuance record for this
+              // attachment: pin which template design produced it there.
+              pdfTemplateMeta = flowPdfTemplateMeta(pdf.template);
             } else pdfNote = " (pdf unavailable in this process, sent without attachment)";
           } catch (e) {
             console.error(`[flows] attachPdf render failed (run ${runId}):`, e);
@@ -210,7 +214,7 @@ export async function executeFlowPlan(
               html: mail.html,
               text: mail.text,
               ...(attachments.length > 0 ? { attachments } : {}),
-              meta: { category: "flows" },
+              meta: { category: "flows", ...pdfTemplateMeta },
             },
           });
         } catch (e) {

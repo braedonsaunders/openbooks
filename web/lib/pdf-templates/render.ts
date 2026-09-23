@@ -38,7 +38,13 @@ import type { ResolvedPdfTemplate } from './store'
 const UNTRUSTED_VALUES = { escapeHtml: true, allowRawValues: false } as const
 
 export async function mergeAndPrintPdf(
-  tpl: ResolvedPdfTemplate,
+  // The renderer takes only what it prints: issuance provenance rides on
+  // ResolvedPdfTemplate for the download/email/backup/flow channels to
+  // record, never through the print itself.
+  tpl: Pick<
+    ResolvedPdfTemplate,
+    'compiledHtml' | 'paperSize' | 'orientation' | 'marginMm' | 'headerHtml' | 'footerHtml'
+  >,
   values: Record<string, unknown>,
 ): Promise<Buffer> {
   const counters = { ...values, page: '{{page}}', pages: '{{pages}}' }

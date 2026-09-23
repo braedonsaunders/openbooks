@@ -58,7 +58,14 @@ export async function GET(
   try {
     const pdf = await mergeAndPrintPdf(tpl, record.values);
     const stamp = await businessToday(user.orgId);
-    return pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}-${stamp}`));
+    // The issued bytes carry their own provenance: which template design
+    // produced this PDF, so a disputed print resolves to an exact design
+    // version without trusting anyone's memory of the default.
+    const response = pdfResponse(pdf, safeName(`${meta.docTitle} ${record.reference}-${stamp}`));
+    if (tpl.provenance.templateId) response.headers.set('x-pdf-template-id', tpl.provenance.templateId);
+    if (tpl.provenance.revision !== null) response.headers.set('x-pdf-template-revision', String(tpl.provenance.revision));
+    response.headers.set('x-pdf-template-hash', tpl.provenance.contentHash);
+    return response;
   } catch (e) {
     return unexpectedServerError('record-pdf', e);
   }
