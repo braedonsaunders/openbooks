@@ -1,0 +1,1 @@
+Trigger and route guard changes only; no CHECK, constraint, index, or backfill touches existing budget rows.

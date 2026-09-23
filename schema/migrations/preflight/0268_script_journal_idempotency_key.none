@@ -1,0 +1,1 @@
+Nullable idempotency_key plus a partial unique index over key IS NOT NULL; every existing row is NULL and therefore outside the index.

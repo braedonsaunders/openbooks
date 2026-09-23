@@ -1,0 +1,1 @@
+Idempotent delta replaying baseline objects with IF NOT EXISTS / OR REPLACE guards; no data validation or backfill.

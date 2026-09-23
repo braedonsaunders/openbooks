@@ -76,6 +76,43 @@
       "steps": [
         { "kind": "sim", "mode": "endurance", "profile": "general-business", "seed": "upgrade-edge-1", "start": "2027-11-01", "end": "2028-03-31" }
       ]
+    },
+    {
+      "id": "edge-legacy",
+      "class": "edge",
+      "description": "Legacy shapes from earlier releases that upgrade cleanly with notices: a tenant catch-all group (0306 adds the default, 0319 retires it), an executed lien waiver renamed afterwards, an unbound active SFTP schedule, a recognition rule edited after obligations, a rate version older than a profile edit, a retention completion inheriting a live action, and grandfathered posted stock-count history. Runs the full upgrade, then assertions/edge-legacy.mjs.",
+      "steps": [
+        { "kind": "seeder", "name": "legacy-shapes", "args": ["legacy"] }
+      ],
+      "expectFindings": [
+        { "code": "0319.default_plus_custom", "severity": "notice" },
+        { "code": "0292.unsnapshotted_waiver", "severity": "notice" },
+        { "code": "0291.unbound_schedule", "severity": "notice" },
+        { "code": "0297.edited_rule", "severity": "notice" },
+        { "code": "0298.stale_pin", "severity": "notice" },
+        { "code": "0274.inherited_live_action", "severity": "notice" },
+        { "code": "0293.duplicate_subject_grandfathered", "severity": "notice" },
+        { "code": "0299.negative_counted_quantity_grandfathered", "severity": "notice" }
+      ],
+      "remedies": []
+    },
+    {
+      "id": "edge-refusals",
+      "class": "edge",
+      "description": "Legacy shapes that must refuse the upgrade by name: duplicate stock-count subjects and negative counts on draft counts, and malformed payrollRemittance markers. The cell proves --check reports exactly expectFindings, a plain bootstrap refuses without touching the ledger, the remedy files (the same remedy text operators get) apply, --check comes back clean, and the full phases run.",
+      "steps": [
+        { "kind": "seeder", "name": "legacy-shapes", "args": ["refusals"] }
+      ],
+      "expectFindings": [
+        { "code": "0293.duplicate_subject", "severity": "refuse" },
+        { "code": "0299.negative_counted_quantity", "severity": "refuse" },
+        { "code": "0296.malformed_remittance_marker", "severity": "refuse" }
+      ],
+      "remedies": [
+        { "kind": "remedy", "code": "0293.duplicate_subject", "sql": "schema/migrations/preflight/remedies/0293.duplicate_subject.sql" },
+        { "kind": "remedy", "code": "0299.negative_counted_quantity", "sql": "schema/migrations/preflight/remedies/0299.negative_counted_quantity.sql" },
+        { "kind": "remedy", "code": "0296.malformed_remittance_marker", "sql": "schema/migrations/preflight/remedies/0296.malformed_remittance_marker.sql" }
+      ]
     }
   ]
 }

@@ -1,0 +1,1 @@
+Deterministic sha256 token_hash backfill in pure SQL; no constraint is validated against existing rows (display sealing happens in bootstrap code, not here).

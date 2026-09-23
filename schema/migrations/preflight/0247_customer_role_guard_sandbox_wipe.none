@@ -1,0 +1,1 @@
+Function-only change to the customer-role guard (sandbox-wipe DELETE exemption); no schema or data change.

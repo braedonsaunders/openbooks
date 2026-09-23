@@ -1,0 +1,1 @@
+Revision column plus an append-only evidence table; both RAISE guards refuse future evidence rewrites only and validate no existing row.

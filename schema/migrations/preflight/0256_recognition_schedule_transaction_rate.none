@@ -1,0 +1,1 @@
+Best-effort FX backfill that leaves NULL where the ledger proves nothing; the posting reader falls back to rate 1 on NULL (engine/src/revenue/recognition.ts), so legacy rows behave exactly as before.

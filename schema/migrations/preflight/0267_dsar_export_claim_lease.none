@@ -1,0 +1,1 @@
+Claim-lease columns for future builds; all existing rows keep their status and no existing row can be mid-build.

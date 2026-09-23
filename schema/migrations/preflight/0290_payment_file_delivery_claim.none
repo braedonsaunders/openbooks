@@ -1,0 +1,1 @@
+Delivery-lease columns and lifecycle states with no backfill; only future deliveries use the new states.

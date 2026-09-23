@@ -1,0 +1,1 @@
+No backfill and no data-validated constraint: eight nullable evidence columns default NULL, the new CHECKs admit NULL, and the freeze triggers gate future writes only.

@@ -1,0 +1,1 @@
+Index-only migration (composite foreign-key backing indexes); indexes validate no row content.

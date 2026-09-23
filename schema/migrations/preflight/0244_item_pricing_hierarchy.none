@@ -1,0 +1,1 @@
+New pricing tables plus insert-missing base price levels (WHERE NOT EXISTS); the customer-role and level guards are future-write triggers that validate no existing row.

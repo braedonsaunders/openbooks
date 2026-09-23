@@ -1,0 +1,1 @@
+No preflight can fire: the baseline already carries CREATE UNIQUE INDEX dunning_log_document_stage on (document_id, stage_id), the ON CONFLICT target the runner relies on (engine/src/receivables/dunning.ts), so duplicate rung rows are unrepresentable.

@@ -1,0 +1,1 @@
+Guard-only migration: openbooks_clone_authority() is honored in jl_guard and the depreciation guard for clone INSERTs of posted rows only. No constraints, indexes, or data changes touch existing rows.
