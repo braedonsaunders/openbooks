@@ -7,14 +7,21 @@ const source = readFileSync(join(import.meta.dirname, 'open-items.ts'), 'utf8')
 const customerHome = readFileSync(join(import.meta.dirname, '..', 'module-home', 'customers.ts'), 'utf8')
 const purchasingHome = readFileSync(join(import.meta.dirname, '..', 'module-home', 'purchasing.ts'), 'utf8')
 
-test('cash open items use only the document current posted projection', () => {
-  assert.match(source, /je\.org_id = \$\{orgId\} and je\.status = 'posted'/)
+test('cash open items read the posting through the shared as-of reconstruction', () => {
+  // F-t03-010 pinned the live posted_entry_id join so a corrected bill could
+  // not read twice. That join has been superseded: a live pointer lets a
+  // later correction or void rewrite past forecasts, so the property pinned
+  // here is the reconstruction — the document's posting as of the date from
+  // journal history, never the live pointer or a live-status filter — which
+  // keeps the F-t03-010 guarantee (reversed entries never become a second
+  // item: only not-yet-reversed entries are effective as of the date).
+  assert.match(source, /asOfPostedEntryLateral/)
   assert.match(source, /d\.org_id = \$\{orgId\}/)
-  // The query drives from documents (open_balance pre-filter) and joins the
-  // posting entry through the document's own current-projection linkage.
-  assert.match(source, /je\.id = d\.posted_entry_id/)
-  assert.match(source, /d\.status = 'posted'/)
-  assert.doesNotMatch(source, /je\.status in \('posted', 'reversed'\)/)
+  // Liveness is date-gated too: posted, or voided strictly after the date —
+  // a later void hides the document forward, never backward.
+  assert.match(source, /d\.voided_at/)
+  assert.doesNotMatch(source, /je\.id = d\.posted_entry_id/)
+  assert.doesNotMatch(source, /je\.status = 'posted'/)
 })
 
 test('customer and purchasing home metrics reject superseded projections', () => {
