@@ -204,7 +204,10 @@ const GATING_GRAPH = {
       id: "g", position: { x: 200, y: 0 },
       data: {
         kind: "gate",
-        gate: { title: "Approve pay run", assignees: [{ kind: "role", role: "admin" }], mode: "any" },
+        // Assignee targets discriminate on `type`: `kind` fails graph
+        // validation and the fail-closed dispatch refuses the submit before
+        // the scope check under test is ever reached.
+        gate: { title: "Approve pay run", assignees: [{ type: "role", role: "admin" }], mode: "any" },
       },
     },
   ],
