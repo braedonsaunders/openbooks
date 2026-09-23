@@ -350,6 +350,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [lineRateUnits, setLineRateUnits] = useState<RateUnitOpt[]>([])
   const [lineRateLoading, setLineRateLoading] = useState(false)
   const [lineRateSource, setLineRateSource] = useState<'rate_book' | 'item_default' | ''>('')
+  const [linePolicyProvenance, setLinePolicyProvenance] = useState<'pinned' | 'inferred' | 'live' | ''>('')
   const [lineComponents, setLineComponents] = useState<{ unitName: string; quantity: string; rate: string; amount: string }[]>([])
 
   const effectiveLayout = props.layout ?? defaultFormLayout('field_ticket')
@@ -413,6 +414,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRate('')
       setLineAmount('')
       setLineRateSource('')
+      setLinePolicyProvenance('')
       setLineComponents([])
       setLineRateUnit('')
       setLineRateUnits([])
@@ -421,6 +423,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRate('')
       setLineAmount('')
       setLineRateSource('')
+      setLinePolicyProvenance('')
       setLineComponents([])
       setLineRateLoading(false)
     } else {
@@ -448,6 +451,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
         setLineRate(String(body.rate ?? ''))
         setLineAmount(String(body.amount ?? ''))
         setLineRateSource(body.source === 'rate_book' ? 'rate_book' : 'item_default')
+        setLinePolicyProvenance(
+          body.policyProvenance === 'inferred' || body.policyProvenance === 'pinned' || body.policyProvenance === 'live'
+            ? body.policyProvenance
+            : '',
+        )
         setLineComponents(Array.isArray(body.components) ? body.components : [])
       })
       .catch((error) => {
@@ -455,6 +463,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           setLineRate('')
           setLineAmount('')
           setLineRateSource('')
+          setLinePolicyProvenance('')
           setLineComponents([])
           if (lineRateUnit) setLineRateUnit('')
         }
@@ -1309,6 +1318,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 <div className="text-xs text-slate-500 md:col-span-3 dark:text-slate-400">
                   {t(`editor.lines.rateSource.${lineRateSource}`)}
                   {lineComponents.length > 0 ? ` · ${lineComponents.map((component) => `${Number(component.quantity)} ${component.unitName} × ${money(component.rate)}`).join(' + ')}` : ''}
+                  {linePolicyProvenance === 'inferred' ? (
+                    <span className="text-amber-600 dark:text-amber-400">
+                      {` · ${tOr('editor.lines.inferredPolicy', 'Inferred pre-upgrade policy — verify before billing')}`}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
             </div>
