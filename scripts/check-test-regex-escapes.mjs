@@ -139,18 +139,28 @@ export function suspectRun(rawRun) {
   return rawRun >= 2 ? rawRun : 0;
 }
 
+// The escapeRegExp idiom: a regex that is ONE character class listing only
+// regex metacharacters, e.g. /[.*+?^${}()|[\]\\]/g. It must match a literal
+// backslash in order to escape one, so its `\\` run is the whole point, not a
+// vacuous double escape. It is recognised by shape, everywhere, instead of
+// being allowlisted file by file: a per-file entry for a pattern that is
+// correct by construction only makes every new use of it fail the build.
+export function isEscapeClass(pattern) {
+  const klass = /^\[((?:\\.|[^\]\\])+)\]$/.exec(pattern);
+  if (!klass) return false;
+  const members = klass[1].replace(/\\(.)/g, "$1");
+  // At least 8 distinct metacharacters: the real idiom lists 13-14, while a
+  // short class like /[\\.]/ may be a mis-escape and stays checked.
+  return members.includes("\\") && /^[.*+?^${}()|[\]\\\/-]+$/.test(members) &&
+    new Set(members).size >= 8;
+}
+
 // Entries the sweep verified by hand: the effective pattern really does
 // match a literal backslash, and the text under test really contains one
 // (shell continuations, psql metacommands, BRE-in-YAML, Windows separators,
 // escapeRegExp idioms, source-text pins). A NEW occurrence fails the build;
 // extend this list only with a reason naming the backslash in the text.
 export const ALLOWLIST = [
-  { file: "engine/src/sync/readme-accuracy.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom: must match a literal backslash to escape it" },
-  { file: "engine/src/payroll/au/tax-year-2027.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
-  { file: "web/app/(app)/analytics/_ui/CashTimeline.test.tsx", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
-  { file: "web/lib/accounts-hygiene.test.ts", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
-  { file: "web/lib/data-io/import-route.test.ts", snippet: "[.*+?${}()|[", reason: "escapeRegExp idiom" },
-  { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "[.*+?^${}()|[", reason: "escapeRegExp idiom" },
   { file: "scripts/ci-pipeline-integrity.test.mjs", snippet: "\\\\\\s*$", reason: "shell line-continuation backslash at end of line" },
   { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "gh api", reason: "expected YAML embeds shell continuations (literal backslash-newline)" },
   { file: "scripts/deploy-edge-workflow.test.mjs", snippet: "dispatches", reason: "expected YAML embeds shell continuations" },
@@ -176,6 +186,7 @@ export function scanFile(path, root = ROOT) {
   const src = readFileSync(path, "utf8");
   const rel = path.startsWith(root + "/") ? path.slice(root.length + 1) : path;
   const checkLiteral = (pattern, line, snippet, origin) => {
+    if (isEscapeClass(pattern)) return;
     for (const run of backslashRuns(pattern)) {
       if (suspectRun(run) > 0 && !isAllowlisted(rel, snippet)) {
         findings.push({ file: rel, line, run, snippet: snippet.slice(0, 100), origin });
