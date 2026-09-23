@@ -519,7 +519,9 @@ test.describe("subscription to revenue", () => {
       expect(bRows[0]?.sequence).toBe(1);
       expect(bRows[0]?.stageName).toBe("Gentle reminder");
       expect(bRows[0]?.amountDue).toBe("1200.0000");
-      expect(bRows[0]?.status).toBe("sent");
+      // Queueing is not delivery: the tick leaves the claim staged, and the
+      // email worker settles it to sent from the provider's verdict.
+      expect(bRows[0]?.status).toBe("staged");
       // The staged email carries the rendered variables, not the template.
       const outbox = await readDunningOutbox(S.orgId);
       expect(outbox).toHaveLength(1);

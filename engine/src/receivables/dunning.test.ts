@@ -5,6 +5,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { isDunnableDocumentKind, renderTemplate, runDunning, runDunningForOrg, selectDueStage, type DunningStage } from "./dunning.ts";
+import { markDunningClaimFailed, markDunningClaimSent } from "../delivery/email-config.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -81,17 +82,25 @@ test("renderTemplate substitutes known tokens and blanks unknown ones", () => {
   assert.equal(renderTemplate("{{missing}} tail", {}), " tail");
 });
 
-test("dunning defers mail through the durable outbox inside the sent-claim transaction", () => {
+test("dunning defers mail through the durable outbox inside the staged-claim transaction", () => {
   const source = readFileSync(new URL("./dunning.ts", import.meta.url), "utf8");
   // A direct Redis enqueue commits outside Postgres: a rolled-back or crashed
-  // tick left mail queued against a sent claim that never existed, and the
+  // tick left mail queued against a staged claim that never existed, and the
   // next tick fired the same rung again — the customer got the letter twice.
   // The rendered notice must instead ride this org's transaction through the
-  // durable scheduler_outbox (enqueueFlowEmail), keyed by the rung identity so
-  // replays collapse onto one row, and no direct queue call may remain.
-  assert.match(source, /import \{ enqueueFlowEmail \} from "\.\.\/scheduling\/outbox\.ts";/);
+  // durable scheduler_outbox (enqueueFlowEmail), keyed by the round identity
+  // so replays collapse onto one row, and no direct queue call may remain.
+  assert.match(source, /import \{ enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS \} from "\.\.\/scheduling\/outbox\.ts";/);
   assert.match(source, /enqueueFlowEmail\(\{/);
-  assert.match(source, /occurrenceKey:\s*`dunning:\$\{doc\.id\}:\$\{stage\.id\}`/);
+  // Fresh claims defer under the rung's base identity…
+  assert.match(source, /let occurrenceKey = `dunning:\$\{doc\.id\}:\$\{stage\.id\}`/);
+  // …every re-arm rotates the key with its own re-arm time, so a retry never
+  // collapses onto a dead outbox row and reports delivery without sending…
+  assert.match(source, /occurrenceKey = `dunning:\$\{doc\.id\}:\$\{stage\.id\}:\$\{/);
+  // …the claim id rides in the outbox meta for the worker's verdict…
+  assert.match(source, /dunningLogId: claimId/);
+  // …and the runner never settles a claim to sent: queueing is not delivery.
+  assert.doesNotMatch(source, /settleClaim\("sent"/);
   assert.doesNotMatch(source, /@openbooks\/jobs/);
   assert.doesNotMatch(source, /\benqueueEmail\b/);
 });
@@ -196,7 +205,7 @@ async function stagedNotice(invoiceId: string): Promise<{
   return { logRows: log.rows, outboxRows: outbox.rows };
 }
 
-test("a fired dunning stage commits its sent claim and its mail deferral together", { skip: !DB }, async () => {
+test("a fired dunning stage commits its staged claim and its mail deferral together", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const { invoiceId, stageId, documentNumber } = await seedDunnableInvoice(org, {
@@ -206,14 +215,16 @@ test("a fired dunning stage commits its sent claim and its mail deferral togethe
 
     const first = await runDunning("2026-07-10");
     assert.equal(first.sent, 1);
-    assert.deepEqual(first.notices.map((n) => n.status), ["sent"]);
+    assert.deepEqual(first.notices.map((n) => n.status), ["staged"]);
 
     // The claim and the deferred delivery are one committed pair: exactly one
-    // append-only sent row AND exactly one flow_email outbox row for the rung,
-    // carrying the same rendered letter. Nothing touched Redis on this path —
-    // the suite runs with no broker reachable at all.
+    // staged claim row AND exactly one flow_email outbox row for the rung,
+    // carrying the same rendered letter. Queueing is not delivery, so the
+    // claim stays staged for the email worker's verdict. Nothing touched
+    // Redis on this path — the suite runs with no broker reachable at all.
     const { logRows, outboxRows } = await stagedNotice(invoiceId);
     assert.equal(logRows.length, 1);
+    assert.equal((logRows[0] as { status: string }).status, "staged");
     assert.equal(outboxRows.length, 1);
     assert.equal(outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
     const payload = outboxRows[0]!.payload as {
@@ -279,8 +290,8 @@ test("a failed claim write rolls the accepted mail job back with it and the retr
       await db.execute(sql`drop function if exists dun_claim_fault()`);
     }
 
-    // The next scheduler tick delivers exactly once: one delivered job and one
-    // immutable sent claim — never a second copy of the letter.
+    // The next scheduler tick defers exactly once: one staged claim and one
+    // outbox letter — never a second copy of the letter.
     const retry = await runDunning("2026-07-10");
     assert.equal(retry.sent, 1);
     const paired = await stagedNotice(invoiceId);
@@ -288,17 +299,18 @@ test("a failed claim write rolls the accepted mail job back with it and the retr
     assert.equal(paired.outboxRows.length, 1);
     assert.equal(paired.outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
 
-    // Terminal means terminal: the lifecycle guard rejects tampering with
-    // the committed sent claim — even a detail-only write that leaves the
-    // status untouched. The guard yields to the test harness's RLS bypass,
-    // so the write must be attempted in a production-posture org transaction
-    // (bypass off) to reach it at all.
+    // Committed means committed: the lifecycle guard rejects tampering with
+    // the staged claim — even a detail-only write that leaves the status
+    // untouched. Only the email worker's verdict transitions may move it.
+    // The guard yields to the test harness's RLS bypass, so the write must
+    // be attempted in a production-posture org transaction (bypass off) to
+    // reach it at all.
     await assert.rejects(
       () =>
         withOrg(org.orgId, () =>
           db.execute(sql`update dunning_log set detail = 'tampered' where document_id = ${invoiceId}`),
         ),
-      (error: unknown) => errorChainMatches(error, /terminal delivery evidence/),
+      (error: unknown) => errorChainMatches(error, /transition staged to staged is refused/),
     );
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
@@ -366,10 +378,10 @@ test("an unsendable dunning notice leaves suppressed evidence and retries once h
       update parties set email = 'billing@acme.test' where id = ${org.customerId} and org_id = ${org.orgId}
     `);
     const second = await runDunning("2026-07-10");
-    assert.deepEqual(second.notices.map((n) => n.status), ["sent"]);
+    assert.deepEqual(second.notices.map((n) => n.status), ["staged"]);
     const paired = await stagedNotice(invoiceId);
     assert.equal(paired.logRows.length, 1);
-    assert.equal((paired.logRows[0] as { status: string }).status, "sent");
+    assert.equal((paired.logRows[0] as { status: string }).status, "staged");
     assert.equal((paired.logRows[0] as { to_email: string }).to_email, "billing@acme.test");
     assert.equal(paired.outboxRows.length, 1);
   } finally {
@@ -681,10 +693,16 @@ test("a failed top-rung send retries the same rung once healed", { skip: !DB }, 
     const retried = await runDunningForOrg(org.orgId, "2026-07-11");
     assert.equal(retried.sent, 1);
     assert.deepEqual(retried.notices.map((n) => n.stageId), [s3]);
+    assert.deepEqual(retried.notices.map((n) => n.status), ["staged"]);
     const paired = await stagedNotice(seeded.invoiceId);
     assert.equal(paired.logRows.length, 1);
+    assert.equal((paired.logRows[0] as { status: string }).status, "staged");
     assert.equal(paired.outboxRows.length, 1);
-    assert.equal(paired.outboxRows[0]!.occurrenceKey, `dunning:${seeded.invoiceId}:${s3}`);
+    const retryKey = paired.outboxRows[0]!.occurrenceKey;
+    assert.ok(
+      retryKey.startsWith(`dunning:${seeded.invoiceId}:${s3}:`),
+      `re-armed retry must rotate the occurrence key, got ${retryKey}`,
+    );
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
@@ -801,6 +819,229 @@ test("a staged claim blocks a second enqueue for the same rung", { skip: !DB }, 
     assert.equal(logRows.length, 1);
     assert.equal((logRows[0] as { status: string }).status, "staged");
     assert.equal(outboxRows.length, 0, "no second letter while a claim is in flight");
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the runner leaves the claim staged and stamps its id in the outbox meta", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId, stageId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+
+    // Queueing is not delivery: the tick stages the claim and defers the
+    // letter, and the provider verdict arrives later through the email
+    // worker. Counting this tick's letter as sent would retire the rung
+    // before the provider ever saw it.
+    const first = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(first.sent, 1);
+    assert.deepEqual(first.notices.map((n) => n.status), ["staged"]);
+
+    const claims = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from dunning_log where document_id = ${invoiceId}
+    `)).rows;
+    assert.equal(claims.length, 1);
+    assert.equal(claims[0]!.status, "staged");
+
+    // The worker settles the claim from the outbox payload, so the payload
+    // must carry the claim it belongs to.
+    const { outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(outboxRows.length, 1);
+    const meta = (outboxRows[0]!.payload as { meta?: Record<string, string> }).meta ?? {};
+    assert.equal(meta.category, "dunning");
+    assert.equal(meta.dunningLogId, claims[0]!.id);
+    assert.equal(outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("two ticks while a claim is staged enqueue exactly one letter", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+
+    // The first tick stages the claim; the second must see the live staged
+    // row and enqueue nothing — the single deferred letter is still awaiting
+    // its provider verdict.
+    const first = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(first.sent, 1);
+    const second = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(second.sent, 0);
+    assert.deepEqual(second.notices, []);
+
+    const { logRows, outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(logRows.length, 1);
+    assert.equal((logRows[0] as { status: string }).status, "staged");
+    assert.equal(outboxRows.length, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failed rung re-arms onto a new occurrence key", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await db.execute(sql`
+      update dunning_policies set reply_to = 'not-an-address'
+       where id = ${seeded.policyId} and org_id = ${org.orgId}
+    `);
+    const failed = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(failed.failed, 1);
+    assert.equal((await stagedNotice(seeded.invoiceId)).outboxRows.length, 0);
+
+    // Healing the cause re-arms the failed claim — but the retry must defer
+    // under a FRESH occurrence key. Reusing the rung's base key would
+    // collapse onto a dead outbox row (or a live one from an earlier round)
+    // and report delivery without sending anything.
+    await db.execute(sql`
+      update dunning_policies set reply_to = null
+       where id = ${seeded.policyId} and org_id = ${org.orgId}
+    `);
+    const retried = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(retried.sent, 1);
+    const paired = await stagedNotice(seeded.invoiceId);
+    assert.equal(paired.logRows.length, 1);
+    assert.equal((paired.logRows[0] as { status: string }).status, "staged");
+    assert.equal(paired.outboxRows.length, 1);
+    const key = paired.outboxRows[0]!.occurrenceKey;
+    assert.ok(key.startsWith(`dunning:${seeded.invoiceId}:${seeded.stageId}:`), `retry must rotate the key, got ${key}`);
+    assert.notEqual(key, `dunning:${seeded.invoiceId}:${seeded.stageId}`);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an abandoned staged claim is re-armed by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId, stageId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const base = `dunning:${invoiceId}:${stageId}`;
+
+    // The deferred letter's outbox row died without the worker ever settling
+    // the claim (crashed drain, exhausted retries): the staged row is older
+    // than any outbox retry horizon, so it must not block the rung forever.
+    await db.execute(sql`
+      update dunning_log set updated_at = now() - interval '24 hours'
+       where document_id = ${invoiceId} and stage_id = ${stageId}
+    `);
+    const reaquired = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(reaquired.sent, 1);
+
+    const { logRows, outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(logRows.length, 1);
+    assert.equal((logRows[0] as { status: string }).status, "staged");
+    assert.match((logRows[0] as { detail: string }).detail ?? "", /abandon/i);
+    assert.equal(outboxRows.length, 2);
+    const keys = outboxRows.map((r) => r.occurrenceKey).sort();
+    assert.equal(keys[0], base);
+    assert.ok(keys[1]!.startsWith(`${base}:`), `re-arm must rotate the key, got ${keys[1]}`);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider acceptance settles a staged claim to sent and retires the rung", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const claimId = (
+      await db.execute<{ id: string }>(sql`
+        select id from dunning_log where document_id = ${invoiceId}
+      `)
+    ).rows[0]!.id;
+
+    // The email worker's acceptance is the only writer that may move a
+    // staged claim to sent — the runner never does.
+    assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
+    const settled = (
+      await db.execute<{ status: string }>(sql`
+        select status from dunning_log where id = ${claimId}
+      `)
+    ).rows[0]!;
+    assert.equal(settled.status, "sent");
+
+    // Replayed acceptance is success, not a failure: crash-gap worker
+    // retries reconcile onto the same verdict.
+    assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
+
+    // The rung is retired: the fired set counts only sent rows, so no later
+    // tick re-fires it.
+    const again = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(again.sent, 0);
+    assert.deepEqual(again.notices, []);
+    assert.equal((await stagedNotice(invoiceId)).outboxRows.length, 1);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider rejection settles a staged claim to failed and the next tick retries", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const first = await stagedNotice(seeded.invoiceId);
+    const claimId = (first.logRows[0] as { id: string }).id;
+    const firstKey = first.outboxRows[0]!.occurrenceKey;
+
+    // The worker records the provider's rejection on the claim — the detail
+    // names what the provider said, and the rung stays out of the fired set.
+    assert.equal(await markDunningClaimFailed(org.orgId, claimId, "550 mailbox unavailable"), true);
+    const rejected = (
+      await db.execute<{ status: string; detail: string }>(sql`
+        select status, detail from dunning_log where id = ${claimId}
+      `)
+    ).rows[0]!;
+    assert.equal(rejected.status, "failed");
+    assert.equal(rejected.detail, "550 mailbox unavailable");
+
+    // The settle is staged-only and idempotent: terminal rows never move,
+    // and unknown rows are reported, never silently accepted.
+    assert.equal(await markDunningClaimFailed(org.orgId, claimId), true);
+    assert.equal(await markDunningClaimSent(org.orgId, claimId), false);
+    assert.equal(await markDunningClaimSent(org.orgId, randomUUID()), false);
+    assert.equal(await markDunningClaimFailed(org.orgId, randomUUID(), "nope"), false);
+
+    // The next tick re-arms the failed claim onto a fresh occurrence key —
+    // the dead round's outbox row is never mistaken for delivery.
+    const retried = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(retried.sent, 1);
+    const paired = await stagedNotice(seeded.invoiceId);
+    assert.equal(paired.logRows.length, 1);
+    assert.equal((paired.logRows[0] as { status: string }).status, "staged");
+    assert.equal(paired.outboxRows.length, 2);
+    const keys = paired.outboxRows.map((r) => r.occurrenceKey);
+    assert.ok(keys.includes(firstKey));
+    const retryKey = keys.find((k) => k !== firstKey)!;
+    assert.ok(retryKey.startsWith(`${firstKey}:`), `retry must rotate the key, got ${retryKey}`);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);

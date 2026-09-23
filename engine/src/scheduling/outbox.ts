@@ -300,6 +300,19 @@ export function schedulerOutboxBackoffMs(attemptCount: number): number {
   return Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, attemptCount - 1));
 }
 
+/**
+ * Worst-case wall-clock horizon for one outbox row to drain: the stale-lock
+ * recovery window plus every backoff between the maximum attempts. A staged
+ * dunning claim older than this can never still be awaiting its letter — its
+ * outbox row is terminal or long dead — so the dunning runner re-arms it
+ * instead of letting it block the rung forever.
+ */
+export const SCHEDULER_OUTBOX_RETRY_HORIZON_MS =
+  STALE_SCHEDULER_OUTBOX_MS +
+  Array.from({ length: MAX_SCHEDULER_OUTBOX_ATTEMPTS }, (_, index) =>
+    schedulerOutboxBackoffMs(index + 1),
+  ).reduce((total, backoff) => total + backoff, 0);
+
 function errorMessage(error: unknown): string {
   return (error instanceof Error ? error.message : String(error)).slice(0, 1000);
 }

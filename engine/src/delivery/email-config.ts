@@ -496,6 +496,56 @@ export async function markPaymentRemittanceSent(orgId: string, id: string): Prom
   }
 }
 
+/**
+ * Settle a dunning claim from the email worker's provider verdict. The
+ * dunning runner leaves each deferred letter 'staged'; only the worker may
+ * move it to its outcome, and only from 'staged' — the fence below is what
+ * refuses to rewrite terminal evidence or a claim a later tick already
+ * re-armed, even when the storage guard is bypassed (as it is in tests).
+ *
+ * Returns true when the claim holds the requested outcome afterwards: either
+ * this call moved it, or a replay found it already there (crash-gap worker
+ * retries reconcile onto the same acceptance and must not report failure).
+ * Returns false when the row is missing or held in any other state — the
+ * caller logs that as a failure, never a silent success.
+ */
+export async function markDunningClaimSent(orgId: string, claimId: string): Promise<boolean> {
+  const moved = await db.execute<{ id: string }>(sql`
+    update dunning_log set status = 'sent', sent_at = now(), updated_at = now()
+     where id = ${claimId} and org_id = ${orgId} and status = 'staged'
+    returning id
+  `);
+  if (moved.rows[0]) return true;
+  const current = (await db.execute<{ status: string }>(sql`
+    select status from dunning_log where id = ${claimId} and org_id = ${orgId}
+  `)).rows[0];
+  return current?.status === "sent";
+}
+
+/**
+ * Record the provider's rejection on a staged dunning claim. The failed row
+ * stays out of the runner's fired set (only 'sent' fires), so a later tick
+ * re-arms it onto a fresh outbox occurrence key. Same idempotent contract as
+ * {@link markDunningClaimSent}: an already-failed row is success, anything
+ * else unmoved is false.
+ */
+export async function markDunningClaimFailed(
+  orgId: string,
+  claimId: string,
+  detail = "email delivery failed",
+): Promise<boolean> {
+  const moved = await db.execute<{ id: string }>(sql`
+    update dunning_log set status = 'failed', detail = ${detail.slice(0, 500)}, updated_at = now()
+     where id = ${claimId} and org_id = ${orgId} and status = 'staged'
+    returning id
+  `);
+  if (moved.rows[0]) return true;
+  const current = (await db.execute<{ status: string }>(sql`
+    select status from dunning_log where id = ${claimId} and org_id = ${orgId}
+  `)).rows[0];
+  return current?.status === "failed";
+}
+
 // --- canonical delivery lineage ----------------------------------------------
 
 /** One attempt's evidence inside meta.attempts — append-only, never rewritten. */

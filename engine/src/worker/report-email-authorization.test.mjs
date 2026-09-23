@@ -21,7 +21,7 @@ const sources = {
     export const resolveOrgEmailTransport = async () => ({ provider: 'test' });
     export const claimEmailDeliveryLog = async () => ({id:'log',attempts:[]});
     export const appendEmailAttemptEvent = async (_org, _id, event) => globalThis.__reportEmailTest.events.push(event);
-    ${['confirmEmailSentGuarded', 'markEmailFailed', 'markEmailSent', 'markEmailSuppressed', 'markEmailUncertain', 'markPaymentRemittanceAttempt', 'markPaymentRemittanceFailed', 'markPaymentRemittanceSent'].map((name) => `export const ${name} = async () => {};`).join('\n')}
+    ${['confirmEmailSentGuarded', 'markDunningClaimFailed', 'markDunningClaimSent', 'markEmailFailed', 'markEmailSent', 'markEmailSuppressed', 'markEmailUncertain', 'markPaymentRemittanceAttempt', 'markPaymentRemittanceFailed', 'markPaymentRemittanceSent'].map((name) => `export const ${name} = async () => {};`).join('\n')}
   `,
   '../delivery/report-delivery.ts': `
     export const markReportDeliveryFailed = async (...args) => globalThis.__reportEmailTest.events.push({failure:args});

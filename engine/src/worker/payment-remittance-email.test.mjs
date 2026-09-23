@@ -9,6 +9,8 @@ const state = {
   remittanceAttempts: [],
   remittanceSent: [],
   remittanceFailed: [],
+  dunningSent: [],
+  dunningFailed: [],
 }
 globalThis.__paymentRemittanceEmailTest = state
 
@@ -40,6 +42,8 @@ const sources = {
     export const markPaymentRemittanceAttempt = async (_org, id, attempt) => globalThis.__paymentRemittanceEmailTest.remittanceAttempts.push([id, attempt]);
     export const markPaymentRemittanceFailed = async (_org, id, error, attempt, terminal) => globalThis.__paymentRemittanceEmailTest.remittanceFailed.push([id, error, attempt, terminal]);
     export const markPaymentRemittanceSent = async (_org, id) => globalThis.__paymentRemittanceEmailTest.remittanceSent.push(id);
+    export const markDunningClaimSent = async (_org, id) => globalThis.__paymentRemittanceEmailTest.dunningSent.push(id);
+    export const markDunningClaimFailed = async (_org, id, detail) => globalThis.__paymentRemittanceEmailTest.dunningFailed.push([id, detail]);
   `,
   '../delivery/report-delivery.ts': `
     export const markReportDeliveryFailed = async () => {};
@@ -89,4 +93,9 @@ test('a transport failure keeps the remittance pending for BullMQ retry', async 
   assert.deepEqual(state.remittanceAttempts.at(-1), ['rem-1', 1])
   assert.deepEqual(state.remittanceFailed.at(-1), ['rem-1', 'provider unavailable', 1, false])
   assert.deepEqual(state.remittanceSent, ['rem-1'])
+})
+
+test('remittance mail never settles a dunning claim', async () => {
+  assert.deepEqual(state.dunningSent, [])
+  assert.deepEqual(state.dunningFailed, [])
 })
