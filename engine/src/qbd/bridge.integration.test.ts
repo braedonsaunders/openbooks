@@ -11,6 +11,7 @@ import {
   prepareCapture,
   recordConnectionError,
   releaseCapture,
+  waitForCapture,
   webConnectorLastError,
 } from "./bridge.ts";
 
@@ -531,6 +532,57 @@ test("a blank or whitespace statusCode fails the capture with a named error", { 
     } finally {
       await db.execute(sql`delete from connections where id = ${connection.id}`);
     }
+  }
+});
+
+
+test("a truncated ledger response fails the capture instead of recording an empty month", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const startMonth = new Date().toISOString().slice(0, 8) + "01";
+    const captureId = await prepareCapture({ orgId, connectionId: connection.id, historyStartDate: startMonth, since: null });
+    const auth = await authenticateWebConnector(connection.id, `qbd:${connection.id}`, connection.password);
+    assert.ok(auth.ticket);
+    const ledger = (await db.execute<{ id: string; family: string }>(sql`
+      select id, family from qbd_requests where capture_id = ${captureId} and family like 'ledger:%' order by sequence limit 1`));
+    const ledgerId = ledger.rows[0]?.id;
+    const family = ledger.rows[0]?.family;
+    assert.ok(ledgerId && family);
+    // Mark the outstanding ledger request sent without claiming through the
+    // queue, so the test submits the truncated response directly against it.
+    await db.execute(sql`update qbd_requests set status = 'sent', session_id = ${auth.ticket}, sent_at = now() where id = ${ledgerId}`);
+
+    // statusCode=0 but no ReportRet: a truncated response, never an empty
+    // month. The capture must fail by family — nothing is stored complete,
+    // so a later sync cannot reverse prior documents as source deletions.
+    const truncated = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
+    assert.equal(await acceptWebConnectorResponse(auth.ticket, truncated, "", ""), -101);
+    const capture = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error_message as error from qbd_captures where id = ${captureId}`));
+    assert.equal(capture.rows[0]?.status, "failed");
+    assert.match(capture.rows[0]?.error ?? "", new RegExp(`GeneralLedger capture for ${family.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*carries no report`));
+    assert.match(await webConnectorLastError(auth.ticket), /carries no report/);
+    await assert.rejects(() => waitForCapture(orgId, captureId), /carries no report/);
+    const stored = (await db.execute<{ complete: number }>(sql`
+      select count(*)::int as complete from qbd_requests where capture_id = ${captureId} and status = 'complete'`));
+    assert.equal(stored.rows[0]?.complete, 0);
+
+    // A present-but-empty report month (ReportRet + column descriptors, zero
+    // data rows) is still accepted and stored complete.
+    const captureId2 = await prepareCapture({ orgId, connectionId: connection.id, historyStartDate: startMonth, since: null });
+    const ledger2 = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId2} and family like 'ledger:%' order by sequence limit 1`));
+    assert.ok(ledger2.rows[0]?.id);
+    await db.execute(sql`update qbd_requests set status = 'sent', session_id = ${auth.ticket}, sent_at = now() where id = ${ledger2.rows[0].id}`);
+    const emptyMonth = `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><GeneralDetailReportQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><ReportRet><ColDesc colID="1"><ColType>TxnID</ColType></ColDesc><ColDesc colID="2"><ColType>Account</ColType></ColDesc><ReportData></ReportData></ReportRet></GeneralDetailReportQueryRs></QBXMLMsgsRs></QBXML>`;
+    const progress = await acceptWebConnectorResponse(auth.ticket, emptyMonth, "", "");
+    assert.ok(progress > 0 && progress < 100, `empty report month is stored, got progress ${progress}`);
+    await closeWebConnectorSession(auth.ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
   }
 });
 
