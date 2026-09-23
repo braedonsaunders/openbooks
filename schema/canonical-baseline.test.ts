@@ -653,6 +653,14 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // groups. 0306 backfills the missing defaults for every org,
     // insert-missing only, so tenant edits and deactivations survive.
     "0306_account_group_default_backfill.sql",
+    // Cloning a template whose posted history sits in already-closed periods
+    // rolled back on the closed-period guard, so no sample company or sandbox
+    // could be cut from it (OM-13). 0316 adds the clone-only insert authority
+    // (openbooks.clone, asserted solely inside the clone transaction and
+    // honoured for INSERT of posted/reversed rows only) to jl_guard and the
+    // reporting-book depreciation guard; updates, deletes and tenant writes
+    // stay refused.
+    "0316_clone_closed_period_authority.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
