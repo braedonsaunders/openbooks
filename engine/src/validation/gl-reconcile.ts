@@ -22,18 +22,29 @@
  * combined cross-currency figure is produced and no FX translation is
  * applied. A currency that cannot be resolved to ISO refuses the run by
  * name instead of joining a bucket it does not belong to.
+ *
+ * Verdicts are exact: decimals to the unit via the house bigint helpers,
+ * counts to the integer. No materiality policy authorises a tolerance, so
+ * there is no tolerance mode. Any DIFFERS exits nonzero so automation can
+ * gate on it; exact agreement exits 0.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sourceClient } from "../sync/source-client.ts";
 import {
   alignMoneyBuckets,
+  compareCountBucket,
+  compareMoneyBucket,
+  formatMoney,
+  formatVerdict,
   parseSince,
   SOURCE_CURRENCY_SYMBOL_QUERY,
   SOURCE_SUBSIDIARY_QUERY,
   sourceInvoiceQuery,
   sourceIsoCurrency,
   sourcePlQuery,
+  verdictsDiffer,
+  type BucketVerdict,
 } from "./gl-reconcile-queries.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
@@ -59,8 +70,10 @@ interface InvoiceTotals extends Record<string, unknown> {
   total: string;
 }
 
-/** Job-detail scan: ledger totals plus overhead and project count. */
-interface JobTotals extends LedgerTotals {
+/** Job-detail scan: OpenBooks-only diagnostics, no cross-system verdict. */
+interface JobTotals extends Record<string, unknown> {
+  revenue: string;
+  cost: string;
   overhead: string;
   projects: number;
 }
@@ -81,12 +94,10 @@ async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
   throw last;
 }
 
-const money = (v: unknown) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const pct = (a: number, b: number) => (b === 0 ? "n/a" : `${((100 * a) / b).toFixed(2)}%`);
-const line = (label: string, ours: number, theirs: number) => {
-  const delta = ours - theirs;
-  const flag = Math.abs(delta) <= Math.abs(theirs) * 0.005 ? "ok" : "DIFFERS";
-  console.log(`  ${label.padEnd(22)} ours ${money(ours).padStart(16)}   source ${money(theirs).padStart(16)}   ${money(delta).padStart(15)}  ${pct(delta, theirs).padStart(8)}  ${flag}`);
+const verdicts: BucketVerdict[] = [];
+const line = (verdict: BucketVerdict) => {
+  verdicts.push(verdict);
+  console.log(formatVerdict(verdict));
 };
 
 (async () => {
@@ -158,12 +169,14 @@ const line = (label: string, ours: number, theirs: number) => {
 
   // No FX translation anywhere below: each bucket is compared in its stated
   // currency, and a currency one side lacks zero-fills into a difference.
+  // Every verdict below is exact — decimal to the unit, counts to the
+  // integer — because no materiality policy authorises a tolerance.
   console.log("LEDGER (one verdict per functional currency; no combined total)");
   for (const bucket of alignMoneyBuckets(ours.map((row) => ({ currency: String(row.currency), amount: row.revenue })), srcRevenue)) {
-    line(`[${bucket.currency}] revenue`, Number(bucket.ours), Number(bucket.theirs));
+    line(compareMoneyBucket(`[${bucket.currency}] revenue`, bucket.ours, bucket.theirs));
   }
   for (const bucket of alignMoneyBuckets(ours.map((row) => ({ currency: String(row.currency), amount: row.cost })), srcCost)) {
-    line(`[${bucket.currency}] cost`, Number(bucket.ours), Number(bucket.theirs));
+    line(compareMoneyBucket(`[${bucket.currency}] cost`, bucket.ours, bucket.theirs));
   }
   console.log("\nCUSTOMER INVOICES (one verdict per transaction currency; no combined total)");
   const invoiceCurrencies = [...new Set([...ourInv.map((row) => row.currency), ...srcInvoices.map((row) => row.currency)])].sort();
@@ -172,8 +185,8 @@ const line = (label: string, ours: number, theirs: number) => {
   for (const currency of invoiceCurrencies) {
     const oursBucket = ourInvByCurrency.get(currency);
     const srcBucket = srcInvByCurrency.get(currency);
-    line(`[${currency}] count`, Number(oursBucket?.n ?? 0), Number(srcBucket?.n ?? 0));
-    line(`[${currency}] total`, Number(oursBucket?.total ?? 0), Number(srcBucket?.total ?? 0));
+    line(compareCountBucket(`[${currency}] count`, oursBucket?.n ?? 0, srcBucket?.n ?? 0));
+    line(compareMoneyBucket(`[${currency}] total`, oursBucket?.total ?? 0, srcBucket?.total ?? 0));
   }
 
   // Job detail only exists after cutover; before it the history is year-end
@@ -187,12 +200,14 @@ const line = (label: string, ours: number, theirs: number) => {
       join accounts a on a.id = jl.account_id
       join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
      where jl.org_id = ${ORG} and jl.project_id is not null and je.posting_date >= ${SINCE}`)))).rows[0]!;
-  const jobRevenue = Number(job.revenue), jobCost = Number(job.cost), overhead = Number(job.overhead);
   console.log(`\nJOB-TAGGED (${job.projects} projects, detail exists only after cutover)`);
-  console.log(`  revenue ${money(jobRevenue)}   cost ${money(jobCost)}   of which applied overhead ${money(overhead)}`);
-  console.log(`  gross ${money(jobRevenue - jobCost)} (${pct(jobRevenue - jobCost, jobRevenue)})`);
-  console.log(`  gross before applied overhead ${money(jobRevenue - jobCost + overhead)} (${pct(jobRevenue - jobCost + overhead, jobRevenue)})`);
-  process.exit(0);
+  console.log(`  revenue ${formatMoney(job.revenue)}   cost ${formatMoney(job.cost)}   of which applied overhead ${formatMoney(job.overhead)}`);
+  if (verdictsDiffer(verdicts)) {
+    console.log(`\nDIFFERS: ${verdicts.filter((verdict) => verdict.status !== "ok").length} of ${verdicts.length} buckets disagree with the source system`);
+    process.exitCode = 1;
+  } else {
+    console.log(`\nAGREES: all ${verdicts.length} buckets match the source system exactly`);
+  }
 })().catch((e) => {
   const chain: string[] = [];
   for (let c = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 250));

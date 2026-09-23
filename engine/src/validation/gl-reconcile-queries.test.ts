@@ -2,13 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   alignMoneyBuckets,
+  compareCountBucket,
+  compareMoneyBucket,
   DEFAULT_SINCE,
+  formatMoney,
+  formatVerdict,
   parseSince,
   SOURCE_CURRENCY_SYMBOL_QUERY,
   SOURCE_SUBSIDIARY_QUERY,
   sourceInvoiceQuery,
   sourceIsoCurrency,
   sourcePlQuery,
+  verdictsDiffer,
 } from "./gl-reconcile-queries.ts";
 
 test("since defaults to the cutover month", () => {
@@ -136,6 +141,41 @@ test("a currency one side lacks zero-fills instead of agreeing", () => {
 
 test("bucket alignment refuses an unlabelled bucket", () => {
   assert.throws(() => alignMoneyBuckets([{ currency: "", amount: "1" }], []), /no currency label/);
+});
+
+test("a sub-tolerance delta still differs: exact decimals, no 0.5% rule", () => {
+  // 1,001,000 vs 1,000,000 is 0.1% of source: the old tolerance called it
+  // ok while a million-scale unit hid inside. Exact comparison differs.
+  const verdict = compareMoneyBucket("[USD] revenue", "1001000.0000", "1000000.0000");
+  assert.equal(verdict.status, "DIFFERS");
+  assert.equal(verdict.delta, "1000.0000");
+  assert.ok(verdictsDiffer([verdict]));
+});
+
+test("agreement is exact to the unit", () => {
+  const verdict = compareMoneyBucket("[USD] revenue", "1000000.0000", "1000000.0000");
+  assert.equal(verdict.status, "ok");
+  assert.equal(verdict.delta, "0.0000");
+  assert.ok(!verdictsDiffer([verdict]));
+});
+
+test("counts compare to the integer, never the float", () => {
+  assert.equal(compareCountBucket("[USD] count", 7, "7").status, "ok");
+  assert.equal(compareCountBucket("[USD] count", 7, "8").status, "DIFFERS");
+  assert.equal(compareCountBucket("[USD] count", 0, "1").status, "DIFFERS");
+  assert.throws(
+    () => compareCountBucket("[USD] count", "7.5", "7"),
+    /fractional population count for \[USD\] count/,
+  );
+});
+
+test("money display never passes through a float", () => {
+  assert.equal(formatMoney("1234567.891"), "1234567.8910");
+  assert.equal(formatMoney(0), "0.0000");
+  const line = formatVerdict(compareMoneyBucket("[EUR] total", "100.0000", "90.0000"));
+  assert.match(line, /\[EUR\] total/);
+  assert.match(line, /DIFFERS/);
+  assert.doesNotMatch(line, /%/);
 });
 
 test("query builders refuse unchecked since values", () => {
