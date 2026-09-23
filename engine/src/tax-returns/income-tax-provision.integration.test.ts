@@ -1627,3 +1627,123 @@ test("restricted reads expose only a visible entity's journal entry, never the h
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("restricted provision views are byte-identical across hidden-subsidiary activity", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Side Channel Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
+    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-SC-A", userId });
+    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-SC-B", userId });
+
+    const scope = new Set([org.subsidiaryId]);
+    const runId1 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    // Run identity (id/version/createdAt) names the run itself, not hidden
+    // activity, so the side-channel comparison strips exactly those envelope
+    // fields — everything else must be byte-identical.
+    const viewOf = async (runId: string): Promise<string> => {
+      const run = (await getProvisionRun(org.orgId, runId, scope))!;
+      assert.ok(run);
+      const { id: _id, version: _version, createdAt: _createdAt, ...rest } = run as Record<string, unknown>;
+      return JSON.stringify(rest);
+    };
+    const before = await viewOf(runId1);
+
+    // Hidden-subsidiary activity ONLY: B books more income and the org
+    // recomputes, so every whole-org fingerprint moves under the reader.
+    await postInvoice(org, { subsidiaryId: branch, amount: "50000", number: "INV-SC-B2", userId });
+    const runId2 = await computeProvisionRun(org.orgId, 2026, {}, userId);
+    const after = await viewOf(runId2);
+
+    // A's numbers are unchanged while the org-wide hashes moved: a restricted
+    // caller must not be able to tell B did anything.
+    assert.equal(after, before);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted provision projections expose only allowlisted payload and lineage keys", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Allowlist Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    const branch = await createSubsidiary(org.orgId, "Branch Co", "CAD", org.subsidiaryId);
+    await seedEnactedRate(org.orgId, "CA federal", "26", { subsidiaryId: org.subsidiaryId, userId });
+    await seedEnactedRate(org.orgId, "Branch federal", "21", { subsidiaryId: branch, userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "200000", number: "INV-AL-A", userId });
+    await postInvoice(org, { subsidiaryId: branch, amount: "100000", number: "INV-AL-B", userId });
+
+    const runId = await computeProvisionRun(org.orgId, 2026, {}, userId);
+
+    // Unrestricted callers keep the full payload exactly as today.
+    const full = (await getProvisionRun(org.orgId, runId))!;
+    const fullPayload = full.payload as Record<string, unknown>;
+    assert.equal(typeof fullPayload.sourceFingerprint, "string");
+    assert.ok("priorPostedRunId" in fullPayload);
+    const fullLineage = fullPayload.sourceLineage as Record<string, unknown>;
+    assert.ok("priorPostedRunId" in fullLineage);
+    assert.ok("priorPostedSnapshotHash" in fullLineage);
+    const stored = (await db.execute<{ snapshot_hash: string }>(sql`
+      select snapshot_hash from tax_provision_runs where org_id = ${org.orgId} and id = ${runId}`));
+    assert.equal(full.snapshotHash, stored.rows[0]!.snapshot_hash);
+
+    // Restricted callers see exactly the allowlisted fields: adding a payload
+    // or lineage field without updating this list fails here on purpose.
+    const restricted = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
+    const payload = restricted.payload as Record<string, unknown>;
+    assert.deepEqual(Object.keys(payload).sort(), [
+      "balances",
+      "currentTax",
+      "deferredExpense",
+      "effectiveRatePercent",
+      "enactedRateJurisdictions",
+      "enactedRatePercent",
+      "entities",
+      "fiscalYear",
+      "framework",
+      "movement",
+      "netTemporaryDifference",
+      "presentationCurrency",
+      "pretaxBookIncome",
+      "rateReconciliation",
+      "sourceLineage",
+      "taxableIncome",
+      "totalExpense",
+    ]);
+    assert.ok(!("sourceFingerprint" in payload));
+    assert.ok(!("priorPostedRunId" in payload));
+    const lineage = payload.sourceLineage as Record<string, unknown>;
+    assert.deepEqual(Object.keys(lineage).sort(), [
+      "fixedAssetDifferences",
+      "framework",
+      "pretaxBySubsidiaryId",
+      "priorBalancesBySubsidiaryId",
+      "rateRows",
+    ]);
+    assert.ok(!("priorPostedRunId" in lineage));
+    assert.ok(!("priorPostedSnapshotHash" in lineage));
+    // The restricted hash is scoped to the visible projection, never the
+    // stored whole-org identity.
+    assert.notEqual(restricted.snapshotHash, full.snapshotHash);
+
+    // A new whole-org payload field stored at rest must not silently leak: it
+    // is absent from the restricted view because the projection allowlists.
+    await db.execute(sql`
+      update tax_provision_runs
+         set payload = jsonb_set(payload || '{"sneakyOrgField":"whole-org"}', '{sourceLineage,sneakyLineageField}', '"whole-org"')
+       where org_id = ${org.orgId} and id = ${runId}`);
+    const leaked = (await getProvisionRun(org.orgId, runId, new Set([org.subsidiaryId])))!;
+    const leakedPayload = leaked.payload as Record<string, unknown>;
+    assert.ok(!("sneakyOrgField" in leakedPayload));
+    assert.ok(!("sneakyLineageField" in (leakedPayload.sourceLineage as Record<string, unknown>)));
+    // And the unrestricted view still carries the stored row verbatim.
+    const stillFull = (await getProvisionRun(org.orgId, runId))!;
+    assert.equal((stillFull.payload as Record<string, unknown>).sneakyOrgField, "whole-org");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

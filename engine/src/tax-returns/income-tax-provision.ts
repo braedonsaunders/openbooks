@@ -898,6 +898,46 @@ export type ProvisionRunDetail = ProvisionRunRow & {
  * the entity workpapers the caller is allowed to see. */
 export type ProvisionSubsidiaryScope = ReadonlySet<string> | null | undefined;
 
+/** Top-level payload fields a subsidiary-restricted caller may see. Every
+ *  aggregate here is either recomputed from the visible entity workpapers or
+ *  scoped to them; the whole-org integrity fields (priorPostedRunId,
+ *  sourceFingerprint) are org-wide fingerprints and stay unrestricted-only, so
+ *  hidden-subsidiary activity can never move a byte of a restricted view.
+ *  Anything not on this list is ABSENT from a restricted projection — a new
+ *  payload field cannot silently leak through a spread. */
+const RESTRICTED_PAYLOAD_FIELDS: ReadonlySet<string> = new Set([
+  "fiscalYear",
+  "framework",
+  "presentationCurrency",
+  "entities",
+  "pretaxBookIncome",
+  "taxableIncome",
+  "currentTax",
+  "deferredExpense",
+  "totalExpense",
+  "balances",
+  "movement",
+  "netTemporaryDifference",
+  "effectiveRatePercent",
+  "rateReconciliation",
+  "enactedRatePercent",
+  "enactedRateJurisdictions",
+  "sourceLineage",
+]);
+
+/** sourceLineage fields a restricted caller may see, after per-entity
+ *  filtering below. priorPostedRunId / priorPostedSnapshotHash name org-wide
+ *  run identity and stay unrestricted-only; anything not listed here is
+ *  absent, so a future lineage field cannot reopen the leak through a
+ *  nested spread. */
+const RESTRICTED_LINEAGE_FIELDS: ReadonlySet<string> = new Set([
+  "framework",
+  "pretaxBySubsidiaryId",
+  "fixedAssetDifferences",
+  "rateRows",
+  "priorBalancesBySubsidiaryId",
+]);
+
 /** Project an org-wide run payload to the caller's visible legal entities.
  * Every aggregate is recomputed from the projected entity workpapers so an
  * entity-restricted caller cannot infer another subsidiary's tax detail from
@@ -916,8 +956,14 @@ function projectProvisionPayload(
   if (entities.length === 0) return null;
 
   const consolidated = consolidateEntityResults(entities);
+  // These fields are root-entity echoes in the unrestricted payload. For a
+  // restricted projection they must describe a visible entity, never the
+  // hidden root or another subsidiary.
+  const echo = entities[0]!;
   const projected: Record<string, unknown> = {
-    ...payload,
+    fiscalYear: payload.fiscalYear,
+    framework: payload.framework,
+    presentationCurrency: payload.presentationCurrency,
     entities,
     pretaxBookIncome: consolidated.pretaxBookIncome,
     taxableIncome: consolidated.taxableIncome,
@@ -929,18 +975,19 @@ function projectProvisionPayload(
     netTemporaryDifference: consolidated.netTemporaryDifference,
     effectiveRatePercent: consolidated.effectiveRatePercent,
     rateReconciliation: consolidated.rateReconciliation,
+    enactedRatePercent: echo.enactedRatePercent,
+    enactedRateJurisdictions: echo.enactedRateJurisdictions,
   };
-
-  // These fields are root-entity echoes in the unrestricted payload. For a
-  // restricted projection they must describe a visible entity, never the
-  // hidden root or another subsidiary.
-  const echo = entities[0]!;
-  projected.enactedRatePercent = echo.enactedRatePercent;
-  projected.enactedRateJurisdictions = echo.enactedRateJurisdictions;
+  // The allowlist is the enforcement, not the comment above: anything a
+  // future edit adds to the projection without allowlisting is stripped.
+  for (const key of Object.keys(projected)) {
+    if (!RESTRICTED_PAYLOAD_FIELDS.has(key)) delete projected[key];
+  }
 
   const lineage = payload.sourceLineage;
   if (typeof lineage === "object" && lineage !== null) {
     const source = lineage as {
+      framework?: unknown;
       pretaxBySubsidiaryId?: unknown;
       fixedAssetDifferences?: unknown;
       rateRows?: unknown;
@@ -949,42 +996,43 @@ function projectProvisionPayload(
     const pretax = source.pretaxBySubsidiaryId;
     const priorBalances = source.priorBalancesBySubsidiaryId;
     projected.sourceLineage = {
-      ...source,
-      ...(typeof pretax === "object" && pretax !== null
-        ? {
-            pretaxBySubsidiaryId: Object.fromEntries(
+      framework: source.framework,
+      pretaxBySubsidiaryId:
+        typeof pretax === "object" && pretax !== null
+          ? Object.fromEntries(
               Object.entries(pretax).filter(([id]) => allowedSubsidiaryIds.has(id)),
-            ),
-          }
-        : {}),
-      ...(Array.isArray(source.fixedAssetDifferences)
-        ? {
-            fixedAssetDifferences: source.fixedAssetDifferences.filter((difference) =>
-              typeof difference === "object" &&
-              difference !== null &&
-              typeof (difference as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
-              allowedSubsidiaryIds.has((difference as { subsidiaryId: string }).subsidiaryId),
-            ),
-          }
-        : {}),
-      ...(Array.isArray(source.rateRows)
-        ? {
-            rateRows: source.rateRows.filter((row) =>
-              typeof row === "object" &&
-              row !== null &&
-              (typeof (row as { subsidiaryId?: unknown }).subsidiaryId !== "string" ||
-                allowedSubsidiaryIds.has((row as { subsidiaryId: string }).subsidiaryId)),
-            ),
-          }
-        : {}),
-      ...(typeof priorBalances === "object" && priorBalances !== null
-        ? {
-            priorBalancesBySubsidiaryId: Object.fromEntries(
+            )
+          : {},
+      fixedAssetDifferences: Array.isArray(source.fixedAssetDifferences)
+        ? source.fixedAssetDifferences.filter((difference) =>
+            typeof difference === "object" &&
+            difference !== null &&
+            typeof (difference as { subsidiaryId?: unknown }).subsidiaryId === "string" &&
+            allowedSubsidiaryIds.has((difference as { subsidiaryId: string }).subsidiaryId),
+          )
+        : [],
+      rateRows: Array.isArray(source.rateRows)
+        ? source.rateRows.filter((row) =>
+            typeof row === "object" &&
+            row !== null &&
+            (typeof (row as { subsidiaryId?: unknown }).subsidiaryId !== "string" ||
+              allowedSubsidiaryIds.has((row as { subsidiaryId: string }).subsidiaryId)),
+          )
+        : [],
+      priorBalancesBySubsidiaryId:
+        typeof priorBalances === "object" && priorBalances !== null
+          ? Object.fromEntries(
               Object.entries(priorBalances).filter(([id]) => allowedSubsidiaryIds.has(id)),
-            ),
-          }
-        : {}),
+            )
+          : {},
     };
+    // Same enforcement for the nested object: a future lineage field that is
+    // not allowlisted here never reaches a restricted caller.
+    for (const key of Object.keys(projected.sourceLineage as Record<string, unknown>)) {
+      if (!RESTRICTED_LINEAGE_FIELDS.has(key)) {
+        delete (projected.sourceLineage as Record<string, unknown>)[key];
+      }
+    }
   }
   return projected;
 }
@@ -1015,6 +1063,15 @@ export async function getProvisionRun(
       projected.effectiveRatePercent == null
         ? null
         : String(projected.effectiveRatePercent);
+    // The stored hash is computed over the UNPROJECTED all-entity material,
+    // so handing it to a restricted caller leaks hidden-subsidiary activity
+    // (their numbers stay identical while the hash moves). Re-derive it over
+    // the visible projection only: same integrity purpose within the caller's
+    // scope, byte-stable across hidden-entity changes. Unrestricted callers
+    // below keep the stored hash untouched.
+    run.snapshotHash = createHash("sha256")
+      .update(canonicalJson(projected))
+      .digest("hex");
     // The stored journal id is the first SORTED entity's entry, which may
     // belong to a hidden subsidiary — resolve the first visible one instead.
     run.journalEntryId = await scopedProvisionJournalEntryId(
