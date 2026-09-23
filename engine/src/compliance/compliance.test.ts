@@ -7,6 +7,7 @@ import {
   evaluateLienWaiverCoverage,
   evaluateRequirement,
   evaluateVendorCompliance,
+  revocationLocalDate,
   waiverInForceOn,
   type EvidenceRecord,
   type LienWaiverEvidence,
@@ -65,6 +66,7 @@ function waiver(over: Partial<WaiverRecord> = {}): WaiverRecord {
     effectiveFrom: "2026-06-01",
     expiresOn: "2026-08-01",
     revokedAt: null,
+    revokedOn: null,
     ...over,
   };
 }
@@ -260,6 +262,22 @@ test("a revoked waiver still covers as-of dates before its revocation", () => {
   // An unrevoked waiver keeps its plain window.
   assert.equal(waiverInForceOn(waiver(), "2026-07-01"), true);
   assert.equal(waiverInForceOn(waiver(), "2026-08-02"), false);
+});
+
+test("a late-evening local revocation stops covering that local day", () => {
+  // 2026-07-10T02:00:00Z is 21:00 on July 9th in Chicago (UTC-5): the UTC
+  // date (July 10th) would still cover the 9th, but the org-local date does
+  // not — the control answers in the org's day, the same basis as today.
+  const revokedOn = revocationLocalDate("2026-07-10T02:00:00Z", "America/Chicago");
+  assert.equal(revokedOn, "2026-07-09");
+  const revoked = waiver({ revokedAt: "2026-07-10T02:00:00Z", revokedOn });
+  assert.equal(waiverInForceOn(revoked, "2026-07-08"), true);
+  assert.equal(waiverInForceOn(revoked, "2026-07-09"), false);
+  assert.equal(waiverInForceOn(revoked, "2026-07-10"), false);
+  const at = (asOf: string) =>
+    evaluateRequirement({ policy: policy(), records: [], waivers: [revoked], asOf });
+  assert.equal(at("2026-07-08").state, "waived");
+  assert.equal(at("2026-07-09").state, "missing");
 });
 
 test("revoking an exception narrows its window instead of erasing history", () => {

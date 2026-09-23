@@ -17,7 +17,7 @@ import {
   type RequirementPolicy,
   type WaiverRecord
 } from '@openbooks/engine/src/compliance/compliance.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessTimeZone, businessToday, formatInZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { addMoney, ZERO_MONEY } from './cash/core'
 import { openItems } from './cash/open-items'
 import { featureRequiredHref } from './gate-targets'
@@ -189,7 +189,7 @@ export async function loadComplianceMatrix(args: {
   const subIds = args.allowedSubsidiaryIds === null || args.allowedSubsidiaryIds === undefined
     ? undefined
     : [...args.allowedSubsidiaryIds]
-  const [policies, classes, vendors, apOpen, records, waivers] = await Promise.all([
+  const [policies, classes, vendors, apOpen, records, waivers, timeZone] = await Promise.all([
     loadRequirementPolicies(args.orgId),
     loadComplianceClasses(args.orgId),
     db.execute(sql`
@@ -219,8 +219,9 @@ export async function loadComplianceMatrix(args: {
        where cr.org_id = ${args.orgId} and cr.status <> 'superseded'
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
     `),
-    // Revoked rows load too: the shared evaluator dates them by revoked_at,
-    // so an as-of read sees each exception exactly while it was in force.
+    // Revoked rows load too: the shared evaluator dates them by the
+    // revocation's org-local date, so an as-of read sees each exception
+    // exactly while it was in force.
     db.execute(sql`
       select cw.party_id as "partyId", cw.id, cw.requirement_id as "requirementId", cw.project_id as "projectId",
              cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn", cw.revoked_at as "revokedAt"
@@ -228,7 +229,8 @@ export async function loadComplianceMatrix(args: {
         left join projects pr on pr.id = cw.project_id and pr.org_id = cw.org_id
        where cw.org_id = ${args.orgId}
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
-    `)
+    `),
+    businessTimeZone(args.orgId),
   ])
 
   const vendorRows = (
@@ -256,9 +258,17 @@ export async function loadComplianceMatrix(args: {
     recordsByParty.set(row.partyId, list)
   }
   const waiversByParty = new Map<string, WaiverRecord[]>()
-  for (const row of (waivers as unknown as { rows: (WaiverRecord & { partyId: string })[] }).rows) {
+  for (const row of (waivers as unknown as { rows: (Omit<WaiverRecord, "revokedOn"> & { partyId: string })[] }).rows) {
+    const revokedAt = row.revokedAt as unknown as string | Date | null
+    const waiver: WaiverRecord & { partyId: string } = {
+      ...row,
+      revokedOn:
+        revokedAt === null || revokedAt === undefined
+          ? null
+          : formatInZone(revokedAt instanceof Date ? revokedAt : new Date(revokedAt), timeZone),
+    }
     const list = waiversByParty.get(row.partyId) ?? []
-    list.push(row)
+    list.push(waiver)
     waiversByParty.set(row.partyId, list)
   }
 
