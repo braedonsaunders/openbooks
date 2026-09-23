@@ -1113,6 +1113,85 @@ test("concurrent approvals cannot spend one entitlement twice", { skip: !DB }, a
   });
 });
 
+test("a request tail past its policy's end refuses naming the first uncovered day", async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "120" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    });
+    // The first-day gate saw the June policy and a 120-hour balance and
+    // filed the range; approval then wrote July absences no policy covers.
+    await assertLeaveRefusal(
+      () => fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        employmentId,
+        leaveTypeId: type.id,
+        startsOn: "2026-06-30",
+        endsOn: "2026-07-02",
+        hours: "24",
+      }),
+      /no active leave policy covers 2026-07-01 of the requested 2026-06-30 to 2026-07-02/,
+      async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_requests
+         where org_id = ${h.org.orgId} and employment_id = ${employmentId}
+      `)).rows[0]?.n ?? 0,
+    );
+  });
+});
+
+test("a stricter successor prices the tail it governs, not the first day's grant", async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "200" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "8" },
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+    });
+    // 24 hours against the July successor's 8-hour grant refuses; the
+    // first-day gate priced the June 200-hour grant and filed it.
+    await assertLeaveRefusal(
+      () => fileLeaveRequest({
+        orgId: h.org.orgId,
+        actorId: h.employeeId,
+        employmentId,
+        leaveTypeId: type.id,
+        startsOn: "2026-06-30",
+        endsOn: "2026-07-02",
+        hours: "24",
+      }),
+      /policy time balance is 8 hours but the request needs 24/,
+      async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_requests
+         where org_id = ${h.org.orgId} and employment_id = ${employmentId}
+      `)).rows[0]?.n ?? 0,
+    );
+    // A request the successor's grant covers still files: the range is not
+    // blanket-refused, only priced under the policy governing each day.
+    const within = await fileLeaveRequest({
+      orgId: h.org.orgId,
+      actorId: h.employeeId,
+      employmentId,
+      leaveTypeId: type.id,
+      startsOn: "2026-06-30",
+      endsOn: "2026-07-02",
+      hours: "8",
+    });
+    assert.equal(within.status, "draft");
+  });
+});
+
 test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);

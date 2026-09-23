@@ -20,6 +20,7 @@ import {
   formatCents,
   parseHoursToCents,
   rangesOverlap,
+  selectPolicy,
   splitHoursAcrossDays,
   type AccrualRule,
   type CarryoverRule,
@@ -27,7 +28,9 @@ import {
 import { LeaveError } from "./leave-errors.ts";
 import {
   applicablePolicy,
+  policiesInRange,
   policyScopeForEmployment,
+  policyToCandidate,
   timeBalanceAsOf,
   type PolicyRow,
   type PolicyScope,
@@ -586,20 +589,36 @@ async function assertTimeBalance(
   leaveTypeId: string,
   scope: PolicyScope,
   startsOn: string,
+  endsOn: string,
   hours: string,
 ): Promise<void> {
-  const policy = await applicablePolicy(exec, orgId, leaveTypeId, scope, startsOn);
-  // No policy declares no entitlement: fail closed by name, never accrue zero.
-  if (!policy) {
-    throw new LeaveError(
-      "REFUSED",
-      "no active leave policy covers this employment on the requested dates — create a policy for this type and scope before filing",
-    );
+  // Coverage is per day, never per request: a policy ending mid-range must
+  // not smuggle the uncovered tail through on the first day's rule, and a
+  // stricter successor must price the days it governs. One range query plus
+  // the pure precedence sort — no per-day round trips.
+  const rows = await policiesInRange(exec, orgId, leaveTypeId, startsOn, endsOn);
+  const candidates = rows.map(policyToCandidate);
+  let allUnlimited = true;
+  for (const day of eachDayOfRange(startsOn, endsOn)) {
+    const pick = selectPolicy(candidates, scope, day);
+    // No policy declares no entitlement: fail closed by name, never accrue zero.
+    if (!pick) {
+      throw new LeaveError(
+        "REFUSED",
+        `no active leave policy covers ${day} of the requested ${startsOn} to ${endsOn} — create a policy for this type and scope covering ${day} before filing`,
+      );
+    }
+    const governing = rows.find((row) => row.id === pick.id);
+    if (!governing || (governing.accrual_rule as AccrualRule).kind !== "unlimited") {
+      allUnlimited = false;
+    }
   }
-  if ((policy.accrual_rule as AccrualRule).kind === "unlimited") return;
+  if (allUnlimited) return;
   // The check reads through timeBalanceAsOf — the same function the drawer
-  // displays — so the gate and the balance can never disagree.
-  const read = await timeBalanceAsOf(exec, orgId, scope.employmentId, leaveTypeId, startsOn);
+  // displays — so the gate and the balance can never disagree. Read as of
+  // the range end so accrual vesting inside the range (a successor's slice
+  // covering the tail) counts toward the request it covers.
+  const read = await timeBalanceAsOf(exec, orgId, scope.employmentId, leaveTypeId, endsOn);
   if (read.balance === null) return;
   if (cmpHours(read.balance, hours) < 0) {
     throw new LeaveError(
@@ -663,7 +682,7 @@ export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<Le
     // subsidiary from the employment, department from the primary
     // assignment — never a hardcoded null department.
     const scope = await policyScopeForEmployment(db, orgId, employmentId, startsOn);
-    await assertTimeBalance(db, orgId, leaveTypeId, scope, startsOn, hours);
+    await assertTimeBalance(db, orgId, leaveTypeId, scope, startsOn, endsOn, hours);
     await assertNotice(db, orgId, leaveTypeId, scope, startsOn, query.onBehalf === true, reason);
     const inserted = (await db.execute<RequestRow>(sql`
       insert into hrm_leave_requests (org_id, employment_id, leave_type_id, starts_on, ends_on,
@@ -743,7 +762,7 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
     await assertLiveEmploymentRange(db, orgId, current.employment_id, startsOn, endsOn);
     await assertNoApprovedOverlap(db, orgId, current.employment_id, startsOn, endsOn, requestId);
     const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-    await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, String(current.hours));
+    await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
     await assertNotice(db, orgId, current.leave_type_id, scope, startsOn, onBehalf, current.reason);
 
     // Lazy: engine/src/flows/run.ts → registry → this service's adapter.
@@ -953,6 +972,7 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
     const submitter = await loadApprovalPerson(db, orgId, current.created_by);
     checkApprovalIdentitySeparation({ approver, submitter, subjectWorkerPartyId: subject.workerPartyId });
     const startsOn = String(current.starts_on).slice(0, 10);
+    const endsOn = String(current.ends_on).slice(0, 10);
     if (query.outcome === "approved") {
       // Serialize decisions against one entitlement: row locks are per
       // request, so without this two concurrent approvals both read the
@@ -968,7 +988,7 @@ export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Prom
       // request itself is excluded structurally — its absences are written
       // after this gate, so there is nothing of its own to count.
       const scope = await policyScopeForEmployment(db, orgId, current.employment_id, startsOn);
-      await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, String(current.hours));
+      await assertTimeBalance(db, orgId, current.leave_type_id, scope, startsOn, endsOn, String(current.hours));
     }
     const decided = (await db.execute<RequestRow>(sql`
       update hrm_leave_requests
