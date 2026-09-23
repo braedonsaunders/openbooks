@@ -28,6 +28,10 @@ export interface CloneOptions {
    * concurrent fiscal-period derivation can never strand the copy filter on
    * a stale ordinal while the copied period rows carry new labels. */
   asOfPeriodId?: string | null;
+  /** Create-only: overwrite the (already inserted) sandbox org row with the
+   * production org configuration captured inside the clone snapshot. Refresh
+   * preserves the sandbox's own org row and omits this. */
+  initializeOrg?: boolean;
   /** Restrict the copy to these tables (used by refresh to skip the preserved
    * customization layer). Undefined = copy the tier's full set. */
   onlyTables?: Set<string>;
@@ -61,6 +65,9 @@ export interface CloneResult {
   perTable: { table: string; rows: number }[];
   /** The cutoff used, when tier='as_of'. */
   asOfCutoff: Pick<AsOfCutoff, "periodId" | "periodName" | "endsOn" | "calendarName"> | null;
+  /** Production org settings captured inside the clone snapshot (SBOX2: the
+   * same snapshot the tenant rows came from). Null unless initializeOrg. */
+  sourceSettings: Record<string, unknown> | null;
 }
 
 /** A cutoff end date comes out of our own snapshot as an ISO civil date. */
@@ -105,6 +112,60 @@ export async function resolveAsOfCutoff(
     calendarId: row.calendar_id,
     calendarName: row.calendar_name,
   };
+}
+
+interface SourceOrgConfig {
+  legalName: string | null;
+  baseCurrency: string;
+  country: string;
+  taxIds: unknown;
+  settings: Record<string, unknown>;
+}
+
+/** Read the production org configuration inside the clone snapshot. A
+ * zero-row read is a failure: the caller named a source org that is gone. */
+async function readSourceOrgConfig(productionOrgId: string): Promise<SourceOrgConfig> {
+  const res = await db.execute<{
+    legal_name: string | null; base_currency: string;
+    country: string; tax_ids: unknown; settings: Record<string, unknown> | null;
+  }>(sql`
+    select legal_name, base_currency, country, tax_ids, settings
+      from orgs where id = ${productionOrgId}`);
+  const row = res.rows[0];
+  if (!row) throw new Error(`production org not found: ${productionOrgId}`);
+  return {
+    legalName: row.legal_name,
+    baseCurrency: row.base_currency,
+    country: row.country,
+    taxIds: row.tax_ids ?? {},
+    settings: row.settings ?? {},
+  };
+}
+
+/**
+ * Overwrite the sandbox org row with the in-snapshot source configuration. A
+ * zero-row write is a failure: the sandbox row must already exist (create
+ * inserts it before the clone; refresh never sets initializeOrg). `name` is
+ * deliberately NOT captured: it is the sandbox's own display name
+ * (create inserts the user's sandbox name), not source configuration.
+ */
+async function applySandboxOrgConfig(
+  sandboxOrgId: string,
+  source: SourceOrgConfig,
+  masked: boolean,
+): Promise<void> {
+  const updated = await db.execute(sql`
+    update orgs
+       set legal_name = ${source.legalName},
+           base_currency = ${source.baseCurrency},
+           country = ${source.country},
+           tax_ids = ${JSON.stringify(masked ? {} : (source.taxIds ?? {}))}::jsonb,
+           settings = ${JSON.stringify(source.settings)}::jsonb,
+           updated_at = now()
+     where id = ${sandboxOrgId}`);
+  if ((updated.rowCount ?? 0) !== 1) {
+    throw new Error(`sandbox org row not found: ${sandboxOrgId}`);
+  }
 }
 
 /** The user-built customization layer — the only tables a 'dev' sandbox copies,
@@ -265,8 +326,9 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   // deferred FK (or worse, commits FK-consistent but incomplete). The clone
   // only writes sandbox rows, so the pinned snapshot cannot conflict with
   // concurrent production writers.
-  const { cutoff } = await withMaintenanceTransaction(null, async () => {
+  const { cutoff, sourceSettings } = await withMaintenanceTransaction(null, async () => {
     let cutoff: AsOfCutoff | null = null;
+    let sourceSettings: Record<string, unknown> | null = null;
     // Resolve the as-of cutoff FIRST: under runClone's own REPEATABLE READ
     // transaction this statement pins the snapshot; under a refresh reuse it
     // joins the outer unit's snapshot. Either way the calendar and end date
@@ -276,6 +338,15 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     if (opts.tier === "as_of") {
       if (!opts.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
       cutoff = await resolveAsOfCutoff(opts.productionOrgId, opts.asOfPeriodId);
+    }
+    // Capture the source org configuration in the same snapshot the tenant
+    // rows are copied from (SBOX2): a Company Settings change landing
+    // between an outer read and this snapshot must reach the sandbox, never
+    // leave it marked ready with pre-change settings beside post-change rows.
+    if (opts.initializeOrg) {
+      const source = await readSourceOrgConfig(opts.productionOrgId);
+      await applySandboxOrgConfig(opts.sandboxOrgId, source, opts.masked);
+      sourceSettings = source.settings;
     }
     // As-of trims journal entries past the cutoff but copies every document,
     // so a post-cutoff posted entry would leave its documents pointing at an
@@ -351,7 +422,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           authority: "openbooks.clone",
           scope: "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
         })}::jsonb, null)`);
-    return { cutoff };
+    return { cutoff, sourceSettings };
   }, { isolationLevel: "REPEATABLE READ" });
 
   return {
@@ -366,6 +437,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           calendarName: cutoff.calendarName,
         }
       : null,
+    sourceSettings,
   };
 }
 

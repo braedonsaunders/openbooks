@@ -140,23 +140,45 @@ export async function rebaseSandboxControlAccounts(args: {
   sandboxOrgId: string;
   seed: string;
   actorId?: string | null;
+  /**
+   * Production settings captured inside the clone snapshot (runClone returns
+   * them). When provided, the rebase derives from the same snapshot the
+   * sandbox settings came from instead of re-reading production after the
+   * clone committed. Refresh omits this and keeps its long-standing
+   * current-production read.
+   */
+  productionSettings?: Record<string, unknown> | null;
 }): Promise<Record<string, string>> {
-  const state = await db.execute(sql`
-    select production.settings -> 'controlAccounts' as production_controls,
-           sandbox.settings -> 'controlAccounts' as sandbox_controls
-      from orgs production
-      join orgs sandbox on sandbox.id = ${args.sandboxOrgId}
-     where production.id = ${args.productionOrgId}
-  `);
-  const row = state.rows[0] as
-    | {
-        production_controls: Record<string, unknown> | null;
-        sandbox_controls: Record<string, unknown> | null;
-      }
-    | undefined;
-  if (!row) throw new Error("sandbox control-account rebase target not found");
+  // With an in-snapshot settings capture, the production half comes from the
+  // caller and only the sandbox half is read; otherwise both halves are read
+  // live (the refresh path).
+  let productionControls: Record<string, unknown> | null | undefined;
+  if (args.productionSettings != null) {
+    productionControls = args.productionSettings["controlAccounts"] as
+      | Record<string, unknown>
+      | null
+      | undefined;
+  } else {
+    const prodRow = (
+      await db.execute(sql`
+      select production.settings -> 'controlAccounts' as production_controls
+        from orgs production
+       where production.id = ${args.productionOrgId}
+    `)
+    ).rows[0]?.production_controls as Record<string, unknown> | null | undefined;
+    if (prodRow === undefined) throw new Error("sandbox control-account rebase target not found");
+    productionControls = prodRow;
+  }
+  const sandboxRow = (
+    await db.execute(sql`
+    select settings -> 'controlAccounts' as sandbox_controls
+      from orgs
+     where id = ${args.sandboxOrgId}
+  `)
+  ).rows[0] as { sandbox_controls: Record<string, unknown> | null } | undefined;
+  if (!sandboxRow) throw new Error("sandbox control-account rebase target not found");
 
-  const sourceControls = row.production_controls ?? {};
+  const sourceControls = productionControls ?? {};
   const sourceIds = [
     ...new Set(
       Object.values(sourceControls).filter(
@@ -192,7 +214,7 @@ export async function rebaseSandboxControlAccounts(args: {
       return sandboxId ? [[key, sandboxId]] : [];
     }),
   );
-  const before = row.sandbox_controls ?? {};
+  const before = sandboxRow.sandbox_controls ?? {};
   if (JSON.stringify(before) === JSON.stringify(rebased)) return rebased;
 
   const requestId = randomUUID();
@@ -320,7 +342,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   if (tier === "as_of" && !input.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
   // Only the cutoff period ID crosses into the clone: runClone resolves its
   // calendar and end date inside the copy snapshot, so no outer lookup can go
-  // stale between here and the copy.
+  // stale between here and the copy (SBOX1 addendum).
   const prod = (await db.execute(sql`
     select name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${input.productionOrgId}`));
@@ -329,7 +351,11 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
 
   // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
   // row is not cloned, so masking policies never see it: a masked sandbox
-  // starts without the organization's tax registrations.
+  // starts without the organization's tax registrations. These values are
+  // PROVISIONAL scaffolding so the row exists for the clone to overwrite:
+  // the authoritative capture happens inside runClone's snapshot
+  // (initializeOrg), and a ready sandbox always carries the snapshot's
+  // configuration, never this read.
   await db.execute(sql`
     insert into orgs (
       id, name, legal_name, base_currency, country, tax_ids, settings,
@@ -364,6 +390,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       tier,
       masked,
       asOfPeriodId: input.asOfPeriodId ?? null,
+      initializeOrg: true,
     });
     // S3-backed attachments live outside the row-copy transaction: copy the
     // objects onto the rebased keys now that the rows exist. A copy failure
@@ -380,6 +407,9 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       sandboxOrgId,
       seed,
       actorId: input.createdBy ?? null,
+      // The clone captured these inside its snapshot: the rebase derives
+      // from the same configuration the sandbox settings came from.
+      productionSettings: result.sourceSettings,
     });
     await neuterSandbox(sandboxOrgId);
     // Prove tenant isolation on the clone before it is marked ready.
@@ -498,7 +528,9 @@ export async function refreshSandbox(
         if (s.tier === "as_of" && !s.as_of_period_id) throw new Error("as-of sandbox requires a cutoff period");
         // Only the cutoff period ID crosses into the clone: runClone resolves
         // its calendar and end date inside the shared snapshot transaction,
-        // so the refresh resolves exactly what it copies.
+        // so the refresh resolves exactly what it copies. The sandbox org
+        // row is deliberately NOT re-initialized here — refresh preserves the
+        // sandbox's own org configuration and only re-pulls tenant rows.
         await wipeSandbox(s.org_id, target);
 
         // Re-copy only the target tables (deterministic ids → preserved
