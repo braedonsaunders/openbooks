@@ -53,8 +53,18 @@ export async function POST(req: Request) {
   // never a tenant-selected location: a requested prefix must stay under the
   // org's namespace, and anything absolute, backslashed, percent-encoded or
   // cross-tenant is refused (the engine's canonical validator fails closed).
-  const backend = appStorageKind()
-  const bucket = backend === 's3' ? appBucket() : null
+  // Storage selection fails closed: partial S3 configuration, or local storage
+  // without an absolute shared OPENBOOKS_DATA_DIR, refuses by name here —
+  // never a saved backend=local row whose uploads land where the importer
+  // never looks.
+  let backend: string
+  let bucket: string | null
+  try {
+    backend = appStorageKind()
+    bucket = backend === 's3' ? appBucket() : null
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 503 })
+  }
   const requestedPrefix = body.rootPrefix?.trim() || ''
   if (requestedPrefix) {
     // Refuse before any insert: a requested prefix is validated once, up front —

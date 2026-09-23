@@ -33,10 +33,10 @@ import {
 import { env } from "../platform/db.ts";
 
 /**
- * Storage backend for the built-in SFTP server. Two implementations, mirroring
- * web/lib/file-storage.ts:
+ * Storage backend for the built-in SFTP server. Two implementations:
  *   - 's3'    → an S3-compatible object store (MinIO in the dev deployment).
- *   - 'local' → a directory on disk (zero-config dev + verification).
+ *   - 'local' → a directory on disk, rooted at an explicitly configured
+ *     absolute OPENBOOKS_DATA_DIR shared by the web and worker processes.
  *
  * The SFTP daemon maps each virtual server's session to a backend rooted at its
  * bucket/prefix (S3) or subfolder (local). Directories are POSIX paths relative
@@ -255,24 +255,93 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
   };
 }
 
-/** Where the local backend keeps files (no env required; a data dir under the app). */
-function localRoot(): string {
-  return env.OPENBOOKS_DATA_DIR ? path.join(env.OPENBOOKS_DATA_DIR, "sftp") : path.join(process.cwd(), ".sftp-data");
+/**
+ * The four environment variables that together configure SFTP object storage.
+ * All four set means S3; none set means local disk; anything in between is a
+ * misconfiguration and refuses by name — never a silent local fallback.
+ */
+const SFTP_S3_VARS = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"] as const;
+
+/**
+ * Live read of one storage setting: process.env wins (values assigned after
+ * module load), falling back to the engine env snapshot (db.ts mirrors the
+ * resolved environment into both at boot, and tests hand that snapshot a
+ * throwaway directory before importing this module).
+ */
+function sftpEnv(name: string): string | undefined {
+  return process.env[name] ?? env[name];
 }
 
 /**
- * Which storage the app itself has available for SFTP files: the shared object
- * store when the app is configured for it, else local disk. This is the app's
- * own storage (same as the file cabinet), NOT a per-tenant/per-SFTP setting —
- * tenants just create a server in the UI and get a folder under their prefix.
+ * Absolute on-disk root for local SFTP storage. The listener runs in the web
+ * process and the scheduled import runs in the worker, each with its own
+ * working directory — so a cwd-relative root would give the two processes two
+ * different folders, and uploads would never meet the importer. Local storage
+ * therefore requires an explicitly configured ABSOLUTE OPENBOOKS_DATA_DIR
+ * shared by both processes; anything else refuses by name.
  */
+function localSftpRoot(): string {
+  const dataDir = sftpEnv("OPENBOOKS_DATA_DIR");
+  if (!dataDir) {
+    throw new Error(
+      "Local SFTP storage needs OPENBOOKS_DATA_DIR set to an absolute directory shared by the web and worker processes, or configure S3",
+    );
+  }
+  if (!path.isAbsolute(dataDir)) {
+    throw new Error(
+      `Local SFTP storage needs OPENBOOKS_DATA_DIR to be an absolute directory shared by the web and worker processes (got '${dataDir}'), or configure S3`,
+    );
+  }
+  return path.join(dataDir, "sftp");
+}
+
+export interface SftpStorageSelection {
+  kind: "s3" | "local";
+  bucket: string | null;
+}
+
+/**
+ * Which storage the app itself has available for SFTP files: the shared
+ * object store when the app is configured for it, else local disk under the
+ * absolute shared OPENBOOKS_DATA_DIR. This is the app's own storage, NOT a
+ * per-tenant/per-SFTP setting — tenants just create a server in the UI and
+ * get a folder under their prefix.
+ *
+ * Fails closed: partial S3 configuration names the missing variable(s), and
+ * local storage without an absolute shared root refuses — never a silent
+ * per-process directory the other process cannot see.
+ */
+export function sftpStorageSelection(): SftpStorageSelection {
+  const missing = SFTP_S3_VARS.filter((name) => !sftpEnv(name));
+  if (missing.length > 0 && missing.length < SFTP_S3_VARS.length) {
+    const plural = missing.length === 1 ? "is" : "are";
+    throw new Error(
+      `S3 is partly configured: ${missing.join(", ")} ${plural} missing — ` +
+        `set the missing variable${missing.length === 1 ? "" : "s"} or unset all four S3 variables to use local SFTP storage`,
+    );
+  }
+  if (missing.length === 0) return { kind: "s3", bucket: sftpEnv("S3_BUCKET")! };
+  // Local only when no S3 variable is set at all AND an absolute shared root
+  // exists; localSftpRoot refuses by name otherwise.
+  localSftpRoot();
+  return { kind: "local", bucket: null };
+}
+
+/**
+ * Refuse-before-serving gate for local/S3 storage selection. The listener
+ * calls this at start and every local backend resolution calls it per row, so
+ * a misconfigured deployment is named at boot instead of silently splitting
+ * uploads and imports across per-process directories.
+ */
+export function assertSftpStorageReady(): void {
+  sftpStorageSelection();
+}
+
 export function appStorageKind(): "s3" | "local" {
-  // Live reads, matching client() above: db.ts snapshots the environment at
-  // module evaluation, so snapshot reads miss values assigned after import.
-  return process.env.S3_ENDPOINT && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY && process.env.S3_BUCKET ? "s3" : "local";
+  return sftpStorageSelection().kind;
 }
 export function appBucket(): string | null {
-  return env.S3_BUCKET ?? null;
+  return sftpStorageSelection().bucket;
 }
 
 /**
@@ -340,9 +409,21 @@ export function backendFor(server: SftpServerStorageConfig): SftpBackend {
   const rootPrefix = assertTenantRootPrefix(server.rootPrefix, server.orgId);
   if (server.backend === "s3") {
     if (!server.bucket) throw new Error("s3 sftp server missing bucket");
+    // Fail closed on a broken object-store configuration: partial S3 throws
+    // naming the missing variable(s); no S3 at all refuses instead of serving
+    // an S3-rooted login from nowhere.
+    const selection = sftpStorageSelection();
+    if (selection.kind !== "s3") {
+      throw new Error(
+        "sftp server is configured for S3 but no S3 storage is configured — set S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY and S3_BUCKET",
+      );
+    }
     return s3Backend(server.bucket, rootPrefix, server.orgId);
   }
-  const dataRoot = path.resolve(localRoot());
+  // The shared root itself is validated here: without an absolute configured
+  // root every local row refuses by name instead of landing in a
+  // per-process directory the other process cannot see.
+  const dataRoot = localSftpRoot();
   const resolved = path.resolve(dataRoot, rootPrefix);
   if (resolved !== dataRoot && !resolved.startsWith(dataRoot + path.sep)) {
     throw new Error("path escapes root");

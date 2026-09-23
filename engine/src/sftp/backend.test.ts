@@ -56,8 +56,24 @@ test("a valid tenant-relative control resolves under the tenant namespace and th
   const rootPrefix = `sftp/${ORG}/feedbot`;
 
   // S3: contained inside the org's namespace (no network I/O at construction).
-  const s3 = backendFor({ orgId: ORG, backend: "s3", bucket: "openbooks", rootPrefix });
-  assert.equal(typeof s3.list, "function");
+  // An S3 row needs a complete object-store configuration to resolve — pin
+  // all four variables (and restore them) so this stays a pure containment
+  // check regardless of the ambient environment.
+  const s3Vars = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET"] as const;
+  const savedS3 = new Map(s3Vars.map((name) => [name, process.env[name] ?? (env as Record<string, string | undefined>)[name]]));
+  try {
+    for (const name of s3Vars) {
+      process.env[name] = `test-${name.toLowerCase().replace(/_/g, "-")}`;
+    }
+    const s3 = backendFor({ orgId: ORG, backend: "s3", bucket: "openbooks", rootPrefix });
+    assert.equal(typeof s3.list, "function");
+  } finally {
+    for (const name of s3Vars) {
+      const value = savedS3.get(name);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
 
   // Local: a write through the resolved backend must land inside the tenant's
   // subfolder of the data root — never beside it, never above it.

@@ -4,6 +4,7 @@ import ssh2 from "ssh2";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { encryptAccountNumber, decryptAccountNumber } from "../payments/rail-settings.ts";
 import { startSftpServer, generateHostKey, type SftpResolver, type SftpServerHandle } from "./server.ts";
+import { assertSftpStorageReady } from "./backend.ts";
 
 /**
  * Ties the SFTP daemon to the database — NOTHING here comes from environment
@@ -166,6 +167,12 @@ export async function ensureSftpServer(load: () => Promise<DaemonConfig> = loadD
     return;
   }
   if (handle && currentPort === cfg.port) return; // already running on the right port
+  // Fail closed before binding: with partial S3 configuration, or local
+  // storage without an absolute OPENBOOKS_DATA_DIR shared by the web and
+  // worker processes, uploads would land where the importer never looks. Name
+  // the misconfiguration here instead of serving such a login. Disabled stays
+  // silent — a fresh install configures nothing and must still boot.
+  assertSftpStorageReady();
   const replacement = await startSftpServer({ port: cfg.port, hostKey: cfg.hostKey, resolve: dbResolver });
   const previous = handle;
   handle = replacement;
