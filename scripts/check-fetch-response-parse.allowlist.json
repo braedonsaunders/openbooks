@@ -120,16 +120,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
-    "fn": "action",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/ap/capture/CaptureReviewDrawer.tsx",
-    "fn": "createDraft",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/ap/capture/CaptureUploadButton.tsx",
     "fn": "upload",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
@@ -325,16 +315,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/projects/ProjectDrawer.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/projects/ProjectDrawer.tsx",
-    "fn": "setActiveState",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "preview",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
@@ -343,21 +323,6 @@
     "path": "web/app/(app)/projects/duplicates/ProjectDuplicatesView.tsx",
     "fn": "merge",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/projects/tabs/BillingSection.tsx",
-    "fn": "submit",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/billing-requests (web/app/api/billing-requests/route.ts): createBillingRequest sits inside try/catch-all answering NextResponse.json ({ status: 422 }); no rethrow. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/projects/tabs/BillingSection.tsx",
-    "fn": "createInvoice",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/billing-requests/[id]/create-invoice (web/app/api/billing-requests/[id]/create-invoice/route.ts): the single fallible call sits inside try/catch-all answering NextResponse.json; no rethrow. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/projects/tabs/BillingSection.tsx",
-    "fn": "cancelRequest",
-    "reason": "server always returns JSON; guard adoption pending. PATCH /api/billing-requests/[id] (web/app/api/billing-requests/[id]/route.ts): the single fallible call sits inside try/catch-all answering NextResponse.json; no rethrow. Verified by reading the handler."
   },
   {
     "path": "web/app/(app)/projects/tabs/ChargesSection.tsx",
