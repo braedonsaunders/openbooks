@@ -11,10 +11,12 @@ import {
   quantumUnitsToHours,
   roundHours,
   roundingQuantumUnits,
+  sameClockPayload,
   splitUtcDays,
   validateClockSequence,
   validateEventChronology,
   validateStages,
+  type ClockPayload,
 } from "./pure.ts";
 import { FieldTimeError } from "./errors.ts";
 
@@ -216,6 +218,34 @@ describe("event chronology", () => {
     validateEventChronology("clock_out", open, open + 1);
     validateEventChronology("switch", open, open + 3_600_000);
     validateEventChronology("break_end", open, open + 1_800_000);
+  });
+});
+
+describe("offline payload identity", () => {
+  const base: ClockPayload = {
+    kind: "clock_in",
+    occurredAtMs: Date.parse("2026-09-14T11:00:00.000Z"),
+    employeePartyId: "11111111-1111-4111-8111-111111111111",
+    projectId: "22222222-2222-4222-8222-222222222222",
+    projectTaskId: null,
+    costCodeRef: null,
+    source: "mobile",
+  };
+  it("an identical replay matches", () => {
+    assert.equal(sameClockPayload(base, { ...base }), true);
+  });
+  it("ids match case-insensitively", () => {
+    assert.equal(
+      sameClockPayload(base, { ...base, projectId: "22222222-2222-4222-8222-222222222222".toUpperCase() }),
+      true,
+    );
+  });
+  it("a different kind, instant, worker, project or source conflicts", () => {
+    assert.equal(sameClockPayload(base, { ...base, kind: "clock_out" }), false);
+    assert.equal(sameClockPayload(base, { ...base, occurredAtMs: base.occurredAtMs + 1 }), false);
+    assert.equal(sameClockPayload(base, { ...base, employeePartyId: "33333333-3333-4333-8333-333333333333" }), false);
+    assert.equal(sameClockPayload(base, { ...base, projectId: null }), false);
+    assert.equal(sameClockPayload(base, { ...base, source: "kiosk" }), false);
   });
 });
 

@@ -307,6 +307,37 @@ export function insidePolygon(point: LatLng, polygon: LatLng[]): boolean {
 
 export type ClockKind = "clock_in" | "clock_out" | "break_start" | "break_end" | "switch";
 
+/** The identity of one offline clock event under its idempotency key. */
+export interface ClockPayload {
+  kind: ClockKind;
+  occurredAtMs: number;
+  employeePartyId: string;
+  projectId: string | null;
+  projectTaskId: string | null;
+  costCodeRef: string | null;
+  source: string;
+}
+
+/**
+ * Same key, same event? A replayed offline event returns the original
+ * recording; the same idempotency key carrying a DIFFERENT event is a
+ * client bug and conflicts. Transport-level fields (device, geo,
+ * photo) are deliberately excluded: they may legitimately differ on a
+ * genuine retry while the event itself is identical.
+ */
+export function sameClockPayload(a: ClockPayload, b: ClockPayload): boolean {
+  const id = (v: string | null): string | null => (v == null ? null : v.toLowerCase());
+  return (
+    a.kind === b.kind &&
+    a.occurredAtMs === b.occurredAtMs &&
+    id(a.employeePartyId) === id(b.employeePartyId) &&
+    id(a.projectId) === id(b.projectId) &&
+    id(a.projectTaskId) === id(b.projectTaskId) &&
+    (a.costCodeRef ?? null) === (b.costCodeRef ?? null) &&
+    a.source === b.source
+  );
+}
+
 const KIND_LABELS: Record<ClockKind, string> = {
   clock_in: "clock-in",
   clock_out: "clock-out",

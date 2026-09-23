@@ -7,6 +7,8 @@
  *   per project segment.
  * - D8: rounding happens once per shift and the exact total is dealt
  *   across UTC day pieces by largest remainder.
+ * - D9: concurrent replays of one offline id record once; a reused id
+ *   with a different payload conflicts.
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -199,6 +201,68 @@ test("an overnight shift deals its rounded total across both UTC days", { skip: 
       // 4 paid hours, dealt 2.00 + 2.00 across the UTC midnight.
       assert.deepEqual(rows.map((r) => r.hours), ["2.0000", "2.0000"]);
       assert.deepEqual(rows.map((r) => r.worked_on), ["2026-09-14", "2026-09-15"]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("concurrent replays of one offline id record once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    const key = randomUUID();
+    const input = {
+      orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+      kind: "clock_in" as const, occurredAt: "2026-09-14T11:00:00.000Z",
+      source: "mobile" as const, projectId, clientEventId: key,
+    };
+    const [first, second] = await Promise.all([
+      withOrg(org.orgId, () => recordClockEvent({ ...input })),
+      withOrg(org.orgId, () => recordClockEvent({ ...input })),
+    ]);
+    // Exactly one writer and one replay — never a unique violation.
+    assert.deepEqual([first.replayed, second.replayed].sort(), [false, true]);
+    assert.equal(first.eventId, second.eventId);
+    await withOrg(org.orgId, async () => {
+      const rows = (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from time_clock_events
+         where org_id = ${org.orgId} and client_event_id = ${key}`)).rows[0]?.n;
+      assert.equal(rows, "1");
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a reused offline id with a different payload conflicts", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const worker = randomUUID();
+    const projectId = randomUUID();
+    await seedWorker(org.orgId, org.subsidiaryId, worker, projectId);
+    const key = randomUUID();
+    await withOrg(org.orgId, () => recordClockEvent({
+      orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+      kind: "clock_in", occurredAt: "2026-09-14T11:00:00.000Z",
+      source: "mobile", projectId, clientEventId: key,
+    }));
+    const code = await withOrg(org.orgId, () =>
+      refusesCode(() => recordClockEvent({
+        orgId: org.orgId, actorUserId: null, employeePartyId: worker,
+        kind: "clock_in", occurredAt: "2026-09-14T12:00:00.000Z",
+        source: "mobile", clientEventId: key,
+      })));
+    assert.equal(code, "client_event_conflict");
+    await withOrg(org.orgId, async () => {
+      const rows = (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from time_clock_events
+         where org_id = ${org.orgId} and client_event_id = ${key}`)).rows[0]?.n;
+      assert.equal(rows, "1");
     });
   } finally {
     await dropScratchOrg(org.orgId);

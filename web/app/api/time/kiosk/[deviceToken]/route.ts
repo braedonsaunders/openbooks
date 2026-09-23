@@ -158,7 +158,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ deviceToken: s
       return NextResponse.json(result)
     }
   } catch (error) {
-    if (error instanceof FieldTimeError) return bad(error.message)
+    if (error instanceof FieldTimeError) {
+      if (error.code === 'client_event_conflict') return NextResponse.json({ error: error.message }, { status: 409 })
+      return bad(error.message)
+    }
     throw error
   }
 }
