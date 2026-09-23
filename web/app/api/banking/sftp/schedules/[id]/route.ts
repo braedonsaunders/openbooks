@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { runDueSftpImports } from '@openbooks/engine/src/sftp/import-job.ts'
+import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from '@openbooks/engine/src/sftp/schedule-notice.ts'
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -97,12 +98,25 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (typeof body.expectedExternalAccountId !== 'string' && body.expectedExternalAccountId !== null) {
       return NextResponse.json({ error: 'expectedExternalAccountId must be a string or null' }, { status: 400 })
     }
+    const canonical = normalizeExternalAccountId(body.expectedExternalAccountId) ?? null
     const bound = await db.execute<{ id: string }>(sql`
-      update sftp_import_schedules set expected_external_account_id = ${normalizeExternalAccountId(body.expectedExternalAccountId) ?? null}, updated_at = now(), updated_by = ${user.id}
+      update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId}
       returning id
     `)
     if (!bound.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // The binding landing resolves the scheduler's named notice for this
+    // schedule (same kind + href the engine writes): the inbox stays
+    // truthful without the operator dismissing it by hand. Clearing the
+    // binding re-arms it on the next scheduler pass. Zero matched rows is
+    // the idempotent replay (already bound, already read), not a failure.
+    if (canonical) {
+      await db.execute(sql`
+        update notifications set read_at = now(), updated_at = now()
+         where org_id = ${user.orgId} and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}
+           and read_at is null and href = ${sftpUnboundScheduleNoticeHref(id)}
+      `)
+    }
     return NextResponse.json({ ok: true })
   }
   if (body.action === 'run') {
@@ -151,5 +165,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     returning id
   `))
   if (!deleted.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // A deleted schedule has no setting to visit: resolve its named notice so
+  // a stale item cannot outlive the schedule it names.
+  await db.execute(sql`
+    update notifications set read_at = now(), updated_at = now()
+     where org_id = ${user.orgId} and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}
+       and read_at is null and href = ${sftpUnboundScheduleNoticeHref(id)}
+  `)
   return NextResponse.json({ ok: true })
 }

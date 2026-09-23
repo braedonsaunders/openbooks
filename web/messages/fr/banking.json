@@ -791,7 +791,9 @@
         "bindingPlaceholder": "identifiant de compte attendu",
         "bindingUnset": "aucun compte lié",
         "bindingEdit": "Définir le compte attendu",
-        "bindingSave": "Enregistrer"
+        "bindingSave": "Enregistrer",
+        "bindingPaused": "En pause : compte attendu non défini",
+        "bindingPausedHint": "Les relevés identifiés sont refusés tant que le compte bancaire attendu n'est pas défini dans les paramètres de cette route."
       },
       "sftpEndpoint": {
         "title": "Point de terminaison SFTP de réception",

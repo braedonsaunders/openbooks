@@ -791,7 +791,9 @@
         "bindingPlaceholder": "想定口座ID",
         "bindingUnset": "口座未設定",
         "bindingEdit": "想定口座を設定",
-        "bindingSave": "保存"
+        "bindingSave": "保存",
+        "bindingPaused": "一時停止中: 予定の口座が未設定",
+        "bindingPausedHint": "このスケジュールの設定で予定の銀行口座を紐付けるまで、特定可能な明細は拒否されます。"
       },
       "sftpEndpoint": {
         "title": "SFTP受信用エンドポイント",

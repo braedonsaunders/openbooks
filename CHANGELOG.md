@@ -8,6 +8,24 @@ changes; each release documents required operator action.
 
 No migrations.
 
+### Bank feeds
+
+- **Operator action: SFTP import schedules created before the expected-account
+  binding need a one-time bind.** The scheduled-import identity check binds
+  each schedule to the one external bank account it accepts, and schedules
+  predating that check have no binding — every identified OFX, BAI2, MT940,
+  or CAMT.053 statement in their watch folders refuses, so an active feed
+  stops importing after the upgrade with only a per-file error to show for
+  it. Affected tenants: any organization with an active SFTP import schedule
+  in an identifying format (including `auto`) whose expected account was
+  never set. CSV schedules are unaffected (CSV carries no account identifier
+  and imports on folder isolation). What the operator must do: open the named
+  notice (Notifications/inbox, linking the exact schedule) or Company
+  Settings → Bank Feeds, where each affected schedule reads "Paused: expected
+  account not set", and bind the expected bank account in the schedule
+  settings — identified statements import on the next run. The binding is
+  never guessed: nothing imports unverified, before or after this change.
+
 ### Engine
 
 - **The engine namespace is bounded.** The 204 files that lived side by side at

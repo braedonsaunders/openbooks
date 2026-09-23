@@ -118,6 +118,13 @@ hooks.deregister();
 
 const { db, withBypass, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
+// The REAL notice identity (this specifier is not mocked): the route must
+// resolve exactly the rows the scheduler writes — a copy here would make
+// the test self-consistent and hollow.
+const {
+  SFTP_UNBOUND_SCHEDULE_NOTICE_KIND,
+  sftpUnboundScheduleNoticeHref,
+} = await import("@openbooks/engine/src/sftp/schedule-notice.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
 
@@ -505,6 +512,57 @@ test(
       // A missing id refuses instead of reporting success.
       const missing = await patchStatus(fixture, randomUUID(), { expectedExternalAccountId: "x" });
       assert.equal(missing.status, 404);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
+  "binding a schedule resolves its unbound notice; clearing does not, DELETE does",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const scheduleId = await createSchedule(fixture);
+      const href = sftpUnboundScheduleNoticeHref(scheduleId);
+      const seedNotice = () =>
+        withBypass(async () => {
+          await db.execute(sql`
+            insert into notifications (org_id, user_id, kind, title, body, href)
+            values (${fixture.orgId}, ${fixture.actorId}, ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}, 'seed', 'seed', ${href})
+          `);
+        });
+      const unreadCount = () =>
+        withBypass(async () =>
+          (await db.execute<{ n: number }>(sql`
+            select count(*)::int as n from notifications
+             where org_id = ${fixture.orgId} and user_id = ${fixture.actorId}
+               and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
+          `)).rows[0]!.n,
+        );
+      await seedNotice();
+      assert.equal(await unreadCount(), 1);
+
+      // RED before the fix: binding reported {ok:true} while the named
+      // notice stayed unread — the inbox claimed a requirement nobody
+      // needed to act on anymore.
+      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
+      assert.equal(bound.status, 200);
+      assert.equal(await unreadCount(), 0, "binding resolves the schedule's unbound notice");
+
+      // Clearing re-arms the requirement on the next scheduler pass — it
+      // must not resolve anything, and resolving nothing is still success.
+      await seedNotice();
+      const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
+      assert.equal(cleared.status, 200);
+      assert.equal(await unreadCount(), 1, "clearing the binding leaves the notice unread");
+
+      // A deleted schedule has no setting to visit: the notice goes with it.
+      const deleted = await deleteStatus(fixture, scheduleId);
+      assert.equal(deleted.status, 200);
+      assert.equal(await unreadCount(), 0, "deleting the schedule resolves its unbound notice");
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }

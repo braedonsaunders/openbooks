@@ -791,7 +791,9 @@
         "bindingPlaceholder": "预期账户标识",
         "bindingUnset": "未绑定账户",
         "bindingEdit": "设置预期账户",
-        "bindingSave": "保存"
+        "bindingSave": "保存",
+        "bindingPaused": "已暂停：未设置预期账户",
+        "bindingPausedHint": "在此计划设置中绑定预期银行账户之前，所有可识别的对账单都将被拒绝。"
       },
       "sftpEndpoint": {
         "title": "SFTP接收端点",

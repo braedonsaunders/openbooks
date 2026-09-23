@@ -166,3 +166,82 @@ test('cancelling the confirm leaves the connection alone (F-t05-021)', async (t)
   assert.equal(globalThis.__feedConfirmCalls?.length, 1, 'Remove must confirm before deleting')
   assert.deepEqual(globalThis.__feedDeletes, [], 'a cancelled confirm must not delete')
 })
+
+async function mountSftpSchedules(
+  schedules: Array<{
+    id: string
+    format: string
+    expectedExternalAccountId: string | null
+  }>,
+) {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BankFeedsClient
+          connections={[]}
+          sftpServers={[
+            {
+              id: 'srv-1',
+              name: 'Bank SFTP',
+              username: 'feedbot',
+              rootPrefix: 'fleet',
+              isActive: true,
+              lastConnectedAt: null,
+            },
+          ]}
+          sftpSchedules={schedules.map((s, i) => ({
+            id: s.id,
+            sftpServerId: 'srv-1',
+            accountId: 'acc-1',
+            folder: `inbound-${i}`,
+            format: s.format,
+            isActive: true,
+            lastRunAt: null,
+            accountNumber: '1000',
+            accountName: 'Operating Cash',
+            expectedExternalAccountId: s.expectedExternalAccountId,
+          }))}
+          accounts={[{ id: 'acc-1', label: '1000 Operating Cash' }]}
+          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  return { host, root }
+}
+
+test('an unbound identifying schedule reads paused, bound and CSV routes do not', async (t) => {
+  const { host, root } = await mountSftpSchedules([
+    { id: 'sched-unbound-ofx', format: 'ofx', expectedExternalAccountId: null },
+    { id: 'sched-bound-ofx', format: 'ofx', expectedExternalAccountId: 'BR001-77' },
+    { id: 'sched-unbound-csv', format: 'csv', expectedExternalAccountId: null },
+  ])
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  const badges = [...host.querySelectorAll('li')].filter((li) =>
+    (li.textContent ?? '').includes('Paused: expected account not set'),
+  )
+  assert.equal(badges.length, 1, 'exactly the unbound OFX schedule reads paused')
+  assert.equal(
+    badges[0]?.getAttribute('id'),
+    'sftp-schedule-sched-unbound-ofx',
+    'the badge sits on the unbound schedule row',
+  )
+  const badge = [...(badges[0]?.querySelectorAll('span') ?? [])].find(
+    (s) => (s.textContent ?? '').trim() === 'Paused: expected account not set',
+  )
+  assert.ok(badge, 'the paused badge itself renders')
+  assert.match(
+    badge?.getAttribute('title') ?? '',
+    /bound/,
+    'the badge names the remedy, not a generic error',
+  )
+})

@@ -791,7 +791,9 @@
         "bindingPlaceholder": "id. de conta esperado",
         "bindingUnset": "sem conta vinculada",
         "bindingEdit": "Definir conta esperada",
-        "bindingSave": "Salvar"
+        "bindingSave": "Salvar",
+        "bindingPaused": "Pausado: conta esperada não definida",
+        "bindingPausedHint": "Os extratos identificados são recusados até que a conta bancária esperada seja vinculada nas configurações desta rota."
       },
       "sftpEndpoint": {
         "title": "Endpoint SFTP de recebimento",

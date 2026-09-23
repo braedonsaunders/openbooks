@@ -20,6 +20,7 @@ import {
 import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, reclaimExpiredDeliveryClaims, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
 import { backendFor, type SftpBackend } from "./backend.ts";
 import { resolveOutboundPath } from "./delivery-path.ts";
+import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from "./schedule-notice.ts";
 
 /**
  * Archive destination for one consumed watch-folder file: a unique generation
@@ -162,8 +163,80 @@ export interface ScheduleRun {
 type ScheduleRow = {
   id: string; org_id: string; account_id: string; format: Fmt; folder: string; csv_mapping: CsvMapping | null;
   expected_external_account_id: string | null;
+  created_by: string | null; account_number: string | null; account_name: string | null; server_name: string;
   backend: string; bucket: string | null; root_prefix: string;
 };
+
+/**
+ * Upgrade-operability surfacing for the 0291 identity binding. That
+ * migration added `expected_external_account_id` nullable with no backfill,
+ * so every schedule predating it refuses each identified statement until an
+ * operator binds the account — with only a per-file error left in the watch
+ * folder to show for it. The first scheduler pass after the upgrade (and
+ * every pass until bound) therefore raises one VISIBLE named notice per
+ * schedule through the house notifications channel (surfaced in
+ * /notifications and the inbox with zero extra plumbing), naming the
+ * schedule and the remedy and linking the exact setting. Deliberately NOT a
+ * silent auto-bind: nothing imports unverified, and the fail-closed gate in
+ * {@link assertScheduleAccountBinding} stays the enforcement point.
+ *
+ * CSV schedules are excluded: CSV carries no account identifier and imports
+ * on watch-folder isolation, so an unbound CSV route is healthy, not
+ * paused — notifying (or badging) it would be a false claim.
+ *
+ * Idempotent: a second pass finds the unread notice and writes nothing, so
+ * the tick never spams. The notice resolves when the binding lands (the
+ * Bank Feeds API marks it read on bind/delete) and re-fires if the binding
+ * is cleared again.
+ */
+export async function ensureUnboundScheduleNotice(s: ScheduleRow): Promise<number> {
+  const href = sftpUnboundScheduleNoticeHref(s.id);
+  // The account owner first: the schedule's author while they are still an
+  // active user of the org, plus whoever can reach the setting — active
+  // super-admins (every permission) and active holders of a role directly
+  // granting admin.setup.manage. A notification target is not an authz
+  // decision, so wildcard/override grants are out of scope here; the author
+  // plus setup managers cover every operable org, and the per-file refusal
+  // plus the schedule badge keep naming the remedy regardless.
+  const recipients = (await db.execute<{ id: string }>(sql`
+    select distinct u.id::text as id
+      from users u
+      left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
+      left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+     where u.org_id = ${s.org_id} and u.is_active
+       and (u.id = ${s.created_by} or u.is_super_admin or (r.permissions ? 'admin.setup.manage'))
+  `)).rows;
+  const accountLabel = [s.account_number, s.account_name].filter(Boolean).join(" · ") || s.account_id;
+  const title = `SFTP schedule /${s.folder} has no expected bank account — identified statements refuse`;
+  const body =
+    `Route /${s.folder} on server ${s.server_name} feeds ${accountLabel} but no expected external account is bound, ` +
+    `so every identified OFX, BAI2, MT940 or CAMT.053 statement refuses and nothing imports. ` +
+    `Bind the expected bank account in the schedule settings (Company Settings → Bank Feeds); ` +
+    `identified statements import on the next run after binding.`;
+  let written = 0;
+  for (const recipient of recipients) {
+    const existing = (await db.execute<{ one: number }>(sql`
+      select 1 as one from notifications
+       where org_id = ${s.org_id} and user_id = ${recipient.id}::uuid
+         and kind = ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND} and href = ${href} and read_at is null
+       limit 1
+    `)).rows[0];
+    if (existing) continue;
+    // Same columns as the shared writeNotification path (kind, title, body,
+    // href, org + user scope) — see engine/src/inbox/adapters/notification.ts:
+    // the row surfaces in /notifications and as an inbox item with zero
+    // extra plumbing. Inlined (not imported) so the sftp module gains no
+    // inbox edge; the hrm qualification alerts use the same convention.
+    const inserted = (await db.execute<{ id: string }>(sql`
+      insert into notifications (org_id, user_id, kind, title, body, href)
+      values (${s.org_id}, ${recipient.id}::uuid, ${SFTP_UNBOUND_SCHEDULE_NOTICE_KIND}, ${title}, ${body}, ${href})
+      returning id
+    `)).rows[0]?.id;
+    if (!inserted) throw new Error("the unbound-schedule notice was not stored — no row was written; retry the action");
+    written += 1;
+  }
+  return written;
+}
 
 async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
   const backend = backendFor({ backend: s.backend, bucket: s.bucket, rootPrefix: s.root_prefix, orgId: s.org_id });
@@ -249,10 +322,12 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   const rows = await withBypassContext(() =>
     db.execute<ScheduleRow>(sql`
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping,
-           sc.expected_external_account_id,
+           sc.expected_external_account_id, sc.created_by,
+           a.number as account_number, a.name as account_name, sv.name as server_name,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id and sv.is_active
+      join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
       join orgs o on o.id = sc.org_id
      where sc.is_active
        and o.env_kind = 'production'
@@ -266,10 +341,18 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
     try { run = await withOrgContext(s.org_id, () => runSchedule(s)); }
     catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
     runs.push(run);
-    await withOrgContext(s.org_id, () =>
-      db.execute(sql`
+    await withOrgContext(s.org_id, async () => {
+      await db.execute(sql`
       update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id} and org_id = ${s.org_id}
-    `));
+    `);
+      // A schedule that cannot accept identified statements must not fail
+      // silently into an empty watch folder: raise (or keep) the one named
+      // house notice until the binding lands. Runs after the scan so a
+      // notice never blocks or renames the import outcome itself.
+      if (s.format !== "csv" && !normalizeExternalAccountId(s.expected_external_account_id)) {
+        await ensureUnboundScheduleNotice(s);
+      }
+    });
   }
   return runs;
 }

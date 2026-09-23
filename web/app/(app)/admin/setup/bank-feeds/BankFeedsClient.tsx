@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -317,6 +317,18 @@ function SftpConnectionCard({
   const [folder, setFolder] = useState("inbound");
   const [expectedAccount, setExpectedAccount] = useState("");
   const t = useTranslations("banking.bankFeeds.client");
+  // Deep link from the scheduler's unbound-schedule notice
+  // (/admin/setup/bank-feeds?schedule=<id>): ring the named schedule so the
+  // operator lands on the exact setting the notice names. Read lazily as
+  // initial state (never setState-in-effect); the scroll stays in the effect.
+  const [highlightedScheduleId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return /[?&]schedule=([0-9a-fA-F-]{36})/.exec(window.location.search)?.[1] ?? null;
+  });
+  useEffect(() => {
+    if (!highlightedScheduleId) return;
+    document.getElementById(`sftp-schedule-${highlightedScheduleId}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [highlightedScheduleId]);
 
   return (
     <Card className="p-4">
@@ -344,12 +356,29 @@ function SftpConnectionCard({
           <div className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">{t("sftpCard.routingTitle")}</div>
           <ul className="space-y-1 text-sm">
             {schedules.map((sc) => (
-              <li key={sc.id} className="flex items-center gap-2">
+              // An unbound route for an identifying format refuses every
+              // identified statement (the 0291 fail-closed gate), so the
+              // schedule reads paused until the account is bound — never a
+              // generic per-file error. CSV carries no identifier and is
+              // healthy unbound, so it shows no badge.
+              <li
+                key={sc.id}
+                id={`sftp-schedule-${sc.id}`}
+                className={`flex items-center gap-2 rounded-md px-1 py-0.5${highlightedScheduleId === sc.id ? " ring-2 ring-amber-400" : ""}`}
+              >
                 <span className="font-mono text-xs">/{sc.folder}</span>
                 <span className="text-slate-400">→</span>
                 <span className="font-mono text-xs">{sc.accountNumber}</span>
                 <span className="text-slate-500">{sc.accountName}</span>
                 <Badge variant="outline">{sc.format}</Badge>
+                {sc.format !== "csv" && !sc.expectedExternalAccountId && (
+                  <span
+                    title={t("sftpCard.bindingPausedHint")}
+                    className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  >
+                    {t("sftpCard.bindingPaused")}
+                  </span>
+                )}
                 <ScheduleBinding sc={sc} onChange={onChange} />
                 <Button size="sm" variant="ghost" className="ml-auto" onClick={async () => { await fetch(`/api/banking/sftp/schedules/${sc.id}`, { method: "DELETE" }); onChange(); }}>{t("sftpCard.remove")}</Button>
               </li>
