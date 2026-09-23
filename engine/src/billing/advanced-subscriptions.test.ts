@@ -5,6 +5,7 @@ import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import {
   AdvancedSubscriptionError,
   addMonths,
+  arrearsLinesForInterval,
   assertCotermAllowed,
   assertIdempotentReplay,
   assertPlanVersionMutable,
@@ -12,7 +13,9 @@ import {
   lifecycleBillingPeriod,
   renewalAction,
   subscriptionComponentTotal,
+  type ComponentWindow,
 } from "./advanced-subscriptions.ts";
+import { prorateDays } from "../money/money.ts";
 
 test("trial suppresses advance billing until trial end", () => {
   assert.equal(firstLifecycleBillOn({ termStartsOn: "2026-01-01", trialEndsOn: "2026-01-15", billingTiming: "advance", interval: "monthly", intervalCount: 1 }), "2026-01-15");
@@ -54,6 +57,74 @@ test("renewal boundary respects invoice timing and policy", () => {
 
 test("multi-component invoice total preserves ledger precision", () => {
   assert.equal(subscriptionComponentTotal([{ quantity: "10", unitPrice: "12.50" }, { quantity: "1", unitPrice: "29.99" }]), "154.9900");
+});
+
+function arrearsWindow(overrides: Partial<ComponentWindow> & { componentKey: string }): ComponentWindow {
+  return {
+    description: "Fee",
+    quantity: "1",
+    unitPrice: "310.0000",
+    incomeAccountId: null,
+    itemId: null,
+    taxCodeId: null,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: null,
+    ...overrides,
+  };
+}
+
+test("arrears prices the interval at the price in force during it, not the next period's", () => {
+  // Price A runs through Jan 31, price B starts Feb 1; a Jan 1 - Feb 1
+  // arrears bill must charge A for January, never B.
+  const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
+    arrearsWindow({ componentKey: "fee", unitPrice: "310.0000", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-31" }),
+    arrearsWindow({ componentKey: "fee", unitPrice: "620.0000", effectiveFrom: "2026-02-01", effectiveTo: null }),
+  ]);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.unitPrice, "310.0000");
+  assert.equal(lines[0]!.quantity, "1");
+  assert.equal(lines[0]!.description, "Fee");
+});
+
+test("an unchanged arrears price bills one verbatim line as before", () => {
+  const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
+    arrearsWindow({ componentKey: "fee", quantity: "2", unitPrice: "155.0000" }),
+  ]);
+  assert.deepEqual(lines, [{
+    description: "Fee",
+    quantity: "2",
+    unitPrice: "155.0000",
+    incomeAccountId: null,
+    itemId: null,
+    taxCodeId: null,
+  }]);
+});
+
+test("a mid-interval arrears price change splits and prorates by effective window", () => {
+  const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
+    arrearsWindow({ componentKey: "fee", unitPrice: "310.0000", effectiveFrom: "2026-01-01", effectiveTo: "2026-01-15" }),
+    arrearsWindow({ componentKey: "fee", unitPrice: "620.0000", effectiveFrom: "2026-01-16", effectiveTo: null }),
+  ]);
+  assert.equal(lines.length, 2);
+  assert.equal(lines[0]!.unitPrice, prorateDays("310.0000", 15, 31));
+  assert.equal(lines[1]!.unitPrice, prorateDays("620.0000", 16, 31));
+  assert.equal(lines[0]!.quantity, "1");
+  assert.match(lines[0]!.description, /2026-01-01.*2026-01-15/);
+  assert.match(lines[1]!.description, /2026-01-16.*2026-01-31/);
+  assert.equal(subscriptionComponentTotal(lines), "470.0000");
+});
+
+test("an arrears component added mid-interval bills only its served slice", () => {
+  const lines = arrearsLinesForInterval("2026-01-01", "2026-02-01", [
+    arrearsWindow({ componentKey: "addon", description: "Add-on", unitPrice: "310.0000", effectiveFrom: "2026-01-16", effectiveTo: null }),
+  ]);
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.unitPrice, prorateDays("310.0000", 16, 31));
+});
+
+test("arrears windowing is degenerate-safe", () => {
+  assert.deepEqual(arrearsLinesForInterval("2026-02-01", "2026-02-01", [arrearsWindow({ componentKey: "fee" })]), []);
+  assert.deepEqual(arrearsLinesForInterval("2026-01-01", "2026-02-01", []), []);
 });
 
 // --- scheduled renewal provenance (fnd_mt97nsbf_qvlaww) --------------------

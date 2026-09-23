@@ -2,7 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
-import { add, mul, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
@@ -735,6 +735,90 @@ export type AdvancedBillingLine = {
   taxCodeId: string | null;
 };
 
+/** A billable component together with its inclusive effective window. */
+export interface ComponentWindow extends AdvancedBillingLine, Record<string, unknown> {
+  componentKey: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+}
+
+/** Whole-day index of an ISO date (UTC), for window overlap arithmetic. */
+function dayIndex(isoDate: string): number {
+  const [year, month, day] = isoDate.split("-").map(Number);
+  return Math.round(Date.UTC(year!, month! - 1, day!) / 86_400_000);
+}
+
+function isoFromDayIndex(day: number): string {
+  return new Date(day * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
+ * Price arrears components over the actual SERVICE interval
+ * [periodStartsOn, periodEndsOn), end-exclusive. Stored component windows are
+ * inclusive on both ends (an amendment closes the prior window on
+ * effectiveOn − 1 day), so a window overlaps the interval exactly when
+ * effectiveFrom < periodEndsOn and (effectiveTo is null or
+ * effectiveTo >= periodStartsOn). A component unchanged inside the interval
+ * bills one line at its interval price, verbatim; a component whose price or
+ * row changes inside the interval bills one prorated line per effective
+ * window via the shared {@link prorateDays} helper — the same full ×
+ * coveredDays / totalDays proration the subscription engine uses for
+ * mid-period changes — with quantity "1" and the slice amount as the unit
+ * price, matching the module's prorated-charge convention. Pure.
+ */
+export function arrearsLinesForInterval(
+  periodStartsOn: string,
+  periodEndsOn: string,
+  windows: ComponentWindow[],
+): AdvancedBillingLine[] {
+  const totalDays = dayIndex(periodEndsOn) - dayIndex(periodStartsOn);
+  if (!(totalDays > 0)) return [];
+  const byKey = new Map<string, ComponentWindow[]>();
+  for (const window of windows) {
+    const keyed = byKey.get(window.componentKey);
+    if (keyed) keyed.push(window);
+    else byKey.set(window.componentKey, [window]);
+  }
+  const lines: AdvancedBillingLine[] = [];
+  for (const rows of byKey.values()) {
+    const ordered = [...rows].sort((left, right) => (left.effectiveFrom < right.effectiveFrom ? -1 : left.effectiveFrom > right.effectiveFrom ? 1 : 0));
+    const overlaps = ordered.flatMap((row) => {
+      const windowStartsOn = row.effectiveFrom > periodStartsOn ? row.effectiveFrom : periodStartsOn;
+      const rowEndsExclusive = row.effectiveTo === null ? periodEndsOn : isoFromDayIndex(dayIndex(row.effectiveTo) + 1);
+      const windowEndsOn = rowEndsExclusive < periodEndsOn ? rowEndsExclusive : periodEndsOn;
+      const coveredDays = dayIndex(windowEndsOn) - dayIndex(windowStartsOn);
+      return coveredDays > 0 ? [{ row, windowStartsOn, windowEndsOn, coveredDays }] : [];
+    });
+    // No change inside the interval (a successor starting exactly on the
+    // end-exclusive boundary serves nothing here): one verbatim line.
+    const unchanged = overlaps.length === 1 && overlaps[0]!.coveredDays === totalDays;
+    for (const overlap of overlaps) {
+      const { row, windowStartsOn, windowEndsOn, coveredDays } = overlap;
+      if (unchanged) {
+        lines.push({
+          description: row.description,
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+          incomeAccountId: row.incomeAccountId,
+          itemId: row.itemId,
+          taxCodeId: row.taxCodeId,
+        });
+      } else {
+        const windowEndsInclusive = isoFromDayIndex(dayIndex(windowEndsOn) - 1);
+        lines.push({
+          description: `${row.description} (${windowStartsOn} → ${windowEndsInclusive})`,
+          quantity: "1",
+          unitPrice: prorateDays(mul(row.quantity, row.unitPrice), coveredDays, totalDays),
+          incomeAccountId: row.incomeAccountId,
+          itemId: row.itemId,
+          taxCodeId: row.taxCodeId,
+        });
+      }
+    }
+  }
+  return lines;
+}
+
 /** Snapshot used by the invoice engine; null means single-plan billing. */
 export async function advancedBillingSnapshot(orgId: string, subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
   contractRevision: number;
@@ -756,15 +840,31 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   if (!row) return null;
   const serviceAnchor = periodStartOverride ?? row.currentPeriodStart ?? billOn;
   const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({ billOn, serviceAnchor, billingTiming: row.billingTiming, interval: row.interval, intervalCount: row.intervalCount });
-  const activeOn = row.billingTiming === "advance" ? periodStartsOn : periodEndsOn;
-  const components = (await db.execute<AdvancedBillingLine>(sql`
-    select name as description, quantity, unit_price as "unitPrice", income_account_id as "incomeAccountId",
-           item_id as "itemId", tax_code_id as "taxCodeId"
+  // One fetch covers both timings: a stored window overlaps the service
+  // interval exactly when it starts before the end-exclusive boundary and
+  // ends on or after the start (open-ended counts as overlapping). Advance
+  // billing then prices the window open on the period's first day — the price
+  // known when the upcoming period is billed — while arrears prices every
+  // window over the service interval it actually served (see
+  // arrearsLinesForInterval). The in-advance path has no boundary confusion:
+  // periodStartsOn is the inclusive first service day, so "active on start"
+  // is the price in force when the period begins.
+  const components = (await db.execute<ComponentWindow>(sql`
+    select component_key as "componentKey", name as description, quantity, unit_price as "unitPrice",
+           income_account_id as "incomeAccountId", item_id as "itemId", tax_code_id as "taxCodeId",
+           effective_from as "effectiveFrom", effective_to as "effectiveTo"
       from subscription_components
-     where org_id = ${orgId} and subscription_id = ${subscriptionId} and effective_from <= ${activeOn}
-       and (effective_to is null or effective_to >= ${activeOn})
+     where org_id = ${orgId} and subscription_id = ${subscriptionId} and effective_from < ${periodEndsOn}
+       and (effective_to is null or effective_to >= ${periodStartsOn})
      order by sort_order, component_key
   `));
-  const total = subscriptionComponentTotal(components.rows);
-  return { contractRevision: row.contractRevision, billingTiming: row.billingTiming, periodStartsOn, periodEndsOn, lines: components.rows, total };
+  const lines = row.billingTiming === "advance"
+    ? components.rows
+      .filter((component) => component.effectiveFrom <= periodStartsOn && (component.effectiveTo === null || component.effectiveTo >= periodStartsOn))
+      .map(({ description, quantity, unitPrice, incomeAccountId, itemId, taxCodeId }): AdvancedBillingLine => ({
+        description, quantity, unitPrice, incomeAccountId, itemId, taxCodeId,
+      }))
+    : arrearsLinesForInterval(periodStartsOn, periodEndsOn, components.rows);
+  const total = subscriptionComponentTotal(lines);
+  return { contractRevision: row.contractRevision, billingTiming: row.billingTiming, periodStartsOn, periodEndsOn, lines, total };
 }
