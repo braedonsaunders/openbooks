@@ -960,6 +960,7 @@
     "backToHub": "分析",
     "configureInSetup": "在设置中配置 →",
     "openReport": "打开报告",
+    "openAnalytics": "打开分析",
     "scenarios": {
       "hire": "以 {util}% 的利用率增加{count, plural, one {# 名员工} other {# 名员工}}，每月可计费小时增加 {hours} 小时。",
       "terminate": "减少{count, plural, one {# 名员工} other {# 名员工}}可节省 {savings} 间接费用，但会损失 {hours} 可计费小时。",

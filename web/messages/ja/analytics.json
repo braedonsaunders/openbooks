@@ -960,6 +960,7 @@
     "backToHub": "アナリティクス",
     "configureInSetup": "設定で構成 →",
     "openReport": "レポートを開く",
+    "openAnalytics": "アナリティクスを開く",
     "scenarios": {
       "hire": "稼働率{util}%の従業員を{count, plural, one {#名} other {#名}}追加すると、月間請求可能時間が{hours}時間増加します。",
       "terminate": "従業員を{count, plural, one {#名} other {#名}}削減すると間接費を{savings}節約できますが、請求可能時間を{hours}時間失います。",

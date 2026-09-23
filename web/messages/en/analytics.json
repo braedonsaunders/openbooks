@@ -960,6 +960,7 @@
     "backToHub": "Analytics",
     "configureInSetup": "Configure in Setup →",
     "openReport": "Open report",
+    "openAnalytics": "Open analytics",
     "scenarios": {
       "hire": "Adding {count, plural, one {# employee} other {# employees}} at {util}% utilization adds {hours} monthly billable hours.",
       "terminate": "Reducing {count, plural, one {# employee} other {# employees}} saves {savings} in overhead but loses {hours} billable hours.",
