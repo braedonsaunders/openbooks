@@ -1,5 +1,6 @@
 import { ensureCloseDefaults } from "../close/defaults.ts";
 import { ensureCrmDefaults } from "../crm/crm.ts";
+import { ensureAccountGroupDefaults } from "./account-group-defaults.ts";
 import { ensureCustomizationDefaults } from "./customization-defaults.ts";
 import { ensureBuiltInPaymentFormats } from "../payments/operations.ts";
 import { seedProjectTypes } from "../projects/seed-project-types.ts";
@@ -20,6 +21,7 @@ export async function provisionOrganizationDefaults(
 ): Promise<void> {
   await ensureCloseDefaults(orgId, actorId ?? undefined);
   await Promise.all([
+    ensureAccountGroupDefaults(orgId, actorId),
     ensureCrmDefaults(orgId, actorId),
     ensureBuiltInPaymentFormats(orgId, actorId),
     seedProjectTypes(orgId, actorId),

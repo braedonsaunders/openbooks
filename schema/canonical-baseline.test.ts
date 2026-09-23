@@ -629,6 +629,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // silently repriced: this adds the revision fence, the supersedes link
     // that retains the prior version, and the stored change reason.
     "0301_item_price_schedule_versioning.sql",
+    // True Cost classifies through the cost_pool/burden account-group
+    // dimensions, but those defaults were seeded only by a hand-run script
+    // against the oldest org: every other org opened True Cost with no
+    // groups. 0306 backfills the missing defaults for every org,
+    // insert-missing only, so tenant edits and deactivations survive.
+    "0306_account_group_default_backfill.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
