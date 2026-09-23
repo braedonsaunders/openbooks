@@ -83,6 +83,34 @@ test("average mixes direct and inverse quotes across the window", { skip: !DB },
   }
 });
 
+test("average counts one quote per date when both directions quote the same day", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await seedQuote(org.orgId, "USD", "CAD", "2026-07-10", "1.0000000000");
+    await seedQuote(org.orgId, "USD", "CAD", "2026-07-20", "2.0000000000");
+    await seedQuote(org.orgId, "CAD", "USD", "2026-07-20", "0.5000000000");
+    // Jul 20 exists in both directions: the direct 2.0 wins and the inverted
+    // 0.5 must not double-count it — (1.0 + 2.0) / 2, not (1+2+2)/3.
+    assert.equal(await averageSpotRate(db, org.orgId, "USD", "CAD", "2026-07-01", "2026-07-31"), "1.5000000000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("average keeps the direct quote when a date is quoted both ways", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // Same pair as the lookup tie test: double rounding separates the direct
+    // quote from the inverted one, so averaging both would not reproduce the
+    // direct rate.
+    await seedQuote(org.orgId, "USD", "CAD", "2026-07-15", "1.0820000000");
+    await seedQuote(org.orgId, "CAD", "USD", "2026-07-15", "0.9242144177");
+    assert.equal(await averageSpotRate(db, org.orgId, "USD", "CAD", "2026-07-01", "2026-07-31"), "1.0820000000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("average returns null when the window holds no quote in either direction", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
