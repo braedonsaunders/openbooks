@@ -720,7 +720,7 @@ export async function loadRecruitingPage(
     drawer: drawerOpen
       ? {
           closeHref: hrefFor(status, null),
-          title: t('recruiting.drawer.title'),
+          title: t('recruiting.drawer.title', { number: requisition?.requisitionNumber ?? '' }),
           description: null,
           requisition,
           candidate,
