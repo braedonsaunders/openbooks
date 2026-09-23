@@ -29,10 +29,15 @@ export function v1GetOrder(request: Request, typeKey: string, id: string): Promi
 export function v1CreateOrder(request: Request, typeKey: string): Promise<NextResponse> {
   const key = orderTypeKey(typeKey);
   return withV1Request(request, `api/v1/${key}`, async (_auth, context) => {
-    await readV1JsonObject(request);
+    const body = await readV1JsonObject(request);
+    const subsidiaryId = body.subsidiaryId ?? body.subsidiary_id ?? null;
+    if (subsidiaryId !== null && typeof subsidiaryId !== "string") {
+      throw invalidInput("subsidiaryId must be a UUID");
+    }
     const outcome = await createApplicationOrder(context, {
       kind: ORDER_TYPE_KIND[key],
       idempotencyKey: requireV1IdempotencyKey(request),
+      subsidiaryId,
     });
     return { status: 201, body: outcome.result, replayed: outcome.replayed };
   });
