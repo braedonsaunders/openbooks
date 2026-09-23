@@ -27,6 +27,7 @@ export async function PaymentsSection({
   orgId,
   userId,
   canManage,
+  canCreate,
   userRoles,
 }: {
   sp: Record<string, string | string[] | undefined>
@@ -35,7 +36,12 @@ export async function PaymentsSection({
   kind: PaymentKind
   orgId: string
   userId: string
+  /** List-view customization (saved views) — never a creation gate. */
   canManage: boolean
+  /** Payment creation (ap.pay / ar.pay by kind) — the single flag the New
+   *  button and the ?paymentNew=1 drawer share, so neither is ever offered
+   *  without the other. */
+  canCreate: boolean
   userRoles: readonly string[]
 }) {
   if (authz.user.orgId !== orgId || !can(authz, kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')) return null
@@ -47,9 +53,11 @@ export async function PaymentsSection({
   // Unsaved-create: ?paymentNew=1 opens an editable drawer on no persisted
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
-  // single idempotent POST. Gated on manage like the draft flow was. The
-  // kind stays fixed by this section's `kind` — the surface decides it.
-  const creating = pickString(sp.paymentNew) === '1' && canManage
+  // single idempotent POST. Gated on the payment permission (canCreate),
+  // never on list-view customization: a payer without manage rights must
+  // still get the drawer the New button promises. The kind stays fixed by
+  // this section's `kind` — the surface decides it.
+  const creating = pickString(sp.paymentNew) === '1' && canCreate
   const paymentId = typeof sp.payment === 'string' && isUuid(sp.payment) ? sp.payment : undefined
   const loaded = paymentId ? await loadPaymentDocument(paymentId, kind, orgId, authz.allowedSubsidiaryIds) : null
   const openPayment = loaded ?? null
@@ -152,7 +160,7 @@ export async function PaymentsSection({
       canManage={canManage}
       sp={sp}
       drawer={drawer}
-      emptyAction={<NewPaymentButton kind={kind} basePath={basePath} label={newLabel} />}
+      emptyAction={canCreate ? <NewPaymentButton kind={kind} basePath={basePath} label={newLabel} /> : undefined}
     />
   )
 }

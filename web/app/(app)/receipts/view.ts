@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
+import { can, requirePermission } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
 
 /**
@@ -24,6 +24,9 @@ export interface ReceiptsData {
   newRunHref: string
   onReceipts: boolean
   onRuns: boolean
+  /** Header New button: the receipts tab AND the creation right — the same
+   *  canCreate the drawer reads through its slot. */
+  showNewReceipt: boolean
   view: 'receipts' | 'runs'
   tabLabels: { receipts: string; collections: string }
   currentParams: Record<string, string | string[] | undefined>
@@ -32,7 +35,7 @@ export interface ReceiptsData {
 export async function loadReceipts(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<ReceiptsData> {
-  await requirePermission('ar.pay')
+  const authz = await requirePermission('ar.pay')
   const t = await getTranslations('receipts')
   const view = pickString(sp.view) === 'runs' ? 'runs' : 'receipts'
 
@@ -44,6 +47,7 @@ export async function loadReceipts(
     newRunHref: mergeHref('/receipts', sp, { view: 'runs', newRun: '1', run: undefined }),
     onReceipts: view === 'receipts',
     onRuns: view === 'runs',
+    showNewReceipt: view === 'receipts' && can(authz, 'ar.pay'),
     view,
     tabLabels: { receipts: t('page.tabs.receipts'), collections: t('page.tabs.collections') },
     currentParams: sp,
@@ -64,7 +68,7 @@ export function receiptsSpec(data: ReceiptsData): PageSpec {
           widget(
             'new-payment',
             { kind: 'customer_payment', basePath: '/receipts', label: data.newReceiptLabel },
-            f('onReceipts'),
+            f('showNewReceipt'),
           ),
           widget('new-payment-run', { href: data.newRunHref, label: data.newRunLabel }, f('onRuns')),
         ],

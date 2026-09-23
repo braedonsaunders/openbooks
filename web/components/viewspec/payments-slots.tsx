@@ -33,6 +33,7 @@ export async function PaymentsSectionSlot({
       orgId={authz.user.orgId}
       userId={authz.user.id}
       canManage={can(authz, 'admin.customization.manage')}
+      canCreate={can(authz, kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay')}
       userRoles={authz.user.roles.map(({ key }) => key)}
     />
   )
