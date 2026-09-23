@@ -82,6 +82,9 @@ export async function POST(req: Request) {
     if (body.documentKind != null && documentKind === undefined) {
       return NextResponse.json({ error: "invalid document kind" }, { status: 422 });
     }
+    if (body.counterpartyCode != null && (typeof body.counterpartyCode !== "string" || !body.counterpartyCode)) {
+      return NextResponse.json({ error: "invalid counterparty code" }, { status: 422 });
+    }
     const result = await quoteExternalTax(
       gate.user.orgId,
       {
@@ -91,6 +94,7 @@ export async function POST(req: Request) {
         shipTo: body.shipTo ?? {},
         itemCode: typeof body.itemCode === "string" ? body.itemCode : null,
         documentKind,
+        counterpartyCode: typeof body.counterpartyCode === "string" && body.counterpartyCode ? body.counterpartyCode : undefined,
         quotedOn: typeof body.quotedOn === "string" ? body.quotedOn : undefined,
       },
       gate.user.id,

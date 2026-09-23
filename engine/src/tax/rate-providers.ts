@@ -52,6 +52,15 @@ export interface TaxQuoteRequest {
   itemCode?: string | null;
   /** Source document kind; selects the provider's document typing. */
   documentKind?: ProviderDocumentKind;
+  /**
+   * Stable counterparty identity (the party id): sent as the provider's
+   * customer key so exemption certificates apply per counterparty instead of
+   * to every quote at once. Party ids are globally unique, so no org prefix
+   * is needed, and 36 characters fit Avalara's 50-character customerCode
+   * limit. For purchase kinds this carries the VENDOR id, which is the field
+   * that provider type looks up.
+   */
+  counterpartyCode?: string;
   quotedOn?: string;
   /** Optional immutable document-line provenance for persisted quotes. */
   documentLineId?: string | null;
@@ -887,9 +896,12 @@ export async function quoteViaAvalara(
   const destinationCountry = requiredCountry(req.shipTo.country, "Avalara", "a destination country");
   const body = {
     type: avalaraDocumentType(req.documentKind),
+    // Per-counterparty identity: a shared literal here would apply one
+    // customer's exemption certificate to every customer. Party-less test
+    // quotes keep the historical literal.
+    customerCode: req.counterpartyCode || "OPENBOOKS",
     companyCode: String(config.companyCode ?? "DEFAULT"),
     date: config.quotedOn,
-    customerCode: "OPENBOOKS",
     currencyCode: req.currency ?? "USD",
     addresses: {
       singleLocation: {
@@ -1088,7 +1100,8 @@ async function quoteTaxJar(
  * and refused when no such mapping exists, so the quote always reconciles
  * before approval. A headline that disagrees with its components is refused.
  * The request's documentKind crosses verbatim when the caller sets it, so a
- * hook can distinguish sales, purchases, and returns.
+ * hook can distinguish sales, purchases, and returns; counterpartyCode
+ * crosses the same way for per-counterparty handling.
  */
 export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,

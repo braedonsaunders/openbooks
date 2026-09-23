@@ -273,6 +273,11 @@ export async function computeBillTotalsWithProvider(
       // PROVIDER_DOCUMENT_KINDS gates this path to the four provider kinds,
       // so the kind always narrows to the request union here.
       documentKind: options.kind as ProviderDocumentKind,
+      // The counterparty identity travels on every quote (the address
+      // resolver above already refused a missing party), so the provider
+      // keys exemption certificates per customer/vendor. For purchase kinds
+      // this is the vendor id, which is what that provider type looks up.
+      counterpartyCode: options.partyId ?? undefined,
       itemCode: line.custom?.taxItemCode == null ? null : String(line.custom.taxItemCode),
       quotedOn: options.documentDate,
     }
