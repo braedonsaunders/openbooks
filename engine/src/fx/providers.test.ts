@@ -5,7 +5,9 @@ import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
 import {
+  applyNormalizedRates,
   computeNextSyncAt,
+  FX_RATE_APPLY_CHUNK,
   FxProviderError,
   FxRunLeaseLostError,
   normalizeFxSnapshots,
@@ -677,6 +679,100 @@ test(
   },
 );
 
+// A valid 50-currency, 31-day config normalizes 50*49 pairs per day: with
+// one statement per pair the apply phase is 75,950 sequential writes inside
+// a single transaction, far past the run lease. The chunked set apply must
+// complete it with the exact row count and per-pair counts intact.
+test(
+  "a 50-currency, 31-day sync applies every pair with batched writes",
+  { skip: !DB },
+  async () => {
+    const foreigns = [
+      "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "SEK", "NOK", "DKK",
+      "PLN", "CZK", "HUF", "RON", "BGN", "ISK", "TRY", "ZAR", "MXN", "BRL",
+      "ARS", "CLP", "COP", "PEN", "UYU", "PYG", "BOB", "VES", "CRC", "PAB",
+      "DOP", "GTQ", "HNL", "NIO", "JMD", "TTD", "BBD", "XCD", "AWG", "SRD",
+      "GYD", "BZD", "QAR", "SAR", "AED", "KWD", "BHD", "OMR", "JOD",
+    ];
+    assert.equal(foreigns.length, 49, "base CAD plus 49 foreigns is the 50-currency config");
+    const provider = createServer((req, res) => {
+      const url = new URL(req.url ?? "", "http://localhost");
+      const from = url.searchParams.get("start_date")!;
+      const to = url.searchParams.get("end_date")!;
+      const observations: Array<Record<string, unknown>> = [];
+      for (let day = from; day <= to; day = addDaysForTest(day)) {
+        const observation: Record<string, unknown> = { d: day };
+        foreigns.forEach((code, i) => {
+          observation[`FX${code}CAD`] = { v: (1 + (i + 1) * 0.01).toFixed(4) };
+        });
+        observations.push(observation);
+      }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ observations }));
+    });
+    const providerOrigin = await listen(provider);
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    function addDaysForTest(date: string): string {
+      const d = new Date(`${date}T00:00:00Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      return d.toISOString().slice(0, 10);
+    }
+
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      for (const code of ["CAD", ...foreigns]) {
+        await db.execute(sql`
+          insert into currencies (code, name, minor_units) values (${code}, ${code}, 2)
+          on conflict (code) do nothing`);
+      }
+      await db.execute(sql`
+        update orgs set settings = settings || '{"features":{"multiCurrency":true}}'::jsonb
+         where id = ${org.orgId}`);
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX operator", "admin"));
+      await saveFxProviderConfig(org.orgId, actorId, {
+        provider: "bank_of_canada",
+        baseCurrency: "CAD",
+        currencies: foreigns,
+        schedule: "manual",
+        syncHourUtc: 0,
+        lookbackDays: 31,
+        isEnabled: true,
+        apiKey: null,
+      });
+      const result = await runFxProvider(org.orgId, "manual");
+      const pairCount = 50 * 49;
+      const expected = pairCount * 31;
+      assert.equal(result.observationsReceived, 31);
+      assert.equal(result.normalizedRates, expected);
+      assert.equal(result.ratesInserted, expected);
+      assert.equal(result.ratesUpdated, 0);
+      const stored = await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
+      assert.equal(stored.rows[0]!.count, String(expected));
+      // A quoted pair still reproduces the source observation exactly at scale.
+      const usdCad = await db.execute<{ rate: string }>(sql`
+        select rate::text as rate from fx_rates
+         where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'
+           and rate_type = 'spot' limit 1`);
+      assert.equal(usdCad.rows[0]!.rate, "1.0100000000");
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
 // A superseded claim — one whose run aged past the lease TTL while still in
 // flight and was reclaimed by a fresh attempt — must not stamp its outcome,
 // resurrect its row, or promote schedule ownership. The winner's commit is the
@@ -902,6 +998,36 @@ test("ECB parsing honors quoted fields in the currency column", () => {
   // three-character currency and stays on its own date.
   assert.equal(snapshots[1]!.unitsPerAnchor['U"SD'], "1.1700");
   assert.equal(snapshots[1]!.date, "2026-07-15");
+});
+
+test("rate application writes in chunked multi-row upserts, not one statement per pair", async () => {
+  // A recording runner stands in for the database (the module's other tests
+  // cover real insert/update/manual semantics): what matters here is the
+  // STATEMENT count — one prefetch plus one multi-row upsert per chunk,
+  // never one statement per pair.
+  const seen: unknown[] = [];
+  const counting = {
+    execute: (async () => {
+      seen.push(true);
+      return { rows: [] };
+    }) as unknown as Pick<typeof db, "execute">,
+  };
+  const total = FX_RATE_APPLY_CHUNK * 2 + 200;
+  const normalized = Array.from({ length: total }, (_, i) => ({
+    date: `2026-07-${String((i % 28) + 1).padStart(2, "0")}`,
+    fromCurrency: "EUR",
+    toCurrency: "USD",
+    rate: "1.2500000000",
+  }));
+  await applyNormalizedRates(counting, {
+    orgId: "org",
+    provider: "bank_of_canada",
+    configId: "cfg",
+    from: "2026-07-01",
+    to: "2026-07-31",
+    normalized,
+  });
+  assert.equal(seen.length, 1 + Math.ceil(total / FX_RATE_APPLY_CHUNK));
 });
 
 test("daily syncs advance past an exact-hour boundary", () => {
