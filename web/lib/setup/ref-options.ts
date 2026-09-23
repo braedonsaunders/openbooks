@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
-import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupRefSource } from './registry'
+import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
 export type RefOption = { value: string; label: string }
@@ -126,19 +126,19 @@ export async function loadEntityOptions(
   const customSegmentFilter = source === 'segment-definitions'
     ? (target.orgScoped ? sql` and source_kind = 'custom'` : sql` where source_kind = 'custom'`)
     : sql``
-  // Label from whichever of `code`/`name` the entity actually carries:
-  // subsidiaries are name-only, stock locations are code-only, most have both.
-  const hasCode = target.fields.some((f) => f.key === 'code')
-  const hasName = target.fields.some((f) => f.key === 'name')
+  // Label and order columns from the target's own declaration
+  // (refTargetPicker in ./registry.ts) — never hardcoded code/name the
+  // target may not carry. The option value is the refValue column (the
+  // natural key) when referencing rows store it instead of the row id.
+  const { valueCol, labelCols, orderCol } = refTargetPicker(target)
   const labelExpr =
-    hasCode && hasName
-      ? sql.raw(`case when coalesce(code, '') <> '' then code || ' · ' || name else name end`)
-      : hasCode
-        ? sql.raw('code')
-        : sql.raw('name')
-  const orderCol = hasName ? 'name' : 'code'
+    labelCols.length === 2
+      ? sql.raw(
+          `case when coalesce(${labelCols[0]}, '') <> '' then ${labelCols[0]} || ' · ' || ${labelCols[1]} else ${labelCols[1]} end`,
+        )
+      : sql.raw(labelCols[0]!)
   const r = (await db.execute(sql`
-    select ${sql.raw(target.idColumn ?? 'id')} as value, ${labelExpr} as label
+    select ${sql.raw(valueCol)} as value, ${labelExpr} as label
       from ${sql.raw(target.table)}${orgFilter}${customSegmentFilter}
      order by ${sql.raw(orderCol)}`))
   return r.rows as RefOption[]

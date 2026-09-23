@@ -43,6 +43,7 @@ export const DOCUMENT_CATEGORIES_ENTITY: SetupEntity = {
   orgScoped: true,
   actorCols: true,
   naturalKey: 'key',
+  refValue: 'key',
   hasActive: true,
   docSlug: 'documents-signatures-and-retention',
   columns: [
