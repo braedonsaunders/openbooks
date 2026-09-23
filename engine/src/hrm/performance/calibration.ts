@@ -6,7 +6,8 @@ import {
   requireAggregatePerformanceManage,
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
-import { HrmPerformanceError } from "./errors.ts";
+import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { assertRatingInScale, parseRatingScale, type RatingScale } from "./performance-math.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 
 /**
@@ -429,6 +430,35 @@ async function requireOpenEntry(
   return { session, entry };
 }
 
+/**
+ * The cycle's declared scales: the numeric rating scale and its labels,
+ * resolved from the cycle's review template. Close writes decided values
+ * into the review, so undecidable values are refused here — never stored
+ * first and validated later.
+ */
+async function loadCycleRatingScale(
+  exec: SqlExecutor,
+  orgId: string,
+  cycleId: string,
+): Promise<RatingScale> {
+  const cycle = (await exec.execute<{ templateId: string | null }>(sql`
+    select template_id as "templateId" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+  `)).rows[0];
+  const template = cycle?.templateId
+    ? (await exec.execute<{ ratingScale: unknown }>(sql`
+        select rating_scale as "ratingScale" from hrm_review_templates
+         where org_id = ${orgId} and id = ${cycle.templateId}
+      `)).rows[0]
+    : undefined;
+  if (!template) {
+    throw new HrmPerformanceError(
+      "TEMPLATE_NOT_FOUND",
+      "the cycle names a template that is not visible in this organization — ask HR to fix the cycle before calibrating",
+    );
+  }
+  return mathRefusal("REFUSED", () => parseRatingScale(template.ratingScale));
+}
+
 export async function setCalibratedRating(args: {
   orgId: string;
   actorId: string;
@@ -442,18 +472,22 @@ export async function setCalibratedRating(args: {
   if (typeof args.justification !== "string" || args.justification.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "changing a calibrated rating needs a justification — say what evidence moved it");
   }
-  const rating = Number(args.calibratedRating);
-  if (!Number.isFinite(rating) || rating < 0) {
-    throw new HrmPerformanceError("INVALID_INPUT", "calibrated rating must be a non-negative number on the template scale");
+  const ratingText = String(args.calibratedRating ?? "").trim();
+  if (ratingText.length === 0) {
+    throw new HrmPerformanceError("INVALID_INPUT", "calibratedRating must be a decimal rating");
   }
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
+    // The decided rating must sit inside the cycle's declared scale: an
+    // off-scale figure would otherwise be written into the review on close.
+    const scale = await loadCycleRatingScale(db, orgId, session.cycle_id);
+    mathRefusal("REFUSED", () => assertRatingInScale(scale, ratingText, "calibrated rating"));
     const fromKey = entry.calibrated_rating ?? entry.proposed_rating;
     const updated = (await db.execute<StoredEntry>(sql`
       update hrm_calibration_entries
-         set calibrated_rating = ${args.calibratedRating}::numeric, justification = ${args.justification.trim()},
+         set calibrated_rating = ${ratingText}::numeric, justification = ${args.justification.trim()},
              decided_by = ${actorId}, decided_at = now(), updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${entryId}
       returning id, review_id, calibrated_rating::text as calibrated_rating
@@ -461,7 +495,7 @@ export async function setCalibratedRating(args: {
     if (updated.length !== 1) {
       throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
     }
-    await recordEvent(db, orgId, actorId, session.id, entryId, "rating_changed", fromKey, args.calibratedRating, args.justification.trim());
+    await recordEvent(db, orgId, actorId, session.id, entryId, "rating_changed", fromKey, ratingText, args.justification.trim());
     const entries = await loadEntries(db, orgId, session.id, allowed);
     const decided = entries.find((e) => e.id === entryId);
     if (!decided) throw new HrmPerformanceError("REFUSED", "the rating change was not stored — no row can be read back; retry the action");
@@ -491,9 +525,25 @@ export async function setPotential(args: {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
+    // Potential is a label from the cycle's declared scale — never free
+    // text that close would file onto the review unchecked.
+    const scale = await loadCycleRatingScale(db, orgId, session.cycle_id);
+    const potentialKey = args.potentialKey.trim();
+    if (scale.labels.length === 0) {
+      throw new HrmPerformanceError(
+        "REFUSED",
+        "the cycle's review template declares no potential labels — declare the scale labels on the template before setting potential",
+      );
+    }
+    if (!scale.labels.includes(potentialKey)) {
+      throw new HrmPerformanceError(
+        "REFUSED",
+        `potential ${JSON.stringify(potentialKey)} is outside the cycle's declared scale (${scale.labels.map((label) => JSON.stringify(label)).join(", ")}) — pick a declared label`,
+      );
+    }
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_calibration_entries
-         set potential_key = ${args.potentialKey.trim()}, decided_by = ${actorId}, decided_at = now(),
+         set potential_key = ${potentialKey}, decided_by = ${actorId}, decided_at = now(),
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${entryId}
       returning id
@@ -501,7 +551,7 @@ export async function setPotential(args: {
     if (updated.length !== 1) {
       throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
     }
-    await recordEvent(db, orgId, actorId, session.id, entryId, "potential_set", entry.potential_key, args.potentialKey.trim(), null);
+    await recordEvent(db, orgId, actorId, session.id, entryId, "potential_set", entry.potential_key, potentialKey, null);
   });
 }
 
