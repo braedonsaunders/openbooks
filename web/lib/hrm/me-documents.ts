@@ -1,8 +1,10 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
+import { HrmDocumentsError } from '@openbooks/engine/src/hrm/documents/errors.ts'
 import { listOwnDocuments } from '@openbooks/engine/src/hrm/documents/documents.ts'
 import { listOwnExports } from '@openbooks/engine/src/hrm/documents/dsar.ts'
+import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
@@ -35,10 +37,25 @@ export async function meDocumentsAuthz(): Promise<MeDocumentsAuthz | null> {
 export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<string, string | undefined>) {
   const t = await getTranslations('hrm')
   const tabs = await meTabs(authz.session, '/me/documents')
-  const [{ documents, partyId }, { exports }] = await Promise.all([
-    listOwnDocuments({ orgId: authz.orgId, actorId: authz.userId }),
-    listOwnExports({ orgId: authz.orgId, actorId: authz.userId }),
-  ])
+  // An unlinked login is a correct refusal with the remedy (the shared
+  // loadOrRefuse mechanism, same as the clock): only the no-link REFUSED
+  // text converts — every other error still throws out of the loader.
+  const outcome = await loadOrRefuse(
+    () => Promise.all([
+      listOwnDocuments({ orgId: authz.orgId, actorId: authz.userId }),
+      listOwnExports({ orgId: authz.orgId, actorId: authz.userId }),
+    ]),
+    {
+      refusals: [
+        { error: HrmDocumentsError, code: 'REFUSED', messageIncludes: 'not linked to a person record' },
+      ],
+      title: t('me.refusedTitle'),
+    },
+  )
+  const [{ documents, partyId }, { exports }] = outcome.ok
+    ? outcome.data
+    : [{ documents: [], partyId: '' }, { exports: [] }]
+  const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal
   const exportOn = await isFeatureEnabled(authz.orgId, 'hrmDataSubjectExport')
   const statusLabel = (value: string): string =>
     t.has(`meDocuments.status.${value}`) ? t(`meDocuments.status.${value}`) : value
@@ -109,5 +126,6 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
     requestExportDone: t('meDocuments.requestExportDone'),
     downloadLabel: t('meDocuments.download'),
     exportOpen: sp.export === '1' && exportOn && partyId.length > 0,
+    refusal,
   }
 }

@@ -11,6 +11,7 @@ import {
   table,
   text,
   widget,
+  widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -40,6 +41,16 @@ export function meSurveysSpec(data: MeSurveysPageData): PageSpec {
       }),
     ],
     body: [
+      // Unlinked login: the loader carries the refusal with its remedy
+      // (the shared mechanism, same as /me and the clock).
+      widgetBlock(
+        'empty-state',
+        {
+          title: data.refusal?.title ?? '',
+          description: data.refusal?.message,
+        },
+        f('refusal'),
+      ),
       grid('flex h-full min-h-0 flex-col gap-4', [
         table({
           variant: 'app',

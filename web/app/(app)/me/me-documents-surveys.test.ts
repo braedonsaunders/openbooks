@@ -51,3 +51,26 @@ test("me surveys page lists open invitations with the respond link", () => {
   assert.match(surveysSections, /!res\.ok/, "error bodies are checked before they are parsed");
   assert.ok(!surveysSections.includes('orgId') && !surveysSections.includes('actorId'), "no org, user, or Authz crosses into the client");
 });
+
+test("an unlinked login reads the refusal state on every /me surface (R8)", () => {
+  const meView = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
+  const clockView = readFileSync(new URL("../time/clock/view.ts", import.meta.url), "utf8");
+  // All four loaders convert through the one shared helper — never a
+  // second classifier, and never a bare try/catch that swallows defects.
+  for (const [name, source] of [["me overview", meView], ["me documents", documentsLoader], ["me surveys", surveysLoader], ["clock", clockView]] as const) {
+    assert.match(source, /loadOrRefuse\(/, `${name} converts refusals through the shared helper`);
+  }
+  // Each loader names its own refusal precisely: the clock converts only
+  // FieldTimeError no_employee_link, the overview pay section only
+  // SelfServiceError NO_LINK, documents and surveys only their no-link
+  // REFUSED text (the grant refusal from the same calls still throws).
+  assert.match(clockView, /error: FieldTimeError, code: 'no_employee_link'/, "the clock converts only its party refusal");
+  assert.match(meView, /error: SelfServiceError, code: 'NO_LINK'/, "the overview pay section converts only NO_LINK");
+  assert.match(documentsLoader, /error: HrmDocumentsError, code: 'REFUSED', messageIncludes: 'not linked to a person record'/, "documents converts only its no-link REFUSED");
+  assert.match(surveysLoader, /error: HrmSurveysError, code: 'REFUSED', messageIncludes: 'not linked to a person record'/, "surveys converts only its no-link REFUSED");
+  // Every spec renders the house refusal block on its refusal field.
+  for (const [name, source] of [["me documents", documentsView], ["me surveys", surveysView], ["clock", clockView]] as const) {
+    assert.match(source, /widgetBlock\(\s*'empty-state'/, `${name} renders the house refusal block`);
+    assert.match(source, /f\('refusal'\)/, `${name} shows the block exactly when the refusal is set`);
+  }
+});
