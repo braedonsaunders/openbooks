@@ -3,12 +3,12 @@ import {
   acceptWebConnectorResponse,
   authenticateWebConnector,
   closeWebConnectorSession,
+  isWebConnectorTicketOpen,
   nextWebConnectorRequest,
   recordConnectionError,
   webConnectorLastError,
 } from '@openbooks/engine/src/qbd/bridge.ts'
-import { firstNode, hasNode, parseXml, xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
-import { readBoundedBodyText } from '../../../../../lib/bounded-body'
+import { assertSoapEnvelopeComplexity, firstNode, hasNode, identifyQbdSoapCall, parseXml, QBD_PREAUTH_MAX_BYTES, xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { QBD_MAX_BODY_BYTES } from './body-limit'
 
 export const runtime = 'nodejs'
@@ -34,8 +34,87 @@ function scalar(method: string, result: string): Response {
   return envelope(`<${method}Response xmlns="${NS}"><${method}Result>${xmlEscape(result)}</${method}Result></${method}Response>`)
 }
 
-function fault(message: string): Response {
-  return envelope(`<soap:Fault><faultcode>soap:Client</faultcode><faultstring>${xmlEscape(message)}</faultstring></soap:Fault>`)
+function fault(message: string, status = 200): Response {
+  return new Response(
+    `<?xml version="1.0" encoding="utf-8"?><soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"><soap:Body><soap:Fault><faultcode>soap:Client</faultcode><faultstring>${xmlEscape(message)}</faultstring></soap:Fault></soap:Body></soap:Envelope>`,
+    { status, headers: { 'Content-Type': 'text/xml; charset=utf-8', 'Cache-Control': 'no-store' } },
+  )
+}
+
+function oversizedRefusal(): Response {
+  return fault('QuickBooks request exceeds the 64 KiB unauthenticated limit; only a ticket-authenticated receiveResponseXML may stream up to 256 MiB', 413)
+}
+
+type HeadRead =
+  | { ok: true; text: string; complete: true }
+  | { ok: true; text: string; complete: false; reader: ReadableStreamDefaultReader<Uint8Array>; decoder: TextDecoder; bytes: number }
+  | { ok: false }
+
+/**
+ * Stream at most the pre-auth head (64 KiB). The accumulation never holds
+ * more than the head plus one in-flight chunk until the caller proves the
+ * call is a ticket-authenticated receiveResponseXML — an unauthenticated
+ * client cannot make the endpoint buffer or parse bulk.
+ */
+async function readHead(req: Request, maxBytes: number): Promise<HeadRead> {
+  const body = req.body
+  if (!body) return { ok: true, text: '', complete: true }
+  const reader = body.getReader()
+  const decoder = new TextDecoder()
+  let bytes = 0
+  let text = ''
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) {
+        reader.releaseLock()
+        return { ok: true, text, complete: true }
+      }
+      bytes += value.byteLength
+      text += decoder.decode(value, { stream: true })
+      if (bytes > maxBytes) return { ok: true, text, complete: false, reader, decoder, bytes }
+    }
+  } catch {
+    await reader.cancel().catch(() => undefined)
+    return { ok: false }
+  }
+}
+
+/** Continue a gated stream up to the large cap after the ticket checked out. */
+async function readRemainder(head: Extract<HeadRead, { complete: false }>, maxBytes: number): Promise<{ ok: true; text: string } | { ok: false }> {
+  let { text, bytes } = { text: head.text, bytes: head.bytes }
+  try {
+    for (;;) {
+      const { done, value } = await head.reader.read()
+      if (done) break
+      bytes += value.byteLength
+      if (bytes > maxBytes) {
+        await head.reader.cancel().catch(() => undefined)
+        return { ok: false }
+      }
+      text += head.decoder.decode(value, { stream: true })
+    }
+  } catch {
+    await head.reader.cancel().catch(() => undefined)
+    return { ok: false }
+  } finally {
+    head.reader.releaseLock()
+  }
+  text += head.decoder.decode()
+  return { ok: true, text }
+}
+
+function parseEnvelope(text: string): Record<string, unknown> | Response {
+  try {
+    assertSoapEnvelopeComplexity(text)
+  } catch (error) {
+    return fault(error instanceof Error ? error.message : 'Malformed SOAP XML', 400)
+  }
+  try {
+    return parseXml(text)
+  } catch {
+    return fault('Malformed SOAP XML')
+  }
 }
 
 export async function GET() {
@@ -44,19 +123,42 @@ export async function GET() {
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const bounded = await readBoundedBodyText(req, QBD_MAX_BODY_BYTES)
-  if (!bounded.ok) {
-    if (bounded.reason === 'too_large') {
-      return new Response('QuickBooks response exceeds the 256 MiB safety limit', { status: 413 })
+  // A sender-declared length is never trusted for acceptance, but it does
+  // justify an early refusal above the absolute cap — even a live ticket's
+  // receiveResponseXML cannot exceed it.
+  const declared = req.headers.get('content-length')
+  if (declared != null && declared.trim() !== '') {
+    const length = Number(declared)
+    if (Number.isSafeInteger(length) && length > QBD_MAX_BODY_BYTES) {
+      return fault('QuickBooks response exceeds the 256 MiB safety limit', 413)
     }
-    return fault('Malformed SOAP XML')
   }
-  let parsed: Record<string, unknown>
-  try {
-    parsed = parseXml(bounded.text)
-  } catch {
-    return fault('Malformed SOAP XML')
+  const head = await readHead(req, QBD_PREAUTH_MAX_BYTES)
+  if (!head.ok) return fault('Malformed SOAP XML')
+  if (head.complete) {
+    const parsed = parseEnvelope(head.text)
+    if (parsed instanceof Response) return parsed
+    return dispatch(id, parsed)
   }
+  // Oversized: identify the method and ticket from the bounded head and
+  // authenticate BEFORE buffering the rest. Anything but a live ticket's
+  // receiveResponseXML is refused with 413 here, having buffered only the
+  // head — never the full body, and never a full parse.
+  const call = identifyQbdSoapCall(head.text)
+  if (call?.method !== 'receiveResponseXML' || !call.ticket || !(await isWebConnectorTicketOpen(call.ticket))) {
+    await head.reader.cancel().catch(() => undefined)
+    return oversizedRefusal()
+  }
+  const rest = await readRemainder(head, QBD_MAX_BODY_BYTES)
+  if (!rest.ok) {
+    return fault('QuickBooks response exceeds the 256 MiB safety limit', 413)
+  }
+  const parsed = parseEnvelope(rest.text)
+  if (parsed instanceof Response) return parsed
+  return dispatch(id, parsed)
+}
+
+async function dispatch(id: string, parsed: Record<string, unknown>): Promise<Response> {
 
   // Presence-dispatched: handshake elements are childless or text-only, so
   // firstNode (object-valued nodes only) never matches them.

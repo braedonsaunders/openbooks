@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertQbdResponsePayload, buildCapturePlan, calendarMonths, continueRequestXml, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
+import { assertQbdResponsePayload, assertSoapEnvelopeComplexity, buildCapturePlan, calendarMonths, continueRequestXml, identifyQbdSoapCall, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, QBD_PREAUTH_MAX_BYTES, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
@@ -77,6 +77,30 @@ test("a success response without its payload is refused, never read as empty", (
   assert.doesNotThrow(
     () => assertQbdResponsePayload({ family: "customer", requestKind: "CustomerQuery", expectedRs: "CustomerQueryRs", responseXml: emptyList }),
   );
+});
+
+test("the pre-auth head identifies the SOAP method and ticket without parsing", () => {
+  assert.equal(QBD_PREAUTH_MAX_BYTES, 64 * 1024);
+  const head = `<soap:Envelope><soap:Body><receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>01a0ce9f-1d5b-7a7a-be6c-0585424d49f5</ticket><response>`;
+  assert.deepEqual(identifyQbdSoapCall(head), { method: "receiveResponseXML", ticket: "01a0ce9f-1d5b-7a7a-be6c-0585424d49f5" });
+  // A truncated prefix still identifies: only the opening element matters.
+  assert.deepEqual(identifyQbdSoapCall(`<soap:Body><authenticate `), { method: "authenticate", ticket: null });
+  assert.deepEqual(
+    identifyQbdSoapCall(`<sendRequestXML><ticket>abc</ticket></sendRequestXML>`),
+    { method: "sendRequestXML", ticket: "abc" },
+  );
+  assert.equal(identifyQbdSoapCall(`<soap:Body><unknownMethod/></soap:Body>`), null);
+  assert.equal(identifyQbdSoapCall(""), null);
+});
+
+test("the complexity guard refuses deep or bloated envelopes before parsing", () => {
+  assert.doesNotThrow(() => assertSoapEnvelopeComplexity(`<soap:Envelope><soap:Body><serverVersion/></soap:Body></soap:Envelope>`));
+  const deep = `<a>`.repeat(200) + `x` + `</a>`.repeat(200);
+  assert.throws(() => assertSoapEnvelopeComplexity(deep), /nests deeper than 128 elements/);
+  assert.throws(() => assertSoapEnvelopeComplexity(`<a/>`.repeat(11), { maxTags: 10, maxDepth: 128 }), /exceeds the 10-tag parser budget/);
+  assert.throws(() => assertSoapEnvelopeComplexity(`<!DOCTYPE x [<!ENTITY y "z">]><x/>`), /may not define a DTD or entity/);
+  // CDATA payload text is opaque: escaped bulk cannot inflate the count.
+  assert.doesNotThrow(() => assertSoapEnvelopeComplexity(`<response><![CDATA[${"<a>".repeat(5000)}]]></response>`));
 });
 
 test("requestID correlation stamps the request element, never the envelope", () => {
