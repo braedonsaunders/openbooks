@@ -139,7 +139,15 @@ for (const { file, symbol, why } of EXECUTION_PATHS) {
 
 test('lot recall cannot bypass the inventory feature gate through either entry point', () => {
   const legacy = read('../app/(app)/reports/lot-recall/page.tsx')
-  assert.match(legacy, /isFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
+  // The legacy entry gates through the shared page boundary, resolved
+  // before any definition lookup or redirect: a switched-off inventory
+  // gate fails closed instead of handing off to the native runner.
+  assert.match(legacy, /await requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)/)
+  assert.match(
+    legacy,
+    /requireFeatureEnabled\(authz\.user\.orgId, 'inventory'\)[\s\S]*builtInReportDefinitionId\(/,
+    'the feature gate resolves before the definition lookup',
+  )
   assert.match(legacy, /notFound\(\)/)
 
   const runner = read('../app/(app)/reports/custom/run/[id]/page.tsx')
