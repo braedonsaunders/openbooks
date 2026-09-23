@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "Decide cycle lines through the approval run",
     "hrm_certifications_read": "View certifications and dispatch readiness",
     "hrm_certifications_manage": "Manage certification types, requirements, and renewals",
+    "hrm_documents_read": "View HR documents",
+    "hrm_documents_manage": "Manage HR documents",
+    "hrm_surveys_manage": "Manage surveys",
     "time_clock": "Clock in from the field",
     "time_crew_enter": "Enter crew time batches",
     "time_kiosk_manage": "Manage kiosk devices and PINs"

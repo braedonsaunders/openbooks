@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "承認フローを通じて明細を決定",
     "hrm_certifications_read": "認定と配車可否の表示",
     "hrm_certifications_manage": "認定種類・要件・更新の管理",
+    "hrm_documents_read": "人事文書を表示",
+    "hrm_documents_manage": "人事文書を管理",
+    "hrm_surveys_manage": "アンケートを管理",
     "time_clock": "現場で打刻する",
     "time_crew_enter": "班バッチを入力する",
     "time_kiosk_manage": "キオスクとPINを管理する"
