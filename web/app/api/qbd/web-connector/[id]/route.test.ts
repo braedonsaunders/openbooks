@@ -76,3 +76,28 @@ test("the client version handshake is answered, not faulted", async () => {
   assert.equal(client.status, 200);
   assert.match(await client.text(), /<clientVersionResult><\/clientVersionResult>/);
 });
+
+test("an oversized unauthenticated authenticate is refused with 413 and a SOAP fault", async () => {
+  const big = soapEnvelope(`<authenticate xmlns="http://developer.intuit.com/"><strUserName>qbd:x</strUserName><strPassword>${"p".repeat(100 * 1024)}</strPassword></authenticate>`);
+  assert.ok(big.length > 64 * 1024);
+  const response = await post(big);
+  assert.equal(response.status, 413);
+  const text = await response.text();
+  assert.match(text, /soap:Fault/);
+  assert.match(text, /64 KiB unauthenticated limit/);
+});
+
+test("an oversized receiveResponseXML with a dead ticket is refused before buffering", async () => {
+  const big = soapEnvelope(`<receiveResponseXML xmlns="http://developer.intuit.com/"><ticket>00000000-0000-4000-8000-000000000000</ticket><response>${"x".repeat(100 * 1024)}</response><hresult></hresult><message></message></receiveResponseXML>`);
+  assert.ok(big.length > 64 * 1024);
+  const response = await post(big);
+  assert.equal(response.status, 413);
+  assert.match(await response.text(), /soap:Fault/);
+});
+
+test("a deeply nested envelope is refused before full parsing", async () => {
+  const deep = soapEnvelope(`<receiveResponseXML>${"<level>".repeat(200)}x${"</level>".repeat(200)}</receiveResponseXML>`);
+  const response = await post(deep);
+  assert.equal(response.status, 400);
+  assert.match(await response.text(), /nests deeper than 128 elements/);
+});

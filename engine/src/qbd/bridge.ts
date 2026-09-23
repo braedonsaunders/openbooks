@@ -584,6 +584,26 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
   }));
 }
 
+/**
+ * Pre-auth gate for oversized SOAP bodies: only a live ticket — an open
+ * session on a currently active connection — may stream a large
+ * receiveResponseXML past the pre-auth bound. The method and ticket come
+ * from a bounded envelope-head scan, so unbuffered bulk never reaches the
+ * parser on an unauthenticated call.
+ */
+export async function isWebConnectorTicketOpen(ticket: string): Promise<boolean> {
+  if (!ticket) return false;
+  try {
+    const current = await session(ticket);
+    return current !== null && current.status === "open" && current.connectionStatus === "active";
+  } catch {
+    // Fail closed: when the ticket cannot be verified, the large body is
+    // refused. The underlying failure surfaces on the normal authenticated
+    // paths; the gate itself never upgrades an error into access.
+    return false;
+  }
+}
+
 export async function webConnectorLastError(ticket: string): Promise<string> {
   const current = await session(ticket);
   if (!current) return "Invalid or expired Web Connector ticket";

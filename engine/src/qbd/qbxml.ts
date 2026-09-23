@@ -159,6 +159,80 @@ function isCalendarDate(year: number, month: number, day: number): boolean {
   return Number.isInteger(day) && day >= 1 && day <= days;
 }
 
+/**
+ * Pre-authentication bound for the Web Connector SOAP endpoint. Every method
+ * except a ticket-authenticated receiveResponseXML must fit inside this head:
+ * the method and ticket are identified from these bytes, and anything larger
+ * from an unauthenticated caller is refused with 413 before the rest is
+ * buffered. 64 KiB comfortably holds any handshake, authenticate, or
+ * sendRequestXML envelope (a few hundred bytes); only receiveResponseXML
+ * carries company-sized payloads.
+ */
+export const QBD_PREAUTH_MAX_BYTES = 64 * 1024;
+
+/** Outermost Web Connector SOAP methods dispatched by the endpoint. */
+const QBD_SOAP_METHODS = [
+  "serverVersion",
+  "clientVersion",
+  "authenticate",
+  "sendRequestXML",
+  "receiveResponseXML",
+  "getLastError",
+  "closeConnection",
+  "connectionError",
+] as const;
+
+/**
+ * Identify the SOAP method and ticket from a bounded envelope head — a cheap
+ * regex scan, never a full parse — so the endpoint can authenticate BEFORE
+ * buffering or parsing a large body. Returns null when no known method
+ * element opens in the head. The head may be a truncated prefix: matching
+ * needs only the opening element and the ticket element, which lead every
+ * real envelope.
+ */
+export function identifyQbdSoapCall(head: string): { method: string; ticket: string | null } | null {
+  const method = QBD_SOAP_METHODS.find((name) => new RegExp(`<${name}(?=[\\s>/])`).test(head));
+  if (!method) return null;
+  const ticket = head.match(/<ticket>([^<]{1,200})<\/ticket>/)?.[1] ?? null;
+  return { method, ticket };
+}
+
+/**
+ * Parser complexity guard, run on the buffered text BEFORE full parsing. Caps
+ * nesting depth and tag count so a deeply nested or tag-bloated envelope
+ * cannot exhaust the parser, and refuses DTD/entity declarations outright
+ * (the same refusal parseXml applies, but before the parse rather than
+ * inside it). CDATA sections are skipped as opaque so escaped payload text
+ * can never inflate the depth count.
+ */
+export function assertSoapEnvelopeComplexity(
+  text: string,
+  limits: { maxTags: number; maxDepth: number } = { maxTags: 10_000_000, maxDepth: 128 },
+): void {
+  if (/<!DOCTYPE|<!ENTITY/i.test(text)) throw new Error("QuickBooks SOAP envelope may not define a DTD or entity");
+  let depth = 0;
+  let tags = 0;
+  const token = /<!\[CDATA\[[\s\S]*?\]\]>|<!--[\s\S]*?-->|<\?[\s\S]*?\?>|<[^<>]*>/g;
+  let match: RegExpExecArray | null;
+  while ((match = token.exec(text)) !== null) {
+    const tag = match[0];
+    if (tag.startsWith("<![CDATA[") || tag.startsWith("<!--") || tag.startsWith("<?")) continue;
+    tags += 1;
+    if (tags > limits.maxTags) {
+      throw new Error(`QuickBooks SOAP envelope exceeds the ${limits.maxTags}-tag parser budget; the request was not parsed`);
+    }
+    if (tag.startsWith("</")) {
+      depth = Math.max(0, depth - 1);
+      continue;
+    }
+    if (tag.endsWith("/>")) continue;
+    depth += 1;
+    if (depth > limits.maxDepth) {
+      throw new Error(`QuickBooks SOAP envelope nests deeper than ${limits.maxDepth} elements; the request was not parsed`);
+    }
+  }
+}
+
 export function parseXml(xml: string): Record<string, unknown> {
   if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new Error("QuickBooks XML declarations may not define a DTD or entity");
   const parsed = parser.parse(xml) as unknown;
