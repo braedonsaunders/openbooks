@@ -583,6 +583,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // with no persisted payment anchor, so moving asOf rephased them (0288
     // backfills anchorDate onto manual_recurring categories missing it).
     "0288_cashflow_category_anchor_date.sql",
+    // Duplicate (item, stock location, lot) lines in one cycle count each
+    // posted the full variance, double-applying one physical observation.
+    // Storage now refuses a second line per subject (NULLS NOT DISTINCT so
+    // NULL-lot duplicates collide too); the engine preflights the same key.
+    "0293_stock_count_line_subject_unique.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
