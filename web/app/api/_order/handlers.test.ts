@@ -75,6 +75,7 @@ class OrderRouteHarness {
   deleteCalls = 0
   convertCalls = 0
   deleted = false
+  submitFlowError: string | null = null
   voidFailure: string | null = null
   convertFailure: { message: string; status?: number; code?: string; details?: unknown } | null = null
   stockLocationFailure: string | null = null
@@ -118,6 +119,7 @@ class OrderRouteHarness {
     this.deleteCalls = 0
     this.convertCalls = 0
     this.deleted = false
+    this.submitFlowError = null
     this.voidFailure = null
     this.convertFailure = null
     this.stockLocationFailure = null
@@ -270,8 +272,8 @@ class OrderRouteHarness {
   async submit(): Promise<{
     gated: false
     runId: null
-    flowError: null
-    autoApproved: true
+    flowError: string | null
+    autoApproved: boolean
   }> {
     this.submitCalls += 1
     await this.holdClaimedPause(this.submitPause)
@@ -279,6 +281,12 @@ class OrderRouteHarness {
       throw new Error(`document is ${this.document.status}, not draft`)
     }
     this.markTransactionDirty()
+    if (this.submitFlowError) {
+      // Models a refused approval routing: the before_submit script effects
+      // are already written when the router refuses.
+      this.flowEffects.push({ kind: 'before_submit', documentId: this.document.id })
+      return { gated: false, runId: null, flowError: this.submitFlowError, autoApproved: false }
+    }
     this.document.status = 'approved'
     return { gated: false, runId: null, flowError: null, autoApproved: true }
   }
@@ -1351,6 +1359,20 @@ test('two concurrent issue requests perform one lifecycle transition', async () 
   assert.deepEqual(await secondResponse.json(), { error: 'only a draft can be issued' })
   assert.equal(harness.submitCalls, 1)
   assert.equal(harness.document.status, 'approved')
+})
+
+test('a refused approval routing rolls back its script effects before returning 422', async () => {
+  harness.reset('draft')
+  harness.submitFlowError = 'no approval policy matches this order'
+  const response = await patch({ status: 'approved' })
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'approval could not be routed: no approval policy matches this order',
+  })
+  // The refusal must not commit the before_submit script effects the
+  // submission already wrote: the order stays a draft with no flow trail.
+  assert.equal(harness.document.status, 'draft')
+  assert.deepEqual(harness.flowEffects, [])
 })
 
 test('concurrent void requests reserve once before any before_void effect', async () => {
