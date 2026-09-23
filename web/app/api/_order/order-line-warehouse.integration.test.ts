@@ -55,7 +55,7 @@ async function approvedOrder(
   const org = await createScratchOrg();
   try {
     const userId = await createScratchUser(org.orgId, "Warehouse Clerk", "admin");
-    const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, kind));
+    const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, kind, randomUUID()));
     const lineId = randomUUID();
     await db.execute(sql`
       insert into document_lines
