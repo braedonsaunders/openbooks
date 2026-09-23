@@ -129,6 +129,7 @@ export async function POST(req: Request) {
           trialEndsOn: typeof body.trialEndsOn === "string" || body.trialEndsOn == null ? body.trialEndsOn || null : String(body.trialEndsOn),
           renewalPolicy: (body.renewalPolicy ?? "auto") as RenewalPolicy,
           renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : subscriptionPeriodCount(body.renewalTermMonths, "renewal term"),
+          billFromUnbilledBoundary: body.billFromUnbilledBoundary == null ? undefined : Boolean(body.billFromUnbilledBoundary),
         }, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       case "amend": {
