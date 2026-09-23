@@ -780,7 +780,11 @@
         "routingTitle": "Enrutamiento de importación — qué carpeta alimenta qué cuenta",
         "noRouting": "Aún sin enrutamiento — añade uno abajo.",
         "folderPlaceholder": "carpeta",
-        "addRoute": "Añadir enrutamiento"
+        "addRoute": "Añadir enrutamiento",
+        "bindingPlaceholder": "id. de cuenta esperado",
+        "bindingUnset": "sin cuenta vinculada",
+        "bindingEdit": "Fijar cuenta esperada",
+        "bindingSave": "Guardar"
       },
       "sftpEndpoint": {
         "title": "Endpoint SFTP de recepción",

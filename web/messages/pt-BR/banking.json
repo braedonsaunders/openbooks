@@ -780,7 +780,11 @@
         "routingTitle": "Roteamento de importação — qual pasta alimenta qual conta",
         "noRouting": "Sem roteamento ainda — adicione um abaixo.",
         "folderPlaceholder": "pasta",
-        "addRoute": "Adicionar roteamento"
+        "addRoute": "Adicionar roteamento",
+        "bindingPlaceholder": "id. de conta esperado",
+        "bindingUnset": "sem conta vinculada",
+        "bindingEdit": "Definir conta esperada",
+        "bindingSave": "Salvar"
       },
       "sftpEndpoint": {
         "title": "Endpoint SFTP de recebimento",

@@ -91,6 +91,7 @@ type SftpScheduleRow = {
   lastRunAt: Date | string | null
   accountNumber: string | null
   accountName: string | null
+  expectedExternalAccountId: string | null
 }
 
 export async function loadBankFeeds(): Promise<BankFeedsData> {
@@ -123,6 +124,7 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
     db.execute<SftpScheduleRow>(sql`
       select sc.id, sc.sftp_server_id as "sftpServerId", sc.account_id as "accountId", sc.format, sc.folder,
              sc.is_active as "isActive", sc.last_run_at as "lastRunAt",
+             sc.expected_external_account_id as "expectedExternalAccountId",
              a.number as "accountNumber", a.name as "accountName"
         from sftp_import_schedules sc
         join accounts a on a.id = sc.account_id and a.org_id = sc.org_id

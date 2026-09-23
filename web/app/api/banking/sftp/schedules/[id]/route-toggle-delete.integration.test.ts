@@ -470,3 +470,43 @@ test(
     }
   },
 );
+
+test(
+  "schedule PATCH binds, rebinds, and clears the expected account",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const scheduleId = await createSchedule(fixture);
+      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "br 001-77" });
+      assert.equal(bound.status, 200);
+      assert.deepEqual(bound.body, { ok: true });
+      const stored = await withBypass(async () =>
+        (await db.execute<{ expected_external_account_id: string | null }>(
+          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
+        )).rows[0]!.expected_external_account_id,
+      );
+      assert.equal(stored, "BR001-77");
+      // A non-string binding refuses before any write.
+      const bad = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: 42 });
+      assert.equal(bad.status, 400);
+      // An explicit null clears the binding (identified files then refuse
+      // until it is set again) — and still reports success, not a 500 from
+      // an empty SQL parameter.
+      const cleared = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: null });
+      assert.equal(cleared.status, 200);
+      const clearedStored = await withBypass(async () =>
+        (await db.execute<{ expected_external_account_id: string | null }>(
+          sql`select expected_external_account_id from sftp_import_schedules where id = ${scheduleId}`,
+        )).rows[0]!.expected_external_account_id,
+      );
+      assert.equal(clearedStored, null);
+      // A missing id refuses instead of reporting success.
+      const missing = await patchStatus(fixture, randomUUID(), { expectedExternalAccountId: "x" });
+      assert.equal(missing.status, 404);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);

@@ -385,6 +385,62 @@ test(
 );
 
 test(
+  "schedule POST stores the expected account binding canonically and GET returns it",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const serverId = await createServer(fixture);
+      await makeReconcilable(fixture, fixture.bankAccountId);
+      const outcome = await postStatus(fixture, {
+        sftpServerId: serverId,
+        accountId: fixture.bankAccountId,
+        format: "ofx",
+        expectedExternalAccountId: "br 001-77",
+      });
+      assert.equal(outcome.status, 200);
+      const createdId = (outcome.body as { id?: unknown }).id;
+      const listing = (await listSchedules(fixture)) as {
+        schedules: Array<{ id: string; expected_external_account_id: string | null }>;
+      };
+      const mine = listing.schedules.find((row) => row.id === createdId);
+      assert.equal(mine?.expected_external_account_id, "BR001-77");
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
+  "schedule POST without a binding saves null instead of failing the insert",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const serverId = await createServer(fixture);
+      await makeReconcilable(fixture, fixture.bankAccountId);
+      // The binding is optional: an absent value must become SQL null, not
+      // an empty parameter that breaks the insert.
+      const outcome = await postStatus(fixture, {
+        sftpServerId: serverId,
+        accountId: fixture.bankAccountId,
+        format: "ofx",
+      });
+      assert.equal(outcome.status, 200);
+      const createdId = (outcome.body as { id?: unknown }).id;
+      const listing = (await listSchedules(fixture)) as {
+        schedules: Array<{ id: string; expected_external_account_id: string | null }>;
+      };
+      assert.equal(listing.schedules.find((row) => row.id === createdId)?.expected_external_account_id, null);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
   "schedule POST still refuses malformed ids before any ownership check",
   { skip: !DB },
   async () => {
