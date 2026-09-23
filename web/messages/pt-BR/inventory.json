@@ -125,7 +125,25 @@
         "amount": "Valor",
         "status": "Status"
       },
-      "noneYet": "Ainda sem comprovantes de custos landed."
+      "noneYet": "Ainda sem comprovantes de custos landed.",
+      "reverse": {
+        "openButton": "Estornar comprovante de custos landed",
+        "title": "Estornar comprovante de custos landed",
+        "description": "O comprovante original, as alocações e o diário permanecem intactos. Um diário de estorno desfaz o razão, e alocações negativas desfazem as camadas.",
+        "voucher": "Comprovante",
+        "selectVoucher": "Selecione um comprovante lançado",
+        "nonePosted": "Sem comprovantes de custos landed lançados.",
+        "voucherRequired": "É necessário um comprovante lançado",
+        "reversalDate": "Data do estorno",
+        "reason": "Motivo",
+        "reasonPlaceholder": "Por que este comprovante deve ser desfeito (5–500 caracteres)",
+        "reasonLength": "O motivo do estorno deve ter entre 5 e 500 caracteres",
+        "reverse": "Estornar comprovante",
+        "reversed": "Comprovante de custos landed estornado",
+        "alreadyReversed": "Esse comprovante já foi estornado",
+        "reverseFailed": "Falha no estorno do comprovante",
+        "loadFailed": "Não foi possível carregar os comprovantes de custos landed"
+      }
     },
     "lots": {
       "lotNumber": "Número do lote",

@@ -125,7 +125,25 @@
         "amount": "Monto",
         "status": "Estado"
       },
-      "noneYet": "Aún no hay vales de flete y aranceles."
+      "noneYet": "Aún no hay vales de flete y aranceles.",
+      "reverse": {
+        "openButton": "Revertir vale de flete y aranceles",
+        "title": "Revertir vale de flete y aranceles",
+        "description": "El vale original, las distribuciones y el diario permanecen intactos. Un diario de reversión revierte el mayor, y las distribuciones negativas revierten las capas.",
+        "voucher": "Vale",
+        "selectVoucher": "Seleccionar un vale contabilizado",
+        "nonePosted": "No hay vales de flete y aranceles contabilizados.",
+        "voucherRequired": "Se requiere un vale contabilizado",
+        "reversalDate": "Fecha de reversión",
+        "reason": "Motivo",
+        "reasonPlaceholder": "Por qué debe revertirse este vale (5-500 caracteres)",
+        "reasonLength": "El motivo de la reversión debe tener entre 5 y 500 caracteres",
+        "reverse": "Revertir vale",
+        "reversed": "Vale de flete y aranceles revertido",
+        "alreadyReversed": "Ese vale ya fue revertido",
+        "reverseFailed": "La reversión del vale falló",
+        "loadFailed": "No se pudieron cargar los vales de flete y aranceles"
+      }
     },
     "lots": {
       "lotNumber": "Número de lote",
