@@ -13,6 +13,10 @@
  *   source-harness     golden harness (source code) on every seeded org: the
  *                      data is clean before the upgrade touches it
  *   snapshot-before    version-tolerant ledger fingerprint
+ *   preflight          candidate `bootstrap --check --json` over the populated
+ *                      install (preflight.json); datasets with expectFindings
+ *                      additionally prove refusal-without-change, remedies,
+ *                      and a clean re-check before the upgrade runs
  *   upgrade            candidate bootstrap over the populated install, timed
  *                      per migration
  *   ledger-complete    every candidate migration is recorded as applied
@@ -95,7 +99,9 @@ function run(phase, command, args, { cwd, env = {}, onLine } = {}) {
     child.on("close", (code, signal) => {
       if (pending) onLine?.(pending, performance.now());
       if (code === 0) resolvePromise(stdout);
-      else reject(new PhaseRefusal(phase, `${command} ${args.join(" ")} exited ${code ?? signal}`));
+      else {
+        reject(new PhaseRefusal(phase, `${command} ${args.join(" ")} exited ${code ?? signal}`, { stdout }));
+      }
     });
   });
 }
@@ -114,6 +120,23 @@ function lastJsonLine(phase, stdout) {
   const lines = stdout.trim().split("\n").filter((line) => line.trim().startsWith("{"));
   if (lines.length === 0) throw new PhaseRefusal(phase, "printed no JSON result");
   return JSON.parse(lines.at(-1));
+}
+
+/** Sorted multiset of "severity:code" over --check findings. */
+export function findingKeys(findings) {
+  return (findings ?? []).map((finding) => `${finding.severity}:${finding.code}`).sort();
+}
+
+/** Multiset difference between the reported and the expected finding keys. */
+export function diffFindingKeys(actual, expected) {
+  const remaining = [...actual];
+  const missing = [];
+  for (const key of expected) {
+    const at = remaining.indexOf(key);
+    if (at >= 0) remaining.splice(at, 1);
+    else missing.push(key);
+  }
+  return { missing, extra: remaining };
 }
 
 async function seedSim(step, sourceDir) {
@@ -218,6 +241,118 @@ function candidateMigrationFilenames() {
     .map((file) => `generated/${file}`);
 }
 
+function refuseFindings(result) {
+  return (result.findings ?? []).filter((finding) => finding.severity === "refuse");
+}
+
+function noticeFindings(result) {
+  return (result.findings ?? []).filter((finding) => finding.severity === "notice");
+}
+
+function refuseCodes(findings) {
+  return [...new Set(findings.map((finding) => finding.code))].sort();
+}
+
+async function appliedFilenames(dbUrl) {
+  return withClient(dbUrl, async (client) =>
+    (await client.query("select filename from public._applied_migrations order by filename")).rows.map((row) => row.filename));
+}
+
+/**
+ * The preflight phase runs before upgrade: the candidate's read-only
+ * `bootstrap --check --json` over the populated install, written to
+ * preflight.json. A dataset with no expectFindings must report no refuse
+ * finding (an unexpected refuse fails the cell by name; unexpected notices
+ * are listed in the summary). A dataset WITH expectFindings proves the
+ * operator path end to end:
+ *
+ *   1. --check reports exactly those codes (no more, no fewer);
+ *   2. plain bootstrap refuses and leaves _applied_migrations and the
+ *      ledger fingerprint untouched;
+ *   3. once the dataset's remedies (repo remedy files under
+ *      schema/migrations/preflight/remedies/, the same files operators
+ *      get) apply, --check reports no refuse finding;
+ *   4. then the normal phases run.
+ */
+async function runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }) {
+  const checkJson = async () => {
+    const stdout = await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts", "--check", "--json"], {
+      cwd: CANDIDATE,
+    });
+    return lastJsonLine("preflight", stdout);
+  };
+  const first = await checkJson();
+  writeFileSync(join(reportDir, "preflight.json"), `${JSON.stringify(first, null, 2)}\n`);
+  const summary = { expected: false, refuses: [], notices: [] };
+  const expected = dataset.expectFindings ?? null;
+  if (!expected) {
+    const refuses = refuseFindings(first);
+    if (refuses.length > 0) {
+      throw new PhaseRefusal(
+        "preflight",
+        `unexpected refuse finding(s): ${refuseCodes(refuses).join(", ")}; declare them in expectFindings with remedies or fix the data`,
+      );
+    }
+    summary.notices = noticeFindings(first);
+    return summary;
+  }
+  const { missing, extra } = diffFindingKeys(findingKeys(first.findings), findingKeys(expected));
+  if (missing.length > 0 || extra.length > 0) {
+    throw new PhaseRefusal(
+      "preflight",
+      `--check reported [${findingKeys(first.findings).join(", ")}] but the dataset expects [${findingKeys(expected).join(", ")}]`,
+    );
+  }
+  summary.expected = true;
+  summary.refuses = refuseFindings(first);
+
+  let refused = false;
+  try {
+    await run("preflight", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: CANDIDATE });
+  } catch (error) {
+    if (!(error instanceof PhaseRefusal)) throw error;
+    const stdout = error.details?.stdout ?? "";
+    if (!/migration preflight/i.test(stdout)) {
+      throw new PhaseRefusal("preflight", `bootstrap failed, but not on a migration preflight: ${error.message}`);
+    }
+    refused = true;
+  }
+  if (!refused) {
+    throw new PhaseRefusal("preflight", "expected bootstrap to refuse on the preflight findings, but it applied cleanly");
+  }
+
+  const appliedAfter = await appliedFilenames(dbUrl);
+  const ledgerDrift = appliedAfter.filter((file) => !sourceLedger.includes(file));
+  if (ledgerDrift.length > 0 || appliedAfter.length !== sourceLedger.length) {
+    throw new PhaseRefusal(
+      "preflight",
+      `the refused bootstrap changed _applied_migrations: ${ledgerDrift.join(", ") || "rows removed"}`,
+    );
+  }
+  const after = await withClient(dbUrl, snapshotLedger);
+  const differences = compareSnapshots(before, after);
+  if (differences.length > 0) {
+    throw new PhaseRefusal("preflight", `the refused bootstrap moved the ledger fingerprint: ${differences.length} difference(s)`);
+  }
+
+  for (const remedy of dataset.remedies ?? []) {
+    const sqlPath = join(CANDIDATE, remedy.sql);
+    if (!existsSync(sqlPath)) throw new PhaseRefusal("preflight", `remedy file ${remedy.sql} does not exist`);
+    const sqlText = readFileSync(sqlPath, "utf8");
+    await withClient(dbUrl, async (client) => {
+      await client.query(sqlText);
+    });
+  }
+  const second = await checkJson();
+  writeFileSync(join(reportDir, "preflight-after-remedies.json"), `${JSON.stringify(second, null, 2)}\n`);
+  const stillRefusing = refuseFindings(second);
+  if (stillRefusing.length > 0) {
+    throw new PhaseRefusal("preflight", `remedies did not clear the check: ${refuseCodes(stillRefusing).join(", ")}`);
+  }
+  summary.notices = [...noticeFindings(first), ...noticeFindings(second)];
+  return summary;
+}
+
 async function catalogSnapshot(phase, env) {
   return run(phase, "npx", ["tsx", "scripts/schema-catalog-snapshot.ts"], { cwd: CANDIDATE, env });
 }
@@ -248,6 +383,7 @@ async function main() {
     phases: [],
     seededOrgs: [],
     upgrade: null,
+    preflight: null,
     refusals: [],
     ok: false,
   };
@@ -281,6 +417,9 @@ async function main() {
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
     const sourceLedger = await withClient(dbUrl, async (client) =>
       (await client.query("select filename from public._applied_migrations order by filename")).rows.map((row) => row.filename));
+
+    report.preflight = await phase("preflight", () =>
+      runPreflightPhase(dataset, reportDir, { dbUrl, before, sourceLedger }));
 
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
     report.upgrade.pending = candidateMigrationFilenames().filter((file) => !sourceLedger.includes(file));
@@ -361,6 +500,10 @@ export function summarize(report) {
   }
   if (report.refusals.length > 0) {
     lines.push("", "Ledger differences (first 20):", "", "```json", JSON.stringify(report.refusals.slice(0, 20), null, 2), "```");
+  }
+  if (report.preflight?.notices?.length > 0) {
+    const codes = [...new Set(report.preflight.notices.map((notice) => notice.code))].sort();
+    lines.push("", `Preflight notices (upgrade continued): ${codes.join(", ")}`);
   }
   return `${lines.join("\n")}\n`;
 }

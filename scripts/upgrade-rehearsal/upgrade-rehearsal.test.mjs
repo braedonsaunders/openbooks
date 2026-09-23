@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
-import { coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { summarize } from "./rehearse.mjs";
+import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
+import { diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -136,6 +136,125 @@ test("the rehearsal never runs on ordinary commits (owner directive: release gat
     ["upgrade-rehearsal/**"],
     "the only push trigger is the release-candidate upgrade-rehearsal/** branch",
   );
+});
+
+test("finding keys compare as a multiset, so a duplicate refusal is not hidden", () => {
+  const actual = findingKeys([
+    { severity: "refuse", code: "0296.bad_a" },
+    { severity: "notice", code: "0297.note_b" },
+    { severity: "refuse", code: "0296.bad_a" },
+  ]);
+  assert.deepEqual(actual, ["notice:0297.note_b", "refuse:0296.bad_a", "refuse:0296.bad_a"]);
+  assert.deepEqual(diffFindingKeys(actual, ["refuse:0296.bad_a", "notice:0297.note_b", "refuse:0296.bad_a"]), {
+    missing: [],
+    extra: [],
+  });
+  assert.deepEqual(diffFindingKeys(["refuse:0296.bad_a"], ["refuse:0296.bad_a", "refuse:0296.missing"]), {
+    missing: ["refuse:0296.missing"],
+    extra: [],
+  });
+  assert.deepEqual(diffFindingKeys(["refuse:0296.bad_a", "refuse:0296.surprise"], ["refuse:0296.bad_a"]), {
+    missing: [],
+    extra: ["refuse:0296.surprise"],
+  });
+});
+
+function refusalDataset(overrides = {}) {
+  return {
+    id: "edge-refusals",
+    class: "edge",
+    steps: [{ kind: "seeder", name: "legacy-shapes" }],
+    expectFindings: [{ code: "0296.bad_a", severity: "refuse" }],
+    remedies: [
+      {
+        kind: "remedy",
+        code: "0296.bad_a",
+        sql: `${REMEDY_DIR_PREFIX}0296.bad_a.sql`,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function refusalConfig(datasets) {
+  return {
+    sources: [{ tag: "v0.1.0-alpha.23" }],
+    requiredDatasetClasses: ["edge"],
+    datasets,
+  };
+}
+
+test("a closed expectFindings/remedies loop validates", () => {
+  assert.deepEqual(validateConfig(refusalConfig([refusalDataset()])), []);
+});
+
+test("a remedy outside the remedies directory is refused (no private remedies)", () => {
+  for (const sql of [
+    "scripts/upgrade-rehearsal/remediations/edge-refusals.sql",
+    "schema/migrations/preflight/remedies/../0296.bad_a.sql",
+    "schema/migrations/preflight/remedies/notes.txt",
+    "schema/migrations/preflight/remedies/.sql",
+  ]) {
+    const dataset = refusalDataset({ remedies: [{ kind: "remedy", code: "0296.bad_a", sql }] });
+    assert.ok(
+      validateConfig(refusalConfig([dataset])).some((problem) => problem.includes("remedy sql must be a file under")),
+      sql,
+    );
+  }
+});
+
+test("a remedy whose code matches neither its file nor an expected refuse is refused", () => {
+  const wrongFile = refusalDataset({
+    remedies: [{ kind: "remedy", code: "0296.bad_a", sql: `${REMEDY_DIR_PREFIX}0296.other.sql` }],
+  });
+  assert.ok(
+    validateConfig(refusalConfig([wrongFile])).some((problem) => problem.includes("does not match its file")),
+  );
+  const unmatched = refusalDataset({
+    remedies: [{ kind: "remedy", code: "0296.unexpected", sql: `${REMEDY_DIR_PREFIX}0296.unexpected.sql` }],
+  });
+  assert.ok(
+    validateConfig(refusalConfig([unmatched])).some((problem) => problem.includes("matches no expected refuse")),
+  );
+});
+
+test("an expected refuse with no remedy, and remedies with no expectations, are refused", () => {
+  const noRemedy = refusalDataset({ remedies: [] });
+  assert.ok(
+    validateConfig(refusalConfig([noRemedy])).some((problem) => problem.includes("has no remedy")),
+  );
+  const noExpectations = refusalDataset({ expectFindings: [], remedies: refusalDataset().remedies });
+  assert.ok(
+    validateConfig(refusalConfig([noExpectations])).some((problem) => problem.includes("without expectFindings")),
+  );
+});
+
+test("malformed expectFindings and a remedy hiding in steps are refused", () => {
+  const badCode = refusalDataset({ expectFindings: [{ code: "oops", severity: "refuse" }], remedies: [] });
+  assert.ok(validateConfig(refusalConfig([badCode])).some((problem) => problem.includes("must look like")));
+  const badSeverity = refusalDataset({
+    expectFindings: [{ code: "0296.bad_a", severity: "warn" }],
+    remedies: [],
+  });
+  assert.ok(validateConfig(refusalConfig([badSeverity])).some((problem) => problem.includes("severity must be")));
+  const hidden = refusalDataset({ steps: [refusalDataset().remedies[0]], remedies: [] });
+  assert.ok(
+    validateConfig(refusalConfig([hidden])).some((problem) => problem.includes("belong in the remedies array")),
+  );
+});
+
+test("the summary lists unexpected preflight notices by code", () => {
+  const text = summarize({
+    source: "v0.1.0-alpha.23",
+    candidate: "abc",
+    dataset: "edge-legacy",
+    ok: true,
+    phases: [{ name: "preflight", ok: true, seconds: 1 }],
+    upgrade: null,
+    preflight: { expected: false, notices: [{ code: "0297.old_rule" }, { code: "0297.old_rule" }] },
+    refusals: [],
+  });
+  assert.match(text, /Preflight notices.*0297\.old_rule/);
 });
 
 test("publish refuses a release whose exact commit has no passing upgrade-verification job", () => {
