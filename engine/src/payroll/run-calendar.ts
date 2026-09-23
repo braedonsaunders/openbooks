@@ -24,8 +24,21 @@ export interface SemiMonthlyBoundaries {
 
 
 
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
+ * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
+ * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
+ * remap onto 1900-1999): this schedule module is database-free and must not
+ * load the db-backed platform stack.
+ */
+function utcCivilDate(year: number, monthIndex: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date;
+}
+
 const monthLengthOf = (d: Date): number =>
-  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+  utcCivilDate(d.getUTCFullYear(), d.getUTCMonth() + 1, 0).getUTCDate();
 
 /**
  * Why an anchor cannot name a semi-monthly schedule, or null if it can.
@@ -135,9 +148,9 @@ export function semiMonthlyBoundaries(anchorPeriodEnd: string): SemiMonthlyBound
 function semiMonthlyEndsIn(
   boundaries: SemiMonthlyBoundaries, year: number, month: number,
 ): [Date, Date] {
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const lastDay = utcCivilDate(year, month + 1, 0).getUTCDate();
   const second = boundaries.secondDay === "month_end" ? lastDay : boundaries.secondDay;
-  return [new Date(Date.UTC(year, month, boundaries.firstDay)), new Date(Date.UTC(year, month, second))];
+  return [utcCivilDate(year, month, boundaries.firstDay), utcCivilDate(year, month, second)];
 }
 
 /** Period boundaries for a schedule: [start, end] containing/after `from`. */
@@ -175,10 +188,10 @@ export function nextPeriodAfter(
     // across a month boundary, where it lives in the previous month.
     // Seeded from the month before the cursor's, both of whose boundaries are
     // necessarily on or before the cursor.
-    const seed = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1));
+    const seed = utcCivilDate(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1);
     let previous = semiMonthlyEndsIn(boundaries, seed.getUTCFullYear(), seed.getUTCMonth())[1];
     for (let m = 0; m < 26; m++) {
-      const base = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + m, 1));
+      const base = utcCivilDate(cursor.getUTCFullYear(), cursor.getUTCMonth() + m, 1);
       for (const end of semiMonthlyEndsIn(boundaries, base.getUTCFullYear(), base.getUTCMonth())) {
         if (end.getTime() > cursor.getTime()) {
           return { periodStart: iso(new Date(previous.getTime() + DAY)), periodEnd: iso(end) };
@@ -194,11 +207,11 @@ export function nextPeriodAfter(
   for (let m = 0; m < 14; m++) {
     const y = cursor.getUTCFullYear();
     const mo = cursor.getUTCMonth() + m;
-    const lastDay = new Date(Date.UTC(y, mo + 1, 0)).getUTCDate();
-    const end = new Date(Date.UTC(y, mo, Math.min(anchorDay, lastDay)));
+    const lastDay = utcCivilDate(y, mo + 1, 0).getUTCDate();
+    const end = utcCivilDate(y, mo, Math.min(anchorDay, lastDay));
     if (end.getTime() > cursor.getTime()) {
-      const prevLast = new Date(Date.UTC(y, mo, 0)).getUTCDate();
-      const start = new Date(Date.UTC(y, mo - 1, Math.min(anchorDay, prevLast) + 1));
+      const prevLast = utcCivilDate(y, mo, 0).getUTCDate();
+      const start = utcCivilDate(y, mo - 1, Math.min(anchorDay, prevLast) + 1);
       return { periodStart: iso(start), periodEnd: iso(end) };
     }
   }

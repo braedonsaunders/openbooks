@@ -76,6 +76,18 @@ test("Good Friday and Easter Monday ride the Easter offset", () => {
   assert.equal(resolveHolidayRule({ kind: "easter_offset", days: -2 }, 2027), "2027-03-26");
 });
 
+test("holiday rules keep literal years 0001-0099 (no 1900 remap)", () => {
+  // Date.UTC maps years 0-99 onto 1900-1999, so every rule date in year 0096
+  // used to render in 1996. Easter 0096 falls on April 1st; September 1st
+  // 0096 is a Saturday, so Labour Day is September 3rd.
+  assert.equal(easterSunday(96), "0096-04-01");
+  assert.equal(resolveHolidayRule({ kind: "fixed", month: 12, day: 25 }, 96), "0096-12-25");
+  assert.equal(
+    resolveHolidayRule({ kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, 96),
+    "0096-09-03",
+  );
+});
+
 test("the first Monday in September, across four years", () => {
   const labourDay = { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 } as const;
   assert.equal(resolveHolidayRule(labourDay, 2024), "2024-09-02");

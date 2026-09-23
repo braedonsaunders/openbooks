@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
 import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
 import {
   filingAccountRef,
@@ -1225,13 +1226,19 @@ function scheduleCalendar(around: string, jurisdiction: string): ReadonlySet<str
 /** The last day of the month `date` falls in. */
 function monthEnd(date: string): string {
   const [y, m] = date.split("-").map(Number);
-  return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
+  return civilDateFromParts(y!, m!, daysInCivilMonth(y!, m!));
 }
 
 /** The `day`th of the month `offsetMonths` after the one `date` falls in. */
 function dayOfMonth(date: string, offsetMonths: number, day: number): string {
   const [y, m] = date.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1 + offsetMonths, day)).toISOString().slice(0, 10);
+  // Month overflow normalizes exactly like the Date.UTC idiom this replaces
+  // (day 31 in a short month rolls into the next month); only the 0-99 →
+  // 1900-1999 remap is gone.
+  const total = (m! - 1) + offsetMonths;
+  const targetYear = y! + Math.floor(total / 12);
+  const targetMonth1 = (((total % 12) + 12) % 12) + 1;
+  return civilDateFromParts(targetYear, targetMonth1, day);
 }
 
 export interface RemittanceDue {
