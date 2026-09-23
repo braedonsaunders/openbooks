@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import {
+  adjustReconciliation,
   autoMatch,
   BankingError,
   createMatch,
@@ -668,6 +669,65 @@ test(
       const retry = await importStatement(statementInput, ctx);
       assert.equal(retry.statementId, null);
       assert.equal(retry.duplicates, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "sign-off refuses when the imported closing balance disagrees with the session balance",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      await postBankJournal(org, actor, ["100"], "closing-check");
+      // The bank's own figure for the cutoff is 90, but the session was
+      // typed as 100: the GL must not balance against a number the bank
+      // never reported.
+      await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          openingBalance: "0",
+          closingBalance: "90",
+          currency: "CAD",
+          lines: [
+            {
+              postedOn: org.date,
+              amount: "100",
+              description: "Closing-check deposit",
+              bankTransactionId: "closing-check-deposit",
+            },
+          ],
+        },
+        ctx,
+      );
+      const reconciliation = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" },
+        ctx,
+      );
+      assert.equal((await autoMatch(reconciliation.id, ctx)).matched, 1);
+      await assert.rejects(
+        markReconciled(reconciliation.id, ctx),
+        /closing balance 90.*session statement balance 100|session statement balance 100.*closing balance 90/,
+      );
+      // The named remedy — adjusting the session to the imported closing —
+      // clears this gate (the genuine 10 imbalance then surfaces as a
+      // difference, not a silent sign-off).
+      await adjustReconciliation(reconciliation.id, { statementBalance: "90" }, ctx);
+      await assert.rejects(markReconciled(reconciliation.id, ctx), /difference is -10\.0000/);
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from reconciliations where id = ${reconciliation.id} and org_id = ${org.orgId}
+      `)).rows[0]!.status;
+      assert.notEqual(status, "signed_off");
     } finally {
       await dropScratchOrg(org.orgId);
     }

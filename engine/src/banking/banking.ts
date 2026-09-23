@@ -2206,6 +2206,27 @@ export async function markReconciled(
       );
     }
 
+    // The session's statement balance is typed by hand; the imported bank
+    // statement's closing balance is the bank's own figure for the cutoff.
+    // When a statement on the cutoff date carries a closing balance, the two
+    // must agree — otherwise the operator balanced the GL against a number
+    // the bank never reported.
+    const cutoffStatements = (await tx.execute<{ closing_balance: string }>(sql`
+      select closing_balance::text as closing_balance
+        from bank_statements
+       where org_id = ${ctx.orgId}
+         and account_id = ${recon.account_id}
+         and statement_date = ${recon.through_date}::date
+         and closing_balance is not null
+    `));
+    for (const stmt of cutoffStatements.rows) {
+      if (toUnits(stmt.closing_balance) !== toUnits(recon.statement_balance)) {
+        throw new BankingError(
+          `Cannot sign off: the imported statement closing balance ${fromUnits(toUnits(stmt.closing_balance))} for ${recon.through_date} does not match the session statement balance ${fromUnits(toUnits(recon.statement_balance))} — adjust the session balance to the imported closing balance`,
+        );
+      }
+    }
+
     const unmatched = (await tx.execute<{ count: number }>(sql`
       select count(*)::int as count
         from bank_statement_lines
