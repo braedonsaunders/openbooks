@@ -296,8 +296,18 @@ export class QbdSource implements MigrationSource {
     return parseReportRows(response.responseXml).flatMap((row) => {
       if (row.rowType !== "DataRow") return [];
       const accountRef = byName.get(row.columns.Account ?? "");
-      if (!accountRef) return [];
       const balance = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+      if (!accountRef) {
+        // A nonzero source balance with no ListID mapping must REFUSE
+        // verification by name: silently dropping it makes the account
+        // invisible to the union check in verifyCurrentLedgerState (0
+        // mismatches) while the ledgers genuinely differ. A truly zero row
+        // is deliberately skipped — there is nothing to verify.
+        if (balance !== 0n) {
+          throw new Error(`QuickBooks trial balance reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before verification can pass`);
+        }
+        return [];
+      }
       return [{ accountRef, balance: fromUnits(balance) }];
     });
   }
@@ -312,12 +322,22 @@ export class QbdSource implements MigrationSource {
     for (const family of await this.ledgerFamilies()) {
       for (const row of await this.ledgerRows(family)) {
         const accountRef = byName.get(row.columns.Account ?? "");
-        if (!accountRef || !row.columns.TxnID) continue;
+        if (!row.columns.TxnID) continue;
         // Report dates are locale display strings (M/D/YYYY); month buckets
         // require ISO. Fail closed on an unparseable date rather than
         // bucketing source truth into a garbage month.
         const month = parseQbdReportDate(row.columns.Date).slice(0, 7);
         const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+        if (!accountRef) {
+          // Same fail-closed rule as trialBalance above: nonzero source
+          // activity with no ListID mapping refuses by name (account, month,
+          // amount) instead of vanishing from the true-up. A truly zero row
+          // is deliberately skipped — there is nothing to reconcile.
+          if (amount !== 0n) {
+            throw new Error(`QuickBooks ledger reports ${fromUnits(amount)} for unmapped account "${row.columns.Account ?? ""}" in ${month}; map the account before sync can proceed`);
+          }
+          continue;
+        }
         const key = `${accountRef}|${month}`;
         buckets.set(key, (buckets.get(key) ?? 0n) + amount);
       }
