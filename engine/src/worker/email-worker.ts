@@ -248,6 +248,11 @@ export function createEmailWorker(): Worker<EmailJobData> {
           const finalQueueAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
           await markReportDeliveryFailed(d.orgId, reportDeliveryId, canonical.id, `delivery pending reconciliation: ${decision.reason}`, finalQueueAttempt);
         }
+        // Terminal for this job's lifetime: the gate suppresses every later
+        // retry of this delivery key, so the staged bytes can never be
+        // fetched again — drop them now that the blocked evidence above is
+        // durable on the log lineage. The no-resend gate itself is untouched.
+        await dropStagedAttachments();
         throw new Error(`email delivery deferred by reconciliation: ${decision.reason}`);
       }
 
@@ -346,6 +351,13 @@ export function createEmailWorker(): Worker<EmailJobData> {
         const alreadyRecorded =
           e instanceof Error &&
           (message.startsWith("email delivery deferred by reconciliation") || /acceptance state unresolved/.test(message));
+        if (alreadyRecorded && job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+          // Terminal uncertain/suppressed delivery whose evidence is already
+          // on the log lineage: the no-resend gate stands, but the staged
+          // bytes will never be fetched again — drop them so exhaustion
+          // doesn't orphan blobs once the failed job ages out of Redis.
+          await dropStagedAttachments();
+        }
         if (!alreadyRecorded) {
           // Definite failure: record evidence, rethrow so BullMQ retries.
           await appendEmailAttemptEvent(d.orgId, canonical.id, {
