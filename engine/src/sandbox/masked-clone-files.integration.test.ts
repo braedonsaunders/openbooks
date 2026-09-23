@@ -28,6 +28,78 @@ async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<vo
   if (failures.length > 0) throw new AggregateError(failures, "test teardown failed");
 }
 
+// D2b: contacts and address locality are people, not configuration. A masked
+// clone fakes the contact identity, redacts the street/city/postal code, and
+// keeps the non-identifying shape (job title/role, region/country).
+test("masked clone masks contact identity and address locality", async () => {
+  const org = await createScratchOrg();
+  let sandboxId: string | null = null;
+  try {
+    const partyId = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name)
+      values (${partyId}, ${org.orgId}, 'customer', 'Acme Widgets Inc.')`);
+    const contactId = randomUUID();
+    await db.execute(sql`insert into contacts
+      (id, org_id, party_id, first_name, last_name, name, title, role, email, phone, mobile_phone, fax, custom)
+      values (${contactId}, ${org.orgId}, ${partyId}, 'Ada', 'Okafor', 'Ada Okafor', 'Controller', 'Billing',
+              'ada@example.com', '+14165550111', '+14165550112', '+14165550113', '{}')`);
+    const addressId = randomUUID();
+    await db.execute(sql`insert into addresses
+      (id, org_id, party_id, label, line1, line2, city, region, postal_code, country, custom)
+      values (${addressId}, ${org.orgId}, ${partyId}, 'Head office', '100 King St W', 'Suite 400',
+              'Toronto', 'ON', 'M5X 1A9', 'CA', '{}')`);
+
+    const created = await createSandbox({
+      productionOrgId: org.orgId,
+      name: `Masked PII ${randomUUID()}`,
+      tier: "full",
+      masked: true,
+    });
+    sandboxId = created.sandboxId;
+
+    const sbxContact = (await db.execute<{
+      first_name: string; last_name: string; name: string; title: string | null; role: string | null;
+      email: string; phone: string; mobile_phone: string; fax: string;
+    }>(sql`select first_name, last_name, name, title, role, email, phone, mobile_phone, fax
+             from contacts where org_id = ${created.sandboxOrgId}`)).rows;
+    assert.equal(sbxContact.length, 1);
+    const c = sbxContact[0]!;
+    for (const [field, value] of Object.entries({
+      first_name: c.first_name, last_name: c.last_name, name: c.name,
+    })) {
+      assert.match(value, /^Contact [0-9A-F]{6}$/, `${field} must be faked`);
+    }
+    assert.ok(c.email.endsWith("@sandbox.invalid"), "contact email must be faked");
+    for (const [field, value] of Object.entries({ phone: c.phone, mobile_phone: c.mobile_phone, fax: c.fax })) {
+      assert.match(value, /^\+1555/, `${field} must be faked`);
+    }
+    const prodLeak = /okafor|ada@example\.com|\+14165550111/i;
+    assert.ok(![c.first_name, c.last_name, c.name, c.email, c.phone].some((v) => prodLeak.test(v ?? "")));
+    // Job function is not identity: it stays so approval/role behavior is testable.
+    assert.equal(c.title, "Controller");
+    assert.equal(c.role, "Billing");
+
+    const sbxAddress = (await db.execute<{
+      line1: string; city: string; postal_code: string; region: string | null; country: string | null;
+    }>(sql`select line1, city, postal_code, region, country
+             from addresses where org_id = ${created.sandboxOrgId}`)).rows;
+    assert.equal(sbxAddress.length, 1);
+    const a = sbxAddress[0]!;
+    assert.equal(a.line1, "REDACTED");
+    assert.equal(a.city, "REDACTED");
+    assert.equal(a.postal_code, "REDACTED");
+    // Coarse jurisdiction stays: the sandbox's tax behavior needs it.
+    assert.equal(a.region, "ON");
+    assert.equal(a.country, "CA");
+  } finally {
+    const sid = sandboxId;
+    await runTeardowns(
+      ...(sid ? [() => deleteSandbox(sid)] : []),
+      () => dropScratchOrg(org.orgId),
+    );
+  }
+});
+
 // D2: a masked sandbox never receives production file bytes. The blob table
 // is not copied at all and version/file rows carry the MASKED_STORAGE_KIND
 // tombstone instead of 'db'/'s3'; every bytes-dispatch site must refuse the

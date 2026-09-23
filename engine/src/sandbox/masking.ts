@@ -121,11 +121,22 @@ export async function loadMaskingPolicies(
  * User rows remain present so the production login can act as its deterministic
  * sandbox counterpart, but their contact identity and password credential are
  * masked just like business PII. Sandbox access is established by the home
- * session, so an empty password hash does not make the environment unusable. */
-const DEFAULT_POLICIES: MaskingPolicy[] = [
+ * session, so an empty password hash does not make the environment unusable.
+ *
+ * Exported for the PII inventory test (pii-inventory.integration.test.ts),
+ * which derives every text/bytea/jsonb column of every cloned table and
+ * fails unless each is masked here or explicitly allow-listed as
+ * non-personal. Add a policy there before allow-listing anyone's identity. */
+export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
   { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },
   { tableName: "party_bank_accounts", columnName: "routing", transform: "null_out" },
+  // D2b: corporate card labels read "Visa …4821 — K. Laroche": the holder
+  // name rides in display text even though holder_party_id points at a
+  // masked party. Fake the label, null the last four like every other one.
+  // The network brand ("Visa") stays: it identifies nobody.
+  { tableName: "payment_cards", columnName: "label", transform: "faker_name" },
+  { tableName: "payment_cards", columnName: "last_four", transform: "null_out" },
   { tableName: "parties", columnName: "email", transform: "faker_email" },
   { tableName: "parties", columnName: "display_name", transform: "faker_name" },
   { tableName: "parties", columnName: "legal_name", transform: "faker_name" },
@@ -138,6 +149,15 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_candidates", columnName: "display_name", transform: "faker_name" },
   { tableName: "hrm_candidates", columnName: "email", transform: "faker_email" },
   { tableName: "hrm_candidates", columnName: "phone", transform: "faker_phone" },
+  // D2b: interviewer notes assess a named person in free text — redact the
+  // prose like review answers, not just the identity columns above.
+  { tableName: "hrm_candidates", columnName: "notes", transform: "redact" },
+  // D2b: goal-update notes are person-tied prose; the progress percent (a
+  // number, out of the text inventory) stays testable.
+  { tableName: "hrm_goal_updates", columnName: "note", transform: "redact" },
+  // D2b: feedback context is schemaless JSON that can carry anything the
+  // requester attached — empty it (NOT NULL jsonb nulls to '{}').
+  { tableName: "hrm_feedback", columnName: "context", transform: "null_out" },
   // HR-8: covered-dependent names are PII like party display names.
   { tableName: "hrm_benefit_dependents", columnName: "display_name", transform: "faker_name" },
   // HR-9 self-service (0198): the emergency contact is candidate PII —
@@ -160,6 +180,41 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "subsidiaries", columnName: "tax_ids", transform: "null_out" },
   { tableName: "addresses", columnName: "line1", transform: "redact" },
   { tableName: "addresses", columnName: "line2", transform: "redact" },
+  // D2b: a street without a city and postal code still locates the person —
+  // redact the locality with the street lines. Region/country stay: they are
+  // coarse jurisdiction the sandbox's tax behavior needs, not identity.
+  { tableName: "addresses", columnName: "city", transform: "redact" },
+  { tableName: "addresses", columnName: "postal_code", transform: "redact" },
+  // D2b: contacts are people at a customer/vendor company, faked exactly
+  // like party and user identity. Title/role stay: a job function ("Billing")
+  // paired with a faked name identifies nobody.
+  { tableName: "contacts", columnName: "first_name", transform: "faker_name" },
+  { tableName: "contacts", columnName: "last_name", transform: "faker_name" },
+  { tableName: "contacts", columnName: "name", transform: "faker_name" },
+  { tableName: "contacts", columnName: "email", transform: "faker_email" },
+  { tableName: "contacts", columnName: "phone", transform: "faker_phone" },
+  { tableName: "contacts", columnName: "mobile_phone", transform: "faker_phone" },
+  { tableName: "contacts", columnName: "fax", transform: "faker_phone" },
+  // D2b: every other column that carries a real person's address. Faked
+  // where the sandbox needs a plausible address (participant and
+  // notification emails), emptied where delivery must simply not resolve.
+  { tableName: "crm_activity_participants", columnName: "email", transform: "faker_email" },
+  { tableName: "dunning_log", columnName: "to_email", transform: "faker_email" },
+  { tableName: "vendor_roles", columnName: "eft_notification_email", transform: "faker_email" },
+  { tableName: "report_runs", columnName: "recipient_emails", transform: "null_out" },
+  { tableName: "report_schedules", columnName: "recipient_emails", transform: "null_out" },
+  { tableName: "close_reporting_packages", columnName: "recipients", transform: "null_out" },
+  { tableName: "payment_remittances", columnName: "recipients", transform: "null_out" },
+  // D2b: NOT NULL text with length CHECKs — redact keeps a passing value
+  // where null_out's '' would refuse the clone INSERT.
+  { tableName: "report_delivery_outbox", columnName: "recipient", transform: "redact" },
+  { tableName: "field_ticket_signature_requests", columnName: "recipient", transform: "redact" },
+  // D2b: a pay-link bearer token must never survive the clone, even though
+  // bootstrap nulls the live column — null_out is a no-op on the rows that
+  // are already clean and closes the rows that are not.
+  { tableName: "payment_links", columnName: "token", transform: "null_out" },
+  // D2b: talent-pool notes assess named succession candidates in free text.
+  { tableName: "hrm_talent_pool_members", columnName: "note", transform: "redact" },
   { tableName: "users", columnName: "email", transform: "faker_email" },
   { tableName: "users", columnName: "name", transform: "faker_name" },
   { tableName: "users", columnName: "password_hash", transform: "reseal_secret" },
@@ -178,6 +233,18 @@ const DEFAULT_POLICIES: MaskingPolicy[] = [
   // same redact as review answers above.
   { tableName: "hrm_one_on_one_items", columnName: "body", transform: "redact" },
   { tableName: "hrm_feedback", columnName: "body", transform: "redact" },
+  // D2b: assistant chat history is interactive user input, not a business
+  // record — operators paste arbitrary data into it. Redact the text and
+  // empty the structured payload (NOT NULL metadata nulls to '{}').
+  { tableName: "ai_messages", columnName: "content", transform: "redact" },
+  { tableName: "ai_messages", columnName: "data", transform: "null_out" },
+  { tableName: "ai_conversations", columnName: "title", transform: "redact" },
+  { tableName: "ai_conversations", columnName: "metadata", transform: "null_out" },
+  // D2b: reviewer comments and notes on agent findings are human-authored
+  // assessments that name people — redact like review answers. The finding
+  // type, severity, status and fingerprint stay: triage shape, not prose.
+  { tableName: "ai_work_item_feedback", columnName: "comment", transform: "redact" },
+  { tableName: "ai_work_item_notes", columnName: "body", transform: "redact" },
   { tableName: "hrm_calibration_entries", columnName: "justification", transform: "redact" },
   { tableName: "hrm_talent_reviews", columnName: "notes", transform: "redact" },
   { tableName: "hrm_succession_candidates", columnName: "notes", transform: "redact" },
