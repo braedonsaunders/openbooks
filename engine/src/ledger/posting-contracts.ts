@@ -1,4 +1,5 @@
 import type { schema } from "../platform/db.ts";
+import type { CustomGlLineRunEvidence } from "../scripting/scripting.ts";
 /** Posting input contracts and the shared refusal identity; no runtime database dependency. */
 
 export type PostingDocument = typeof schema.documents.$inferSelect;
@@ -113,7 +114,23 @@ export interface TaxPostingComponent {
 
 export type ExpenseSettlement = "out_of_pocket" | "company_paid" | "personal";
 
-export class PostingError extends Error {}
+export class PostingError extends Error {
+  /**
+   * custom_gl_lines script_runs evidence for scripts that completed before
+   * this refusal, in run order. Set only when the refusal originates in the
+   * custom_gl_lines runner: the rows were inserted in the posting
+   * transaction and roll back with it, so the posting coordinator
+   * re-records them out-of-band when it owns the transaction. Absent
+   * everywhere else — notably for before_post, whose mutation and evidence
+   * stay atomic with the post by design (journal-posting-atomic).
+   */
+  readonly customGlLineRuns?: CustomGlLineRunEvidence[];
+
+  constructor(message?: string, options?: { customGlLineRuns?: CustomGlLineRunEvidence[] }) {
+    super(message);
+    this.customGlLineRuns = options?.customGlLineRuns;
+  }
+}
 
 /** Automation and audit controls applied across the posting phases. */
 export type PostDocumentOptions = {

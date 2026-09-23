@@ -751,3 +751,74 @@ test("an attributed custom_gl_lines run cannot stamp a subsidiary outside the ac
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("a refused attempt keeps its error evidence and a fixed retry posts once with no duplicate rows", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Poster", "poster"));
+    await withOrgContext(org.orgId, async () => {
+      await enableAllocScripting(org.orgId);
+      await db.execute(sql`
+        update app_roles set permissions = '["gl.post"]'::jsonb
+         where org_id = ${org.orgId} and key = 'poster'`);
+      await seedCustomGlScript(
+        org.orgId,
+        `function main(ctx) { ob.log("about to fail"); throw new Error("retry-probe-boom"); }`,
+        { name: "flaky" },
+      );
+    });
+    const documentId = await withOrgContext(org.orgId, () =>
+      seedBalancedDraftJournal(org, "JE-CGL-RETRY", actorId),
+    );
+    await withOrgContext(org.orgId, () =>
+      submitAndReleaseIfUngated("journal", documentId, actorId),
+    );
+    // No outer transaction: the refusal rolls the posting unit back, and the
+    // coordinator must re-record the failed run out-of-band.
+    await assert.rejects(
+      withOrgContext(org.orgId, () =>
+        postDocument(documentId, postingControlDeps(org), {
+          deferEffects: true,
+          audit: { actorId, source: "test" },
+        }),
+      ),
+      /retry-probe-boom/,
+    );
+    const failed = await withOrgContext(org.orgId, () =>
+      db.execute<{ status: string; error_message: string | null; logs: unknown; entries: number }>(sql`
+        select (select status from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as status,
+               (select error_message from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as error_message,
+               (select logs from script_runs where org_id = ${org.orgId} and target_id = ${documentId}) as logs,
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`),
+    );
+    assert.equal(failed.rows[0]!.entries, 0, "the refused post wrote no journal");
+    assert.equal(failed.rows[0]!.status, "error");
+    assert.match(failed.rows[0]!.error_message ?? "", /retry-probe-boom/);
+    assert.match(JSON.stringify(failed.rows[0]!.logs), /about to fail/);
+
+    // Fix the script and retry the same approved document: the post commits
+    // with exactly one new ok row — the re-recorded error row is not
+    // duplicated and the success path writes nothing extra.
+    await withOrgContext(org.orgId, () =>
+      db.execute(sql`
+        update user_scripts set source = 'function main(ctx) { return { lines: [] }; }'
+         where org_id = ${org.orgId} and trigger_point = 'custom_gl_lines'`),
+    );
+    await withOrgContext(org.orgId, () =>
+      postDocument(documentId, postingControlDeps(org), {
+        deferEffects: true,
+        audit: { actorId, source: "test" },
+      }),
+    );
+    const retried = await withOrgContext(org.orgId, () =>
+      db.execute<{ statuses: string[]; entries: number }>(sql`
+        select (select array_agg(status order by at) from script_runs
+                 where org_id = ${org.orgId} and target_id = ${documentId}) as statuses,
+               (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries`),
+    );
+    assert.deepEqual(retried.rows[0]!.statuses, ["error", "ok"]);
+    assert.equal(retried.rows[0]!.entries, 1);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
