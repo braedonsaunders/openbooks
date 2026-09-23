@@ -1,5 +1,5 @@
 import { PaymentError } from "./payment-errors.ts";
-import { parseIsoDate } from "../platform/business-date.ts";
+import { parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { type EftSettings } from "./rail-settings.ts";
 
 export interface Cpa005Payment {
@@ -69,9 +69,11 @@ function julian(iso: string, what: string): string {
 
 /** 0YYDDD from already-zoned calendar parts — no clock reads, no zone. */
 function julianFromParts(year: number, month: number, dayOfMonth: number): string {
-  const start = Date.UTC(year, 0, 1);
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999.
+  const start = utcDateFromParts(year, 0, 1).getTime();
   const day =
-    Math.floor((Date.UTC(year, month - 1, dayOfMonth) - start) / 86_400_000) + 1;
+    Math.floor((utcDateFromParts(year, month - 1, dayOfMonth).getTime() - start) / 86_400_000) + 1;
   return `0${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
 }
 

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { daysInCivilMonth } from "../platform/business-date.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
 import { add, normalizeDecimal } from "../money/money.ts";
 import {
@@ -95,7 +96,9 @@ function monthWindow(date: string): ResolvedWindow {
   const year = Number(date.slice(0, 4));
   const month = Number(date.slice(5, 7));
   const from = `${date.slice(0, 7)}-01`;
-  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999.
+  const lastDay = daysInCivilMonth(year, month);
   return { from, to: `${date.slice(0, 7)}-${String(lastDay).padStart(2, "0")}` };
 }
 

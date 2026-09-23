@@ -230,7 +230,11 @@ function validIsoDate(value: string): boolean {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
+  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
+  // copied here so this leaf module loads no platform stack).
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 

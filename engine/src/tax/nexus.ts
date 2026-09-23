@@ -42,7 +42,12 @@ function iso(year: number, month1: number, day: number): string {
 
 /** Last calendar day of a 1-based month, honoring leap years. */
 function lastDayOfMonth(year: number, month1: number): number {
-  return new Date(Date.UTC(year, month1, 0)).getUTCDate();
+  // Local copy of the platform/business-date.ts utcDateFromParts idiom
+  // (`new Date(0)` + setUTCFullYear, which keeps literal years 0001-0099 that
+  // Date.UTC would remap onto 1900-1999): this module is import-free and stays so.
+  const end = new Date(0);
+  end.setUTCFullYear(year, month1, 0);
+  return end.getUTCDate();
 }
 
 /**
