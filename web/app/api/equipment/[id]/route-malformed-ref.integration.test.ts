@@ -66,7 +66,7 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
 test('PATCH rejects a malformed subsidiaryId instead of throwing', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { subsidiaryId: 'not-a-uuid' })
+    const result = await patch(unitId, { subsidiaryId: 'not-a-uuid', revision: 0 })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
   } finally {
     await dropScratchOrg(org.orgId)
@@ -76,7 +76,7 @@ test('PATCH rejects a malformed subsidiaryId instead of throwing', { skip: !DB }
 test('PATCH rejects a malformed chargeItemId instead of throwing', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { chargeItemId: 'not-a-uuid' })
+    const result = await patch(unitId, { chargeItemId: 'not-a-uuid', revision: 0 })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
   } finally {
     await dropScratchOrg(org.orgId)
@@ -86,7 +86,7 @@ test('PATCH rejects a malformed chargeItemId instead of throwing', { skip: !DB }
 test('PATCH still renames a unit with valid references', { skip: !DB }, async () => {
   const { org, unitId } = await fixture()
   try {
-    const result = await patch(unitId, { name: 'Renamed Unit' })
+    const result = await patch(unitId, { name: 'Renamed Unit', revision: 0 })
     assert.equal(result.status, 200, JSON.stringify(result.json))
   } finally {
     await dropScratchOrg(org.orgId)
