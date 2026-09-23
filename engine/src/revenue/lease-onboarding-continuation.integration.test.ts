@@ -263,23 +263,125 @@ test("opening balances fail closed on bad cutover input", { skip: !DB }, async (
   }
 });
 
-test("an as-of past the term end refuses commencement", { skip: !DB }, async () => {
+test("an as-of past the term end is refused at creation and at commencement", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const accounts = await seedLeaseAccounts(org);
-    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+    // Fail fast: an as-of no periods remain from can never commence, so
+    // creation refuses it instead of persisting an uncommenceable lease.
+    await assert.rejects(
+      createLeaseAgreement(org.orgId, null, {
+        subsidiaryId: org.subsidiaryId,
+        leaseNumber: "L-BAD-4",
+        commencementOn: "2021-01-01",
+        termPeriods: 72,
+        paymentFrequency: "monthly",
+        paymentAmount: "2000",
+        annualDiscountRatePercent: "6",
+        classificationInputs: { transfersOwnership: true },
+        openingBalances: { liability: "1000", rouCarrying: "1000", asOf: "2027-06-30" },
+        accounts,
+      }),
+      /past the end of the lease term/,
+    );
+    // A legacy row persisted before the creation gate still fails closed at
+    // commencement with no rows written.
+    const legacyId = randomUUID();
+    await db.execute(sql`
+      insert into lease_agreements
+        (id, org_id, subsidiary_id, lease_number, status, commencement_on, term_periods,
+         payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
+         classification, classification_inputs,
+         opening_liability, opening_rou_carrying, opening_balances_as_of,
+         rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
+         amortization_expense_account_id, lease_expense_account_id, payment_account_id,
+         custom, created_by, updated_by)
+      values (${legacyId}, ${org.orgId}, ${org.subsidiaryId}, 'L-BAD-4-LEGACY', 'draft', '2021-01-01', 72,
+              'monthly', 'arrears', '2000', '6',
+              'finance', '{}'::jsonb,
+              '1000', '1000', '2027-06-30',
+              ${accounts.rouAsset}, ${accounts.leaseLiability}, ${accounts.interestExpense},
+              ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
+              '{}'::jsonb, null, null)`);
+    await assert.rejects(commenceLease(org.orgId, legacyId, null), /term|remain/i);
+    const lines = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`)).rows[0]!.n;
+    assert.equal(lines, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a mid-period arrears cutover is refused with a period-end remedy", async () => {
+  // Balances measured through 2026-07-15 sit mid-period (July runs 07-01 to
+  // 07-31): scheduling from the carried figures would book July's full
+  // interest and amortization on top of the outgoing system's first-half
+  // recognition. The cutover must be a period end such as 2026-06-30.
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const base = {
       subsidiaryId: org.subsidiaryId,
-      leaseNumber: "L-BAD-4",
-      commencementOn: "2021-01-01",
-      termPeriods: 72,
-      paymentFrequency: "monthly",
-      paymentAmount: "2000",
+      commencementOn: "2026-07-01",
+      termPeriods: 12,
+      paymentFrequency: "monthly" as const,
+      paymentAmount: "1000",
       annualDiscountRatePercent: "6",
       classificationInputs: { transfersOwnership: true },
-      openingBalances: { liability: "1000", rouCarrying: "1000", asOf: "2027-06-30" },
       accounts,
+    };
+    await assert.rejects(
+      createLeaseAgreement(org.orgId, null, {
+        ...base,
+        leaseNumber: "L-MID-1",
+        openingBalances: { liability: "10000", rouCarrying: "10000", asOf: "2026-07-15" },
+      }),
+      /period end/,
+    );
+    // The boundary itself stays committable: carry the PV of the 11
+    // remaining payments through the 2026-06-30 period end.
+    const boundaryLiability = presentValueOfLevelStream({
+      payment: "1000",
+      periods: 11,
+      rate: periodRateFromAnnualPercent("6", 12),
+      timing: "arrears",
     });
-    await assert.rejects(commenceLease(org.orgId, leaseId, null), /term|remain/i);
+    const { leaseId } = await createLeaseAgreement(org.orgId, null, {
+      ...base,
+      leaseNumber: "L-MID-2",
+      commencementOn: "2026-06-01",
+      openingBalances: { liability: boundaryLiability, rouCarrying: boundaryLiability, asOf: "2026-06-30" },
+    });
+    const commenced = await commenceLease(org.orgId, leaseId, null);
+    assert.equal(commenced.liability, boundaryLiability);
+    const kept = (await db.execute<{ n: number; first: number }>(sql`
+      select count(*)::int as n, min(sequence)::int as first from lease_agreement_schedule_lines
+       where org_id = ${org.orgId} and lease_id = ${leaseId}`)).rows[0]!;
+    assert.equal(kept.n, 11, "only the post-cutover periods schedule");
+    assert.equal(kept.first, 2);
+    // A legacy row persisted before the creation gate fails closed at
+    // commencement with no rows written.
+    const legacyId = randomUUID();
+    await db.execute(sql`
+      insert into lease_agreements
+        (id, org_id, subsidiary_id, lease_number, status, commencement_on, term_periods,
+         payment_frequency, payment_timing, payment_amount, annual_discount_rate_percent,
+         classification, classification_inputs,
+         opening_liability, opening_rou_carrying, opening_balances_as_of,
+         rou_asset_account_id, lease_liability_account_id, interest_expense_account_id,
+         amortization_expense_account_id, lease_expense_account_id, payment_account_id,
+         custom, created_by, updated_by)
+      values (${legacyId}, ${org.orgId}, ${org.subsidiaryId}, 'L-MID-LEGACY', 'draft', '2026-07-01', 12,
+              'monthly', 'arrears', '1000', '6',
+              'finance', '{}'::jsonb,
+              '10000', '10000', '2026-07-15',
+              ${accounts.rouAsset}, ${accounts.leaseLiability}, ${accounts.interestExpense},
+              ${accounts.amortizationExpense}, ${accounts.leaseExpense}, ${accounts.payment},
+              '{}'::jsonb, null, null)`);
+    await assert.rejects(commenceLease(org.orgId, legacyId, null), /period end/);
+    const rows = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from lease_agreement_schedule_lines where org_id = ${org.orgId} and lease_id = ${legacyId}`)).rows[0]!.n;
+    assert.equal(rows, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
