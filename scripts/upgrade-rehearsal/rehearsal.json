@@ -53,6 +53,14 @@
       ]
     },
     {
+      "id": "multi-entity",
+      "class": "multi-entity",
+      "description": "USD parent with EUR and CAD subsidiaries plus an elimination subsidiary: FX rates, foreign-currency trade with realized FX, month-end revaluation, intercompany journals, a consolidation run, and closed periods. Seeded by the source release's own posting kernel (no raw ledger inserts).",
+      "steps": [
+        { "kind": "seeder", "name": "multi-entity", "args": ["--seed", "upgrade-multi-1"] }
+      ]
+    },
+    {
       "id": "samples",
       "class": "samples",
       "description": "Every sample-company template the source release can prepare.",
