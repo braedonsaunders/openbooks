@@ -1078,7 +1078,8 @@ test.describe("procure-to-pay workflows", () => {
         // A fresh page starts at about:blank, where a relative fetch URL
         // cannot resolve — land on the app first (the admin page this test
         // seeds through is already there, which is why only this call failed).
-        await approverPg.goto("/");
+        await approverPg.goto("/dashboard");
+        await approverPg.waitForLoadState("load");
         await dismissSetupWizard(approverPg);
         // The refused self-verification above writes nothing, so the
         // certificate is still at its initial revision for the approver.
