@@ -93,30 +93,62 @@ async function mintResetToken(
 type ResetRecipient = { id: string; org_id: string; name: string | null; email: string };
 
 /**
- * Deliver a minted token through the org's email transport. Returns true
- * when the message was handed to a transport (the email_log row records the
- * eventual provider outcome); false when there is no transport to hand to.
+ * Whether a minted token is still the credential to send: unused,
+ * unexpired, and not superseded by a newer issuance for the same user.
+ * Newness compares (created_at, id) so two mints in one instant still
+ * order deterministically (ids are time-ordered v7).
  */
-async function deliverResetEmail(
+async function isResetTokenCurrent(userId: string, raw: string): Promise<boolean> {
+  const row = (await db.execute<{ id: string }>(sql`
+    select cur.id from auth_password_resets cur
+     where cur.user_id = ${userId}
+       and cur.token_hash = ${tokenHash(raw)}
+       and cur.used_at is null
+       and cur.expires_at > clock_timestamp()
+       and not exists (
+         select 1 from auth_password_resets newer
+          where newer.user_id = cur.user_id
+            and (newer.created_at, newer.id) > (cur.created_at, cur.id)
+       )
+  `)).rows[0];
+  return !!row;
+}
+
+/**
+ * Deliver a minted token through the org's email transport. Returns true
+ * when the message reached a transport (the email_log row records the
+ * eventual provider outcome); false when the token was superseded, consumed,
+ * or expired before delivery and nothing was sent.
+ *
+ * One transaction holds a per-user advisory delivery lock across the
+ * currency check and the provider send, so concurrent requests resolve in
+ * mint order: without this, a first request stalled in provider delivery can
+ * land after a newer link, and the most recent email holds a dead link while
+ * the request status says sent. An advisory lock (not a row lock) keeps slow
+ * provider I/O from blocking password login or reset completion, which take
+ * row locks elsewhere. Minting already committed before this runs, so the
+ * credential itself is never held across provider I/O.
+ */
+export async function deliverResetEmail(
   user: ResetRecipient,
   transport: EmailTransport,
   raw: string,
 ): Promise<boolean> {
-  const message = passwordResetEmail({
-    recipientName: user.name,
-    resetUrl: setPasswordUrl(raw),
-    expiresMinutes: RESET_TOKEN_TTL_MIN,
-  });
-  const logId = await withBypass(async () => insertEmailLog({
-    orgId: user.org_id,
-    recipients: [user.email],
-    subject: message.subject,
-    status: "queued",
-    categoryKey: "password_reset",
-  }));
-  // Commit the credential and release the user lock before provider I/O. A
-  // slow mail server must not hold password login or reset completion hostage.
-  await withBypass(async () => {
+  return withBypass(async () => {
+    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`);
+    if (!(await isResetTokenCurrent(user.id, raw))) return false;
+    const message = passwordResetEmail({
+      recipientName: user.name,
+      resetUrl: setPasswordUrl(raw),
+      expiresMinutes: RESET_TOKEN_TTL_MIN,
+    });
+    const logId = await insertEmailLog({
+      orgId: user.org_id,
+      recipients: [user.email],
+      subject: message.subject,
+      status: "queued",
+      categoryKey: "password_reset",
+    });
     try {
       const outcome = await sendVia(transport, {
         to: user.email,
@@ -136,8 +168,8 @@ async function deliverResetEmail(
     } catch (error) {
       await markEmailFailed(user.org_id, logId, error instanceof Error ? error.message : String(error));
     }
+    return true;
   });
-  return true;
 }
 
 export async function requestPasswordReset(
@@ -221,15 +253,23 @@ export async function issueInviteSetPasswordLink(input: {
   authorize?: () => Promise<void>;
 }): Promise<InviteLinkIssuance | null> {
   const { networkHash, userAgentHash } = authContextHashes(input.context);
-  return withBypass(async () => {
+  // Mint first and commit: delivery re-checks currency in its own
+  // transaction, which can only see this token once it is committed.
+  const minted = await withBypass(async () => {
+    // The authoritative ceiling re-check runs inside the mint transaction:
+    // throwing rolls the mint back (no token, no email).
     if (input.authorize) await input.authorize();
     const raw = await mintResetToken(input.user.id, networkHash, userAgentHash);
     if (!raw) return null;
     const transport = await resolveOrgEmailTransport(input.user.org_id);
-    if (!transport) return { raw, emailQueued: false };
-    await deliverResetEmail(input.user, transport, raw);
-    return { raw, emailQueued: true };
+    return { raw, transport };
   });
+  if (!minted) return null;
+  if (!minted.transport) return { raw: minted.raw, emailQueued: false };
+  // A superseded invite link is never emailed: the admin holds the raw
+  // token from this same call, and sending a dead link would only confuse.
+  const delivered = await deliverResetEmail(input.user, minted.transport, minted.raw);
+  return { raw: minted.raw, emailQueued: delivered };
 }
 
 export type ResetOutcome = { ok: true } | { ok: false; reason: "invalid_token" | "weak_password" };
