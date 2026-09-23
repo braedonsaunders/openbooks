@@ -106,16 +106,27 @@ export function CategoryManager({
   const [draft, setDraft] = useState<ForecastCategory | null>(null)
 
   // Authoritative list of raw configs (payloads carry computed rows).
+  const applyRemote = (j: unknown) => {
+    if (j && Array.isArray((j as { categories?: unknown }).categories)) {
+      setCats((j as { categories: ForecastCategory[] }).categories)
+    }
+    if (j && typeof (j as { revision?: unknown }).revision === 'number') {
+      setRevision((j as { revision: number }).revision)
+    }
+  }
   const reload = async () => {
     try {
       const r = await fetch('/api/analytics/cashflow/categories')
       if (!r.ok) return
-      const j = await r.json()
-      if (j && Array.isArray(j.categories)) setCats(j.categories)
-      if (j && typeof j.revision === 'number') setRevision(j.revision)
+      applyRemote(await r.json())
     } catch { /* keep the last known list */ }
   }
-  useEffect(() => { void reload() }, [])
+  useEffect(() => {
+    fetch('/api/analytics/cashflow/categories')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { applyRemote(j) })
+      .catch(() => {})
+  }, [])
 
   const glAccounts = accountOptions.filter((a) => !a.type || !['asset_bank', 'liability_card'].includes(a.type))
   const cardAccounts = accountOptions.filter((a) => a.type === 'liability_card')

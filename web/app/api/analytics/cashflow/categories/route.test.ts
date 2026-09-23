@@ -10,6 +10,7 @@ interface RouteState {
   committedQueries: string[]
   pendingQueries: string[]
   priorCategories: unknown[]
+  priorRevision: number
   inTransaction: boolean
   transactions: number
   commits: number
@@ -24,6 +25,7 @@ const state: RouteState = {
   committedQueries: [],
   pendingQueries: [],
   priorCategories: [],
+  priorRevision: 0,
   inTransaction: false,
   transactions: 0,
   commits: 0,
