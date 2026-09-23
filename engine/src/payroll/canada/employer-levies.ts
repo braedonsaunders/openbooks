@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
-import { PayrollPackError } from "../packs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
 import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
 
 /**
