@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
+import { mulDecimal, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { statementBookExpr } from "../../../../../lib/gl-summary";
+import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
 import { toISO } from "../../../../../lib/cash/core";
 import { openItems } from "../../../../../lib/cash/open-items";
 import { isUuid } from "../../../../../lib/list-params";
@@ -101,10 +102,14 @@ export async function GET(req: Request) {
     // payment posted in two books appears once, not twice.
     (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
-        coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount
+        coalesce(d.document_date, d.posting_date)::text as date,
+        round(abs(d.total) * d.fx_rate, 4) as func_amount,
+        coalesce(sub.base_currency, o.base_currency) as func
       from documents d
       join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
         and je.status in ('posted', 'reversed') and je.book_id = ${statementBookExpr(user.orgId)}
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+      join orgs o on o.id = d.org_id
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and d.status = 'posted'
         and d.kind in (${settlementKinds})
@@ -114,6 +119,35 @@ export async function GET(req: Request) {
       limit 200
     `)),
   ]);
+
+  // Recent amounts translate to presentation at each document's date through
+  // the flow path — a USD 100 vendor payment in a CAD org reads CAD 135,
+  // never CAD 100.
+  const fxResult = await flowRates(user.orgId, recent.rows.map((r) => ({
+    func: typeof r.func === "string" ? r.func : null,
+    date: String(r.date ?? today).slice(0, 10),
+  }))).then(
+    (rates) => ({ ok: true as const, rates }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  if (!fxResult.ok) {
+    return NextResponse.json(
+      { error: "missing exchange rate", message: fxResult.error instanceof Error ? fxResult.error.message : String(fxResult.error) },
+      { status: 422 },
+    );
+  }
+  const fx = fxResult.rates;
+  let recentAmounts: string[];
+  try {
+    recentAmounts = recent.rows.map((r) =>
+      mulDecimal(String(r.func_amount ?? "0"), fx.rateAt(typeof r.func === "string" ? r.func : null, String(r.date ?? today).slice(0, 10))));
+  } catch (error) {
+    return NextResponse.json(
+      { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
+      { status: 422 },
+    );
+  }
+  const currency = fx.base || await presentationCurrency(user.orgId);
 
   const avgDays = pay.rows[0]?.avg_days === null || pay.rows[0]?.avg_days === undefined ? null : Math.round(Number(pay.rows[0].avg_days));
   const totalPaid = normalizeMoney(String(pay.rows[0]?.total_paid ?? "0"));
@@ -148,7 +182,8 @@ export async function GET(req: Request) {
     openBalance,
     overdueCount,
     reliability,
+    currency,
     openItems: rows,
-    recentPayments: ((recent.rows)).map((r) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(String(r.amount ?? "0")) })),
+    recentPayments: ((recent.rows)).map((r, i) => ({ docId: r.doc_id, docKind: r.doc_kind, entryId: r.entry_id, docNumber: r.document_number ?? "", date: r.date, amount: normalizeMoney(recentAmounts[i] ?? "0") })),
   });
 }

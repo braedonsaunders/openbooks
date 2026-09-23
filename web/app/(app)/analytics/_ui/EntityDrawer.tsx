@@ -38,9 +38,11 @@ interface EntityPayment {
 }
 
 /** The entity endpoint's JSON body. Amounts are ledger strings — pass them to
- *  `fmtMoney` untouched so formatting keeps full decimal precision. */
+ *  `fmtMoney` untouched so formatting keeps full decimal precision.
+ *  `recentPayments` amounts are translated to `currency` (presentation). */
 interface EntityData {
   avgDays: number | null
+  currency: string
   totalPaid: string
   paymentCount: number
   openBalance: string
@@ -54,15 +56,27 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<EntityData | null>(null)
-  const [error, setError] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'open' | 'payments'>('open')
   const [page, setPage] = useState(0)
   useEffect(() => {
     let live = true
     fetch(`/api/analytics/cashflow/entity?party=${party}&side=${side}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(async (r) => {
+        // The endpoint refuses by name (e.g. the 422 missing-rate refusal):
+        // check ok first, then surface its remedy instead of a generic line.
+        if (!r.ok) {
+          let message: string | null = null
+          try {
+            const problem = (await r.json()) as { message?: unknown }
+            if (typeof problem.message === 'string' && problem.message.length > 0) message = problem.message
+          } catch { message = null }
+          throw new Error(message ?? `History is unavailable (status ${r.status}).`)
+        }
+        return r.json()
+      })
       .then((j) => { if (live) setData(j) })
-      .catch(() => { if (live) setError(true) })
+      .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Could not load history.') })
     return () => { live = false }
   }, [party, side])
   const dt = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
@@ -110,7 +124,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
           <div className="flex shrink-0 items-center gap-1 border-b border-slate-100 px-3 py-2 dark:border-slate-800">
             {([
               ['open', `Open items (${(data.openItems ?? []).length})`],
-              ['payments', `Payments (${(data.recentPayments ?? []).length})`],
+              ['payments', `Payments (${(data.recentPayments ?? []).length} · ${data.currency})`],
             ] as const).map(([key, label]) => (
               <button
                 key={key}
