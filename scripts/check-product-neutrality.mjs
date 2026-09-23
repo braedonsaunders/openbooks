@@ -128,6 +128,10 @@ const connectorPaths = [
   /^web\/app\/\(app\)\/sync\//,
   /^web\/app\/api\/(?:platform\/connections|qbd)\//,
   /^web\/lib\/docs\/articles\/(?:netsuite-bridge|quickbooks-desktop-connector)\.ts$/,
+  // Conformance tests for those connector articles: a test that cannot name
+  // the article it verifies cannot fail for the right reason. Product/UI
+  // copy outside these files stays vendor-neutral.
+  /^web\/lib\/docs\/articles\/(?:netsuite-bridge|quickbooks-desktop-connector)\.test\.ts$/,
   /^web\/lib\/docs\/articles\/migrate-with-a-connector\.ts$/,
   /^web\/lib\/docs\/index\.ts$/,
   /^web\/messages\/[^/]+\/sync\.json$/,
