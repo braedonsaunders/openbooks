@@ -512,7 +512,10 @@ test("approved sales and purchases use the configured provider atomically and re
     const origin = await listenTaxServer(provider);
     await saveTaxRateProviderConfig(
       org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/quote` } },
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { quoteUrl: `${origin}/quote`, jurisdictionTaxCodes: { CA: taxCodeId } },
+      },
       null,
     );
 
@@ -609,7 +612,10 @@ test("approved sales and purchases use the configured provider atomically and re
     assert.equal(calls, 3);
     await saveTaxRateProviderConfig(
       org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/outage` } },
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { quoteUrl: `${origin}/outage`, jurisdictionTaxCodes: { CA: taxCodeId } },
+      },
       null,
     );
     await postDocument(replay.id, deps, { deferEffects: true, suppressAutomation: true });
@@ -768,7 +774,10 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
         (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
     await saveTaxRateProviderConfig(
       org.orgId,
-      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: {} },
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
+      },
       null,
     );
     const config = await readTaxRateProviderConfig(org.orgId);
@@ -833,6 +842,18 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
       /booked 1 tax component\(s\) but the provider quote has 2.*recalculate the draft/,
     );
     assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`)).rows[0]?.count, "0");
+
+    // Equal dollars with swapped codes add up fine but book every dollar to
+    // the wrong jurisdiction liability: posting refuses instead of booking.
+    const swapped = await seedSale("PROV-SWAPPED", [
+      { taxCodeId: cityCode, sequence: 1, rate: "7", amount: "7.0000", collected: cityAccount },
+      { taxCodeId: stateCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: org.accounts.taxOutput },
+    ]);
+    await assert.rejects(
+      postDocument(swapped.id, deps, { deferEffects: true, suppressAutomation: true }),
+      /component 1 books the wrong tax code for provider jurisdiction "STATE" \(mapped to "STATE"\).*re-quote the draft/,
+    );
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${swapped.id}`)).rows[0]?.count, "0");
 
     // The mapped shape posts state 7.00 and city 1.25 to their own accounts.
     const mapped = await seedSale("PROV-MAPPED", [
@@ -1081,6 +1102,66 @@ test("a synthesized headline component is booked, approved, and posted under its
     assert.deepEqual(taxLines.map((row) => row.amount), ["-8.2500"]);
   } finally {
     if (provider) await closeTaxServer(provider);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("legacy evidence without a jurisdiction binding refuses instead of booking", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const codeId = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values (${codeId}, ${org.orgId}, 'EXT', 'External tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    // No jurisdiction mapping configured: a pre-mapping draft whose amounts
+    // match the quote still refuses, because nothing binds its codes to the
+    // quote's jurisdictions.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: {} },
+      null,
+    );
+    const config = await readTaxRateProviderConfig(org.orgId);
+    const documentId = randomUUID();
+    const lineId = randomUUID();
+    await db.execute(sql`
+      insert into documents
+        (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
+         currency, subtotal, tax_total, total)
+      values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'LEGACY-1', ${org.customerId}, ${org.subsidiaryId}, ${org.date},
+              'CAD', '100', '9.5000', '109.5000')`);
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+         tax_amount, tax_code_id, quantity, unit_price)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.accounts.revenue}, '100', '100', '9.5000', ${codeId}, '1', '100')`);
+    await db.execute(sql`
+      insert into document_line_tax_components
+        (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+         tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+         price_includes_tax, compound_on_previous, rounding_scale,
+         collected_account_id, paid_account_id, overridden)
+      values (${org.orgId}, ${lineId}, ${codeId}, 1, '9.5', '100', '9.5000', '9.5000', '0', 'standard',
+              false, false, 2, ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true)`);
+    await db.execute(sql`
+      insert into tax_rate_quotes
+        (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
+         taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
+      values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{}'::jsonb, '{}'::jsonb,
+              '100.0000', '9.5000', '[{"jurisdiction": "CA", "ratePercent": "9.5000", "taxAmount": "9.5000"}]'::jsonb,
+              'Q-LEG', null, ${lineId})`);
+    await db.execute(sql`update documents set status = 'approved' where id = ${documentId}`);
+    await assert.rejects(
+      postDocument(documentId, {
+        control: {
+          ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank,
+          taxCollected: org.accounts.taxOutput, taxPaid: org.accounts.taxInput,
+        },
+      }, { deferEffects: true, suppressAutomation: true }),
+      /provider jurisdiction "CA" has no mapped tax code.*re-quote the draft/,
+    );
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${documentId}`)).rows[0]?.count, "0");
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });

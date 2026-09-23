@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address } from "../tax/rate-providers.ts";
+import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
 type ProviderTaxPlan = {
@@ -208,6 +208,21 @@ export async function resolveProviderTaxPlans(
     if (evidenceMismatch) {
       throw new PostingError(
         `line ${line.lineNumber} booked tax components do not match the provider quote (${evidenceMismatch}); recalculate the draft before approval`,
+      );
+    }
+    // Amounts alone cannot prove attribution: equal-dollar components with
+    // swapped codes add up fine while booking to the wrong jurisdiction
+    // liabilities. Compare each booked tax-code binding (and its posting
+    // accounts) against the quote's jurisdiction before the GL sees it.
+    const bindingMismatch = await providerBindingMismatch(
+      doc.orgId,
+      existingComponents,
+      persisted.components,
+      config.settings,
+    );
+    if (bindingMismatch) {
+      throw new PostingError(
+        `line ${line.lineNumber} booked tax components do not match the provider quote (${bindingMismatch}); recalculate the draft before approval`,
       );
     }
     const configs = taxConfigsFromEvidence(existingComponents);
