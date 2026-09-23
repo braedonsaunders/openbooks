@@ -85,9 +85,9 @@ export interface OverheadSource {
     | "rate_engine" //         per-department composite burden rate × project hours-by-dept
     | "posted_gl_account_group"; // sum posted GL in an overhead account group tagged to the project
   /** For percent_of_labor — the percentage (25 = 25%). Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
-  ratePercent?: string | number;
+  ratePercent?: string;
   /** For per_labor_hour — the flat dollars per labor hour. Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
-  ratePerHour?: string | number;
+  ratePerHour?: string;
   /** For rate_engine — how the per-department composite rate resolves + applies. */
   rateEngine?: {
     /** live = recompute from actuals via the True Cost engine; standard = use the effective-dated overhead_rates table. */
@@ -145,7 +145,7 @@ export interface FinancialProfile {
   totalPrice: {
     method: "contract_field" | "billable_value" | "not_to_exceed" | "cost_plus";
     /** For cost_plus: default markup % if the project doesn't set one. Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
-    defaultMarkupPercent?: string | number;
+    defaultMarkupPercent?: string;
   };
   /** Could-be-invoiced / backlog definition. */
   couldBeInvoiced: { formula: "price_minus_invoiced" | "unbilled_billable" };
