@@ -49,6 +49,7 @@ const SEED = `
   import {
     createScratchOrg,
     dropScratchOrg,
+    seedActiveEmployment,
     seedFlowActors,
   } from "./engine/src/testing/fixtures.ts";
   import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
@@ -69,6 +70,9 @@ const SEED = `
         (\${employeeId}, \${org.orgId}, 'employee', 'Audit Worker',
          \${org.subsidiaryId}, true, '{}'::jsonb)
     \`);
+    // The approval pins past the employment guard; without this the audit
+    // assertions below would stop at employee_not_found.
+    await seedActiveEmployment(org.orgId, employeeId);
     await db.execute(sql\`
       insert into projects
         (id, org_id, subsidiary_id, code, name, customer_id, status,

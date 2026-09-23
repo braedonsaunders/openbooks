@@ -49,6 +49,7 @@ const SEED = `
   import {
     createScratchOrg,
     dropScratchOrg,
+    seedActiveEmployment,
     seedFlowActors,
   } from "./engine/src/testing/fixtures.ts";
   import { amendTimeEntry } from "./web/lib/time-amendment.ts";
@@ -68,6 +69,7 @@ const SEED = `
         (\${employeeId}, \${org.orgId}, 'employee', 'Amend Worker',
          \${org.subsidiaryId}, true, '{}'::jsonb)
     \`);
+    await seedActiveEmployment(org.orgId, employeeId);
     await db.execute(sql\`
       insert into timesheet_weeks
         (id, org_id, employee_party_id, week_start, status,

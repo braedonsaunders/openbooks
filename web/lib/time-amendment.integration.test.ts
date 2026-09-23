@@ -8,7 +8,7 @@ registerHooks({resolve(specifier,context,next){
 }})
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, seedFlowActors, seedActiveEmployment, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { amendTimeEntry } = await import('./time-amendment')
 const { approveSubmittedTimeEntries } = await import('./time-approval')
 
@@ -35,6 +35,7 @@ test('an amendment carries the original snapshots and approves as an exact contr
       await db.execute(sql`update items set default_rate = '125.0000' where org_id = ${org.orgId} and id = ${org.items.service}`)
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${employee}, ${org.orgId}, 'employee', 'Amended worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      await seedActiveEmployment(org.orgId, employee)
       await db.execute(sql`insert into labor_cost_rates (id, org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active)
         values (${randomUUID()}, ${org.orgId}, ${employee}, 'CAD', '50.0000', 'hour', '2080.0000', '2026-01-01', true)`)
       await db.execute(sql`insert into overhead_rates (id, org_id, method, rate_kind, rate_percent, effective_from)
@@ -99,6 +100,9 @@ test('amending an editable entry is refused and writes no offset', {skip:!proces
       const employee = randomUUID(), project = randomUUID()
       await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
         values (${employee}, ${org.orgId}, 'employee', 'Editable worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
+      // Employed: the editable-entry refusal below must prove the amendment
+      // rule, not a missing employment.
+      await seedActiveEmployment(org.orgId, employee)
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'EDITABLE', 'Editable job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
       await db.execute(sql`insert into timesheet_weeks (id, org_id, employee_party_id, week_start, status, created_by, updated_by)

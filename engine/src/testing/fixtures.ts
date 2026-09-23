@@ -581,6 +581,20 @@ export async function createScratchUser(
   return userId;
 }
 
+/**
+ * Give a scratch party an active employment. pinTimesheetEmployee (and the
+ * weekly save behind it) requires an active employee_roles row for an active
+ * party — a parties row alone is not an employment, so time tests seed this
+ * for every employee they pin past the guard. Tests proving the refusal
+ * itself seed no employment and assert employee_not_found instead.
+ */
+export async function seedActiveEmployment(orgId: string, partyId: string, hiredOn = "2026-01-01"): Promise<void> {
+  await assertFixtureDatabase();
+  await db.execute(sql`
+    insert into employee_roles (org_id, party_id, hired_on, is_active)
+    values (${orgId}, ${partyId}, ${hiredOn}, true)`);
+}
+
 /** Seed the users an approval-flow test needs. Passwords are placeholders. */
 export async function seedFlowActors(orgId: string): Promise<FlowActors> {
   const mk = async (name: string, role: string): Promise<string> => {

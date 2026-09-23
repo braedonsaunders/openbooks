@@ -55,6 +55,7 @@ test(
       import {
         createScratchOrg,
         dropScratchOrg,
+        seedActiveEmployment,
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
       import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
@@ -87,6 +88,9 @@ test(
             (\${employeeId}, \${org.orgId}, 'employee', 'Approval Worker',
              \${org.subsidiaryId}, true, '{}'::jsonb)
         \`);
+        // Eligible employment: the injected-rollback path must be reached
+        // past the pin, not refused before it.
+        await seedActiveEmployment(org.orgId, employeeId);
         await db.execute(sql\`
           insert into projects
             (id, org_id, subsidiary_id, code, name, customer_id, status,
@@ -164,6 +168,7 @@ test(
       import {
         createScratchOrg,
         dropScratchOrg,
+        seedActiveEmployment,
         seedFlowActors,
       } from "./engine/src/testing/fixtures.ts";
       import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
@@ -212,6 +217,7 @@ test(
             (\${employeeId}, \${org.orgId}, 'employee', \${'Approval Worker ' + label},
              \${org.subsidiaryId}, true, '{}'::jsonb)
         \`);
+        await seedActiveEmployment(org.orgId, employeeId);
         await db.execute(sql\`
           insert into projects
             (id, org_id, subsidiary_id, code, name, customer_id, status,
