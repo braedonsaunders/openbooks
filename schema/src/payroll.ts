@@ -15,6 +15,8 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
+import { documents } from "./documents";
+import { parties } from "./parties";
 import { workerEmployments } from "./hrm";
 import { payrollFilingAccounts } from "./payroll-filing";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
@@ -670,6 +672,11 @@ export const payStubLines = pgTable(
       enum: ["unknown", "item", "component", "org_default"],
     }).notNull().default("unknown"),
     expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
+    /** Snapshot at commit: the vendor this line accrued to. Remittances route
+     * by this, never the component's current vendor (migration 0296). A
+     * union agreement needs no separate column: its destination reaches the
+     * line only through its auto-provisioned component. */
+    remittancePartyId: uuid("remittance_party_id"),
     /** Snapshot at commit: the account this line was credited to. Remittances
      * debit this, never the component's current setup. */
     liabilityAccountId: uuid("liability_account_id"),
@@ -682,6 +689,11 @@ export const payStubLines = pgTable(
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
     index("pay_stub_lines_project").on(t.orgId, t.projectId),
+    foreignKey({ name: "pay_stub_lines_remittance_party_tenant_fkey",
+      columns: [t.orgId, t.remittancePartyId],
+      foreignColumns: [parties.orgId, parties.id],
+    }),
+    index("pay_stub_lines_remittance_party").on(t.orgId, t.remittancePartyId),
     foreignKey({ name: "pay_stub_lines_liability_account_tenant_fkey",
       columns: [t.orgId, t.liabilityAccountId],
       foreignColumns: [accounts.orgId, accounts.id],
@@ -712,6 +724,40 @@ export const payStubLines = pgTable(
         and length(trim(${t.expenseAccountEvidence}->>'reason')) > 0
         and length(trim(${t.expenseAccountEvidence}->>'reference')) > 0)
     `),
+  ],
+);
+
+/**
+ * Per-accrual remittance coverage: which committed stub lines a live
+ * remittance bill consumed (migration 0296). A later same-window bill covers
+ * only lines no non-voided bill has covered, so an off-cycle run committed
+ * after its month billed can still remit its remainder; voiding a bill frees
+ * its lines. Bills that predate line coverage and fail the exact-total
+ * backfill keep the fail-closed window-overlap refusal.
+ */
+export const payrollRemittanceCoverage = pgTable(
+  "payroll_remittance_coverage",
+  {
+    orgId: orgRef(),
+    billDocumentId: uuid("bill_document_id").notNull(),
+    stubLineId: uuid("stub_line_id").notNull(),
+    /** The line's raw amount (credits net at read time, as the summary nets). */
+    amount: money("amount").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    createdBy: uuid("created_by"),
+  },
+  (t) => [
+    foreignKey({ name: "payroll_remittance_coverage_bill_tenant_fkey",
+      columns: [t.orgId, t.billDocumentId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+    // Single-column line reference (entitlement_ledger precedent):
+    // pay_stub_lines has no (org_id, id) unique key for a composite FK.
+    foreignKey({ name: "payroll_remittance_coverage_line_fkey",
+      columns: [t.stubLineId],
+      foreignColumns: [payStubLines.id],
+    }),
+    index("payroll_remittance_coverage_line").on(t.orgId, t.stubLineId),
   ],
 );
 

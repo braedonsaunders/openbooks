@@ -158,10 +158,10 @@ async function addEntityAccrual(
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, created_by, updated_by)
+       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${lineId}, ${fx.org.orgId}, ${stubId}, ${fx.component}, 'deduction',
             'Test withholding', ${input.amount}, 10, ${fx.liability}, 'commit',
-            ${fx.actorId}, ${fx.actorId})`);
+            ${fx.org.vendorId}, ${fx.actorId}, ${fx.actorId})`);
   return { documentId, documentNumber };
 }
 

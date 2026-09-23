@@ -306,7 +306,7 @@ async function mixedCurrencyAccruals(
   allowedSubsidiaryIds: PayrollSubsidiaryScope | undefined,
   executor: RemittanceExecutor,
   presentation: string,
-  declarationFor: (country: string | null) => StatutoryRemittanceDeclaration | null,
+  isInternalAccrual: (row: { systemKey: string | null; country: string | null }) => boolean,
 ): Promise<{
   rows: RemittanceRow[];
   contextByAccount: Map<string, { gross: string; employees: number }>;
@@ -348,7 +348,7 @@ async function mixedCurrencyAccruals(
       filingUnknown: boolean; province: string; subsidiary_id: string | null;
       currency: string; period_id: string; period_end: string; amount: string;
     }>(sql`
-    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
@@ -373,7 +373,7 @@ async function mixedCurrencyAccruals(
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
-     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id,
               s.currency_code, period.id, period.ends_on
@@ -421,10 +421,7 @@ async function mixedCurrencyAccruals(
     return roundMoney(mulRate(amount, rate), 2);
   };
   const rows: RemittanceRow[] = slices.rows
-    .filter((row) =>
-      row.system_key == null
-      || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
-    )
+    .filter((row) => !isInternalAccrual({ systemKey: row.system_key, country: row.country }))
     .map((row) => ({
       component_id: row.component_id,
       code: row.code,
@@ -472,6 +469,72 @@ async function mixedCurrencyAccruals(
   return { rows, contextByAccount };
 }
 
+/**
+ * The narrow row shape destination resolution reads — shared by the summary
+ * (which folds grouped rows) and bill creation (which resolves individual
+ * accrual lines for coverage), so the two can never disagree about who an
+ * accrual remits to.
+ */
+export interface RemittanceResolvableRow {
+  /** The stub line's commit-time destination snapshot (migration 0296). */
+  snapshotPartyId: string | null;
+  systemKey: string | null;
+  country: string | null;
+  province: string;
+}
+
+/**
+ * Destination resolution over commit-time snapshots, extracted so the summary
+ * and the bill creator share one implementation. Country-first pack lookup
+ * (two packs may give the same withholding the same system key, so the
+ * country stamped on the component row picks the pack), exactly as the
+ * summary always resolved.
+ */
+export function makeRemittanceDestinationResolver(
+  payrollSettings: Record<string, unknown>,
+): {
+  resolveDestination: (row: RemittanceResolvableRow) => { partyId: string | null; vendorKey: string | null };
+  isInternalAccrual: (row: Pick<RemittanceResolvableRow, "systemKey" | "country">) => boolean;
+} {
+  const declarations = new Map<string, StatutoryRemittanceDeclaration | null>();
+  const declarationFor = (country: string | null): StatutoryRemittanceDeclaration | null => {
+    if (!country) return null;
+    const hit = declarations.get(country);
+    if (hit !== undefined) return hit;
+    const found = PAYROLL_COUNTRY_PACKS[country] ? statutoryRemittanceDeclaration(country) : null;
+    declarations.set(country, found);
+    return found;
+  };
+  const settingsVendor = (settingsKey: string): string | null => {
+    const vendor = payrollSettings[settingsKey];
+    return typeof vendor === "string" && vendor ? vendor : null;
+  };
+  return {
+    resolveDestination: (row) => {
+      const packDeclaration = row.systemKey ? declarationFor(row.country) : null;
+      const regionalKey = row.systemKey
+        ? packDeclaration?.regionalVendorSettingsKeyBySystemKey.get(row.systemKey)?.[row.province]
+        : undefined;
+      // The regional key is provenance even when the org has not configured
+      // the vendor yet: an unconfigured RQ destination is still an RQ
+      // destination — it surfaces unassigned under the RQ schedule, never
+      // under the CRA one.
+      if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
+      // The SNAPSHOT, never the live component: a vendor edited after commit
+      // cannot re-point this accrual.
+      if (row.snapshotPartyId) return { partyId: row.snapshotPartyId, vendorKey: null };
+      const vendorKey = row.systemKey
+        ? packDeclaration?.vendorSettingsKeyBySystemKey.get(row.systemKey)
+        : undefined;
+      if (!vendorKey) return { partyId: null, vendorKey: null };
+      return { partyId: settingsVendor(vendorKey), vendorKey };
+    },
+    isInternalAccrual: (row) =>
+      row.systemKey != null
+      && (declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.systemKey) ?? false),
+  };
+}
+
 export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
@@ -485,20 +548,13 @@ export async function payrollRemittanceSummary(
   // (hasUnknownFilingAccount); only bill creation for a flagged group fails
   // closed, until those stubs are reconciled.
   const filingAccount = sql`s.filing_account_id`;
-  // One pack's declaration per component country, resolved country-first: two
-  // packs may give the same withholding the same system key, so the country
-  // stamped on the component row picks the pack. A row naming no country (or
-  // none with a pack) carries no pack declaration — every lookup misses, as
-  // for a system key no pack declares.
-  const declarations = new Map<string, StatutoryRemittanceDeclaration | null>();
-  const declarationFor = (country: string | null): StatutoryRemittanceDeclaration | null => {
-    if (!country) return null;
-    const hit = declarations.get(country);
-    if (hit !== undefined) return hit;
-    const found = PAYROLL_COUNTRY_PACKS[country] ? statutoryRemittanceDeclaration(country) : null;
-    declarations.set(country, found);
-    return found;
-  };
+  // One shared destination resolver for the summary AND the bill creator's
+  // coverage reads: pack declarations are resolved country-first (two packs
+  // may give the same withholding the same system key, so the country
+  // stamped on the component row picks the pack), and internal accruals
+  // (liabilities that settle through employee payout, never remittance) are
+  // excluded by the same predicate in both paths.
+  const sharedResolution = makeRemittanceDestinationResolver(rawSettings);
   // Every group states its own currency (RemittanceGroup.currency): a scope
   // whose committed stubs share one currency states that native currency —
   // even when it differs from the org's base — and a scope spanning more
@@ -527,7 +583,7 @@ export async function payrollRemittanceSummary(
   let presentationCurrency: string | undefined;
   if (scopeCurrencies.length > 1 && presentation) {
     ({ rows, contextByAccount } = await mixedCurrencyAccruals(
-      orgId, range, allowedSubsidiaryIds, executor, presentation, declarationFor,
+      orgId, range, allowedSubsidiaryIds, executor, presentation, sharedResolution.isInternalAccrual,
     ));
     presentationCurrency = presentation;
   } else {
@@ -544,9 +600,11 @@ export async function payrollRemittanceSummary(
       filingUnknown: boolean; province: string; subsidiary_id: string | null;
       currency: string; amount: string;
     }>(sql`
-    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+    select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
            -- Historical accrual evidence only. Current component or statutory
-           -- account setup cannot establish where an older liability accrued.
+           -- account setup cannot establish where an older liability accrued,
+           -- and the CURRENT component vendor cannot establish who an older
+           -- accrual remits to: both are the stub line's commit-time snapshot.
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
            bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
@@ -566,7 +624,7 @@ export async function payrollRemittanceSummary(
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution', 'credit')
        ${payrollSubsidiaryScopeFilter(sql`source_document.subsidiary_id`, allowedSubsidiaryIds)}
-     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, c.remittance_party_id,
+     group by c.id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
               l.liability_account_id, ${filingAccount}, s.province,
               source_document.subsidiary_id, s.currency_code
      order by c.sequence, c.code
@@ -580,10 +638,7 @@ export async function payrollRemittanceSummary(
   // The slice amount rides along natively: this path is single-currency, so
   // it agrees with the consolidated amount by construction.
   rows = queried.rows
-    .filter((row) =>
-      row.system_key == null
-      || !declarationFor(row.country)?.internalAccrualSystemKeys.includes(row.system_key),
-    )
+    .filter((row) => !sharedResolution.isInternalAccrual({ systemKey: row.system_key, country: row.country }))
     .map((row) => ({
       ...row,
       sliceAmount: row.kind === "credit" ? neg(row.amount) : row.amount,
@@ -611,36 +666,26 @@ export async function payrollRemittanceSummary(
   }
   const filingAccounts = await filingAccountsByIdIn(orgId, executor);
 
-  // Destination and account both resolve through the pack declarations. A
-  // component with a REGION-scoped vendor declaration for the stub's province
-  // (QPP/QPIP → the Revenu Québec vendor for QC stubs) resolves there FIRST —
-  // it outranks even the component's own remittance_party_id, because that
-  // column is one value on a component whose amounts split by destination.
-  // Otherwise a `tax_authority` component falls back to the vendor named by
-  // ITS pack's remittanceVendorSettingsKey (the CRA remittance vendor for the
-  // CA pack; a pack that declares none surfaces unassigned for setup, which
-  // is where the US statutory components have always landed). An `external`
-  // component (WCB, SUTA) only ever uses its own remittance_party_id.
-  const settingsVendor = (settingsKey: string): string | null => {
-    const vendor = rawSettings[settingsKey];
-    return typeof vendor === "string" && vendor ? vendor : null;
-  };
-  const resolveDestination = (row: (typeof rows)[number]): { partyId: string | null; vendorKey: string | null } => {
-    const packDeclaration = row.system_key ? declarationFor(row.country) : null;
-    const regionalKey = row.system_key
-      ? packDeclaration?.regionalVendorSettingsKeyBySystemKey.get(row.system_key)?.[row.province]
-      : undefined;
-    // The regional key is provenance even when the org has not configured the
-    // vendor yet: an unconfigured RQ destination is still an RQ destination —
-    // it surfaces unassigned under the RQ schedule, never under the CRA one.
-    if (regionalKey) return { partyId: settingsVendor(regionalKey), vendorKey: regionalKey };
-    if (row.remittance_party_id) return { partyId: row.remittance_party_id, vendorKey: null };
-    const vendorKey = row.system_key
-      ? packDeclaration?.vendorSettingsKeyBySystemKey.get(row.system_key)
-      : undefined;
-    if (!vendorKey) return { partyId: null, vendorKey: null };
-    return { partyId: settingsVendor(vendorKey), vendorKey };
-  };
+  // Destination resolves through the pack declarations over the stub line's
+  // commit-time snapshot (migration 0296) — never the live component. A
+  // REGION-scoped vendor declaration for the stub's province (QPP/QPIP → the
+  // Revenu Québec vendor for QC stubs) resolves FIRST, outranking even the
+  // snapshot, because that column is one value on a component whose amounts
+  // split by destination. Otherwise a `tax_authority` component falls back to
+  // the vendor named by ITS pack's remittanceVendorSettingsKey (the CRA
+  // remittance vendor for the CA pack; a pack that declares none surfaces
+  // unassigned for setup, which is where the US statutory components have
+  // always landed). An `external` component (WCB, SUTA) only ever uses its
+  // own snapshot party.
+  const resolver = sharedResolution;
+  const toResolvable = (row: (typeof rows)[number]): RemittanceResolvableRow => ({
+    snapshotPartyId: row.remittance_party_id,
+    systemKey: row.system_key,
+    country: row.country,
+    province: row.province,
+  });
+  const resolveDestination = (row: (typeof rows)[number]): { partyId: string | null; vendorKey: string | null } =>
+    resolver.resolveDestination(toResolvable(row));
   const resolveParty = (row: (typeof rows)[number]): string | null => resolveDestination(row).partyId;
   const resolveVendorKey = (row: (typeof rows)[number]): string | null => resolveDestination(row).vendorKey;
   const resolveAccount = (row: (typeof rows)[number]): string | null =>
@@ -875,6 +920,10 @@ export type RemittanceRow = {
   system_key: string | null;
   /** The component row's pack country — picks the pack whose declaration governs the row. */
   country: string | null;
+  /** The stub line's commit-time destination snapshot (migration 0296) — the
+   * vendor the accrual remitted to when it committed, never the component's
+   * vendor today. Null for lines whose component named no vendor (which fall
+   * through to the pack's configured vendor, exactly as before). */
   remittance_party_id: string | null;
   liability_account_id: string | null;
   filing_account_id: string | null;
@@ -1938,8 +1987,102 @@ export async function createRemittanceBill(
                 ${component.amount}, ${actorId}, ${actorId})
       `);
     }
+    // Per-accrual coverage (migration 0296): record exactly which committed
+    // lines this bill consumed, resolved through the same resolver the
+    // summary folds by — including region-scoped rows whose snapshot party
+    // is not their resolved destination. A later same-window bill covers
+    // only lines no non-voided bill has covered. The equality below is the
+    // insert's own receipt: coverage that does not sum to the billed slice
+    // is a failure, not a success.
+    const creatorResolution = makeRemittanceDestinationResolver(await rawPayrollSettings(orgId, tx));
+    const billed = (await remittanceScopeLines(tx, orgId, {
+      from: input.from, to: input.to, filingAccountId, entityId,
+    })).filter((line) =>
+      !creatorResolution.isInternalAccrual(line)
+      && creatorResolution.resolveDestination(line).partyId === input.partyId,
+    );
+    const billedTotal = sum(billed.map((line) => (line.kind === "credit" ? neg(line.amount) : line.amount)));
+    if (cmp(billedTotal, total) !== 0) {
+      throw new PayrollError(
+        "remittance bill coverage does not match the billed payroll — regenerate this bill",
+      );
+    }
+    if (billed.length > 0) {
+      const covered = (await tx.execute<{ stub_line_id: string }>(sql`
+        insert into payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount, created_by)
+        select ${orgId}, ${documentId}, cov.line_id, cov.line_amount::numeric, ${actorId}
+          from unnest(${`{${billed.map((line) => line.lineId).join(",")}}`}::uuid[],
+                      ${`{${billed.map((line) => line.amount).join(",")}}`}::text[]) as cov(line_id, line_amount)
+        returning stub_line_id::text as stub_line_id
+      `));
+      if (covered.rows.length !== billed.length) {
+        throw new PayrollError(
+          "remittance bill coverage was not recorded — regenerate this bill",
+        );
+      }
+    }
     return { documentId, documentNumber: number };
   }, { isolationLevel: "read committed" });
+}
+
+/**
+ * One committed accrual line in a bill's scope, with the fields destination
+ * resolution reads. The bill creator resolves these in TypeScript through the
+ * same resolver the summary folds by, so coverage records exactly the lines
+ * the bill consumed — including region-scoped rows whose snapshot party is
+ * not their resolved destination.
+ */
+export interface RemittanceScopeLine {
+  lineId: string;
+  kind: "deduction" | "employer_contribution" | "credit";
+  /** Raw native amount (credits net at read time, as the summary nets). */
+  amount: string;
+  /** The stub line's commit-time destination snapshot (migration 0296). */
+  snapshotPartyId: string | null;
+  systemKey: string | null;
+  country: string | null;
+  province: string;
+}
+
+/**
+ * Every committed accrual line behind one (period, filing account, entity)
+ * scope — the bill's coverage population. Destination resolution stays in
+ * TypeScript (pack declarations cannot be re-derived in SQL); callers keep
+ * the lines whose resolved destination is their vendor.
+ */
+export async function remittanceScopeLines(
+  executor: RemittanceExecutor,
+  orgId: string,
+  key: { from: string; to: string; filingAccountId: string | null; entityId: string },
+): Promise<RemittanceScopeLine[]> {
+  const rows = (await executor.execute<{
+    line_id: string; kind: "deduction" | "employer_contribution" | "credit";
+    amount: string; snapshot_party_id: string | null;
+    system_key: string | null; country: string | null; province: string;
+  }>(sql`
+    select l.id::text as line_id, l.kind, l.amount::text as amount,
+           l.remittance_party_id::text as snapshot_party_id,
+           c.system_key, c.country, s.province
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where l.org_id = ${orgId} and s.pay_date between ${key.from} and ${key.to}
+       and l.kind in ('deduction', 'employer_contribution', 'credit')
+       and d.subsidiary_id = ${key.entityId}
+       and s.filing_account_id is not distinct from ${key.filingAccountId}
+     order by l.id
+  `));
+  return rows.rows.map((row) => ({
+    lineId: row.line_id,
+    kind: row.kind,
+    amount: row.amount,
+    snapshotPartyId: row.snapshot_party_id,
+    systemKey: row.system_key,
+    country: row.country,
+    province: row.province,
+  }));
 }
 
 /**

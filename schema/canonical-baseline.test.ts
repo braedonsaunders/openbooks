@@ -619,6 +619,13 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // requestID correlation, and storage refuses a second 'sent' row per
     // ticket so a concurrent double-claim fails instead of corrupting.
     "0295_qbd_web_connector_in_flight.sql",
+    // Historical remittance destinations followed the live component vendor,
+    // so a post-commit vendor edit re-pointed accrued payroll and allowed a
+    // second bill to post (double payment). Commits now snapshot the
+    // destination per stub line; pre-existing bills gain per-line coverage
+    // only on an exact-total match, otherwise they keep the fail-closed
+    // window refusal until voided and recreated.
+    "0296_payroll_remittance_destination_snapshot.sql",
     // Item-rate pricing read the live profile before choosing the historical
     // version, so a later policy switch repriced late entries dated in the
     // old month (0298 pins policy, base unit and presentation per

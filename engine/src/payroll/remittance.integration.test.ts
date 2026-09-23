@@ -71,7 +71,7 @@ async function createRemittanceFixture(): Promise<RemittanceFixture> {
 
 async function addCommittedRemittanceAccrual(
   fixture: RemittanceFixture,
-  input: { payDate: string; amount: string; employeeId?: string },
+  input: { payDate: string; amount: string; employeeId?: string; snapshotPartyId?: string },
 ): Promise<void> {
   const { org, actorId, componentId, liabilityAccountId, scheduleId } = fixture;
   const employeeId = input.employeeId ?? randomUUID();
@@ -113,10 +113,11 @@ async function addCommittedRemittanceAccrual(
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, created_by, updated_by)
+       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values
       (${lineId}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
-       'Test withholding', ${input.amount}, 10, ${liabilityAccountId}, 'commit', ${actorId}, ${actorId})`);
+       'Test withholding', ${input.amount}, 10, ${liabilityAccountId}, 'commit',
+       ${input.snapshotPartyId ?? org.vendorId}, ${actorId}, ${actorId})`);
 }
 
 async function waitForRemittanceFenceWaiter(key: string): Promise<void> {
@@ -726,6 +727,228 @@ test(
       release();
       await holder;
       await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a vendor change after commit keeps July's payee while future runs go to the new vendor",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      // The component's vendor changes in August: July's accrual must keep
+      // payee A, while runs committed after the change remit to B.
+      const vendorB = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                             is_active, custom, created_by, updated_by)
+        values (${vendorB}, ${fixture.org.orgId}, 'company', 'Local B',
+                ${fixture.org.subsidiaryId}, true, '{}'::jsonb,
+                ${fixture.actorId}, ${fixture.actorId})`);
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
+        values (${fixture.org.orgId}, ${vendorB}, true, ${fixture.actorId}, ${fixture.actorId})`);
+      await db.execute(sql`
+        update pay_components set remittance_party_id = ${vendorB}
+         where org_id = ${fixture.org.orgId} and id = ${fixture.componentId}`);
+
+      const july = await payrollRemittanceSummary(fixture.org.orgId, {
+        from: "2026-07-01", to: "2026-07-31",
+      });
+      assert.equal(july.length, 1);
+      assert.equal(july[0]!.partyId, fixture.org.vendorId);
+
+      // The unbilled July accrual still bills to A after the vendor change,
+      // and coverage records exactly the July line.
+      const billA = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+      });
+      const billTotal = (await db.execute<{ total: string }>(sql`
+        select total::text as total from documents
+         where org_id = ${fixture.org.orgId} and id = ${billA.documentId}`)).rows[0]!.total;
+      assert.equal(cmp(billTotal, "100"), 0);
+      const coverage = (await db.execute<{ lines: number; covered: string }>(sql`
+        select count(*)::int as lines, coalesce(sum(amount), 0)::text as covered
+          from payroll_remittance_coverage
+         where org_id = ${fixture.org.orgId} and bill_document_id = ${billA.documentId}`)).rows[0]!;
+      assert.equal(coverage.lines, 1);
+      assert.equal(cmp(coverage.covered, "100"), 0);
+
+      // A run committed after the change carries snapshot B and remits to B.
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-08-15", amount: "50.00", snapshotPartyId: vendorB,
+      });
+      const august = await payrollRemittanceSummary(fixture.org.orgId, {
+        from: "2026-08-01", to: "2026-08-31",
+      });
+      assert.equal(august.length, 1);
+      assert.equal(august[0]!.partyId, vendorB);
+      assert.equal(cmp(august[0]!.total, "50"), 0);
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a posted bill blocks a second bill for the same accruals after a vendor change",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const first = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-07-01", to: "2026-07-31",
+      });
+      await submitAndReleaseIfUngated("vendor_bill", first.documentId, fixture.actorId);
+      await postDocument(first.documentId, {
+        control: {
+          ar: fixture.org.accounts.ar,
+          ap: fixture.org.accounts.ap,
+          bank: fixture.org.accounts.bank,
+        },
+      });
+
+      const vendorB = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id,
+                             is_active, custom, created_by, updated_by)
+        values (${vendorB}, ${fixture.org.orgId}, 'company', 'Local B',
+                ${fixture.org.subsidiaryId}, true, '{}'::jsonb,
+                ${fixture.actorId}, ${fixture.actorId})`);
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
+        values (${fixture.org.orgId}, ${vendorB}, true, ${fixture.actorId}, ${fixture.actorId})`);
+      await db.execute(sql`
+        update pay_components set remittance_party_id = ${vendorB}
+         where org_id = ${fixture.org.orgId} and id = ${fixture.componentId}`);
+
+      // The July accruals still remit to A: there is nothing to bill to B,
+      // so no second document is minted and no number is consumed.
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: vendorB, from: "2026-07-01", to: "2026-07-31",
+        }),
+        /nothing to remit to this vendor for the period/,
+      );
+      const bills = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'`)).rows[0]!.n;
+      assert.equal(bills, 1);
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "commit snapshots the component vendor onto each accrual line",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const craPayable = await account("2310", "CRA payable", "liability_current");
+      const vacationPayable = await account("2320", "Vacation payable", "liability_current");
+      await db.execute(sql`
+        insert into vendor_roles (org_id, party_id, is_active, created_by, updated_by)
+        values (${org.orgId}, ${org.vendorId}, true, ${actorId}, ${actorId})
+        on conflict do nothing`);
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense, burdenExpenseAccountId: wageExpense,
+            netPayAccountId: netPayable, cppPayableAccountId: craPayable,
+            eiPayableAccountId: craPayable, taxPayableAccountId: craPayable,
+            vacationPayableAccountId: vacationPayable, wagesTo: "expense",
+          },
+        })}::jsonb where id = ${org.orgId}`);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      // The vendor assigned BEFORE commit is the one history must keep.
+      await db.execute(sql`
+        update pay_components set remittance_party_id = ${org.vendorId}
+         where org_id = ${org.orgId} and country = 'CA'
+           and kind in ('deduction', 'employer_contribution')`);
+
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Dues Dora', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '104000', 'year', '2080', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               vacation_percent, vacation_method, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'CA', 'ON', 'salary', 1, 1,
+                '4', 'accrue', true, ${actorId}, ${actorId})`);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+
+      const stamped = (await db.execute<{ stamped: number; total: number }>(sql`
+        select count(*) filter (where remittance_party_id = ${org.vendorId})::int as stamped,
+               count(*)::int as total
+          from pay_stub_lines l
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+         where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
+           and l.kind in ('deduction', 'employer_contribution', 'credit')`)).rows[0]!;
+      assert.ok(stamped.total > 0);
+      assert.equal(stamped.stamped, stamped.total);
+
+      // A vendor edit after commit cannot move the frozen snapshot, and the
+      // summary keeps routing the accrual to the commit-time payee.
+      const vendorB = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${vendorB}, ${org.orgId}, 'company', 'Local B', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        update pay_components set remittance_party_id = ${vendorB}
+         where org_id = ${org.orgId} and country = 'CA'`);
+      const frozen = (await db.execute<{ moved: number }>(sql`
+        select count(*)::int as moved from pay_stub_lines l
+          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+         where l.org_id = ${org.orgId} and s.pay_run_document_id = ${run.documentId}
+           and l.kind in ('deduction', 'employer_contribution', 'credit')
+           and l.remittance_party_id is distinct from ${org.vendorId}`)).rows[0]!.moved;
+      assert.equal(frozen, 0);
+      const groups = await payrollRemittanceSummary(org.orgId, {
+        from: "2026-07-01", to: "2026-07-31",
+      });
+      assert.equal(groups.length, 1);
+      assert.equal(groups[0]!.partyId, org.vendorId);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );

@@ -140,10 +140,10 @@ async function seedRqPayroll(options: {
   await db.execute(sql`
     insert into pay_stub_lines
       (id, org_id, stub_id, component_id, kind, description, amount, sequence,
-       liability_account_id, liability_account_source, created_by, updated_by)
+       liability_account_id, liability_account_source, remittance_party_id, created_by, updated_by)
     values (${randomUUID()}, ${org.orgId}, ${stubId}, ${componentId}, 'deduction',
             ${options.componentName ?? 'QPIP'}, '400.0000', 10, ${liabilityAccountId}, 'commit',
-            ${actorId}, ${actorId})`);
+            ${options.externalParty === true ? rqVendorId : null}, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, actorId, accountId, craVendorId: org.vendorId, rqVendorId };
 }
 
