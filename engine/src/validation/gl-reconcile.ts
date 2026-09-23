@@ -11,14 +11,20 @@
  * those two eras is what makes a healthy tenant look catastrophic.
  *
  * Usage: npx tsx --conditions=react-server src/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD]
+ *
+ * --since may fall anywhere in a period: both sides filter on the actual
+ * transaction date (source t.trandate against OpenBooks posting/document
+ * dates), so a mid-period date covers the same population on both sides and
+ * period-level P&L parity stays meaningful without snapping or refusing dates.
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sourceClient } from "../sync/source-client.ts";
+import { parseSince, sourceInvoiceQuery, sourcePlQuery } from "./gl-reconcile-queries.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
   ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
-const SINCE = process.argv.find((a) => a.startsWith("--since="))?.split("=")[1] ?? "2024-06-01";
+const SINCE = parseSince(process.argv.find((a) => a.startsWith("--since="))?.split("=")[1]);
 
 /** P&L role, read from the account's type — a chart may say cogs or expense. */
 const COST = ["cogs", "expense", "expense_other"];
@@ -72,18 +78,8 @@ const line = (label: string, ours: number, theirs: number) => {
   console.log(`${org.name} (${org.env_kind})  —  posting on/after ${SINCE}\n`);
 
   const client = sourceClient();
-  const [srcPl] = await retry(() => client.query<{ revenue: string; cost: string }>(`
-    select sum(case when acct.accttype in ('Income','OthIncome') then -tal.amount else 0 end) revenue,
-           sum(case when acct.accttype in ('COGS','Expense','OthExpense') then tal.amount else 0 end) cost
-      from transactionaccountingline tal
-      join transaction t on t.id = tal.transaction
-      join account acct on acct.id = tal.account
-      join accountingperiod ap on ap.id = t.postingperiod
-     where tal.posting = 'T' and ap.isyear = 'F' and ap.startdate >= to_date('${SINCE}','YYYY-MM-DD')`));
-  const [srcInv] = await retry(() => client.query<{ n: string; total: string }>(`
-    select count(*) n, sum(t.foreigntotal) total from transaction t
-      join accountingperiod ap on ap.id = t.postingperiod
-     where t.type = 'CustInvc' and ap.startdate >= to_date('${SINCE}','YYYY-MM-DD')`));
+  const [srcPl] = await retry(() => client.query<{ revenue: string; cost: string }>(sourcePlQuery(SINCE)));
+  const [srcInv] = await retry(() => client.query<{ n: string; total: string }>(sourceInvoiceQuery(SINCE)));
 
   const ours = ((await retry(() => db.execute<LedgerTotals>(sql`
     select coalesce(sum(-jl.amount) filter (where a.type = any(${`{${REVENUE.join(",")}}`}::text[])), 0)::text revenue,
