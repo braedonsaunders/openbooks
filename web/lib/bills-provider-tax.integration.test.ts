@@ -85,7 +85,9 @@ test('vendor bills ship from the vendor to the receiving entity; invoices ship f
       org.orgId,
       {
         provider: 'custom_http', isEnabled: true, preferProvider: true,
-        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { GST: codeId } },
+        // The stub declares historical support so the fixture-dated documents
+        // below quote at all; as-of refusal is covered by its own test.
+        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { GST: codeId }, supportsHistoricalDates: true },
       },
       null,
       { allowPrivateEndpoints: true },

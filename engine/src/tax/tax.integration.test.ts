@@ -9,6 +9,7 @@ import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
 import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, resolveCounterpartyTaxAddress, resolveEntityTaxAddress, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { businessToday } from "../platform/business-date.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -517,7 +518,9 @@ test("approved sales and purchases use the configured provider atomically and re
       org.orgId,
       {
         provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { quoteUrl: `${origin}/quote`, jurisdictionTaxCodes: { CA: taxCodeId } },
+        // The stub declares historical support so the fixture-dated documents
+        // below quote at all; as-of refusal is covered by its own test.
+        settings: { quoteUrl: `${origin}/quote`, jurisdictionTaxCodes: { CA: taxCodeId }, supportsHistoricalDates: true },
       },
       null,
       stubOutbound,
@@ -947,6 +950,9 @@ test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones p
       shipFrom: { country: "US", region: "WA", postalCode: "98101" },
       shipTo: { line1: "1 Main St", city: "Seattle", region: "WA", postalCode: "98101", country: "US" },
     };
+    // Quote the business today: the cross-foot under test is orthogonal to
+    // as-of support, and a fixture-dated quote would (correctly) refuse.
+    const today = await businessToday(org.orgId);
 
     await saveTaxRateProviderConfig(
       org.orgId,
@@ -955,13 +961,13 @@ test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones p
       LOCAL_STUB,
     );
     const matched = await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
     }, null, LOCAL_STUB);
     assert.equal(matched.taxAmount, "8.2500");
     mode = "bad";
     await assert.rejects(
       quoteExternalTax(org.orgId, {
-        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
       }, null, LOCAL_STUB),
       /avalara returned tax 8.2500 but its components sum to 8.2400/,
     );
@@ -974,13 +980,13 @@ test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones p
     );
     mode = "match";
     const tjMatched = await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+      taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
     }, null, LOCAL_STUB);
     assert.equal(tjMatched.taxAmount, "8.2500");
     mode = "bad";
     await assert.rejects(
       quoteExternalTax(org.orgId, {
-        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
+        taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: today,
       }, null, LOCAL_STUB),
       /taxjar returned tax 8.2500 but its components sum to 8.2400/,
     );
@@ -1005,8 +1011,10 @@ test("headline-only custom hook quotes synthesize a mapped component, or refuse"
       res.end(JSON.stringify(hookBody));
     });
     const origin = await listenTaxServer(provider);
+    // Quote the business today: the headline rule under test is orthogonal
+    // to as-of support, and a fixture-dated quote would (correctly) refuse.
     const request = {
-      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {}, quotedOn: org.date,
+      taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {}, quotedOn: await businessToday(org.orgId),
     };
 
     // No headline mapping configured: a nonzero bare headline refuses by name.
@@ -1085,7 +1093,9 @@ test("a synthesized headline component is booked, approved, and posted under its
       org.orgId,
       {
         provider: "custom_http", isEnabled: true, preferProvider: true,
-        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
+        // The stub declares historical support so the fixture-dated document
+        // below quotes at all; as-of refusal is covered by its own test.
+        settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM", supportsHistoricalDates: true },
       },
       null,
       LOCAL_STUB,
@@ -1345,6 +1355,93 @@ test("a party address edited after approval does not break posting; the document
     );
     assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${moved.id}`)).rows[0]?.count, "0");
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("providers that cannot quote as of the document date refuse; Avalara sends and records it", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const seenDates: Array<unknown> = [];
+  let provider: Server | null = null;
+  try {
+    provider = createServer(async (req, res) => {
+      const body = JSON.parse(await bodyOf(req)) as Record<string, unknown>;
+      res.writeHead(200, { "content-type": "application/json" });
+      if (req.url === "/api/v2/transactions/create") {
+        seenDates.push(body.date);
+        res.end(JSON.stringify({
+          totalTax: 8.25,
+          code: "Q",
+          summary: [{ jurisdictionType: "STATE", rate: 0.0825, tax: 8.25 }],
+        }));
+      } else {
+        seenDates.push(body.quotedOn);
+        res.end(JSON.stringify({
+          taxAmount: "8.2500",
+          components: [{ jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" }],
+          externalRef: "H",
+        }));
+      }
+    });
+    const origin = await listenTaxServer(provider);
+    const address = {
+      shipFrom: { country: "US", region: "WA", postalCode: "98101" },
+      shipTo: { line1: "1 Main St", city: "Seattle", region: "WA", postalCode: "98101", country: "US" },
+    };
+    const backDated = { taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: "2024-03-01" };
+
+    // TaxJar has no as-of parameter: a 2024 document refuses before any
+    // provider call and persists no quote.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "taxjar", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, apiKey: "K" },
+      null,
+      LOCAL_STUB,
+    );
+    const refusedLine = randomUUID();
+    await assert.rejects(
+      quoteExternalTax(org.orgId, { ...backDated, documentLineId: refusedLine }, null, LOCAL_STUB),
+      /TaxJar can't calculate tax as of 2024-03-01 — enter tax manually for this back-dated document/,
+    );
+    assert.equal((await db.execute(sql`select count(*) from tax_rate_quotes where document_line_id = ${refusedLine}`)).rows[0]?.count, "0");
+
+    // Avalara takes the as-of date on the wire and the evidence records it.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "avalara", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, accountId: "A", licenseKey: "L" },
+      null,
+      LOCAL_STUB,
+    );
+    const lineId = randomUUID();
+    const avalaraQuote = await quoteExternalTax(org.orgId, { ...backDated, documentLineId: lineId }, null, LOCAL_STUB);
+    assert.equal(avalaraQuote.taxAmount, "8.2500");
+    assert.deepEqual(seenDates, ["2024-03-01"]);
+    const recorded = (await db.execute<{ quotedOn: string }>(sql`
+      select quoted_on as "quotedOn" from tax_rate_quotes where document_line_id = ${lineId}`)).rows[0];
+    assert.equal(recorded?.quotedOn, "2024-03-01");
+
+    // A custom hook is current-rates-only until it declares otherwise.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook` } },
+      null,
+      LOCAL_STUB,
+    );
+    await assert.rejects(
+      quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB),
+      /custom tax hook can't calculate tax as of 2024-03-01/,
+    );
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook`, supportsHistoricalDates: true } },
+      null,
+      LOCAL_STUB,
+    );
+    const hookQuote = await quoteExternalTax(org.orgId, backDated, null, LOCAL_STUB);
+    assert.equal(hookQuote.taxAmount, "8.2500");
+    assert.deepEqual(seenDates, ["2024-03-01", "2024-03-01"]);
+  } finally {
+    if (provider) await closeTaxServer(provider);
     await dropScratchOrg(org.orgId);
   }
 });
