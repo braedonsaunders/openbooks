@@ -1026,6 +1026,7 @@
     "save": "Salvar configurações",
     "saved": "Configurações de IA salvas.",
     "saveFailed": "Não foi possível salvar as configurações.",
+    "featureDisabled": "O Fechamento contínuo está desativado. Ative-o em Configuração → Funcionalidades para ativar os pacotes de agentes.",
     "keyCleared": "Chave de API removida.",
     "removeKey": "Remover chave de API",
     "testConnection": "Testar conexão",

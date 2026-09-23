@@ -18,7 +18,9 @@ const {
   saveSetupAgentPolicy,
 } = await import('./agents.ts')
 const { saveOrgAiSettings } = await import('../assistant/ai-config.ts')
-const { normalizeAgentSettingsInput, saveOrgAiAgentSettings } = await import('../assistant/ai-config.ts')
+const { getOrgAiSettings, normalizeAgentSettingsInput, saveOrgAiAgentSettings } = await import(
+  '../assistant/ai-config.ts'
+)
 
 /**
  * DB proofs for the Agents setup adapters (web/lib/setup/agents.ts): toggling
@@ -286,6 +288,83 @@ test(
       saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING, enabled: false }),
     )
     assert.equal(disabled.enabled, false)
+  },
+)
+
+test(
+  'a pre-enabled pack does not block provider saves while the module is off',
+  { skip: !DB },
+  async (t) => {
+    // C4: the bulk provider form resubmits every pack's current state, so
+    // refusing on ANY submitted enabled flag locked an org with a
+    // pre-enabled pack out of unrelated provider settings. Only the
+    // TRANSITION to enabled refuses — resubmitting the stored state saves.
+    const org: ScratchOrg = await createScratchOrg()
+    t.after(async () => {
+      await dropScratchOrg(org.orgId)
+    })
+    const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+    await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+    )
+    assert.equal((await applyFeatureChanges(org.orgId, userId, { continuousClose: false })).ok, true)
+
+    // Single-pack resubmit of the stored enabled state: no transition.
+    const resubmitted = await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+    )
+    assert.equal(resubmitted.enabled, true)
+
+    // Bulk provider save with the pack resubmitted unchanged: the provider
+    // change persists and the pack stays enabled.
+    await withBypassContext(() =>
+      saveOrgAiSettings(org.orgId, userId, { ...bulkAiInput(), modelFast: 'x-new-model' }),
+    )
+    const settings = await withBypassContext(() => getOrgAiSettings(org.orgId))
+    assert.equal(settings.modelFast, 'x-new-model', 'the provider change persists while off')
+    const row = await policyRow(org.orgId, 'accounting')
+    assert.ok(row, 'the pre-enabled pack survives the provider save')
+    assert.equal(row.enabled, true)
+  },
+)
+
+test(
+  'switching a pack off then on while the module is off refuses the switch-on',
+  { skip: !DB },
+  async (t) => {
+    // The transition gate in the other direction: disabling while off stays
+    // allowed (cleanup), but the subsequent enable is a transition and must
+    // refuse by name with nothing persisted.
+    const org: ScratchOrg = await createScratchOrg()
+    t.after(async () => {
+      await dropScratchOrg(org.orgId)
+    })
+    const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+    await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+    )
+    assert.equal((await applyFeatureChanges(org.orgId, userId, { continuousClose: false })).ok, true)
+
+    const disabled = await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING, enabled: false }),
+    )
+    assert.equal(disabled.enabled, false)
+
+    await assert.rejects(
+      withBypassContext(() =>
+        saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+      ),
+      /feature_disabled/,
+      're-enabling a disabled pack while off refuses by name',
+    )
+    await assert.rejects(
+      withBypassContext(() => saveOrgAiSettings(org.orgId, userId, bulkAiInput())),
+      /feature_disabled/,
+      'the bulk form refuses the same transition by name',
+    )
+    const row = await policyRow(org.orgId, 'accounting')
+    assert.ok(row)
+    assert.equal(row.enabled, false, 'a refused enable persists nothing')
   },
 )
 

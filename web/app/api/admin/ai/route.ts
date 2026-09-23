@@ -4,6 +4,7 @@ import { guardPermission } from "../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../lib/assistant/client";
 import {
   clearOrgAiKey,
+  CONTINUOUS_CLOSE_DISABLED_REMEDY,
   getOrgAiSettings,
   saveOrgAiSettings,
   normalizeAgentSettingsInput,
@@ -57,6 +58,12 @@ export async function PUT(req: Request) {
     input.agents = body.agents === undefined ? [] : normalizeAgentSettingsInput(body.agents);
     await saveOrgAiSettings(gate.user.orgId, gate.user.id, input);
   } catch (e) {
+    // Enabling a pack while Continuous Close is off refuses by name with a
+    // 409 (like the run routes), carrying the remedy instead of the bare
+    // code; every other validation failure stays a 422.
+    if ((e as Error).message === "feature_disabled") {
+      return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 });
+    }
     return NextResponse.json({ error: (e as Error).message }, { status: 422 });
   }
   return NextResponse.json(await getOrgAiSettings(gate.user.orgId));

@@ -881,6 +881,7 @@ test('feature refusal copy ships translated in every locale', () => {
   // titles named inside the message; an absent key falls back to English
   // inside otherwise translated switchboards.
   const keys = [
+    'admin.ai.featureDisabled',
     'admin.setup.features.errors.blocked',
     'admin.setup.features.errors.dependency',
     'admin.setup.features.errors.dependents',

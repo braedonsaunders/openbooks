@@ -184,7 +184,10 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
         })
         const body = (await res.json()) as AiFormInitial & { error?: string }
         if (!res.ok) {
-          toast.error(body.error ?? t('saveFailed'))
+          // This endpoint answers 409 only for the Continuous Close
+          // pack-enable refusal: show the translated remedy instead of the
+          // raw server string. Every other failure keeps the server message.
+          toast.error(res.status === 409 ? t('featureDisabled') : (body.error ?? t('saveFailed')))
           return
         }
         setHasKey(body.hasKey)

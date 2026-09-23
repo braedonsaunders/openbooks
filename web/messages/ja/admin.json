@@ -1023,6 +1023,7 @@
     "save": "設定を保存",
     "saved": "AI設定を保存しました。",
     "saveFailed": "設定を保存できませんでした。",
+    "featureDisabled": "継続決算がオフになっています。エージェントパックを有効化するには、セットアップ → 機能でオンにしてください。",
     "keyCleared": "APIキーを削除しました。",
     "removeKey": "APIキーを削除",
     "testConnection": "接続をテスト",
