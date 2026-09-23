@@ -1222,6 +1222,21 @@ export async function categoryWeekly(
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}
         and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
+        -- An internal transfer between two selected banks is one debit and
+        -- one credit inside the viewed set: counting only its negative leg
+        -- reports the move as spending. Skip the outflow leg when the same
+        -- entry carries an in-scope positive leg, netting the move to zero.
+        -- A transfer to an out-of-scope account keeps its leg: cash really
+        -- left the viewed set.
+        and not (
+          coalesce(d.kind, 'journal') = 'transfer'
+          and exists (
+            select 1 from journal_lines l2
+             where l2.entry_id = l.entry_id and l2.org_id = l.org_id
+               and l2.account_id in (${ids})
+               and l2.amount > 0
+          )
+        )
     `));
     // Same data-start rule as the GL path (see historyWindowDivisor),
     // measured in this strategy's own read scope: bank legs matching its
@@ -1235,6 +1250,15 @@ export async function categoryWeekly(
         left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
        where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0
          and (${kindFilter})${memoFilter}${subScope(sql`l.subsidiary_id`, context.subIds)}
+         and not (
+           coalesce(d.kind, 'journal') = 'transfer'
+           and exists (
+             select 1 from journal_lines l2
+              where l2.entry_id = l.entry_id and l2.org_id = l.org_id
+                and l2.account_id in (${ids})
+                and l2.amount > 0
+           )
+         )
     `));
     const bankStartIso = bankStartRow.rows[0]?.d ?? null;
     const weeklyHistory: Record<string, Money> = {};
