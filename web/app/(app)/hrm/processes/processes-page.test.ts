@@ -57,7 +57,7 @@ test("segments filter server-side and rows resolve through the read service", ()
   assert.ok(!/from hrm_process_steps/.test(loader), "loader issues no direct step-table reads");
 });
 
-test("the checklist body checks refusals before parsing, on every action", () => {
+test("the checklist body refuses through the shared action path, on every action", () => {
   for (const path of [
     "/api/hrm/processes/steps/${step.id}/complete",
     "/api/hrm/processes/steps/${reasonFor.stepId}/skip",
@@ -66,8 +66,13 @@ test("the checklist body checks refusals before parsing, on every action", () =>
   ]) {
     assert.ok(panel.includes(path), `the panel must call ${path}`);
   }
-  assert.match(panel, /if \(!res\.ok\)/, "refusals are checked before parsing");
-  assert.match(panel, /readApiErrorMessage\(res,/, "refusal messages render intact");
+  // Mutations run on the shared action path (useAppAction + fetchAction):
+  // fetchAction checks res.ok before trusting the body, so a refusal can
+  // never become a parse error — pin the path, not a per-call check.
+  assert.match(panel, /useAppAction/, "actions run through the shared action hook");
+  assert.match(panel, /fetchAction\(/, "actions ride fetchAction, ok-first by construction");
+  assert.match(panel, /onRefused/, "refusal messages render intact through the hook");
+  assert.ok(!panel.includes('readApiErrorMessage'), "no hand-rolled error parsing beside the shared path");
 });
 
 test("process managers can open a real, permission-gated checklist authoring flow", () => {
