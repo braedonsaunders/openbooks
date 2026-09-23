@@ -7,7 +7,7 @@ import test from 'node:test'
 // only on stocked rows — and persist the choice through the draft writer.
 const drawer = readFileSync(new URL('./OrderDrawer.tsx', import.meta.url), 'utf8')
 const handlers = readFileSync(new URL('../../api/_order/handlers.ts', import.meta.url), 'utf8')
-const lib = readFileSync(new URL('../../api/_order/lib.ts', import.meta.url), 'utf8')
+const lineSelection = readFileSync(new URL('../../api/_order/line-selection.ts', import.meta.url), 'utf8')
 
 test('the order drawer models a per-line warehouse', () => {
   assert.match(drawer, /stockLocationId: string/, 'LineRow carries the line warehouse')
@@ -22,7 +22,7 @@ test('the order picker shows only for several locations and stocked rows', () =>
 })
 
 test('the order draft writer persists a validated line warehouse', () => {
-  assert.match(lib, /stockLocationId\?: string \| null/, 'OrderLineInput accepts the choice')
+  assert.match(lineSelection, /stockLocationId\?: string \| null/, 'OrderLineInput accepts the choice')
   assert.match(handlers, /resolveLineStockLocation/, 'PATCH resolves every submitted line')
   assert.match(handlers, /stock_location_id/, 'the line re-insert stores the resolution')
 })
