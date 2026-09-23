@@ -467,7 +467,7 @@ import { receiveInventory } from "./engine/src/inventory/movements.ts";
       // createOrderDraft inserts NO subsidiary — the exact origin of the
       // converted bill the audit pinned.
       const po = await withOrg(org.orgId, () =>
-        createOrderDraft(org.orgId, userId, "purchase_order"),
+        createOrderDraft(org.orgId, userId, "purchase_order", randomUUID()),
       );
       const poLineId = randomUUID();
       await db.execute(sql\`

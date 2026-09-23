@@ -47,7 +47,7 @@ test("partial sales fulfillments move inventory and fence billing exactly once",
       });
 
       const order = await withOrg(org.orgId, () =>
-        createOrderDraft(org.orgId, userId, "sales_order"),
+        createOrderDraft(org.orgId, userId, "sales_order", randomUUID()),
       );
       const sourceLineId = randomUUID();
       await db.execute(sql\`
@@ -286,7 +286,7 @@ test("sales fulfillment rejects a non-calendar date without mutating the order",
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -377,7 +377,7 @@ test("voiding a shipment unwinds stock and restores counters, then the order voi
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -485,7 +485,7 @@ import { reverseInventoryMovement } from "./engine/src/inventory/reversal.ts";
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -581,7 +581,7 @@ test("voiding a shipment of billed quantities is refused without mutation", { sk
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -671,7 +671,7 @@ test("voiding a movement-free service shipment restores order counters", { skip:
     const org = await createScratchOrg();
     try {
       const userId = await createScratchUser(org.orgId, "Shipping Clerk", "admin");
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -755,7 +755,7 @@ test("voiding a shipment with malformed provenance is refused as a controlled er
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
@@ -862,7 +862,7 @@ test("voiding a shipment writes per-source-order audit with before and after", {
         quantity: "10", unitCost: "2", subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing, date: org.date,
       });
-      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order"));
+      const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID()));
       const sourceLineId = randomUUID();
       await db.execute(sql\`
         insert into document_lines
