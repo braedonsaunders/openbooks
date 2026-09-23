@@ -1658,7 +1658,10 @@
     "requestCancel": "取消",
     "requestStatus": {
       "open": "处理中"
-    }
+    },
+    "emptyTitle": "暂无薪酬记录",
+    "emptyDescription": "目前还没有您的带宽位置或薪酬单记录。请在下方请求您的薪酬信息，人事部将会回复。",
+    "notLinked": "此登录尚未关联任何人员 — 在使用自助服务之前，请让管理员在 Admin → Users → Link person 中关联您的人员"
   },
   "qualifications": {
     "title": "资质",

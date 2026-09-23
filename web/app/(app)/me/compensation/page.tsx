@@ -9,8 +9,9 @@ export async function generateMetadata() {
 
 /**
  * My compensation — placement, statements, and the pay-information
- * request. Renders only when hrmCompensation is on and the person has
- * a band or a statement.
+ * request. Renders when hrmCompensation is on: content panels show while
+ * the person has a band or a statement, the empty state covers a linked
+ * person with neither, and the named refusal covers an unlinked login.
  */
 export default async function MyCompensationPage({
   searchParams,

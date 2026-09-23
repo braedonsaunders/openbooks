@@ -1716,7 +1716,10 @@
     "requestCancel": "Cancel",
     "requestStatus": {
       "open": "Open"
-    }
+    },
+    "emptyTitle": "No compensation on file yet",
+    "emptyDescription": "There is no pay band or compensation statement on file for you yet. Request your pay information below and HR will respond.",
+    "notLinked": "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service"
   },
   "qualifications": {
     "title": "Qualifications",

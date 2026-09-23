@@ -304,7 +304,15 @@ test("both specs render the refusal through the house empty-state block", async 
   assert.match(loader, /refusal: \{ title: string; message: string \} \| null/, "the loader data carries the refusal beside the content");
   assert.match(loader, /t\('compensation\.title'\)/, "the home refusal banner reuses the existing page title");
   assert.match(loader, /t\('equity\.title'\)/, "the equity refusal banner reuses the existing page title");
-  assert.ok(!/refusedTitle/.test(loader), "no new refusal-title key is introduced in the loader");
+  // The /me compensation refusal lives in this file too and reuses the
+  // shared me.refusedTitle (the same title every /me loader carries since
+  // 1cc5f9c78) — the property is no NEW refusal-title key, not zero
+  // occurrences of the shared one.
+  assert.deepEqual(
+    [...loader.matchAll(/t\('([^']*refusedTitle)'\)/g)].map((m) => m[1]),
+    ['me.refusedTitle'],
+    "the loader introduces no new refusal-title key: home/equity reuse their page titles, /me reuses the shared title",
+  );
   const catalogNamespaces = JSON.parse(strings) as {
     compensation?: { refusedTitle?: unknown };
     equity?: { refusedTitle?: unknown };

@@ -747,6 +747,23 @@ export interface MyCompData {
   employmentId: string
   tabs: { href: string; label: string; active: boolean }[]
   hasContent: boolean
+  /**
+   * True when the person is linked but holds no band and no statement: the
+   * page renders its explicit empty state with the pay-information request
+   * as the next step instead of an ambiguous 404.
+   */
+  showEmpty: boolean
+  /** The pay-information request applies only while an employment resolves. */
+  canRequest: boolean
+  emptyTitle: string
+  emptyDescription: string
+  /**
+   * Named no-link refusal (the /me documents/surveys shape): set only by
+   * myCompRefusal for a login with no employment — the page renders the
+   * house empty-state block with the remedy, never notFound(). Null on
+   * every loadMyCompensation row.
+   */
+  refusal: { title: string; message: string } | null
   placementLabel: string
   placement: string
   compaRatio: string | null
@@ -798,6 +815,11 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
     employmentId,
     tabs,
     hasContent,
+    showEmpty: !hasContent,
+    canRequest: true,
+    emptyTitle: t('myComp.emptyTitle'),
+    emptyDescription: t('myComp.emptyDescription'),
+    refusal: null,
     placementLabel: t('myComp.placement'),
     placement: t.has(`compensation.placement.${placement}`) ? t(`compensation.placement.${placement}`) : placement,
     compaRatio,
@@ -821,6 +843,50 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
         ? t(`myComp.requestStatus.${openRequest.status}`)
         : openRequest.status
       : null,
+  }
+}
+
+/**
+ * The /me/compensation page state for a login with no employment (not
+ * linked): the named no-link refusal with its remedy, carried as page
+ * state for the house empty-state block (same as /me, documents, surveys
+ * and the clock) — never an ambiguous 404. The request widget stays off
+ * (canRequest false): with no employment there is nothing to file
+ * against.
+ */
+export async function myCompRefusal(authz: Authz): Promise<MyCompData> {
+  const t = await getTranslations('hrm')
+  const { meTabs } = await import('./self-service')
+  const tabs = (await meTabs(authz, '/me/compensation')).map((tab) => ({
+    href: tab.href,
+    label: tab.label,
+    active: tab.active === true,
+  }))
+  return {
+    title: t('myComp.title'),
+    description: t('myComp.description'),
+    employmentId: '',
+    tabs,
+    hasContent: false,
+    showEmpty: false,
+    canRequest: false,
+    emptyTitle: t('myComp.emptyTitle'),
+    emptyDescription: t('myComp.emptyDescription'),
+    refusal: { title: t('me.refusedTitle'), message: t('myComp.notLinked') },
+    placementLabel: t('myComp.placement'),
+    placement: '',
+    compaRatio: null,
+    bandRange: null,
+    statementsTitle: t('myComp.statementsTitle'),
+    statementsColumns: { period: t('myComp.columns.period'), generated: t('myComp.columns.generated') },
+    statements: [],
+    statementsEmpty: t('myComp.statementsEmpty'),
+    requestLabel: t('myComp.requestPayInfo'),
+    requestHref: '',
+    requestFailed: t('myComp.requestFailed'),
+    requestSubmit: t('myComp.requestSubmit'),
+    requestCancel: t('myComp.requestCancel'),
+    requestStatus: null,
   }
 }
 

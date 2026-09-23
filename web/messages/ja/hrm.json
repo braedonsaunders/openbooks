@@ -1658,7 +1658,10 @@
     "requestCancel": "キャンセル",
     "requestStatus": {
       "open": "受付中"
-    }
+    },
+    "emptyTitle": "報酬はまだ登録されていません",
+    "emptyDescription": "バンド内の位置も明細もまだ登録されていません。下から給与情報を請求してください。人事部が対応します。",
+    "notLinked": "このログインに人物がリンクされていません — セルフサービスを利用する前に、管理者に Admin → Users → Link person であなたの人物をリンクしてもらってください"
   },
   "qualifications": {
     "title": "資格",
