@@ -81,10 +81,14 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       // Verify-only user: attestation duty without the editing duty.
+      // Full org scope (allowedSubsidiaryIds null), so the subsidiary fence
+      // allows every record the route checks — mirroring the real guard for
+      // an unscoped caller.
       export async function getAuthz() {
         return { user: { orgId: '${ORG_ID}', id: '${VERIFIER_ID}' }, allowedSubsidiaryIds: null }
       }
       export function can(_authz, perm) { return perm === 'compliance.verify' }
+      export function guardSubsidiaryScope() { return null }
     `,
   ],
   [
