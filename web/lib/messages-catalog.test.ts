@@ -697,6 +697,36 @@ test('journal memo/reference hints ship localized in every locale', () => {
   }
 })
 
+test('setup wizard selection copy ships localized in every locale', () => {
+  // UX-19: the company step states its combobox selections as live text and
+  // the review step badges click-through defaults — absent outside en they
+  // fall back to English inside otherwise translated wizards. The
+  // {country}/{currency}/{fiscalMonth} interpolations must survive in every
+  // locale.
+  const source = flattenCatalog('en')
+  const keys = [
+    'admin.setup.wizard.company.selectedSummary',
+    'admin.setup.wizard.review.defaultBadge',
+    'admin.setup.wizard.review.defaultsHint',
+  ]
+  for (const key of keys) assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    }
+  }
+  for (const locale of locales) {
+    const summary = flattenCatalog(locale).get('admin.setup.wizard.company.selectedSummary') ?? ''
+    for (const token of ['{country}', '{currency}', '{fiscalMonth}']) {
+      assert.ok(summary.includes(token), `${locale} must keep the ${token} interpolation`)
+    }
+  }
+})
+
 test('pack-declared tax filing notices resolve localized in every locale', () => {
   // F-w4-001: the generic prepare panel branched on the literal `CA_GST34`
   // code because packs had no notice channel. Packs now declare a
@@ -3095,9 +3125,10 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // qualification-settings), translated in all 7 locales.
   // m23_insights_autosave/F1: 4069 = 4063 plus 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
-  // m36_ctrl_ap_release/CTRL-01: 4076 = 4069 plus 7 vendor-bill approval
-  // keys (settings.approvals.*), translated in all 7 locales.
-  assert.equal(wanted.length, 4076, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // m36_ctrl_ap_release/CTRL-01 + m34_ux_roles/UX-19: 4079 = 4069 plus 7
+  // vendor-bill approval keys (settings.approvals.*) and 3 wizard selection
+  // keys (company.selectedSummary, review.defaultBadge/defaultsHint), all 7 locales.
+  assert.equal(wanted.length, 4079, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3475,10 +3506,9 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // m17_hrm_ui/F5-followup: 4062 + rehash for the 12 rehomed-entity keys.
   // m23_insights_autosave/F1: 4069 + rehash for the 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
-  // m36_ctrl_ap_release/CTRL-01: 4076 + rehash for the 7 vendor-bill
-  // approval keys (settings.approvals.*), translated in all 7 locales.
-  const ADMIN_I2_SOURCE_COUNT = 4076
-  const ADMIN_I2_SOURCE_HASH = '80d583bea7963601efb77f0ed01f4748df0de1a77a66758aa68f737b7cc6ed0f'
+  // m36 CTRL-01 + m34 UX-19: 4079 + rehash for the 7 approval and 3 wizard keys.
+  const ADMIN_I2_SOURCE_COUNT = 4079
+  const ADMIN_I2_SOURCE_HASH = 'f31e07f23777200121fd73ea8ed97853d6bc2cd1166465abe6813ebc3221d711'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

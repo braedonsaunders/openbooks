@@ -143,6 +143,15 @@ export function SetupWizard(props: {
   const [payrollPack, setPayrollPack] = useState<PayrollPack>(initialPayrollPack(installablePacks))
   const countries = useMemo(() => countryOptions(locale), [locale])
   const currencies = useMemo(() => currencyOptions(locale), [locale])
+  // Fiscal months render in the operator's locale — a hardcoded English list
+  // would state the wrong selected value to every non-English reviewer.
+  const fiscalMonths = useMemo(() => {
+    const format = new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' })
+    return Array.from({ length: 12 }, (_, index) => ({
+      value: index + 1,
+      label: format.format(new Date(Date.UTC(2026, index, 1))),
+    }))
+  }, [locale])
 
   // The Payroll step only exists when the module is switched on — it is an
   // optional module step, inserted after Operations where it was enabled.
@@ -425,6 +434,7 @@ export function SetupWizard(props: {
           fiscalMonth={fiscalMonth}
           countries={countries}
           currencies={currencies}
+          months={fiscalMonths}
           setName={setName}
           setLegalName={setLegalName}
           setCountry={setCountry}
@@ -502,6 +512,17 @@ export function SetupWizard(props: {
           country={country}
           currency={currency}
           fiscalMonth={fiscalMonth}
+          defaults={{
+            country: props.initial.country,
+            currency: props.initial.baseCurrency,
+            fiscalMonth: props.initial.fiscalYearStartMonth,
+            teamSize: props.initial.workspaceProfile.teamSize,
+            complexity: props.initial.workspaceProfile.complexity,
+            bookStart: props.initial.workspaceProfile.bookStart,
+            taxPosition: props.initial.workspaceProfile.taxPosition,
+            monthlyActivity: props.initial.workspaceProfile.monthlyActivity,
+            closeCadence: props.initial.workspaceProfile.closeCadence,
+          }}
           teamSize={teamSize}
           complexity={complexity}
           bookStart={bookStart}
@@ -573,13 +594,20 @@ function CompanyStep(props: {
   fiscalMonth: number
   countries: { value: string; label: string }[]
   currencies: { value: string; label: string }[]
+  months: { value: number; label: string }[]
   setName: (v: string) => void
   setLegalName: (v: string) => void
   setCountry: (v: string) => void
   setCurrency: (v: string) => void
   setFiscalMonth: (v: number) => void
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, countries, currencies } = props
+  const { t, name, legalName, country, currency, fiscalMonth, countries, currencies, months } = props
+  // The comboboxes' selected values as plain text: an accessibility snapshot
+  // that cannot expose a native select's current option still reads this
+  // line, and aria-live announces it when a selection changes.
+  const countryLabel = countries.find((option) => option.value === country)?.label ?? country
+  const currencyLabel = currencies.find((option) => option.value === currency)?.label ?? currency
+  const fiscalMonthLabel = months.find((option) => option.value === fiscalMonth)?.label ?? String(fiscalMonth)
   return (
     <div className="space-y-6">
       <div>
@@ -654,16 +682,17 @@ function CompanyStep(props: {
             onChange={(e) => props.setFiscalMonth(Number(e.target.value))}
             className="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
           >
-            {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'].map(
-              (m, i) => (
-                <option key={m} value={i + 1}>
-                  {m}
-                </option>
-              ),
-            )}
+            {months.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
       </div>
+      <p aria-live="polite" className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+        {t('company.selectedSummary', { country: countryLabel, currency: currencyLabel, fiscalMonth: fiscalMonthLabel })}
+      </p>
     </div>
   )
 }
@@ -1223,6 +1252,20 @@ function ReviewStep(props: {
   country: string
   currency: string
   fiscalMonth: number
+  /** The pre-selected values the wizard opened with: a review value still
+   *  equal to its default was accepted by click-through, never deliberately
+   *  chosen, and is badged so. */
+  defaults: {
+    country: string
+    currency: string
+    fiscalMonth: number
+    teamSize: TeamSize
+    complexity: ComplexityLevel
+    bookStart: BookStart
+    taxPosition: TaxPosition
+    monthlyActivity: MonthlyActivityLevel
+    closeCadence: CloseCadence
+  }
   teamSize: TeamSize
   complexity: ComplexityLevel
   bookStart: BookStart
@@ -1238,13 +1281,19 @@ function ReviewStep(props: {
   payrollPacks: WizardPayrollPack[]
   seedChartOfAccounts: boolean
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
+  const { t, name, legalName, country, currency, fiscalMonth, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
   const payrollPackName = payrollPack
     ? (payrollPacks.find((pack) => pack.country === payrollPack)?.name ?? payrollPack)
     : null
   const fiscalMonthName = new Intl.DateTimeFormat(undefined, { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(2026, fiscalMonth - 1, 1)),
   )
+  const defaultBadge = t('review.defaultBadge')
+  const anyDefault = country === defaults.country || currency === defaults.currency
+    || fiscalMonth === defaults.fiscalMonth || teamSize === defaults.teamSize
+    || complexity === defaults.complexity || bookStart === defaults.bookStart
+    || taxPosition === defaults.taxPosition || monthlyActivity === defaults.monthlyActivity
+    || closeCadence === defaults.closeCadence
   return (
     <div className="space-y-5">
       <div>
@@ -1253,18 +1302,23 @@ function ReviewStep(props: {
         </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('review.description')}</p>
       </div>
+      {anyDefault && (
+        <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+          {t('review.defaultsHint')}
+        </p>
+      )}
       <div className="space-y-2 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
         <ReviewRow label={t('review.companyName')} value={name} />
         <ReviewRow label={t('review.legalName')} value={legalName || t('review.notProvided')} />
-        <ReviewRow label={t('review.country')} value={country.toUpperCase()} />
-        <ReviewRow label={t('review.currency')} value={currency} />
-        <ReviewRow label={t('review.fiscalYear')} value={fiscalMonthName} />
-        <ReviewRow label={t('review.teamSize')} value={t(`profile.team.${teamSize}.title`)} />
-        <ReviewRow label={t('review.complexity')} value={t(`profile.complexity.${complexity}.title`)} />
-        <ReviewRow label={t('review.bookStart')} value={t(`launch.books.${bookStart}.title`)} />
-        <ReviewRow label={t('review.taxPosition')} value={t(`launch.tax.${taxPosition}`)} />
-        <ReviewRow label={t('review.monthlyActivity')} value={t(`rhythm.activity.${monthlyActivity}.title`)} />
-        <ReviewRow label={t('review.closeCadence')} value={t(`rhythm.close.${closeCadence}.title`)} />
+        <ReviewRow label={t('review.country')} value={country.toUpperCase()} isDefault={country === defaults.country} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.currency')} value={currency} isDefault={currency === defaults.currency} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.fiscalYear')} value={fiscalMonthName} isDefault={fiscalMonth === defaults.fiscalMonth} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.teamSize')} value={t(`profile.team.${teamSize}.title`)} isDefault={teamSize === defaults.teamSize} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.complexity')} value={t(`profile.complexity.${complexity}.title`)} isDefault={complexity === defaults.complexity} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.bookStart')} value={t(`launch.books.${bookStart}.title`)} isDefault={bookStart === defaults.bookStart} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.taxPosition')} value={t(`launch.tax.${taxPosition}`)} isDefault={taxPosition === defaults.taxPosition} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.monthlyActivity')} value={t(`rhythm.activity.${monthlyActivity}.title`)} isDefault={monthlyActivity === defaults.monthlyActivity} defaultBadge={defaultBadge} />
+        <ReviewRow label={t('review.closeCadence')} value={t(`rhythm.close.${closeCadence}.title`)} isDefault={closeCadence === defaults.closeCadence} defaultBadge={defaultBadge} />
         <ReviewRow
           label={t('review.sampleCompany')}
           value={includeSampleCompany ? t('review.sampleCompanyYes') : t('review.sampleCompanyNo')}
@@ -1311,11 +1365,18 @@ function ReviewStep(props: {
   )
 }
 
-function ReviewRow({ label, value }: { label: string; value: string }) {
+function ReviewRow({ label, value, isDefault, defaultBadge }: { label: string; value: string; isDefault?: boolean; defaultBadge?: string }) {
   return (
-    <div className="flex items-center justify-between py-1">
+    <div className="flex items-center justify-between gap-2 py-1">
       <span className="text-sm text-slate-500 dark:text-slate-400">{label}</span>
-      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{value}</span>
+      <span className="flex items-center gap-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+        {isDefault && defaultBadge ? (
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {defaultBadge}
+          </span>
+        ) : null}
+        {value}
+      </span>
     </div>
   )
 }

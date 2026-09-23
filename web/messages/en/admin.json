@@ -4054,7 +4054,8 @@
         "legalNamePlaceholder": "Registered legal entity name",
         "country": "Country",
         "currency": "Base currency",
-        "fiscalYear": "Fiscal year starts in"
+        "fiscalYear": "Fiscal year starts in",
+        "selectedSummary": "Selected: {country} · {currency} · fiscal year starts {fiscalMonth}."
       },
       "industry": {
         "title": "What's your industry?",
@@ -4252,7 +4253,9 @@
         "note": "This creates your accounting foundation and starting workspace. The readiness guide will show anything still needed before your first live posting. Every optional capability remains adjustable from Company Settings → Features.",
         "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features.",
         "payrollPack": "Payroll country pack",
-        "payrollPackNone": "None — install later from Payroll setup"
+        "payrollPackNone": "None — install later from Payroll setup",
+        "defaultBadge": "Default",
+        "defaultsHint": "Fields marked Default kept their pre-selected value. Go back to change them before applying."
       },
       "applying": {
         "title": "Setting up your books…",
