@@ -261,7 +261,9 @@ test("pay-run scope guard: oracle table for the include/exclude asymmetry", { sk
       actorId: fx.actorId,
       mutation: { action: "exclude", employeePartyId: fx.deactivatedId },
     });
-    assert.deepEqual(repeat, { changed: false });
+    // Repeating an exclusion without an idempotency key is a plain no-op,
+    // not a replay: nothing changes and nothing was replayed.
+    assert.deepEqual(repeat, { changed: false, replayed: false });
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }

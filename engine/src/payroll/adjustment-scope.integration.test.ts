@@ -11,7 +11,7 @@ for (const scenario of ["authorized", "hidden snapshot", "concurrent transfer"] 
   test(`direct payroll adjustment scope: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     const writer = await pool.connect();
-    let pending: Promise<PromiseSettledResult<{ changed: boolean }>> | undefined;
+    let pending: Promise<PromiseSettledResult<{ changed: boolean; replayed: boolean }>> | undefined;
     try {
       await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
       const { input } = await calculatedRun(fx);
@@ -36,7 +36,9 @@ for (const scenario of ["authorized", "hidden snapshot", "concurrent transfer"] 
       const change = () => mutatePayRunAdjustment({ ...input, allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
         mutation: { action: "exclude", employeePartyId: targetId } });
       if (scenario === "authorized") {
-        assert.deepEqual(await change(), { changed: true });
+        // The idempotency fix returns the replay flag alongside the scope
+        // outcome; a fresh exclusion applies (changed) and is not a replay.
+        assert.deepEqual(await change(), { changed: true, replayed: false });
         assert.notDeepEqual(await snapshot(), before);
       } else if (scenario === "hidden snapshot") {
         await assert.rejects(change(), /pay run not found/);
