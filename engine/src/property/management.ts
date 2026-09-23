@@ -2011,7 +2011,28 @@ export async function finalizeCamPool(orgId: string, actorId: string, poolId: st
     const actual = await sourceTotals();
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");
     if (cmp(actualAmount, "0") < 0) throw new PropertyManagementError("CAM expense activity is net-negative; review the selected accounts before finalizing");
-    const leases = (await tx.execute<CamLeaseRow>(sql`select l.id,l.cam_share_percent,u.rentable_area,
+    // Weight fence: the sealed allocations and the fingerprint below are a
+    // function of lease.cam_share_percent and unit.rentable_area, so the
+    // rows that source them are locked FOR SHARE for the whole finalization,
+    // in deterministic id order. updatePropertyLease and updatePropertyUnit
+    // both hold their rows FOR UPDATE, which conflicts with FOR SHARE in
+    // both directions: a concurrent edit either commits before these locks
+    // are taken (and is counted) or parks behind this transaction until it
+    // ends. New units cannot move a sealed weight — only an edit to an
+    // overlapping lease or its unit can, and both are covered.
+    await tx.execute(sql`
+      select l.id from property_leases l where l.org_id=${orgId} and l.property_id=${pool.property_id}
+        and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
+        and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
+      order by l.id for share`);
+    await tx.execute(sql`
+      select u.id from property_units u where u.org_id=${orgId} and u.id in (
+        select l.unit_id from property_leases l where l.org_id=${orgId} and l.property_id=${pool.property_id}
+          and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
+          and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
+          and l.unit_id is not null)
+      order by u.id for share`);
+    const leases = (await tx.execute<CamLeaseRow>(sql`select l.id,l.lease_number,l.cam_share_percent,u.rentable_area,
       greatest(l.starts_on,coalesce(l.move_in_on,l.starts_on),${pool.period_starts_on}::date)::text as overlap_start,
       least(coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on}::date),${pool.period_ends_on}::date)::text as overlap_end,
       coalesce((select sum(s.amount) from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id

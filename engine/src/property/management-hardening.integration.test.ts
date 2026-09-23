@@ -545,6 +545,96 @@ test("R13: CAM finalization refuses an overlapping lease with no rentable area i
   }
 });
 
+test("R14: CAM finalization waits for a concurrent lease-weight edit and seals the committed value", async () => {
+  const fx = await seedProperty();
+  let holder: { query: (text: string) => Promise<unknown>; release: () => void } | null = null;
+  let outcome: Promise<{ actualAmount: string; allocations: number }> | null = null;
+  try {
+    const orgId = fx.org.orgId;
+    const unitA = randomUUID();
+    const unitB = randomUUID();
+    await db.execute(sql`
+      insert into property_units (id, org_id, property_id, code, rentable_area, status)
+      values (${unitA}, ${orgId}, ${fx.propertyId}, 'UA', 100, 'occupied'),
+             (${unitB}, ${orgId}, ${fx.propertyId}, 'UB', 100, 'occupied')`);
+    const leaseA = randomUUID();
+    const leaseB = randomUUID();
+    await db.execute(sql`
+      insert into property_leases (id, org_id, property_id, unit_id, tenant_id, lease_number, status, starts_on, ends_on, cam_method)
+      values (${leaseA}, ${orgId}, ${fx.propertyId}, ${unitA}, ${fx.org.customerId}, 'LSE-CAM-WA', 'active', '2026-07-01', '2026-07-31', 'pro_rata'),
+             (${leaseB}, ${orgId}, ${fx.propertyId}, ${unitB}, ${fx.org.customerId}, 'LSE-CAM-WB', 'active', '2026-07-01', '2026-07-31', 'pro_rata')`);
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+      values (${entryId}, ${orgId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, ${`CAM-${entryId.slice(0, 8)}`}, '2026-07-15', ${fx.org.periodId}, 'CAM source', 'draft', 'manual')`);
+    await db.execute(sql`
+      insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, location_id, amount, currency, txn_amount, fx_rate)
+      values (${orgId}, ${entryId}, 1, ${fx.org.accounts.adjustment}, ${fx.org.subsidiaryId}, ${fx.org.locationId}, 10000, 'CAD', 10000, 1),
+             (${orgId}, ${entryId}, 2, ${fx.org.accounts.bank}, ${fx.org.subsidiaryId}, null, -10000, 'CAD', -10000, 1)`);
+    await db.execute(sql`update journal_entries set status='posted', posted_at=now() where org_id = ${orgId} and id = ${entryId}`);
+    await db.execute(sql`
+      insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, locked_by, reason, created_by, updated_by)
+      values (${orgId}, ${fx.org.periodId}, ${fx.org.bookId}, ${fx.org.subsidiaryId}, 'gl', 'closed', now(), ${fx.actorId}, 'CAM', ${fx.actorId}, ${fx.actorId})`);
+    const camPool = await createCamPool({
+      orgId, actorId: fx.actorId, propertyId: fx.propertyId, name: "FY26 FENCE", fiscalYear: 2026,
+      periodStartsOn: "2026-07-01", periodEndsOn: "2026-07-31", allocationBasis: "rentable_area", budgetAmount: "10000",
+      expenseAccountIds: [fx.org.accounts.adjustment],
+    });
+    // A concurrent unit edit holds its row the way updatePropertyUnit does —
+    // FOR UPDATE, uncommitted — while finalization starts on another session.
+    // A raw pooled client carries no tenant: without app.current_org the RLS
+    // policy yields zero rows, the UPDATE locks nothing, and the test would
+    // prove nothing. Set the tenant and assert the row count.
+    const client = await pool.connect();
+    holder = client;
+    await client.query("BEGIN");
+    await client.query("select set_config('app.current_org', $1, false)", [orgId]);
+    const held = await client.query("update property_units set rentable_area = 400 where org_id = $1 and id = $2", [orgId, unitA]);
+    assert.equal(held.rowCount, 1, "the holder edit must own the unit row for the whole probe");
+    let settled = false;
+    let failed: unknown = null;
+    outcome = finalizeCamPool(orgId, fx.actorId, camPool.id);
+    void outcome.then(() => { settled = true; }, (error: unknown) => { settled = true; failed = error; });
+    const deadline = Date.now() + 10_000;
+    let blocked = false;
+    while (!settled && Date.now() < deadline) {
+      // A row-weight waiter parks on the holder's transaction id (no
+      // relation attached), so watch waiter state rather than pg_locks.
+      blocked = (await db.execute<{ blocked: boolean }>(sql`select exists(
+        select 1 from pg_stat_activity
+         where datname = current_database() and pid <> pg_backend_pid()
+           and state = 'active' and wait_event_type = 'Lock'
+      ) as blocked`)).rows[0]!.blocked;
+      if (blocked) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(blocked, `finalization must park on the weight lock instead of reading past the edit (early failure: ${String(failed)})`);
+    assert.ok(!settled, "finalization must not complete while the weight edit is uncommitted");
+    await client.query("COMMIT");
+    holder = null;
+    await client.query("select set_config('app.current_org', '', false)");
+    client.release();
+    const finalized = await outcome;
+    assert.ifError(failed);
+    assert.equal(finalized.allocations, 2);
+    const shares = (await db.execute<{ lease_number: string; share_percent: string }>(sql`
+      select l.lease_number, a.share_percent::text
+        from cam_allocations a join property_leases l on l.id = a.lease_id and l.org_id = a.org_id
+       where a.org_id = ${orgId} and a.pool_id = ${camPool.id} order by l.lease_number`)).rows;
+    assert.deepEqual(shares.map((row) => [row.lease_number, row.share_percent]), [
+      ["LSE-CAM-WA", "80.0000"],
+      ["LSE-CAM-WB", "20.0000"],
+    ], "the sealed allocation reflects the committed 400 sqft edit, never the stale 100");
+  } finally {
+    if (holder) {
+      await holder.query("ROLLBACK").catch(() => {});
+      await holder.query("select set_config('app.current_org', '', false)").catch(() => {});
+      holder.release();
+    }
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
 
 test("R12: a blank termination date is refused without mutating the lease", { skip: !DB }, async () => {
   const fx = await seedProperty();
