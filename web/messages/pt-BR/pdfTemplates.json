@@ -35,6 +35,8 @@
     "previewHint": "Renderizado pelo mesmo mecanismo que imprime o documento real, mesclado com o seu registro mais recente.",
     "refreshPreview": "Atualizar prévia",
     "previewFailed": "Falha na prévia",
+    "rendererUnavailableTitle": "Renderizador de PDF indisponível",
+    "rendererUnavailableHint": "A pré-visualização não pode ser gerada até que o renderizador de PDF do servidor seja corrigido. Peça ao seu administrador para instalar o Chromium ou definir PUPPETEER_EXECUTABLE_PATH e atualize a pré-visualização.",
     "deleteConfirm": "Excluir este modelo? Os registros voltarão ao design padrão.",
     "blockContent": "Conteúdo",
     "blockFields": "Campos do registro",

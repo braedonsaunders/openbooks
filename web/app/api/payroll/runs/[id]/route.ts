@@ -13,6 +13,7 @@ import {
   assertPayRunApprovalReleased, payRunApprovalState,
 } from '@openbooks/engine/src/payroll/approval.ts'
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
+import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { canonicalAdjustmentHours, mutatePayRunAdjustment, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
@@ -529,6 +530,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (body.action === 'email-stubs') {
       const result = await emailRunStubs(gate.user.orgId, id, gate.allowedSubsidiaryIds)
+      // Total renderer outage across the batch: every per-item entry carries
+      // the named refusal but the UI lists only names, so answer the 503
+      // here rather than ok:true with N hidden causes. Tenant refusals
+      // (opaque run, policy) throw before any render and keep their status.
+      if (result.sent === 0 && result.rendererOutage) {
+        const rendererRefusal = rendererStatusResponse()
+        if (rendererRefusal) return rendererRefusal
+      }
       return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'record-payment') {

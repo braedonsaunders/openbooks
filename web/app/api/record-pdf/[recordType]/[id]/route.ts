@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { rendererUnavailableResponse } from "../../../../../lib/api/pdf-renderer";
 import { unexpectedServerError } from "../../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { pdfResponse, safeName } from "../../../../../lib/export";
@@ -67,6 +68,8 @@ export async function GET(
     response.headers.set('x-pdf-template-hash', tpl.provenance.contentHash);
     return response;
   } catch (e) {
+    const rendererRefusal = rendererUnavailableResponse(e);
+    if (rendererRefusal) return rendererRefusal;
     return unexpectedServerError('record-pdf', e);
   }
 }

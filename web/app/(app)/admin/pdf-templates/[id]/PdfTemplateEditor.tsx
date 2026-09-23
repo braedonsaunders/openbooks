@@ -18,6 +18,7 @@ import { html as htmlLang } from '@codemirror/lang-html'
 import { EditorView } from '@codemirror/view'
 import { ArrowLeft } from 'lucide-react'
 import { Badge, Button, Input } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { prettifyTemplateHtml } from '../../../../../lib/pdf-templates/prettify'
 import { serializeTemplateEditor, type PaletteCollection, type PaletteField } from './builder-blocks'
@@ -75,6 +76,9 @@ export default function PdfTemplateEditor({
   const [busy, setBusy] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewBusy, setPreviewBusy] = useState(false)
+  // A renderer outage is a persistent pane refusal, not a transient toast:
+  // the preview can never succeed until the server's renderer is fixed.
+  const [previewError, setPreviewError] = useState<string | null>(null)
   // Remount the builder whenever we re-enter Design so it reloads sourceHtml.
   const [designEpoch, setDesignEpoch] = useState(0)
   const editorRef = useRef<Editor | null>(null)
@@ -115,6 +119,7 @@ export default function PdfTemplateEditor({
 
   async function refreshPreview(source?: string) {
     setPreviewBusy(true)
+    setPreviewError(null)
     try {
       const res = await fetch('/api/pdf-templates/preview', {
         method: 'POST',
@@ -130,8 +135,12 @@ export default function PdfTemplateEditor({
         }),
       })
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        toast.error(data.error ?? t('editor.previewFailed'))
+        const message = await readApiErrorMessage(res, t('editor.previewFailed'))
+        if (res.status === 503) {
+          setPreviewError(message)
+        } else {
+          toast.error(message)
+        }
         return
       }
       const blob = await res.blob()
@@ -331,6 +340,17 @@ export default function PdfTemplateEditor({
             </div>
             {previewUrl ? (
               <iframe title="pdf-preview" src={previewUrl} className="min-h-0 w-full flex-1" />
+            ) : previewError ? (
+              <div className="flex flex-1 items-center justify-center p-6">
+                <div
+                  role="alert"
+                  className="max-w-lg rounded-lg border border-amber-300/40 bg-amber-950/60 p-5 text-sm text-amber-100"
+                >
+                  <p className="font-semibold text-amber-200">{t('editor.rendererUnavailableTitle')}</p>
+                  <p className="mt-2 leading-relaxed">{previewError}</p>
+                  <p className="mt-2 text-amber-200/80">{t('editor.rendererUnavailableHint')}</p>
+                </div>
+              </div>
             ) : (
               <div className="flex flex-1 items-center justify-center text-sm text-white/70">
                 {previewBusy ? '…' : t('editor.previewHint')}

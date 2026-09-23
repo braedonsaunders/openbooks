@@ -8,6 +8,16 @@ export { renderPdfDocument } from './document'
 export { renderStatementPdf } from './statement'
 export { renderHtmlDocumentPdf, type HtmlDocumentPdfInput, type PdfOrientation } from './html'
 export {
+  PdfBrowserPool,
+  RendererUnavailableError,
+  pdfRendererStatus,
+  rendererExecutablePath,
+  scrubRendererEnv,
+  sharedPdfPool,
+  type PdfBrowserLauncher,
+  type PdfRendererStatus,
+} from './browser-pool'
+export {
   renderTemplate,
   expandRepeatMarkers,
   sanitizeTemplateHtml,

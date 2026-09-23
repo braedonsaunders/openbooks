@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { Browser, LaunchOptions, Page } from 'puppeteer-core'
-import { PdfBrowserPool, scrubRendererEnv, type PdfBrowserLauncher } from './browser-pool'
+import {
+  PdfBrowserPool,
+  RendererUnavailableError,
+  pdfRendererStatus,
+  rendererExecutablePath,
+  scrubRendererEnv,
+  type PdfBrowserLauncher,
+} from './browser-pool'
 
 type FakePageOptions = {
   onClose?: () => void
@@ -185,6 +192,69 @@ test('a non-sandbox launch failure is not retried', async () => {
   const pool = new PdfBrowserPool(launcher)
   await assert.rejects(pool.withPage(async () => 'never'), /no such executable/)
   assert.equal(calls, 1)
+})
+
+test('a missing executable fails as the typed refusal naming the path and the remedy', async () => {
+  // This machine has no Chromium: point the pool at a path that cannot
+  // exist, with the exact shape puppeteer-core reports for it.
+  const missing = '/nonexistent-dir-7c2/chromium'
+  const previous = process.env.PUPPETEER_EXECUTABLE_PATH
+  process.env.PUPPETEER_EXECUTABLE_PATH = missing
+  try {
+    assert.equal(rendererExecutablePath(), missing)
+    let calls = 0
+    const launcher: PdfBrowserLauncher = async () => {
+      calls += 1
+      throw new Error(`Browser was not found at the configured executablePath (${missing})`)
+    }
+    const pool = new PdfBrowserPool(launcher)
+    const error = await pool.withPage(async () => 'never').catch((e: unknown) => e)
+    assert.ok(error instanceof RendererUnavailableError, `expected RendererUnavailableError, saw ${error}`)
+    assert.equal(error.executablePath, missing)
+    assert.match(error.message, /PDF renderer is unavailable/)
+    assert.ok(error.message.includes(missing), 'the refusal names the path it tried')
+    assert.ok(error.message.includes('PUPPETEER_EXECUTABLE_PATH'), 'the refusal names the remedy')
+    // A missing binary is not a sandbox problem: no --no-sandbox retry.
+    assert.equal(calls, 1)
+  } finally {
+    if (previous === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH
+    else process.env.PUPPETEER_EXECUTABLE_PATH = previous
+  }
+})
+
+test('a raw ENOENT spawn naming the executable fails as the typed refusal', async () => {
+  const missing = '/nonexistent-dir-7c2/chromium'
+  const previous = process.env.PUPPETEER_EXECUTABLE_PATH
+  process.env.PUPPETEER_EXECUTABLE_PATH = missing
+  try {
+    const spawnError = Object.assign(
+      new Error(`spawn ${missing} ENOENT`),
+      { code: 'ENOENT' },
+    )
+    const pool = new PdfBrowserPool(async () => { throw spawnError })
+    const error = await pool.withPage(async () => 'never').catch((e: unknown) => e)
+    assert.ok(error instanceof RendererUnavailableError, `expected RendererUnavailableError, saw ${error}`)
+    assert.equal((error as RendererUnavailableError).executablePath, missing)
+  } finally {
+    if (previous === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH
+    else process.env.PUPPETEER_EXECUTABLE_PATH = previous
+  }
+})
+
+test('renderer readiness reports unavailable with the remedy when the executable is absent', () => {
+  const missing = '/nonexistent-dir-7c2/chromium'
+  const previous = process.env.PUPPETEER_EXECUTABLE_PATH
+  process.env.PUPPETEER_EXECUTABLE_PATH = missing
+  try {
+    const status = pdfRendererStatus()
+    assert.equal(status.available, false)
+    assert.equal(status.executablePath, missing)
+    assert.ok(status.message.includes(missing), 'readiness names the path it tried')
+    assert.ok(status.message.includes('PUPPETEER_EXECUTABLE_PATH'), 'readiness names the remedy')
+  } finally {
+    if (previous === undefined) delete process.env.PUPPETEER_EXECUTABLE_PATH
+    else process.env.PUPPETEER_EXECUTABLE_PATH = previous
+  }
 })
 
 test('an explicit opt-out launches unsandboxed immediately', async () => {

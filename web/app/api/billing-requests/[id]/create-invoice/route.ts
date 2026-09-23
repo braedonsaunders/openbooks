@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { generateInvoiceFromBillingRequest, BillingError } from '../../../../../lib/billing'
+import { isRendererUnavailable } from '../../../../../lib/api/pdf-renderer'
 import { assembleInvoiceBackup, type BackupType } from '../../../../../lib/invoice-backup'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
@@ -31,9 +32,14 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
         await assembleInvoiceBackup(gate.user.orgId, gate.user.id, result.id, result.backupType as BackupType, gate.allowedSubsidiaryIds)
       } catch (e) {
         console.error('billing backup auto-assemble failed', { requestId: id, invoiceId: result.id, error: e })
+        // A renderer outage is not a packet defect: the draft stands, but
+        // the failure names the outage and its remedy instead of advising a
+        // retry that would fail identically.
         backup = {
           status: 'failed',
-          error: 'The backup packet could not be generated — generate it from the billing request, then submit the invoice',
+          error: isRendererUnavailable(e) && e instanceof Error
+            ? e.message
+            : 'The backup packet could not be generated — generate it from the billing request, then submit the invoice',
         }
       }
     }

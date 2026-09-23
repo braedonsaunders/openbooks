@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -24,6 +25,10 @@ export const runtime = 'nodejs'
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function fail(e: unknown) {
+  // The send-for-signature action renders the ticket PDF: a renderer outage
+  // answers with the named 503 refusal, never the generic 500 below.
+  const rendererRefusal = rendererUnavailableResponse(e)
+  if (rendererRefusal) return rendererRefusal
   const status = e instanceof DocumentEditError ? e.status : e instanceof FieldTicketNotFoundError ? 404 : e instanceof FieldTicketError ? 422 : 500
   return NextResponse.json({ error: (e as Error).message }, { status })
 }

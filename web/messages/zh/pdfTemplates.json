@@ -35,6 +35,8 @@
     "previewHint": "由打印真实文档的同一引擎渲染，并与您最近的记录合并。",
     "refreshPreview": "刷新预览",
     "previewFailed": "预览失败",
+    "rendererUnavailableTitle": "PDF 渲染器不可用",
+    "rendererUnavailableHint": "在服务器的 PDF 渲染器修复之前无法生成预览。请让管理员安装 Chromium 或设置 PUPPETEER_EXECUTABLE_PATH，然后刷新预览。",
     "deleteConfirm": "删除此模板？记录将回退到默认设计。",
     "blockContent": "内容",
     "blockFields": "记录字段",

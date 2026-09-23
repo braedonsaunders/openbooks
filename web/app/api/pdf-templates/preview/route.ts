@@ -1,5 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
+import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
 import { compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { can, guardPermission } from "../../../../lib/authz";
 import { unexpectedServerError } from "../../../../lib/api/unexpected";
@@ -82,6 +83,8 @@ export async function POST(req: Request) {
     );
     return pdfResponse(pdf, `${meta.label} preview`);
   } catch (e) {
+    const rendererRefusal = rendererUnavailableResponse(e);
+    if (rendererRefusal) return rendererRefusal;
     return unexpectedServerError('pdf-templates/preview', e);
   }
 }

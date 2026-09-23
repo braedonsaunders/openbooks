@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import {
+  RendererUnavailableError,
   encryptPdf,
   renderPasswordExpression,
   type PasswordTokenCatalog,
@@ -208,6 +209,14 @@ export interface EmailStubsResult {
   /** Employees whose delivery preference is print-only. */
   printOnly: string[]
   failed: { name: string; error: string }[]
+  /**
+   * A render was attempted and the outage struck: every failed entry carries
+   * the named refusal in its message, but the batch envelope cannot show it
+   * (callers list names, not causes), so the route answers the 503 itself.
+   * Absent unless a render attempt met the outage — tenant refusals and
+   * policy failures never set it.
+   */
+  rendererOutage?: boolean
 }
 
 /**
@@ -254,6 +263,10 @@ export async function emailRunStubs(
       })
       result.sent += 1
     } catch (e) {
+      // The per-item message already names the outage and its remedy, and
+      // the flag below lets the route refuse the batch as the 503 it is
+      // when nothing was sent at all.
+      if (e instanceof RendererUnavailableError) result.rendererOutage = true
       result.failed.push({ name: stub.name, error: (e as Error).message })
     }
   }

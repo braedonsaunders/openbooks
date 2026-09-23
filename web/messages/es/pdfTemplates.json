@@ -35,6 +35,8 @@
     "previewHint": "Generada por el mismo motor que imprime el documento real, con su registro más reciente.",
     "refreshPreview": "Actualizar vista previa",
     "previewFailed": "Error en la vista previa",
+    "rendererUnavailableTitle": "Renderizador de PDF no disponible",
+    "rendererUnavailableHint": "La vista previa no se puede generar hasta que se repare el renderizador de PDF del servidor. Pida a su administrador que instale Chromium o configure PUPPETEER_EXECUTABLE_PATH y actualice la vista previa.",
     "deleteConfirm": "¿Eliminar esta plantilla? Los registros usarán el diseño predeterminado.",
     "blockContent": "Contenido",
     "blockFields": "Campos del registro",

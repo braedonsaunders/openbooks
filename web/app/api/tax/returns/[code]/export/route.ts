@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -107,6 +108,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       generatedAt: new Date(`${stamp}T00:00:00Z`),
     }), filename)
   } catch (e: unknown) {
+    const rendererRefusal = rendererUnavailableResponse(e)
+    if (rendererRefusal) return rendererRefusal
     return NextResponse.json({ error: e instanceof Error ? e.message : 'export failed' }, { status: 422 })
   }
 }

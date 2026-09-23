@@ -35,6 +35,8 @@
     "previewHint": "Rendered by the exact engine that prints the real document, merged with your most recent record.",
     "refreshPreview": "Refresh preview",
     "previewFailed": "Preview failed",
+    "rendererUnavailableTitle": "PDF renderer unavailable",
+    "rendererUnavailableHint": "The preview cannot render until the server's PDF renderer is fixed. Ask your administrator to install Chromium or set PUPPETEER_EXECUTABLE_PATH, then refresh the preview.",
     "deleteConfirm": "Delete this template? Records will fall back to the default design.",
     "blockContent": "Content",
     "blockFields": "Record fields",

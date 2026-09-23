@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
 import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
 import { pool } from "@openbooks/engine/src/platform/db.ts";
+import { pdfRendererStatus, type PdfRendererStatus } from "@openbooks/pdf";
 import { requireSessionSecret } from "../../../../lib/auth-secret-policy";
 
 export const runtime = "nodejs";
@@ -22,7 +23,10 @@ async function within<T>(operation: Promise<T>, milliseconds = 4_000): Promise<T
   }
 }
 
-async function dependencyReadiness(): Promise<Record<"database" | "redis" | "objectStorage", "ok" | "unavailable" | "disabled">> {
+async function dependencyReadiness(): Promise<{
+  dependencies: Record<"database" | "redis" | "objectStorage" | "pdfRenderer", "ok" | "unavailable" | "disabled">;
+  renderer: PdfRendererStatus;
+}> {
   const requireS3 = process.env.OPENBOOKS_REQUIRE_S3_HEALTH === "1";
   const controller = new AbortController();
   const abort = setTimeout(() => controller.abort(), 4_000);
@@ -39,15 +43,25 @@ async function dependencyReadiness(): Promise<Record<"database" | "redis" | "obj
         : Promise.resolve("disabled"),
   ]);
   clearTimeout(abort);
+  // Presence of the configured Chromium executable is the deployment
+  // precondition — no browser is launched from a health check. A missing
+  // renderer never gates routing readiness (below): like a worker-only
+  // incident, a renderer-only incident must not remove every web pod from
+  // service. The PDF routes answer 503 with the named remedy individually.
+  const renderer = pdfRendererStatus();
   return {
-    database: checks[0].status === "fulfilled" ? "ok" : "unavailable",
-    redis: checks[1].status === "fulfilled" ? "ok" : "unavailable",
-    objectStorage:
-      !s3Enabled && !requireS3
-        ? "disabled"
-        : checks[2].status === "fulfilled"
-          ? "ok"
-          : "unavailable",
+    dependencies: {
+      database: checks[0].status === "fulfilled" ? "ok" : "unavailable",
+      redis: checks[1].status === "fulfilled" ? "ok" : "unavailable",
+      objectStorage:
+        !s3Enabled && !requireS3
+          ? "disabled"
+          : checks[2].status === "fulfilled"
+            ? "ok"
+            : "unavailable",
+      pdfRenderer: renderer.available ? "ok" : "unavailable",
+    },
+    renderer,
   };
 }
 
@@ -70,10 +84,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ status: "ok", service: "openbooks-api", version });
   }
   if (include === "dependencies" || include === "readiness") {
-    const dependencies = await dependencyReadiness();
-    const ready = Object.values(dependencies).every((status) => status === "ok" || status === "disabled");
+    const { dependencies, renderer } = await dependencyReadiness();
+    // Routing readiness covers the infrastructure every request needs. The
+    // renderer is reported (dependencies.pdfRenderer plus the renderer
+    // detail carrying the remedy) but excluded: PDF routes refuse
+    // individually, and a renderer-only incident must not drain the pool.
+    const ready = (['database', 'redis', 'objectStorage'] as const).every(
+      (key) => dependencies[key] === "ok" || dependencies[key] === "disabled",
+    );
     return NextResponse.json(
-      { status: ready ? "ok" : "degraded", service: "openbooks-api", version, dependencies },
+      { status: ready ? "ok" : "degraded", service: "openbooks-api", version, dependencies, renderer },
       { status: ready ? 200 : 503 },
     );
   }
