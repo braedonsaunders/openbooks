@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { civilDayIndex, isoFromCivilDayIndex } from "../platform/business-date.ts";
 import { SYSTEM_ACTOR_ID } from "../banking/banking.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
@@ -1022,24 +1023,16 @@ export interface ComponentWindow extends AdvancedBillingLine, Record<string, unk
 }
 
 /**
- * Whole-day index of an ISO date (UTC), for window overlap arithmetic.
- * Date.UTC maps years 0-99 onto 1900-1999, so civil days go through the
- * `new Date(0)` + setUTCFullYear idiom (the same one advanceLifecycleDate
- * uses), which keeps the literal year.
+ * Window overlap arithmetic goes through the single civil-date definition in
+ * platform/business-date.ts (civilDayIndex / isoFromCivilDayIndex), which
+ * keeps literal years 0001-0099 instead of remapping them onto 1900-1999.
  */
 function dayIndex(isoDate: string): number {
-  const [year, month, day] = isoDate.split("-").map(Number);
-  const date = new Date(0);
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCFullYear(year!, month! - 1, day!);
-  return Math.round(date.getTime() / 86_400_000);
+  return civilDayIndex(isoDate);
 }
 
 function isoFromDayIndex(day: number): string {
-  // Year rendered from UTC getters, never toISOString: the getters report
-  // the civil year with no 1900 offset.
-  const date = new Date(day * 86_400_000);
-  return `${String(date.getUTCFullYear()).padStart(4, "0")}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  return isoFromCivilDayIndex(day);
 }
 
 /**

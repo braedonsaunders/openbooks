@@ -37,7 +37,10 @@ export function formatInZone(date: Date, timeZone: string): string {
   }).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
-  return `${value("year")}-${value("month")}-${value("day")}`;
+  // `year: "numeric"` renders years below 1000 unpadded ("96", "999"), which
+  // breaks the YYYY-MM-DD contract (and parseIsoDate) for business dates in
+  // years 0001-0999. Month and day are "2-digit" and need no padding.
+  return `${value("year").padStart(4, "0")}-${value("month")}-${value("day")}`;
 }
 
 /**
@@ -113,6 +116,118 @@ export function isIsoCalendarDate(value: unknown): value is string {
   if (typeof value !== "string") return false;
   try { parseIsoDate(value); return true; }
   catch { return false; }
+}
+
+// ---------------------------------------------------------------------------
+// Civil-date arithmetic: years 0001-9999 without the 1900 remap
+// ---------------------------------------------------------------------------
+//
+// `Date.UTC(year, ...)` and `new Date(year, ...)` map years 0-99 onto
+// 1900-1999, so any civil-date math built on them silently relocates dates in
+// years 0001-0099 by eighteen centuries (a 0099-12-25..0100-01-07 window reads
+// as a negative ~694,000-day span, and a mid-period assignment prorates to
+// zero). These primitives are the ONE civil-date arithmetic in the repo:
+// construct through utcDateFromParts (the `new Date(0)` + setUTCFullYear
+// idiom, which keeps the literal year) or parse through parseIsoDate
+// (ISO-string parsing is exact for years 0001-9999), and difference through
+// calendarDaysBetween / inclusiveCalendarDays.
+// scripts/check-civil-date-arithmetic.mjs refuses Date.UTC / multi-arg
+// new Date with a non-literal year anywhere else, so the next site cannot
+// regress silently.
+
+function civilPart(value: number, field: string): number {
+  if (!Number.isSafeInteger(value)) throw new RangeError(`civil date ${field} must be a safe whole number`);
+  return value;
+}
+
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day[, time]) parts — the
+ * single replacement for `Date.UTC` with a variable year. Out-of-range parts
+ * normalize EXACTLY like Date.UTC (month 12 rolls to January, day 0 is the
+ * previous month's last day), so month-end and month-step call sites keep
+ * their shape; only the 0-99 → 1900-1999 remap is gone. Non-integer parts
+ * throw instead of producing NaN.
+ */
+export function utcDateFromParts(
+  year: number,
+  monthIndex: number,
+  day: number,
+  hour = 0,
+  minute = 0,
+  second = 0,
+  ms = 0,
+): Date {
+  civilPart(year, "year");
+  civilPart(monthIndex, "month");
+  civilPart(day, "day");
+  civilPart(hour, "hour");
+  civilPart(minute, "minute");
+  civilPart(second, "second");
+  civilPart(ms, "millisecond");
+  const date = new Date(0);
+  date.setUTCHours(hour, minute, second, ms);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date;
+}
+
+/** Render a UTC Date's civil calendar day as zero-padded YYYY-MM-DD. */
+function isoDayOf(date: Date): string {
+  return `${String(date.getUTCFullYear()).padStart(4, "0")}-`
+    + `${String(date.getUTCMonth() + 1).padStart(2, "0")}-`
+    + `${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Whole-day index of an ISO date (days since the Unix epoch, UTC), for
+ * window overlap arithmetic. The input is validated exactly like
+ * parseIsoDate (real calendar date, years 0001-9999), so garbage refuses
+ * here instead of indexing a normalized neighbor.
+ */
+export function civilDayIndex(iso: string): number {
+  parseIsoDate(iso);
+  const year = Number(iso.slice(0, 4));
+  const month = Number(iso.slice(5, 7));
+  const day = Number(iso.slice(8, 10));
+  return Math.round(utcDateFromParts(year, month - 1, day).getTime() / 86_400_000);
+}
+
+/**
+ * The ISO date a whole-day index denotes — the inverse of civilDayIndex.
+ * Rendered from UTC getters (never toISOString), so the civil year survives
+ * with no 1900 offset at any supported year.
+ */
+export function isoFromCivilDayIndex(day: number): string {
+  calendarOffset(day);
+  return isoDayOf(new Date(day * 86_400_000));
+}
+
+/** Whole calendar days from one ISO date to another (b - a; signed). */
+export function calendarDaysBetween(fromIso: string, toIso: string): number {
+  return civilDayIndex(toIso) - civilDayIndex(fromIso);
+}
+
+/** Whole calendar days in the INCLUSIVE window [from, to] (both ISO dates). */
+export function inclusiveCalendarDays(fromIso: string, toIso: string): number {
+  return civilDayIndex(toIso) - civilDayIndex(fromIso) + 1;
+}
+
+/**
+ * Last calendar day of a 1-based month, honoring leap years (0096 has a
+ * February 29th; 0100 does not). Out-of-range months roll over exactly like
+ * the `Date.UTC(year, month1, 0)` idiom this replaces.
+ */
+export function daysInCivilMonth(year: number, month1: number): number {
+  return utcDateFromParts(year, month1, 0).getUTCDate();
+}
+
+/**
+ * Zero-padded YYYY-MM-DD for civil (year, month1, day) parts. Parts
+ * normalize exactly like Date.UTC (documented on utcDateFromParts) — callers
+ * needing refusal of impossible dates validate first, via a parseIsoDate
+ * round-trip.
+ */
+export function civilDateFromParts(year: number, month1: number, day: number): string {
+  return isoDayOf(utcDateFromParts(year, month1 - 1, day));
 }
 
 function isoDay(date: Date): string {
