@@ -92,10 +92,17 @@ export async function POST(req: Request) {
               return NextResponse.json({ error: `components[${index}] must be an object` }, { status: 422 });
             }
             const component = entry as Record<string, unknown>;
+            // Quantity defaults to one per the documented catalog contract;
+            // a unit price is never defaulted: a missing price once became a
+            // silent free component, so it is required and must be canonical
+            // (an explicit "0" stays a valid free component).
             const quantity = exactMoney(component.quantity ?? "1");
-            const unitPrice = exactMoney(component.unitPrice ?? "0");
+            if (component.unitPrice === undefined || component.unitPrice === null || component.unitPrice === "") {
+              return NextResponse.json({ error: `components[${index}] unit price is required — send an explicit "0" for a free component` }, { status: 422 });
+            }
+            const unitPrice = exactMoney(component.unitPrice);
             if (quantity === null) return invalidDecimal("quantity");
-            if (unitPrice === null) return invalidDecimal("unit price");
+            if (unitPrice === null) return NextResponse.json({ error: `components[${index}] unit price must be an exact decimal` }, { status: 422 });
             components.push({
               componentKey: String(component.componentKey ?? ""),
               name: String(component.name ?? ""),
