@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrg,
   seedFlowActors,
   seedApprovalFlow,
@@ -526,6 +527,115 @@ test(
         (e) =>
           e instanceof LossOfControlProposalError &&
           (e as LossOfControlProposalError).status === 404,
+      );
+    }),
+);
+async function scopedActor(f: Fixture): Promise<string> {
+  const userId = await createScratchUser(
+    f.org.orgId,
+    "A scoped controller",
+    "a_scoped_controller",
+  );
+  const updated = await db.execute(
+    sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [f.org.subsidiaryId, f.child, f.elimination] })}::jsonb where org_id=${f.org.orgId} and key='a_scoped_controller' returning id`,
+  );
+  assert.equal(
+    updated.rows.length,
+    1,
+    "the scoped role restriction must apply to exactly one role",
+  );
+  await db.execute(
+    sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${f.org.orgId},${userId},'close.run','grant')`,
+  );
+  return userId;
+}
+async function bOnlyManualLine(f: Fixture) {
+  // Like post(), but stamps the B-family memo at insert time: posted journal
+  // lines are immutable, so the memo cannot be added afterwards.
+  const entry = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values(${entry},${f.org.orgId},${f.org.bookId},${f.elimination},${entry},'2026-07-16',${f.org.periodId},'draft','manual')`,
+    );
+    for (const [i, l] of [
+      { accountId: f.accounts.goodwill!, amount: "100" },
+      { accountId: f.org.accounts.bank, amount: "-100" },
+    ].entries())
+      await tx.execute(
+        sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo) values(${f.org.orgId},${entry},${i + 1},${l.accountId},${f.elimination},${l.amount},'CAD',${l.amount},1,'B family goodwill impairment')`,
+      );
+    await tx.execute(
+      sql`update journal_entries set status='posted',posted_at=now() where org_id=${f.org.orgId} and id=${entry}`,
+    );
+  });
+  return (
+    await db.execute<{ id: string; amount: string }>(
+      sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${entry} and account_id=${f.accounts.goodwill!} order by line_number limit 1`,
+    )
+  ).rows[0]!;
+}
+test(
+  "L2: a B-only manual elimination is hidden from family A's restricted picker",
+  { skip: !DB },
+  async () =>
+    twoFamilyFixture(async (f) => {
+      await bOnlyManualLine(f);
+      const restricted = await loadLossOfControlProposalData(
+        db,
+        f.org.orgId,
+        f.interest,
+        new Set([f.org.subsidiaryId, f.child, f.elimination]),
+      );
+      assert.deepEqual(
+        restricted.adjustmentLines,
+        [],
+        "lines without family lineage must not leak to a restricted caller",
+      );
+      const open = await loadLossOfControlProposalData(
+        db,
+        f.org.orgId,
+        f.interest,
+        null,
+      );
+      assert.ok(
+        open.adjustmentLines.some(
+          (l) => l.memo === "B family goodwill impairment",
+        ),
+        "unrestricted callers still see the unattributed manual lines",
+      );
+    }),
+);
+test(
+  "L2: selecting a manual line requires an unrestricted proposer",
+  { skip: !DB },
+  async () =>
+    twoFamilyFixture(async (f) => {
+      const line = await bOnlyManualLine(f);
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          await scopedActor(f),
+          input(f, {
+            additionalConsolidationLines: [
+              { lineId: line.id, amount: line.amount },
+            ],
+          }),
+        ),
+        (e) => /subsidiary-restricted proposal cannot select them/.test(deepest(e)),
+      );
+      assert.ok(
+        await proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, {
+            additionalConsolidationLines: [
+              { lineId: line.id, amount: line.amount },
+            ],
+          }),
+        ),
+        "an unrestricted controller's explicit selection is the attributable provenance",
       );
     }),
 );

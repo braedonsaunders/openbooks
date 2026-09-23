@@ -185,13 +185,19 @@ export async function loadLossOfControlProposalData(
         !a.subsidiary_id ||
         allowedSubsidiaryIds.has(a.subsidiary_id)),
   );
-  const adjustmentLines = eliminations.length
-    ? (
-        await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
-          sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
-        )
-      ).rows
-    : [];
+  // Manual elimination journals carry no family lineage: the elimination
+  // entity is shared by unrelated families, so a subsidiary-restricted caller
+  // cannot tell this interest's lines from another family's. Offer them only
+  // to unrestricted callers; restricted callers see none (L2). Selecting a
+  // line likewise requires an unrestricted proposer (see scope()).
+  const adjustmentLines =
+    allowedSubsidiaryIds || !eliminations.length
+      ? []
+      : (
+          await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
+            sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
+          )
+        ).rows;
   return {
     interest,
     subsidiaries,
@@ -425,6 +431,16 @@ async function scope(
     permission: "close.run",
     feature: "multiSubsidiary",
   });
+  if (input.additionalConsolidationLines.length > 0) {
+    // Manual elimination lines carry no family lineage (see the selector
+    // above): a subsidiary-restricted actor cannot verify attribution, so
+    // only an unrestricted group controller may select them explicitly (L2).
+    const actorScope = await actorAllowedSubsidiaryIds(tx, orgId, actorId);
+    if (actorScope)
+      throw new Error(
+        "manual elimination lines carry no family attribution, so a subsidiary-restricted proposal cannot select them; have an unrestricted group controller include the lines explicitly",
+      );
+  }
   const period = (
     await tx.execute<{ id: string; starts_on: string; ends_on: string }>(
       sql`select p.id,p.starts_on::text,p.ends_on::text from accounting_periods p join fiscal_calendars c on c.org_id=p.org_id and c.id=p.fiscal_calendar_id where p.org_id=${orgId} and c.is_active and c.is_default and not p.is_adjustment and p.starts_on<=${input.effectiveOn} and p.ends_on>=${input.effectiveOn} for share of p,c`,
