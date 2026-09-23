@@ -761,6 +761,54 @@ export function assertLeaseTermWithinHorizon(
   return frequencyMonths;
 }
 
+/**
+ * Cutover-date gate for continue-from-opening onboarding. The first
+ * scheduled period must begin on or after the balances' as-of date: a
+ * mid-period cutover would book that period's full interest and ROU
+ * amortization from the carried figures while the outgoing system already
+ * recognised the pre-cutover days — double-recognising the same activity.
+ * Advance timing is stricter (the payment falls on the period start, so the
+ * cutover must strictly precede it); arrears timing settles at period end,
+ * so a cutover exactly on the boundary is clean. Either way the named
+ * remedy is the outgoing ledger's closing balance at a period end.
+ */
+export function assertOpeningAsOfOnPeriodBoundary(args: {
+  commencementOn: string;
+  termPeriods: number;
+  frequencyMonths: number;
+  paymentTiming: "arrears" | "advance";
+  asOf: string;
+}): void {
+  let firstStart: string | null = null;
+  for (let i = 0; i < args.termPeriods; i++) {
+    const start = addMonths(args.commencementOn, i * args.frequencyMonths);
+    const end = addDays(
+      addMonths(args.commencementOn, (i + 1) * args.frequencyMonths),
+      -1,
+    );
+    if (end > args.asOf) {
+      firstStart = start;
+      break;
+    }
+  }
+  if (firstStart === null) {
+    throw new LeaseError(
+      `opening balances as-of ${args.asOf} fall past the end of the lease term — no periods remain to continue`,
+    );
+  }
+  const clean =
+    args.paymentTiming === "advance"
+      ? firstStart > args.asOf
+      : firstStart >= args.asOf;
+  if (!clean) {
+    throw new LeaseError(
+      args.paymentTiming === "advance"
+        ? "advance lease opening balances must be measured through a period end, before the next advance payment; use the outgoing ledger closing balance at that boundary"
+        : "arrears lease opening balances must be measured through a period end; a mid-period cutover would book full-period interest and amortization for activity the outgoing system already recognised — use the outgoing ledger closing balance at that boundary",
+    );
+  }
+}
+
 export interface CreateLeaseInput {
   subsidiaryId: string;
   leaseNumber: string;
@@ -883,6 +931,16 @@ export async function createLeaseAgreement(
           "opening balances as-of date cannot precede the commencement date",
         );
       }
+      // Fail fast: a mid-period cutover can never commence (see
+      // assertOpeningAsOfOnPeriodBoundary), so refuse it here with the same
+      // named remedy instead of persisting an uncommenceable lease.
+      assertOpeningAsOfOnPeriodBoundary({
+        commencementOn: input.commencementOn,
+        termPeriods: input.termPeriods,
+        frequencyMonths,
+        paymentTiming: input.paymentTiming ?? "arrears",
+        asOf: openingBalances.asOf,
+      });
     }
     const openingLiability = openingBalances
       ? exactMoney(openingBalances.liability, "Opening liability")
@@ -1400,14 +1458,20 @@ export async function commenceLease(
       );
     }
 
-    if (
-      opening &&
-      lease.payment_timing === "advance" &&
-      remaining[0]!.start <= opening.asOf
-    ) {
-      throw new LeaseError(
-        "advance lease opening balances must be measured through a period end, before the next advance payment; use the outgoing ledger closing balance at that boundary",
-      );
+    // The cutover must sit on a period boundary for either timing (strictly
+    // before the next period for advance, on-or-before for arrears): a
+    // mid-period as-of would book that period's full interest and ROU
+    // amortization from the carried figures on top of the outgoing system's
+    // pre-cutover recognition. Re-validated here so legacy rows persisted
+    // before the creation gate fail closed too.
+    if (opening) {
+      assertOpeningAsOfOnPeriodBoundary({
+        commencementOn: lease.commencement_on,
+        termPeriods: lease.term_periods,
+        frequencyMonths,
+        paymentTiming: lease.payment_timing,
+        asOf: opening.asOf,
+      });
     }
     const measurement = measureLesseeLease({
       payment: lease.payment_amount,
