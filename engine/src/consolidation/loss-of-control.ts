@@ -19,6 +19,7 @@ import {
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
 import {
   loadSubsidiaryContext,
+  restrictionAdmits,
   uuidArray,
   validateSubsidiaryRestrictions,
 } from "../organization/subsidiaries.ts";
@@ -75,6 +76,208 @@ export interface LossOfControlInput {
     description: string;
   }[];
 }
+export class LossOfControlProposalError extends Error {
+  constructor(
+    readonly status: 404 | 403,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export interface LossOfControlProposalData {
+  interest: {
+    subsidiary_id: string;
+    parent_subsidiary_id: string;
+    investment_account_id: string;
+    equity_income_account_id: string;
+  };
+  subsidiaries: {
+    id: string;
+    name: string;
+    parent_id: string | null;
+    base_currency: string;
+    is_elimination: boolean;
+  }[];
+  accounts: { id: string; number: string; name: string; type: string }[];
+  eliminations: { id: string; name: string; base_currency: string }[];
+  adjustmentLines: {
+    id: string;
+    entry_number: string;
+    posting_date: string;
+    account_name: string;
+    amount: string;
+    memo: string | null;
+  }[];
+}
+
+/**
+ * Selector behind GET interests/[id]/loss-of-control. The account picker
+ * offers only accounts admissible to this disposal's posting entities (the
+ * parent and the visible elimination entities) under the house
+ * account-restriction semantics — an account restricted to another family's
+ * subtree never appears, and neither does anything outside the actor's
+ * scope. Manual elimination lines carry no family lineage (L2).
+ */
+export async function loadLossOfControlProposalData(
+  runner: SqlExecutor,
+  orgId: string,
+  interestId: string,
+  allowedSubsidiaryIds: Set<string> | null,
+): Promise<LossOfControlProposalData> {
+  const interest = (
+    await runner.execute<LossOfControlProposalData["interest"]>(
+      sql`select subsidiary_id,parent_subsidiary_id,investment_account_id,equity_income_account_id from subsidiary_ownership_interests where org_id=${orgId} and id=${interestId}`,
+    )
+  ).rows[0];
+  if (
+    !interest ||
+    (allowedSubsidiaryIds &&
+      (!allowedSubsidiaryIds.has(interest.subsidiary_id) ||
+        !allowedSubsidiaryIds.has(interest.parent_subsidiary_id)))
+  )
+    throw new LossOfControlProposalError(404, "ownership interest not found");
+  const subsidiaries = (
+    await runner.execute<LossOfControlProposalData["subsidiaries"][number]>(
+      sql`with recursive family as(select id,org_id,name,parent_id,base_currency,is_elimination from subsidiaries where org_id=${orgId} and id=${interest.subsidiary_id} union all select s.id,s.org_id,s.name,s.parent_id,s.base_currency,s.is_elimination from subsidiaries s join family f on f.org_id=s.org_id and s.parent_id=f.id where not s.is_elimination) select id,name,parent_id,base_currency,is_elimination from family order by name`,
+    )
+  ).rows;
+  if (
+    allowedSubsidiaryIds &&
+    subsidiaries.some((s) => !allowedSubsidiaryIds.has(s.id))
+  )
+    throw new LossOfControlProposalError(
+      403,
+      "this disposal includes an entity outside your authorization",
+    );
+  const context = await loadSubsidiaryContext(runner, orgId);
+  const eliminations = (
+    await runner.execute<LossOfControlProposalData["eliminations"][number]>(
+      sql`select id,name,base_currency from subsidiaries where org_id=${orgId} and is_active and is_elimination order by name`,
+    )
+  ).rows.filter(
+    (s) => !allowedSubsidiaryIds || allowedSubsidiaryIds.has(s.id),
+  );
+  const postingTargets = [
+    interest.parent_subsidiary_id,
+    ...eliminations.map((s) => s.id),
+  ];
+  const accounts = (
+    await runner.execute<
+      LossOfControlProposalData["accounts"][number] & {
+        subsidiary_id: string | null;
+        subsidiary_include_children: boolean;
+      }
+    >(
+      sql`select id,number,name,type,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and is_active and not is_summary order by number`,
+    )
+  ).rows.filter(
+    (a) =>
+      postingTargets.some((t) =>
+        restrictionAdmits(
+          context,
+          a.subsidiary_id,
+          a.subsidiary_include_children,
+          t,
+        ),
+      ) &&
+      (!allowedSubsidiaryIds ||
+        !a.subsidiary_id ||
+        allowedSubsidiaryIds.has(a.subsidiary_id)),
+  );
+  const adjustmentLines = eliminations.length
+    ? (
+        await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
+          sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
+        )
+      ).rows
+    : [];
+  return {
+    interest,
+    subsidiaries,
+    accounts: accounts.map(({ id, number, name, type }) => ({
+      id,
+      number,
+      name,
+      type,
+    })),
+    eliminations,
+    adjustmentLines,
+  };
+}
+
+/**
+ * Every account the disposal posts must admit its posting entity under the
+ * house account-restriction semantics — the picker offers only admissible
+ * accounts, and the proposal refuses anything else by name (L1). The
+ * controlling investment comes from the interest record itself, not the
+ * caller, but it posts to the parent all the same.
+ */
+async function assertDisposalAccountsAdmissible(
+  tx: SqlExecutor,
+  orgId: string,
+  context: Awaited<ReturnType<typeof loadSubsidiaryContext>>,
+  args: {
+    parentId: string;
+    eliminationId: string;
+    investmentAccountId: string;
+    input: LossOfControlInput;
+  },
+) {
+  const legs: { accountId: string; targetId: string; leg: string }[] = [
+    { accountId: args.input.proceedsAccountId, targetId: args.parentId, leg: "disposal proceeds" },
+    { accountId: args.input.retainedAccountId, targetId: args.parentId, leg: "retained investment" },
+    { accountId: args.input.retainedAccountId, targetId: args.eliminationId, leg: "retained interest remeasurement" },
+    { accountId: args.input.parentGainLossAccountId, targetId: args.parentId, leg: "separate-book disposal gain or loss" },
+    { accountId: args.investmentAccountId, targetId: args.parentId, leg: "controlling investment" },
+    { accountId: args.input.investmentTranslationAccountId, targetId: args.eliminationId, leg: "investment translation" },
+    { accountId: args.input.gainLossAccountId, targetId: args.eliminationId, leg: "consolidated disposal gain or loss" },
+    ...args.input.oci.flatMap((o) => [
+      { accountId: o.accountId, targetId: args.eliminationId, leg: "OCI release" },
+      { accountId: o.destinationAccountId, targetId: args.eliminationId, leg: "OCI destination" },
+    ]),
+  ];
+  const seen = new Set<string>();
+  const wanted = legs.filter((l) => {
+    const key = `${l.accountId}:${l.targetId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const accounts = (
+    await tx.execute<{
+      id: string;
+      name: string;
+      subsidiary_id: string | null;
+      subsidiary_include_children: boolean;
+    }>(
+      sql`select id,name,subsidiary_id,subsidiary_include_children from accounts where org_id=${orgId} and id=any(${uuidArray(wanted.map((l) => l.accountId))}::uuid[])`,
+    )
+  ).rows;
+  const byId = new Map(accounts.map((a) => [a.id, a]));
+  for (const leg of wanted) {
+    const account = byId.get(leg.accountId);
+    if (!account) continue;
+    if (
+      !restrictionAdmits(
+        context,
+        account.subsidiary_id,
+        account.subsidiary_include_children,
+        leg.targetId,
+      )
+    ) {
+      const restrictedTo = account.subsidiary_id
+        ? context.byId.get(account.subsidiary_id)?.name ?? "another subsidiary"
+        : null;
+      throw new Error(
+        restrictedTo
+          ? `account "${account.name}" is restricted to "${restrictedTo}" and cannot post the ${leg.leg} leg to "${context.byId.get(leg.targetId)?.name ?? leg.targetId}" in this disposal`
+          : `account "${account.name}" cannot post the ${leg.leg} leg in this disposal`,
+      );
+    }
+  }
+}
+
 type Interest = {
   id: string;
   subsidiary_id: string;
@@ -209,6 +412,12 @@ async function scope(
   const requiredSubsidiaryIds = [
     ...new Set([parent.id, elimination.id, ...family]),
   ];
+  await assertDisposalAccountsAdmissible(tx, orgId, context, {
+    parentId: parent.id,
+    eliminationId: elimination.id,
+    investmentAccountId: interest.investment_account_id,
+    input,
+  });
   await assertFinancialChangeAccess(tx, {
     orgId,
     actorId,

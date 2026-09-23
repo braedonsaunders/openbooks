@@ -19,6 +19,8 @@ import {
   applyLossOfControl,
   proposeLossOfControlReversal,
   applyLossOfControlReversal,
+  loadLossOfControlProposalData,
+  LossOfControlProposalError,
   type LossOfControlInput,
 } from "./loss-of-control.ts";
 import { runOwnershipConsolidation } from "./consolidation.ts";
@@ -163,6 +165,24 @@ const deepest = (e: unknown): string =>
   e && typeof e === "object" && "cause" in e && e.cause
     ? deepest(e.cause)
     : String(e);
+async function twoFamilyFixture(
+  work: (
+    f: Fixture & { childB: string; bAccount: string; aAccount: string },
+  ) => Promise<void>,
+) {
+  return fixture(async (f) => {
+    const childB = randomUUID(),
+      bAccount = randomUUID(),
+      aAccount = randomUUID();
+    await db.execute(
+      sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_elimination,is_active) values(${childB},${f.org.orgId},${f.org.subsidiaryId},'Second family','CAD','CA',false,true)`,
+    );
+    await db.execute(
+      sql`insert into accounts(id,org_id,number,name,type,is_active,is_summary,eliminate,subsidiary_id) values(${bAccount},${f.org.orgId},'C-b','B family ledger','asset_current_other',true,false,false,${childB}),(${aAccount},${f.org.orgId},'C-a','A family ledger','asset_current_other',true,false,false,${f.child})`,
+    );
+    await work({ ...f, childB, bAccount, aAccount });
+  });
+}
 test(
   "loss of control previews without posting, requires approval, derecognizes goodwill/NCI, and is idempotent",
   { skip: !DB },
@@ -461,6 +481,73 @@ test(
     }),
 );
 
+test(
+  "L1: the proposal picker offers no other family's restricted accounts",
+  { skip: !DB },
+  async () =>
+    twoFamilyFixture(async (f) => {
+      const scope = new Set([f.org.subsidiaryId, f.child, f.elimination]);
+      const data = await loadLossOfControlProposalData(
+        db,
+        f.org.orgId,
+        f.interest,
+        scope,
+      );
+      const ids = new Set(data.accounts.map((a) => a.id));
+      assert.ok(
+        !ids.has(f.bAccount),
+        "an account restricted to family B must not appear in family A's picker",
+      );
+      assert.ok(
+        !ids.has(f.aAccount),
+        "an account restricted to family A's child cannot post the parent/elimination legs",
+      );
+      assert.ok(
+        ids.has(f.accounts.investment!),
+        "an unrestricted disposal account stays offerable",
+      );
+      const open = await loadLossOfControlProposalData(
+        db,
+        f.org.orgId,
+        f.interest,
+        null,
+      );
+      assert.ok(
+        !new Set(open.accounts.map((a) => a.id)).has(f.bAccount),
+        "inadmissible accounts stay out of the picker for unrestricted callers too",
+      );
+      await assert.rejects(
+        loadLossOfControlProposalData(
+          db,
+          f.org.orgId,
+          f.interest,
+          new Set([f.childB]),
+        ),
+        (e) =>
+          e instanceof LossOfControlProposalError &&
+          (e as LossOfControlProposalError).status === 404,
+      );
+    }),
+);
+test(
+  "L1: a proposal using another family's account refuses by name",
+  { skip: !DB },
+  async () =>
+    twoFamilyFixture(async (f) => {
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, { proceedsAccountId: f.bAccount }),
+        ),
+        (e) =>
+          /account "B family ledger" is restricted to "Second family"/.test(
+            deepest(e),
+          ),
+      );
+    }),
+);
 test(
   "generic correcting journals remain automatic source evidence, never manual disposal inputs",
   { skip: !DB },

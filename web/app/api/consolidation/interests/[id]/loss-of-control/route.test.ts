@@ -44,7 +44,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export async function proposeLossOfControl(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
+        source: `export class LossOfControlProposalError extends Error{constructor(status,message){super(message);this.status=status}}export async function loadLossOfControlProposalData(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new LossOfControlProposalError(404,s.refusal);return {proposal:true}}export async function proposeLossOfControl(...args){const s=globalThis[Symbol.for('control-loss-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
       };
     return next(url, context);
   },
@@ -117,6 +117,22 @@ test("unreadable amounts and malformed control-loss evidence are refused before 
     assert.equal(r.status, 422);
     assert.equal(state.calls.length, 0);
   }
+});
+test("proposal data passes through and proposal refusals keep their status", async () => {
+  state.calls = [];
+  state.refusal = "";
+  state.allowed = true;
+  const ok = await route.GET(new Request("http://openbooks.test/x"), context);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), { proposal: true });
+  state.refusal = "ownership interest not found";
+  const refused = await route.GET(
+    new Request("http://openbooks.test/x"),
+    context,
+  );
+  assert.equal(refused.status, 404);
+  assert.equal((await refused.json()).error, state.refusal);
+  state.refusal = "";
 });
 test("control-loss domain refusal and authorization are not swallowed", async () => {
   state.refusal =
