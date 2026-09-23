@@ -59,12 +59,36 @@ export async function PUT(req: Request, { params }: Params) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
-    name?: string
-    category?: string | null
-    description?: string | null
-    kind?: string
-    allowedRoles?: string[] | null
+    name?: unknown
+    category?: unknown
+    description?: unknown
+    kind?: unknown
+    allowedRoles?: unknown
     schema?: unknown
+  }
+
+  // The body is an open object: a numeric name/category/key would crash
+  // String.prototype calls with a 500, and a non-array allowedRoles would
+  // silently clear the role list. Refuse mistyped fields by name.
+  for (const field of ['name', 'category', 'description'] as const) {
+    const value = body[field]
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+      return NextResponse.json({ error: `${field} must be a string` }, { status: 400 })
+    }
+  }
+  if (body.kind !== undefined && typeof body.kind !== 'string') {
+    return NextResponse.json({ error: 'kind must be a string' }, { status: 400 })
+  }
+  if (body.allowedRoles !== undefined && body.allowedRoles !== null) {
+    if (
+      !Array.isArray(body.allowedRoles) ||
+      body.allowedRoles.some((r) => typeof r !== 'string')
+    ) {
+      return NextResponse.json(
+        { error: 'allowedRoles must be an array of role keys or null' },
+        { status: 400 },
+      )
+    }
   }
 
   const hasMetadataChanges =
@@ -98,30 +122,35 @@ export async function PUT(req: Request, { params }: Params) {
       if (!beforeTemplate) return { kind: 'not-found' as const }
 
       if (hasMetadataChanges) {
-        const name = body.name?.trim() || template.name
-        const kind = ['form', 'wizard', 'checklist', 'register'].includes(body.kind ?? '')
-          ? body.kind
+        const bodyName = body.name as string | undefined
+        const bodyCategory = body.category as string | null | undefined
+        const bodyDescription = body.description as string | null | undefined
+        const bodyKind = body.kind as string | undefined
+        const bodyRoles = body.allowedRoles as string[] | null | undefined
+        const name = bodyName?.trim() || template.name
+        const kind = ['form', 'wizard', 'checklist', 'register'].includes(bodyKind ?? '')
+          ? bodyKind!
           : template.kind
         const allowedRoles =
-          body.allowedRoles === undefined
+          bodyRoles === undefined
             ? template.allowed_roles
-            : Array.isArray(body.allowedRoles) && body.allowedRoles.length > 0
-              ? body.allowedRoles.map((r) => String(r)).slice(0, 20)
+            : Array.isArray(bodyRoles) && bodyRoles.length > 0
+              ? bodyRoles.slice(0, 20)
               : null
         const afterTemplate = {
           ...beforeTemplate,
           name,
-          category: body.category === undefined ? template.category : body.category?.trim() || null,
+          category: bodyCategory === undefined ? template.category : bodyCategory?.trim() || null,
           description:
-            body.description === undefined ? template.description : body.description?.trim() || null,
+            bodyDescription === undefined ? template.description : bodyDescription?.trim() || null,
           kind,
           allowed_roles: allowedRoles,
         }
         await tx.execute(sql`
           update form_templates
              set name = ${name},
-                 category = ${body.category === undefined ? template.category : body.category?.trim() || null},
-                 description = ${body.description === undefined ? template.description : body.description?.trim() || null},
+                 category = ${bodyCategory === undefined ? template.category : bodyCategory?.trim() || null},
+                 description = ${bodyDescription === undefined ? template.description : bodyDescription?.trim() || null},
                  kind = ${kind},
                  allowed_roles = ${allowedRoles === null ? null : JSON.stringify(allowedRoles)}::jsonb,
                  updated_at = now(), updated_by = ${user.id}

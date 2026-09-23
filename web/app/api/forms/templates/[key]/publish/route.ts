@@ -31,7 +31,12 @@ export async function POST(
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data as { changelog?: string }
+  const body = parsedBody.data as { changelog?: unknown }
+  // A numeric changelog would crash .trim() with a 500.
+  if (body.changelog !== undefined && body.changelog !== null && typeof body.changelog !== 'string') {
+    return NextResponse.json({ error: 'changelog must be a string' }, { status: 400 })
+  }
+  const changelog = (body.changelog as string | null | undefined)?.trim() || null
 
   const outcome = await db.transaction(async (tx) => {
     // Lock the parent first so concurrent publishers cannot both observe the
@@ -80,7 +85,7 @@ export async function POST(
     const stamped = await tx.execute(sql`
       update form_template_versions
          set published_at = now(), published_by = ${user.id},
-             changelog = ${body.changelog?.trim() || null},
+             changelog = ${changelog},
              updated_at = now(), updated_by = ${user.id}
        where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
        returning id
@@ -107,7 +112,7 @@ export async function POST(
           event: 'publish',
           version: latest.version,
           before: { published_at: null },
-          after: { changelog: body.changelog?.trim() || null, schemaHash },
+          after: { changelog, schemaHash },
         },
         actorId: user.id,
       },

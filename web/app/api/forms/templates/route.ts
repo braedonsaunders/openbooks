@@ -50,14 +50,25 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
-    key?: string
-    name?: string
-    kind?: string
-    category?: string
-    description?: string
+    key?: unknown
+    name?: unknown
+    kind?: unknown
+    category?: unknown
+    description?: unknown
   }
-  const name = body.name?.trim()
-  const key = body.key?.trim().toLowerCase()
+  // The body is an open object: a numeric name/key/category would crash
+  // String.prototype calls with a 500. Refuse non-string scalars by name.
+  for (const field of ['name', 'key', 'category', 'description'] as const) {
+    const value = body[field]
+    if (value !== undefined && value !== null && typeof value !== 'string') {
+      return NextResponse.json({ error: `${field} must be a string` }, { status: 400 })
+    }
+  }
+  if (body.kind !== undefined && typeof body.kind !== 'string') {
+    return NextResponse.json({ error: 'kind must be a string' }, { status: 400 })
+  }
+  const name = (body.name as string | undefined)?.trim()
+  const key = (body.key as string | undefined)?.trim().toLowerCase()
   if (!name || !key) {
     return NextResponse.json({ error: 'name and key are required' }, { status: 400 })
   }
@@ -67,7 +78,9 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
-  const kind = body.kind && KINDS.has(body.kind) ? body.kind : 'form'
+  const kind = body.kind && KINDS.has(body.kind as string) ? (body.kind as string) : 'form'
+  const category = body.category as string | null | undefined
+  const description = body.description as string | null | undefined
 
   // Parent + version 1 commit atomically: separate autocommitted statements
   // strand an unusable template (key burned, no draft) when the version
@@ -81,8 +94,8 @@ export async function POST(req: Request) {
 
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
-        values (${user.orgId}, ${key}, ${name}, ${body.category?.trim() || null},
-                ${body.description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
+        values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
+                ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
         returning id
       `))
       const templateId = inserted.rows[0]!.id

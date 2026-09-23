@@ -215,3 +215,13 @@ test('re-publishing an already-published version is a 409 with no audit', async 
   assert.equal(response.status, 409)
   assert.equal(routeState.audits.length, 0)
 })
+
+test('a numeric changelog is a 400, never a 500', async () => {
+  reset()
+
+  const response = await post({ changelog: 5 })
+
+  assert.equal(response.status, 400)
+  assert.equal(routeState.calls.length, 0)
+  assert.equal(routeState.audits.length, 0)
+})
