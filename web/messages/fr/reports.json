@@ -2201,6 +2201,9 @@
     },
     "print": "Imprimer",
     "printFailed": "Impossible d'ouvrir la boîte d'impression",
+    "exported": "{filename} exporté.",
+    "exportFailed": "Impossible d'exporter {format}.",
+    "exporting": "Exportation de {format}…",
     "export": "Exporter"
   },
   "projectProfitability": {

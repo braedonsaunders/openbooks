@@ -2071,6 +2071,9 @@
     },
     "print": "Imprimir",
     "printFailed": "Não foi possível abrir a caixa de diálogo de impressão",
+    "exported": "{filename} exportado.",
+    "exportFailed": "Não foi possível exportar {format}.",
+    "exporting": "Exportando {format}…",
     "export": "Exportar"
   },
   "builtIns": {

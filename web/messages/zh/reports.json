@@ -2071,6 +2071,9 @@
     },
     "print": "打印",
     "printFailed": "无法打开打印对话框",
+    "exported": "已导出 {filename}。",
+    "exportFailed": "无法导出 {format}。",
+    "exporting": "正在导出 {format}…",
     "export": "导出"
   },
   "builtIns": {
