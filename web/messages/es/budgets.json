@@ -74,6 +74,7 @@
     "locked": "Esta versión está bloqueada. Cópiela para crear una nueva revisión editable.",
     "dimensions": {
       "title": "Sección dimensional",
+      "subsidiary": "Subsidiaria",
       "department": "Departamento",
       "project": "Proyecto",
       "location": "Ubicación",

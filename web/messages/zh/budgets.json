@@ -74,6 +74,7 @@
     "locked": "此版本已锁定。复制它以创建新的可编辑修订版。",
     "dimensions": {
       "title": "维度切片",
+      "subsidiary": "子公司",
       "department": "部门",
       "project": "项目",
       "location": "地点",

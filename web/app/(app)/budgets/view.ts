@@ -61,6 +61,7 @@ export async function loadBudgets(
     return value && isUuid(value) ? value : null
   }
   const dims: BudgetDimensions = {
+    subsidiaryId: dimension('budgetSubsidiary'),
     departmentId: dimension('budgetDepartment'),
     projectId: dimension('budgetProject'),
     locationId: dimension('budgetLocation'),
@@ -85,6 +86,7 @@ export async function loadBudgets(
     budgetNew: null,
     budgetQ: null,
     budgetPage: null,
+    budgetSubsidiary: null,
     budgetDepartment: null,
     budgetProject: null,
     budgetLocation: null,
@@ -114,7 +116,7 @@ export async function loadBudgets(
     : null
   const drawer: BudgetsData['drawer'] = workspace && drawerPayload
     ? {
-        remountKey: `${workspace.scenario.id}-${workspace.scenario.revision}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`,
+        remountKey: `${workspace.scenario.id}-${workspace.scenario.revision}-${dims.subsidiaryId}-${dims.departmentId}-${dims.projectId}-${dims.locationId}-${dims.classId}`,
         ...drawerPayload,
       }
     : null

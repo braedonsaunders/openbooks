@@ -10,6 +10,7 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { ImportParseError, parseImportFile } from '../../../../../lib/data-io/parse'
 import type { ImportFormat } from '../../../../../lib/data-io/types'
 import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
+import { PNL_TYPES } from '../../../../../lib/account-types'
 
 export const runtime = 'nodejs'
 
@@ -21,13 +22,47 @@ function norm(value: unknown) {
   return String(value ?? '').trim().toLowerCase()
 }
 
-function lookup(rows: Lookup[]) {
-  const map = new Map<string, string>()
-  for (const row of rows) {
-    if (row.key) map.set(norm(row.key), row.id)
-    map.set(norm(row.name), row.id)
+type ResolveOutcome = { id: string } | { ambiguous: string[] } | { unknown: true }
+
+/**
+ * Exact-then-folded name resolver. The old lookup() let later rows overwrite
+ * earlier ones, so a repeated name resolved by spreadsheet row order — period
+ * names repeat across fiscal calendars, dimension codes carry no uniqueness,
+ * and account names are not unique. An ambiguous folded name refuses naming
+ * every candidate instead of guessing; exact duplicates refuse the same way.
+ * (Mirrors the subsidiary resolver below, which already works this way.)
+ */
+function buildResolver(rows: Lookup[]) {
+  const display = (row: Lookup) => (row.key ? `${row.name} (${row.key})` : row.name)
+  const exact = new Map<string, Map<string, string>>()
+  const folded = new Map<string, Map<string, string>>()
+  const add = (map: Map<string, Map<string, string>>, variant: string, row: Lookup) => {
+    let bucket = map.get(variant)
+    if (!bucket) {
+      bucket = new Map<string, string>()
+      map.set(variant, bucket)
+    }
+    if (!bucket.has(row.id)) bucket.set(row.id, display(row))
   }
-  return map
+  for (const row of rows) {
+    if (row.key) add(exact, row.key, row)
+    if (row.name) add(exact, row.name, row)
+    const variants = new Set([norm(row.key), norm(row.name)].filter((variant) => variant))
+    for (const variant of variants) add(folded, variant, row)
+  }
+  return (value: string): ResolveOutcome => {
+    const text = String(value ?? '').trim()
+    if (!text) return { unknown: true }
+    const direct = exact.get(text)
+    if (direct) {
+      if (direct.size > 1) return { ambiguous: [...direct.values()] }
+      return { id: [...direct.keys()][0]! }
+    }
+    const bucket = folded.get(norm(text))
+    if (!bucket) return { unknown: true }
+    if (bucket.size > 1) return { ambiguous: [...bucket.values()] }
+    return { id: [...bucket.keys()][0]! }
+  }
 }
 
 function first(row: Record<string, unknown>, ...headers: string[]) {
@@ -75,16 +110,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
     db.execute<Lookup>(sql`select id, coalesce(number, '') as key, name, type from accounts where org_id = ${user.orgId} and is_active and not is_summary`),
-    db.execute<Lookup>(sql`select id, name as key, name from accounting_periods where org_id = ${user.orgId} and fiscal_year = ${scenario.fiscal_year} and not is_adjustment`),
+    // Periods resolve within the budget's pinned calendar only: the line
+    // guard admits default-calendar periods, so resolving a same-named
+    // period from another calendar would write a line the worksheet hides.
+    db.execute<Lookup>(sql`
+      select p.id, p.name as key, p.name
+        from accounting_periods p
+        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+       where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
+         and not p.is_adjustment and fc.is_default`),
     db.execute<Lookup>(sql`select id, name as key, name from subsidiaries where org_id = ${user.orgId} and is_active and not is_elimination`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from departments where org_id = ${user.orgId} and is_active`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from projects where org_id = ${user.orgId} and is_active`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from locations where org_id = ${user.orgId} and is_active`),
     db.execute<Lookup>(sql`select id, coalesce(code, '') as key, name from classes where org_id = ${user.orgId} and is_active`),
   ]))
-  const accounts = lookup(accountsResult.rows)
+  const resolveAccount = buildResolver(accountsResult.rows)
+  // An Account Number cell resolves as a number only (account numbers are
+  // unique per tenant): it never guesses an account by name.
+  const resolveAccountNumber = buildResolver(accountsResult.rows.map((row) => ({ ...row, name: '' })))
+  const accountTypes = new Map(accountsResult.rows.map((row) => [row.id, row.type ?? '']))
+  const accountDisplays = new Map(
+    accountsResult.rows.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
+  )
   const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
-  const periods = lookup(periodsResult.rows)
+  const resolvePeriod = buildResolver(periodsResult.rows)
   // Subsidiaries carry no code; rows resolve by id, exact name, then
   // case-insensitive name. Storage guarantees (org_id, name) uniqueness, but
   // the folded lookup can still collide on case variants — like the
@@ -110,11 +160,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
      order by created_at, id
      limit 1
   `)).rows[0]?.id ?? null
+  // Dimensions resolve by code or name (the export writes code with a name
+  // fallback, so either form round-trips); a blank cell is genuinely "no
+  // dimension" because the export never emits a blank for a set dimension.
   const dimensions = {
-    departmentId: lookup(departmentsResult.rows),
-    projectId: lookup(projectsResult.rows),
-    locationId: lookup(locationsResult.rows),
-    classId: lookup(classesResult.rows),
+    departmentId: buildResolver(departmentsResult.rows),
+    projectId: buildResolver(projectsResult.rows),
+    locationId: buildResolver(locationsResult.rows),
+    classId: buildResolver(classesResult.rows),
   }
 
   const errors: { row: number; field: string; message: string }[] = []
@@ -122,12 +175,53 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const seen = new Set<string>()
   parsed.rows.forEach((row, index) => {
     const rowNumber = index + 2
-    const accountKey = first(row, 'Account Number', 'Account', 'accountNumber', 'account')
+    // The export writes Account Number (blank when the account has none)
+    // alongside Account Name: a blank number falls back to the name instead
+    // of resolving nobody. A number cell resolves as a number only — it never
+    // guesses an account by name.
+    const accountNumberCell = first(row, 'Account Number', 'accountNumber')
+    const accountNameCell = first(row, 'Account Name', 'Account', 'account', 'accountName')
+    let accountId: string | null = null
+    const accountCellText = String(accountNumberCell ?? '').trim() || String(accountNameCell ?? '').trim()
+    if (String(accountNumberCell ?? '').trim()) {
+      const outcome = resolveAccountNumber(String(accountNumberCell))
+      if ('id' in outcome) accountId = outcome.id
+      else if ('ambiguous' in outcome) {
+        errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
+      } else {
+        errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+      }
+    } else if (String(accountNameCell ?? '').trim()) {
+      const outcome = resolveAccount(String(accountNameCell))
+      if ('id' in outcome) accountId = outcome.id
+      else if ('ambiguous' in outcome) {
+        errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
+      } else {
+        errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+      }
+    } else {
+      errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+    }
+    // Budgets cover the P&L only (the worksheet, variances and the line
+    // guard agree): a balance-sheet account refuses by name, it never lands
+    // in a hidden-but-counted line.
+    if (accountId && !PNL_TYPES.includes(accountTypes.get(accountId) ?? '')) {
+      errors.push({ row: rowNumber, field: 'Account Number', message: `non_pnl_account: ${accountDisplays.get(accountId) ?? accountCellText}` })
+      accountId = null
+    }
     const periodKey = first(row, 'Period', 'period')
-    const accountId = accounts.get(norm(accountKey))
-    const periodId = periods.get(norm(periodKey))
-    if (!accountId) errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-    if (!periodId) errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+    let periodId: string | null = null
+    if (String(periodKey ?? '').trim()) {
+      const outcome = resolvePeriod(String(periodKey))
+      if ('id' in outcome) periodId = outcome.id
+      else if ('ambiguous' in outcome) {
+        errors.push({ row: rowNumber, field: 'Period', message: `ambiguous_period: ${outcome.ambiguous.join(', ')}` })
+      } else {
+        errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+      }
+    } else {
+      errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+    }
 
     const subsidiaryRaw = first(row, 'Subsidiary', 'subsidiary', 'subsidiaryId')
     const subsidiaryText = String(subsidiaryRaw ?? '').trim()
@@ -170,9 +264,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     for (const [key, header] of dimHeaders) {
       const raw = first(row, header, header.toLowerCase(), key)
       if (String(raw ?? '').trim()) {
-        const resolved = dimensions[key].get(norm(raw))
-        if (!resolved) errors.push({ row: rowNumber, field: header, message: 'unknown_dimension' })
-        else resolvedDims[key] = resolved
+        const outcome = dimensions[key](String(raw))
+        if ('id' in outcome) resolvedDims[key] = outcome.id
+        else if ('ambiguous' in outcome) {
+          errors.push({ row: rowNumber, field: header, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
+        } else {
+          errors.push({ row: rowNumber, field: header, message: 'unknown_dimension' })
+        }
       }
     }
     let amount = '0.0000'
