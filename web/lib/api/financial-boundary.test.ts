@@ -137,6 +137,11 @@ const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z
  * (`v1CreateOrder` / `v1ConvertOrder` / `readV1JsonObject`). Same factory
  * hatch: the commands still validate after the object parse.
  *
+ * A 284th hatch (items PATCH, parsing through jsonObject then re-validating
+ * with its own itemPatchSchema) was wired to parse through itemPatchSchema
+ * directly at the boundary instead — same 422 with the same first-issue
+ * message, second validation deleted — restoring 283 at the ceiling.
+ *
  * Raising it was the honest option rather than the tidy one. Several of these
  * answer domain statuses parseJsonBody cannot produce: items/price returns 404
  * for a malformed item id to stay tenant-opaque, and a schema failure is

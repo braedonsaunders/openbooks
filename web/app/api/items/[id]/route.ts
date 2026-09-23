@@ -1,4 +1,4 @@
-import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -179,11 +179,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  // The patch body parses directly through its zod schema: the schema
+  // already validated separately, so parsing through jsonObject first only
+  // ran the same validation twice. Schema failures stay 422 with the first
+  // issue message, exactly as the removed second validation reported them.
+  const parsedBody = await parseJsonBody(req, itemPatchSchema, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const fields = itemPatchSchema.safeParse(parsedBody.data)
-  if (!fields.success) return bad(fields.error.issues[0]?.message ?? 'Invalid item fields')
-  const body = fields.data
+  const body = parsedBody.data
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
