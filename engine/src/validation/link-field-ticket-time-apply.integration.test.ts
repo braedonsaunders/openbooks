@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { fork } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 import {
@@ -230,6 +236,129 @@ test("an entry re-ticketed between plan and apply refuses instead of writing a f
       },
     );
     assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketC);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+const LINK_SCRIPT =
+  process.env.G37_LINK_UNDER_TEST ??
+  fileURLToPath(new URL("./link-field-ticket-time-by-source.ts", import.meta.url));
+
+function runLinkTool(args: string[]): Promise<{
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}> {
+  return new Promise((resolve) => {
+    const child = fork(LINK_SCRIPT, args, {
+      execArgv: [
+        "--no-concurrent-sparkplug",
+        "--no-concurrent-recompilation",
+        "--import",
+        "tsx",
+        "--import",
+        "./engine/src/testing/database-bypass.ts",
+      ],
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    const watchdog = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve({ code: null, stdout, stderr: `${stderr} (child timed out)` });
+    }, 180_000);
+    child.on("error", (error) => {
+      clearTimeout(watchdog);
+      resolve({ code: null, stdout, stderr: error.message });
+    });
+    child.on("exit", (code) => {
+      clearTimeout(watchdog);
+      resolve({ code, stdout, stderr });
+    });
+  });
+}
+
+async function ticketNumber(id: string): Promise<string> {
+  return String(
+    (
+      await db.execute<{ document_number: string }>(
+        sql`select document_number from documents where id = ${id}`,
+      )
+    ).rows[0]!.document_number,
+  );
+}
+
+test("the apply without an operator refuses", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const harness = await setup(org.orgId);
+    const entryId = await entry(harness, "SRC-NOACTOR", harness.ticketA);
+    const dir = mkdtempSync(join(tmpdir(), "link-noactor-"));
+    const input = join(dir, "links.json");
+    writeFileSync(
+      input,
+      JSON.stringify([{ id: "SRC-NOACTOR", ticket_number: await ticketNumber(harness.ticketB) }]),
+    );
+    const result = await runLinkTool([
+      `--org=${harness.orgId}`,
+      `--input=${input}`,
+      `--out=${join(dir, "report.json")}`,
+      "--reason=test apply without an operator refuses",
+      "--apply",
+      // Scratch orgs are production-kind; the flag below is the test's
+      // explicit decision to write to its own throwaway tenant.
+      "--production",
+    ]);
+    assert.notEqual(result.code, 0);
+    assert.match(result.stderr, /--actor/);
+    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketA);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the apply records the verified operator on every audit row", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const harness = await setup(org.orgId);
+    const operatorId = await createScratchUser(org.orgId, "Link Operator", "link_operator");
+    const entryId = await entry(harness, "SRC-ACTOR", harness.ticketA);
+    const dir = mkdtempSync(join(tmpdir(), "link-actor-"));
+    const input = join(dir, "links.json");
+    writeFileSync(
+      input,
+      JSON.stringify([{ id: "SRC-ACTOR", ticket_number: await ticketNumber(harness.ticketB) }]),
+    );
+    const result = await runLinkTool([
+      `--org=${harness.orgId}`,
+      `--input=${input}`,
+      `--out=${join(dir, "report.json")}`,
+      "--reason=test apply records the verified operator",
+      "--apply",
+      // Scratch orgs are production-kind; the flag below is the test's
+      // explicit decision to write to its own throwaway tenant.
+      "--production",
+      `--actor=${operatorId}`,
+    ]);
+    assert.equal(result.code, 0);
+    assert.equal(await currentTicket(harness.orgId, entryId), harness.ticketB);
+    const audits = (
+      await db.execute<{ actor_id: string | null }>(
+        sql`select actor_id from audit_log where org_id = ${harness.orgId} and table_name = 'time_entries'`,
+      )
+    ).rows;
+    assert.ok(audits.length > 0);
+    for (const audit of audits) {
+      assert.equal(audit.actor_id, operatorId);
+    }
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -10,11 +10,15 @@
  * never allocates a line across tickets and never changes hours or money.
  *
  * Dry-run is the default. Production writes require all of:
- *   --apply --production --reason="..." --org=<uuid>
+ *   --apply --production --reason="..." --org=<uuid> --actor=<operator user uuid>
+ *
+ * --actor names the operator: it must be a user of the target organization
+ * and is recorded on every audit row the apply writes.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { withOrg } from "../platform/db.ts";
+import { sql } from "drizzle-orm";
+import { db, withOrg } from "../platform/db.ts";
 import {
   applyTimeTicketLinks,
   classifyTimeTicketLinks,
@@ -44,6 +48,10 @@ const outputPath =
 const apply = args.get("apply") === "true";
 const excludeProjectConflicts =
   args.get("exclude-project-conflicts") === "true";
+const actorArg = args.get("actor")?.trim() ?? "";
+if (actorArg && !/^[0-9a-f-]{36}$/i.test(actorArg)) {
+  throw new Error("--actor must be a user UUID from the target organization");
+}
 const reason = args.get("reason")?.trim() ?? "";
 if (!existsSync(inputPath)) throw new Error(`input not found: ${inputPath}`);
 if (!/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(sourceKey)) {
@@ -103,6 +111,26 @@ const {
 } = classifyTimeTicketLinks(resolved, links.length, uniqueLinks.size);
 
 if (apply) {
+  // Operator identity first: production lineage changes are audited, and an
+  // audit row without an actor names no one. Follows the operator-CLI
+  // convention (--actor UUID, e.g. scripts/payroll-reconcile-*.ts), verified
+  // against the target organization here.
+  if (!actorArg) {
+    throw new Error(
+      "refusing apply: --actor <user UUID> is required so every audit row carries its operator; pass the operator's user id from the target organization",
+    );
+  }
+  const actor = (
+    await db.execute(
+      sql`select id from users where org_id = ${orgId} and id = ${actorArg}`,
+    )
+  ).rows[0];
+  if (!actor) {
+    throw new Error(
+      `refusing apply: --actor ${actorArg} is not a user of this organization; pass the operator's user id from the target organization`,
+    );
+  }
+  const actorId = String(actor.id);
   if (
     missingTimeEntries.length ||
     missingTickets.length ||
@@ -136,7 +164,7 @@ if (apply) {
         reason,
         inputSha256,
         runId,
-        actorId: null,
+        actorId,
       }),
     );
   }

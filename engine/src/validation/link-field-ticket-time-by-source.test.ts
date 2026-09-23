@@ -27,6 +27,29 @@ test("the link tool plans and applies through the locking module", () => {
   );
 });
 
+test("the apply requires a verified same-org operator", () => {
+  assert.match(script, /--actor=<operator user uuid>/);
+  assert.match(
+    script,
+    /--actor <user UUID> is required so every audit row carries its operator/,
+  );
+  assert.match(
+    script,
+    /select id from users where org_id = /,
+    "the actor is verified against the target organization",
+  );
+  assert.match(
+    script,
+    /is not a user of this organization/,
+    "a foreign actor refuses by name",
+  );
+  assert.doesNotMatch(
+    script,
+    /actorId: null/,
+    "no apply path may record a null actor",
+  );
+});
+
 test("the apply locks, re-verifies, and checks every write", () => {
   assert.match(module, /for update of te/, "entries are locked before verify");
   assert.match(
