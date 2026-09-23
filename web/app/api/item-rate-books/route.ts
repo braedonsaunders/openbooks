@@ -5,7 +5,8 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
-import { validateRateBookLines, type ValidRateBookLine } from '@/lib/item-rate-book-lines'
+import { validateRateBookLines, type RateBookInputLine, type ValidRateBookLine } from '@/lib/item-rate-book-lines'
+import { validateTimeTypeBillRates } from '@/lib/item-rate-time-types'
 import { isUuid } from '@/lib/list-params'
 import { saveSetupBook } from '@/lib/setup/books'
 import { resolveSetupEntity } from '@/lib/setup/write'
@@ -45,6 +46,22 @@ export async function POST(request: Request) {
   // a refusal leaves the current active version untouched.
   if (replaceRates && validated.lines.length === 0 && body.confirmEmptyReplacement !== true) {
     return NextResponse.json({ error: `A replacement with no rate lines would clear every rate in this book from ${effectiveFrom}. Confirm that all rates should end, then save again.` }, { status: 422 })
+  }
+  // Per-time-type premiums validate through the shared validator: every key
+  // must be an active time type of this org and every value valid money.
+  // Anything else refuses by row and key with no write — never filtered
+  // silently. The maps run over the raw input in order so labels name the
+  // submitted row; validated lines take their premiums by row number.
+  if (replaceRates) {
+    const premiumMaps = (body.lines as RateBookInputLine[]).map((raw, index) => ({
+      label: `Row ${index + 1}`,
+      raw: raw?.timeTypeBillRates,
+    }))
+    const validatedPremiums = await validateTimeTypeBillRates(gate.user.orgId, premiumMaps)
+    if ('error' in validatedPremiums) return NextResponse.json({ error: validatedPremiums.error }, { status: 422 })
+    for (const line of validated.lines) {
+      line.timeTypeBillRates = validatedPremiums.rates[line.rowNumber - 1] ?? {}
+    }
   }
 
   const multiCurrency = await isFeatureEnabled(gate.user.orgId, 'multiCurrency')

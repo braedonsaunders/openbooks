@@ -1,5 +1,4 @@
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from './exact-decimal'
 import { parseItemRateDecimal } from './item-rate-numerics'
 import { isUuid } from './list-params'
 
@@ -20,6 +19,8 @@ export interface RateBookInputLine {
 }
 
 export interface ValidRateBookLine {
+  /** 1-based position in the submitted array, for refusal labels. */
+  rowNumber: number
   itemId: string
   unitCode: string
   unitName: string
@@ -30,10 +31,6 @@ export interface ValidRateBookLine {
   pricingPolicy: string
   invoicePresentation: string
   timeTypeBillRates: Record<string, string>
-}
-
-function wholeDigits(value: string): number {
-  return value.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
 }
 
 function isBlankField(value: unknown): boolean {
@@ -66,6 +63,9 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
   for (const raw of input as RateBookInputLine[]) {
     position += 1
     const row = `Row ${position}`
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      return { error: `${row}: rate line must be an object.` }
+    }
     if (isBlankRateBookLine(raw)) continue
     const itemId = String(raw.itemId ?? '').trim()
     const unitCode = String(raw.unitCode ?? '').trim().toLowerCase()
@@ -110,24 +110,21 @@ export function validateRateBookLines(input: unknown): { lines: ValidRateBookLin
     }
     profiles.set(itemId, profile)
 
-    const premiums: Record<string, string> = {}
+    // Premium CONTENT (org membership, values) validates through the shared
+    // validator in the route, which overwrites timeTypeBillRates below. The
+    // structural checks stay here so malformed maps refuse by row early.
     if (raw.timeTypeBillRates != null) {
       if (typeof raw.timeTypeBillRates !== 'object' || Array.isArray(raw.timeTypeBillRates)) {
         return { error: `${row}: labor premiums must map time types to rates.` }
       }
-      for (const [timeTypeId, supplied] of Object.entries(raw.timeTypeBillRates as Record<string, unknown>)) {
+      for (const timeTypeId of Object.keys(raw.timeTypeBillRates)) {
         if (!isUuid(timeTypeId)) return { error: `${row}: labor premium "${timeTypeId}" is not a valid time type.` }
-        const rate = canonicalDecimal(String(supplied), 4)
-        if (rate === null || cmp(rate, '0') < 0 || wholeDigits(rate) > 15) {
-          return { error: `${row}: labor premium rates must be non-negative exact numbers with no more than four decimal places.` }
-        }
-        premiums[timeTypeId] = normalizeMoney(rate)
       }
     }
     lines.push({
-      itemId, unitCode, unitName, baseQuantity,
+      rowNumber: position, itemId, unitCode, unitName, baseQuantity,
       costRate: normalizeMoney(costRate), billRate: normalizeMoney(billRate),
-      baseUnit, pricingPolicy, invoicePresentation, timeTypeBillRates: premiums,
+      baseUnit, pricingPolicy, invoicePresentation, timeTypeBillRates: {},
     })
   }
   return { lines }

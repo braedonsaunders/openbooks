@@ -7,8 +7,8 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
-import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { parseItemRateDecimal } from '../../../../../lib/item-rate-numerics'
+import { validateTimeTypeBillRates } from '../../../../../lib/item-rate-time-types'
 
 export const runtime = 'nodejs'
 
@@ -46,20 +46,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 interface TierInput { unitCode?: string; unitName?: string; baseQuantity?: string; costRate?: string; billRate?: string; timeTypeBillRates?: Record<string, string> }
-
-/** Keep only uuid → non-negative numeric entries (explicit per-time-type bill rates). */
-function cleanTierRates(input: Record<string, string> | undefined): string {
-  const out: Record<string, string> = {}
-  if (input && typeof input === 'object') {
-    for (const [k, v] of Object.entries(input)) {
-      if (isUuid(k) && v !== '') {
-        const exact = canonicalDecimal(v, 4)
-        if (exact !== null && cmp(exact, '0') >= 0) out[k] = normalizeMoney(exact)
-      }
-    }
-  }
-  return JSON.stringify(out)
-}
 
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -139,6 +125,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       billRate: normalizeMoney(billRate),
     })
   }
+  // Per-time-type premiums validate through the shared validator: every key
+  // must be an active time type of this org and every value valid money.
+  // Anything else refuses by rate unit and key with no write — never filtered
+  // silently.
+  const validatedPremiums = await validateTimeTypeBillRates(
+    gate.user.orgId,
+    body.tiers.map((tier, index) => ({ label: `Rate unit ${index + 1}`, raw: tier.timeTypeBillRates })),
+  )
+  if ('error' in validatedPremiums) return NextResponse.json({ error: validatedPremiums.error }, { status: 422 })
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -230,11 +225,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         values (${gate.user.orgId}, ${version.rows[0]!.id}, ${id}, ${baseUnit}, ${body.pricingPolicy}, ${body.invoicePresentation ?? 'rate_components'}, ${gate.user.id}, ${gate.user.id})
       `)
       let sort = 0
-      for (const tier of tiers) {
+      for (const [index, tier] of tiers.entries()) {
         await tx.execute(sql`
           insert into item_rate_lines (org_id, version_id, item_id, unit_code, unit_name, base_quantity, cost_rate, bill_rate, time_type_bill_rates, sort_order, created_by, updated_by)
           values (${gate.user.orgId}, ${version.rows[0]!.id}, ${id}, ${tier.unitCode}, ${tier.unitName},
-                  ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${cleanTierRates(tier.timeTypeBillRates)}::jsonb, ${sort++}, ${gate.user.id}, ${gate.user.id})
+                  ${tier.baseQuantity}, ${tier.costRate}, ${tier.billRate}, ${JSON.stringify(validatedPremiums.rates[index] ?? {})}::jsonb, ${sort++}, ${gate.user.id}, ${gate.user.id})
         `)
       }
       await tx.execute(sql`
