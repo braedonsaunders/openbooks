@@ -11,7 +11,7 @@
  *   node scripts/upgrade-rehearsal/plan.mjs                  # print the matrix
  *   node scripts/upgrade-rehearsal/plan.mjs --github-output "$GITHUB_OUTPUT"
  */
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -190,6 +190,14 @@ export function validateConfig(config) {
     }
     const expected = validateExpectFindings(dataset, where, problems);
     validateRemedies(dataset, expected, where, problems);
+    if (dataset?.assertions !== undefined && typeof dataset.assertions !== "boolean") {
+      refuse(problems, `${where}: assertions must be true or absent`);
+    } else if (dataset?.assertions === true) {
+      const file = join(HERE, "assertions", `${dataset.id}.mjs`);
+      if (!existsSync(file)) {
+        refuse(problems, `${where}: declares assertions but ${file} is missing; a deleted assertions file must not silently skip the phase`);
+      }
+    }
     if (dataset?.class !== "empty" && Array.isArray(dataset?.steps) && dataset.steps.length === 0) {
       refuse(problems, `${where}: only the empty class may have no steps`);
     }

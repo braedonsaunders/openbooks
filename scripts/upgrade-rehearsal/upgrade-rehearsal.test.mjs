@@ -188,6 +188,20 @@ test("a closed expectFindings/remedies loop validates", () => {
   assert.deepEqual(validateConfig(refusalConfig([refusalDataset()])), []);
 });
 
+test("a dataset declaring assertions needs its assertions file, and the flag is boolean", () => {
+  const missing = refusalDataset({ id: "no-such-dataset", assertions: true });
+  assert.ok(
+    validateConfig(refusalConfig([missing])).some((problem) => problem.includes("declares assertions but")),
+  );
+  const malformed = refusalDataset({ assertions: "yes" });
+  assert.ok(
+    validateConfig(refusalConfig([malformed])).some((problem) => problem.includes("assertions must be true or absent")),
+  );
+  const committed = loadConfig().datasets.find((dataset) => dataset.id === "edge-legacy");
+  assert.equal(committed?.assertions, true);
+  assert.deepEqual(validateConfig(loadConfig()), []);
+});
+
 test("a remedy outside the remedies directory is refused (no private remedies)", () => {
   for (const sql of [
     "scripts/upgrade-rehearsal/remediations/edge-refusals.sql",

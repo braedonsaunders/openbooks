@@ -16,11 +16,10 @@
  * (b) The active unbound SFTP schedule is paused with a named notice after
  *     one scheduler tick — never auto-assigned, never misattributed.
  * (c) Every reconstructed-history row (0274/0292/0297/0298) appears in
- *     upgrade_legacy_provenance with its verbatim note. BLOCKED on m74's
- *     0326: until that table exists the gate refuses by name.
+ *     upgrade_legacy_provenance with its verbatim note (pinned against
+ *     0326's bytes).
  * (d) Posted stock-count history is intact, no draft count is left empty,
- *     and the grandfathered notice rows are recorded. The recorded half is
- *     BLOCKED on 0326 with (c).
+ *     and the grandfathered notice rows are recorded under 0293/0299.
  */
 import pg from "pg";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
@@ -51,7 +50,7 @@ async function main() {
   try {
     await checkWaiverFrozenOrLegacy(client, seededOrgs);
     await checkUnboundSchedulePaused(client, seededOrgs);
-    await checkProvenanceRecorded(client, seededOrgs);
+    await checkReconstructedHistoryProvenance(client, seededOrgs);
     await checkPostedCountsIntact(client, seededOrgs);
   } finally {
     await client.end();
@@ -197,23 +196,90 @@ async function checkUnboundSchedulePaused(client, seededOrgs) {
 }
 
 /**
- * (c) + (d-recorded) need m74's 0326 upgrade_legacy_provenance table, which
- * is not on main yet. Until it lands this gate refuses by name instead of
- * passing hollow: presence of the table is the only thing observable here.
- * When 0326 lands, replace the body below with per-shape row + verbatim
- * note checks (0274 EDGE-file doc, 0292 EDGE-W-1, 0297 EDGE-RR rule, 0298
- * EDGE version/item pin, plus the 0293/0299 grandfathered posted rows).
+ * (c) Every reconstructed-history row appears in upgrade_legacy_provenance
+ * with its verbatim note. Table, key columns, and note texts are pinned
+ * against 0326_upgrade_legacy_provenance.sql: readers key off
+ * (org, migration, table, row) membership, and the column comment names
+ * release-lane assertions as the verbatim matchers of note text.
  */
-async function checkProvenanceRecorded(client) {
-  const { rows } = await client.query(
-    `select 1 from information_schema.tables
-      where table_schema = 'public' and table_name = 'upgrade_legacy_provenance'`,
-  );
-  if (rows.length === 0) {
-    check("legacy-provenance-recorded", false, "upgrade_legacy_provenance is absent: m74's 0326 has not landed, (c) and the recorded half of (d) cannot run");
-    return;
+const PROVENANCE_NOTES = {
+  "0274_retention_action_completion_snapshot":
+    "retention action inherited from the live schedule; governing action at completion unrecorded — unverified legacy",
+  "0292_lien_waiver_executed_snapshot":
+    "executed before execution snapshots existed; print image not frozen at signing — unverified legacy",
+  "0297_recognition_rule_versions":
+    "rule predates versioning; pre-upgrade policy edits were made in place so the pinned row may not be the policy its obligations were built under — unverified legacy",
+  "0298_item_rate_version_profile_pins":
+    "rate pin backfilled from the live profile; governing policy at version time unrecorded — unverified legacy",
+  "0293_stock_count_line_subject_unique":
+    "duplicate subject posted before the 0293 guard; double-posted variance stands — grandfathered legacy",
+  "0299_stock_count_line_counted_nonnegative":
+    "negative count posted before the 0299 guard; phantom variance stands — grandfathered legacy",
+};
+
+/**
+ * Provenance rows, or null when the registry itself is absent (0326 not yet
+ * applied: the checks below refuse by name instead of crashing without JSON).
+ */
+async function provenanceRow(client, orgIds, migration, table, rowId) {
+  try {
+    const { rows } = await client.query(
+      `select note from public.upgrade_legacy_provenance
+        where org_id = any($1) and migration = $2 and table_name = $3 and row_id = $4`,
+      [orgIds, migration, table, rowId],
+    );
+    return rows;
+  } catch (error) {
+    if (error?.code === "42P01") return null;
+    throw error;
   }
-  check("legacy-provenance-recorded", false, "upgrade_legacy_provenance exists but per-shape verbatim checks are not written yet: pin them against 0326's bytes");
+}
+
+async function checkReconstructedHistoryProvenance(client, seededOrgs) {
+  const problems = [];
+  const want = async (label, migration, table, rowId) => {
+    if (!rowId) {
+      problems.push(`${label}: shape row not found, cannot check its provenance row`);
+      return;
+    }
+    const rows = await provenanceRow(client, seededOrgs, migration, table, rowId);
+    if (rows === null) {
+      problems.push(`${label}: upgrade_legacy_provenance is absent — 0326 has not applied, cannot verify`);
+    } else if (rows.length !== 1) {
+      problems.push(`${label}: ${rows.length} provenance row(s) for (${migration}, ${table}, ${rowId}), want exactly 1`);
+    } else if (rows[0].note !== PROVENANCE_NOTES[migration]) {
+      problems.push(`${label}: provenance note is not verbatim 0326: ${JSON.stringify(rows[0].note)}`);
+    }
+  };
+  const doc = await client.query(
+    `select id from public.hrm_documents where org_id = any($1) and title = 'EDGE file'`,
+    [seededOrgs],
+  );
+  await want("0274/EDGE file", "0274_retention_action_completion_snapshot", "hrm_documents", doc.rows[0]?.id);
+  const waiver = await client.query(
+    `select id from public.lien_waivers where org_id = any($1) and waiver_number = 'EDGE-W-1'`,
+    [seededOrgs],
+  );
+  await want("0292/EDGE-W-1", "0292_lien_waiver_executed_snapshot", "lien_waivers", waiver.rows[0]?.id);
+  const rule = await client.query(
+    `select id from public.recognition_rules where org_id = any($1) and code = 'EDGE-RR'`,
+    [seededOrgs],
+  );
+  await want("0297/EDGE-RR", "0297_recognition_rule_versions", "recognition_rules", rule.rows[0]?.id);
+  const pin = await client.query(
+    `select p.id from public.item_rate_version_profiles p
+       join public.item_rate_versions v on v.org_id = p.org_id and v.id = p.version_id
+       join public.item_rate_books b on b.org_id = v.org_id and b.id = v.rate_book_id
+       join public.items i on i.org_id = p.org_id and i.id = p.item_id
+      where p.org_id = any($1) and b.code = 'EDGE-RB' and i.name = 'EDGE rate item'`,
+    [seededOrgs],
+  );
+  if (pin.rows.length !== 1) {
+    problems.push(`0298/EDGE pin: found ${pin.rows.length} pin row(s), want exactly 1`);
+  } else {
+    await want("0298/EDGE pin", "0298_item_rate_version_profile_pins", "item_rate_version_profiles", pin.rows[0].id);
+  }
+  check("reconstructed-history-provenance", problems.length === 0, problems.join("; ") || "0274/0292/0297/0298 rows recorded with verbatim 0326 notes");
 }
 
 /**
@@ -254,7 +320,35 @@ async function checkPostedCountsIntact(client, seededOrgs) {
     [seededOrgs],
   );
   if (empty.rows[0].n !== 0) problems.push(`${empty.rows[0].n} draft/review count(s) left with no lines`);
-  check("posted-counts-intact", problems.length === 0, problems.join("; ") || "EDGE posted keeps 3 lines (-5,9,9); no empty draft counts");
+  // (d, recorded half) Every EDGE posted line stands grandfathered: all
+  // three share one subject so all three record under 0293, and the
+  // negative line records under 0299 too.
+  if (posted.length === 1 && posted[0].status === "posted") {
+    const lines = await client.query(
+      `select id, counted_quantity from public.stock_count_lines
+        where org_id = any($1) and stock_count_id = $2`,
+      [seededOrgs, posted[0].id],
+    );
+    for (const line of lines.rows) {
+      const rows293 = await provenanceRow(client, seededOrgs,
+        "0293_stock_count_line_subject_unique", "stock_count_lines", line.id);
+      if (rows293 === null) {
+        problems.push(`posted line ${line.id}: upgrade_legacy_provenance is absent — 0326 has not applied`);
+      } else if (rows293.length !== 1 || rows293[0].note !== PROVENANCE_NOTES["0293_stock_count_line_subject_unique"]) {
+        problems.push(`posted line ${line.id}: 0293 grandfathered row missing or note not verbatim`);
+      }
+      if (Number(line.counted_quantity) < 0) {
+        const rows299 = await provenanceRow(client, seededOrgs,
+          "0299_stock_count_line_counted_nonnegative", "stock_count_lines", line.id);
+        if (rows299 === null) {
+          problems.push(`posted line ${line.id}: upgrade_legacy_provenance is absent — 0326 has not applied`);
+        } else if (rows299.length !== 1 || rows299[0].note !== PROVENANCE_NOTES["0299_stock_count_line_counted_nonnegative"]) {
+          problems.push(`posted line ${line.id}: 0299 grandfathered row missing or note not verbatim`);
+        }
+      }
+    }
+  }
+  check("posted-counts-intact", problems.length === 0, problems.join("; ") || "EDGE posted keeps 3 lines (-5,9,9); no empty draft counts; grandfathered rows recorded");
 }
 
 main().then(
