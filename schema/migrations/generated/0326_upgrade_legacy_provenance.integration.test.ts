@@ -25,8 +25,17 @@ const migrationSql = readFileSync(
  * negative control proving the criterion, not just the timestamp, decides:
  * an old but unreferenced rule, a fresh writer pin, a draft waiver, an
  * uncompleted document, draft counts.
+ *
+ * Everything runs inside one transaction that always rolls back: the posted
+ * duplicates and the posted negative only exist in pre-guard installs, so
+ * the test drops their guards (0293 unique, 0299 check) to plant the true
+ * legacy shape without depending on other lanes' exemptions — and the
+ * rollback restores both constraints, so parallel suites never observe a
+ * guardless table. The scratch org itself is created outside (and dropped
+ * after) because teardown cannot run inside the rolled-back unit.
  */
 const LEGACY_DAY = "2020-01-15";
+const ROLLBACK = Symbol("0326-test-rollback");
 
 async function provenance(orgId: string) {
   return (await db.execute<{ migration: string; table_name: string; row_id: string; note: string }>(sql`
@@ -55,16 +64,24 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
   const dupB = randomUUID();
   const negLine = randomUUID();
   try {
-    await withBypass(async () => {
-      // Test-only accommodation: this database carries the pre-exemption
-      // 0293 unique guard, which refuses the posted duplicates the g43 lane
-      // is exempting. Drop it to plant the grandfathered fixture rows; the
-      // 0326 criteria below are constraint-agnostic.
-      await db.execute(sql`
-        alter table stock_count_lines drop constraint if exists stock_count_lines_no_duplicate_subject`);
+    // One pinned transaction for everything below; the sentinel rolls it
+    // all back (guards restored, fixtures vanished). A real failure still
+    // propagates: only the sentinel is swallowed.
+    await withBypass(() =>
+      db.transaction(async () => {
+        // Pre-guard install shape: the grandfathered rows cannot exist
+        // under the 0293/0299 guards, so plant them with both guards down.
+        // The rollback restores the constraints.
+        await db.execute(sql`
+          alter table stock_count_lines drop constraint if exists stock_count_lines_no_duplicate_subject`);
+        // g43's staged 0293 enforces the guard as a partial unique INDEX of
+        // the same name (a constraint on older ledgers); drop whichever exists.
+        await db.execute(sql`drop index if exists stock_count_lines_no_duplicate_subject`);
+        await db.execute(sql`
+          alter table stock_count_lines drop constraint if exists stock_count_lines_counted_nonnegative`);
 
-      // -- 0297: a pre-versioning rule pinned by an obligation (marked), an
-      // -- old rule nothing references, and a fresh rule (both unmarked).
+        // -- 0297: a pre-versioning rule pinned by an obligation (marked), an
+        // -- old rule nothing references, and a fresh rule (both unmarked).
       for (const [id, created] of [[oldRule, LEGACY_DAY], [staleRule, LEGACY_DAY]] as const) {
         await db.execute(sql`
           insert into recognition_rules
@@ -215,9 +232,10 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
         values (${org.orgId}, ${negDraft}, ${org.items.fifo}, ${org.stockLocationId}, null, '10', '-1')`);
 
       await db.execute(sql.raw(migrationSql));
-    });
 
-    const rows = await withBypass(() => provenance(org.orgId));
+    // Same pinned transaction: a nested withBypass would open a second
+    // connection and wait forever on this transaction's locks.
+    const rows = await provenance(org.orgId);
     const marked = new Map(rows.map((row) => [`${row.migration}/${row.table_name}/${row.row_id}`, row.note]));
     assert.equal(rows.length, 8, `expected 8 legacy rows, got ${JSON.stringify(rows.map((r) => [r.migration, r.row_id]))}`);
 
@@ -275,7 +293,7 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
 
     // The registry is tenant-isolated at the storage boundary, like every
     // other org table: RLS on, forced past the table owner, with a policy.
-    const guard = (await withBypass(() => db.execute<{ relrowsecurity: boolean; relforcerowsecurity: boolean; policies: string }>(sql`
+    const guard = (await (db.execute<{ relrowsecurity: boolean; relforcerowsecurity: boolean; policies: string }>(sql`
       select c.relrowsecurity, c.relforcerowsecurity, count(p.policyname)::text as policies
         from pg_class c
         join pg_namespace n on n.oid = c.relnamespace
@@ -288,15 +306,15 @@ test("0326 records the six legacy classes and nothing else, idempotently", { ski
     assert.equal(guard.policies, "1");
 
     // Re-running changes nothing: every legacy row collides on its key.
-    await withBypass(async () => {
-      await db.execute(sql.raw(migrationSql));
-    });
-    assert.deepEqual(await withBypass(() => provenance(org.orgId)), rows);
+    await db.execute(sql.raw(migrationSql));
+    assert.deepEqual(await provenance(org.orgId), rows);
 
-    await withBypass(async () => {
-      await db.execute(sql`delete from upgrade_legacy_provenance where org_id = ${org.orgId}`);
+        throw ROLLBACK;
+      }),
+    ).catch((error: unknown) => {
+      if (error !== ROLLBACK) throw error;
     });
   } finally {
-    await withBypass(() => dropScratchOrg(org.orgId));
+    await dropScratchOrg(org.orgId);
   }
 });
