@@ -173,10 +173,10 @@ test("the splitter keeps dollar-quoted bodies whole and drops empties", () => {
     ].join("\n"),
   );
   assert.equal(statements.length, 4);
-  assert.match(statements[0], /SET statement_timeout/);
-  assert.match(statements[1], /RAISE NOTICE 'a;b'/);
-  assert.match(statements[2], /\$body\$/);
-  assert.match(statements[3], /SELECT 'semi;colon', "weird;ident"/);
+  assert.match(statements[0]!, /SET statement_timeout/);
+  assert.match(statements[1]!, /RAISE NOTICE 'a;b'/);
+  assert.match(statements[2]!, /\$body\$/);
+  assert.match(statements[3]!, /SELECT 'semi;colon', "weird;ident"/);
 });
 
 test("the splitter does not mistake a cast or a placeholder for a dollar quote", () => {

@@ -104,6 +104,10 @@ jobs:
         # Fails the job if any workspace with a `typecheck` script errors;
         # workspaces without one are skipped by --if-present.
         run: npm run typecheck --workspaces --if-present
+      - name: Typecheck scripts
+        # scripts/ is not a workspace, so it needs its own gate: nothing
+        # checked scripts/*.ts before scripts/tsconfig.json existed.
+        run: npm run typecheck:scripts
       - name: Lint
         # Cheap, and it used to surface only after sixteen Postgres containers
         # had already started. The zero-warning ceiling is the gate.

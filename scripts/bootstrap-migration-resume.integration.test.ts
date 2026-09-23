@@ -110,8 +110,8 @@ test("a kill mid-file leaves objects but no ledger row; the resume heals to a va
       `select exists (select 1 from pg_tables where tablename = 'probe_g43_resume') as "tableExists",
               exists (select 1 from pg_class where relname = 'probe_g43_resume_item') as "indexExists"`,
     );
-    assert.equal(partial.rows[0].tableExists, true, "committed steps survive the kill");
-    assert.equal(partial.rows[0].indexExists, false, "later steps never ran");
+    assert.equal(partial.rows[0]!.tableExists, true, "committed steps survive the kill");
+    assert.equal(partial.rows[0]!.indexExists, false, "later steps never ran");
 
     // The resume: the whole file replays idempotently through the real executor.
     const resumer = await connectMigrationClient();
@@ -129,7 +129,7 @@ test("a kill mid-file leaves objects but no ledger row; the resume heals to a va
     }
     const recorded = await ledgerRows(setup);
     assert.equal(recorded.length, 1, "the resume records the ledger row exactly once");
-    assert.equal(recorded[0].sha256, DIGEST);
+    assert.equal(recorded[0]!.sha256, DIGEST);
     const healed = await setup.query<{ valid: boolean; constrained: boolean; seeded: boolean }>(
       `select i.indisvalid as valid,
               exists (select 1 from pg_constraint where conname = 'probe_g43_resume_payload_present') as constrained,
@@ -138,9 +138,9 @@ test("a kill mid-file leaves objects but no ledger row; the resume heals to a va
         where c.relname = 'probe_g43_resume_item'`,
     );
     assert.equal(healed.rows.length, 1, "the concurrent index exists after resume");
-    assert.equal(healed.rows[0].valid, true, "the resumed build is valid, not INVALID");
-    assert.equal(healed.rows[0].constrained, true, "later steps ran on resume");
-    assert.equal(healed.rows[0].seeded, true, "the idempotent seed ran once");
+    assert.equal(healed.rows[0]!.valid, true, "the resumed build is valid, not INVALID");
+    assert.equal(healed.rows[0]!.constrained, true, "later steps ran on resume");
+    assert.equal(healed.rows[0]!.seeded, true, "the idempotent seed ran once");
   } finally {
     await setup.query("drop table if exists probe_g43_resume").catch(() => {});
     await setup.query("delete from public._applied_migrations where filename = $1", [FILENAME]).catch(() => {});

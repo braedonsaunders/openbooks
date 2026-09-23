@@ -385,7 +385,7 @@ export function splitSqlStatements(content: string): string[] {
         flush();
         continue;
       }
-      if (ch.trim().length > 0) hasCode = true;
+      if (ch !== undefined && ch.trim().length > 0) hasCode = true;
       current += ch;
       i += 1;
       continue;
@@ -495,8 +495,10 @@ export async function executeMigrationBody(
   }
   const statements = splitSqlStatements(body);
   for (let index = 0; index < statements.length; index += 1) {
+    // In bounds: index < statements.length.
+    const statement = statements[index] as string;
     try {
-      await client.query(statements[index]);
+      await client.query(statement);
     } catch (error) {
       if (isLockNotAvailable(error)) throw error;
       const raw = error instanceof Error ? error.message : String(error);

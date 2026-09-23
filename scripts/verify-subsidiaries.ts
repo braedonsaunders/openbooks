@@ -15,15 +15,24 @@ import { db, withOrg, pool } from "../engine/src/platform/db.ts";
 import { postDocument } from "../engine/src/ledger/posting-document.ts";
 import { deriveConsolidatedRates, runAutoElimination } from "../engine/src/consolidation/consolidation.ts";
 
-const q = async (s: ReturnType<typeof sql>): Promise<Record<string, unknown>[]> =>
-  (await db.execute<Record<string, unknown>>(s)).rows;
+type IdRow = { id: string };
+type NameRow = { id: string; name: string };
+type OrgRow = { id: string; name: string; ccy: string };
+
+// Return type is inferred (not annotated): drizzle rows are
+// Assume<T, QueryResultRow>, which resolves to T for concrete callers but is
+// not assignable back to a bare T inside a generic helper — the same reason
+// engine/src/harness/scenario.ts leaves its one/all helpers unannotated.
+const q = async <T extends Record<string, unknown> = Record<string, unknown>>(
+  s: ReturnType<typeof sql>,
+) => (await db.execute<T>(s)).rows;
 
 const targetOrgId = process.argv[2];
 if (!targetOrgId || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(targetOrgId)) {
   throw new Error("Pass the UUID of a disposable sandbox or preview org; production tenants are never valid verification targets");
 }
 const [org] = await (async () =>
-  q(sql`
+  q<OrgRow>(sql`
     select id, name, base_currency as ccy
       from orgs
      where id = ${targetOrgId}
@@ -33,35 +42,39 @@ if (!org) {
   throw new Error(`Verification target ${targetOrgId} is missing or is a production tenant`);
 }
 console.log(`org: ${org.name} (${org.id})`);
-const actorId = (await q(sql`
+const actorId = (await q<IdRow>(sql`
   select id
     from users
    where org_id = ${org.id} and is_active
    order by is_super_admin desc, created_at
-   limit 1`))[0]?.id as string | undefined;
+   limit 1`))[0]?.id;
 if (!actorId) throw new Error("sandbox has no active user to attribute verification postings");
 
 const entryId = await withOrg(org.id, async () => {
-  const root = (await q(sql`select id, name from subsidiaries where parent_id is null`))[0];
+  const root = (await q<NameRow>(sql`select id, name from subsidiaries where parent_id is null`))[0];
+  if (!root) throw new Error("sandbox has no root subsidiary");
   console.log(`root subsidiary: ${root.name}`);
 
   // -- 1. seed second + elimination subsidiaries (idempotent) ---------------
   await q(sql`
     insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
     on conflict (code) do nothing`);
-  const ensureSub = async (name: string, isElim: boolean, currency: string) => {
-    const found = await q(sql`select id from subsidiaries where name = ${name}`);
-    if (found[0]) {
+  const ensureSub = async (name: string, isElim: boolean, currency: string): Promise<string> => {
+    const found = await q<IdRow>(sql`select id from subsidiaries where name = ${name}`);
+    const foundId = found[0]?.id;
+    if (foundId) {
       await q(sql`
         update subsidiaries set base_currency = ${currency}, is_elimination = ${isElim}, is_active = true
-         where id = ${found[0].id}`);
-      return found[0].id;
+         where id = ${foundId}`);
+      return foundId;
     }
-    return (
-      await q(sql`
+    const createdId = (
+      await q<IdRow>(sql`
         insert into subsidiaries (org_id, parent_id, name, base_currency, country, is_elimination)
         values (${org.id}, ${root.id}, ${name}, ${currency}, 'CA', ${isElim}) returning id`)
-    )[0].id;
+    )[0]?.id;
+    if (!createdId) throw new Error(`failed to create subsidiary ${name}`);
+    return createdId;
   };
   const east = await ensureSub("Verify East Inc", false, "USD");
   await ensureSub("Verify Elimination", true, org.ccy);
@@ -70,7 +83,7 @@ const entryId = await withOrg(org.id, async () => {
     insert into accounting_books (org_id, code, name, is_primary)
     values (${org.id}, 'primary', 'Primary Book', true)
     on conflict (org_id, code) do update set is_primary = true, is_active = true`);
-  const calendar = (await q(sql`
+  const calendar = (await q<IdRow>(sql`
     select id from fiscal_calendars where org_id = ${org.id} and is_default and is_active limit 1`))[0];
   if (!calendar) throw new Error("sandbox has no active default fiscal calendar");
   await q(sql`
@@ -86,18 +99,21 @@ const entryId = await withOrg(org.id, async () => {
     on conflict (org_id, from_currency, to_currency, as_of, rate_type) do update
       set rate = excluded.rate, source = excluded.source`);
 
-  const ensureAccount = async (number: string, name: string, type: string, eliminate: boolean) => {
-    const found = await q(sql`select id from accounts where number = ${number}`);
-    if (found[0]) return found[0].id;
-    return (
-      await q(sql`
+  const ensureAccount = async (number: string, name: string, type: string, eliminate: boolean): Promise<string> => {
+    const found = await q<IdRow>(sql`select id from accounts where number = ${number}`);
+    const foundId = found[0]?.id;
+    if (foundId) return foundId;
+    const createdId = (
+      await q<IdRow>(sql`
         insert into accounts (org_id, number, name, type, eliminate)
         values (${org.id}, ${number}, ${name}, ${type}, ${eliminate}) returning id`)
-    )[0].id;
+    )[0]?.id;
+    if (!createdId) throw new Error(`failed to create account ${number}`);
+    return createdId;
   };
   const dueFrom = await ensureAccount("19999", "Verify IC Due From East", "asset_other", true);
   const dueTo = await ensureAccount("29999", "Verify IC Due To Root", "liability_current_other", true);
-  const pairFound = await q(sql`
+  const pairFound = await q<IdRow>(sql`
     select id from intercompany_pairs
      where (from_subsidiary_id = ${root.id} and to_subsidiary_id = ${east})
         or (from_subsidiary_id = ${east} and to_subsidiary_id = ${root.id})`);
@@ -114,11 +130,12 @@ const entryId = await withOrg(org.id, async () => {
   // -- 2. a cross-currency journal: root pays CAD 1,250 of East's expense ---
   const stamp = `VERIFY-IC-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const doc = (
-    await q(sql`
+    await q<IdRow>(sql`
       insert into documents (org_id, kind, document_number, document_date, currency, subsidiary_id, status, memo)
       values (${org.id}, 'journal', ${stamp}, '2026-07-15', ${org.ccy}, ${root.id}, 'draft', 'subsidiary verification')
       returning id`)
-  )[0].id;
+  )[0]?.id;
+  if (!doc) throw new Error("failed to create verification journal");
   await q(sql`
     insert into document_lines (org_id, document_id, line_number, account_id, amount, subsidiary_id, description)
     values (${org.id}, ${doc}, 1, ${expense}, 1250.00, ${east}, 'East expense paid by root'),

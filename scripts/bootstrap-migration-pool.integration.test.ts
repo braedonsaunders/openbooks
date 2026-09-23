@@ -321,7 +321,7 @@ test(
           where c.relname = 'probe_no_txn_item_a'`,
       );
       assert.equal(invalid.rows.length, 1);
-      assert.equal(invalid.rows[0].valid, false);
+      assert.equal(invalid.rows[0]!.valid, false);
       await setup.query(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS probe_no_txn_item_a ON probe_no_txn (org_id, item_id)",
       );
@@ -329,7 +329,7 @@ test(
         `select i.indisvalid as valid from pg_index i join pg_class c on c.oid = i.indexrelid
           where c.relname = 'probe_no_txn_item_a'`,
       );
-      assert.equal(stillInvalid.rows[0].valid, false, "IF NOT EXISTS skips the INVALID name");
+      assert.equal(stillInvalid.rows[0]!.valid, false, "IF NOT EXISTS skips the INVALID name");
       await setup.query("delete from public._applied_migrations where filename = $1", [filename]);
       await runAttempt();
       const healed = await setup.query<{ valid: boolean; definition: string }>(
@@ -337,8 +337,8 @@ test(
            from pg_index i join pg_class c on c.oid = i.indexrelid
           where c.relname = 'probe_no_txn_item_a'`,
       );
-      assert.equal(healed.rows[0].valid, true);
-      assert.ok(healed.rows[0].definition.includes("(org_id, item_id)"));
+      assert.equal(healed.rows[0]!.valid, true);
+      assert.ok(healed.rows[0]!.definition.includes("(org_id, item_id)"));
     } finally {
       await setup.query("drop table if exists probe_no_txn").catch(() => {});
       await setup

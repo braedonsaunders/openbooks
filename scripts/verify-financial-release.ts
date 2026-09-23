@@ -250,12 +250,15 @@ export function assertReleaseGatePassed(output: string): ReleaseGateCounts {
   return counts;
 }
 
-async function queryOne<T>(
-  query: ReturnType<typeof sql>,
-): Promise<T> {
-  const result = (await db.execute<T>(query));
-  if (!result.rows[0]) throw new Error("release audit query returned no row");
-  return result.rows[0];
+// Return type is inferred (not annotated): drizzle rows are
+// Assume<T, QueryResultRow>, which resolves to T for concrete callers but is
+// not assignable back to a bare T inside a generic helper — the same reason
+// engine/src/harness/scenario.ts leaves its one/all helpers unannotated.
+async function queryOne<T extends Record<string, unknown>>(query: ReturnType<typeof sql>) {
+  const result = await db.execute<T>(query);
+  const row = result.rows[0];
+  if (!row) throw new Error("release audit query returned no row");
+  return row;
 }
 
 async function main(): Promise<void> {
