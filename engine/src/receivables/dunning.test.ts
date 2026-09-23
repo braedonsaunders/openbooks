@@ -26,10 +26,18 @@ test("selectDueStage fires the highest crossed stage that has not fired", () => 
   assert.equal(selectDueStage(ladder, 3, new Set(), 0)?.id, "a");
 });
 
-test("selectDueStage never re-sends a stage already in the log", () => {
-  assert.equal(selectDueStage(ladder, 40, new Set(["c"]), 0)?.id, "b");
-  assert.equal(selectDueStage(ladder, 40, new Set(["c", "b"]), 0)?.id, "a");
+test("a fired higher rung supersedes every lower rung; a failed send retries", () => {
+  // 40 days late with stage 3 sent: nothing lower may ever send, on this or
+  // any later tick — escalation never walks back down the ladder.
+  assert.equal(selectDueStage(ladder, 40, new Set(["c"]), 0), null);
+  assert.equal(selectDueStage(ladder, 40, new Set(["c", "b"]), 0), null);
   assert.equal(selectDueStage(ladder, 40, new Set(["c", "b", "a"]), 0), null);
+  // A sent middle rung still lets a higher crossed rung fire…
+  assert.equal(selectDueStage(ladder, 40, new Set(["b"]), 0)?.id, "c");
+  assert.equal(selectDueStage(ladder, 20, new Set(["b"]), 0), null);
+  // …and a crossed stage whose send FAILED leaves no sent row, so it is
+  // simply unfired and retries instead of being skipped.
+  assert.equal(selectDueStage(ladder, 40, new Set(), 0)?.id, "c");
 });
 
 test("selectDueStage returns null before the first threshold", () => {
@@ -568,6 +576,97 @@ test("a policy pointed at a payable kind never duns the vendor", { skip: !DB }, 
     const notice = await stagedNotice(billId);
     assert.equal(notice.logRows.length, 0);
     assert.equal(notice.outboxRows.length, 0);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+/** One ladder per scenario, each in its own org: policies scan every invoice
+ * of their kind, so two ladders sharing an org would dun each other's
+ * invoices instead of isolating the rung under test. */
+function threeRungLadder() {
+  return [1, 2, 3].map((sequence) => ({
+    id: randomUUID(),
+    sequence,
+    offsetDays: [0, 15, 30][sequence - 1]!,
+    name: `Stage ${sequence}`,
+  }));
+}
+
+test("a 40-days-late invoice sends the top rung once and later ticks send nothing lower", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const stages = threeRungLadder();
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+      dueDate: "2026-06-01",
+      stages,
+    });
+    const [s1, s2, s3] = stages.map((s) => s.id);
+
+    // Tick 1, 40 days late: the top rung fires once — not the lower rungs.
+    const first = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(first.sent, 1);
+    assert.deepEqual(first.notices.map((n) => n.stageId), [s3]);
+    let staged = await stagedNotice(invoiceId);
+    assert.equal(staged.logRows.length, 1);
+    assert.equal(staged.outboxRows.length, 1);
+
+    // Later ticks send nothing lower: the fired top rung supersedes rungs 1-2.
+    const second = await runDunningForOrg(org.orgId, "2026-07-12");
+    assert.equal(second.sent, 0);
+    assert.deepEqual(second.notices, []);
+    const third = await runDunningForOrg(org.orgId, "2026-07-13");
+    assert.equal(third.sent, 0);
+    assert.deepEqual(third.notices, []);
+    staged = await stagedNotice(invoiceId);
+    assert.equal(staged.logRows.length, 1);
+    assert.equal(staged.outboxRows.length, 1);
+    assert.ok(s1 && s2, "lower rungs stay unrecorded");
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failed top-rung send retries the same rung once healed", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // A misconfigured reply-to fails payload validation before any SQL runs,
+    // so the send fails gracefully with no sent row and a clean transaction —
+    // then healing the reply-to lets the next tick deliver exactly once.
+    const stages = threeRungLadder();
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+      dueDate: "2026-06-01",
+      stages,
+    });
+    const s3 = stages[2]!.id;
+    await db.execute(sql`
+      update dunning_policies set reply_to = 'not-an-address'
+       where id = ${seeded.policyId} and org_id = ${org.orgId}
+    `);
+    const failed = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(failed.sent, 0);
+    assert.equal(failed.failed, 1);
+    assert.deepEqual(failed.notices.map((n) => [n.documentId, n.stageId, n.status]), [[seeded.invoiceId, s3, "failed"]]);
+    const empty = await stagedNotice(seeded.invoiceId);
+    assert.equal(empty.logRows.length, 0, "a failed send leaves no sent row to supersede anything");
+    assert.equal(empty.outboxRows.length, 0);
+    await db.execute(sql`
+      update dunning_policies set reply_to = null
+       where id = ${seeded.policyId} and org_id = ${org.orgId}
+    `);
+    const retried = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(retried.sent, 1);
+    assert.deepEqual(retried.notices.map((n) => n.stageId), [s3]);
+    const paired = await stagedNotice(seeded.invoiceId);
+    assert.equal(paired.logRows.length, 1);
+    assert.equal(paired.outboxRows.length, 1);
+    assert.equal(paired.outboxRows[0]!.occurrenceKey, `dunning:${seeded.invoiceId}:${s3}`);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
