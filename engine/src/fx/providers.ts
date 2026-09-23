@@ -202,9 +202,26 @@ function expandScientific(value: string): string {
   const source = value.trim();
   const match = source.match(/^([+-]?)(\d+)(?:\.(\d*))?[eE]([+-]?\d+)$/);
   if (!match) return source;
-  const sign = match[1] === "-" ? "-" : "";
+  const exponent = Number(match[4]);
   const digits = `${match[2]}${match[3] ?? ""}`;
-  const decimalAt = match[2]!.length + Number(match[4]);
+  const decimalAt = match[2]!.length + exponent;
+  // Bound BEFORE materializing: a 9-byte '1e1000000' must refuse here, not
+  // after allocating a megabyte of zeros (and '1e1000000000' must not ask
+  // for a gigabyte or die in String.repeat). The rate store is
+  // numeric(19,10) — nine integer digits — and the fixed-point engine keeps
+  // eighteen fractional digits, so a value with more significant integer
+  // digits, or whose first significant fractional digit falls past the
+  // truncation width, is unrepresentable by construction. Non-finite
+  // exponents (a thousand-digit exponent parses as Infinity) refuse too.
+  const leadingZeros = digits.match(/^0*/)?.[0].length ?? 0;
+  if (
+    !Number.isFinite(decimalAt)
+    || decimalAt - leadingZeros > 9
+    || -decimalAt + leadingZeros + 1 > DECIMAL_SCALE
+  ) {
+    throw new FxProviderError(`provider returned an unrepresentable rate: ${value}`);
+  }
+  const sign = match[1] === "-" ? "-" : "";
   if (decimalAt <= 0) return `${sign}0.${"0".repeat(-decimalAt)}${digits}`;
   if (decimalAt >= digits.length) return `${sign}${digits}${"0".repeat(decimalAt - digits.length)}`;
   return `${sign}${digits.slice(0, decimalAt)}.${digits.slice(decimalAt)}`;
@@ -236,7 +253,7 @@ export function ratioRate(numerator: string, denominator: string): string {
 }
 
 /** Build every directed pair so posting and any subsidiary tree need no triangulation. */
-export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: string, currencies: string[]): NormalizedFxRate[] {
+export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: string, currencies: string[], providerName = "provider"): NormalizedFxRate[] {
   const wanted = [...new Set([baseCurrency, ...currencies])].sort();
   const out: NormalizedFxRate[] = [];
   for (const snapshot of snapshots) {
@@ -247,12 +264,20 @@ export function normalizeFxSnapshots(snapshots: FxSnapshot[], baseCurrency: stri
     for (const fromCurrency of wanted) {
       for (const toCurrency of wanted) {
         if (fromCurrency === toCurrency) continue;
-        out.push({
-          date: snapshot.date,
-          fromCurrency,
-          toCurrency,
-          rate: ratioRate(snapshot.unitsPerAnchor[toCurrency]!, snapshot.unitsPerAnchor[fromCurrency]!),
-        });
+        let rate: string;
+        try {
+          rate = ratioRate(snapshot.unitsPerAnchor[toCurrency]!, snapshot.unitsPerAnchor[fromCurrency]!);
+        } catch (error) {
+          if (!(error instanceof FxProviderError)) throw error;
+          // Refuse by name — provider, pair, and date — so the operator can
+          // identify the bad observation. Like every other invalid-row
+          // refusal, this fails the run before any write (the sync applies
+          // rates in a later transaction), never skips silently.
+          throw new FxProviderError(
+            `${providerName} returned an unrepresentable rate for ${fromCurrency}→${toCurrency} on ${snapshot.date}`,
+          );
+        }
+        out.push({ date: snapshot.date, fromCurrency, toCurrency, rate });
       }
     }
   }
@@ -521,7 +546,12 @@ export async function runFxProvider(
   try {
     const snapshots = await fetchProviderSnapshots(config, range.from, range.to);
     if (snapshots.length === 0) throw new FxProviderError("provider returned no observations for the requested period");
-    const normalized = normalizeFxSnapshots(snapshots, config.baseCurrency, config.currencies);
+    const normalized = normalizeFxSnapshots(
+      snapshots,
+      config.baseCurrency,
+      config.currencies,
+      FX_PROVIDER_MANIFESTS[config.provider].displayName,
+    );
     const latestObservationDate = snapshots.map((s) => s.date).sort().at(-1)!;
     const result: FxSyncResult = {
       observationsReceived: snapshots.length,

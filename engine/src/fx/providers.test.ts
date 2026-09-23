@@ -825,6 +825,32 @@ test("provider rates accept scientific notation and refuse non-positive input", 
   assert.throws(() => ratioRate("1", "-1.5e-3"), FxProviderError);
 });
 
+test("provider rates refuse unrepresentable scientific notation without expanding it", () => {
+  // A 9-byte '1e1000000' must refuse instead of materializing a million
+  // zeros, and a ten-digit exponent must not ask String.repeat for a
+  // gigabyte (or die with RangeError): both refuse as domain refusals.
+  assert.throws(() => ratioRate("1e1000000", "1"), /provider returned an unrepresentable rate: 1e1000000/);
+  assert.throws(() => ratioRate("1", "1e1000000000"), /provider returned an unrepresentable rate/);
+  assert.throws(() => ratioRate("1e-1000000", "1"), /provider returned an unrepresentable rate/);
+  // Ordinary exponents still parse exactly.
+  assert.equal(ratioRate("1.5e2", "1"), "150.0000000000");
+  assert.equal(ratioRate("1", "2.5E-3"), "400.0000000000");
+  // Just inside numeric(19,10) parses; just outside refuses.
+  assert.equal(ratioRate("999999999.9999999999", "1"), "999999999.9999999999");
+  assert.throws(() => ratioRate("1e10", "1"), /provider returned an unrepresentable rate: 1e10/);
+});
+
+test("normalization names the provider, pair, and date of an unrepresentable observation", () => {
+  assert.throws(
+    () => normalizeFxSnapshots([{
+      date: "2026-07-14",
+      anchor: "EUR",
+      unitsPerAnchor: { EUR: "1", USD: "1e1000000" },
+    }], "EUR", ["USD"], "European Central Bank"),
+    /European Central Bank returned an unrepresentable rate for EUR→USD on 2026-07-14/,
+  );
+});
+
 test("ECB parsing tolerates any column order but requires every column", () => {
   const row = (header: string, body: string): string => [header, body].join("\n");
   const reordered = parseEcbCsv(row("CURRENCY,OBS_VALUE,TIME_PERIOD", "USD,1.1650,2026-07-14"));
