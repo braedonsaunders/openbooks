@@ -11,13 +11,54 @@ import {
   startStockCount,
 } from "./stock-counts.ts";
 import { listStockCounts } from "./stock-count-queries.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
- * Stock-count list regressions: cursor pagination past 500 rows (D6) and
- * discrepant-line variance (D5). Subsidiary scoping (D4) follows.
- * Integration partition only (filename), against scratch orgs.
+ * Stock-count list regressions: subsidiary scoping (D4), discrepant-line
+ * variance (D5), and cursor pagination past 500 rows (D6). Integration
+ * partition only (filename), against scratch orgs.
  */
+
+async function secondSubsidiary(org: ScratchOrg): Promise<string> {
+  const id = randomUUID();
+  // One root per org: the scratch fixture already created it, so the second
+  // legal entity hangs under the root.
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+  return id;
+}
+
+test("the list scopes to the caller's subsidiary grant; an empty grant sees nothing", async () => {
+  const org = await createScratchOrg();
+  try {
+    const subB = await secondSubsidiary(org);
+    for (const subsidiaryId of [org.subsidiaryId, subB]) {
+      await createStockCount(org.orgId, null, {
+        locationId: org.locationId,
+        subsidiaryId,
+        countedOn: org.date,
+        lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+      });
+    }
+    const onlyA = await listStockCounts(org.orgId, { subsidiaryIds: [org.subsidiaryId] });
+    assert.equal(onlyA.totalCount, 1);
+    assert.equal(onlyA.counts.length, 1);
+    const both = await listStockCounts(org.orgId, { subsidiaryIds: [org.subsidiaryId, subB] });
+    assert.equal(both.totalCount, 2);
+    // An empty grant fails closed: no rows, no total, no cursor.
+    assert.deepEqual(await listStockCounts(org.orgId, { subsidiaryIds: [] }), {
+      counts: [],
+      totalCount: 0,
+      nextCursor: null,
+    });
+    // Full access still reads org-wide.
+    assert.equal((await listStockCounts(org.orgId, {})).totalCount, 2);
+    assert.equal((await listStockCounts(org.orgId)).totalCount, 2);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 test("offsetting variances stay visibly discrepant; no cross-item sum is shown", async () => {
   const org = await createScratchOrg();

@@ -83,7 +83,12 @@ export default async function Inventory({
 
   const countData = view === 'counts'
     ? await Promise.all([
-        listStockCounts(orgId),
+        // The shared list query scopes subsidiaries server-side, exactly as
+        // the counts API does — a restricted reader never receives another
+        // entity's counts to filter client-side.
+        listStockCounts(orgId, {
+          subsidiaryIds: authz.allowedSubsidiaryIds ? [...authz.allowedSubsidiaryIds] : null,
+        }),
         db.execute<{ id: string; name: string | null }>(sql`
           select id, name from locations where org_id = ${orgId} and is_active order by name`),
         db.execute<{ id: string; name: string | null }>(sql`
