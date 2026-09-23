@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "Expandir",
-    "collapse": "Recolher"
+    "collapse": "Recolher",
+    "label": "Lista de pastas"
   },
   "actions": {
     "newFolder": "Nova pasta",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF, imagens, CSV, XLSX, DOCX, TXT · até 25 MB",
     "tooLarge": "{name} excede o limite de 25 MB",
     "uploading": "{count, plural, one {Enviando # arquivo…} other {Enviando # arquivos…}}",
-    "selectFolder": "Selecione uma pasta para enviar…"
+    "selectFolder": "Selecione uma pasta para enviar…",
+    "noFolderHint": "Os envios precisam de um destino: escolha primeiro uma pasta na lista de pastas.",
+    "selectFolderAction": "Selecionar pasta"
   },
   "attach": {
     "title": "Anexar arquivo",

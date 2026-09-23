@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "展開",
-    "collapse": "折りたたむ"
+    "collapse": "折りたたむ",
+    "label": "フォルダ一覧"
   },
   "actions": {
     "newFolder": "新規フォルダー",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF、画像、CSV、XLSX、DOCX、TXT · 最大25 MB",
     "tooLarge": "{name} は25 MBの上限を超えています",
     "uploading": "{count, plural, one {#個のファイルをアップロード中…} other {#個のファイルをアップロード中…}}",
-    "selectFolder": "アップロード先のフォルダーを選択…"
+    "selectFolder": "アップロード先のフォルダーを選択…",
+    "noFolderHint": "アップロードには保存先が必要です。先にフォルダ一覧からフォルダを選んでください。",
+    "selectFolderAction": "フォルダを選択"
   },
   "attach": {
     "title": "ファイルを添付",

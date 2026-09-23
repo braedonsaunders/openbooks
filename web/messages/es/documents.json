@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "Expandir",
-    "collapse": "Contraer"
+    "collapse": "Contraer",
+    "label": "Lista de carpetas"
   },
   "actions": {
     "newFolder": "Nueva carpeta",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF, imágenes, CSV, XLSX, DOCX, TXT · hasta 25 MB",
     "tooLarge": "{name} supera el límite de 25 MB",
     "uploading": "{count, plural, one {Subiendo # archivo…} other {Subiendo # archivos…}}",
-    "selectFolder": "Selecciona una carpeta de destino…"
+    "selectFolder": "Selecciona una carpeta de destino…",
+    "noFolderHint": "Las subidas necesitan un destino: elija primero una carpeta en la lista de carpetas.",
+    "selectFolderAction": "Seleccionar carpeta"
   },
   "attach": {
     "title": "Adjuntar archivo",
