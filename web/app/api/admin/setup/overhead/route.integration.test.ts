@@ -53,6 +53,7 @@ const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -87,6 +88,33 @@ async function lifecycleAudits(orgId: string): Promise<number> {
   return r.rows[0]!.n;
 }
 
+async function projectProfileActivity(orgId: string, projectTypeId: string) {
+  const [versions, audits] = await Promise.all([
+    withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from project_financial_profile_versions
+       where org_id = ${orgId} and project_type_id = ${projectTypeId}`)),
+    withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${orgId} and table_name = 'project_financial_profile_versions'
+         and row_id in (select id from project_financial_profile_versions
+                         where org_id = ${orgId} and project_type_id = ${projectTypeId})`)),
+  ]);
+  return { versions: versions.rows[0]!.n, audits: audits.rows[0]!.n };
+}
+
+async function addProfileType(orgId: string): Promise<{ id: string; profile: Record<string, unknown> }> {
+  const template = BUILTIN_PROJECT_TYPES.find((type) => type.key === "schedule_of_values")!;
+  const id = randomUUID();
+  await withBypassContext(() => db.execute(sql`
+    insert into project_types (id, org_id, key, name, billing_method, invoicing_profile, backup_profile)
+    values (${id}, ${orgId}, 'scope-overhead-test', 'Scope overhead test', 'fixed_price',
+            ${JSON.stringify(template.invoicingProfile)}::jsonb, ${JSON.stringify(template.backupProfile)}::jsonb)`));
+  await withBypassContext(() => db.execute(sql`
+    insert into project_financial_profile_versions (org_id, project_type_id, effective_from, financial_profile, reason)
+    values (${orgId}, ${id}, '2000-01-01', ${JSON.stringify(template.financialProfile)}::jsonb, 'scope test baseline')`));
+  return { id, profile: template.financialProfile as unknown as Record<string, unknown> };
+}
+
 function post(body: unknown): Promise<Response> {
   return POST(new Request("http://localhost/api/admin/setup/overhead", {
     method: "POST",
@@ -105,6 +133,115 @@ test("restricted actors cannot change org-wide overhead application settings", {
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
     assert.equal(await storedApplication(org.orgId), null);
     assert.equal(await applicationAudits(org.orgId), 0);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted actors cannot change org-wide overhead lifecycle settings", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Lifecycle Admin", "admin"));
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const response = await post({ action: "set-lifecycle", mode: "scheduled", cadence: "quarterly" });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    assert.equal(await storedLifecycle(org.orgId), null);
+    assert.equal(await lifecycleAudits(org.orgId), 0);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted actors cannot publish org-wide overhead rates", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Publisher", "admin"));
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`))).rows[0]!.n;
+    const response = await post({ action: "publish", effectiveFrom: "2026-10-01", rates: [] });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from overhead_rates where org_id = ${org.orgId}`))).rows[0]!.n;
+    assert.equal(after, before);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted actors cannot publish org-wide project type overhead profiles", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Profile Admin", "admin"));
+    const projectType = await addProfileType(org.orgId);
+    const before = await projectProfileActivity(org.orgId, projectType.id);
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const response = await post({
+      action: "apply",
+      projectTypeIds: [projectType.id],
+      overhead: { method: "none" },
+      effectiveFrom: "2099-01-01",
+      reason: "Scope restriction regression",
+    });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    assert.deepEqual(await projectProfileActivity(org.orgId, projectType.id), before);
+  } finally {
+    routeState.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("restricted actors cannot backfill org-wide overhead journals", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Restricted Backfill Admin", "admin"));
+    const departmentId = randomUUID();
+    const projectId = randomUUID();
+    const timeEntryId = randomUUID();
+    const employeeId = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
+        features: { projects: true, timeTracking: true },
+        overheadApplication: { mode: "net_zero_pair", accountId: org.accounts.adjustment },
+      })}::jsonb where id = ${org.orgId}`));
+    await withBypassContext(() => db.execute(sql`
+      insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Backfill Department')`));
+    await withBypassContext(() => db.execute(sql`
+      insert into overhead_rates (id, org_id, method, rate_kind, rate_percent, effective_from)
+      values (${randomUUID()}, ${org.orgId}, 'standard', 'per_hour', 10, '2026-01-01')`));
+    await withBypassContext(() => db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${employeeId}, ${org.orgId}, 'person', 'Backfill worker', ${org.subsidiaryId}, true, '{}'::jsonb)`));
+    await withBypassContext(() => db.execute(sql`
+      insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'BACKFILL-1', 'Backfill job', ${org.customerId}, 'active', true, '{}'::jsonb)`));
+    await withBypassContext(() => db.execute(sql`
+      insert into time_entries
+        (id, org_id, employee_party_id, worked_on, hours, project_id, department_id, status,
+         cost_rate, cost_rate_currency, cost_rate_subsidiary_id, costing_basis, is_billable,
+         custom, created_by, updated_by)
+      values (${timeEntryId}, ${org.orgId}, ${employeeId}, '2026-07-01', 2, ${projectId}, ${departmentId}, 'approved',
+              25, 'CAD', ${org.subsidiaryId}, 'actual', false, '{}'::jsonb, ${actorId}, ${actorId})`));
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: new Set([org.subsidiaryId]) };
+    const before = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`))).rows[0]!.n;
+    const response = await post({ action: "backfill-overhead" });
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+    const after = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}`))).rows[0]!.n;
+    assert.equal(after, before);
+    const marker = (await withBypassContext(() => db.execute<{ overheadJournalEntryId: string | null; custom: Record<string, unknown> }>(sql`
+      select overhead_journal_entry_id as "overheadJournalEntryId", custom
+        from time_entries where org_id = ${org.orgId} and id = ${timeEntryId}`))).rows[0]!;
+    assert.equal(marker.overheadJournalEntryId, null);
+    assert.deepEqual(marker.custom, {});
   } finally {
     routeState.gate = null;
     await dropScratchOrg(org.orgId);

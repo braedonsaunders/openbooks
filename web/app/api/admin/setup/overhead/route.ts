@@ -17,6 +17,23 @@ import { isCalendarDate } from '../../../../../lib/setup/coerce'
 
 export const dynamic = 'force-dynamic'
 
+/** Keep the handler's full action inventory here so each write's ownership
+ * decision stays explicit: only a department-targeted publish is
+ * entity-owned; every other supported action writes org-wide policy/state. */
+function requiresUnrestrictedOverheadScope(body: Record<string, unknown>): boolean {
+  switch (body.action) {
+    case 'publish':
+      return !Array.isArray(body.rates) || body.rates.length === 0
+    case 'apply':
+    case 'set-lifecycle':
+    case 'set-application':
+    case 'backfill-overhead':
+      return true
+    default:
+      return false
+  }
+}
+
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length
@@ -54,7 +71,7 @@ export async function POST(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  if (body.action === 'set-lifecycle' || body.action === 'set-application') {
+  if (requiresUnrestrictedOverheadScope(body)) {
     const scopeDenied = guardUnrestrictedScope(gate)
     if (scopeDenied) return scopeDenied
   }
@@ -90,11 +107,8 @@ export async function POST(req: Request) {
     try {
       if (gate.allowedSubsidiaryIds) {
         if (rates.length === 0) {
-          // No explicit rates publishes EVERY department via the live
-          // engine: an org-wide write, so publish-all needs unrestricted
-          // scope.
-          const unrestricted = guardUnrestrictedScope(gate)
-          if (unrestricted) return unrestricted
+          // The route-level ownership classification requires unrestricted
+          // access before this org-wide publish-all branch.
         } else {
           // Every department in the publish must sit in the actor's scope
           // (departments.subsidiary_id): a restricted admin cannot replace
