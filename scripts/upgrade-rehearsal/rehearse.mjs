@@ -603,9 +603,41 @@ async function main() {
   return report.ok ? 0 : 1;
 }
 
+/**
+ * The lock/timing watch-list: every summary carries the candidate SHA and the
+ * file digests of these five migrations, so lock evidence is always tied to
+ * the exact bytes it describes. Computed from the candidate tree at summary
+ * time (the tree the upgrade ran); missing files report as absent, never as
+ * a digest, so a summary can never silently describe other bytes.
+ */
+export const WATCH_LIST_MIGRATIONS = Object.freeze([
+  "0293_stock_count_line_subject_unique",
+  "0294_dunning_delivery_state_machine",
+  "0296_payroll_remittance_destination_snapshot",
+  "0299_stock_count_line_counted_nonnegative",
+  "0301_item_price_schedule_versioning",
+]);
+
+export function watchListDigests() {
+  const { createHash } = process.getBuiltinModule("node:crypto");
+  return WATCH_LIST_MIGRATIONS.map((name) => {
+    const file = join(CANDIDATE, "schema", "migrations", "generated", `${name}.sql`);
+    if (!existsSync(file)) return { name, digest: "absent" };
+    const digest = createHash("sha256").update(readFileSync(file)).digest("hex").slice(0, 8);
+    return { name, digest };
+  });
+}
+
 export function summarize(report) {
+  const digests = watchListDigests();
   const lines = [
     `### Upgrade rehearsal: ${report.source} → ${report.candidate ?? "candidate"} · dataset \`${report.dataset}\``,
+    "",
+    `candidate: \`${report.candidate ?? "unrecorded"}\``,
+    "",
+    "| watch-list migration | sha256[:8] |",
+    "|---|---|",
+    ...digests.map((d) => `| ${d.name} | ${d.digest} |`),
     "",
     report.ok ? "**PASS**" : `**REFUSED:** ${report.error ?? "unknown"}`,
     "",
