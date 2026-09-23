@@ -262,6 +262,62 @@ test("S1: restricted preview without a pin is refused and persists nothing", { s
   }
 });
 
+test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", { skip: !DB }, async () => {
+  const s = await setup();
+  const postedId = randomUUID();
+  const versionId = (await db.execute<{ id: string }>(sql`
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`)).rows[0]!.id;
+  await db.execute(sql`
+    insert into allocation_runs
+      (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
+       status, trigger_kind, source_total, allocated_total, residual, computation, requested_by, created_by, updated_by)
+    values
+      (${postedId}, ${s.orgId}, ${s.ruleId}, ${versionId}, 'hash-r', ${s.periodId}, ${s.bookId}, ${s.subsidiaryId},
+       'posted', 'manual', '10.00', '10.00', '0.00', '{}'::jsonb, ${s.actorId}, ${s.actorId}, ${s.actorId})`);
+  const runState = async (id: string): Promise<{ status: string; journals: number; runs: number }> => {
+    const rows = (await db.execute<{ status: string; journal_entry_id: string | null; reversal_entry_id: string | null }>(sql`
+      select status, journal_entry_id, reversal_entry_id from allocation_runs
+       where org_id = ${s.orgId} and id = ${id}`)).rows;
+    const counted = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`)).rows;
+    return {
+      status: rows[0]!.status,
+      journals: [rows[0]!.journal_entry_id, rows[0]!.reversal_entry_id].filter(Boolean).length,
+      runs: Number(counted[0]?.count ?? 0),
+    };
+  };
+  try {
+    // Restricted to nothing: both runs are invisible, so every mutation is a
+    // tenant-opaque 404 — never a lifecycle refusal that confirms the run.
+    authenticate(s.orgId, s.actorId, ["allocations.run", "gl.post"], []);
+    const before = await runState(postedId);
+    const post = await postRoute.POST(
+      jsonRequest(`/api/allocations/runs/${s.runId}/post`, "POST", { reason: "takeover" }),
+      { params: Promise.resolve({ id: s.runId }) },
+    );
+    assert.equal(post.status, 404);
+    assert.deepEqual(await post.json(), { error: "not found" });
+    const reverse = await reverseRoute.POST(
+      jsonRequest(`/api/allocations/runs/${postedId}/reverse`, "POST", { reason: "takeover attempt" }),
+      { params: Promise.resolve({ id: postedId }) },
+    );
+    assert.equal(reverse.status, 404);
+    const rerun = await rerunRoute.POST(
+      jsonRequest(`/api/allocations/runs/${postedId}/rerun`, "POST", { reason: "takeover attempt" }),
+      { params: Promise.resolve({ id: postedId }) },
+    );
+    assert.equal(rerun.status, 404);
+    // Nothing changed: no post, no reversal, no fresh run.
+    assert.deepEqual(await runState(postedId), before);
+    const previewed = (await db.execute<{ status: string }>(sql`
+      select status from allocation_runs where org_id = ${s.orgId} and id = ${s.runId}`)).rows[0];
+    assert.equal(previewed?.status, "previewed");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(s.orgId);
+  }
+});
+
 test("S1: preview validates id shapes at the boundary", { skip: !DB }, async () => {
   const s = await setup();
   try {

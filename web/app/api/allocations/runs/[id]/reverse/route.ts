@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
+import { requireVisibleAllocationRun } from "../../../../../../lib/allocations-scope";
 import { isUuid } from "../../../../../../lib/list-params";
 import { reverseAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
 import { allocationRunErrorResponse } from "../../../_lib.ts";
@@ -27,6 +28,8 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!gateCan(gate, "gl.post")) return missingPermission("gl.post");
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const scoped = await requireVisibleAllocationRun(gate.user.orgId, id, gate.allowedSubsidiaryIds);
+  if (scoped instanceof NextResponse) return scoped;
   const parsedBody = await parseJsonBody(req, reasonBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   try {
