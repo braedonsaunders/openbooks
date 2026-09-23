@@ -185,6 +185,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'hrm-calibration-entry': { props: ['editor'] },
   'hrm-calibration-missing': { props: ['missing', 'title'] },
   'hrm-change-request-actions': { props: ['appliedChangeId', 'departmentOptions', 'employmentId', 'requestId', 'requestStatus'] },
+  'hrm-change-request-dialog': { props: ['closeHref', 'departmentOptions', 'requestId', 'subject'] },
   'hrm-clock-controls': { props: ['clockOutLabel', 'geoHint', 'initial', 'photoFolderId', 'photoRequired', 'projects', 'tasks'] },
   'hrm-comp-cycle-dialog': { props: ['dialog'] },
   'hrm-comp-equity-dialog': { props: ['dialog'] },

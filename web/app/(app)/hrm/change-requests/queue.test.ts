@@ -12,6 +12,8 @@ import test from "node:test";
 const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
 const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
 const dialog = readFileSync(new URL("./ProposeChangeDialog.tsx", import.meta.url), "utf8");
+const detailDialog = readFileSync(new URL("./ChangeRequestDetailDialog.tsx", import.meta.url), "utf8");
+const detailDrawer = readFileSync(new URL("./ChangeRequestDetailDrawer.tsx", import.meta.url), "utf8");
 const rowActions = readFileSync(new URL("./ChangeRequestRowActions.tsx", import.meta.url), "utf8");
 const loader = readFileSync(new URL("../../../../lib/hrm/change-requests.ts", import.meta.url), "utf8");
 const mapping = readFileSync(new URL("../../../../lib/hrm/queue-status.ts", import.meta.url), "utf8");
@@ -68,6 +70,35 @@ test("cells compose the shared primitives over loader-resolved display fields", 
   assert.match(loader, /statusVariant/, "the loader resolves the badge variant");
 });
 
+test("every row opens its request-detail drawer from a shareable URL", () => {
+  assert.match(view, /link\(item\('openLabel'\), item\('requestHref'\)\)/, "each row carries an open link onto its drawer URL");
+  assert.match(loader, /requestHref/, "the loader builds the per-row ?request=<id> href");
+  assert.match(loader, /openLabel/, "the loader resolves the open link label");
+  assert.match(loader, /params\.set\('request', requestId\)/, "the href preserves the active segment beside the request param");
+  assert.match(strings, /"openRequest"/, "en/hrm carries queue.openRequest");
+});
+
+test("the request-detail drawer opens from ?request=<id> and closes by navigating away", () => {
+  assert.match(view, /hrm-change-request-dialog/, "the detail island renders in the page body");
+  assert.match(
+    view,
+    /widgetBlock\(\s*'hrm-change-request-dialog'[\s\S]*?f\('dialogOpen'\)/,
+    "the detail island renders only when the request param is present",
+  );
+  assert.match(loader, /dialogOpen/, "the loader derives the detail state from the search params");
+  assert.match(loader, /dialogRequestId/, "the loader passes the requested id, never a row index");
+  assert.match(loader, /dialogSubject/, "the loader names a visible row's subject for the drawer");
+  assert.match(detailDialog, /ChangeRequestDetailDrawer/, "the dialog opens the existing detail drawer");
+  assert.match(detailDialog, /router\.push\(closeHref/, "closing the detail navigates the param away");
+  assert.match(detailDrawer, /\/api\/hrm\/change-requests\/\$\{requestId\}/, "the drawer reads the single-request route");
+  assert.match(detailDrawer, /if \(!res\.ok\)/, "error bodies are checked before they are parsed");
+  assert.match(detailDrawer, /role="alert"/, "an out-of-scope id renders the named refusal, never the data");
+  assert.match(detailDrawer, /ChangeRequestActions/, "the drawer carries the existing lifecycle actions");
+  assert.match(detailDrawer, /decisionSnapshot/, "the drawer renders the decision context");
+  assert.ok(!/<table/.test(detailDrawer), "the detail drawer holds no hand-rolled table");
+  assert.ok(!/<table/.test(detailDialog), "the detail dialog holds no hand-rolled table");
+});
+
 test("the propose dialog opens from a URL param and closes by navigating away", () => {
   assert.match(view, /hrm-propose-change-dialog/, "the dialog island renders in the page body");
   assert.match(view, /f\('proposeOpen'\)/, "the dialog opens only when the propose param is present");
@@ -101,7 +132,7 @@ test("unknown segments and scope denials render as refusals, never empty tables"
 });
 
 test("queue widgets are registered exactly once in every registry", () => {
-  for (const name of ['hrm-change-request-actions', 'hrm-propose-change-dialog']) {
+  for (const name of ['hrm-change-request-actions', 'hrm-change-request-dialog', 'hrm-propose-change-dialog']) {
     assert.match(widgets, new RegExp(`'${name}'`), `${name} renders its island, never a second copy`);
     assert.match(contracts, new RegExp(`'${name}': \\{ props: \\[`), `${name} contract pins the prop surface`);
     assert.match(names, new RegExp(`'${name}'`), `${name} is registered`);
@@ -118,6 +149,14 @@ test("queue copy resolves from the hrm catalog, never inline English", () => {
     "allLabel",
     "emptyTitle",
     "proposeButton",
+    "openRequest",
+    "detailTitle",
+    "detailLoading",
+    "detailFailed",
+    "detailSubject",
+    "detailProposedChange",
+    "detailHistory",
+    "detailDecision",
     "notAvailable",
   ]) {
     assert.ok(strings.includes(`"${key}"`), `en/hrm carries queue.${key}`);

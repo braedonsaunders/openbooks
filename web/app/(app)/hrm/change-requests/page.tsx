@@ -10,10 +10,13 @@ export async function generateMetadata() {
 /**
  * The org-wide employment change-request queue — the Change requests tab.
  * Status segments with counts, employee, kind, effective date, requester
- * and submitted-at per row, opening the existing ChangeRequestDrawer with
- * ChangeRequestActions on every row. Renders only when the hrm feature
- * gate is on and the actor holds hrm.employment.read — the view 404s
- * otherwise.
+ * and submitted-at per row; every row's open link navigates to the
+ * shareable ?request=<id> URL, which renders the request-detail drawer
+ * (subject, proposed change, reason, history, and decision context, with
+ * the existing ChangeRequestActions lifecycle island inside). The propose
+ * dialog files new drafts through the existing ChangeRequestDrawer.
+ * Renders only when the hrm feature gate is on and the actor holds
+ * hrm.employment.read — the view 404s otherwise.
  */
 export default async function ChangeRequestQueuePage({
   searchParams,

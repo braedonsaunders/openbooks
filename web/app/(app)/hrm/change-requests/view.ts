@@ -58,6 +58,10 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
       widgetCell('hrm-verb-chip', { label: item('verbLabel') }),
     ),
     // HR-16 end
+    // OM-12: every row opens its request-detail drawer (?request=<id>),
+    // the same open-link column the leave queue carries — a link, so row
+    // click and keyboard Enter both reach the shareable drawer URL.
+    column('', link(item('openLabel'), item('requestHref'))),
   ]
   if (data.canManage) {
     columns.push(
@@ -137,7 +141,7 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
                       trailing: [
                         spanRow({
                           label: f('truncatedNote'),
-                          labelColSpan: data.canManage ? 9 : 8,
+                          labelColSpan: data.canManage ? 10 : 9,
                           labelClassName:
                             'text-center text-xs text-slate-400 dark:text-slate-500',
                           cells: [],
@@ -157,6 +161,21 @@ export function changeRequestQueueSpec(data: ChangeRequestQueueData): PageSpec {
                   closeHref: f('dialogCloseHref'),
                 },
                 f('proposeOpen'),
+              ),
+              // OM-12: the request-detail drawer (?request=<id>), mirroring
+              // the leave queue's hrm-leave-dialog trio — the loader owns
+              // the open state and the return href, closing navigates the
+              // param away. departmentOptions ride along for the drawer's
+              // lifecycle actions (edit) and department display labels.
+              widgetBlock(
+                'hrm-change-request-dialog',
+                {
+                  requestId: f('dialogRequestId'),
+                  closeHref: f('dialogCloseHref'),
+                  subject: f('dialogSubject'),
+                  departmentOptions: f('departmentOptions'),
+                },
+                f('dialogOpen'),
               ),
             ],
           }),
