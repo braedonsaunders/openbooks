@@ -1993,6 +1993,18 @@ export async function updateSetupRecord(
           returning id`)))
         const successorId = String(inserted.rows[0]?.id)
 
+        // Request match image for the successor insert audit, mirroring the
+        // POST path: the exact coerced columns the insert stores (actor
+        // context included), so the evidence names the request it came from.
+        const successorMatch: Record<string, unknown> = {}
+        for (const column of successorColumns) {
+          if (column === 'org_id') successorMatch[column] = orgId
+          else if (column === 'code') successorMatch[column] = String(current.code)
+          else if (column === 'created_by' || column === 'updated_by') successorMatch[column] = actorId
+          else if (column === 'effective_to') successorMatch[column] = effectiveTo ?? null
+          else successorMatch[column] = valueFor(column) ?? null
+        }
+
         if (closesPrior) {
           await audit({
             orgId,
@@ -2008,7 +2020,7 @@ export async function updateSetupRecord(
           table: entity.table,
           rowId: successorId,
           action: 'insert',
-          changes: { after: await loadSetupAuditRow(entity, orgId, successorId, tx) },
+          changes: { after: await loadSetupAuditRow(entity, orgId, successorId, tx), match: successorMatch },
           actorId,
         }, tx)
         return successorId
