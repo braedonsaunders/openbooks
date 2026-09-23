@@ -147,6 +147,28 @@ test(
 );
 
 test(
+  "concurrent reopens serialize: exactly one unwinds and audits",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const fixture = await seedApprovedWeek();
+    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+    try {
+      const [first, second] = await Promise.all([
+        post({ employee: fixture.employeeId, week: "2026-07-12" }),
+        post({ employee: fixture.employeeId, week: "2026-07-12" }),
+      ]);
+      const statuses = [first.status, second.status].sort();
+      assert.deepEqual(statuses, [200, 422], "the replay loser must be refused under the header lock");
+      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+      assert.equal(rows.length, 1, "the loser must not write a second 'reopened' audit");
+      assert.equal((rows[0]!.changes as { before: { status: string } }).before.status, "approved");
+    } finally {
+      await cleanup(fixture);
+    }
+  },
+);
+
+test(
   "a refused reopen leaves no audit evidence behind",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
