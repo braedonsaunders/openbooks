@@ -4024,6 +4024,7 @@
     },
     "wizard": {
       "skip": "Omitir por ahora",
+      "skipped": "Configuración omitida — retómela cuando quiera desde Configuración de la empresa.",
       "back": "Atrás",
       "next": "Continuar",
       "apply": "Configurar mis libros",
@@ -4324,6 +4325,12 @@
         },
         "installError": "La nómina quedó activada, pero el paquete de país no pudo instalarse. Puede instalarlo desde Nómina → Módulos de país."
       }
+    },
+    "redirectNotice": {
+      "title": "Se le ha redirigido",
+      "settingsBody": "/admin/settings ahora está aquí, en Configuración de la empresa — actualice su marcador.",
+      "indexBody": "La configuración ahora se abre en la lista de puesta en marcha — comience aquí.",
+      "providersBody": "Los proveedores de pago necesitan la función Pagos en línea — actívela aquí para continuar."
     },
     "guide": {
       "hero": {

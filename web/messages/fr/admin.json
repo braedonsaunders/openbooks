@@ -4024,6 +4024,7 @@
     },
     "wizard": {
       "skip": "Passer pour l'instant",
+      "skipped": "Configuration ignorée — reprenez-la à tout moment depuis Configuration de l'entreprise.",
       "back": "Retour",
       "next": "Continuer",
       "apply": "Configurer mes livres",
@@ -4324,6 +4325,12 @@
         },
         "installError": "La paie a été activée, mais le module pays n'a pas pu être installé. Vous pouvez l'installer depuis Paie → Modules pays."
       }
+    },
+    "redirectNotice": {
+      "title": "Vous avez été redirigé",
+      "settingsBody": "/admin/settings se trouve désormais ici, dans Configuration de l'entreprise — mettez à jour votre favori.",
+      "indexBody": "La configuration s'ouvre désormais sur la liste de mise en service — commencez ici.",
+      "providersBody": "Les prestataires de paiement nécessitent la fonction Paiements en ligne — activez-la ici pour continuer."
     },
     "guide": {
       "hero": {

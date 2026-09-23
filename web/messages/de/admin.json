@@ -4022,6 +4022,12 @@
     "payroll": {
       "navTitle": "Lohnabrechnung"
     },
+    "redirectNotice": {
+      "title": "Sie wurden weitergeleitet",
+      "settingsBody": "/admin/settings befindet sich jetzt hier, unter Firmeneinrichtung — aktualisieren Sie Ihr Lesezeichen.",
+      "indexBody": "Setup beginnt jetzt mit der Go-live-Checkliste — starten Sie hier.",
+      "providersBody": "Zahlungsanbieter benötigen die Funktion Online-Zahlungen — aktivieren Sie sie hier, um fortzufahren."
+    },
     "guide": {
       "activity": {
         "high": "mehr als 1.000 monatliche Vorgänge",
@@ -4210,6 +4216,7 @@
         "title": "Ihr Unternehmen dort abholen, wo es steht"
       },
       "skip": "Vorerst überspringen",
+      "skipped": "Setup übersprungen — jederzeit unter Firmeneinrichtung fortsetzen.",
       "welcome": {
         "description": "Sagen Sie uns, wie Ihr Unternehmen arbeitet, und OpenBooks formt einen fokussierten Startarbeitsbereich darum. Sie prüfen jede Wahl, bevor sich etwas ändert.",
         "f1": "Kontenplan",
