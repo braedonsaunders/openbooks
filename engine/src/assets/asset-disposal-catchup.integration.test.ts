@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { AssetLifecycleError, disposeAsset } from "./asset-lifecycle.ts";
-import { buildSchedule, runDepreciation } from "./depreciation.ts";
+import { disposeAsset } from "./asset-lifecycle.ts";
+import { buildSchedule } from "./depreciation.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -50,41 +50,39 @@ async function seedInServiceAsset(
 }
 
 test(
-  "disposing with zero prior runs refuses while an ended period sits unposted, then succeeds after the catch-up run",
+  "disposing with zero prior runs stays open and books NBV off posted-to-date",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const { assetId, bank } = await seedInServiceAsset(org, actorId, "CATCHUP-DISP");
     try {
-      // July ended with its 100.00 plan line still unposted and no run has
-      // ever posted: the old stub guard needs a posted trail to fire, so
-      // without the due-unposted rule this disposal would book NBV 1000.
-      await assert.rejects(
-        disposeAsset(org.orgId, assetId, {
-          proceeds: "850",
-          proceedsAccountId: bank,
-          date: "2026-07-31",
-          actorId,
-        }),
-        (error: unknown) =>
-          error instanceof AssetLifecycleError &&
-          /unposted depreciation/.test(error.message) &&
-          /2026-07/.test(error.message) &&
-          /post the depreciation run/.test(error.message),
-        "disposal with an ended-but-unposted period is refused naming the period",
-      );
-
-      // The explicit operator choice: post the catch-up first, then dispose.
-      assert.equal((await runDepreciation(org.orgId, "2026-07-31", actorId, assetId)).totalAmount, "100.0000");
+      // Deliberate exception (e7944aea3), restored: with zero prior runs
+      // there is no posted trail to leapfrog, so the stub tie cannot fire
+      // and the disposal stays open. July's 100.00 plan line remains
+      // unposted; NBV is cost less posted-to-date (1000), not the
+      // schedule-tied 900 a catch-up run would produce.
       const disposal = await disposeAsset(org.orgId, assetId, {
         proceeds: "850",
         proceedsAccountId: bank,
         date: "2026-07-31",
         actorId,
       });
-      assert.equal(disposal.nbv, "900.0000");
-      assert.equal(disposal.gainLoss, "-50.0000");
+      assert.equal(disposal.nbv, "1000.0000");
+      assert.equal(disposal.gainLoss, "-150.0000");
+      assert.equal(disposal.status, "disposed");
+      const july = (await db.execute<{ posted: string | null }>(sql`
+        select l.posted_amount::text as posted
+          from depreciation_schedule_lines l
+          join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+         where l.org_id = ${org.orgId} and s.asset_id = ${assetId}`)).rows;
+      assert.ok(july.length > 0 && july.every((line) => line.posted === null));
+      const balance = (await db.execute<{ total: string }>(sql`
+        select coalesce(sum(l.amount), 0)::text as total
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+         where l.org_id = ${org.orgId} and e.id = ${disposal.entryId}`)).rows[0]!;
+      assert.equal(balance.total, "0.0000");
     } finally {
       await dropScratchOrg(org.orgId);
     }
