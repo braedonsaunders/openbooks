@@ -210,6 +210,11 @@ type SubRow = {
   autoPost: boolean;
   planName: string;
   planAmount: string;
+  /**
+   * The currency invoices post in: the pinned plan version's currency when
+   * the subscription has an advanced lifecycle (falling back to the base
+   * plan only when the version carries none), else the base plan's.
+   */
   planCurrency: string | null;
   incomeAccountId: string | null;
   itemId: string | null;
@@ -626,7 +631,7 @@ async function billOne(
 const SUB_SELECT = sql`
   select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
          s.price_override as "priceOverride", s.auto_post as "autoPost",
-         p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
+         p.name as "planName", p.amount as "planAmount", coalesce(v.currency_code, p.currency_code) as "planCurrency",
          p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
          coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount",
          -- The invoice follows the customer entity (parties.subsidiary_id),
@@ -874,7 +879,7 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
   const r = (await db.execute<SubDetail>(sql`
     select s.id, s.org_id as "orgId", s.customer_id as "customerId", s.quantity,
            s.price_override as "priceOverride", s.auto_post as "autoPost",
-           p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
+           p.name as "planName", p.amount as "planAmount", coalesce(v.currency_code, p.currency_code) as "planCurrency",
            p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
            p.interval, p.interval_count as "intervalCount",
            -- Same customer-entity derivation as SUB_SELECT: the invoice
@@ -891,6 +896,8 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
       from subscriptions s
       join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
       join parties c on c.id = s.customer_id and c.org_id = s.org_id
+      left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
+      left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
       join orgs o on o.id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${orgId} limit 1
   `));

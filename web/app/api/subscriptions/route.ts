@@ -207,10 +207,12 @@ export async function GET() {
              s.last_invoice_id as "lastInvoiceId", s.last_error as "lastError",
              exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle",
              c.display_name as "customerName", p.name as "planName", p.amount as "planAmount",
-             p.interval, p.interval_count as "intervalCount", p.currency_code as "planCurrency"
+             p.interval, p.interval_count as "intervalCount", coalesce(v.currency_code, p.currency_code) as "planCurrency"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
         left join parties c on c.id = s.customer_id and c.org_id = s.org_id
+        left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
+        left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
        where s.org_id = ${orgId}
          ${customerSubsidiaryFilter(authz.allowedSubsidiaryIds)}
        order by s.created_at desc
