@@ -99,16 +99,30 @@ export async function PATCH(req: Request, { params }: Params) {
     const outcome = await db.transaction(async (tx) => {
       // The before-image rides the row lock inside this transaction (never the
       // pre-transaction read above, which a concurrent PATCH could already
-      // have superseded). The self-update runs FIRST and its affected row is
-      // checked: a concurrent delete between the pre-check above and this
-      // statement matches zero rows, and that is a 404 — never {ok:true} with
-      // a phantom audit event. The default-clear below must not run before
-      // this check, or a vanished row would still lose the kind's default on
-      // a 404.
+      // have superseded). The lock doubles as the existence check: a
+      // concurrent delete between the pre-check above and this statement
+      // matches zero rows here, and that is a 404 — never {ok:true} with a
+      // phantom audit event, and the default-clear below never runs for a
+      // vanished row.
       const before = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
         select to_jsonb(pdf_templates) as snapshot from pdf_templates
          where org_id = ${user.orgId} and id = ${id} for update`))
       if (before.rows.length === 0) return 'missing' as const
+      // A promotion clears the old default BEFORE the self-update sets the
+      // new one: unique indexes are checked per statement, so setting self
+      // first would trip the one-default backstop mid-transaction. The clear
+      // is safe here (unlike a blind pre-check) because the lock above
+      // already proved the row exists in this transaction — the self-update
+      // below cannot be the zero-row case.
+      if (isDefault && !existing.isDefault) {
+        // Same per-(org, kind) serialization as the collection POST: two
+        // concurrent promotions must order, not both commit a default.
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(hashtextextended(${'pdf-template-default:' + user.orgId + ':' + existing.recordType}, 0))`);
+        await tx.execute(sql`
+          update pdf_templates set is_default = false, updated_at = now()
+           where org_id = ${user.orgId} and record_type = ${existing.recordType} and is_default and id <> ${id}`);
+      }
       const updated = (await tx.execute<{ snapshot: Record<string, unknown> }>(sql`
         update pdf_templates
            set name = ${name}, description = ${body.description !== undefined ? body.description : existing.description},
@@ -116,14 +130,11 @@ export async function PATCH(req: Request, { params }: Params) {
                header_html = ${header || null}, footer_html = ${footer || null},
                source_html = ${prettySource}, compiled_html = ${compiled.compiledHtml},
                is_default = ${isDefault}, is_active = ${isActive},
+               revision = revision + 1,
                updated_at = now(), updated_by = ${user.id}
          where org_id = ${user.orgId} and id = ${id}
         returning to_jsonb(pdf_templates) as snapshot`))
       if (updated.rows.length === 0) return 'missing' as const
-      if (isDefault && !existing.isDefault)
-        await tx.execute(sql`
-          update pdf_templates set is_default = false, updated_at = now()
-           where org_id = ${user.orgId} and record_type = ${existing.recordType} and is_default and id <> ${id}`);
       // The design audit carries the full before/after row — a bare {name}
       // cannot show what the save changed, and the failing audit write rolls
       // the design change back with it.

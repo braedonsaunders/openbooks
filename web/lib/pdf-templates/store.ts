@@ -21,6 +21,8 @@ export type PdfTemplateRow = {
   compiledHtml: string
   isDefault: boolean
   isActive: boolean
+  /** Design version: bumped by every PATCH, cited by every issued PDF. */
+  revision: number
   updatedAt: string
 }
 
@@ -29,7 +31,7 @@ const COLS = sql`
   paper_size as "paperSize", orientation, margin_mm as "marginMm",
   header_html as "headerHtml", footer_html as "footerHtml",
   source_html as "sourceHtml", compiled_html as "compiledHtml",
-  is_default as "isDefault", is_active as "isActive", updated_at as "updatedAt"
+  is_default as "isDefault", is_active as "isActive", revision, updated_at as "updatedAt"
 `
 
 export async function listPdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
