@@ -8,6 +8,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { LineGrid, type LineGridColumn } from '@/components/line-grid'
 import { PagedTable } from '@/components/paged-table'
 import { confirmDialog } from '@/lib/confirm'
+import { promptDialog } from '@/lib/prompt'
 
 interface PriceBreak extends Record<string, unknown> { id?: string; minimumQuantity: string; unitPrice: string }
 interface Level { id: string; code: string; name: string; pricing_method: string; percentage: string | null; cost_basis: string | null; is_base: boolean }
@@ -15,7 +16,8 @@ interface Customer { id: string; display_name: string }
 interface Schedule {
   id: string; price_level_id: string | null; customer_id: string | null; currency: string;
   quantity_basis: 'line_quantity' | 'overall_item_quantity'; effective_from: string; effective_to: string | null;
-  is_active: boolean; price_level_name: string | null; customer_name: string | null; breaks: PriceBreak[]
+  is_active: boolean; revision: number; supersedes_id: string | null; change_reason: string | null;
+  price_level_name: string | null; customer_name: string | null; breaks: PriceBreak[]
 }
 interface PricingData { levels: Level[]; customers: Customer[]; currencies: { code: string; name: string }[]; baseCurrency: string | null; schedules: Schedule[] }
 
@@ -41,6 +43,8 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   const [effectiveTo, setEffectiveTo] = useState('')
   const [isActive, setIsActive] = useState(true)
   const [breaks, setBreaks] = useState<PriceBreak[]>([{ minimumQuantity: '1', unitPrice: '0' }])
+  const [editingRevision, setEditingRevision] = useState(0)
+  const [reason, setReason] = useState('')
 
   // Fetch chain rather than an async body: every state update below sits in a
   // promise continuation (the fetch response), never synchronously in the
@@ -70,15 +74,22 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   function beginNew(target: 'base' | 'level' | 'customer' = 'base') {
     setEditingId('new'); setCreateRequestId(crypto.randomUUID()); setScope(target); setPriceLevelId(data?.levels.find((level) => !level.is_base)?.id ?? ''); setCustomerId('')
     setCurrency(data?.baseCurrency ?? data?.currencies[0]?.code ?? ''); setQuantityBasis('line_quantity'); setEffectiveFrom(today); setEffectiveTo(''); setIsActive(true)
-    setBreaks([{ minimumQuantity: '1', unitPrice: '0' }]); setError('')
+    setBreaks([{ minimumQuantity: '1', unitPrice: '0' }]); setEditingRevision(0); setReason(''); setError('')
   }
   function beginEdit(schedule: Schedule) {
     setEditingId(schedule.id)
     setScope(schedule.customer_id ? 'customer' : schedule.price_level_id && !data?.levels.find((level) => level.id === schedule.price_level_id)?.is_base ? 'level' : 'base')
     setPriceLevelId(schedule.price_level_id ?? ''); setCustomerId(schedule.customer_id ?? ''); setCurrency(schedule.currency)
     setQuantityBasis(schedule.quantity_basis); setEffectiveFrom(schedule.effective_from); setEffectiveTo(schedule.effective_to ?? '')
-    setIsActive(schedule.is_active); setBreaks(schedule.breaks.length ? schedule.breaks : [{ minimumQuantity: '1', unitPrice: '0' }]); setError('')
+    setIsActive(schedule.is_active); setBreaks(schedule.breaks.length ? schedule.breaks : [{ minimumQuantity: '1', unitPrice: '0' }])
+    setEditingRevision(schedule.revision); setReason(''); setError('')
   }
+
+  // A schedule that already prices effective dates keeps its history: the
+  // server inserts a corrected version (or a prospective successor) and
+  // requires a reason when the new prices reach the past.
+  const editingSchedule = editingId !== null && editingId !== 'new' ? data?.schedules.find((schedule) => schedule.id === editingId) ?? null : null
+  const reasonVisible = editingSchedule !== null && editingSchedule.effective_from <= today
 
   async function save() {
     setBusy(true); setError('')
@@ -87,15 +98,16 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
         method: editingId === 'new' ? 'POST' : 'PATCH',
         headers: { 'Content-Type': 'application/json', ...(editingId === 'new' ? { 'Idempotency-Key': createRequestId } : {}) },
         body: JSON.stringify({
-          ...(editingId !== 'new' ? { id: editingId } : {}),
+          ...(editingId !== 'new' ? { id: editingId, revision: editingRevision } : {}),
           priceLevelId: scope === 'level' ? priceLevelId : scope === 'base' ? data?.levels.find((level) => level.is_base)?.id ?? null : null,
           customerId: scope === 'customer' ? customerId : null,
           currency, quantityBasis, effectiveFrom, effectiveTo: effectiveTo || null, isActive, breaks,
+          ...(reason.trim() ? { reason: reason.trim() } : {}),
         }),
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
-        const message = responseError(payload, t('saveFailed')); setError(message); toast.error(message); return
+        const message = responseError(payload, t('saveFailed')); setError(message); toast.error(message); await load(); return
       }
       toast.success(t('saved')); setEditingId(null); setCreateRequestId(''); await load()
     } catch {
@@ -104,10 +116,19 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
   }
 
   async function remove(schedule: Schedule) {
-    if (!(await confirmDialog({ message: t('confirmDelete'), confirmLabel: common('actions.delete'), tone: 'danger' }))) return
-    const response = await fetch(`/api/items/${itemId}/prices?schedule=${schedule.id}`, { method: 'DELETE' })
-    if (!response.ok) { const payload = await response.json().catch(() => null); toast.error(responseError(payload, t('deleteFailed'))); return }
-    toast.success(t('deleted')); await load()
+    // An effective schedule is history: ending it keeps the row with an
+    // effective-to date, so the operator names the reason up front. A
+    // never-effective schedule never priced anything and is deleted outright.
+    const params = new URLSearchParams({ schedule: schedule.id, revision: String(schedule.revision) })
+    if (schedule.effective_from <= today) {
+      const endReason = await promptDialog({ title: t('endDateTitle'), label: t('endDateReasonLabel'), confirmLabel: common('actions.delete') })
+      if (!endReason) return
+      params.set('reason', endReason)
+    } else if (!(await confirmDialog({ message: t('confirmDelete'), confirmLabel: common('actions.delete'), tone: 'danger' }))) return
+    const response = await fetch(`/api/items/${itemId}/prices?${params}`, { method: 'DELETE' })
+    if (!response.ok) { const payload = await response.json().catch(() => null); toast.error(responseError(payload, t('deleteFailed'))); await load(); return }
+    const outcome = await response.json().catch(() => null)
+    toast.success(outcome && typeof outcome === 'object' && (outcome as { endDated?: unknown }).endDated ? t('ended') : t('deleted')); await load()
   }
 
   const targetLabel = (schedule: Schedule) => schedule.customer_name
@@ -132,6 +153,13 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
             <div className="space-y-1"><Label>{t('effectiveTo')}</Label><Input type="date" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
             <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />{common('status.active')}</label>
           </div>
+          {reasonVisible ? (
+            <div className="space-y-1">
+              <Label>{t('changeReason')}</Label>
+              <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t('changeReasonPlaceholder')} />
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('changeReasonHint')}</p>
+            </div>
+          ) : null}
           <div><h4 className="mb-1 text-sm font-medium">{t('breaksTitle')}</h4><p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t('breaksDescription')}</p>
             <LineGrid columns={breakColumns} rows={breaks} onRowsChange={setBreaks} emptyRow={() => ({ minimumQuantity: '', unitPrice: '' })} minRows={1} addLabel={t('addBreak')} addPlacement="top" />
           </div>
