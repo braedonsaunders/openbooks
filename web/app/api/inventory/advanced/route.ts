@@ -8,7 +8,7 @@ import { InventoryError, InventoryIdempotencyConflictError } from "@openbooks/en
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
 import { ensureLot, ensureSerial, queryLotRecall } from "@openbooks/engine/src/inventory/tracking.ts";
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
-import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
+import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
@@ -176,6 +176,17 @@ export async function POST(req: Request) {
     return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
   };
 
+  /** Refuse restricted callers any landed-cost voucher whose subsidiary they cannot see. */
+  const voucherSubsidiaryInScope = async (voucherId: unknown): Promise<boolean> => {
+    if (!gate.allowedSubsidiaryIds) return true;
+    if (typeof voucherId !== "string" || !isUuid(voucherId)) return false;
+    const r = await db.execute<{ subsidiary_id: string | null }>(
+      sql`select subsidiary_id from landed_cost_vouchers where id = ${voucherId} and org_id = ${orgId}`,
+    );
+    const subsidiaryId = r.rows[0]?.subsidiary_id ?? null;
+    return subsidiaryId !== null && gate.allowedSubsidiaryIds.has(subsidiaryId);
+  };
+
   /** Run one monetary action through the engine's canonical replay boundary. */
   const idempotent = <T>(operation: string, request: unknown, execute: () => Promise<T>) =>
     executeIdempotentInventoryAction(orgId, userId, {
@@ -285,6 +296,29 @@ export async function POST(req: Request) {
           () => postLandedCostVoucher(orgId, userId, input),
         );
         return NextResponse.json({ replayed, ...res }, { status: 201 });
+      }
+      case "reverseLandedVoucher": {
+        if (!body.id) return NextResponse.json({ error: "landed-cost voucher required" }, { status: 422 });
+        if (!body.date) {
+          return NextResponse.json({ error: "reversal date required" }, { status: 422 });
+        }
+        if (typeof body.memo !== "string" || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
+          return NextResponse.json({ error: "reversal reason must be between 5 and 500 characters" }, { status: 422 });
+        }
+        if (!(await voucherSubsidiaryInScope(body.id))) {
+          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+        }
+        const { value: res, replayed } = await idempotent(
+          "inventory.landed-voucher.reverse",
+          { id: body.id, date: body.date, reason: body.memo },
+          () =>
+            reverseLandedCostVoucher(orgId, userId, {
+              voucherId: body.id!,
+              reversalDate: body.date!,
+              reason: body.memo!,
+            }),
+        );
+        return NextResponse.json({ replayed, ...res });
       }
       case "ensureLot": {
         if (!body.itemId || !body.lotNumber) return NextResponse.json({ error: "item and lot number required" }, { status: 422 });

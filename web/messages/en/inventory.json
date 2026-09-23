@@ -125,7 +125,25 @@
         "amount": "Amount",
         "status": "Status"
       },
-      "noneYet": "No landed cost vouchers yet."
+      "noneYet": "No landed cost vouchers yet.",
+      "reverse": {
+        "openButton": "Reverse landed-cost voucher",
+        "title": "Reverse landed-cost voucher",
+        "description": "The original voucher, allocations, and journal stay intact. A contra journal unwinds the GL and negative allocation evidence unwinds the layers.",
+        "voucher": "Voucher",
+        "selectVoucher": "Select a posted voucher",
+        "nonePosted": "No posted landed-cost vouchers.",
+        "voucherRequired": "A posted voucher is required",
+        "reversalDate": "Reversal date",
+        "reason": "Reason",
+        "reasonPlaceholder": "Why this voucher must be unwound (5-500 characters)",
+        "reasonLength": "The reversal reason must be between 5 and 500 characters",
+        "reverse": "Reverse voucher",
+        "reversed": "Reversed landed-cost voucher",
+        "alreadyReversed": "That voucher was already reversed",
+        "reverseFailed": "Voucher reversal failed",
+        "loadFailed": "Could not load landed-cost vouchers"
+      }
     },
     "lots": {
       "lotNumber": "Lot number",

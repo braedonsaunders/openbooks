@@ -653,6 +653,9 @@ export const INVENTORY_ADVANCED_ACTION_PERMISSIONS = {
   shipTransfer: "items.post",
   receiveTransfer: "items.post",
   postLandedVoucher: "items.post",
+  // A posted voucher is immutable history: unwinding it is a reversal, so it
+  // demands items.reverse (maker/checker), never the posting grant.
+  reverseLandedVoucher: "items.reverse",
 } as const satisfies Record<string, CataloguePermission>;
 
 /**
