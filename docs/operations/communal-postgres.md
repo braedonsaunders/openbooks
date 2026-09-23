@@ -88,6 +88,10 @@ ORG_COUNTRY=US
 ORG_CURRENCY=USD
 ADMIN_EMAIL=admin@example.com
 ADMIN_PASSWORD=REPLACE_WITH_RANDOM_ADMIN_PASSWORD
+# Optional: grant this existing user platform super-admin on a fresh install
+# with no active super administrator (strict one-time, audited, refused by
+# name when the address names no user).
+# PLATFORM_ADMIN_EMAIL=admin@example.com
 ```
 
 Use your organization's actual country/currency, supply the normal encryption
