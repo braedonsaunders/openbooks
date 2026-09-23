@@ -10,7 +10,7 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
-import { createCycle, openCycle } from "./review-cycles.ts";
+import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import { listFeedback, writeFeedback } from "./feedback.ts";
 
@@ -277,6 +277,35 @@ test("a restricted HR reads only the feedback whose subject they cover", { skip:
     assert.deepEqual(seenByB.map((f) => f.body).sort(), ["B-side feedback"]);
     const seenByFull = await listFeedback({ orgId: h.org.orgId, actorId: h.hrFull });
     assert.deepEqual(seenByFull.map((f) => f.body).sort(), ["A-side feedback", "B-side feedback"]);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a restricted HR moves only the cycles they cover", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const cycleId = await openScopedCycle(h);
+    // HR-B cannot force calibration on an A-scoped cycle — the scope
+    // refusal fires before the pending-reviews refusal.
+    await assert.rejects(
+      moveToCalibrating({ orgId: h.org.orgId, actorId: h.hrB, cycleId, force: true, forceReason: "rush" }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmAuthorizationError);
+        assert.match(e.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    await assert.rejects(
+      closeCycle({ orgId: h.org.orgId, actorId: h.hrB, cycleId }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmAuthorizationError);
+        assert.match(e.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    const closed = await closeCycle({ orgId: h.org.orgId, actorId: h.hrA, cycleId });
+    assert.equal(closed.status, "closed");
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
