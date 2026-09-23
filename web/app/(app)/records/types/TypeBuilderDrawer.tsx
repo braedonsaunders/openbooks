@@ -33,6 +33,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { confirmDialog } from '@/lib/confirm'
+import { promptDialog } from '@/lib/prompt'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { ICON_KEYS, NavIcon } from '../../../../components/sidebar-nav'
 import {
@@ -303,6 +304,16 @@ export function TypeBuilderDrawer({
 
   // -- lifecycle actions ------------------------------------------------------
   async function lifecycle(action: 'publish' | 'archive') {
+    // Publish/archive transitions are audited with an operator reason; the
+    // server refuses a reasonless transition, so collect it up front. Cancel
+    // or an empty reason writes nothing.
+    const reason = await promptDialog({
+      title: action === 'publish' ? t('typeBuilder.publish') : t('typeBuilder.archive'),
+      label: tc('amendment.reason'),
+      placeholder: tc('amendment.placeholder'),
+      confirmLabel: action === 'publish' ? t('typeBuilder.publish') : t('typeBuilder.archive'),
+    })
+    if (!reason) return
     if (action === 'archive') {
       const ok = await confirmDialog({
         message: t('typeBuilder.archiveConfirm', { name }),
@@ -315,7 +326,7 @@ export function TypeBuilderDrawer({
       const res = await fetch(`/api/records/types/${type.id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, reason }),
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string; issues?: Issue[] } | null

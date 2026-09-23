@@ -75,6 +75,19 @@ function lifecycle(id: string, action: 'publish' | 'archive') {
     new Request(`http://localhost/api/records/types/${id}/publish`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
+      // Publish/archive transitions are audited with an operator reason; the
+      // route refuses a reasonless transition, so every call carries one.
+      body: JSON.stringify({ action, reason: 'lifecycle regression' }),
+    }),
+    { params: Promise.resolve({ id }) },
+  )
+}
+
+function lifecycleWithoutReason(id: string, action: 'publish' | 'archive') {
+  return POST(
+    new Request(`http://localhost/api/records/types/${id}/publish`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action }),
     }),
     { params: Promise.resolve({ id }) },
@@ -99,6 +112,76 @@ async function insertDraft(orgId: string, actorId: string, status: 'draft' | 'pu
   `)
   return typeId
 }
+
+test(
+  'a publish without an audit reason is refused before any write',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actorId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      return { org: created, actorId: actor }
+    })
+
+    state.authz = authz(actorId, org.orgId)
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const draftId = await withBypass(() => insertDraft(org.orgId, actorId))
+        const refused = await lifecycleWithoutReason(draftId, 'publish')
+        assert.equal(refused.status, 422, await refused.clone().text())
+        assert.match(String((await refused.json()).error ?? ''), /reason/i)
+        const audits = (await db.execute<{ count: string }>(sql`
+          select count(*) from audit_log
+           where org_id = ${org.orgId} and table_name = 'custom_record_types' and row_id = ${draftId}
+        `)).rows[0]
+        assert.equal(audits?.count, '0', 'the refusal commits no audit event')
+        const stillThere = (await db.execute<{ status: string }>(sql`
+          select status from custom_record_types where id = ${draftId} and org_id = ${org.orgId}
+        `)).rows[0]
+        assert.equal(stillThere?.status, 'draft', 'the refusal changes no status')
+      })
+    } finally {
+      state.authz = null
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
+
+test(
+  'a publish commits its transition audit with before, after and reason',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const { org, actorId } = await withBypass(async () => {
+      const created = await createScratchOrg()
+      const actor = (await seedFlowActors(created.orgId)).adminId
+      return { org: created, actorId: actor }
+    })
+
+    state.authz = authz(actorId, org.orgId)
+    try {
+      await withOrgContext(org.orgId, async () => {
+        const draftId = await withBypass(() => insertDraft(org.orgId, actorId))
+        const published = await lifecycle(draftId, 'publish')
+        assert.equal(published.status, 200, await published.clone().text())
+        const events = (await db.execute<{ action: string; changes: unknown; actor_id: string }>(sql`
+          select action, changes, actor_id from audit_log
+           where org_id = ${org.orgId} and table_name = 'custom_record_types' and row_id = ${draftId}
+           order by id
+        `)).rows
+        assert.equal(events.length, 1, 'one transition event per publish')
+        assert.equal(events[0]!.action, 'update')
+        assert.equal(events[0]!.actor_id, actorId)
+        const changes = events[0]!.changes as { before: { status: string }; after: { status: string }; reason: string }
+        assert.equal(changes.before.status, 'draft')
+        assert.equal(changes.after.status, 'published')
+        assert.equal(changes.reason, 'lifecycle regression')
+      })
+    } finally {
+      state.authz = null
+      await withBypass(() => dropScratchOrg(org.orgId))
+    }
+  },
+)
 
 test(
   'publish and delete refuse zero-row writes by name instead of reporting success',
