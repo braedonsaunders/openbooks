@@ -2,10 +2,11 @@
 -- (schema/migrations/preflight/0293_stock_count_line_subject_unique.sql).
 --
 -- Deterministic rule (also named in the preflight remedy text): on counts
--- that are NOT posted (posted counts are immutable — U13), keep the
--- lowest-id line per duplicate subject — a recount re-snapshots the one
--- line, it does not add a second — and delete the rest. Merging by hand,
--- keep one line per subject. Idempotent: a second run matches no group.
+-- still open for correction (posted and cancelled counts are immutable —
+-- U13 restaged, so their lines stand as evidence and are never merged),
+-- keep the lowest-id line per duplicate subject — a recount re-snapshots
+-- the one line, it does not add a second — and delete the rest. Merging by
+-- hand, keep one line per subject. Idempotent: a second run matches no group.
 --
 -- Self-contained for the rehearsal runner: one transaction as the migration
 -- owner with the RLS bypass the forced-RLS catalog otherwise denies (the
@@ -18,7 +19,7 @@ USING (SELECT (array_agg(l.id ORDER BY l.id))[1] AS keep_id, l.org_id, l.stock_c
          FROM public.stock_count_lines l
          JOIN public.stock_counts c
            ON c.id = l.stock_count_id AND c.org_id = l.org_id
-        WHERE c.status IS DISTINCT FROM 'posted'
+        WHERE c.status NOT IN ('posted', 'cancelled')
         GROUP BY l.org_id, l.stock_count_id, l.item_id, l.stock_location_id, l.lot_id
        HAVING count(*) > 1) dup,
       public.stock_counts kc
@@ -30,5 +31,5 @@ WHERE dead.org_id = dup.org_id
   AND dead.id <> dup.keep_id
   AND kc.id = dead.stock_count_id
   AND kc.org_id = dead.org_id
-  AND kc.status IS DISTINCT FROM 'posted';
+  AND kc.status NOT IN ('posted', 'cancelled');
 commit;
