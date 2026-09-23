@@ -151,7 +151,7 @@ async function resolveQueueRows(
   if (appliedIds.length > 0) {
     const verbs = (await db.execute<{ id: string; verb: string }>(sql`
       select id::text as id, verb from employment_changes
-       where org_id = ${orgId}::uuid and id = any(${appliedIds}::uuid[])
+       where org_id = ${orgId}::uuid and id = any(${`{${appliedIds.join(',')}}`}::uuid[])
     `)).rows
     for (const v of verbs) verbByChange.set(v.id, v.verb)
   }

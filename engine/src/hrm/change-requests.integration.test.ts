@@ -796,6 +796,15 @@ test("reads are org-scoped and employment-gated", { skip: !DB }, async () => {
     const listed = await listChangeRequests({ orgId: h.org.orgId, actorId: h.submitterId, employmentId });
     assert.equal(listed.length, 1);
     assert.equal(listed[0]!.id, draft.id);
+    // The driver hands timestamptz back as TEXT here; the DTO promises Date,
+    // and the change-request queue called toISOString on a submitted row's
+    // submittedAt and crashed. Once submitted, every timestamp is a Date.
+    await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id, reason: "hire" });
+    const submitted = (await listChangeRequests({ orgId: h.org.orgId, actorId: h.submitterId, employmentId }))[0]!;
+    assert.ok(submitted.submittedAt instanceof Date && !Number.isNaN(submitted.submittedAt.getTime()), "submittedAt is a Date");
+    assert.ok(submitted.createdAt instanceof Date, "createdAt is a Date");
+    assert.ok(submitted.updatedAt instanceof Date, "updatedAt is a Date");
+    assert.doesNotThrow(() => submitted.submittedAt!.toISOString());
     // Unknown ids and foreign orgs report uniformly not-found.
     await assert.rejects(
       getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: randomUUID() }),

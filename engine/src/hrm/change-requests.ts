@@ -333,16 +333,16 @@ type RequestRow = {
   reason_code: string | null;
   status: string;
   submitted_by: string | null;
-  submitted_at: Date | null;
+  submitted_at: Date | string | null;
   flow_run_id: string | null;
   decision_snapshot: Record<string, unknown> | null;
-  applied_at: Date | null;
+  applied_at: Date | string | null;
   applied_by: string | null;
   applied_employment_revision: number | null;
   applied_employment_change_id: string | null;
-  created_at: Date;
+  created_at: Date | string;
   created_by: string | null;
-  updated_at: Date;
+  updated_at: Date | string;
   updated_by: string | null;
 };
 
@@ -375,6 +375,26 @@ export interface ChangeRequestDTO {
   readonly updatedBy: string | null;
 }
 
+/**
+ * One timestamp shape at the DB boundary. A row can reach toDTO with its
+ * timestamptz columns as Date (the pg type parser) or as ISO text (rows
+ * read back through paths that serialize, e.g. a RETURNING re-read or a
+ * JSON hop), and the queue then crashed calling toISOString on a string.
+ * Normalize once here so every DTO carries a real Date; a value that is
+ * neither refuses by name instead of rendering "Invalid Date".
+ */
+function asTimestamp(value: Date | string, column: string): Date {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`change request ${column} is not a valid timestamp: ${String(value)}`);
+  }
+  return date;
+}
+
+function asOptionalTimestamp(value: Date | string | null, column: string): Date | null {
+  return value === null || value === undefined ? null : asTimestamp(value, column);
+}
+
 function toDTO(row: RequestRow): ChangeRequestDTO {
   return {
     id: row.id,
@@ -390,16 +410,16 @@ function toDTO(row: RequestRow): ChangeRequestDTO {
     reasonCode: row.reason_code ?? null,
     status: row.status,
     submittedBy: row.submitted_by,
-    submittedAt: row.submitted_at,
+    submittedAt: asOptionalTimestamp(row.submitted_at, "submitted_at"),
     flowRunId: row.flow_run_id,
     decisionSnapshot: row.decision_snapshot,
-    appliedAt: row.applied_at,
+    appliedAt: asOptionalTimestamp(row.applied_at, "applied_at"),
     appliedBy: row.applied_by,
     appliedEmploymentRevision: row.applied_employment_revision,
     appliedEmploymentChangeId: row.applied_employment_change_id,
-    createdAt: row.created_at,
+    createdAt: asTimestamp(row.created_at, "created_at"),
     createdBy: row.created_by,
-    updatedAt: row.updated_at,
+    updatedAt: asTimestamp(row.updated_at, "updated_at"),
     updatedBy: row.updated_by,
   };
 }
