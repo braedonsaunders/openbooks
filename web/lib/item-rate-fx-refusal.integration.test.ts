@@ -11,12 +11,14 @@ const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate } = await import('./item-rates')
 
+const DB = !!process.env.OPENBOOKS_DB_URL
+
 /**
  * A selected rate card without FX coverage must refuse — never fall through
  * to a lower-priority card. Project EUR card + default CAD card, no
  * EUR→CAD spot: the old resolver billed the CAD card and reported success.
  */
-test('missing FX on the selected card refuses instead of billing a lower card', async () => {
+test('missing FX on the selected card refuses instead of billing a lower card', { skip: !DB }, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
@@ -58,7 +60,7 @@ test('missing FX on the selected card refuses instead of billing a lower card', 
  * Absence of an item/version still falls through: a project card that does
  * not cover the item bills the default card (same currency, no FX needed).
  */
-test('a card without the item still falls through to the default card', async () => {
+test('a card without the item still falls through to the default card', { skip: !DB }, async () => {
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {

@@ -247,12 +247,20 @@ export async function createProjectCharge(
         }
       }
 
-      const resolved = rateSnapshot ?? (enteredCostRate == null && enteredBillRate == null
-        ? await resolveItemRate({
-            orgId, projectId: input.projectId, itemId: line.itemId,
-            equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: quantity,
-          })
-        : null)
+      // A resolution refusal (e.g. the selected rate card lacks FX cover)
+      // is a business refusal, not a server fault: wrap it so the route
+      // maps it to 422 with the remedy instead of a 500.
+      let resolved: typeof rateSnapshot
+      try {
+        resolved = rateSnapshot ?? (enteredCostRate == null && enteredBillRate == null
+          ? await resolveItemRate({
+              orgId, projectId: input.projectId, itemId: line.itemId,
+              equipmentUnitId: line.equipmentUnitId, onDate: docDate, baseQuantity: quantity,
+            })
+          : null)
+      } catch (error) {
+        throw new ChargeError(error instanceof Error ? error.message : 'Could not resolve item rate')
+      }
       const fallbackCostRate = exactMoney(enteredCostRate ?? it.default_cost ?? '0', 'Cost rate')
       const fallbackBillRate = exactMoney(enteredBillRate ?? it.default_rate ?? fallbackCostRate, 'Bill rate')
       const costAmount = exactMoney(resolved?.cost.amount ?? mul(quantity, fallbackCostRate), 'Cost amount')
