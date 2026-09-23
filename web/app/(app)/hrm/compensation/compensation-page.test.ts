@@ -64,12 +64,19 @@ test("equity renders frozen metrics as tiles with the per-category table", () =>
   assert.match(equityView, /variant: 'app'/, "the table uses the shared app table primitives");
 });
 
-test("client islands post through the API routes with res.ok-first errors", () => {
+test("client islands post through the shared action path with ok-first errors", () => {
   assert.match(islands, /\/api\/hrm\/comp-cycles/, "cycle actions ride the cycle routes");
   assert.match(islands, /\/api\/hrm\/headcount-plans/, "plan actions ride the plan routes");
   assert.match(islands, /\/api\/hrm\/pay-gap-snapshots/, "snapshot generation rides its route");
   assert.match(islands, /\/api\/hrm\/pay-information-requests/, "pay-information requests ride their route");
-  assert.match(islands, /readApiErrorMessage/, "refusals render with res.ok checked before parsing");
+  // Mutations run on the shared action path (useAppAction + fetchAction):
+  // fetchAction checks res.ok before trusting the body, so a refusal can
+  // never become a parse error — pin the path, not a per-call check.
+  assert.match(islands, /useAppAction/, "mutations run through the shared action hook");
+  assert.match(islands, /fetchAction\(/, "mutations ride fetchAction, ok-first by construction");
+  assert.match(islands, /onRefused/, "refusals render inline through the hook");
+  assert.match(islands, /fallbackMessage/, "every action names its failure copy up front");
+  assert.ok(!islands.includes('readApiErrorMessage'), "no hand-rolled error parsing beside the shared path");
   assert.ok(!islands.includes('<table'), "no hand-rolled table in the islands");
   assert.ok(!islands.includes('<button'), "actions render through the shared Button");
 });
