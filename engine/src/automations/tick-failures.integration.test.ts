@@ -113,6 +113,64 @@ async function setupUnpermittedElderHarness(): Promise<Harness & { elderId: stri
   });
 }
 
+test("a date_relative scan visits every match past row 200", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const COUNT = 210;
+    // One statement seeds the whole population: parties, employments,
+    // changes, and live versions, so the test proves the scan rather
+    // than the seed loop.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set constraints worker_employment_versions_change_tenant_fkey deferred`);
+      await tx.execute(sql`
+        with seeded_parties as (
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          select uuid_generate_v7(), ${h.org.orgId}, 'person',
+                 'Bulk Worker ' || g, true, '{}'::jsonb
+            from generate_series(1, ${COUNT}) g
+          returning id
+        ),
+        seeded_employments as (
+          insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, service_start, service_start_provenance, revision)
+          select uuid_generate_v7(), ${h.org.orgId}, id, ${h.org.subsidiaryId}, ${today}::date, 'bulk seed', 1
+            from seeded_parties
+          returning id
+        ),
+        seeded_changes as (
+          insert into employment_changes
+            (org_id, employment_id, revision, change_kind, prior_snapshot, reason,
+             recorded_source, recorded_source_ref, closed_versions)
+          select ${h.org.orgId}, id, 1, 'status_changed',
+                 '{}'::jsonb, 'bulk seed', 'system', 'bulk-seed', '[]'::jsonb
+            from seeded_employments
+          returning employment_id
+        )
+        insert into worker_employment_versions
+          (org_id, employment_id, version_no, status, effective_from, recorded_at)
+        select ${h.org.orgId}, employment_id, 1, 'active', ${today}::date, now()
+          from seeded_changes
+      `);
+    });
+    const recipe = await createAutomation({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      name: "bulk date scan",
+      trigger: { kind: "date_relative", entity: "employment", dateField: "service_start", offsetDays: 0, direction: "before", atTime: "09:00" },
+      rules: {},
+      conditions: {},
+      actions: [{ kind: "send_notification", to: "initiator", body: "bulk fired" }],
+    });
+    await db.execute(sql`update automations set status = 'enabled' where id = ${recipe.id}`);
+    const summary = await runAutomationTick(new Date());
+    assert.equal(summary.dateRelativeFailed, 0);
+    assert.equal(summary.dateRelativeFired, COUNT);
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from automation_runs where automation_id = ${recipe.id}
+    `)).rows[0]!.n;
+    assert.equal(runs, COUNT, "every match past row 200 fires exactly once");
+  });
+});
+
 test("the tick fires as the publisher when the oldest user holds no permission", { skip: !DB }, async () => {
   const h = await setupUnpermittedElderHarness();
   try {
