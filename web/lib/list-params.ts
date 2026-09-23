@@ -70,6 +70,26 @@ export function parsePrefixedListParams<S extends string>(
   )
 }
 
+/**
+ * True when the list shell narrows what the operator sees: a search term, an
+ * applied quick-filter chip (requested or defaulted), or a saved-view filter.
+ * The universal lists render a "no records match the current filters" empty
+ * state in that case and a record-type-specific "nothing here yet" one
+ * otherwise — the two states need different copy AND different actions, so
+ * the check lives here, next to the param parsing, for every list shell to
+ * share. `showInactive` is deliberately excluded: showing inactive rows can
+ * only widen the list, never empty it.
+ */
+export function hasActiveListFilters(args: {
+  q: string | undefined
+  quickValues: Record<string, string | undefined>
+  savedViewFilterCount: number
+}): boolean {
+  if (args.q && args.q.trim().length > 0) return true
+  if (Object.values(args.quickValues).some((value) => value !== undefined)) return true
+  return args.savedViewFilterCount > 0
+}
+
 export function pickString(v: string | string[] | undefined): string | undefined {
   if (Array.isArray(v)) return v[0]
   return v

@@ -134,6 +134,9 @@
     "search": "Nach Datum, Quelle oder Konto suchen…",
     "emptyTitle": "Keine Auszüge importiert",
     "emptyDescription": "Importieren Sie einen OFX- oder CSV-Auszug von einem Konto, um ihn hier zu sehen.",
+    "noAccountsTitle": "Noch keine abstimmbaren Konten",
+    "noAccountsDescription": "Markieren Sie Ihre Bank- und Kartenkonten im Kontenplan als abstimmbar und importieren Sie dann einen Auszug.",
+    "noAccountsLink": "Kontenplan öffnen",
     "accountLabel": "Konto",
     "accountPlaceholder": "Konto auswählen…"
   },

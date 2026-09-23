@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { buildListDrawerHref, isUuid } from './list-params'
+import { buildListDrawerHref, hasActiveListFilters, isUuid } from './list-params'
 
 test('isUuid accepts canonical UUIDs and rejects malformed route ids', () => {
   const canonicalIds = [
@@ -70,4 +70,49 @@ test('list drawer href replaces stale drawer context instead of nesting it', () 
     '/bills?q=steel&status=pending_approval',
   )
   assert.equal(url.searchParams.getAll('drawerReturn').length, 1)
+})
+
+test('an unfiltered list is not filter-active, so the empty state may use page copy', () => {
+  // UX-08b: "no imports yet" and "filters match nothing" need different copy
+  // AND different actions. Only a truly unfiltered shell may render the
+  // page-specific "nothing here yet" copy.
+  assert.equal(
+    hasActiveListFilters({ q: undefined, quickValues: {}, savedViewFilterCount: 0 }),
+    false,
+  )
+})
+
+test('a search term marks the list filter-active even when it is only whitespace-padded', () => {
+  assert.equal(
+    hasActiveListFilters({ q: '  ofx  ', quickValues: {}, savedViewFilterCount: 0 }),
+    true,
+  )
+  assert.equal(
+    hasActiveListFilters({ q: '   ', quickValues: {}, savedViewFilterCount: 0 }),
+    false,
+  )
+})
+
+test('an applied quick filter marks the list filter-active, requested or defaulted', () => {
+  assert.equal(
+    hasActiveListFilters({ q: undefined, quickValues: { source: 'manual' }, savedViewFilterCount: 0 }),
+    true,
+  )
+  // A defaulted chip still narrows the list, so it still counts.
+  assert.equal(
+    hasActiveListFilters({ q: undefined, quickValues: { source: 'all' }, savedViewFilterCount: 0 }),
+    true,
+  )
+  // An explicitly cleared ('all' → undefined) chip does not.
+  assert.equal(
+    hasActiveListFilters({ q: undefined, quickValues: { source: undefined }, savedViewFilterCount: 0 }),
+    false,
+  )
+})
+
+test('a saved-view filter marks the list filter-active', () => {
+  assert.equal(
+    hasActiveListFilters({ q: undefined, quickValues: {}, savedViewFilterCount: 2 }),
+    true,
+  )
 })

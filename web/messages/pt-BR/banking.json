@@ -134,6 +134,9 @@
     "search": "Buscar por data, origem ou conta…",
     "emptyTitle": "Nenhum extrato importado",
     "emptyDescription": "Importe um extrato OFX ou CSV de uma conta para vê-lo aqui.",
+    "noAccountsTitle": "Ainda não há contas conciliáveis",
+    "noAccountsDescription": "Marque suas contas bancárias e de cartão como conciliáveis no Plano de contas e importe um extrato.",
+    "noAccountsLink": "Abrir o Plano de contas",
     "accountLabel": "Conta",
     "accountPlaceholder": "Selecione uma conta…"
   },

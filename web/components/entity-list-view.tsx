@@ -14,7 +14,7 @@ import { ShowInactivesToggle } from './show-inactives-toggle'
 import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
-import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-params'
+import { buildListDrawerHref, hasActiveListFilters, parseListParams, pickString } from '../lib/list-params'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
@@ -74,6 +74,8 @@ export async function EntityListView({
   sp,
   drawer,
   emptyAction,
+  emptyTitle,
+  emptyDescription,
   formatValue,
   crmAccountsVisible = true,
   hrmEmploymentVisible = true,
@@ -106,6 +108,16 @@ export async function EntityListView({
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
+  /**
+   * Page-specific "nothing here yet" copy, shown only when NO search, quick
+   * filter or saved-view filter is active. With filters active the empty
+   * state always names the filters instead — "no imports yet" and "filters
+   * match nothing" need different copy AND different actions. Absent, the
+   * generic common copy renders exactly as before, so lists that pass
+   * neither prop are unaffected.
+   */
+  emptyTitle?: string
+  emptyDescription?: string
   formatValue?: (row: Record<string, unknown>, columnKey: string, value: unknown) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
@@ -344,6 +356,13 @@ export async function EntityListView({
   if (source.enrichRows) await source.enrichRows(orgId, rows)
   const filteredTotal = Number(totalRow.rows[0]?.n ?? 0)
   const total = filteredTotal
+  // "Nothing here yet" vs "filters match nothing" need different copy AND
+  // different actions; the distinction is whether the shell narrows the list.
+  const filtersActive = hasActiveListFilters({
+    q: params.q,
+    quickValues,
+    savedViewFilterCount: view.filters.length,
+  })
 
   // Enum value → display label, resolved from any list filter that carries an
   // option set (status, project_type…). Lets both the chips and the table
@@ -514,7 +533,11 @@ export async function EntityListView({
       </div>
       {total === 0 ? (
         <div className="mt-4">
-          <EmptyState title={tCommon('empty.title')} description={tCommon('empty.description')} action={emptyAction} />
+          <EmptyState
+            title={filtersActive ? tCommon('empty.title') : (emptyTitle ?? tCommon('empty.title'))}
+            description={filtersActive ? tCommon('empty.description') : (emptyDescription ?? tCommon('empty.description'))}
+            action={emptyAction}
+          />
         </div>
       ) : (
         <div className="mt-3">
