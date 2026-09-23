@@ -882,7 +882,10 @@ test.describe("procure-to-pay workflows", () => {
   test("early-payment discount settles $1,000 for $975 cash (total-as-cash)", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
-      await page.goto("/");
+      // "/" redirects to the canonical /dashboard home (UX-17); land there
+      // directly and let it settle so page.evaluate never races the redirect.
+      await page.goto("/dashboard");
+      await page.waitForLoadState("load");
       await dismissSetupWizard(page);
 
       const vendorName = `Discount Supply ${TAG}`;
@@ -927,7 +930,10 @@ test.describe("procure-to-pay workflows", () => {
   test("vendor credit netted with an expense reimbursement inside one pay run", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
-      await page.goto("/");
+      // "/" redirects to the canonical /dashboard home (UX-17); land there
+      // directly and let it settle so page.evaluate never races the redirect.
+      await page.goto("/dashboard");
+      await page.waitForLoadState("load");
       await dismissSetupWizard(page);
 
       // Vendor with an $800 bill and a $200 posted credit memo (ungated kind:
@@ -1006,7 +1012,10 @@ test.describe("procure-to-pay workflows", () => {
   test("subcontractor blocked by missing compliance evidence, then released", async ({ browser, baseURL }) => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
-      await page.goto("/");
+      // "/" redirects to the canonical /dashboard home (UX-17); land there
+      // directly and let it settle so page.evaluate never races the redirect.
+      await page.goto("/dashboard");
+      await page.waitForLoadState("load");
       await dismissSetupWizard(page);
 
       // Policy: subcontractors must carry current general-liability evidence;
