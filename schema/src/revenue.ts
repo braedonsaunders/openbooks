@@ -13,7 +13,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, id, money, orgRef } from "./helpers";
+import { auditColumns, fxRate, id, money, orgRef } from "./helpers";
 
 /**
  * Revenue recognition, shaped by ASC 606 / IFRS 15 and source platform's Advanced
@@ -233,6 +233,14 @@ export const recognitionSchedules = pgTable(
       .notNull()
       .default("planned"),
     totalAmount: money("total_amount").notNull(),
+    /**
+     * Transaction currency and historical deferral rate (0256): the plan
+     * lines are in this currency and recognition converts them at this
+     * rate — deferred revenue is a non-monetary liability, never
+     * revalued. Amendment bookRates (change_basis) take precedence.
+     */
+    transactionCurrency: text("transaction_currency"),
+    transactionFxRate: fxRate("transaction_fx_rate"),
     ...auditColumns,
   },
   (t) => [uniqueIndex("rec_schedules_obligation_book").on(t.obligationId, t.bookId)],
