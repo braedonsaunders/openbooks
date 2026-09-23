@@ -3,6 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { add, cmp, div, fromUnits, mul, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
@@ -11,14 +12,24 @@ import { loadProjectType } from './project-type'
 import { crmActivityScope, crmOpportunityScope, crmSharedScope } from './crm-scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 
+/**
+ * Money travels as canonical numeric(19,4) decimal strings (house bigint
+ * helpers through aggregation and JSON; formatted only at the UI edge).
+ * openItems deliberately returns exact decimal text, and parseFloat would
+ * corrupt it — 0.10 + 0.20 becomes 0.30000000000000004, and amounts above
+ * 2^53 lose cents. Counts, days and percents stay numbers; they are not
+ * money and never aggregate across currencies.
+ */
+export type PulseMoney = string
+
 export interface CustomerAgingBreakdown {
-  current: number
-  days1To30: number
-  days31To60: number
-  days61To90: number
-  days90Plus: number
-  totalOpen: number
-  totalOverdue: number
+  current: PulseMoney
+  days1To30: PulseMoney
+  days31To60: PulseMoney
+  days61To90: PulseMoney
+  days90Plus: PulseMoney
+  totalOpen: PulseMoney
+  totalOverdue: PulseMoney
 }
 
 /**
@@ -61,6 +72,20 @@ export function pulseSectionsFor(
   return sections
 }
 
+/**
+ * Realized margin percent, exact bigint math (same shape as the project
+ * financial reader's margin_pct): null on a zero base, never a float
+ * division. Display rounding happens at the UI edge.
+ */
+export function marginPercent(profit: PulseMoney, base: PulseMoney): number | null {
+  const baseUnits = toUnits(base)
+  if (baseUnits === 0n) return null
+  const negative = baseUnits < 0n
+  const signedProfit = toUnits(profit) * (negative ? -1n : 1n)
+  const absoluteBase = negative ? -baseUnits : baseUnits
+  return Number(fromUnits(roundDiv((signedProfit * 100n * 10_000n), absoluteBase)))
+}
+
 export interface CustomerPulseData {
   party: {
     id: string
@@ -77,7 +102,7 @@ export interface CustomerPulseData {
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
     holdReason?: string | null
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
-    creditLimit?: number | null
+    creditLimit?: PulseMoney | null
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
     hasCreditLimit?: boolean
   }
@@ -88,10 +113,10 @@ export interface CustomerPulseData {
   aging?: CustomerAgingBreakdown
   /** Present only with ar.read. */
   credit?: {
-    creditLimit: number | null
-    openArBalance: number
-    unbilledOrdersBalance: number
-    remainingCredit: number | null
+    creditLimit: PulseMoney | null
+    openArBalance: PulseMoney
+    unbilledOrdersBalance: PulseMoney
+    remainingCredit: PulseMoney | null
     creditUtilizationPercent: number | null
   }
   /** Present only with ar.read. */
@@ -107,9 +132,9 @@ export interface CustomerPulseData {
     openOpportunities: number
     wonOpportunities: number
     lostOpportunities: number
-    projectedPipeline: number
-    weightedPipeline: number
-    wonAmount: number
+    projectedPipeline: PulseMoney
+    weightedPipeline: PulseMoney
+    wonAmount: PulseMoney
     winRatePercent: number | null
   }
   /** Present only with projects.read (and the Projects feature enabled). */
@@ -117,10 +142,10 @@ export interface CustomerPulseData {
     enabled: boolean
     totalCount: number
     activeCount: number
-    totalContractValue: number
-    totalBilled: number
-    totalCost: number
-    grossProfit: number
+    totalContractValue: PulseMoney
+    totalBilled: PulseMoney
+    totalCost: PulseMoney
+    grossProfit: PulseMoney
     grossMarginPercent: number | null
   }
   /**
@@ -134,7 +159,7 @@ export interface CustomerPulseData {
     type: 'activity' | 'estimate' | 'sales_order' | 'invoice' | 'payment' | 'stage_event'
     title: string
     description: string | null
-    amount?: number
+    amount?: PulseMoney
     currency?: string
     timestamp: string
     status?: string
@@ -189,9 +214,10 @@ export async function loadCustomerPulse(
 
   // The credit limit lives on the customer role alongside terms and hold
   // state. parties carries no credit columns, so there is no fallback.
+  // Canonical decimal text, never parseFloat (see PulseMoney).
   const creditLimitRaw = partyRow.cr_credit_limit
   const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined
-  const creditLimitNum = hasCreditLimit ? parseFloat(creditLimitRaw!) || 0 : null
+  const creditLimit = hasCreditLimit ? normalizeMoney(creditLimitRaw!) : null
 
   const party: CustomerPulseData['party'] = {
     id: partyRow.id,
@@ -209,7 +235,7 @@ export async function loadCustomerPulse(
     party.paymentTermsName = partyRow.terms_name
     party.isOnHold = Boolean(partyRow.is_on_hold)
     party.holdReason = partyRow.hold_reason
-    party.creditLimit = creditLimitNum
+    party.creditLimit = creditLimit
     party.hasCreditLimit = hasCreditLimit
   }
 
@@ -229,20 +255,23 @@ export async function loadCustomerPulse(
     const customerOpenItems = allOpenItems.filter((item) => item.partyId === partyId)
     const asOfDate = parseIsoDate(asOf)
 
-    let current = 0
-    let days1To30 = 0
-    let days31To60 = 0
-    let days61To90 = 0
-    let days90Plus = 0
-    let totalOpen = 0
-    let totalOverdue = 0
+    // Exact decimal accumulation: openItems returns canonical decimal text
+    // and the house bigint helpers keep it exact (0.10 + 0.20 stays
+    // "0.3000"; values above 2^53 keep their cents).
+    let current = '0'
+    let days1To30 = '0'
+    let days31To60 = '0'
+    let days61To90 = '0'
+    let days90Plus = '0'
+    let totalOpen = '0'
+    let totalOverdue = '0'
 
     for (const item of customerOpenItems) {
-      const val = parseFloat(item.remaining) || 0
-      totalOpen += val
+      const val = normalizeMoney(item.remaining)
+      totalOpen = add(totalOpen, val)
 
       if (!item.dueDate) {
-        current += val
+        current = add(current, val)
         continue
       }
 
@@ -251,13 +280,13 @@ export async function loadCustomerPulse(
       )
 
       if (diffDays <= 0) {
-        current += val
+        current = add(current, val)
       } else {
-        totalOverdue += val
-        if (diffDays <= 30) days1To30 += val
-        else if (diffDays <= 60) days31To60 += val
-        else if (diffDays <= 90) days61To90 += val
-        else days90Plus += val
+        totalOverdue = add(totalOverdue, val)
+        if (diffDays <= 30) days1To30 = add(days1To30, val)
+        else if (diffDays <= 60) days31To60 = add(days31To60, val)
+        else if (diffDays <= 90) days61To90 = add(days61To90, val)
+        else days90Plus = add(days90Plus, val)
       }
     }
 
@@ -272,15 +301,20 @@ export async function loadCustomerPulse(
          and d.voided_at is null
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
     `)
-    const unbilledOrdersBalance = parseFloat(ordersResult.rows[0]?.unbilled_total ?? '0') || 0
+    // The SQL sum over numeric(19,4) is exact; keep it decimal text.
+    const unbilledOrdersBalance = normalizeMoney(ordersResult.rows[0]?.unbilled_total ?? '0')
 
-    // Remaining credit headroom
-    let remainingCredit: number | null = null
+    // Remaining credit headroom, exact: limit minus committed (open plus
+    // unbilled), floored at zero. Utilization is a display percent derived
+    // from the exact strings at the edge — it never feeds another sum.
+    let remainingCredit: PulseMoney | null = null
     let creditUtilizationPercent: number | null = null
-    if (hasCreditLimit && creditLimitNum !== null) {
-      const committed = totalOpen + unbilledOrdersBalance
-      remainingCredit = Math.max(0, creditLimitNum - committed)
-      creditUtilizationPercent = creditLimitNum > 0 ? Math.min(100, (committed / creditLimitNum) * 100) : 100
+    if (hasCreditLimit && creditLimit !== null) {
+      const committed = add(totalOpen, unbilledOrdersBalance)
+      remainingCredit = cmp(committed, creditLimit) > 0 ? '0.0000' : add(creditLimit, neg(committed))
+      creditUtilizationPercent = cmp(creditLimit, '0') > 0
+        ? Math.min(100, Number(mul(div(committed, creditLimit), '100')))
+        : 100
     }
 
     // 4. Payment metrics & DSO
@@ -289,17 +323,17 @@ export async function loadCustomerPulse(
     const dso = partyAvgDaysToPay ?? Math.round(stats.globalAvg)
 
     aging = {
-      current,
-      days1To30,
-      days31To60,
-      days61To90,
-      days90Plus,
-      totalOpen,
-      totalOverdue,
+      current: normalizeMoney(current),
+      days1To30: normalizeMoney(days1To30),
+      days31To60: normalizeMoney(days31To60),
+      days61To90: normalizeMoney(days61To90),
+      days90Plus: normalizeMoney(days90Plus),
+      totalOpen: normalizeMoney(totalOpen),
+      totalOverdue: normalizeMoney(totalOverdue),
     }
     credit = {
-      creditLimit: creditLimitNum,
-      openArBalance: totalOpen,
+      creditLimit,
+      openArBalance: normalizeMoney(totalOpen),
       unbilledOrdersBalance,
       remainingCredit,
       creditUtilizationPercent,
@@ -350,9 +384,9 @@ export async function loadCustomerPulse(
       openOpportunities: oppRow?.open_count ?? 0,
       wonOpportunities: wonCount,
       lostOpportunities: lostCount,
-      projectedPipeline: parseFloat(oppRow?.projected_sum ?? '0') || 0,
-      weightedPipeline: parseFloat(oppRow?.weighted_sum ?? '0') || 0,
-      wonAmount: parseFloat(oppRow?.won_sum ?? '0') || 0,
+      projectedPipeline: normalizeMoney(oppRow?.projected_sum ?? '0'),
+      weightedPipeline: normalizeMoney(oppRow?.weighted_sum ?? '0'),
+      wonAmount: normalizeMoney(oppRow?.won_sum ?? '0'),
       winRatePercent,
     }
   }
@@ -375,26 +409,26 @@ export async function loadCustomerPulse(
          and prj.is_active
          ${subsidiaryVisibleFilter(sql`prj.subsidiary_id`, allowedSubsidiaryIds ?? null)}
     `)
-    let contractTotal = 0
-    let billedTotal = 0
-    let costTotal = 0
+    let contractTotal = '0'
+    let billedTotal = '0'
+    let costTotal = '0'
     for (const row of listRes.rows) {
       const projectType = await loadProjectType(orgId, row.id)
       const fin = await resolveProjectFinancials(orgId, row.id, projectType.financialProfile)
-      contractTotal += Number(fin.contractValue) || 0
-      billedTotal += Number(fin.measures.invoiced_to_date ?? 0) || 0
-      costTotal += Number(fin.measures.total_cost ?? 0) || 0
+      contractTotal = add(contractTotal, normalizeMoney(String(fin.contractValue ?? '0')))
+      billedTotal = add(billedTotal, normalizeMoney(String(fin.measures.invoiced_to_date ?? '0')))
+      costTotal = add(costTotal, normalizeMoney(String(fin.measures.total_cost ?? '0')))
     }
-    const profit = billedTotal - costTotal
+    const profit = add(billedTotal, neg(costTotal))
     projects = {
       enabled: true,
       totalCount: listRes.rows.length,
       activeCount: listRes.rows.filter((r) => r.status === 'awarded' || r.status === 'active').length,
-      totalContractValue: contractTotal,
-      totalBilled: billedTotal,
-      totalCost: costTotal,
-      grossProfit: profit,
-      grossMarginPercent: billedTotal !== 0 ? (profit / billedTotal) * 100 : null,
+      totalContractValue: normalizeMoney(contractTotal),
+      totalBilled: normalizeMoney(billedTotal),
+      totalCost: normalizeMoney(costTotal),
+      grossProfit: normalizeMoney(profit),
+      grossMarginPercent: marginPercent(profit, billedTotal),
     }
   }
 
@@ -472,7 +506,7 @@ export async function loadCustomerPulse(
         type,
         title: `${d.document_number} (${d.kind.replace('_', ' ')})`,
         description: d.memo,
-        amount: parseFloat(d.total) || 0,
+        amount: normalizeMoney(d.total),
         currency: d.currency,
         status: d.status,
         timestamp: d.document_date,
