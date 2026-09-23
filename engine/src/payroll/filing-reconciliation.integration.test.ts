@@ -20,11 +20,13 @@ type TwoEntityFixture = {
   orgId: string;
   adminId: string;
   rootId: string;
+  rootName: string;
   entityB: string;
   stubA: string;
   stubB: string;
   accountA: string;
   accountB: string;
+  accountOrg: string;
   restrictedId: string;
 };
 
@@ -108,10 +110,12 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
 
   const accountA = randomUUID();
   const accountB = randomUUID();
+  const accountOrg = randomUUID();
   await db.execute(sql`
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name, subsidiary_id, is_default)
     values (${accountA}, ${fx.orgId}, 'CA', 'ca_rp', '111111111RP0001', 'Entity A program', ${fx.subsidiaryId}, true),
-           (${accountB}, ${fx.orgId}, 'CA', 'ca_rp', '222222222RP0001', 'Entity B program', ${entityB}, false)`);
+           (${accountB}, ${fx.orgId}, 'CA', 'ca_rp', '222222222RP0001', 'Entity B program', ${entityB}, false),
+           (${accountOrg}, ${fx.orgId}, 'CA', 'ca_rp', '333333333RP0001', 'Org-wide program', null, false)`);
 
   const restrictedId = await createScratchUser(fx.orgId, "Entity A reconciler", "entity_a_reconciler");
   await db.execute(sql`
@@ -119,9 +123,11 @@ async function seedTwoEntities(): Promise<TwoEntityFixture> {
       subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [fx.subsidiaryId] })}::jsonb
      where org_id = ${fx.orgId} and key = 'entity_a_reconciler'`);
 
+  const rootName = (await db.execute<{ name: string }>(sql`
+    select name from subsidiaries where org_id = ${fx.orgId} and id = ${fx.subsidiaryId}`)).rows[0]!.name;
   return {
-    orgId: fx.orgId, adminId: fx.actorId, rootId: fx.subsidiaryId, entityB,
-    stubA, stubB, accountA, accountB, restrictedId,
+    orgId: fx.orgId, adminId: fx.actorId, rootId: fx.subsidiaryId, rootName, entityB,
+    stubA, stubB, accountA, accountB, accountOrg, restrictedId,
   };
 }
 
@@ -161,6 +167,49 @@ test("a restricted actor cannot rewrite another entity's filing history", { skip
         orgId: fx.orgId,
         actorId: fx.restrictedId,
         rows: [{ stubId: fx.stubA, filingAccountId: fx.accountA, ...evidence }],
+      }),
+      1,
+    );
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
+
+test("a filing account from the wrong legal entity refuses before the update", { skip: !DB }, async () => {
+  const fx = await seedTwoEntities();
+  try {
+    await assert.rejects(
+      reconcilePayrollFilingAccounts({
+        orgId: fx.orgId,
+        actorId: fx.adminId,
+        rows: [{ stubId: fx.stubA, filingAccountId: fx.accountB, ...evidence }],
+      }),
+      (error: unknown) => {
+        const message = (error as Error).message;
+        for (const expected of ["222222222RP0001", "Entity B", fx.rootName]) {
+          assert.ok(message.includes(expected), `refusal names ${expected}: ${message}`);
+        }
+        return true;
+      },
+    );
+    // The stub stays unknown with no audit: the one-time guard must still
+    // allow the correct attribution afterwards.
+    assert.equal((await stubSource(fx.orgId, fx.stubA)).source, "unknown");
+    assert.equal(await auditCount(fx.orgId, fx.stubA), 0);
+    assert.equal(
+      await reconcilePayrollFilingAccounts({
+        orgId: fx.orgId,
+        actorId: fx.adminId,
+        rows: [{ stubId: fx.stubA, filingAccountId: fx.accountA, ...evidence }],
+      }),
+      1,
+    );
+    // An org-wide account stays usable on any entity's stub.
+    assert.equal(
+      await reconcilePayrollFilingAccounts({
+        orgId: fx.orgId,
+        actorId: fx.adminId,
+        rows: [{ stubId: fx.stubB, filingAccountId: fx.accountOrg, ...evidence }],
       }),
       1,
     );
