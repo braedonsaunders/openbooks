@@ -764,6 +764,63 @@ test(
     }),
 );
 test(
+  "L5: a fully reversed manual journal can no longer be selected or measured",
+  { skip: !DB },
+  async () =>
+    fixture(async (f) => {
+      const original = await post(f, f.elimination, "2026-07-16", [
+        { accountId: f.accounts.goodwill!, amount: "100" },
+        { accountId: f.org.accounts.bank, amount: "-100" },
+      ]);
+      const line = (
+        await db.execute<{ id: string; amount: string }>(
+          sql`select id,amount::text as amount from journal_lines where org_id=${f.org.orgId} and entry_id=${original} and account_id=${f.accounts.goodwill!} order by line_number limit 1`,
+        )
+      ).rows[0]!;
+      await post(
+        f,
+        f.elimination,
+        "2026-07-17",
+        [
+          { accountId: f.accounts.goodwill!, amount: "-100" },
+          { accountId: f.org.accounts.bank, amount: "100" },
+        ],
+        original,
+      );
+      const marked = await db.execute(
+        sql`update journal_entries set status='reversed' where org_id=${f.org.orgId} and id=${original} and status='posted' returning id`,
+      );
+      assert.equal(
+        marked.rows.length,
+        1,
+        "the reversed original must be marked exactly once",
+      );
+      const open = await loadLossOfControlProposalData(
+        db,
+        f.org.orgId,
+        f.interest,
+        null,
+      );
+      assert.ok(
+        open.adjustmentLines.every((l) => l.id !== line.id),
+        "a fully reversed line is not outstanding evidence and must not be offered",
+      );
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          f.interest,
+          f.actors.submitterId,
+          input(f, {
+            additionalConsolidationLines: [
+              { lineId: line.id, amount: line.amount },
+            ],
+          }),
+        ),
+        (e) => /manually attributed elimination line/.test(deepest(e)),
+      );
+    }),
+);
+test(
   "L1: a proposal using another family's account refuses by name",
   { skip: !DB },
   async () =>
