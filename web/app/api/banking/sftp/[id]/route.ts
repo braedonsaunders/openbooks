@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { encryptSecret, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
+import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
@@ -75,9 +76,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ username, password })
   }
   const nextActive = body.isActive !== false
+  let refused: NextResponse | null = null
   await db.transaction(async (tx) => {
     const before = await currentRow(tx, id, user.orgId)
     if (!before) { notFound = true; return }
+    // Reactivation is the update path that can reintroduce shared folders:
+    // refuse waking a server whose root is equal to, inside, or containing
+    // an ACTIVE sibling's root. The target row is already locked by
+    // currentRow; locking the siblings serializes concurrent toggles.
+    if (nextActive && !before.is_active) {
+      const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
+        select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} and id <> ${id} for update
+      `))
+      const hit = findRootOverlap(
+        before.root_prefix,
+        siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+      )
+      if (hit) {
+        refused = NextResponse.json({ error: rootOverlapRefusal(before.root_prefix, hit), code: 'sftp_root_overlap' }, { status: 409 })
+        return
+      }
+    }
     const after = (await tx.execute<SftpServerAuditRow & { id: string }>(sql`
       update sftp_servers set is_active = ${nextActive}, updated_at = now(), updated_by = ${user.id}
        where id = ${id} and org_id = ${user.orgId}
@@ -92,6 +111,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       actorId: user.id,
     }, tx)
   })
+  if (refused) return refused
   if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
