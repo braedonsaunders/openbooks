@@ -152,6 +152,83 @@ test(
 );
 
 test(
+  "a rejection replay keeps the original reason and writes no new evidence",
+  async () => {
+    const fixture = await seedSubmittedWeek();
+    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+    try {
+      const first = await post({
+        employee: fixture.employeeId,
+        week: "2026-07-12",
+        reason: "Client code is wrong, please fix",
+      });
+      assert.equal(first.status, 200, await first.text());
+      const replay = await post({
+        employee: fixture.employeeId,
+        week: "2026-07-12",
+        reason: "A different story",
+      });
+      assert.equal(replay.status, 422, await replay.clone().text());
+      assert.match(
+        ((await replay.json()) as { error: string }).error,
+        /already rejected.*Client code is wrong/,
+        "the replay refusal must name the original decision, not the replayed reason",
+      );
+      const header = await withOrgContext(fixture.org.orgId, async () => (
+        await db.execute(sql`
+          select status, rejection_reason as "rejectionReason" from timesheet_weeks
+           where id = ${fixture.headerId}
+        `)
+      ).rows[0]);
+      assert.equal(header!.status, "rejected");
+      assert.equal(header!.rejectionReason, "Client code is wrong, please fix");
+      const entry = await withOrgContext(fixture.org.orgId, async () => (
+        await db.execute(sql`
+          select status, rejection_reason as "rejectionReason" from time_entries
+           where id = ${fixture.timeEntryId}
+        `)
+      ).rows[0]);
+      assert.equal(entry!.rejectionReason, "Client code is wrong, please fix");
+      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+      assert.equal(rows.length, 1, "the replay must not add evidence");
+    } finally {
+      await cleanup(fixture);
+    }
+  },
+);
+
+test(
+  "concurrent rejections serialize: the loser keeps the winner's reason",
+  async () => {
+    const fixture = await seedSubmittedWeek();
+    state.user = { orgId: fixture.org.orgId, id: fixture.actorId };
+    try {
+      const [first, second] = await Promise.all([
+        post({ employee: fixture.employeeId, week: "2026-07-12", reason: "First decision reason" }),
+        post({ employee: fixture.employeeId, week: "2026-07-12", reason: "Second decision reason" }),
+      ]);
+      const statuses = [first.status, second.status].sort();
+      assert.deepEqual(statuses, [200, 422], "the replay loser must be refused under the header lock");
+      const header = await withOrgContext(fixture.org.orgId, async () => (
+        await db.execute(sql`
+          select rejection_reason as "rejectionReason" from timesheet_weeks
+           where id = ${fixture.headerId}
+        `)
+      ).rows[0]);
+      assert.match(
+        String(header!.rejectionReason),
+        /^(First decision reason|Second decision reason)$/,
+        "the stored reason must be exactly one decision, never a blend or overwrite",
+      );
+      const rows = await auditRows(fixture.org.orgId, fixture.headerId);
+      assert.equal(rows.length, 1, "the loser must not write a second 'rejected' audit");
+    } finally {
+      await cleanup(fixture);
+    }
+  },
+);
+
+test(
   "a refused rejection leaves no audit evidence behind",
   { skip: !env.OPENBOOKS_DB_URL },
   async () => {
