@@ -20,6 +20,7 @@ export const PERSONA_WIDGETS: Record<string, WidgetRenderer> = {
         delegatePlaceholder:
           str(props, 'delegatePlaceholder') ?? 'Delegate to…',
       }}
+      notices={(props.notices as ComponentProps<typeof InboxTaskList>['notices']) ?? []}
     />
   ),
 }

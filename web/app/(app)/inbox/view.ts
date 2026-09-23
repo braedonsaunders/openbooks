@@ -5,7 +5,7 @@ import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
 import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
-import { listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
+import { listInbox, type InboxItem, type InboxSourceNotice } from '@openbooks/engine/src/inbox/index.ts'
 import {
   approvalWorklistPageForAuthz,
   type ApprovalWorklistItem,
@@ -184,6 +184,8 @@ export interface ApprovalsData {
   tasksPresent: boolean
   tasksEmpty: boolean
   taskRows: InboxTaskListRow[]
+  /** Named per-source notices for the legs that refused or failed (OM-10). */
+  taskNotices: string[]
   tasksEmptyTitle: string
   tasksEmptyDescription: string
   taskOpenLabel: string
@@ -563,12 +565,20 @@ export async function loadApprovals(
   // and the active list so the sources read once.
   const ctx = await inboxContext(authz)
   const taskCache = new Map<string, InboxItem[]>()
+  // One source's refusal or failure must not blank the inbox (OM-10): the
+  // engine names each failed source into this collector while the healthy
+  // legs still list, and the loader renders them as small named notices
+  // beside the surviving rows. Keyed by kind so the six parallel reads
+  // below cannot double-report the same source.
+  const taskNoticeByKind = new Map<string, string>()
   const taskKindsFor = (key: InboxFilter) =>
     key === 'all' || key === 'overdue' ? INBOX_TASK_KINDS : (INBOX_FILTER_KINDS[key] ?? [])
   const taskItemsFor = async (key: InboxFilter): Promise<InboxItem[]> => {
     const kinds = taskKindsFor(key)
     if (kinds.length === 0) return []
-    const items = await listInbox(ctx, { kinds, cache: taskCache })
+    const collected: InboxSourceNotice[] = []
+    const items = await listInbox(ctx, { kinds, cache: taskCache, notices: collected })
+    for (const notice of collected) taskNoticeByKind.set(notice.kind, notice.message)
     return key === 'overdue' ? items.filter((item) => item.priority === 'overdue') : items
   }
   const [tasksAll, tasksMy, tasksSig, tasksNotices, tasksOverdue, tasksActive] = await Promise.all([
@@ -579,6 +589,13 @@ export async function loadApprovals(
     taskItemsFor('overdue'),
     taskItemsFor(filter),
   ])
+  // Named per-source notices for the legs that refused or failed, in stable
+  // kind order. The frame is translated; the reason stays the source's own
+  // message intact. (tasksNotices above is the notices-filter ITEMS — this
+  // is the failure copy, deliberately named apart.)
+  const failedSourceNotices = [...taskNoticeByKind.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([kind, reason]) => ti('sourceUnavailable', { source: ti(`kinds.${kind}`), reason }))
   const toTaskRow = (item: InboxItem): InboxTaskListRow => ({
     id: item.id,
     kindLabel: ti(`kinds.${item.kind}`),
@@ -608,7 +625,10 @@ export async function loadApprovals(
       return haystack.includes(query.toLowerCase())
     })
     .map(toTaskRow)
-  const tasksEmpty = showTasks && taskRows.length === 0
+  // A failed source is not "all clear": the empty state stays hidden while
+  // a notice names the missing area, and the list block stays mounted so
+  // the notice renders even when no rows survived.
+  const tasksEmpty = showTasks && taskRows.length === 0 && failedSourceNotices.length === 0
   const filterCount = (key: InboxFilter): number => {
     if (key === 'all') return tasksAll.length
     if (key === 'my_tasks') return tasksMy.length
@@ -715,9 +735,10 @@ export async function loadApprovals(
     filter,
     showUnion,
     showTasks,
-    tasksPresent: showTasks && taskRows.length > 0,
+    tasksPresent: showTasks && (taskRows.length > 0 || failedSourceNotices.length > 0),
     tasksEmpty,
     taskRows,
+    taskNotices: failedSourceNotices,
     tasksEmptyTitle: ti('emptyTitle'),
     tasksEmptyDescription: ti('emptyDescription'),
     taskOpenLabel: ti('open'),
@@ -843,6 +864,7 @@ export function approvalsSpec(data: ApprovalsData): PageSpec {
               openLabel: data.taskOpenLabel,
               actedLabel: data.taskActedLabel,
               delegatePlaceholder: data.taskDelegatePlaceholder,
+              notices: data.taskNotices,
             }),
             when: f('tasksPresent'),
           },

@@ -434,6 +434,24 @@ export async function getLeaveRequest(query: { orgId: string; actorId: string; r
 }
 
 /**
+ * Self-service leave eligibility: the permission half of reading one's own
+ * requests. One predicate, defined here where the reads live — the inbox
+ * own-leg probe reuses it, so the gate and the probe can never disagree
+ * about who may read their own requests. (The second half, a linked
+ * employment, is loadOwnEmploymentIds in authorization.ts.)
+ */
+export async function mayReadOwnLeaveRequests(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<boolean> {
+  return (
+    (await actorHasPermission(exec, orgId, actorId, "hrm.leave.request")) ||
+    (await actorHasPermission(exec, orgId, actorId, "hrm.leave.read"))
+  );
+}
+
+/**
  * One of the actor's OWN requests. The second self-service touch, beside the
  * inbox: proof of ownership is the employment behind the login, never a
  * caller-supplied worker — anything else refuses without saying whether the
@@ -441,9 +459,7 @@ export async function getLeaveRequest(query: { orgId: string; actorId: string; r
  */
 export async function getOwnLeaveRequest(query: { orgId: string; actorId: string; requestId: string }): Promise<LeaveRequestSummary> {
   return withOrgTransaction(query.orgId, async () => {
-    const may =
-      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.request")) ||
-      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.read"));
+    const may = await mayReadOwnLeaveRequests(db, query.orgId, query.actorId);
     if (!may) {
       throw new HrmAuthorizationError(
         "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",
@@ -529,9 +545,7 @@ export async function listOrgLeaveRequests(
  */
 export async function myLeaveRequests(query: { orgId: string; actorId: string }): Promise<LeaveRequestSummary[]> {
   return withOrgTransaction(query.orgId, async () => {
-    const may =
-      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.request")) ||
-      (await actorHasPermission(db, query.orgId, query.actorId, "hrm.leave.read"));
+    const may = await mayReadOwnLeaveRequests(db, query.orgId, query.actorId);
     if (!may) {
       throw new HrmAuthorizationError(
         "Leave access requires the hrm.leave.request permission — ask an administrator to grant it in /admin/roles.",

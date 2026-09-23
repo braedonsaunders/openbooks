@@ -45,6 +45,7 @@
   "open": "Abrir",
   "acted": "Hecho",
   "refused": "No se pudo completar: {message}",
+  "sourceUnavailable": "{source} no disponible: {reason}",
   "delegatePlaceholder": "Delegar a…",
   "count": "{count, plural, one {# elemento} other {# elementos}}"
 }

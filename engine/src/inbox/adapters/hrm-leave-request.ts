@@ -14,8 +14,9 @@
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
+import { loadOwnEmploymentIds } from "../../hrm/authorization.ts";
 import { submitLeaveRequest } from "../../hrm/leave.ts";
-import { myLeaveRequests } from "../../hrm/leave-read.ts";
+import { mayReadOwnLeaveRequests, myLeaveRequests } from "../../hrm/leave-read.ts";
 import { db } from "../../platform/db.ts";
 import { hrmOn, toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
@@ -52,22 +53,32 @@ export const hrmLeaveRequestAdapter: InboxAdapter = {
         source: { kind: "hrm_leave_request_gate", id: gate.id },
       });
     }
-    // Own leg — my drafts ready to submit.
-    const mine = await myLeaveRequests({ orgId: ctx.orgId, actorId: ctx.actorId });
-    for (const request of mine) {
-      if (request.status !== "draft") continue;
-      out.push({
-        id: inboxItemId("hrm_leave_request", `own:${request.id}`),
-        kind: "hrm_leave_request",
-        title: "Leave request draft",
-        subtitle: `${request.leaveTypeCode} · ${request.startsOn} → ${request.endsOn}`,
-        dueAt: null,
-        createdAt: ctx.asOf,
-        priority: "normal",
-        subjectHref: `/hrm/my-leave?request=${request.id}`,
-        actions: [{ key: "submit", label: "Submit", style: "primary", needsReason: false }],
-        source: { kind: "hrm_leave_request", id: request.id },
-      });
+    // Own leg — my drafts ready to submit. Self-service only, probed BEFORE
+    // the read: the actor needs the same permission myLeaveRequests enforces
+    // (reused here, never redefined) AND a linked employment. Anyone else —
+    // approvers, accountants — contributes zero own-leg items, never the
+    // named refusal, which used to blank the whole inbox (OM-10). The
+    // approver leg above keeps its own gates, unchanged.
+    if (
+      (await mayReadOwnLeaveRequests(db, ctx.orgId, ctx.actorId)) &&
+      (await loadOwnEmploymentIds(db, ctx.orgId, ctx.actorId)).length > 0
+    ) {
+      const mine = await myLeaveRequests({ orgId: ctx.orgId, actorId: ctx.actorId });
+      for (const request of mine) {
+        if (request.status !== "draft") continue;
+        out.push({
+          id: inboxItemId("hrm_leave_request", `own:${request.id}`),
+          kind: "hrm_leave_request",
+          title: "Leave request draft",
+          subtitle: `${request.leaveTypeCode} · ${request.startsOn} → ${request.endsOn}`,
+          dueAt: null,
+          createdAt: ctx.asOf,
+          priority: "normal",
+          subjectHref: `/hrm/my-leave?request=${request.id}`,
+          actions: [{ key: "submit", label: "Submit", style: "primary", needsReason: false }],
+          source: { kind: "hrm_leave_request", id: request.id },
+        });
+      }
     }
     return out;
   },

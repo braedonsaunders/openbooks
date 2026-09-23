@@ -33,7 +33,7 @@ import {
 } from "../hrm/leave.ts";
 import { createProcessTemplate, openProcess, upsertProcessTemplateStep } from "../hrm/processes.ts";
 import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-requests.ts";
-import { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
+import { actOnInboxItem, countInbox, InboxError, listInbox, type InboxSourceNotice } from "./registry.ts";
 import { writeNotification } from "./adapters/notification.ts";
 import "./index.ts";
 
@@ -305,6 +305,99 @@ test("notices: unread rows surface as items and mark-read completes in place", {
       select read_at::text as read_at from notifications where org_id = ${org.orgId} and user_id = ${userId}
     `)).rows[0]!;
     assert.ok(row.read_at !== null, "mark-read stamps the row the route reads");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("OM-10: an actor without leave access loads the leave leg with no own items and no crash", { skip: !DB }, async () => {
+  // Tom Okafor / Priya Nair shape: HRM is on, the actor holds no
+  // hrm.leave.* grant and has no linked employment. Before the fix the
+  // own leg called myLeaveRequests unconditionally and its named refusal
+  // blanked the whole inbox; now the leg contributes zero items.
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const actorId = await createScratchUser(org.orgId, "Inbox Approver No Leave", "inbox_no_leave");
+    const ctx = { orgId: org.orgId, actorId, asOf: nowIso() };
+    const notices: InboxSourceNotice[] = [];
+    const items = await listInbox(ctx, { kinds: ["hrm_leave_request"], notices });
+    assert.deepEqual(items, [], "an ineligible actor gets zero leave items, not an exception");
+    assert.deepEqual(notices, [], "a skipped leg is not a failure: no notice either");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("OM-10: the approver leg still shows gates addressed to an approver who lacks hrm.leave.request", { skip: !DB }, async () => {
+  // The own-leg gate must not take the approver leg with it: an approver
+  // with NO hrm grants at all still sees leave gates assigned to them,
+  // and sees no own-draft items.
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const workerId = await createScratchUser(org.orgId, "Inbox Leave Worker", "inbox_leave_worker");
+    const approverId = await createScratchUser(org.orgId, "Inbox Leave Approver", "inbox_leave_approver");
+    await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage"]);
+    const workerParty = await linkPerson(org.orgId, workerId, "Inbox Leave Worker");
+    await linkPerson(org.orgId, approverId, "Inbox Leave Approver");
+    const employmentId = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
+    const type = await createLeaveType({ orgId: org.orgId, actorId: workerId, code: "VAC", name: "Vacation", paid: true, valueCrossing: "payout" });
+    await createLeavePolicy({
+      orgId: org.orgId, actorId: workerId, leaveTypeId: type.id,
+      appliesTo: { employer_subsidiary_id: null, department_id: null },
+      accrualRule: { kind: "per_year", hours: "120" },
+      carryoverRule: { kind: "none" }, minimumNoticeDays: 0, effectiveFrom: "2020-01-01",
+    });
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+      assignees: [{ type: "user", userId: approverId }],
+      mode: "any",
+    });
+    const draft = await fileLeaveRequest({
+      orgId: org.orgId, actorId: workerId, employmentId, leaveTypeId: type.id,
+      startsOn: "2026-07-06", endsOn: "2026-07-06", hours: "8", reason: "rest",
+    });
+    await submitLeaveRequest({ orgId: org.orgId, actorId: workerId, requestId: draft.id });
+
+    const ctx = { orgId: org.orgId, actorId: approverId, asOf: nowIso() };
+    const items = await listInbox(ctx, { kinds: ["hrm_leave_request"] });
+    const gates = items.filter((i) => i.source.kind === "hrm_leave_request_gate");
+    assert.equal(gates.length, 1, "the addressed gate surfaces without any hrm grant");
+    assert.ok(
+      items.every((i) => i.source.kind === "hrm_leave_request_gate"),
+      "no own-draft items leak to an actor with no self-service eligibility",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("OM-10: an HR-eligible employee with a draft still sees it in the leave leg", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const workerId = await createScratchUser(org.orgId, "Inbox Draft Worker", "inbox_draft_worker");
+    await grant(org.orgId, workerId, ["hrm.leave.request", "hrm.leave.manage"]);
+    const workerParty = await linkPerson(org.orgId, workerId, "Inbox Draft Worker");
+    const employmentId = await mkEmployment(org.orgId, workerParty, org.subsidiaryId);
+    const type = await createLeaveType({ orgId: org.orgId, actorId: workerId, code: "VAC", name: "Vacation", paid: true, valueCrossing: "payout" });
+    await createLeavePolicy({
+      orgId: org.orgId, actorId: workerId, leaveTypeId: type.id,
+      appliesTo: { employer_subsidiary_id: null, department_id: null },
+      accrualRule: { kind: "per_year", hours: "120" },
+      carryoverRule: { kind: "none" }, minimumNoticeDays: 0, effectiveFrom: "2020-01-01",
+    });
+    const draft = await fileLeaveRequest({
+      orgId: org.orgId, actorId: workerId, employmentId, leaveTypeId: type.id,
+      startsOn: "2026-09-06", endsOn: "2026-09-06", hours: "8", reason: "rest",
+    });
+
+    const ctx = { orgId: org.orgId, actorId: workerId, asOf: nowIso() };
+    const items = await listInbox(ctx, { kinds: ["hrm_leave_request"] });
+    const own = items.filter((i) => i.source.kind === "hrm_leave_request");
+    assert.equal(own.length, 1, "the eligible employee still sees their draft");
+    assert.equal(own[0]!.source.id, draft.id);
   } finally {
     await dropScratchOrg(org.orgId);
   }

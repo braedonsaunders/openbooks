@@ -251,7 +251,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'import-statement-picker': { props: ['accounts', 'placeholder', 'selectLabel'] },
   'import-wizard': { props: [] },
   'in-nav-cell': { props: ['label', 'shown'] },
-  'inbox-task-list': { props: ['actedLabel', 'delegatePlaceholder', 'openLabel', 'rows', 'users'] },
+  'inbox-task-list': { props: ['actedLabel', 'delegatePlaceholder', 'notices', 'openLabel', 'rows', 'users'] },
   'insights-dashboard-builder': { props: ['availableCards', 'canCreate', 'canPublish', 'cards', 'dashboard', 'pinned'] },
   'insights-tabs': { props: ['active'] },
   'inventory-action-drawer': { props: ['accounts', 'items', 'stockLocations'] },

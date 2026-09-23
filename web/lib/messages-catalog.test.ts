@@ -3799,6 +3799,32 @@ test('change-request approval rows carry a translated kind label in every locale
   }
 })
 
+test('inbox source-unavailable notices ship translated in every locale', () => {
+  // OM-10: one refusing or failing source names itself beside the surviving
+  // rows through this key (the area label inside {source}, the source's own
+  // message inside {reason}). An absent key falls back to English inside an
+  // otherwise translated inbox — the same silent shape as the v0.1.0-alpha.22
+  // unregistered-namespace defect. The pinned key list is the per-area count:
+  // adding notice copy here means translating it in all seven locales.
+  const keys = ['inbox.sourceUnavailable'] as const
+  const source = flattenCatalog('en')
+  for (const key of keys) {
+    const english = source.get(key)
+    assert.ok(english && english.trim(), `English source is missing ${key}`)
+  }
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const catalog = flattenCatalog(locale)
+    for (const key of keys) {
+      const value = catalog.get(key)
+      assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+      assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+      for (const token of ['{source}', '{reason}']) {
+        assert.ok(value.includes(token), `${locale} ${key} must keep the ${token} interpolation`)
+      }
+    }
+  }
+})
+
 test('budget approval rows carry a translated kind label in every locale', () => {
   // The approvals inbox renders pending budgets with a kinds label
   // (F-t13-005); without one the row falls back to the raw
