@@ -25,6 +25,11 @@ registerHooks({
           const s = globalThis.__complianceRecordSupersedeState;
           return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
         }
+        export async function getAuthz() {
+          const s = globalThis.__complianceRecordSupersedeState;
+          return { user: { orgId: s.orgId, id: s.actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null };
+        }
+        export function can() { return true }
       `);
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
     return next(specifier, context);
@@ -34,6 +39,8 @@ const { db, withBypassContext, withOrgContext } = await import("@openbooks/engin
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { POST } = await import("./route.ts");
+const { PATCH } = await import("./[id]/route.ts");
+const { createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture() {
@@ -143,16 +150,55 @@ test("record creation refuses another vendor's certificate as supersedesId", { s
   }
 });
 
-test("record creation still files a genuine renewal", { skip: !DB }, async () => {
+test("a renewal files as pending and leaves the prior certificate in force", { skip: !DB }, async () => {
   const { org, partyId, requirementId, priorId } = await fixture();
   try {
     const response = await post({
       partyId, requirementId, effectiveFrom: "2026-07-20", expiresOn: "2026-10-15",
       supersedesId: priorId,
     });
-    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
+    const json = (await response.json().catch(() => null)) as { id?: string } | null;
+    assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(await recordCount(org.orgId), 3);
+    // The still-valid certificate is NOT superseded by an unattested upload.
+    assert.equal(await recordStatus(priorId), "active");
+    const link = (await withBypassContext(() =>
+      db.execute<{ supersedes_id: string | null }>(
+        sql`select supersedes_id from compliance_records where id = ${json!.id!}`,
+      ))).rows[0]!.supersedes_id;
+    assert.equal(link, priorId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("verifying the renewal supersedes the prior certificate", { skip: !DB }, async () => {
+  const { org, partyId, requirementId, priorId } = await fixture();
+  try {
+    const created = (await (await post({
+      partyId, requirementId, effectiveFrom: "2026-07-20", expiresOn: "2026-10-15",
+      supersedesId: priorId,
+    })).json()) as { id: string };
+    // Attestation is someone else's duty: the uploader cannot verify.
+    state.actorId = await withBypassContext(() => createScratchUser(org.orgId, "Verifier", "compliance_manager"));
+    const response = await withOrgContext(state.orgId, () =>
+      PATCH(
+        new Request(`http://records.test/api/compliance/records/${created.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "verify" }),
+        }),
+        { params: Promise.resolve({ id: created.id }) },
+      ),
+    );
+    assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(await recordStatus(priorId), "superseded");
+    assert.equal(await recordStatus(created.id), "active");
+    const forward = (await withBypassContext(() =>
+      db.execute<{ superseded_by_id: string | null }>(
+        sql`select superseded_by_id from compliance_records where id = ${priorId}`,
+      ))).rows[0]!.superseded_by_id;
+    assert.equal(forward, created.id);
   } finally {
     await dropScratchOrg(org.orgId);
   }

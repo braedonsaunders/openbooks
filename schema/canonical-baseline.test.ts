@@ -573,6 +573,12 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // event: concurrent corrections lost one silently (0281 adds the
     // required revision plus the append-only correction evidence table).
     "0281_hrm_exit_record_revision_and_audit.sql",
+    // A pending renewal immediately superseded the still-valid certificate
+    // it named, an unmatched renewal link was silently ignored, certificate
+    // PATCH had no concurrency fence, and one waive holder requested and
+    // approved an exception (0282 adds the pending renewal link, the
+    // revision counters, and the waiver requester).
+    "0282_compliance_renewal_revision_and_approval.sql",
     // Manual monthly cashflow schedules stepped from the horizon's Sunday
     // with no persisted payment anchor, so moving asOf rephased them (0288
     // backfills anchorDate onto manual_recurring categories missing it).
