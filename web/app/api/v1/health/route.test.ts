@@ -3,8 +3,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // Health wiring for the PDF renderer: the readiness payload reports renderer
-// availability (with the remedy when unavailable) without gating routing
-// readiness on it. db + worker heartbeat are mocked; the pdf probe and the
+// availability without gating routing readiness on it. The route is
+// unauthenticated, so it never discloses the executable path or remedy. db + worker heartbeat are mocked; the pdf probe and the
 // route are REAL.
 
 const mockSources = new Map<string, string>([
@@ -65,19 +65,18 @@ async function dependencies(): Promise<{ status: number; body: Record<string, un
 
 test('a present executable reports the renderer ready', async () => {
   await withEnv(
-    { NODE_ENV: 'test', SESSION_SECRET: 'health-test-secret', PUPPETEER_EXECUTABLE_PATH: '/bin/true' },
+    { NODE_ENV: 'test', SESSION_SECRET: 'health-test-secret', PUPPETEER_EXECUTABLE_PATH: process.execPath },
     async () => {
       const { status, body } = await dependencies()
       assert.equal(status, 200)
       assert.deepEqual((body.dependencies as Record<string, string>).pdfRenderer, 'ok')
-      const renderer = body.renderer as { available: boolean; executablePath: string; message: string }
-      assert.equal(renderer.available, true)
-      assert.equal(renderer.executablePath, '/bin/true')
+      assert.equal(body.renderer, undefined, 'no renderer detail on the unauthenticated route')
+      assert.ok(!JSON.stringify(body).includes(process.execPath), 'the executable path is never disclosed')
     },
   )
 })
 
-test('a missing executable reports unavailable with the remedy but stays routable', async () => {
+test('a missing executable reports unavailable but stays routable', async () => {
   await withEnv(
     {
       NODE_ENV: 'test',
@@ -91,11 +90,8 @@ test('a missing executable reports unavailable with the remedy but stays routabl
       assert.equal(status, 200)
       assert.equal(body.status, 'ok')
       assert.deepEqual((body.dependencies as Record<string, string>).pdfRenderer, 'unavailable')
-      const renderer = body.renderer as { available: boolean; executablePath: string; message: string }
-      assert.equal(renderer.available, false)
-      assert.equal(renderer.executablePath, '/nonexistent-dir-7c2/chromium')
-      assert.ok(renderer.message.includes('/nonexistent-dir-7c2/chromium'), 'readiness names the path it tried')
-      assert.ok(renderer.message.includes('PUPPETEER_EXECUTABLE_PATH'), 'readiness names the remedy')
+      assert.equal(body.renderer, undefined, 'no renderer detail on the unauthenticated route')
+      assert.ok(!JSON.stringify(body).includes('/nonexistent-dir-7c2'), 'the executable path is never disclosed')
     },
   )
 })
