@@ -2819,6 +2819,7 @@
       "initialAmountPercent": "初期金額 %",
       "deferredAccountId": "繰延収益勘定",
       "recognizedAccountId": "認識済み収益勘定",
+      "version": "バージョン",
       "isForecast": "予測ルール",
       "itemId": "品目",
       "unitPrice": "単価",
@@ -3081,6 +3082,7 @@
       "reviewMonths": "レビュー周期（月）"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "収益で既に使用されているルールの方法、期間、日付、オフセット、割合、または勘定科目を変更すると新しいバージョンが作成され、既存の履行義務は旧バージョンを保持します。",
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
       "basisCapAmountPerPeriod": "1給与期間にこの金額に達したらこの項目を停止します。",
       "basisCapAmountPerYear": "課税年度にこの金額に達したらこの項目を停止します。CRAのマネー・パーチェス限度額または米国402(g)の選択的繰延限度額が該当します。期首残高を含む当年確定済み金額も算入されます。",

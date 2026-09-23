@@ -3144,8 +3144,8 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // CTRL-01 (+7) + UX-19 (+3) + g22 UX-17 (+5 redirect/home keys): 4084 = 4069 + 15, all 7 locales.
   // TZ1 (+5 business-time-zone keys: settings.organization timeZone/timeZoneHint/
   // timeZonePlaceholder, wizard.company.timeZone, wizard.review.timeZone):
-  // 4089 = 4084 + 5, all 7 locales.
-  assert.equal(wanted.length, 4089, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // 4091 = 4084 + 5 (TZ1) + 2 (RM3 recognition-rule versioning), all 7 locales.
+  assert.equal(wanted.length, 4091, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3305,6 +3305,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // shared identifiers. Anything pasted back in English outside this
   // list fails.
   const ADMIN_I2_COGNATES = new Set([
+    // RM3: "Version" is the German term for a rule version, identical to English.
+    'de:admin.setup.fields.version',
     // HR-17: Feedback is the German product term (Duden loanword), kept as in English.
     'de:admin.features.hrmFeedback.title',
     'de:admin.users.linkPersonLabel',
@@ -3524,10 +3526,10 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // m23_insights_autosave/F1: 4069 + rehash for the 6 flow-builder keyboard
   // connect keys (builder.inspector.connect*), translated in all 7 locales.
   // CTRL-01 + UX-19 + UX-17: 4084 + rehash.
-  // TZ1: 4089 + rehash for the 5 business-time-zone keys, translated in
+  // TZ1: 4091 + rehash for the 5 business-time-zone keys, translated in
   // all 7 locales.
-  const ADMIN_I2_SOURCE_COUNT = 4089
-  const ADMIN_I2_SOURCE_HASH = '51e6aa6130e722ab51615ae99371a2dbd9b6ddd38bba7c738c779b89fc1aa8dc'
+  const ADMIN_I2_SOURCE_COUNT = 4091
+  const ADMIN_I2_SOURCE_HASH = 'dd4c268cf2df6eb667d4c7252b52dffd99596c8b86013860ae8b747bfb3022cc'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

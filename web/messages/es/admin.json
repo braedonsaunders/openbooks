@@ -2702,6 +2702,7 @@
       "initialAmountPercent": "Importe inicial %",
       "deferredAccountId": "Cuenta de ingresos diferidos",
       "recognizedAccountId": "Cuenta de ingresos reconocidos",
+      "version": "Versión",
       "isForecast": "Regla de previsión",
       "itemId": "Artículo",
       "unitPrice": "Precio unitario",
@@ -2968,6 +2969,7 @@
       "reviewMonths": "Cadencia (meses)"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "Cambiar el método, el plazo, las fechas, los desfases, el porcentaje o las cuentas de una regla ya utilizada en ingresos crea una nueva versión; las obligaciones existentes conservan la versión anterior.",
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
       "lienWaiverEnforcement": "Bloquear significa que una factura de esta clase no puede pagarse hasta que una renuncia firmada la cubra.",
       "defaultLienWaiverType": "Preseleccionado al crear una renuncia para estas contrapartes.",

@@ -2790,6 +2790,7 @@
       "initialAmountPercent": "% do valor inicial",
       "deferredAccountId": "Conta de receita diferida",
       "recognizedAccountId": "Conta de receita reconhecida",
+      "version": "Versão",
       "isForecast": "Regra de previsão",
       "itemId": "Item",
       "unitPrice": "Preço unitário",
@@ -3013,6 +3014,7 @@
       "reviewMonths": "Cadência (meses)"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "Alterar o método, o prazo, as datas, os deslocamentos, o percentual ou as contas de uma regra já usada na receita cria uma nova versão; as obrigações existentes mantêm a versão anterior.",
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
       "lienWaiverEnforcement": "Bloquear significa que uma fatura desta classe não pode ser paga até que uma quitação assinada a cubra.",
       "defaultLienWaiverType": "Pré-selecionado ao criar uma quitação para uma dessas contrapartes.",
