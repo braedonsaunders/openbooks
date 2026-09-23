@@ -59,6 +59,16 @@ test('the loader resolves the employer name and wires it through the drawer', ()
   assert.match(sections, /employer: labels\.offerEmployer/, 'the employer label reaches the island')
 })
 
+test('the accept dialog pins the refusal instead of swallowing it', () => {
+  // Accept rides the shared act(): the 422 NO_FLOW body renders through
+  // readApiErrorMessage into the role=alert slot — the operator reads the
+  // remedy, never a parse error or a silent toast.
+  const island = actions.split('OfferActionsIsland')[1]!.split('HR-18 depth islands')[0]!
+  assert.match(island, /action: 'accept'/, 'Accept and hire posts through the shared path')
+  assert.match(island, /readApiErrorMessage\(res, labels\.failed\)/, 'the refusal message renders intact')
+  assert.match(island, /role="alert"/, 'the pinned refusal is an accessible alert')
+})
+
 test('the employer field label ships in every locale', () => {
   for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
     const catalog = JSON.parse(
