@@ -14,7 +14,7 @@ import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts
 import { runDocumentVersionedTransaction } from "../../engine/src/records/document-edit-policy.ts";
 import { canonicalDecimal } from './exact-decimal'
 import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
-import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import { acquireFeatureGateLock, checkProjectsWriteEnabled, isFeatureEnabled } from './features'
 import { createProjectCharge } from './project-charges'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
@@ -232,6 +232,14 @@ export async function updateTicketHeader(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx) => {
+      // Re-homing the ticket onto a project attaches new Projects
+      // disable-blockers, so a disable racing this edit must refuse one
+      // side or the other. Checked before the Field Tickets recheck (which
+      // also fails once Projects goes off, via the parent gate) so the
+      // refusal names the gate.
+      if (patch.projectId != null && !(await checkProjectsWriteEnabled(orgId, tx))) {
+        throw new FieldTicketError('Projects feature is disabled')
+      }
       await assertFieldTicketsEnabledTx(tx, orgId)
       const doc = await loadHeader(orgId, ticketId)
       if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
@@ -392,8 +400,16 @@ export async function saveCrewGrid(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx) => {
-      await assertFieldTicketsEnabledTx(tx, orgId)
       const doc = await loadHeader(orgId, ticketId)
+      // Crew hours land as draft time entries carrying the ticket's project
+      // — new Projects disable-blockers — so a disable racing this save
+      // must refuse one side or the other. Checked before the Field Tickets
+      // recheck (which also fails once Projects goes off, via the parent
+      // gate) so the refusal names the gate instead of a bare 404.
+      if (doc.project_id && !(await checkProjectsWriteEnabled(orgId, tx))) {
+        throw new FieldTicketError('Projects feature is disabled')
+      }
+      await assertFieldTicketsEnabledTx(tx, orgId)
       if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
         throw new FieldTicketNotFoundError('Ticket not found')
@@ -569,13 +585,13 @@ export async function addTicketLine(
 ): Promise<void> {
   await withOrg(orgId, async () => runDocumentVersionedTransaction<
     TicketTransaction,
-    { status: string; updatedAt: string; subsidiaryId: string | null },
+    { status: string; updatedAt: string; subsidiaryId: string | null; projectId: string | null },
     void
   >({
     expectedRevision,
     transaction: (work) => db.transaction(work),
-    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null }>(sql`
-      select d.status, d.subsidiary_id as "subsidiaryId",
+    lock: async (tx) => (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; projectId: string | null }>(sql`
+      select d.status, d.subsidiary_id as "subsidiaryId", d.project_id as "projectId",
              ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "updatedAt"
         from documents d
         join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
@@ -583,6 +599,13 @@ export async function addTicketLine(
        for update of d, ft
     `)).rows[0] ?? null,
     mutate: async (tx, locked) => {
+      // Item lines on a project ticket feed project billing, so a disable
+      // racing this insert must refuse one side or the other. Checked
+      // before the Field Tickets recheck (which also fails once Projects
+      // goes off, via the parent gate) so the refusal names the gate.
+      if (locked.projectId && !(await checkProjectsWriteEnabled(orgId, tx))) {
+        throw new FieldTicketError('Projects feature is disabled')
+      }
       await assertFieldTicketsEnabledTx(tx, orgId)
       if (locked.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
       if (!subsidiaryScopeAllows(allowedSubsidiaryIds, locked.subsidiaryId)) {
@@ -625,6 +648,11 @@ async function addTicketLineUnlocked(
   const quantity = exactTicketQuantity(input.quantity)
 
   if (!doc.project_id) throw new FieldTicketError('Choose a project before adding items')
+  // Item lines on a project ticket feed project billing, so a disable
+  // racing this insert must refuse one side or the other.
+  if (!(await checkProjectsWriteEnabled(orgId, tx))) {
+    throw new FieldTicketError('Projects feature is disabled')
+  }
   if (input.equipmentUnitId) {
     // The drawer already hides the picker. Turning Equipment off must also
     // refuse a new link here so a crafted add-line cannot write

@@ -116,8 +116,8 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:features', `export async function isFeatureEnabled() { return true }\n     export async function acquireFeatureGateLock() {}`],
-  ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }`],
+  ['mock:features', `export async function isFeatureEnabled() { return true }\n     export async function acquireFeatureGateLock() {}\n     export async function checkProjectsWriteEnabled() { return true }`],
+  ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }\nexport async function acquireOrgFeatureGateLock() {}\nexport function featureGateLockKey(orgId) { return \`openbooks:feature-gate:\${orgId}\` }`],
   [
     'mock:signing',
     `export async function sendTicketForSignature() {
