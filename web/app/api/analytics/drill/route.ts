@@ -4,9 +4,25 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { serializeLedgerDecimal } from "./ledger-decimal";
+import type { SQL } from "drizzle-orm";
 
 export const runtime = "nodejs";
+
+/**
+ * Scope predicate for an optionally-joined subsidiary column: legs with no
+ * joined record stay (scoped by their own entity filters); legs WITH a
+ * record require it visible. The house helper cannot express "missing row"
+ * (null id) versus "null column", and a null-subsidiary source document must
+ * not read as org-wide the way a sourceless manual journal does.
+ */
+function joinedSubsidiaryScope(id: SQL, sub: SQL, allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``;
+  const ids = [...allowed];
+  if (ids.length === 0) return sql` and false`;
+  return sql`and (${id} is null or ${sub} = any(${`{${ids.join(",")}}`}::uuid[]))`;
+}
 
 /**
  * Generic analytics drill-down, with one endpoint for every dashboard:
@@ -36,6 +52,19 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
 
+  // The same legal-entity scope as the parent aggregates (spend-velocity and
+  // customer-intelligence narrow every query through the caller's subsidiary
+  // list): journal legs by their line and entry subsidiary, document-sourced
+  // legs additionally by a visible source document. Detail AND every summary
+  // query carry the scope — a restricted caller with a known shared id sees
+  // no hidden lines, names, memos, amounts or totals.
+  const allowed = gate.allowedSubsidiaryIds;
+  const lineScope = subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed);
+  const entryScope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowed);
+  const docJoinScope = joinedSubsidiaryScope(sql`d.id`, sql`d.subsidiary_id`, allowed);
+  const docScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed);
+  const srcEntryScope = joinedSubsidiaryScope(sql`e.id`, sql`e.subsidiary_id`, allowed);
+
   if (account) {
     const [detail, monthly, byParty, agg] = await Promise.all([
       (db.execute(sql`
@@ -49,6 +78,9 @@ export async function GET(req: Request) {
         left join parties p on p.id = l.party_id and p.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
+          ${docJoinScope}
         order by e.posting_date desc, abs(l.amount) desc
         limit 1000
       `)),
@@ -58,6 +90,8 @@ export async function GET(req: Request) {
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
         group by 1 order by 1
       `)),
       (db.execute(sql`
@@ -67,6 +101,8 @@ export async function GET(req: Request) {
         left join parties p on p.id = l.party_id and p.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
         group by 1 order by abs(sum(l.amount)) desc
         limit 15
       `)),
@@ -76,6 +112,8 @@ export async function GET(req: Request) {
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
       `)),
     ]);
     return NextResponse.json({
@@ -108,6 +146,8 @@ export async function GET(req: Request) {
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
+        ${docScope}
+        ${srcEntryScope}
       order by coalesce(d.document_date, d.posting_date) desc, abs(d.total) desc
       limit 1000
     `)),
@@ -117,6 +157,7 @@ export async function GET(req: Request) {
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
+        ${docScope}
       group by 1 order by 1
     `)),
     (db.execute(sql`
@@ -125,6 +166,7 @@ export async function GET(req: Request) {
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
+        ${docScope}
       group by 1 order by sum(abs(d.total)) desc
     `)),
     (db.execute(sql`
@@ -133,6 +175,7 @@ export async function GET(req: Request) {
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
         and coalesce(d.document_date, d.posting_date) >= ${from}
         and coalesce(d.document_date, d.posting_date) <= ${to}
+        ${docScope}
     `)),
   ]);
   return NextResponse.json({
