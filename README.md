@@ -205,6 +205,15 @@ ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
 Open <http://localhost:4780>. Credentials remain in `.env.compose`, which is
 created with mode `600` and ignored by Git.
 
+A fresh installation has no platform super administrator, and the platform
+console (`/platform`) requires one. To reach it, set `PLATFORM_ADMIN_EMAIL`
+to the first administrator's address in the one-shot bootstrap container's
+environment before the first bootstrap: when no active super administrator
+exists anywhere in the installation, that existing user is granted platform
+super-admin once (logged, audited). Later bootstraps ignore the variable,
+and further grants are made from the console itself. If it names someone who
+does not exist, bootstrap refuses by name.
+
 At the first administrator sign-in, OpenBooks opens a guided company setup for
 identity, fiscal calendar, industry chart of accounts, and authoritative feature
 switches. Setup can be deferred without being recorded as complete and resumed

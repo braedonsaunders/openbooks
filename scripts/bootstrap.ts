@@ -11,6 +11,9 @@
  *      periods, and the built-in RBAC roles.
  *   5. Upserts the initial admin user from ADMIN_EMAIL / ADMIN_NAME /
  *      ADMIN_PASSWORD (skipped when unset).
+ *   6. Grants platform super-admin from PLATFORM_ADMIN_EMAIL when set and no
+ *      active super administrator exists anywhere in the installation (strict
+ *      one-time, audited; refused by name when the address names no user).
  *
  * Run: npx tsx scripts/bootstrap.ts   (or the esbuild bundle in the image)
  */
@@ -2327,6 +2330,109 @@ async function seedAdmin(orgId: string): Promise<void> {
   }
 }
 
+/**
+ * First platform super-admin for a fresh self-hosted install. The platform
+ * console authorizes on users.is_super_admin, and its only grant path is the
+ * console itself, which already requires a super administrator — so a fresh
+ * install could never reach it. When PLATFORM_ADMIN_EMAIL names an existing
+ * user and no active super administrator exists anywhere in the
+ * installation, that user is promoted; the grant is audited and logged.
+ * It is a strict no-op once any active super administrator exists (later
+ * grants are governed by the console) and when PLATFORM_ADMIN_EMAIL is
+ * unset. The transaction lock serializes concurrent bootstraps so two
+ * cannot both grant.
+ */
+async function ensureFirstPlatformAdmin(): Promise<void> {
+  const configured = env.PLATFORM_ADMIN_EMAIL?.trim();
+  if (!configured) return;
+  const email = configured.toLowerCase();
+  const granted = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('openbooks:first-platform-admin', 0))`);
+    const existing = (await tx.execute<{ id: string }>(sql`
+      select id from users where is_super_admin and is_active limit 1
+    `));
+    if (existing.rows.length > 0) return false;
+    const candidates = (await tx.execute<{
+      id: string;
+      org_id: string;
+      email: string;
+      is_active: boolean;
+      is_super_admin: boolean;
+    }>(sql`
+      select id, org_id, email, is_active, is_super_admin
+        from users
+       where lower(email) = ${email}
+    `));
+    const active = candidates.rows.filter((row) => row.is_active);
+    if (active.length === 0) {
+      const state =
+        candidates.rows.length > 0 ? "exists but is inactive" : "does not exist";
+      const remedy =
+        candidates.rows.length > 0
+          ? "reactivate that user"
+          : "set PLATFORM_ADMIN_EMAIL to the seeded administrator (ADMIN_EMAIL) or create the user first";
+      throw new Error(
+        `[bootstrap] PLATFORM_ADMIN_EMAIL names ${configured}, but that user ${state}; ` +
+          `${remedy}, then re-run bootstrap`,
+      );
+    }
+    if (active.length > 1) {
+      throw new Error(
+        `[bootstrap] PLATFORM_ADMIN_EMAIL names ${configured}, but that address belongs to ` +
+          `${active.length} active users in different organizations; keep exactly one active user ` +
+          `with that address, then re-run bootstrap`,
+      );
+    }
+    const target = active[0]!;
+    const promoted = (await tx.execute<{ id: string }>(sql`
+      update users
+         set is_super_admin = true, updated_at = now(), updated_by = ${target.id}
+       where id = ${target.id} and not is_super_admin and is_active
+         and not exists (select 1 from users where is_super_admin and is_active)
+      returning id
+    `));
+    if (promoted.rows.length === 0) {
+      // A concurrent bootstrap granted first: the no-op condition now holds,
+      // so this is the benign lost race rather than a dropped write.
+      const raced = (await tx.execute<{ id: string }>(sql`
+        select id from users where is_super_admin and is_active limit 1
+      `));
+      if (raced.rows.length > 0) return false;
+      throw new Error(
+        `[bootstrap] PLATFORM_ADMIN_EMAIL grant for ${configured} affected no rows; re-run bootstrap`,
+      );
+    }
+    const audit = (await tx.execute<{ id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${target.org_id},
+        'users',
+        ${target.id},
+        'update',
+        ${JSON.stringify({
+          source: "bootstrap",
+          reason: `Granted platform super-admin access on first bootstrap via PLATFORM_ADMIN_EMAIL (${configured})`,
+          before: { is_super_admin: false },
+          after: { is_super_admin: true },
+        })}::jsonb,
+        ${target.id}
+      )
+      returning id
+    `));
+    if (audit.rows.length !== 1) {
+      throw new Error(
+        `[bootstrap] PLATFORM_ADMIN_EMAIL grant for ${configured} was not audited; re-run bootstrap`,
+      );
+    }
+    return true;
+  });
+  if (granted) {
+    console.log(
+      `[bootstrap] ${configured} granted platform super-admin via PLATFORM_ADMIN_EMAIL (no active super administrator existed)`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const precreated = precreatedRolesEnabled(env);
   const runtimeConfig = runtimeDatabaseConfig();
@@ -2435,6 +2541,7 @@ async function main(): Promise<void> {
         await provisionOrganizationDefaults(orgId);
       }
       await seedAdmin(primaryOrgId);
+      await ensureFirstPlatformAdmin();
       if (env.OPENBOOKS_TEST_OWNERSHIP_TRANSFER === "1" && !runtimeConfig) {
         throw new Error(
           "[bootstrap] OPENBOOKS_TEST_OWNERSHIP_TRANSFER requires OPENBOOKS_RUNTIME_DB_URL",

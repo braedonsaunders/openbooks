@@ -36,7 +36,7 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
   const ownerPool = new pg.Pool({ connectionString: url(owner), max: 1 });
   const runtimePool = new pg.Pool({ connectionString: url(runtime), max: 1 });
   const bootstrap = async (overrides: Record<string, string> = {}) => {
-    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OPENBOOKS_") && !key.startsWith("ADMIN_") && !key.startsWith("ORG_")));
+    const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("OPENBOOKS_") && !key.startsWith("ADMIN_") && !key.startsWith("ORG_") && !key.startsWith("PLATFORM_")));
     return exec(process.execPath, ["--no-concurrent-sparkplug", "--no-concurrent-recompilation", "--import", "tsx", "scripts/bootstrap.ts"], {
       cwd: root, maxBuffer: 4 * 1024 * 1024, timeout: 150_000,
       env: { ...env, NODE_ENV: "production", OPENBOOKS_BOOTSTRAP: "1", OPENBOOKS_PRECREATED_ROLES: "1",
@@ -73,13 +73,24 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
     } finally { await extensionAdmin.end(); }
 
     await t.test("fresh installation runs migrations, seeds, and governed queries with separate constrained logins", async () => {
-      const result = await bootstrap();
+      const result = await bootstrap({ PLATFORM_ADMIN_EMAIL: "hosted@example.test" });
       assert.match(result.stdout, /pre-created roles verified/);
       assert.match(result.stdout, /\[bootstrap\] done/);
       await ownerPool.query("select set_config('app.bypass_rls','on',false)");
       const seeded = await ownerPool.query("select (select count(*)::int from orgs) as orgs, (select count(*)::int from users where email='hosted@example.test') as admins, (select count(*)::int from _applied_migrations) as migrations");
       assert.equal(seeded.rows[0].orgs, 1); assert.equal(seeded.rows[0].admins, 1);
       assert.ok(seeded.rows[0].migrations > 100);
+      // A fresh install has no other path to /platform: the seeded
+      // administrator named by PLATFORM_ADMIN_EMAIL is its first platform
+      // operator, and exactly that user holds the flag.
+      assert.match(result.stdout, /hosted@example\.test granted platform super-admin via PLATFORM_ADMIN_EMAIL/);
+      assert.deepEqual((await ownerPool.query("select email from users where is_super_admin and is_active")).rows, [{ email: "hosted@example.test" }]);
+      const grantAudit = await ownerPool.query("select action, actor_id, row_id, changes from audit_log where table_name='users'");
+      assert.equal(grantAudit.rows.length, 1);
+      assert.equal(grantAudit.rows[0].action, "update");
+      assert.match(String(grantAudit.rows[0].changes.reason), /PLATFORM_ADMIN_EMAIL/);
+      assert.equal(grantAudit.rows[0].changes.before.is_super_admin, false);
+      assert.equal(grantAudit.rows[0].changes.after.is_super_admin, true);
       const ownerOnly = await ownerPool.query("select pg_get_userbyid(relowner) as owner from pg_class where oid='public.orgs'::regclass");
       assert.equal(ownerOnly.rows[0].owner, owner);
       assert.deepEqual((await runtimePool.query("select id from orgs")).rows, []);
@@ -89,7 +100,12 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
     await t.test("bootstrap retry preserves migration digests and seed identities", async () => {
       const before = await ownerPool.query("select filename, sha256, applied_at from _applied_migrations order by filename");
       const orgs = await ownerPool.query("select id from orgs order by id");
-      await bootstrap();
+      // A different address on a retry is NOT promoted: an operator already
+      // exists, so the console governs grants from here.
+      const retry = await bootstrap({ ADMIN_EMAIL: "second@example.test", PLATFORM_ADMIN_EMAIL: "second@example.test" });
+      assert.doesNotMatch(retry.stdout, /granted platform super-admin/);
+      assert.deepEqual((await ownerPool.query("select email from users where is_super_admin and is_active order by email")).rows, [{ email: "hosted@example.test" }]);
+      assert.deepEqual((await ownerPool.query("select email, is_super_admin from users where email='second@example.test'")).rows, [{ email: "second@example.test", is_super_admin: false }]);
       assert.deepEqual((await ownerPool.query("select filename, sha256, applied_at from _applied_migrations order by filename")).rows, before.rows);
       assert.deepEqual((await ownerPool.query("select id from orgs order by id")).rows, orgs.rows);
     });
@@ -154,6 +170,20 @@ test("host-managed PostgreSQL installs, upgrades, and refuses broken permissions
       const migration = new URL(adminUrl!); migration.pathname = `/${managedDatabase}`;
       const result = await bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: migration.toString(), OPENBOOKS_RUNTIME_DB_URL: url(managedRole, managedDatabase) });
       assert.match(result.stdout, /\[bootstrap\] done/);
+      // Without PLATFORM_ADMIN_EMAIL a fresh install grants no one: today's
+      // behaviour is preserved and the console remains unreachable until an
+      // operator is granted through it.
+      assert.doesNotMatch(result.stdout, /granted platform super-admin/);
+      const managedPool = new pg.Pool({ connectionString: migration.toString(), max: 1 });
+      try {
+        await managedPool.query("select set_config('app.bypass_rls','on',false)");
+        assert.deepEqual((await managedPool.query("select email from users where is_super_admin and is_active")).rows, []);
+        // Naming a user that does not exist refuses by name with the remedy
+        // instead of granting no one, and the refused run grants nothing.
+        await assert.rejects(bootstrap({ OPENBOOKS_PRECREATED_ROLES: "0", OPENBOOKS_MIGRATION_DB_URL: migration.toString(), OPENBOOKS_RUNTIME_DB_URL: url(managedRole, managedDatabase), PLATFORM_ADMIN_EMAIL: "ghost@example.test" }),
+          (error: unknown) => /PLATFORM_ADMIN_EMAIL names ghost@example\.test.*does not exist.*ADMIN_EMAIL/.test((error as { stderr: string }).stderr));
+        assert.deepEqual((await managedPool.query("select email from users where is_super_admin and is_active")).rows, []);
+      } finally { await managedPool.end(); }
       const login = await admin.query("select rolcanlogin, rolsuper, rolcreaterole, rolbypassrls from pg_roles where rolname=$1", [managedRole]);
       assert.deepEqual(login.rows, [{ rolcanlogin: true, rolsuper: false, rolcreaterole: false, rolbypassrls: false }]);
     });
