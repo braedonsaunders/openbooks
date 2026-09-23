@@ -14,8 +14,9 @@ import { HrmPerformanceError } from "./errors.ts";
 import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import { createGoal } from "./goals.ts";
-import { getCycleDetail, getReviewDetail, listMyReviews } from "./performance-read.ts";
 import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
+import { getCycleDetail, getReviewDetail, listMyReviews } from "./performance-read.ts";
+import { getExitRecord, listExitRecords, recordExit } from "./exits.ts";
 
 /**
  * g11_performance_exits: legal-entity scope across the performance module
@@ -403,6 +404,59 @@ test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, asy
        where org_id = ${h.org.orgId} and kind = 'feedback'
          and context->>'fulfills_request_id' = ${request.id}`)).rows[0]!.n;
     assert.equal(count, "1");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+async function mkLeaver(
+  h: Harness,
+  label: string,
+  subsidiaryId: string,
+): Promise<{ employmentId: string }> {
+  // Versions are append-only evidence — tests never update them either —
+  // so a leaver is a fresh employment whose FIRST version is terminated,
+  // exactly like the neighbouring exits test seeds them.
+  const key = `leaver_${label.replace(/[^a-z0-9]+/gi, "_")}`;
+  const userId = await createScratchUser(h.org.orgId, `Leaver ${label}`, key);
+  const partyId = await linkPerson(h.org.orgId, userId);
+  const employmentId = await mkEmployment(h.org.orgId, partyId, subsidiaryId);
+  await mkVersion(h.org.orgId, employmentId, "2026-01-01", "terminated");
+  return { employmentId };
+}
+
+
+test("a restricted HR reads only the exit records they cover", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const leaverA = await mkLeaver(h, "leaver-a", h.org.subsidiaryId);
+    const leaverB = await mkLeaver(h, "leaver-b", h.subB);
+    const exitA = await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverA.employmentId,
+      reasonKind: "resignation", isVoluntary: true,
+    });
+    const exitB = await recordExit({
+      orgId: h.org.orgId, actorId: h.hrFull, employmentId: leaverB.employmentId,
+      reasonKind: "redundancy", isVoluntary: false,
+    });
+    // Cross-scope reads answer as missing, never as refused.
+    await assert.rejects(
+      getExitRecord({ orgId: h.org.orgId, actorId: h.hrA, exitId: exitB.id }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmPerformanceError);
+        assert.equal(e.code, "NOT_FOUND");
+        return true;
+      },
+    );
+    assert.equal((await getExitRecord({ orgId: h.org.orgId, actorId: h.hrA, exitId: exitA.id })).id, exitA.id);
+    assert.deepEqual(
+      (await listExitRecords({ orgId: h.org.orgId, actorId: h.hrA })).map((e) => e.id),
+      [exitA.id],
+    );
+    assert.deepEqual(
+      (await listExitRecords({ orgId: h.org.orgId, actorId: h.hrB })).map((e) => e.id),
+      [exitB.id],
+    );
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
