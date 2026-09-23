@@ -10,7 +10,8 @@ import {
   SANDBOX_CYCLE_BREAKERS,
   selfRefColumns,
 } from "./catalog.ts";
-import { CUSTOMIZATION_LAYER, runClone, type SandboxTier } from "./clone.ts";
+import { copyClonedFileObjects, CUSTOMIZATION_LAYER, listSandboxS3VersionIds, runClone, type SandboxTier } from "./clone.ts";
+import { deleteS3Blobs } from "../platform/file-storage.ts";
 import { neuterSandbox } from "../organization/sandbox-guard.ts";
 import { seedDefaultMaskingPolicies } from "./masking.ts";
 import { verifyCloneRls } from "./verify-rls.ts";
@@ -368,6 +369,16 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       masked,
       asOfPeriod,
     });
+    // S3-backed attachments live outside the row-copy transaction: copy the
+    // objects onto the rebased keys now that the rows exist. A copy failure
+    // marks the sandbox failed (catch below), never a ready sandbox whose
+    // cabinet 404s. Masked clones are a no-op here by construction — their
+    // rows carry the tombstone kind, never 's3'.
+    await copyClonedFileObjects({
+      productionOrgId: input.productionOrgId,
+      sandboxOrgId,
+      seed,
+    });
     await rebaseSandboxControlAccounts({
       productionOrgId: input.productionOrgId,
       sandboxOrgId,
@@ -470,15 +481,21 @@ export async function refreshSandbox(
         throw new Error(`cannot refresh sandbox ${sandboxId} while it is being deleted`);
       }
 
+      // The sandbox's current S3 object keys, snapshotted BEFORE the wipe:
+      // objects live outside the row transaction, so keys whose versions
+      // disappear upstream are deleted after the re-copy commits.
+      const staleS3VersionIds = await listSandboxS3VersionIds(s.org_id);
+      // Which tables to wipe + re-copy. Keeping customizations means leaving the
+      // customization layer untouched and refreshing everything else. Computed
+      // outside the clone unit: the post-commit S3 sync below needs the same set.
+      const { rebaseSet } = await loadCatalog();
+      const target = new Set(
+        [...rebaseSet].filter((t) => !(keep && CUSTOMIZATION_LAYER.has(t))),
+      );
+
       await inRefreshTransaction(async () => {
-        const { rebaseSet } = await loadCatalog();
         const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
         if (s.tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
-        // Which tables to wipe + re-copy. Keeping customizations means leaving the
-        // customization layer untouched and refreshing everything else.
-        const target = new Set(
-          [...rebaseSet].filter((t) => !(keep && CUSTOMIZATION_LAYER.has(t))),
-        );
         await wipeSandbox(s.org_id, target);
 
         // Re-copy only the target tables (deterministic ids → preserved
@@ -512,6 +529,19 @@ export async function refreshSandbox(
         // across clone + verify + ready. Re-acquiring the same key on this
         // transaction's connection would deadlock the request against itself.
       });
+      // After the clone unit commits, still under the same-sandbox lock:
+      // bring the sandbox's S3 objects to the re-copied rows (masked clones
+      // are a no-op — tombstoned rows never match 's3'), then drop keys whose
+      // versions disappeared upstream. A sync failure marks the refresh
+      // failed (catch below), never a ready sandbox with a stale cabinet.
+      await copyClonedFileObjects({
+        productionOrgId: s.production_org_id,
+        sandboxOrgId: s.org_id,
+        seed: sandboxSeed,
+        onlyTables: target,
+      });
+      const currentS3VersionIds = new Set(await listSandboxS3VersionIds(s.org_id));
+      await deleteS3Blobs(staleS3VersionIds.filter((id) => !currentS3VersionIds.has(id)));
       // After the clone unit commits, still under the same-sandbox lock.
       // verifyCloneRls opens its own withOrg transactions (bypass off).
       await verifyCloneRls({
@@ -589,7 +619,11 @@ export async function deleteSandbox(sandboxId: string): Promise<void> {
   }
   try {
     const { tenantTables } = await loadCatalog();
+    // S3 objects live outside the row wipe: snapshot the keys first so the
+    // sandbox's objects die with its rows instead of orphaning in the bucket.
+    const s3VersionIds = await listSandboxS3VersionIds(orgId);
     await wipeSandbox(orgId, new Set(tenantTables.map((t) => t.name)));
+    await deleteS3Blobs(s3VersionIds);
     await withOrg(null, async () => {
       await db.execute(sql`delete from orgs where id = ${orgId}`);
     });

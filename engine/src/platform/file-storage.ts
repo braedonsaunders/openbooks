@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, CopyObjectCommand, DeleteObjectsCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { env } from "./db.ts";
 
 /** Shared file-cabinet blob driver used by both web requests and workers. */
@@ -47,27 +47,114 @@ export async function assertS3Ready(abortSignal?: AbortSignal): Promise<void> {
   await s3().send(new HeadBucketCommand({ Bucket: s3Bucket() }), { abortSignal });
 }
 
+/**
+ * Object-store driver behind the file-cabinet blob functions. Production
+ * traffic uses the S3 implementation; tests replace the network (not the
+ * dispatch) with an in-memory store via setFileBlobStoreForTests.
+ */
+export interface FileBlobStore {
+  putObject(versionId: string, bytes: Buffer, contentType: string): Promise<void>;
+  getObject(versionId: string): Promise<Buffer | null>;
+  copyObject(fromVersionId: string, toVersionId: string): Promise<void>;
+  deleteObjects(versionIds: string[]): Promise<void>;
+}
+
+const s3Store: FileBlobStore = {
+  async putObject(versionId, bytes, contentType) {
+    await s3().send(new PutObjectCommand({
+      Bucket: env.S3_BUCKET!,
+      Key: objectKey(versionId),
+      Body: bytes,
+      ContentType: contentType,
+    }));
+  },
+  async getObject(versionId) {
+    try {
+      const result = await s3().send(new GetObjectCommand({
+        Bucket: env.S3_BUCKET!,
+        Key: objectKey(versionId),
+      }));
+      if (!result.Body) return null;
+      return Buffer.from(await result.Body.transformToByteArray());
+    } catch (error) {
+      if ((error as { name?: string }).name === "NoSuchKey") return null;
+      throw error;
+    }
+  },
+  async copyObject(fromVersionId, toVersionId) {
+    // Server-side copy: bytes never transit the clone worker.
+    await s3().send(new CopyObjectCommand({
+      Bucket: env.S3_BUCKET!,
+      CopySource: `${env.S3_BUCKET!}/${objectKey(fromVersionId)}`,
+      Key: objectKey(toVersionId),
+    }));
+  },
+  async deleteObjects(versionIds) {
+    for (let index = 0; index < versionIds.length; index += 1_000) {
+      const chunk = versionIds.slice(index, index + 1_000);
+      try {
+        await s3().send(new DeleteObjectsCommand({
+          Bucket: env.S3_BUCKET!,
+          Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })), Quiet: true },
+        }));
+      } catch (error) {
+        console.error("[file-storage] S3 blob cleanup failed (objects orphaned):", (error as Error).message);
+      }
+    }
+  },
+};
+
+let storeOverride: FileBlobStore | null = null;
+
+/**
+ * Test seam: replace the object store (the network) with an in-memory
+ * implementation. Pass null to restore the S3 driver. Callers keep using
+ * put/get/copy/deleteS3Blob, so the dispatch under test is the real one.
+ */
+export function setFileBlobStoreForTests(store: FileBlobStore | null): void {
+  storeOverride = store;
+}
+
+/** In-memory FileBlobStore for tests: no network, same interface. */
+export function createInMemoryFileBlobStore(): FileBlobStore & { keys(): string[] } {
+  const objects = new Map<string, { bytes: Buffer; contentType: string }>();
+  return {
+    async putObject(versionId, bytes, contentType) {
+      objects.set(versionId, { bytes: Buffer.from(bytes), contentType });
+    },
+    async getObject(versionId) {
+      const found = objects.get(versionId);
+      return found ? Buffer.from(found.bytes) : null;
+    },
+    async copyObject(fromVersionId, toVersionId) {
+      const found = objects.get(fromVersionId);
+      if (!found) throw new Error(`in-memory blob store has no object for version ${fromVersionId}`);
+      objects.set(toVersionId, { bytes: Buffer.from(found.bytes), contentType: found.contentType });
+    },
+    async deleteObjects(versionIds) {
+      for (const id of versionIds) objects.delete(id);
+    },
+    keys() {
+      return [...objects.keys()];
+    },
+  };
+}
+
+function activeStore(): FileBlobStore {
+  return storeOverride ?? s3Store;
+}
+
 export async function putS3Blob(versionId: string, bytes: Buffer, contentType: string): Promise<void> {
-  await s3().send(new PutObjectCommand({
-    Bucket: env.S3_BUCKET!,
-    Key: objectKey(versionId),
-    Body: bytes,
-    ContentType: contentType,
-  }));
+  await activeStore().putObject(versionId, bytes, contentType);
 }
 
 export async function getS3Blob(versionId: string): Promise<Buffer | null> {
-  try {
-    const result = await s3().send(new GetObjectCommand({
-      Bucket: env.S3_BUCKET!,
-      Key: objectKey(versionId),
-    }));
-    if (!result.Body) return null;
-    return Buffer.from(await result.Body.transformToByteArray());
-  } catch (error) {
-    if ((error as { name?: string }).name === "NoSuchKey") return null;
-    throw error;
-  }
+  return activeStore().getObject(versionId);
+}
+
+/** Server-side object copy for sandbox clones (S3-backed versions only). */
+export async function copyS3Blob(fromVersionId: string, toVersionId: string): Promise<void> {
+  await activeStore().copyObject(fromVersionId, toVersionId);
 }
 
 /**
@@ -172,15 +259,5 @@ export function isMaskedFileContentError(err: unknown): boolean {
 }
 
 export async function deleteS3Blobs(versionIds: string[]): Promise<void> {
-  for (let index = 0; index < versionIds.length; index += 1_000) {
-    const chunk = versionIds.slice(index, index + 1_000);
-    try {
-      await s3().send(new DeleteObjectsCommand({
-        Bucket: env.S3_BUCKET!,
-        Delete: { Objects: chunk.map((id) => ({ Key: objectKey(id) })), Quiet: true },
-      }));
-    } catch (error) {
-      console.error("[file-storage] S3 blob cleanup failed (objects orphaned):", (error as Error).message);
-    }
-  }
+  await activeStore().deleteObjects(versionIds);
 }
