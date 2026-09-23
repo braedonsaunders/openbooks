@@ -18,6 +18,7 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "server-only") return virtual("export {}");
+    if (specifier === "next-intl/server") return virtual("export async function getTranslations() { return (key) => key }; export async function getLocale() { return 'en' }");
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return '' }");
     if (specifier.endsWith("/lib/authz"))
       return virtual(`
