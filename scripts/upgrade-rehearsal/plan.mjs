@@ -158,6 +158,16 @@ export function validateConfig(config) {
     if (!TAG.test(source?.tag ?? "")) refuse(problems, `source ${JSON.stringify(source?.tag)} is not a release tag`);
     else if (tags.has(source.tag)) refuse(problems, `source ${source.tag} is listed twice`);
     tags.add(source?.tag);
+    const defects = source?.knownHarnessDefects ?? [];
+    if (!Array.isArray(defects)) refuse(problems, `source ${source?.tag}: knownHarnessDefects must be an array`);
+    else {
+      for (const defect of defects) {
+        if (!ID.test(defect?.check ?? "")) refuse(problems, `source ${source?.tag}: known harness defect needs its check name`);
+        if (typeof defect?.reason !== "string" || defect.reason.replace(/\s/g, "").length < 40) {
+          refuse(problems, `source ${source?.tag}: known harness defect ${defect?.check} needs a reason (at least 40 characters) saying why the tagged check is wrong`);
+        }
+      }
+    }
   }
 
   const ids = new Set();

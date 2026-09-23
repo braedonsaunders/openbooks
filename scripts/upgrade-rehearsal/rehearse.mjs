@@ -11,7 +11,8 @@
  *   source-install     the source release's own bootstrap
  *   seed               the dataset, written by the SOURCE release's tooling
  *   source-harness     golden harness (source code) on every seeded org: the
- *                      data is clean before the upgrade touches it
+ *                      data is clean before the upgrade touches it (only
+ *                      checks the source DECLARES broken may fail)
  *   snapshot-before    version-tolerant ledger fingerprint
  *   preflight          candidate `bootstrap --check --json` over the populated
  *                      install (preflight.json); datasets with expectFindings
@@ -202,10 +203,35 @@ async function seed(dataset, sourceDir) {
   return orgIds;
 }
 
-async function harness(phase, treeDir, orgIds) {
+/** The golden harness's FAIL lines, split by whether the source declared them. */
+export function classifyHarnessFailures(stdout, tolerated) {
+  const failed = [...String(stdout).matchAll(/^\s*FAIL\s+(\S+)/gm)].map((match) => match[1]);
+  return { failed, unexpected: failed.filter((name) => !tolerated.has(name)) };
+}
+
+/**
+ * Run the golden harness on each org. `tolerated` names checks that are
+ * DECLARED broken in a frozen source release (rehearsal.json
+ * sources[].knownHarnessDefects). A run passes if every FAIL line it prints
+ * is one of those checks. A non-zero exit with no FAIL line, or any
+ * undeclared FAIL, is refused. The candidate harness is always run with no
+ * tolerance, and it re-checks the same data after the upgrade.
+ */
+async function harness(phase, treeDir, orgIds, tolerated = new Set()) {
+  const toleratedRuns = [];
   for (const orgId of orgIds) {
-    await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir });
+    try {
+      await run(phase, "npm", ["--prefix", "engine", "run", "--silent", "harness", "--", orgId], { cwd: treeDir });
+    } catch (error) {
+      if (tolerated.size === 0 || !(error instanceof PhaseRefusal) || typeof error.details?.stdout !== "string") throw error;
+      const { failed, unexpected } = classifyHarnessFailures(error.details.stdout, tolerated);
+      if (failed.length === 0 || unexpected.length > 0) {
+        throw new PhaseRefusal(phase, `harness failed on org ${orgId}: ${unexpected.join(", ") || "non-zero exit with no FAIL line"}`);
+      }
+      toleratedRuns.push({ orgId, tolerated: failed });
+    }
   }
+  return toleratedRuns;
 }
 
 async function timedBootstrap(phase, env = {}) {
@@ -411,7 +437,10 @@ async function main() {
 
     await phase("source-install", () => run("source-install", "npx", ["tsx", "scripts/bootstrap.ts"], { cwd: sourceDir }));
     report.seededOrgs = await phase("seed", () => seed(dataset, sourceDir));
-    await phase("source-harness", () => harness("source-harness", sourceDir, report.seededOrgs));
+    const sourceEntry = config.sources.find((candidate) => candidate.tag === process.env.UPGRADE_SOURCE_TAG);
+    const toleratedAtSource = new Set((sourceEntry?.knownHarnessDefects ?? []).map((defect) => defect.check));
+    report.toleratedSourceHarness = await phase("source-harness", () =>
+      harness("source-harness", sourceDir, report.seededOrgs, toleratedAtSource));
 
     const before = await phase("snapshot-before", () => withClient(dbUrl, snapshotLedger));
     writeFileSync(join(reportDir, "ledger-before.json"), `${JSON.stringify(before, null, 2)}\n`);
@@ -431,7 +460,7 @@ async function main() {
         withClient(dbUrl, (client) => snapshotLedger(client, { columns: fingerprintColumnsOf(before) })));
       writeFileSync(join(reportDir, "ledger-after-remedies.json"), `${JSON.stringify(baseline, null, 2)}\n`);
       await phase("source-harness-after-remedies", () =>
-        harness("source-harness-after-remedies", sourceDir, report.seededOrgs));
+        harness("source-harness-after-remedies", sourceDir, report.seededOrgs, toleratedAtSource));
     }
 
     report.upgrade = await phase("upgrade", () => timedBootstrap("upgrade"));
@@ -509,6 +538,14 @@ export function summarize(report) {
       "| migration | seconds |",
       "|---|---|",
       ...report.upgrade.migrations.slice(0, 10).map((m) => `| ${m.filename} | ${m.seconds} |`),
+    );
+  }
+  if ((report.toleratedSourceHarness ?? []).length > 0) {
+    lines.push(
+      "",
+      "Source-harness failures tolerated as declared known defects of the source release (the candidate harness re-checks with no tolerance):",
+      "",
+      ...report.toleratedSourceHarness.map((entry) => `- org ${entry.orgId}: ${entry.tolerated.join(", ")}`),
     );
   }
   if (report.refusals.length > 0) {

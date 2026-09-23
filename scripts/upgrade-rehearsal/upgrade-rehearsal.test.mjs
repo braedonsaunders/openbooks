@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
+import { classifyHarnessFailures, diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -277,4 +277,24 @@ test("a per-record hash difference is refused even when every aggregate matches"
   const before = snapshot({ rowHashes: { documents: { columns: ["id"], dropped: [], perOrg: [{ org_id: "o1", rows: "2", hash: "10" }] } } });
   const after = snapshot({ rowHashes: { documents: { columns: ["id"], dropped: [], perOrg: [{ org_id: "o1", rows: "2", hash: "11" }] } } });
   assert.deepEqual(compareSnapshots(before, after).map((d) => d.section), ["rowHashes.documents"]);
+});
+
+test("only harness checks a source release declares broken may fail at the source", () => {
+  const out = [
+    "  PASS  per-entry-balance      0 unbalanced",
+    "  FAIL  open-balance-fresh     3 closed-period documents have stale open_balance (want 0)",
+    "  FAIL  subledger-tieout       residual 12.00",
+  ].join("\n");
+  assert.deepEqual(classifyHarnessFailures(out, new Set(["open-balance-fresh"])), {
+    failed: ["open-balance-fresh", "subledger-tieout"],
+    unexpected: ["subledger-tieout"],
+  });
+  assert.deepEqual(classifyHarnessFailures(out, new Set(["open-balance-fresh", "subledger-tieout"])).unexpected, []);
+});
+
+test("a declared source harness defect must name its check and say why the tagged check is wrong", () => {
+  const vague = config({ sources: [{ tag: "v0.1.0-alpha.23", knownHarnessDefects: [{ check: "open-balance-fresh", reason: "flaky" }] }] });
+  assert.ok(validateConfig(vague).some((p) => p.includes("needs a reason")));
+  const unnamed = config({ sources: [{ tag: "v0.1.0-alpha.23", knownHarnessDefects: [{ reason: "x".repeat(60) }] }] });
+  assert.ok(validateConfig(unnamed).some((p) => p.includes("needs its check name")));
 });
