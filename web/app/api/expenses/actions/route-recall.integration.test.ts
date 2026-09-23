@@ -174,6 +174,30 @@ test('recall refuses a stranger but allows an admin', { skip: !DB }, async () =>
   }
 })
 
+test('recall refuses the creator when someone else submitted', async () => {
+  const { orgId, submitterId, scratch, cleanup } = await fixture()
+  try {
+    as(submitterId, [{ key: 'accountant', name: 'accountant' }])
+    const { id, gateId } = await submittedReport(orgId, submitterId, scratch, 'pending_approval')
+    // The draft was created by an assistant but submitted by someone else:
+    // authorship alone must not recall another user's submission.
+    const creatorId = await createScratchUser(orgId, 'Creator C', 'accountant')
+    await db.execute(sql`update documents set created_by = ${creatorId} where id = ${id} and org_id = ${orgId}`)
+    as(creatorId, [{ key: 'accountant', name: 'accountant' }])
+    const refused = await post({ action: 'recall', documentId: id, expectedUpdatedAt: await revision(id) })
+    assert.equal(refused.status, 403, JSON.stringify(refused.json))
+    assert.equal(await statusOf(id), 'pending_approval')
+    assert.equal(await gateStatus(gateId), 'pending')
+    // The actual submitter still recalls.
+    as(submitterId, [{ key: 'accountant', name: 'accountant' }])
+    const allowed = await post({ action: 'recall', documentId: id, expectedUpdatedAt: await revision(id) })
+    assert.equal(allowed.status, 200, JSON.stringify(allowed.json))
+    assert.equal(await statusOf(id), 'draft')
+  } finally {
+    await cleanup()
+  }
+})
+
 test('recall keeps decided gates as history when reopening an approved report', { skip: !DB }, async () => {
   const { orgId, submitterId, scratch, cleanup } = await fixture()
   try {
