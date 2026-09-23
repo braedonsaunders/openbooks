@@ -45,7 +45,7 @@ import {
   sourcePlQuery,
   verdictsDiffer,
   type BucketVerdict,
-} from "./gl-reconcile-queries.ts";
+} from "../sync/gl-reconcile-source-queries.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
   ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
@@ -108,7 +108,7 @@ const line = (verdict: BucketVerdict) => {
   const client = sourceClient();
 
   // Source ISO symbols by currency-record id. Single-currency accounts do
-  // not expose the currency record to SuiteQL; an empty map then falls back
+  // not expose the currency record to the source query API; an empty map then falls back
   // to the display labels, and the grouped queries below still fail loudly.
   let symbolById = new Map<string, string>();
   try {
