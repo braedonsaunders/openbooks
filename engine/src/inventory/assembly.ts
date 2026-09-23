@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { add, cmp, isZero, neg, normalizeMoney } from "../money/money.ts";
+import { add, cmp, isZero, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
@@ -17,6 +17,22 @@ import { type ReverseInventoryInput, type ReverseInventoryResult, type Reversibl
 // ---------------------------------------------------------------------------
 // Assembly build (light manufacturing / kits)
 // ---------------------------------------------------------------------------
+
+/**
+ * Exact decimal product of two numeric(19,4) inputs: up to 8 decimal places
+ * with trailing zeros trimmed (0.0001 × 0.0001 → "0.00000001"). extendCost
+ * rounds that to 4dp ("0.0000"); when it does, the refusal must still state
+ * the true requirement rather than "needs 0.0000".
+ */
+function exactExtension(quantity: string, quantityPer: string): string {
+  const product = toUnits(quantity) * toUnits(quantityPer); // 1e-8 units
+  const negative = product < 0n;
+  const abs = negative ? -product : product;
+  const whole = abs / 100_000_000n;
+  const frac = (abs % 100_000_000n).toString().padStart(8, "0").replace(/0+$/, "");
+  const text = frac ? `${whole}.${frac}` : `${whole}`;
+  return negative ? `-${text}` : text;
+}
 
 export interface BuildInput {
   assemblyItemId: string;
@@ -166,10 +182,22 @@ export async function buildAssembly(
           `tracked component ${component.component_item_id} requires explicit serial/lot consumption evidence`,
         );
       }
+      const reqQty = extendCost(input.quantity, component.quantity_per);
+      if (isZero(reqQty)) {
+        // A valid 4dp quantity-per times a valid 4dp build quantity can
+        // round to 0.0000 (0.0001 × 0.0001 = 0.00000001). Posting that as a
+        // zero-quantity consume dies on the inv_moves_qty_nonzero CHECK as a
+        // raw driver error — refuse by name before any posting instead, with
+        // the exact requirement stated. There is no sub-precision policy to
+        // fall back to: the operator builds more or fixes the recipe.
+        throw new InventoryError(
+          `component ${itemNameById.get(component.component_item_id)} needs ${exactExtension(input.quantity, component.quantity_per)}, below the 0.0001 unit precision — build a larger quantity or adjust the recipe`,
+        );
+      }
       components.push({
         itemId: component.component_item_id,
         profile,
-        reqQty: extendCost(input.quantity, component.quantity_per),
+        reqQty,
       });
     }
 
