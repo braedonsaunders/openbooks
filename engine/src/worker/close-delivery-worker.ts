@@ -8,7 +8,7 @@ import {
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
 import { isValidEmailAddress } from "@openbooks/emails";
-import { storeEmailAttachments } from "../delivery/email-attachments.ts";
+import { deleteStoredEmailAttachments, storeEmailAttachments } from "../delivery/email-attachments.ts";
 import { db, withOrgContext } from "../platform/db.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
@@ -242,18 +242,26 @@ export async function processCloseDeliveryJobData(
       // worker fetches the bytes at send time instead of Redis holding
       // report contents for days.
       const attachments = await storeEmailAttachments(files);
-      await enqueueEmail(
-        {
-          orgId,
-          to: recipients,
-          subject,
-          html,
-          text,
-          attachments,
-          meta: { category: "close-package" },
-        },
-        { jobId: emailIntentKey },
-      );
+      try {
+        await enqueueEmail(
+          {
+            orgId,
+            to: recipients,
+            subject,
+            html,
+            text,
+            attachments,
+            meta: { category: "close-package" },
+          },
+          { jobId: emailIntentKey },
+        );
+      } catch (error) {
+        // The staged bytes belong to this attempt alone: a failed handoff
+        // must delete the refs it just staged (each staged under a fresh
+        // random id), or every queue retry orphans another set of blobs.
+        await deleteStoredEmailAttachments(attachments);
+        throw error;
+      }
 
       await db.execute(sql`
         insert into close_events (org_id, run_id, event_type, payload)

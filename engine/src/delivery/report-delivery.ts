@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { computeNextRunAt } from "@openbooks/reports";
 import { enqueueEmail, enqueueReportRun, type EnqueueEmailData } from "@openbooks/jobs";
 import { deriveEmailDeliveryKey, isValidEmailAddress, scheduledReportEmail } from "@openbooks/emails";
-import { storeEmailAttachments } from "./email-attachments.ts";
+import { deleteStoredEmailAttachments, storeEmailAttachments } from "./email-attachments.ts";
 import { getEmailQueue } from "@openbooks/jobs";
 import { businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
@@ -531,15 +531,23 @@ export async function dispatchReportDeliveries(
     const attachments = await storeEmailAttachments([
       { filename: row.filename, content: Buffer.from(row.bytes).toString("base64"), contentType: row.content_type },
     ]);
-    await enqueue({
-      orgId: row.org_id,
-      to: row.recipient,
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      attachments,
-      meta: { category: "report", reportRunId: row.run_id, reportDeliveryId: row.id },
-    }, { jobId });
+    try {
+      await enqueue({
+        orgId: row.org_id,
+        to: row.recipient,
+        subject: mail.subject,
+        html: mail.html,
+        text: mail.text,
+        attachments,
+        meta: { category: "report", reportRunId: row.run_id, reportDeliveryId: row.id },
+      }, { jobId });
+    } catch (error) {
+      // The staged bytes belong to this attempt alone: a failed handoff
+      // must delete the refs it just staged (each staged under a fresh
+      // random id), or every dispatch retry orphans another set of blobs.
+      await deleteStoredEmailAttachments(attachments);
+      throw error;
+    }
     await db.execute(sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
              queue_job_id=${jobId}, error=null, updated_at=now()
