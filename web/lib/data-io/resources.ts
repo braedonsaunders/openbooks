@@ -70,17 +70,6 @@ async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<b
 
 type SubsidiaryScope = ReadonlySet<string> | null
 
-function scopeAllows(
-  scope: SubsidiaryScope,
-  subsidiaryId: unknown,
-  orgWideNull = false,
-): boolean {
-  if (scope === null) return true
-  const value = String(subsidiaryId ?? '').trim()
-  if (!value) return orgWideNull
-  return scope.has(value)
-}
-
 /**
  * Resolve the names used by export adapters for subsidiary references. Setup
  * and property resources intentionally export natural keys, so filtering the
@@ -120,38 +109,6 @@ function filterReferenceScopedRows(
       if (value === null || value === undefined || value === '') return false
       return names.has(String(value)) || scope.has(String(value))
     })),
-  }
-}
-
-async function filterMasterRows(
-  orgId: string,
-  key: string,
-  result: ReadResult,
-  scope: SubsidiaryScope,
-): Promise<ReadResult | null> {
-  if (key !== 'accounts' && key !== 'parties') return null
-  const table = key === 'accounts' ? 'accounts' : 'parties'
-  const rowKey = key === 'accounts' ? 'number' : 'shortCode'
-  const raw = (await db.execute(sql`
-    select ${sql.raw(key === 'accounts' ? 'number' : 'short_code')} as row_key,
-           ${sql.raw(key === 'accounts' ? 'name' : 'display_name')} as display_name,
-           subsidiary_id
-      from ${sql.raw(table)}
-     where org_id = ${orgId}`)) as {
-    rows: { row_key: string | null; display_name: string | null; subsidiary_id: string | null }[]
-  }
-  const visible = new Set<string>()
-  for (const row of raw.rows) {
-    if (!scopeAllows(scope, row.subsidiary_id, true)) continue
-    if (row.row_key) visible.add(row.row_key)
-    if (row.display_name) visible.add(row.display_name)
-  }
-  return {
-    ...result,
-    rows: result.rows.filter((row) => {
-      const value = row[rowKey] ?? (key === 'parties' ? row.displayName : undefined)
-      return visible.has(String(value ?? ''))
-    }),
   }
 }
 
@@ -201,43 +158,6 @@ async function filterPropertyRows(
   }
 }
 
-async function employeeVisibleLabels(orgId: string, scope: SubsidiaryScope): Promise<Set<string>> {
-  const result = (await db.execute(sql`
-    select distinct coalesce(er.employee_number, p.short_code, p.display_name) as employee,
-           p.display_name, p.subsidiary_id
-      from parties p
-      left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
-      left join employee_payroll_profiles prof on prof.employee_party_id = p.id and prof.org_id = p.org_id
-     where p.org_id = ${orgId}
-       and (er.party_id is not null or prof.employee_party_id is not null)
-       and p.subsidiary_id is not null`)) as {
-    rows: { employee: string | null; display_name: string | null; subsidiary_id: string | null }[]
-  }
-  const labels = new Set<string>()
-  for (const row of result.rows) {
-    if (!scopeAllows(scope, row.subsidiary_id, true)) continue
-    if (row.employee) labels.add(row.employee)
-    if (row.display_name) labels.add(row.display_name)
-  }
-  return labels
-}
-
-async function filterPayrollRows(
-  orgId: string,
-  key: string,
-  result: ReadResult,
-  scope: SubsidiaryScope,
-): Promise<ReadResult | null> {
-  if (!['payroll-opening-balances', 'payroll-opening-entitlements', 'prior-payroll-register'].includes(key)) {
-    return null
-  }
-  const labels = await employeeVisibleLabels(orgId, scope)
-  return {
-    ...result,
-    rows: result.rows.filter((row) => labels.has(String(row.employee ?? ''))),
-  }
-}
-
 /** Bind role-derived visibility to every resource returned by the registry. */
 function bindReadScope(resource: DataResource, orgId: string, scope?: SubsidiaryScope): DataResource {
   if (scope === undefined) return resource
@@ -248,15 +168,13 @@ function bindReadScope(resource: DataResource, orgId: string, scope?: Subsidiary
       const result = await resource.read({ allowedSubsidiaryIds: effectiveScope })
       if (effectiveScope === null) return result
 
-      // Transaction resources enforce this in their source query. The generic
-      // adapters below cover setup, master, property, payroll and custom
-      // records whose legacy read methods expose natural keys instead.
-      const master = await filterMasterRows(orgId, resource.descriptor.key, result, effectiveScope)
-      if (master) return master
+      // Master and payroll resources enforce the scope in their source
+      // queries by row identity (their natural keys are reusable display
+      // labels, so a label post-filter leaks across legal entities). The
+      // generic adapters below cover setup, property and custom records
+      // whose legacy read methods expose natural keys instead.
       const property = await filterPropertyRows(orgId, resource.descriptor.key, result, effectiveScope)
       if (property) return property
-      const payroll = await filterPayrollRows(orgId, resource.descriptor.key, result, effectiveScope)
-      if (payroll) return payroll
       const names = await subsidiaryNames(orgId, effectiveScope)
       return filterReferenceScopedRows(result, names, effectiveScope) ?? result
     },

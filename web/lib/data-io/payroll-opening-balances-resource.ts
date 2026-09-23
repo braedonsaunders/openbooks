@@ -23,7 +23,12 @@ import {
 } from '@openbooks/engine/src/payroll/entitlements.ts'
 import type { CellValue, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
-import { enforceExportRowLimit, MAX_EXPORT_ROWS } from './resource-core'
+import {
+  enforceExportRowLimit,
+  MAX_EXPORT_ROWS,
+  subsidiaryReadFilterWithUnassigned,
+  type ReadCtx,
+} from './resource-core'
 import { employeeWriteScopeError } from './write-scope'
 
 /**
@@ -190,10 +195,13 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
     async columns() {
       return (await this.fields()).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const components = await loadComponents()
       const resourceFields = fields(components)
       const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
+      // Employee visibility is decided by the PARTY's subsidiary, in SQL —
+      // never by matching the exported employee label afterwards, which a
+      // same-named employee in another legal entity would also match.
       const result = (await db.execute(sql`
         select b.id as "__rowId",
                coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
@@ -203,7 +211,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           from payroll_opening_balances b
           join parties p on p.id = b.employee_party_id and p.org_id = b.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = b.org_id
-         where b.org_id = ${orgId}
+         where b.org_id = ${orgId}${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          order by b.tax_year desc, p.display_name
          limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
@@ -473,9 +481,10 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
     async columns() {
       return (await this.fields()).map((f) => ({ key: f.key, label: f.label }))
     },
-    async read() {
+    async read(readCtx?: ReadCtx) {
       const resourceFields = entitlementFields(await loadPlans())
       const columns = resourceFields.map((f) => ({ key: f.key, label: f.label }))
+      // Same identity-based employee scope as the balances read above.
       const result = (await db.execute(sql`
         select coalesce(er.employee_number, p.short_code, p.display_name) as "employee",
                p.display_name as "employeeName",
@@ -486,7 +495,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
           join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id
           join parties p on p.id = l.employee_party_id and p.org_id = l.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = l.org_id
-         where l.org_id = ${orgId} and l.kind = 'opening'
+         where l.org_id = ${orgId} and l.kind = 'opening'${subsidiaryReadFilterWithUnassigned(sql`p.subsidiary_id`, readCtx?.allowedSubsidiaryIds)}
          order by pl.code, p.display_name
          limit ${MAX_EXPORT_ROWS + 1}`)) as { rows: Record<string, CellValue>[] }
       // Sentinel read: refuse rather than truncate a complete-looking file.
