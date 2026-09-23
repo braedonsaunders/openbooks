@@ -105,6 +105,43 @@ test('reapRetiredNavLinks leaves an over-cap visible nav alone and is a no-op un
   assert.equal(JSON.stringify(small), snapshot);
 });
 
+test('reapRetiredNavLinks prunes the globally oldest retired row across groups', () => {
+  const config = defaultNavConfig();
+  const groupA = config.groups[0]!;
+  const groupB = config.groups[1]!;
+  const visibleBefore = config.groups.reduce((n, group) => n + group.items.length, 0);
+  // Pad with visible rows so exactly one prune is needed once the two
+  // retired rows below are added; visible rows are never reapable.
+  const filler = NAV_CONFIG_TOTAL_ROW_CAP + 1 - visibleBefore - 2;
+  assert.ok(filler > 0);
+  for (let i = 0; i < filler; i++) groupA.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}` });
+  // Group A comes earlier in config order but retires NEWER than group B:
+  // the single prune must take B's older row, proving group traversal order
+  // does not arbitrate across groups.
+  groupA.items.push({ kind: 'link', href: '/retired-new', label: 'New', extensionKey: 'ext-a', hidden: true, retiredAt: '2026-09-02T00:00:00.000Z' });
+  groupB.items.push({ kind: 'link', href: '/retired-old', label: 'Old', extensionKey: 'ext-b', hidden: true, retiredAt: '2026-09-01T00:00:00.000Z' });
+  assert.equal(reapRetiredNavLinks(config), 1);
+  const hrefs = config.groups.flatMap((group) => group.items).flatMap((item) => (item.kind === 'link' ? [item.href] : []));
+  assert.ok(!hrefs.includes('/retired-old'), "group B's older retirement must be pruned first");
+  assert.ok(hrefs.includes('/retired-new'), "group A's newer retirement must survive");
+});
+
+test('reapRetiredNavLinks treats unstamped legacy retirements as oldest', () => {
+  const config = defaultNavConfig();
+  const groupA = config.groups[0]!;
+  const groupB = config.groups[1]!;
+  const visibleBefore = config.groups.reduce((n, group) => n + group.items.length, 0);
+  const filler = NAV_CONFIG_TOTAL_ROW_CAP + 1 - visibleBefore - 2;
+  assert.ok(filler > 0);
+  for (let i = 0; i < filler; i++) groupA.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}` });
+  groupA.items.push({ kind: 'link', href: '/retired-stamped', label: 'Stamped', extensionKey: 'ext-a', hidden: true, retiredAt: '2026-09-02T00:00:00.000Z' });
+  groupB.items.push({ kind: 'link', href: '/retired-legacy', label: 'Legacy', extensionKey: 'ext-b', hidden: true });
+  assert.equal(reapRetiredNavLinks(config), 1);
+  const hrefs = config.groups.flatMap((group) => group.items).flatMap((item) => (item.kind === 'link' ? [item.href] : []));
+  assert.ok(!hrefs.includes('/retired-legacy'), 'an unstamped legacy retirement must sort oldest');
+  assert.ok(hrefs.includes('/retired-stamped'), 'the stamped retirement must survive');
+});
+
 type NavProbeItem = { href?: string; hidden?: boolean; extensionKey?: string };
 
 async function navItemsAt(orgId: string, href: string): Promise<NavProbeItem[]> {

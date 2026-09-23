@@ -1013,6 +1013,9 @@ export type NavItemConfig =
       iconKey?: string
       hidden?: boolean
       mobile?: boolean
+      /** ISO timestamp stamped when the extension retire loop hid this row.
+       * Absent on rows retired before the stamp existed; those sort oldest. */
+      retiredAt?: string
     }
 
 export interface NavGroupConfig {
