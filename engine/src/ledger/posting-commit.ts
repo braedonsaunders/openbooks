@@ -1,5 +1,5 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db, inDbTransaction, schema } from "../platform/db.ts";
+import { db, inDbTransaction, schema, withTransactionSavepoint } from "../platform/db.ts";
 
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 
@@ -132,25 +132,32 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     );
     let entry: { id: string };
     try {
-      entry = (await tx
-        .insert(schema.journalEntries)
-        .values({
-          orgId: doc.orgId,
-          bookId: book.id,
-          subsidiaryId: subApplied.docSubId,
-          entryNumber,
-          postingDate,
-          periodId: period.id,
-          memo: effectiveDoc.memo,
-          status: "draft",
-          sourceDocumentId: doc.id,
-          origin:
-            subApplied.multi ||
-            scriptLines.some((l) => l.subsidiaryId !== subApplied.docSubId)
-              ? "intercompany"
-              : "document",
-        })
-        .returning({ id: schema.journalEntries.id }))[0]!;
+      // Isolate the insert in a savepoint. postDocument always runs inside a
+      // caller-visible transaction now, so a unique violation would otherwise
+      // abort the whole unit — and the claimant diagnosis in the 23505 branch
+      // below would raise 25P02 (aborted transaction) instead of the
+      // PostingError concurrent posters handle.
+      entry = (await withTransactionSavepoint(tx, () =>
+        tx
+          .insert(schema.journalEntries)
+          .values({
+            orgId: doc.orgId,
+            bookId: book.id,
+            subsidiaryId: subApplied.docSubId,
+            entryNumber,
+            postingDate,
+            periodId: period.id,
+            memo: effectiveDoc.memo,
+            status: "draft",
+            sourceDocumentId: doc.id,
+            origin:
+              subApplied.multi ||
+              scriptLines.some((l) => l.subsidiaryId !== subApplied.docSubId)
+                ? "intercompany"
+                : "document",
+          })
+          .returning({ id: schema.journalEntries.id }),
+      ))[0]!;
     } catch (error) {
       const code = (error as { code?: string }).code ??
         (error as { cause?: { code?: string } }).cause?.code;

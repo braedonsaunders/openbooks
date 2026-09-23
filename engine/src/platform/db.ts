@@ -235,6 +235,20 @@ export function ambientTenantOrgId(): string | null {
   return ctx.orgId;
 }
 
+/**
+ * Whether the ambient scope grants trusted cross-org bypass without pinning a
+ * transaction: a context-only bypass block, or the integration-test process's
+ * bypass resolver with no store at all. Units running here have authority but
+ * no atomicity — callers like postDocument open a maintenance transaction so
+ * their multi-step writes still commit or roll back as one. False under a
+ * tenant scope, inside any pinned transaction, and with no context (which
+ * stays deny-by-default).
+ */
+export function ambientBypassWithoutTransaction(): boolean {
+  const ctx = activeOrgCtx();
+  return !!ctx?.bypass && !ctx.txDb;
+}
+
 const rawConnect = async (): Promise<pg.PoolClient> =>
   protectCheckedOutClient(
     await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(basePool),
