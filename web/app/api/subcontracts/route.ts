@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
+  SubcontractConflictError,
   SubcontractError,
   addSubcontractSovLine,
   approveSubcontract,
@@ -134,7 +135,7 @@ export async function GET(request: Request) {
     `),
     db.execute(sql`
       select a.id, a.application_number as "applicationNumber", a.period_end as "periodEnd",
-             a.vendor_invoice_number as "vendorInvoiceNumber", a.status,
+             a.vendor_invoice_number as "vendorInvoiceNumber", a.status, a.revision,
              a.gross_this_period as "grossThisPeriod", a.retainage_this_period as "retainageThisPeriod", a.net_due as "netDue",
              a.vendor_bill_document_id as "vendorBillDocumentId", d.document_number as "vendorBillNumber", d.status as "vendorBillStatus",
              coalesce(a.submitted_by, a.created_by) <> ${authz.user.id} as "independentApprovalAllowed"
@@ -361,24 +362,40 @@ export async function POST(request: Request) {
         result = await createVendorPayApplication({ ...body, orgId, userId } as unknown as { orgId: string; userId: string; subcontractId: string; periodEnd: string; vendorInvoiceNumber?: string | null; });
         break;
       case "updatePayApplication": {
+        // Malformed lines never reach the engine: a non-array (or an entry
+        // without a line identity or with an unparseable amount) is 422
+        // naming the line, not a 500 from deep inside the update.
+        // Concurrent editors are fenced by the revision token the loader
+        // read: a missing token is 422, a stale one 409s in the engine.
         if (!Array.isArray(body.lines)) {
-          result = await updateVendorPayApplicationLines({ ...body, orgId, userId } as unknown as { orgId: string; userId: string; payApplicationId: string; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
-          break;
+          return NextResponse.json({ error: "lines must be an array of pay-application lines" }, { status: 422 });
+        }
+        if (!Number.isInteger(body.expectedRevision) || (body.expectedRevision as number) < 1) {
+          return NextResponse.json({ error: "expectedRevision must be the positive integer revision token the loader read" }, { status: 422 });
         }
         const lines = [];
-        for (const line of body.lines as Array<Record<string, unknown>>) {
+        for (const [index, entry] of (body.lines as Array<unknown>).entries()) {
+          const label = `line ${index + 1}`;
+          if (typeof entry !== "object" || entry === null) {
+            return NextResponse.json({ error: `${label}: a pay-application line object is required` }, { status: 422 });
+          }
+          const line = entry as Record<string, unknown>;
+          const sovLineId = String(line.sovLineId ?? "");
+          if (!isUuid(sovLineId)) {
+            return NextResponse.json({ error: `${label}: sovLineId must be a valid uuid` }, { status: 422 });
+          }
           const workCompletedThisPeriod = exactMoney(line.workCompletedThisPeriod ?? "0");
           const materialsStoredCurrent = exactMoney(line.materialsStoredCurrent ?? "0");
           if (workCompletedThisPeriod === null || materialsStoredCurrent === null) {
-            return invalidDecimal("Draw amount");
+            return NextResponse.json({ error: `${label} (${sovLineId}): draw amount must be an exact decimal` }, { status: 422 });
           }
           lines.push({
-            sovLineId: String(line.sovLineId ?? ""),
+            sovLineId,
             workCompletedThisPeriod,
             materialsStoredCurrent,
           });
         }
-        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as unknown as { orgId: string; userId: string; payApplicationId: string; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
+        result = await updateVendorPayApplicationLines({ ...body, orgId, userId, lines } as unknown as { orgId: string; userId: string; payApplicationId: string; expectedRevision: number; lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string; }>; });
         break;
       }
       case "submitPayApplication":
@@ -416,6 +433,10 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(result, { status: action.startsWith("create") || action.startsWith("add") ? 201 : 200 });
   } catch (error) {
+    // A stale revision token is a conflict (409), not a validation refusal:
+    // the record moved under the editor, so the message names the remedy
+    // (reload, then re-enter) and the client can tell it apart from a 422.
+    if (error instanceof SubcontractConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof SubcontractError) return NextResponse.json({ error: error.message }, { status: 422 });
     const code = (error as { code?: string }).code;
     if (code === "23505") return NextResponse.json({ error: "That number is already in use" }, { status: 409 });

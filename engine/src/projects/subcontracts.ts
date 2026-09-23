@@ -9,7 +9,10 @@ import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "../money/money.t
 
 export class SubcontractError extends Error {}
 
+export class SubcontractConflictError extends SubcontractError {}
+
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Calendar-day boundary check for every date interpolated into a DATE column.
@@ -745,28 +748,75 @@ export async function updateVendorPayApplicationLines(input: {
   orgId: string;
   userId: string;
   payApplicationId: string;
+  expectedRevision: number;
   lines: Array<{ sovLineId: string; workCompletedThisPeriod: string; materialsStoredCurrent: string }>;
-}): Promise<ComputedVendorApplication> {
+}): Promise<ComputedVendorApplication & { revision: number }> {
+  // Fail closed on malformed lines before any transaction opens: every
+  // refusal names the line (1-based position plus its SOV identity), so a
+  // malformed draw surfaces as a 422 naming the line — never a TypeError
+  // 500 from inside the update loop.
+  if (!Number.isInteger(input.expectedRevision) || (input.expectedRevision as number) < 1) {
+    throw new SubcontractError("expectedRevision must be a positive integer revision token the loader read");
+  }
+  if (!Array.isArray(input.lines) || input.lines.length === 0) {
+    throw new SubcontractError("Pay-application lines must be a non-empty array");
+  }
+  const prepared = input.lines.map((update, index) => {
+    const label = `line ${index + 1}`;
+    if (typeof update !== "object" || update === null) {
+      throw new SubcontractError(`${label}: a pay-application line object is required`);
+    }
+    const sovLineId = String(update.sovLineId ?? "");
+    if (!UUID_RE.test(sovLineId)) {
+      throw new SubcontractError(`${label}: sovLineId must be a valid uuid`);
+    }
+    const tagged = `${label} (${sovLineId})`;
+    let work: string;
+    try {
+      work = persistVendorPayApplicationWorkCompletedThisPeriod(update.workCompletedThisPeriod);
+    } catch {
+      throw new SubcontractError(`${tagged}: work completed this period must be an exact decimal`);
+    }
+    let stored: string;
+    try {
+      stored = persistVendorPayApplicationMaterialsStoredCurrent(update.materialsStoredCurrent);
+    } catch {
+      throw new SubcontractError(`${tagged}: materials stored current must be an exact decimal`);
+    }
+    if (cmp(work, "0") < 0 || cmp(stored, "0") < 0) {
+      throw new SubcontractError(`${tagged}: application amounts cannot be negative`);
+    }
+    return { sovLineId, work, stored, tagged };
+  });
   return db.transaction(async (tx) => {
     await assertFeatureEnabled(tx, input.orgId);
-    const app = (await tx.execute<{ status: string }>(sql`select status from vendor_pay_applications where org_id = ${input.orgId} and id = ${input.payApplicationId} for update`));
+    const app = (await tx.execute<{ status: string; revision: number }>(sql`select status, revision from vendor_pay_applications where org_id = ${input.orgId} and id = ${input.payApplicationId} for update`));
     if (!app.rows[0]) throw new SubcontractError("Vendor application not found");
     if (app.rows[0].status !== "draft") throw new SubcontractError("Only a draft application can be edited");
-    for (const update of input.lines) {
-      const work = persistVendorPayApplicationWorkCompletedThisPeriod(update.workCompletedThisPeriod);
-      const stored = persistVendorPayApplicationMaterialsStoredCurrent(update.materialsStoredCurrent);
-      if (cmp(work, "0") < 0 || cmp(stored, "0") < 0) throw new SubcontractError("Application amounts cannot be negative");
+    const current = Number(app.rows[0].revision);
+    if (current !== input.expectedRevision) {
+      throw new SubcontractConflictError(
+        `This application changed while you were editing (revision ${current}, you hold ${input.expectedRevision}) — reload it to see the other editor's values, then re-enter your changes`,
+      );
+    }
+    for (const line of prepared) {
       const changed = (await tx.execute(sql`
-        update vendor_pay_application_lines set work_completed_this_period = ${work}, materials_stored_current = ${stored},
+        update vendor_pay_application_lines set work_completed_this_period = ${line.work}, materials_stored_current = ${line.stored},
           updated_at = now(), updated_by = ${input.userId}
-        where org_id = ${input.orgId} and pay_application_id = ${input.payApplicationId} and sov_line_id = ${update.sovLineId}
+        where org_id = ${input.orgId} and pay_application_id = ${input.payApplicationId} and sov_line_id = ${line.sovLineId}
         returning id
       `));
-      if (!changed.rows.length) throw new SubcontractError("Application line does not belong to this application");
+      if (!changed.rows.length) throw new SubcontractError(`${line.tagged}: application line does not belong to this application`);
     }
+    const bumped = (await tx.execute<{ revision: number }>(sql`
+      update vendor_pay_applications set revision = revision + 1, updated_at = now(), updated_by = ${input.userId}
+       where org_id = ${input.orgId} and id = ${input.payApplicationId}
+       returning revision
+    `)).rows[0]!.revision;
+    const revision = Number(bumped);
     const computed = await computeApplicationTx(tx, input.orgId, input.payApplicationId);
-    await audit(tx, input.orgId, "vendor_pay_applications", input.payApplicationId, "update_lines", { computed }, input.userId);
-    return computed;
+    await audit(tx, input.orgId, "vendor_pay_applications", input.payApplicationId, "update_lines", { computed, revision }, input.userId);
+    return { ...computed, revision };
   });
 }
 

@@ -569,6 +569,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // concurrent edits silently lost one writer's changes. equipment_units
     // gains the revision counter the PATCH fence compares under lock.
     "0278_equipment_unit_revision.sql",
+    // Vendor pay-application line edits carried no revision evidence, so
+    // concurrent editors silently overwrote each other's certified inputs:
+    // the header gains the house revision token and the update requires
+    // the revision its editor read (409 on conflict).
+    "0280_vendor_pay_application_revision.sql",
     // Exit corrections rewrote the row with no revision and no audit
     // event: concurrent corrections lost one silently (0281 adds the
     // required revision plus the append-only correction evidence table).

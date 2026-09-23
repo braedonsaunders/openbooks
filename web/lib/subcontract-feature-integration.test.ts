@@ -43,7 +43,7 @@ const transitionRouteMockSources = new Map<string, string>([
       // engine module, so the route is judged by the rule the product actually
       // applies — a hand copy could drift while this file stayed green. The
       // DB-backed functions stay stubbed: this route test never calls them.
-      export { parseSubcontractTransitionAction, SubcontractError } from ${JSON.stringify(
+      export { parseSubcontractTransitionAction, SubcontractConflictError, SubcontractError } from ${JSON.stringify(
         new URL('../../engine/src/projects/subcontracts.ts', import.meta.url).href,
       )}
       export async function transitionSubcontract() { state.transitionCalls += 1 }
@@ -163,6 +163,9 @@ test("subcontract API persists money through canonicalDecimal and normalizeMoney
   assert.match(route, /normalizeMoney/);
   assert.match(route, /originalCommitment/);
   assert.match(route, /scheduledValue/);
-  assert.match(route, /Draw amount/);
+  // Draw-amount refusals name the offending line (position plus SOV id),
+  // never a bare label: a malformed draw must 422 naming its line.
+  assert.match(route, /draw amount must be an exact decimal/);
+  assert.match(route, /line \$\{index \+ 1\}/);
   assert.doesNotMatch(route, /createSubcontract\(\{ \.\.\.body, orgId, userId \}/);
 });
