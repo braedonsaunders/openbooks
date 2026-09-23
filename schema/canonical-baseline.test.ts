@@ -524,6 +524,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // posted a second numbered journal. documents gains a nullable
     // idempotency_key with a partial unique index (org_id, key).
     "0268_script_journal_idempotency_key.sql",
+    // The shared posting-period resolver reads the org's active default
+    // fiscal calendar; backfill one for every org whose calendars carry
+    // none, refusing ambiguous orgs by id instead of guessing.
+    "0275_default_calendar_backfill.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
