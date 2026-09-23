@@ -52,6 +52,11 @@ async function countStatus(orgId: string, countId: string): Promise<string> {
     select status from stock_counts where org_id = ${orgId} and id = ${countId}`)).rows[0]!.status;
 }
 
+async function movementCount(orgId: string): Promise<string> {
+  return (await db.execute<{ n: string }>(sql`
+    select count(*)::text as n from inventory_movements where org_id = ${orgId}`)).rows[0]!.n;
+}
+
 async function setInventoryFeature(orgId: string, enabled: boolean): Promise<void> {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${`{"inventory":${enabled}}`}::jsonb) where id=${orgId}`);
 }
@@ -268,3 +273,81 @@ test("a zero-variance post with Inventory disabled refuses instead of marking po
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("posting outside a caller-owned transaction refuses instead of half-posting", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    const { countId } = await openCountedReview(org, "9");
+    const movementsBefore = await movementCount(org.orgId);
+    await assert.rejects(postStockCount(org.orgId, null, countId), (e: unknown) => {
+      assert.ok(e instanceof InventoryError);
+      // The refusal must name the remedy, and the remedy must exist:
+      // executeIdempotentInventoryAction is the production posting path.
+      assert.match((e as Error).message, /needs its caller's transaction/i);
+      assert.match((e as Error).message, /executeIdempotentInventoryAction/i);
+      return true;
+    });
+    assert.equal(await countStatus(org.orgId, countId), "review", "a refused post leaves the count in review");
+    assert.equal(await movementCount(org.orgId), movementsBefore, "a refused post moves no stock");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting inside the caller's transaction applies each variance once and flips to posted", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    const { countId } = await openCountedReview(org, "9");
+    const result = await withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId));
+    assert.equal(result.status, "posted");
+    assert.equal(result.lines.length, 1);
+    assert.equal(result.lines[0]!.variance, "-1.0000");
+    assert.ok(result.lines[0]!.movementId, "a nonzero variance posts a movement");
+    assert.ok(result.lines[0]!.entryId, "a nonzero variance posts a journal entry");
+    assert.equal(await countStatus(org.orgId, countId), "posted");
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, countId)),
+      /already posted/i,
+      "a posted count is immutable — a second post refuses, never double-applies",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a failing post rolls every variance back and keeps the count in review", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    // Two lines: the first posts, then the second line is deleted mid-flight
+    // is not simulable — instead close the period so the adjustment fails.
+    const count = await createStockCount(org.orgId, null, {
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      countedOn: org.date,
+      lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    });
+    await startStockCount(org.orgId, null, count.id);
+    const lineId = (await db.execute<{ id: string }>(sql`
+      select id from stock_count_lines where org_id = ${org.orgId} and stock_count_id = ${count.id}`)).rows[0]!.id;
+    await recordCountedQuantity(org.orgId, null, { countId: count.id, lineId, countedQuantity: "9" });
+    await submitStockCountForReview(org.orgId, null, count.id);
+    const movementsBefore = await movementCount(org.orgId);
+    await setInventoryFeature(org.orgId, false);
+    try {
+      await assert.rejects(
+        withOrgTransaction(org.orgId, () => postStockCount(org.orgId, null, count.id)),
+        /inventory feature is disabled/i,
+      );
+    } finally {
+      await setInventoryFeature(org.orgId, true);
+    }
+    assert.equal(await countStatus(org.orgId, count.id), "review", "a failed post keeps the count in review");
+    assert.equal(await movementCount(org.orgId), movementsBefore, "a failed post moves no stock");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
