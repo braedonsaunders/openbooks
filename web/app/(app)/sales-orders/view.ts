@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { mergeHref, pickString } from '../../../lib/list-params'
+import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
@@ -99,6 +99,9 @@ export async function loadSalesOrders(
   const canManage = can(authz, 'ar.create')
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
+  // Only a real document id may reach the uuid comparison: the create view
+  // (no id, or the literal 'new') must not bind '' or 'new' to a uuid column.
+  const openDocumentId = openId && isUuid(openId) ? openId : null
   // Unsaved-create: ?orderNew=1 opens an editable drawer on an in-memory
   // payload — zero writes on open, zero on Cancel, one idempotent POST on
   // Save. ?order=new deep links keep working through the redirect widget.
@@ -125,10 +128,12 @@ export async function loadSalesOrders(
              where it.org_id = ${authz.user.orgId} and it.is_active
                and (
                  ${inventoryEnabled ? sql`true` : sql`it.kind not in ('inventory', 'assembly', 'kit')`}
-                 or it.id in (
-                   select item_id from document_lines
-                    where org_id = ${authz.user.orgId} and document_id = ${openId ?? ''} and item_id is not null
-                 )
+                 ${openDocumentId
+                   ? sql`or it.id in (
+                       select item_id from document_lines
+                        where org_id = ${authz.user.orgId} and document_id = ${openDocumentId} and item_id is not null
+                     )`
+                   : sql``}
                )
              order by it.name limit 2000`),
           taxCodeOptions(authz.user.orgId),
