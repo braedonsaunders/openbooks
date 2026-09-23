@@ -27,6 +27,7 @@ import {
   type UnifiedApproval,
 } from "../../flows/approval-worklist.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
+import { toWorklistScope } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -121,16 +122,20 @@ export const flowsApprovalAdapter: InboxAdapter = {
     return out;
   },
   async act(ctx, sourceId, actionKey, reason): Promise<void> {
+    // The session's subsidiary boundary rides into the write authority:
+    // deciding by id must refuse an out-of-scope gate, not just hide it
+    // from the list.
+    const allowedSubsidiaryIds = toWorklistScope(ctx).allowedSubsidiaryIds;
     const sep = sourceId.indexOf(":");
     const leg = sourceId.slice(0, sep);
     const id = sourceId.slice(sep + 1);
     if (leg === "gate") {
       if (actionKey === "approve") {
-        await decideGate({ gateId: id, decision: "approved", userId: ctx.actorId, comment: reason });
+        await decideGate({ gateId: id, decision: "approved", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
         return;
       }
       if (actionKey === "reject") {
-        await decideGate({ gateId: id, decision: "rejected", userId: ctx.actorId, comment: reason });
+        await decideGate({ gateId: id, decision: "rejected", userId: ctx.actorId, comment: reason, allowedSubsidiaryIds });
         return;
       }
       if (actionKey === "delegate") {
@@ -142,17 +147,17 @@ export const flowsApprovalAdapter: InboxAdapter = {
             "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
           );
         }
-        await delegateGate(id, ctx.actorId, match[1]!);
+        await delegateGate(id, ctx.actorId, match[1]!, allowedSubsidiaryIds);
         return;
       }
     }
     if (leg === "document") {
       if (actionKey === "approve") {
-        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "approved", reason);
+        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "approved", reason, allowedSubsidiaryIds);
         return;
       }
       if (actionKey === "reject") {
-        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "rejected", reason);
+        await decideDocumentApproval(ctx.orgId, id, ctx.actorId, "rejected", reason, allowedSubsidiaryIds);
         return;
       }
     }
