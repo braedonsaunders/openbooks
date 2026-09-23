@@ -421,10 +421,23 @@ export async function generateInvoiceFromBillingRequest(
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable
            and te.billing_status = 'unbilled'
-           ${isFinal && ticketIds.length === 0 ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
+           ${isFinal && ticketIds.length === 0 && !hasTimeSelection ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on, te.id
          for update of te
       `))
+      // Every explicitly selected entry must be billable here: invoicing only
+      // the eligible subset while marking the request invoiced would silently
+      // drop the rest. Name the entries that cannot be billed so the operator
+      // can recreate the request without them (or approve them first).
+      if (hasTimeSelection) {
+        const billed = new Set(timeRows.rows.map((row) => String(row.id)))
+        const missing = selected!.filter((id) => !billed.has(id))
+        if (missing.length > 0) {
+          throw new BillingError(
+            `Time ${missing.length === 1 ? 'entry' : 'entries'} ${missing.join(', ')} selected on this billing request cannot be billed — already billed, unapproved, non-billable, or outside this project or its dates. Cancel this request and create a new one without ${missing.length === 1 ? 'it' : 'them'}`,
+          )
+        }
+      }
 
       for (const te of timeRows.rows) {
         const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
