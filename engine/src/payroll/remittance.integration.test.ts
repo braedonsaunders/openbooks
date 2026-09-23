@@ -674,6 +674,69 @@ test(
 );
 
 test(
+  "a later same-period run bills only its unbilled lines, never twice",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-15", amount: "10.00",
+      });
+      const first = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+      });
+      // A second accrual lands after the first bill: the same window now
+      // holds $10 of consumed lines and $5 of fresh ones.
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-01-20", amount: "5.00",
+      });
+      const second = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+      });
+      assert.notEqual(second.documentId, first.documentId);
+      const totals = (await db.execute<{ id: string; total: string }>(sql`
+        select id::text as id, total::text as total
+          from documents
+         where org_id = ${fixture.org.orgId} and kind = 'vendor_bill'
+           and custom->'payrollRemittance'->>'partyId' = ${fixture.org.vendorId}
+           and status <> 'voided'
+      `)).rows;
+      assert.equal(totals.length, 2);
+      const byId = new Map(totals.map((row) => [row.id, row.total]));
+      assert.equal(cmp(byId.get(first.documentId)!, "10.00"), 0);
+      assert.equal(cmp(byId.get(second.documentId)!, "5.00"), 0);
+      // No double bill: every consumed line is covered exactly once, by the
+      // bill that billed it, and the two bills' coverage never shares a line.
+      const coverage = (await db.execute<{ line: string; bills: number; amount: string }>(sql`
+        select cov.stub_line_id::text as line, count(*)::int as bills,
+               sum(cov.amount)::text as amount
+          from payroll_remittance_coverage cov
+          join documents bill
+            on bill.id = cov.bill_document_id and bill.org_id = cov.org_id
+         where cov.org_id = ${fixture.org.orgId} and bill.status <> 'voided'
+         group by cov.stub_line_id
+      `)).rows;
+      assert.equal(coverage.length, 2);
+      for (const row of coverage) assert.equal(row.bills, 1);
+      assert.equal(
+        cmp(sum(coverage.map((row) => row.amount)), "15.00"),
+        0,
+        "covered lines sum to the billed scope exactly once",
+      );
+      // Nothing left unbilled: an exact re-run keeps the duplicate refusal.
+      await assert.rejects(
+        createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+          partyId: fixture.org.vendorId, from: "2026-01-01", to: "2026-01-31",
+        }),
+        /already exists/,
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
   "remittance bill snapshots accruals after the destination fence is released",
   { skip: !DB },
   async () => {
