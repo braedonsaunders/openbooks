@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   accrualEarned,
   accrualEarnedAcrossSegments,
+  selectReigns,
   addHours,
   carryoverApplied,
   cmpHours,
@@ -196,6 +197,41 @@ test("selection skips policies whose window ended before the date", () => {
   const current = { id: "current", employerSubsidiaryId: null, departmentId: null, effectiveFrom: "2026-01-01", effectiveTo: null };
   assert.equal(selectPolicy([old, current], scope, "2026-06-01")?.id, "current");
   assert.equal(selectPolicy([old], scope, "2026-06-01"), null);
+});
+
+test("reigns split the year at successions and let the specific policy replace the general one", () => {
+  const org = {
+    id: "org", employerSubsidiaryId: null, departmentId: null,
+    effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30",
+    rule: { kind: "per_period" as const, hours: "8", periods_per_year: 12 },
+  };
+  const successor = {
+    id: "successor", employerSubsidiaryId: null, departmentId: null,
+    effectiveFrom: "2026-07-01", effectiveTo: null,
+    rule: { kind: "per_period" as const, hours: "16", periods_per_year: 12 },
+  };
+  const dept = {
+    id: "dept", employerSubsidiaryId: null, departmentId: "d1",
+    effectiveFrom: "2026-01-01", effectiveTo: null,
+    rule: { kind: "per_year" as const, hours: "40" },
+  };
+  const orgScope = { employerSubsidiaryId: "s1", departmentId: null };
+  assert.deepEqual(
+    selectReigns([org, successor], orgScope, "2026-01-01", "2026-12-31").map((reign) => [reign.from, reign.to]),
+    [["2026-01-01", "2026-06-30"], ["2026-07-01", "2026-12-31"]],
+  );
+  // The department worker's whole year reigns under the department policy:
+  // the org-wide rules never stack and never price in.
+  const deptScope = { employerSubsidiaryId: "s1", departmentId: "d1" };
+  assert.deepEqual(
+    selectReigns([org, successor, dept], deptScope, "2026-01-01", "2026-12-31").map((reign) => [reign.from, reign.to]),
+    [["2026-01-01", "2026-12-31"]],
+  );
+  // Gap days carry no reign.
+  assert.deepEqual(
+    selectReigns([org], orgScope, "2026-01-01", "2026-12-31").map((reign) => [reign.from, reign.to]),
+    [["2026-01-01", "2026-06-30"]],
+  );
 });
 
 test("whole periods elapsed clamps to the year", () => {

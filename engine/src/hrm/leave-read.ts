@@ -17,11 +17,11 @@ import {
   accrualEarnedAcrossSegments,
   addHours,
   carryoverApplied,
+  selectReigns,
   subHours,
   timeBalance,
   selectPolicy,
   type AccrualRule,
-  type AccrualSegment,
   type CarryoverRule,
   type PolicyCandidate,
 } from "./leave-math.ts";
@@ -208,12 +208,14 @@ export async function timeBalanceAsOf(
     const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
     return { kind: "time", policyId: policy.id, earned: null, carried: "0", taken, balance: null, unlimited: true };
   }
-  // Accrual is earned per policy segment over its effective window: a
-  // mid-year successor earns the old rate before the switch and the new
-  // rate after, never the current rule backdated to January.
+  // Accrual is earned per governing reign over its window: each day accrues
+  // under its most-specific policy, so a mid-year successor earns the old
+  // rate before the switch and the new rate after (never the current rule
+  // backdated to January), and a department policy replaces — never stacks
+  // with — the org-wide rule for its workers.
   const yearStart = accrualYearOf(asOf);
   const segments = await policiesInRange(exec, orgId, leaveTypeId, yearStart, asOf);
-  const earned = accrualEarnedAcrossSegments(toSegments(segments), yearStart, asOf);
+  const earned = accrualEarnedAcrossSegments(withRules(segments, scope, yearStart, asOf), yearStart, asOf);
   const taken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, yearStart, asOf);
   // Carryover is earned under the policies in force for the prior year and
   // carried under the rule holding the year boundary — never under the
@@ -224,7 +226,7 @@ export async function timeBalanceAsOf(
   let carried = "0";
   const priorSegments = await policiesInRange(exec, orgId, leaveTypeId, priorStart, priorEnd);
   if (priorSegments.length > 0) {
-    const priorEarned = accrualEarnedAcrossSegments(toSegments(priorSegments), priorStart, priorEnd);
+    const priorEarned = accrualEarnedAcrossSegments(withRules(priorSegments, scope, priorStart, priorEnd), priorStart, priorEnd);
     if (priorEarned !== null) {
       const priorTaken = await absenceHoursInWindow(exec, orgId, employmentId, leaveTypeId, priorStart, priorEnd);
       const unused = subHours(priorEarned, priorTaken);
@@ -253,12 +255,23 @@ export async function timeBalanceAsOf(
   };
 }
 
-function toSegments(rows: readonly PolicyRow[]): AccrualSegment[] {
-  return rows.map((row) => ({
-    rule: row.accrual_rule as AccrualRule,
-    from: String(row.effective_from).slice(0, 10),
-    to: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
-  }));
+/**
+ * Governing reigns of policy rows for a scope and window: each day's
+ * most-specific policy, run together so accrual prices every slice at the
+ * rule that actually covered its first service day.
+ */
+function withRules(
+  rows: readonly PolicyRow[],
+  scope: PolicyScope,
+  from: string,
+  to: string,
+) {
+  return selectReigns(
+    rows.map((row) => ({ ...policyToCandidate(row), rule: row.accrual_rule as AccrualRule })),
+    scope,
+    from,
+    to,
+  );
 }
 
 export interface ValueBalanceEntry {
