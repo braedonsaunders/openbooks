@@ -137,3 +137,25 @@ test("a shared REFUSED code converts only its no-link text", async () => {
     /self-service grant/,
   );
 });
+
+test("a refusal's remedy link rides into page state only when declared", async () => {
+  const notConfigured = () =>
+    loadOrRefuse(
+      async () => {
+        throw new FieldTimeError("field_time_not_configured", "Field time is not configured — declare the rules in Timesheets setup");
+      },
+      {
+        refusals: [{ error: FieldTimeError, code: "field_time_not_configured", action: { href: "/time/setup", label: "Open setup" } }],
+        title: "Field clock",
+      },
+    );
+  const withLink = await notConfigured();
+  assert.deepEqual(withLink.ok ? null : withLink.refusal.action, { href: "/time/setup", label: "Open setup" });
+  const plain = await loadOrRefuse(
+    async () => {
+      throw new FieldTimeError("no_employee_link", "No employee record is linked to this login");
+    },
+    { refusals: [NO_EMPLOYEE], title: "Field clock" },
+  );
+  assert.equal(plain.ok ? "loaded" : "action" in plain.refusal, false, "no action key when none is declared");
+});

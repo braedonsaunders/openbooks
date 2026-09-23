@@ -83,7 +83,12 @@ test('a linked login never hits the party refusal again', { skip: !env.OPENBOOKS
     // ever converts, so linking the party clears exactly this state.
     try {
       const data = await withBypass(() => loadClockPageData(org.orgId, userId, t))
-      assert.equal(data.refusal, null, 'a linked login gets data, not the party refusal')
+      // A linked login gets data, or (scratch orgs declare no field-time
+      // rules) the not-configured refusal — never the party refusal.
+      assert.ok(
+        data.refusal === null || !/No employee record is linked/.test(data.refusal.message),
+        'a linked login never reads the party refusal',
+      )
     } catch (e) {
       // Any other error (e.g. the feature-gate refusal) still throws out
       // of the loader — the assertion is only that the party refusal is
@@ -93,6 +98,34 @@ test('a linked login never hits the party refusal again', { skip: !env.OPENBOOKS
         `a linked login must never hit the party refusal, threw: ${String(e)}`,
       )
     }
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('an unconfigured org reads the setup refusal, with the setup link only for managers', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    const userId = await withBypass(() => createScratchUser(org.orgId, 'Linked worker', 'viewer'))
+    const partyId = randomUUID()
+    await withBypass(() => db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active)
+      values (${partyId}, ${org.orgId}, 'person', 'Linked Worker', true)`))
+    await withBypass(() => db.execute(sql`
+      update users set party_id = ${partyId} where org_id = ${org.orgId} and id = ${userId}`))
+    await withBypass(() => db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb) - 'fieldTime', '{features,fieldTime}', 'true'::jsonb, true)
+       where id = ${org.orgId}`))
+    // Field time on, rules never declared: the engine's named refusal
+    // (FieldTimeError field_time_not_configured) renders, not the boundary.
+    const manager = await withBypass(() => loadClockPageData(org.orgId, userId, t, { canManageSetup: true }))
+    assert.ok(manager.refusal, 'an unconfigured org gets refusal state, not a throw')
+    assert.match(manager.refusal.message, /Field time is not configured/)
+    assert.deepEqual(manager.refusal.action, { href: '/time/setup', label: 'field.openSetup' })
+    const worker = await withBypass(() => loadClockPageData(org.orgId, userId, t, { canManageSetup: false }))
+    assert.ok(worker.refusal, 'a worker reads the same refusal')
+    assert.equal(worker.refusal.action, undefined, 'no setup link for a caller who cannot configure it')
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }

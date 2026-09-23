@@ -83,6 +83,7 @@
     "timesheetsTab": "Timesheets",
     "clockTab": "Ponto",
     "crewTab": "Equipe",
+    "openSetup": "Abrir configuração de folhas de horas",
     "geoHint": "Sua localização é conferida com a geocerca do projeto quando houver. Um ponto fora é registrado mesmo assim e sinalizado para quem aprova.",
     "clockIn": "Bater entrada",
     "clockOut": "Bater saída",

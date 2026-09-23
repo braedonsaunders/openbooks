@@ -83,6 +83,7 @@
     "timesheetsTab": "Feuilles",
     "clockTab": "Pointer",
     "crewTab": "Équipe",
+    "openSetup": "Ouvrir la configuration des feuilles de temps",
     "geoHint": "Votre position est comparée à la zone du projet quand elle existe. Un point hors zone est quand même enregistré et signalé au valideur.",
     "clockIn": "Pointer l'arrivée",
     "clockOut": "Pointer le départ",

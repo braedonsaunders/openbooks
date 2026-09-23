@@ -83,6 +83,7 @@
     "timesheetsTab": "タイムシート",
     "clockTab": "打刻",
     "crewTab": "班",
+    "openSetup": "タイムシート設定を開く",
     "geoHint": "宣言済みの場合はプロジェクトのジオフェンスと照合します。圏外の位置も記録され、承認者にフラグ表示されます。",
     "clockIn": "出勤",
     "clockOut": "退勤",

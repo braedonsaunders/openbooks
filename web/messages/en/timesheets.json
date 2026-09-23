@@ -83,6 +83,7 @@
     "timesheetsTab": "Timesheets",
     "clockTab": "Clock",
     "crewTab": "Crew",
+    "openSetup": "Open Timesheets setup",
     "geoHint": "Your location is checked against the project geofence when one is declared. An outside fix is recorded anyway and flagged for the approver.",
     "clockIn": "Clock in",
     "clockOut": "Clock out",
