@@ -164,9 +164,12 @@ export function utcDateFromParts(
   civilPart(minute, "minute");
   civilPart(second, "second");
   civilPart(ms, "millisecond");
+  // Year/month/day FIRST, time parts second: an out-of-range time carries
+  // into the date (hour 24 is the next day at 00:00), and setting the parts
+  // in the other order lets setUTCFullYear overwrite the carried day.
   const date = new Date(0);
-  date.setUTCHours(hour, minute, second, ms);
   date.setUTCFullYear(year, monthIndex, day);
+  date.setUTCHours(hour, minute, second, ms);
   return date;
 }
 
