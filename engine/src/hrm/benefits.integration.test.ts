@@ -692,6 +692,41 @@ test("generation writes monthly rows, prorates daily, idempotent on retry", { sk
   });
 });
 
+test("concurrent generators for one month share one row per kind without aborting", async () => {
+  await withHarness(async (h) => {
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);
+    const seed = await seedPlan(h.org.orgId, {});
+    const windowId = await seedWindow(h.org.orgId);
+    const dto = await electEnrollment({
+      orgId: h.org.orgId,
+      actorId: h.adminId,
+      employmentId,
+      planId: seed.planId,
+      windowId,
+      effectiveFrom: "2026-01-01",
+    });
+    // Two generators on two connections at once: the unique constraint
+    // arbitrates, the loser re-reads the winner, and neither transaction
+    // aborts (a 23505 caught inside the open transaction used to fail every
+    // later statement with 25P02 and roll both generations back).
+    const query = { orgId: h.org.orgId, actorId: h.adminId, coverageMonth: "2026-03" };
+    const [first, second] = await Promise.all([
+      generateBenefitPayrollInputs(query),
+      generateBenefitPayrollInputs(query),
+    ]);
+    for (const [index, result] of [first, second].entries()) {
+      assert.equal(result.length, 2, `generator ${index} returns both kinds`);
+    }
+    assert.deepEqual(first.map((r) => r.id).sort(), second.map((r) => r.id).sort(), "both generators land on the same rows");
+    const stored = await inputsOf(dto.id);
+    assert.equal(stored.length, 2, "exactly one row per kind survives the race");
+    assert.deepEqual(stored.map((r) => [r.kind, r.amount, r.status]), [
+      ["benefit_deduction", "250.0000", "pending"],
+      ["employer_contribution", "500.0000", "pending"],
+    ]);
+  });
+});
+
 test("generation converts per_period by schedule and refuses guesses", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId);

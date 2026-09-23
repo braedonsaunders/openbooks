@@ -640,27 +640,25 @@ async function persistFlags(
       alreadyOpen += 1;
       continue;
     }
-    try {
-      const inserted = (await exec.execute<{ id: string }>(sql`
-        insert into payroll_anomaly_flags (
-          org_id, pay_period_from, pay_period_to, employment_id, kind,
-          severity, detail, explanation, status, created_by
-        ) values (
-          ${orgId}::uuid, ${from}::date, ${to}::date,
-          ${flag.employmentId}::uuid, ${flag.kind},
-          ${SEVERITY_BY_KIND[flag.kind]}, ${JSON.stringify(flag.detail)}::jsonb,
-          ${flag.explanation}, 'open', ${actorId}::uuid
-        ) returning id::text as id`)).rows[0];
-      if (inserted) created += 1;
-    } catch (error) {
-      // A racing rescan inserted the same key first: the unique index
-      // refused us, which is the idempotency working, not a failure.
-      if (error instanceof Error && "code" in error && (error as { code: string }).code === "23505") {
-        alreadyOpen += 1;
-        continue;
-      }
-      throw error;
-    }
+    // A racing rescan for the same key is expected and benign: the
+    // rescan-unique index arbitrates, the loser lands zero rows, and the
+    // flag is counted already-open. DO NOTHING (not a 23505 catch) because
+    // a unique violation would abort this scan transaction and fail every
+    // later statement with 25P02. Inference-less: the arbiter is an
+    // expression index, which ON CONFLICT (columns) cannot name.
+    const inserted = (await exec.execute<{ id: string }>(sql`
+      insert into payroll_anomaly_flags (
+        org_id, pay_period_from, pay_period_to, employment_id, kind,
+        severity, detail, explanation, status, created_by
+      ) values (
+        ${orgId}::uuid, ${from}::date, ${to}::date,
+        ${flag.employmentId}::uuid, ${flag.kind},
+        ${SEVERITY_BY_KIND[flag.kind]}, ${JSON.stringify(flag.detail)}::jsonb,
+        ${flag.explanation}, 'open', ${actorId}::uuid
+      ) on conflict do nothing
+      returning id::text as id`)).rows[0];
+    if (inserted) created += 1;
+    else alreadyOpen += 1;
   }
   return { created, alreadyOpen, suppressed };
 }
