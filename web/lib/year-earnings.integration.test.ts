@@ -66,6 +66,11 @@ async function post(args: {
   tag: string
 }): Promise<void> {
   const entry = randomUUID()
+  // Hoisted out of the insert below: a nested template literal inside an
+  // interpolation desynchronizes the bypass-scope ratchet's parser, which
+  // then ends this helper's body early and reports the status flip as an
+  // unwrapped top-level write. Same SQL bytes, scanner-visible shape.
+  const negated = `-${args.amount}`
   await db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
@@ -75,7 +80,7 @@ async function post(args: {
     insert into journal_lines
       (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
     values (${args.orgId}, ${entry}, 1, ${args.debit}, ${args.subsidiaryId}, ${args.amount}, 'CAD', ${args.amount}, '1'),
-           (${args.orgId}, ${entry}, 2, ${args.credit}, ${args.subsidiaryId}, ${`-${args.amount}`}, 'CAD', ${`-${args.amount}`}, '1')`)
+           (${args.orgId}, ${entry}, 2, ${args.credit}, ${args.subsidiaryId}, ${negated}, 'CAD', ${negated}, '1')`)
   // Runs in the caller's bypass scope, NOT a nested withBypassContext: the
   // inserts above inherit the outer withBypass, and opening a second
   // mechanism inside it lost the scope, so this UPDATE matched zero rows.
