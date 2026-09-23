@@ -12,6 +12,7 @@ import {
 } from "../platform/db.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
 import { autopilotRunToEnd, provisionRun } from "../sim/runner.ts";
+import { reconcileDocumentSequences } from "../records/numbering.ts";
 import { SAMPLE_COMPANY_BY_INDUSTRY, SAMPLE_COMPANY_PROFILES } from "./catalog.ts";
 
 export class SampleCompanyError extends Error {
@@ -756,6 +757,12 @@ async function finalizePreview(args: {
       `);
     });
   });
+  // Sample-to-live handoff (OM-01): the clone carries the template's
+  // documents, so advance its canonical sequences past the highest cloned
+  // number per kind even if the copy did not carry the reconciled counters.
+  // Forward-only and idempotent — a no-op when the counters already lead.
+  await withOrgContext(args.sandboxOrgId, () =>
+    reconcileDocumentSequences(db, args.sandboxOrgId));
 }
 
 export async function createSampleCompany(

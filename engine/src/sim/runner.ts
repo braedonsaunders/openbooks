@@ -23,6 +23,7 @@ import {
 import type { SimContext } from "./context.ts";
 import type { SimOrg } from "./world.ts";
 import { autopilotDay } from "./autopilot.ts";
+import { reconcileDocumentSequences } from "../records/numbering.ts";
 
 /**
  * Day-loop primitives. The operator (Claude Code) drives the loop: `dayStart`
@@ -132,7 +133,14 @@ export async function autopilotRunToEnd(runDir: string): Promise<RunManifest> {
         `sample simulation halted on ${start.simDate}: ${start.halted.failures.map((failure) => failure.invariant).join(", ")}`,
       );
     }
-    if (start.done) return loadRun(runDir).manifest;
+    if (start.done) {
+      // Sample-to-live handoff (OM-01): the generator numbers documents from
+      // private counters, so advance the canonical sequences past the highest
+      // sample number per kind — the next live document continues the run.
+      const { manifest } = loadRun(runDir);
+      await withOrgContext(manifest.orgId, () => reconcileDocumentSequences(db, manifest.orgId));
+      return loadRun(runDir).manifest;
+    }
 
     const { manifest, world } = loadRun(runDir);
     await withSimClock(manifest.simDate, () =>
