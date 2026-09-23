@@ -46,6 +46,12 @@
       "ratios": "Kennzahlen",
       "configuration": "Konfiguration"
     },
+    "forecast": {
+      "domainCaveatTitle": "Prognose verlässt den Wertebereich der Kennzahl",
+      "domainCaveat": "{metric} kann nicht negativ sein, aber die {model}-Projektion fällt ab {month} unter null, weil das Modell den jüngsten Rückgang fortschreibt. Spätere Monate zeigen, was der Trend bedeutet — keine erreichbaren {metric}; die ETS-Variante mit gedämpftem Trend lässt den Rückgang auslaufen, statt ihn zu verlängern.",
+      "domainTableNote": "Monate ab {month} projizieren unter null — außerhalb des Bereichs dieser Kennzahl.",
+      "domainGrowthNote": "Das projizierte Wachstum beruht auf Werten außerhalb des Bereichs von {metric} — siehe Hinweis oben."
+    },
     "kpi": {
       "revenue": "Umsatz",
       "grossMargin": "Bruttomarge",

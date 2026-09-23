@@ -6,8 +6,30 @@
  * so it runs client-side off the monthly GL series.
  */
 
-export type ForecastMethod = 'ets' | 'linear' | 'seasonal' | 'moving_avg' | 'arima'
+export type ForecastMethod = 'ets' | 'ets_damped' | 'linear' | 'seasonal' | 'moving_avg' | 'arima'
 export type Seasonality = 'auto' | 'none' | 'monthly' | 'quarterly'
+
+/**
+ * The sign domain a forecasted metric may take. Revenue is nonnegative —
+ * a projection below zero is not a prediction of negative sales but the
+ * model's trend carried past the domain's edge. Margins and income can
+ * genuinely go negative, so they declare 'any' and never breach.
+ */
+export type SignDomain = 'nonnegative' | 'any'
+
+export interface DomainBreach {
+  breached: boolean
+  /** Index into the projected values of the first out-of-domain point (-1). */
+  firstIndex: number
+}
+
+/** Whether the central projection leaves the metric's sign domain. Bands
+ * are uncertainty, not projection — only `values` can breach. */
+export function checkSignDomain(values: number[], domain: SignDomain): DomainBreach {
+  if (domain !== 'nonnegative') return { breached: false, firstIndex: -1 }
+  const firstIndex = values.findIndex((v) => v < 0)
+  return firstIndex === -1 ? { breached: false, firstIndex: -1 } : { breached: true, firstIndex }
+}
 
 export interface ForecastResult {
   values: number[]
@@ -83,7 +105,7 @@ function band(values: number[], sd: number, z: number, spread: number): { low: n
   }
 }
 
-export function forecastETS(data: number[], horizon: number, seasonalPeriod: number, z = 1.645): ForecastResult {
+export function forecastETS(data: number[], horizon: number, seasonalPeriod: number, z = 1.645, phi = 1): ForecastResult {
   const n = data.length
   const alpha = 0.3
   const beta = 0.1
@@ -115,7 +137,12 @@ export function forecastETS(data: number[], horizon: number, seasonalPeriod: num
   const values: number[] = []
   for (let h = 1; h <= horizon; h++) {
     const seasonFactor = seasonal.length > 0 ? seasonal[(n + h - 1) % seasonalPeriod]! : 1
-    values.push((level + trend * h) * seasonFactor)
+    // phi = 1 is the classic linear-trend extrapolation; phi < 1 damps the
+    // trend geometrically (sum of phi^i), so a steep decline levels off
+    // instead of crossing the domain edge in a straight line. phi is a
+    // documented model choice, never a silent clamp: the caller names it.
+    const trendTerm = phi === 1 ? trend * h : trend * (phi * (1 - phi ** h)) / (1 - phi)
+    values.push((level + trendTerm) * seasonFactor)
   }
   const sd = calculateStdDev(data)
   return { values, ...band(values, sd, z, 0.1), fitted, trend, seasonal: seasonal.length > 0, seasonalPeriod }
@@ -229,6 +256,9 @@ export function applyForecastMethod(
   switch (method) {
     case 'ets':
       result = forecastETS(data, horizon, seasonalPeriod, z)
+      break
+    case 'ets_damped':
+      result = forecastETS(data, horizon, seasonalPeriod, z, 0.9)
       break
     case 'linear':
       result = forecastLinear(data, horizon, z)

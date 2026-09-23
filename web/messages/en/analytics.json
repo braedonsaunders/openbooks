@@ -46,6 +46,12 @@
       "ratios": "Ratios",
       "configuration": "Configuration"
     },
+    "forecast": {
+      "domainCaveatTitle": "Projection leaves the metric's range",
+      "domainCaveat": "{metric} can't be negative, but the {model} projection crosses below zero starting {month} because the model carries the recent decline forward. Treat later months as what the trend implies, not as attainable {metric}; the damped-trend ETS variant levels the decline off instead of extending it.",
+      "domainTableNote": "Months from {month} onward project below zero, outside the range this metric can take.",
+      "domainGrowthNote": "Projected growth is computed from values outside {metric}'s range — see the caveat above."
+    },
     "kpi": {
       "revenue": "Revenue",
       "grossMargin": "Gross Margin",

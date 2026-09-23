@@ -46,6 +46,12 @@
       "ratios": "Ratios",
       "configuration": "Configuración"
     },
+    "forecast": {
+      "domainCaveatTitle": "La proyección sale del rango de la métrica",
+      "domainCaveat": "{metric} no puede ser negativo, pero la proyección {model} cae por debajo de cero desde {month} porque el modelo prolonga la caída reciente. Los meses posteriores muestran lo que implica la tendencia, no {metric} alcanzables; la variante ETS de tendencia amortiguada suaviza la caída en lugar de prolongarla.",
+      "domainTableNote": "Los meses desde {month} proyectan bajo cero, fuera del rango de esta métrica.",
+      "domainGrowthNote": "El crecimiento proyectado se calcula con valores fuera del rango de {metric}; consulta la advertencia anterior."
+    },
     "kpi": {
       "revenue": "Ingresos",
       "grossMargin": "Margen bruto",
