@@ -1090,8 +1090,8 @@ export async function recordRecognitionEvent(
 
     await lockObligationContract(tx,input.orgId,input.obligationId);
     // Validate the obligation exists and uses a milestone or usage method.
-    const oblRes = (await tx.execute<{ id: string; method: string; status: string }>(sql`
-      select o.id, r.method, o.status
+    const oblRes = (await tx.execute<{ id: string; description: string; method: string; status: string }>(sql`
+      select o.id, o.description, r.method, o.status
         from performance_obligations o
         join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
        where o.id = ${input.obligationId} and o.org_id = ${input.orgId}
@@ -1103,6 +1103,23 @@ export async function recordRecognitionEvent(
     if (oblRes.rows[0].method !== "milestone" && oblRes.rows[0].method !== "usage") {
       throw new RevenueRecognitionError(
         `recognition method '${oblRes.rows[0].method}' does not accept events; only milestone and usage methods are supported`,
+      );
+    }
+    // A promise retired by a prospective modification keeps its satisfied
+    // status but its schedules are closed: the rebuild plans zero lines for
+    // them, so an accepted event would sit in an event row that can never
+    // reach the plan or the GL. Refuse by name before inserting anything.
+    // Fully satisfied but NOT retired promises still accept negative
+    // corrections, which reverse earned revenue through the normal rebuild.
+    const schedRes = (await tx.execute<{ change_basis: RevenueChangeBasis | null }>(sql`
+      select change_basis from recognition_schedules
+       where obligation_id = ${input.obligationId} and org_id = ${input.orgId}`));
+    const retirement = schedRes.rows
+      .map((row) => row.change_basis)
+      .find((basis) => basis?.retired);
+    if (retirement) {
+      throw new RevenueRecognitionError(
+        `"${oblRes.rows[0].description}" was retired by modification ${retirement.changeId} on ${retirement.effectiveOn} — record the event against its replacement promise or amend the contract`,
       );
     }
 
