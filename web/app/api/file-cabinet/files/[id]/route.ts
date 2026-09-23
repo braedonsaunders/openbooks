@@ -1,11 +1,22 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { deleteFile, getFile, moveFile, purgeFile, renameFile } from '../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { fileViewer, requireFileAccess, requireFolderAccess, requireSession } from '../../lib'
 
 export const runtime = 'nodejs'
+
+/** Abort a multi-verb file edit so the shared transaction rolls everything back. */
+class FilePatchAbort extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'FilePatchAbort'
+    this.status = status
+  }
+}
 
 /** Get file details (metadata + versions + attachment links). */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -32,24 +43,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = parsedBody.data
   if (!body) return NextResponse.json({ error: 'invalid body' }, { status: 400 })
 
-  if (typeof body.name === 'string' && body.name.trim()) {
-    // The verb commits the rename and its attributable audit atomically.
-    const ok = await renameFile(gate.user.orgId, id, body.name.trim(), gate.user.id, {
-      actorId: gate.user.id,
-    })
-    if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : null
+  const folderId = typeof body.folderId === 'string' ? body.folderId : null
+  // Every refusal is decided BEFORE anything commits: the rename and the move
+  // below share one transaction, so a refused move can never leave a rename
+  // behind (and a refused rename never reaches the move).
+  if (folderId !== null && !isUuid(folderId)) {
+    return NextResponse.json({ error: 'invalid folderId' }, { status: 400 })
   }
-  if (typeof body.folderId === 'string') {
-    if (!isUuid(body.folderId)) {
-      return NextResponse.json({ error: 'invalid folderId' }, { status: 400 })
-    }
+  if (folderId !== null) {
     // Moving also needs Editor+ on the destination folder.
-    const destGate = await requireFolderAccess(gate, body.folderId, 'editor')
+    const destGate = await requireFolderAccess(gate, folderId, 'editor')
     if (destGate) return destGate
-    const ok = await moveFile(gate.user.orgId, id, body.folderId, gate.user.id, {
-      actorId: gate.user.id,
+  }
+  if (name === null && folderId === null) return NextResponse.json({ ok: true })
+  try {
+    await inDbTransaction(async (tx) => {
+      const audit = { actorId: gate.user.id, executor: tx }
+      if (name !== null) {
+        // The verb commits the rename and its attributable audit atomically.
+        const ok = await renameFile(gate.user.orgId, id, name, gate.user.id, audit)
+        if (!ok) throw new FilePatchAbort(404, 'not found')
+      }
+      if (folderId !== null) {
+        const ok = await moveFile(gate.user.orgId, id, folderId, gate.user.id, audit)
+        if (!ok) throw new FilePatchAbort(400, 'cannot move file')
+      }
     })
-    if (!ok) return NextResponse.json({ error: 'cannot move file' }, { status: 400 })
+  } catch (error) {
+    if (error instanceof FilePatchAbort) {
+      return NextResponse.json({ error: error.message }, { status: error.status })
+    }
+    throw error
   }
   return NextResponse.json({ ok: true })
 }
