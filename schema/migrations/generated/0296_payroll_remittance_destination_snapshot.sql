@@ -44,12 +44,51 @@
 -- EXISTS DDL, a guarded constraint add, DROP-then-CREATE trigger and policy,
 -- an anti-joined backfill), and scripts/bootstrap.ts carries the reviewed
 -- digest transition that authorises the re-run.
+--
+-- U5: pay_stub_lines is a hot table, so this file declares
+-- `-- openbooks: no-transaction` and the runner executes it statement by
+-- statement with a bounded session lock_timeout. The contract that makes a
+-- mid-file failure retry-safe: every statement is idempotent (IF NOT EXISTS
+-- throughout, guarded adds, anti-joined fills), and the DO block below drops
+-- this file's own INVALID indexes — a failed CONCURRENTLY build leaves one
+-- behind, and IF NOT EXISTS would otherwise skip the name forever, silently
+-- keeping the missing index. The snapshot index builds CONCURRENTLY and the
+-- snapshot FK arrives NOT VALID with a separate VALIDATE step, so neither
+-- takes a write-blocking lock over the whole table.
+--
+-- This file carries no lock_timeout of its own (refused for ordinals above
+-- 0251 by check-migration-headers); the runner's bound governs.
+
+-- openbooks: no-transaction
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET client_min_messages = warning;
+
+-- Retry safety: drop our own INVALID indexes before rebuilding. A failed
+-- CONCURRENTLY build leaves the name present but unusable, and IF NOT
+-- EXISTS below would then skip it forever. Plain (non-concurrent) DROP
+-- inside the DO block is safe: an INVALID index answers no query, so its
+-- brief exclusive lock contends with nothing.
+DO $$
+DECLARE
+  idx text;
+BEGIN
+  FOR idx IN
+    SELECT c.relname
+      FROM pg_index i
+      JOIN pg_class c ON c.oid = i.indexrelid
+     WHERE NOT i.indisvalid
+       AND c.relname IN (
+         'pay_stub_lines_remittance_party'
+       )
+  LOOP
+    EXECUTE format('DROP INDEX IF EXISTS %I', idx);
+  END LOOP;
+END
+$$;
 
 -- Every live remittance marker must parse before the backfill casts below.
 -- The backfill's regexes admit shape-valid values a cast still rejects
@@ -155,6 +194,12 @@ END
 $precheck$;
 
 ALTER TABLE public.pay_stub_lines ADD COLUMN IF NOT EXISTS remittance_party_id uuid;
+-- The snapshot FK arrives NOT VALID: adding it validating would scan hot
+-- pay_stub_lines under one lock. The dangling-vendor precheck above refuses
+-- first over exactly the scope the backfill below writes, so the VALIDATE
+-- step finds no violation on a healthy install; on an unhealthy one it
+-- fails NAMING the constraint, and the operator repoints the vendor and
+-- re-runs (the no-transaction resume contract: earlier steps replay clean).
 DO $remittance_snapshot_fkey$
 BEGIN
   IF NOT EXISTS (
@@ -162,11 +207,12 @@ BEGIN
   ) THEN
     ALTER TABLE public.pay_stub_lines ADD CONSTRAINT pay_stub_lines_remittance_party_tenant_fkey
       FOREIGN KEY (org_id, remittance_party_id) REFERENCES public.parties(org_id, id)
-      DEFERRABLE INITIALLY IMMEDIATE;
+      DEFERRABLE INITIALLY IMMEDIATE NOT VALID;
   END IF;
 END
 $remittance_snapshot_fkey$;
-CREATE INDEX IF NOT EXISTS pay_stub_lines_remittance_party ON public.pay_stub_lines(org_id, remittance_party_id);
+ALTER TABLE public.pay_stub_lines VALIDATE CONSTRAINT pay_stub_lines_remittance_party_tenant_fkey;
+CREATE INDEX CONCURRENTLY IF NOT EXISTS pay_stub_lines_remittance_party ON public.pay_stub_lines(org_id, remittance_party_id);
 
 UPDATE public.pay_stub_lines l
    SET remittance_party_id = c.remittance_party_id
