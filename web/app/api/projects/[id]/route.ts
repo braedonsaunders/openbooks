@@ -228,29 +228,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     invoicingPref = p == null || (typeof p === 'object' && Object.values(p).every((v) => v == null)) ? null : p
   }
 
-  let mergedCustom: Record<string, unknown> | undefined
-  if (body.custom !== undefined) {
-    const base = { ...(existing.rows[0].custom ?? {}) }
-    const defs = await loadFieldDefs('projects')
-    // PATCH custom values are partial: validate the effective bag so an
-    // omitted required field can be satisfied by its stored value.
-    const result = validateCustomValues(defs, { ...base, ...body.custom })
-    if (!result.ok) return bad(Object.values(result.errors)[0]!, result.errors)
-    // Reference custom values are uuid-SHAPED at this point but nothing
-    // proves the referenced row belongs to the caller: refuse foreign or
-    // dangling ids instead of persisting a cross-tenant pointer.
-    // Supplied values only, so legacy bags cannot lock unrelated edits.
-    const suppliedCustom: Record<string, unknown> = {}
-    for (const key of Object.keys(body.custom)) {
-      if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
-    }
-    const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
-    if (unowned.length > 0) return bad(`${unowned[0]!.label} not found in this organization`)
-    for (const d of defs) delete base[d.key]
-    Object.assign(base, result.cleaned)
-    mergedCustom = base
-  }
-
   const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
   if (contractValue === 'invalid') return bad('Contract value must be a number')
 
@@ -269,6 +246,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   let featureRefused = false
   let scopeRefused = false
+  let customRefused: NextResponse | null = null
   await withOrgTransaction(user.orgId, async () => {
     // Serialize against feature toggles, then re-ask the gate the entry guard
     // already asked: its answer may be stale by the time this write lands.
@@ -298,6 +276,38 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return
     }
     const before = locked.rows[0]
+    // Custom jsonb merges under the row lock (read-modify-write on the
+    // locked bag): concurrent PATCHes for distinct keys all read the same
+    // pre-lock bag outside, so merging here — after this writer holds the
+    // lock — is what keeps the second writer from overwriting the first.
+    let mergedCustom: Record<string, unknown> | undefined
+    if (body.custom !== undefined) {
+      const base = { ...((before.custom as Record<string, unknown> | null) ?? {}) }
+      const defs = await loadFieldDefs('projects')
+      // PATCH custom values are partial: validate the effective bag so an
+      // omitted required field can be satisfied by its stored value.
+      const result = validateCustomValues(defs, { ...base, ...body.custom })
+      if (!result.ok) {
+        customRefused = bad(Object.values(result.errors)[0]!, result.errors)
+        return
+      }
+      // Reference custom values are uuid-SHAPED at this point but nothing
+      // proves the referenced row belongs to the caller: refuse foreign or
+      // dangling ids instead of persisting a cross-tenant pointer.
+      // Supplied values only, so legacy bags cannot lock unrelated edits.
+      const suppliedCustom: Record<string, unknown> = {}
+      for (const key of Object.keys(body.custom)) {
+        if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+      }
+      const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+      if (unowned.length > 0) {
+        customRefused = bad(`${unowned[0]!.label} not found in this organization`)
+        return
+      }
+      for (const d of defs) delete base[d.key]
+      Object.assign(base, result.cleaned)
+      mergedCustom = base
+    }
     await db.execute(sql`
     update projects set
       name = ${name !== undefined ? name : sql`name`},
@@ -352,6 +362,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
   }
   if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (customRefused) return customRefused
 
   const payload = await loadProject(id, user.orgId)
   if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
