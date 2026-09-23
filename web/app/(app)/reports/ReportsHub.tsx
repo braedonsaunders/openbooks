@@ -165,7 +165,7 @@ export function ReportsHub({
                       </span>
                       <div className="min-w-0 flex-1">
                         <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{card.title}</h3>
-                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{card.desc}</p>
+                        <p className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{card.desc}</p>
                       </div>
                       <ArrowUpRight
                         size={15}
