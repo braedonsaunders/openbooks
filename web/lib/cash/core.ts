@@ -459,7 +459,6 @@ const addMonthsUTC = (d: Date, n: number): Date => {
   return r;
 };
 const daysInMonthUTC = (d: Date): number => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
-const round2 = (n: number): number => Math.round(n * 100) / 100;
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**
@@ -538,12 +537,11 @@ export async function categoryWeekly(
   const { money } = await getMoneyFormatter(orgId)
   const n = weekStarts.length;
   // Strategy implementations use ordinary numbers for non-ledger model
-  // coefficients (proration, cadence and formula evaluation), but every
-  // monetary result is canonicalized to a four-decimal string at this
-  // function's return boundary. SQL money values are never exposed as a
-  // JavaScript Number.
-  // Formula evaluation is the sole numeric model path; its rounded result is
-  // immediately canonicalized back to exact money before leaving this scope.
+  // coefficients (proration, cadence), but every monetary result is
+  // canonicalized to a four-decimal string at this function's return
+  // boundary. SQL money values are never exposed as a JavaScript Number, and
+  // formula evaluation is exact decimal end to end (see ./formula): the
+  // evaluator returns a canonical numeric(19,4) string, never a float.
   const weekly = new Array<Money>(n).fill(ZERO_MONEY);
   const weeklyExact = new Array<Money | null>(n).fill(null);
   const asOf = parseISO(asOfIso);
@@ -873,7 +871,9 @@ export async function categoryWeekly(
       // A malformed tenant formula is a refusal the operator must see named,
       // never a silent 0 forecast that looks like "no cash expected" —
       // forecast-only, but it is the forecast the release gate reads.
-      let result: number;
+      // evaluateFormula returns an exact numeric(19,4) string (never a
+      // float), so no rounding crosses the IEEE-754 boundary here.
+      let result: string;
       try {
         result = evaluateFormula(evalStr);
       } catch (e) {
@@ -881,12 +881,7 @@ export async function categoryWeekly(
           `cash forecast formula "${cat.formula}" failed for the week of ${k}: ${(e as Error).message}`,
         );
       }
-      if (!isFinite(result)) {
-        throw new Error(
-          `cash forecast formula "${cat.formula}" produced a non-finite value for the week of ${k}`,
-        );
-      }
-      weekly[i] = normalizeMoneyValue(String(round2(result)));
+      weekly[i] = normalizeMoneyValue(result);
     });
     logic = cat.formula.length > 60 ? `${cat.formula.slice(0, 57)}…` : cat.formula;
     meta = { method: "Calculated Formula", formula: cat.formula };
