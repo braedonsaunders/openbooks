@@ -142,7 +142,7 @@ test('project actions link the existing General Ledger to the complete project p
   assert.match(drawer, /project: String\(pr\.id\)/)
   assert.match(loader, /min\(e\.posting_date\)/)
   assert.match(loader, /l\.project_id = \$\{projectId\}/)
-  assert.match(report, /dimensionOptions\(undefined, dims\.projectId\)/)
+  assert.match(report, /dimensionOptions\(undefined, dims\.projectId, dims\.subsidiaryIds\)/, 'the GL picker inherits the reader subsidiary fence')
   assert.match(reports, /p\.id = \$\{selectedProjectId \?\? null\}::uuid/)
 })
 
