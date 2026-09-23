@@ -39,7 +39,11 @@ export interface ParsedStatementLine {
   amount: string;
   description: string | null;
   counterpartyRef?: string | null;
-  /** Source-provided dedupe key (OFX FITID). Synthesized at import when absent. */
+  /**
+   * Dedupe key: source-provided (OFX FITID) when the bank supplies one, else
+   * a deterministic fingerprint synthesized at import
+   * (`synth-v1:…`, see synthesizeStatementLineId). Never null after import.
+   */
   bankTransactionId?: string | null;
 }
 
@@ -1022,11 +1026,75 @@ async function loadReconcilableAccount(orgId: string, accountId: string): Promis
 }
 
 /**
+ * Deterministic dedupe identity for a line the bank gave no ID. The
+ * fingerprint covers the validated posting date, the canonical amount, and
+ * the normalized description, plus the line's occurrence ordinal among
+ * content-identical tuples in the same statement: two genuine $5 coffees on
+ * the same day import as two distinct IDs, while a re-exported file resolves
+ * to the same IDs in any row order. Case and surrounding/inner spacing in the
+ * description are not identity — re-exports routinely reflow them.
+ *
+ * The `synth-v1:` prefix namespaces synthesized keys away from
+ * source-provided FITIDs and versions the normalization, so a future
+ * semantics change mints disjoint IDs instead of colliding with this scheme.
+ * Callers must synthesize (assignStatementLineIds) before consulting stored
+ * IDs: an ID-less line from a different source then dedupes against the
+ * already-imported one instead of importing — and reconciling — twice.
+ */
+export function synthesizeStatementLineId(
+  line: Pick<ParsedStatementLine, "postedOn" | "amount" | "description">,
+  occurrence: number,
+): string {
+  if (!Number.isSafeInteger(occurrence) || occurrence < 1) {
+    throw new BankingError("Statement line occurrence must be a positive integer");
+  }
+  const fingerprint = createHash("sha256")
+    .update("openbooks.bank-statement-line.v1", "utf8")
+    .update("\0", "utf8")
+    .update(line.postedOn, "utf8")
+    .update("\0", "utf8")
+    .update(line.amount, "utf8")
+    .update("\0", "utf8")
+    .update(normalizeFingerprintText(line.description), "utf8")
+    .update("\0", "utf8")
+    .update(String(occurrence), "utf8")
+    .digest("hex");
+  return `synth-v1:${fingerprint}`;
+}
+
+/** Description normalization for the dedupe fingerprint (see above). */
+export function normalizeFingerprintText(value: string | null | undefined): string {
+  return (value ?? "").trim().replace(/\s+/g, " ").toUpperCase();
+}
+
+export type IdentifiedStatementLine = ParsedStatementLine & { bankTransactionId: string };
+
+/**
+ * Fill every ID-less validated line with its deterministic fingerprint,
+ * counting occurrences among content-identical tuples within this batch.
+ * Source-provided IDs pass through untouched. The result carries no nulls,
+ * so the account-scoped unique index and filterDuplicateStatementLines see
+ * one uniform identity for both kinds of lines.
+ */
+export function assignStatementLineIds(
+  lines: readonly ParsedStatementLine[],
+): IdentifiedStatementLine[] {
+  const occurrences = new Map<string, number>();
+  return lines.map((line) => {
+    if (line.bankTransactionId) return { ...line, bankTransactionId: line.bankTransactionId };
+    const tuple = `${line.postedOn}\0${line.amount}\0${normalizeFingerprintText(line.description)}`;
+    const occurrence = (occurrences.get(tuple) ?? 0) + 1;
+    occurrences.set(tuple, occurrence);
+    return { ...line, bankTransactionId: synthesizeStatementLineId(line, occurrence) };
+  });
+}
+
+/**
  * Apply the safe automatic statement dedupe rules. An exact retry of source
- * bytes is the same import, while a non-empty ID supplied by the bank may
- * identify a transaction across different sources. Parsed line content is not
- * identity — two real transactions can share every visible field — so an
- * ID-less line from a different source is retained and remains ID-less.
+ * bytes is the same import. Every other line carries a transaction ID —
+ * source-provided (OFX FITID) or synthesized at import for ID-less lines
+ * (see synthesizeStatementLineId) — and an ID already on the account, or
+ * already seen in this batch, marks the line a duplicate.
  */
 export function filterDuplicateStatementLines(
   lines: ParsedStatementLine[],
@@ -1174,11 +1242,11 @@ function sourceEvidence(
 
 /**
  * Import normalized statement lines for a reconcilable account. Lines whose
- * source-provided `bankTransactionId` already exists on the account are
- * skipped. An exact retry of source bytes for the same account is skipped as
- * one import even when its lines have no transaction IDs. Different source
- * bytes without transaction IDs cannot be safely content-deduped, so their
- * lines are retained. With `dryRun` nothing is written — used for preview.
+ * transaction ID — source-provided `bankTransactionId`, or the deterministic
+ * fingerprint synthesized for ID-less lines — already exists on the account
+ * are skipped and reported as duplicates. An exact retry of source bytes for
+ * the same account is skipped as one import. With `dryRun` nothing is
+ * written — used for preview.
  * Committed imports retain their exact source bytes in the append-only audit
  * log and point `rawFileRef` to that evidence. Engine callers without an
  * external file/feed payload retain a canonical copy of the import request.
@@ -1229,6 +1297,11 @@ export async function importStatement(
       bankTransactionId,
     };
   });
+  // Every line leaves here with an ID: source-provided when the bank gave
+  // one, else the deterministic fingerprint. The stored-ID lookup and the
+  // account-scoped unique index below then dedupe re-exported ID-less files
+  // line by line instead of importing — and reconciling — them twice.
+  const identified = assignStatementLineIds(validated);
   const openingBalance = opts.openingBalance
     ? normalizeAmount(opts.openingBalance, "Opening balance")
     : null;
@@ -1262,7 +1335,7 @@ export async function importStatement(
       ? []
       : [
           ...new Set(
-            validated.flatMap((line) =>
+            identified.flatMap((line) =>
               line.bankTransactionId ? [line.bankTransactionId] : [],
             ),
           ),
@@ -1279,7 +1352,7 @@ export async function importStatement(
       for (const row of existing.rows) existingIds.add(row.id);
     }
     const { lines: fresh, duplicates } = filterDuplicateStatementLines(
-      validated,
+      identified,
       existingIds,
       sourceAlreadyImported,
     );

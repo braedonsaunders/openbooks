@@ -676,6 +676,77 @@ test(
 );
 
 test(
+  "re-importing a re-exported ID-less month imports only genuinely new rows",
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actor = (await seedFlowActors(org.orgId)).adminId;
+      const ctx = { orgId: org.orgId, userId: actor };
+      await db.execute(sql`
+        update accounts
+           set reconcilable = true, currency_restriction = 'CAD'
+         where id = ${org.accounts.bank} and org_id = ${org.orgId}
+      `);
+      // Two genuine $5 coffees on the same day: content-identical, both real.
+      const month = [
+        { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+        { postedOn: org.date, amount: "-5.0000", description: "coffee shop" },
+        { postedOn: org.date, amount: "100.0000", description: "PAYROLL" },
+      ];
+      const first = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          currency: "CAD",
+          lines: month,
+        },
+        ctx,
+      );
+      assert.equal(first.imported, 3);
+      assert.equal(first.duplicates, 0);
+
+      // The bank re-exports the month: same lines reordered with reflowed
+      // descriptions, plus one genuinely new trailing row.
+      const reexport = await importStatement(
+        {
+          accountId: org.accounts.bank,
+          source: "manual" as const,
+          statementDate: org.date,
+          currency: "CAD",
+          lines: [
+            { postedOn: org.date, amount: "100.0000", description: "payroll" },
+            { postedOn: org.date, amount: "-5.0000", description: "COFFEE  SHOP" },
+            { postedOn: org.date, amount: "-5.0000", description: "COFFEE SHOP" },
+            { postedOn: org.date, amount: "-7.5000", description: "LATE FEE" },
+          ],
+        },
+        ctx,
+      );
+      assert.equal(reexport.imported, 1);
+      assert.equal(reexport.duplicates, 3);
+
+      // The account holds four lines, each with a distinct synthesized ID —
+      // the re-export neither doubled the month nor merged the twin coffees.
+      const stored = await db.execute<{ bank_transaction_id: string }>(sql`
+        select bank_transaction_id from bank_statement_lines
+         where org_id = ${org.orgId} and account_id = ${org.accounts.bank}
+      `);
+      assert.equal(stored.rows.length, 4);
+      assert.equal(
+        new Set(stored.rows.map((row) => row.bank_transaction_id)).size,
+        4,
+      );
+      for (const row of stored.rows) {
+        assert.match(row.bank_transaction_id, /^synth-v1:[0-9a-f]{64}$/);
+      }
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "sign-off refuses when the imported closing balance disagrees with the session balance",
   async () => {
     const org = await createScratchOrg();
