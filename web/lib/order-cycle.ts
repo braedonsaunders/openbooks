@@ -1533,13 +1533,21 @@ export async function convertOrder(
       const revision = (await tx.execute<{ updated_at: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${newId} and org_id = ${orgId}
       `)).rows[0]!.updated_at
-      await issueSalesOrder({
+      const issuance = await issueSalesOrder({
         orgId,
         salesOrderId: newId,
         actorId: userId,
         expectedUpdatedAt: revision,
         creditOverrideReason: options.creditOverrideReason,
       })
+      // A refused routing throws: the submission already wrote its
+      // before_submit script effects, and answering from inside this
+      // conversion transaction would commit them alongside the refusal.
+      // The ConversionError maps to the same 422 after the rollback, so the
+      // refused issue never strands a converted order with committed effects.
+      if (issuance.submission.flowError) {
+        throw new ConversionError(`approval could not be routed: ${issuance.submission.flowError}`)
+      }
     }
 
     const opportunityLink = (await tx.execute<{ opportunity_id: string }>(sql`

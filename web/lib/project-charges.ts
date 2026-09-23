@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
@@ -340,10 +340,18 @@ export async function createProjectCharge(
   let stage: ChargeCommittedStage = 'approval-routing'
   try {
     if (opts.post !== false) {
-      const submission = await submitAndReleaseIfUngated('project_charge', created.id, userId)
-      if (submission.flowError) {
-        throw new ChargeError(`approval could not be routed: ${submission.flowError}`)
-      }
+      // The submission runs in this transaction so a refused routing throws
+      // inside it: without the wrapper the submission's own transaction
+      // would commit its before_submit script effects before the charge
+      // reports the failure. The created charge itself stays committed by
+      // design — ChargeCommittedError carries its id for recovery.
+      const submission = await withOrgTransaction(orgId, async () => {
+        const inner = await submitAndReleaseIfUngated('project_charge', created.id, userId)
+        if (inner.flowError) {
+          throw new ChargeError(`approval could not be routed: ${inner.flowError}`)
+        }
+        return inner
+      })
       approvalPending = submission.gated
     }
 

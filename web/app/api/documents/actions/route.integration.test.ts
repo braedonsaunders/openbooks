@@ -171,3 +171,71 @@ test('documents/actions submit evidences the transition in the audit trail', { s
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
+
+/**
+ * A submit whose approval routing is refused must leave no script effects
+ * committed. The submission writes its before_submit mutations and runs its
+ * on_submit dispatch before the router refuses; answering 422 from inside
+ * the submission transaction used to commit all of it alongside the refusal.
+ * The route now throws inside the transaction so the whole submission rolls
+ * back, then answers the same 422 after the rollback: the document stays a
+ * draft, the scripted memo is gone, and no failed run or script run rows
+ * survive as a trail of the refused attempt.
+ */
+test('documents/actions submit with refused routing commits no script effects', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Sales rep', 'sales_rep'))
+    const invoiceId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`update app_roles set permissions='["ar.read","ar.create"]'::jsonb where org_id=${org.orgId} and key='sales_rep'`)
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, subsidiary_id, party_id,
+           document_date, due_date, currency, fx_rate, subtotal, tax_total, total, created_by)
+        values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`RTE-${invoiceId.slice(0, 8)}`},
+                ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
+                'CAD', '1', '100', '0', '100', ${actor})`)
+      await db.execute(sql`
+        insert into document_lines
+          (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+        values (${org.orgId}, ${invoiceId}, 1, ${org.accounts.revenue}, '1', '100', '100', '0', '0')`)
+      // A before_submit script whose mutation the submission writes before
+      // the router refuses.
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,scripts}', 'true') where id = ${org.orgId}`)
+      await db.execute(sql`
+        insert into user_scripts
+          (org_id, name, trigger_point, document_kind, source, timeout_ms, sort_order, is_active)
+        values (${org.orgId}, 'stamp memo', 'before_submit', 'customer_invoice',
+          ${'function main(ctx) { return { set: { memo: "scripted-memo" } }; }'},
+          2000, 100, true)`)
+      // An unparseable on_submit flow: the dispatch fails, so the submission
+      // is refused with a flowError after the script effects are written.
+      await db.execute(sql`
+        insert into flows (id, org_id, name, subject_kind, enabled, graph)
+        values (${randomUUID()}, ${org.orgId}, 'Broken flow', 'customer_invoice', true,
+          ${JSON.stringify({ nodes: 'not-an-array' })}::jsonb)`)
+    })
+    state.user = { id: actor, orgId: org.orgId, name: 'Sales rep', email: 'rep@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+
+    await withOrgContext(org.orgId, async () => {
+      const refused = await POST(request({ action: 'submit', documentId: invoiceId }))
+      assert.equal(refused.status, 422, JSON.stringify(await refused.clone().json()))
+      const body = await refused.json() as { error?: string }
+      assert.match(body.error ?? '', /approval could not be routed:/)
+      assert.match(body.error ?? '', /Broken flow/)
+    })
+    const after = (await withBypassContext(() => db.execute<{ status: string; memo: string | null }>(sql`
+      select status, memo from documents where id = ${invoiceId} and org_id = ${org.orgId}`))).rows[0]!
+    assert.equal(after.status, 'draft')
+    assert.equal(after.memo, null, 'the refused submission must not commit its script mutation')
+    const runs = (await withBypassContext(() => db.execute(sql`
+      select id from flow_runs where subject_id = ${invoiceId}`))).rows
+    assert.equal(runs.length, 0, 'the refused dispatch must not commit its failed run')
+    const scriptRuns = (await withBypassContext(() => db.execute(sql`
+      select id from script_runs where org_id = ${org.orgId}`))).rows
+    assert.equal(scriptRuns.length, 0, 'the refused submission must not commit its script run rows')
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
