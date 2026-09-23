@@ -201,6 +201,9 @@ test(
         /Failed query/,
       );
       await withOrgTransaction(fx.orgId, async () => {
+        // A stub id the org does not hold is indistinguishable from one
+        // outside the actor's legal-entity scope: both refuse as not visible,
+        // and the savepoint still rolls the batch's valid row back.
         await assert.rejects(
           reconcilePayrollFilingAccounts({
             orgId: fx.orgId,
@@ -210,7 +213,7 @@ test(
               { ...row, stubId: "ffffffff-ffff-ffff-ffff-ffffffffffff" },
             ],
           }),
-          /not unresolved legacy/,
+          /not visible in this organization and legal-entity scope/,
         );
         assert.equal(
           (

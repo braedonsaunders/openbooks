@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
+import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 
@@ -70,6 +71,17 @@ export async function reconcilePayrollFilingAccounts(input: {
       for (const row of [...input.rows].sort((a, b) =>
         a.stubId.localeCompare(b.stubId),
       )) {
+        // Historical payroll belongs to its original pay-run entity. Hold that
+        // document against a concurrent void before resolving its source stub,
+        // exactly as the liability reconciliation does for its lines.
+        const source = (await db.execute<{ subsidiary_id: string | null }>(sql`
+          select d.subsidiary_id from pay_stubs s
+          join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
+          where s.org_id=${input.orgId} and s.id=${row.stubId} for share of d`)).rows[0];
+        const allowed = await actorAllowedSubsidiaryIds(db,input.orgId,input.actorId);
+        if (!source || (allowed !== null && (!source.subsidiary_id || !allowed.has(source.subsidiary_id)))) {
+          throw new PayrollError("Historical payroll is not visible in this organization and legal-entity scope.");
+        }
         const result = await db.execute(sql`
         update pay_stubs set filing_account_id = ${row.filingAccountId},
           filing_account_source = 'reconciled',
