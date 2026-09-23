@@ -29,12 +29,96 @@
 -- their window's snapshot lines sum EXACTLY to the bill total (credits
 -- netting as in the summary); anything else keeps the fail-closed
 -- window-overlap refusal until it is voided and recreated.
+--
+-- Legacy markers are unconstrained jsonb, so a marker precheck (below, first)
+-- refuses the upgrade by name — document numbers and fields — when a live
+-- bill's marker is missing a required field or carries a value the backfill
+-- casts cannot parse (an impossible calendar date, a non-uuid vendor or
+-- account reference). The shape regexes in the backfill are pre-filters, not
+-- validators; the casts are safe only because this precheck runs first in
+-- every application, including reapply.
+--
+-- Corrective-revision history: this file is reapplied, never edited blindly.
+-- Every statement is idempotent against the revision it supersedes (IF NOT
+-- EXISTS DDL, a guarded constraint add, DROP-then-CREATE trigger and policy,
+-- an anti-joined backfill), and scripts/bootstrap.ts carries the reviewed
+-- digest transition that authorises the re-run.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SET client_min_messages = warning;
+
+-- Every live remittance marker must parse before the backfill casts below.
+-- The backfill's regexes admit shape-valid values a cast still rejects
+-- (2026-02-30, a 36-dash non-uuid), and a cast failure aborts the whole
+-- upgrade with a bare conversion error naming nothing. Refuse first, naming
+-- each bill and field, so the operator corrects the marker (or voids the
+-- bill) and re-applies. Markers that are not objects, or objects naming none
+-- of the four fields, predate structured bills: the backfill skips them as
+-- before and they keep the fail-closed overlap refusal.
+DO $remittance_marker_precheck$
+DECLARE
+  bad_count integer := 0;
+  bad_detail text := '';
+  rec record;
+  complaint text;
+BEGIN
+  FOR rec IN
+    SELECT b.document_number AS number, f.field AS field, f.value AS value, f.flavor AS flavor
+      FROM public.documents b
+      CROSS JOIN LATERAL (
+        VALUES
+          ('from', b.custom -> 'payrollRemittance' ->> 'from', 'date'),
+          ('to', b.custom -> 'payrollRemittance' ->> 'to', 'date'),
+          ('partyId', b.custom -> 'payrollRemittance' ->> 'partyId', 'uuid'),
+          ('filingAccountId', b.custom -> 'payrollRemittance' ->> 'filingAccountId', 'uuid-or-null')
+      ) AS f(field, value, flavor)
+     WHERE b.kind = 'vendor_bill' AND b.status <> 'voided'
+       AND jsonb_typeof(b.custom -> 'payrollRemittance') = 'object'
+       AND (b.custom -> 'payrollRemittance') ?| array['from', 'to', 'partyId', 'filingAccountId']
+     ORDER BY b.document_number, f.field
+  LOOP
+    complaint := NULL;
+    IF rec.value IS NULL THEN
+      IF rec.flavor <> 'uuid-or-null' THEN
+        complaint := 'missing';
+      END IF;
+    ELSIF rec.flavor = 'date' AND rec.value !~ '^\d{4}-\d{2}-\d{2}$' THEN
+      complaint := 'malformed date "' || rec.value || '"';
+    ELSIF (rec.flavor = 'uuid' OR rec.flavor = 'uuid-or-null') AND rec.value !~ '^[0-9a-fA-F-]{36}$' THEN
+      complaint := 'malformed reference "' || rec.value || '"';
+    ELSIF rec.flavor = 'date' THEN
+      BEGIN
+        PERFORM rec.value::date;
+      EXCEPTION
+        -- 22007 (bad shape that slipped the regex) and 22008 (a real
+        -- calendar miss like February 30th): both are unparseable markers.
+        WHEN invalid_datetime_format OR datetime_field_overflow THEN
+          complaint := 'impossible calendar date "' || rec.value || '"';
+      END;
+    ELSE
+      BEGIN
+        PERFORM rec.value::uuid;
+      EXCEPTION
+        WHEN invalid_text_representation THEN
+          complaint := 'unparseable reference "' || rec.value || '"';
+      END;
+    END IF;
+    IF complaint IS NOT NULL THEN
+      bad_count := bad_count + 1;
+      bad_detail := bad_detail || rec.number || ' ' || rec.field || ': ' || complaint || '; ';
+    END IF;
+  END LOOP;
+  IF bad_count > 0 THEN
+    RAISE EXCEPTION USING ERRCODE = '23514', CONSTRAINT = 'payroll_remittance_marker_parseable',
+      MESSAGE = 'payroll remittance bill(s) carry markers the coverage backfill cannot parse: '
+        || bad_detail
+        || 'correct each marker (real calendar dates, vendor/account uuids) or void the bill, then re-apply';
+  END IF;
+END
+$remittance_marker_precheck$;
 
 -- Every component vendor referenced by a committed accrual must still exist:
 -- the snapshot FK below would otherwise fail with a bare violation, and a
@@ -69,11 +153,19 @@ BEGIN
 END
 $precheck$;
 
-ALTER TABLE public.pay_stub_lines ADD COLUMN remittance_party_id uuid;
-ALTER TABLE public.pay_stub_lines ADD CONSTRAINT pay_stub_lines_remittance_party_tenant_fkey
-  FOREIGN KEY (org_id, remittance_party_id) REFERENCES public.parties(org_id, id)
-  DEFERRABLE INITIALLY IMMEDIATE;
-CREATE INDEX pay_stub_lines_remittance_party ON public.pay_stub_lines(org_id, remittance_party_id);
+ALTER TABLE public.pay_stub_lines ADD COLUMN IF NOT EXISTS remittance_party_id uuid;
+DO $remittance_snapshot_fkey$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'pay_stub_lines_remittance_party_tenant_fkey'
+  ) THEN
+    ALTER TABLE public.pay_stub_lines ADD CONSTRAINT pay_stub_lines_remittance_party_tenant_fkey
+      FOREIGN KEY (org_id, remittance_party_id) REFERENCES public.parties(org_id, id)
+      DEFERRABLE INITIALLY IMMEDIATE;
+  END IF;
+END
+$remittance_snapshot_fkey$;
+CREATE INDEX IF NOT EXISTS pay_stub_lines_remittance_party ON public.pay_stub_lines(org_id, remittance_party_id);
 
 UPDATE public.pay_stub_lines l
    SET remittance_party_id = c.remittance_party_id
@@ -98,6 +190,7 @@ BEGIN
   RETURN NEW;
 END
 $$;
+DROP TRIGGER IF EXISTS pay_stub_line_remittance_guard ON public.pay_stub_lines;
 CREATE TRIGGER pay_stub_line_remittance_guard BEFORE UPDATE ON public.pay_stub_lines
 FOR EACH ROW EXECUTE FUNCTION public.pay_stub_line_remittance_guard();
 COMMENT ON COLUMN public.pay_stub_lines.remittance_party_id IS
@@ -106,7 +199,7 @@ COMMENT ON COLUMN public.pay_stub_lines.remittance_party_id IS
 -- Per-accrual coverage: which committed stub lines a live remittance bill
 -- consumed. A later same-window bill covers only lines no non-voided bill
 -- has covered; voiding a bill frees its lines (only non-voided bills count).
-CREATE TABLE public.payroll_remittance_coverage (
+CREATE TABLE IF NOT EXISTS public.payroll_remittance_coverage (
   org_id uuid NOT NULL,
   bill_document_id uuid NOT NULL,
   stub_line_id uuid NOT NULL,
@@ -123,7 +216,7 @@ CREATE TABLE public.payroll_remittance_coverage (
   CONSTRAINT payroll_remittance_coverage_line_fkey
     FOREIGN KEY (stub_line_id) REFERENCES public.pay_stub_lines(id)
 );
-CREATE INDEX payroll_remittance_coverage_line ON public.payroll_remittance_coverage(org_id, stub_line_id);
+CREATE INDEX IF NOT EXISTS payroll_remittance_coverage_line ON public.payroll_remittance_coverage(org_id, stub_line_id);
 ALTER TABLE public.payroll_remittance_coverage ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ONLY public.payroll_remittance_coverage FORCE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS org_isolation ON public.payroll_remittance_coverage;
@@ -136,7 +229,10 @@ COMMENT ON POLICY org_isolation ON public.payroll_remittance_coverage IS 'openbo
 -- them). A bill that fails the exact-total match — a later run added lines,
 -- the vendor changed mid-window, or the bill was hand-edited — gets no rows
 -- and keeps the fail-closed window-overlap refusal: void and recreate it to
--- move it onto line coverage.
+-- move it onto line coverage. The casts below are safe only because the
+-- marker precheck at the top of this file runs first in every application.
+-- Re-apply safe: a row is inserted only where this bill holds no backfill
+-- row for the line yet.
 INSERT INTO public.payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount)
 WITH sane_bills AS (
   SELECT b.org_id, b.id, b.total, b.subsidiary_id,
@@ -162,6 +258,12 @@ SELECT sane.org_id, sane.id, l.id, l.amount
   JOIN public.pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
  WHERE sane.from_date IS NOT NULL AND sane.to_date IS NOT NULL AND sane.party_id IS NOT NULL
    AND sane.filing_ok
+   AND NOT EXISTS (
+     SELECT 1 FROM public.payroll_remittance_coverage cov
+      WHERE cov.org_id = sane.org_id
+        AND cov.bill_document_id = sane.id
+        AND cov.stub_line_id = l.id
+   )
    AND r.run_status = 'committed'
    AND l.kind IN ('deduction', 'employer_contribution', 'credit')
    AND s.pay_date BETWEEN sane.from_date AND sane.to_date
