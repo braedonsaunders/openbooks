@@ -49,6 +49,7 @@ const SEED = `
   import {
     createScratchOrg,
     dropScratchOrg,
+    seedActiveEmployment,
     seedFlowActors,
   } from "./engine/src/testing/fixtures.ts";
   import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
@@ -67,6 +68,8 @@ const SEED = `
         (\${employeeId}, \${org.orgId}, 'employee', 'Guard Worker',
          \${org.subsidiaryId}, true, '{}'::jsonb)
     \`);
+    // The guard refusals below must be reached past the pin.
+    await seedActiveEmployment(org.orgId, employeeId);
     await db.execute(sql\`
       insert into timesheet_weeks
         (id, org_id, employee_party_id, week_start, status,

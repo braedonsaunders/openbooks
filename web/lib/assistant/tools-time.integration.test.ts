@@ -21,7 +21,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { createScratchOrg, dropScratchOrg, seedActiveEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
 function userFor(orgId: string, name: string): SessionUser {
@@ -69,6 +69,12 @@ async function seedTime(org: { orgId: string; subsidiaryId: string }) {
       values (${employee}, ${orgId}, 'employee', 'Harbour Foreman', true, '{}'::jsonb, ${rootSubsidiary}),
              (${hiddenEmployee}, ${orgId}, 'employee', 'Hidden Worker', true, '{}'::jsonb, ${hiddenSubsidiary})
     `);
+    // Both employees hold active employments: the reads pin past the
+    // employment guard, while the hidden worker is still refused by
+    // subsidiary scope (and the cross-org reader by tenant), so those
+    // refusals prove scope rather than a missing employment.
+    await seedActiveEmployment(orgId, employee);
+    await seedActiveEmployment(orgId, hiddenEmployee);
     await db.execute(sql`
       insert into projects(id,org_id,name,subsidiary_id,is_active)
       values (${project},${orgId},'Harbourview Tower',${rootSubsidiary},true)
