@@ -322,3 +322,19 @@ test('archiving a vanished template is a 404, not success', async () => {
   assert.equal(response.status, 404)
   assert.equal(routeState.audits.length, 0)
 })
+
+test('mistyped fields are 400s before any write, never a 500', async () => {
+  for (const body of [
+    { name: 5 },
+    { category: 3 },
+    { kind: 9 },
+    { allowedRoles: 'admin' },
+    { allowedRoles: [1] },
+  ]) {
+    reset()
+    const response = await put(body as Record<string, unknown>)
+    assert.equal(response.status, 400)
+    assert.equal(routeState.transactionStarts, 0)
+    assert.equal(routeState.audits.length, 0)
+  }
+})

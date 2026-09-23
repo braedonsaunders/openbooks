@@ -193,3 +193,17 @@ test('a concurrent creator racing the dupe check is a 409, not a 500', async () 
   assert.equal(response.status, 409)
   assert.match(((await response.json()) as { error: string }).error, /already exists/)
 })
+
+test('mistyped scalars are 400s, never a 500', async () => {
+  for (const body of [
+    { key: 'intake', name: 5 },
+    { key: 7, name: 'Intake' },
+    { key: 'intake', name: 'Intake', category: 3 },
+    { key: 'intake', name: 'Intake', kind: 9 },
+  ]) {
+    reset()
+    const response = await post(body as Record<string, unknown>)
+    assert.equal(response.status, 400)
+    assert.equal(routeState.transactionStarts, 0)
+  }
+})
