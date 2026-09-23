@@ -60,6 +60,18 @@ type OrgRow = { name: string; base_currency: string; brand_primary: string | nul
  * denomination — a printed amount in a guessed currency is indistinguishable
  * from a correct one.
  */
+/**
+ * Print an exact numeric(19,4) hours quantity with trailing zeros trimmed —
+ * 7.50 prints as "7.5", 0.04 as "0.04", exact zero as "0". The figure always
+ * carries full stored precision, so it reconciles to the billed amount
+ * beside it instead of rounding to a 0.0 the money contradicts.
+ */
+export function formatExactHours(decimal4: string): string {
+  const [int = '0', frac = ''] = decimal4.split('.')
+  const trimmed = frac.replace(/0+$/, '')
+  return trimmed ? `${int}.${trimmed}` : int
+}
+
 export class MissingPdfOrgError extends Error {
   constructor(orgId: string) {
     super(`organization ${orgId} was not found — refusing to print amounts in an invented currency`)
@@ -520,9 +532,10 @@ async function loadFieldTicketValues(
   interface CrewAgg {
     employee_name: string
     labor_class: string
-    hours: Record<'reg' | 'ot' | 'dt' | 'other', number>
+    /** Exact numeric(19,4) decimal strings — never floats. */
+    hours: Record<'reg' | 'ot' | 'dt' | 'other', string>
     rates: Record<'reg' | 'ot' | 'dt' | 'other', string | null>
-    perDay: Record<string, number>
+    perDay: Record<string, string>
     amount: string
   }
   const crewMap = new Map<string, CrewAgg>()
@@ -533,7 +546,7 @@ async function loadFieldTicketValues(
       row = {
         employee_name: e.employee_name,
         labor_class: e.item_name ?? '',
-        hours: { reg: 0, ot: 0, dt: 0, other: 0 },
+        hours: { reg: '0.0000', ot: '0.0000', dt: '0.0000', other: '0.0000' },
         rates: { reg: null, ot: null, dt: null, other: null },
         perDay: {},
         amount: '0',
@@ -541,26 +554,33 @@ async function loadFieldTicketValues(
       crewMap.set(k, row)
     }
     const t = tier(e.time_classification)
-    const h = Number(e.hours) || 0
-    row.hours[t] += h
+    // Hours stay exact decimals end to end: float accumulation plus
+    // one-decimal formatting once printed 0.0 for a nonzero 0.04 while the
+    // billed amount beside it was nonzero.
+    const h = typeof e.hours === 'number' ? String(e.hours) : (e.hours ?? '0')
+    row.hours[t] = add(row.hours[t]!, h)
     if (e.bill_rate != null) {
       row.rates[t] = row.rates[t] ?? String(e.bill_rate)
       row.amount = add(row.amount, mul(String(e.hours ?? '0'), String(e.bill_rate)))
     }
     const di = days.indexOf(e.worked_on)
-    if (di >= 0) row.perDay[`day${di + 1}_${t}`] = (row.perDay[`day${di + 1}_${t}`] ?? 0) + h
+    if (di >= 0) {
+      const cell = `day${di + 1}_${t}`
+      row.perDay[cell] = add(row.perDay[cell] ?? '0.0000', h)
+    }
   }
 
   const crew = [...crewMap.values()].map((r) => {
+    const hoursCell = (v: string): string => (!isZero(v) ? formatExactHours(v) : '')
     const rowVals: Record<string, unknown> = {
       employee_name: r.employee_name,
       labor_class: r.labor_class,
       class_code: r.labor_class ? r.labor_class.charAt(0).toUpperCase() : '',
-      reg_hours: r.hours.reg ? r.hours.reg.toFixed(1) : '',
-      ot_hours: r.hours.ot ? r.hours.ot.toFixed(1) : '',
-      dt_hours: r.hours.dt ? r.hours.dt.toFixed(1) : '',
-      other_hours: r.hours.other ? r.hours.other.toFixed(1) : '',
-      total_hours: (r.hours.reg + r.hours.ot + r.hours.dt + r.hours.other).toFixed(1),
+      reg_hours: hoursCell(r.hours.reg),
+      ot_hours: hoursCell(r.hours.ot),
+      dt_hours: hoursCell(r.hours.dt),
+      other_hours: hoursCell(r.hours.other),
+      total_hours: formatExactHours(add(add(r.hours.reg, r.hours.ot), add(r.hours.dt, r.hours.other))),
       reg_rate: r.rates.reg != null ? m(r.rates.reg) : '',
       ot_rate: r.rates.ot != null ? m(r.rates.ot) : '',
       dt_rate: r.rates.dt != null ? m(r.rates.dt) : '',
@@ -570,7 +590,7 @@ async function loadFieldTicketValues(
     for (let i = 1; i <= 7; i++) {
       for (const t of ['reg', 'ot', 'dt', 'other'] as const) {
         const key = `day${i}_${t}`
-        rowVals[key] = r.perDay[key] ? String(r.perDay[key]) : ''
+        rowVals[key] = r.perDay[key] !== undefined ? hoursCell(r.perDay[key]!) : ''
       }
     }
     return rowVals
@@ -598,7 +618,10 @@ async function loadFieldTicketValues(
     .filter(Boolean)
     .join(', ')
 
-  const totalHours = ticket.entries.reduce((a, e) => a + (Number(e.hours) || 0), 0)
+  const totalHours = ticket.entries.reduce(
+    (a, e) => add(a, typeof e.hours === 'number' ? String(e.hours) : (e.hours ?? '0')),
+    '0.0000',
+  )
   const dayLabel = (dayIso: string) => {
     const d = new Date(`${dayIso}T12:00:00Z`)
     return `${d.toLocaleDateString('en-CA', { weekday: 'short', timeZone: 'UTC' })} ${dayIso.slice(5)}`
@@ -621,7 +644,7 @@ async function loadFieldTicketValues(
     labor_total: m(ticket.laborTotal),
     lines_total: m(ticket.linesTotal),
     grand_total: m(ticket.grandTotal),
-    total_hours: totalHours.toFixed(1),
+    total_hours: formatExactHours(totalHours),
     customer_signature_image: ft.signatures?.customer?.image ?? '',
     customer_signature_name: ft.signatures?.customer?.name ?? '',
     customer_signed_at: ft.signatures?.customer?.at ? fmtDate(ft.signatures.customer.at.slice(0, 10), locale) : '',
