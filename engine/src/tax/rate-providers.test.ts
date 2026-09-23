@@ -282,6 +282,47 @@ test("Avalara quotes carry the non-committing document type for every kind", asy
   }
 });
 
+test("Avalara keys each quote to its own counterparty code, so only the exempt one is untaxed", async () => {
+  const local = { allowPrivateEndpoints: true } as const;
+  const seenCodes: Array<unknown> = [];
+  const server = createServer(async (req, res) => {
+    const body = JSON.parse(await readBody(req)) as { customerCode?: unknown };
+    seenCodes.push(body.customerCode);
+    const exempt = body.customerCode === "customer-exempt";
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify(
+        exempt
+          ? { totalTax: 0, code: "Q-EXEMPT", summary: [] }
+          : {
+              totalTax: 8.25,
+              code: "Q-TAXED",
+              summary: [{ jurisdictionType: "STATE", rate: 0.0825, tax: 8.25 }],
+            },
+      ),
+    );
+  });
+  const origin = await listen(server);
+  const config = {
+    accountId: AVALARA_ACCOUNT_ID,
+    licenseKey: AVALARA_LICENSE_KEY,
+    baseUrl: origin,
+    quotedOn: quoteRequest.quotedOn!,
+  };
+  try {
+    const exempt = await quoteViaAvalara({ ...quoteRequest, counterpartyCode: "customer-exempt" }, config, local);
+    const taxed = await quoteViaAvalara({ ...quoteRequest, counterpartyCode: "customer-ordinary" }, config, local);
+    assert.deepEqual(seenCodes, ["customer-exempt", "customer-ordinary"]);
+    assert.equal(exempt.taxAmount, "0.0000");
+    assert.equal(taxed.taxAmount, "8.2500");
+    // A request without an identity keeps the historical shared literal.
+    await quoteViaAvalara(quoteRequest, config, local);
+    assert.deepEqual(seenCodes[2], "OPENBOOKS");
+  } finally {
+    await close(server);
+  }
+});
+
 test("normal provider responses pass with credentials confined to the configured origin", async () => {
   interface SeenCall {
     pathname: string;
