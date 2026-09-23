@@ -25,10 +25,11 @@
 -- line coverage ledger the incremental-billing fix reads: bills created after
 -- this migration record exactly which stub lines they consumed, so a later
 -- same-period run can bill its unbilled remainder instead of being refused
--- as an overlap. Pre-existing non-voided bills are backfilled ONLY when
--- their window's snapshot lines sum EXACTLY to the bill total (credits
--- netting as in the summary); anything else keeps the fail-closed
--- window-overlap refusal until it is voided and recreated.
+-- as an overlap. Pre-existing bills are REPAIRED, not just backfilled: a
+-- live bill is covered only when it reconciles exactly (recorded party
+-- equals the marker party, lines per liability account equal the accrual
+-- groups); anything else is left uncovered and NAMED by notice, keeping the
+-- fail-closed window-overlap refusal until it is voided and recreated.
 --
 -- Legacy markers are unconstrained jsonb, so a marker precheck (below, first)
 -- refuses the upgrade by name — document numbers and fields — when a live
@@ -223,17 +224,23 @@ DROP POLICY IF EXISTS org_isolation ON public.payroll_remittance_coverage;
 CREATE POLICY org_isolation ON public.payroll_remittance_coverage USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
 COMMENT ON POLICY org_isolation ON public.payroll_remittance_coverage IS 'openbooks:org_isolation:v1';
 
--- Backfill coverage for pre-existing live bills whose window is unambiguous:
--- the snapshot lines in the bill's own window, party, filing account and
--- entity sum EXACTLY to the bill total (credits netting, as the summary nets
--- them). A bill that fails the exact-total match — a later run added lines,
--- the vendor changed mid-window, or the bill was hand-edited — gets no rows
--- and keeps the fail-closed window-overlap refusal: void and recreate it to
--- move it onto line coverage. The casts below are safe only because the
--- marker precheck at the top of this file runs first in every application.
--- Re-apply safe: a row is inserted only where this bill holds no backfill
--- row for the line yet.
-INSERT INTO public.payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount)
+-- Repair coverage for pre-existing bills. A live bill is covered ONLY when
+-- it reconciles EXACTLY: its recorded party equals the marker party, and
+-- its lines per liability account equal the committed accrual groups per
+-- liability account (credits netting as the summary nets them; zero-amount
+-- lines and zero-net groups dropped on both sides). Anything else — a
+-- hand-edited wrong-account bill, a re-pointed party, a window that gained
+-- a later run — gets NO rows and is NAMED by the notice below; it keeps the
+-- fail-closed window-overlap refusal until it is voided and recreated (void
+-- and recreate: a corrected draft records no coverage, so correcting and
+-- posting would leave payable lines that look unbilled). Only bills with no
+-- app-recorded coverage are in scope: post-0296 bills carry the creator's
+-- own rows (created_by IS NOT NULL) and are never rewritten here. Backfill
+-- rows for voided bills are deleted (voiding frees the lines); app rows are
+-- never touched. The casts below are safe only because the marker precheck
+-- at the top of this file runs first in every application. Re-apply safe:
+-- fills are anti-joined, empties only remove backfill rows, the notice is
+-- side-effect free.
 WITH sane_bills AS (
   SELECT b.org_id, b.id, b.total, b.subsidiary_id,
          CASE WHEN (b.custom -> 'payrollRemittance' ->> 'from') ~ '^\d{4}-\d{2}-\d{2}$'
@@ -251,52 +258,304 @@ WITH sane_bills AS (
    WHERE b.kind = 'vendor_bill' AND b.status <> 'voided'
      AND (b.custom -> 'payrollRemittance') IS NOT NULL
 )
-SELECT sane.org_id, sane.id, l.id, l.amount
-  FROM sane_bills sane
-  JOIN public.pay_stub_lines l ON l.org_id = sane.org_id
-  JOIN public.pay_stubs s ON s.id = l.stub_id AND s.org_id = l.org_id
-  JOIN public.pay_runs r ON r.document_id = s.pay_run_document_id AND r.org_id = s.org_id
- WHERE sane.from_date IS NOT NULL AND sane.to_date IS NOT NULL AND sane.party_id IS NOT NULL
-   AND sane.filing_ok
+, scoped AS (
+  -- Repair scope: live structured bills with no app-recorded coverage.
+  -- Post-0296 bills carry the creator's own rows (created_by IS NOT NULL)
+  -- and are never rewritten here.
+  SELECT s.* FROM sane_bills s
+  JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+ WHERE b.status <> 'voided'
    AND NOT EXISTS (
-     SELECT 1 FROM public.payroll_remittance_coverage cov
-      WHERE cov.org_id = sane.org_id
-        AND cov.bill_document_id = sane.id
-        AND cov.stub_line_id = l.id
+     SELECT 1 FROM public.payroll_remittance_coverage c
+      WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
    )
-   AND r.run_status = 'committed'
-   AND l.kind IN ('deduction', 'employer_contribution', 'credit')
-   AND s.pay_date BETWEEN sane.from_date AND sane.to_date
-   AND l.remittance_party_id IS NOT DISTINCT FROM sane.party_id
-   AND s.filing_account_id IS NOT DISTINCT FROM sane.filing_id
+),
+scoped_lines AS (
+  -- Candidate accrual lines per bill (snapshot matching; the pack-aware
+  -- resolution lands with the U4 revision of this repair).
+  SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
+         l.liability_account_id AS acct,
+         CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
+    FROM scoped s
+    JOIN public.pay_stub_lines l ON l.org_id = s.org_id
+    JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
+    JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+   WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
+     AND s.filing_ok
+     AND r.run_status = 'committed'
+     AND l.kind IN ('deduction', 'employer_contribution', 'credit')
+     AND st.pay_date BETWEEN s.from_date AND s.to_date
+     AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+     AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
+     AND EXISTS (
+       SELECT 1 FROM public.documents d
+        WHERE d.id = r.document_id AND d.org_id = r.org_id
+          AND d.subsidiary_id IS NOT DISTINCT FROM s.subsidiary_id
+     )
+),
+accrual_groups AS (
+  SELECT org_id, bill, acct, sum(net) AS net
+    FROM scoped_lines
+   GROUP BY org_id, bill, acct
+  HAVING sum(net) <> 0
+),
+bill_groups AS (
+  SELECT s.org_id, s.id AS bill, dl.account_id AS acct, sum(dl.amount) AS net
+    FROM scoped s
+    JOIN public.document_lines dl ON dl.org_id = s.org_id AND dl.document_id = s.id
+   WHERE dl.amount <> 0
+   GROUP BY s.org_id, s.id, dl.account_id
+),
+party_bad AS (
+  SELECT s.org_id, s.id AS bill FROM scoped s
+  JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+ WHERE b.party_id IS DISTINCT FROM s.party_id
+),
+line_bad AS (
+  SELECT s.org_id, s.id AS bill FROM scoped s
+   WHERE EXISTS (
+     SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+     EXCEPT
+     SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+   ) OR EXISTS (
+     SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+     EXCEPT
+     SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+   )
+),
+reconciled AS (
+  SELECT org_id, id AS bill FROM scoped
+  EXCEPT
+  SELECT org_id, bill FROM party_bad
+  EXCEPT
+  SELECT org_id, bill FROM line_bad
+)
+INSERT INTO public.payroll_remittance_coverage (org_id, bill_document_id, stub_line_id, amount)
+SELECT sl.org_id, sl.bill, sl.line, sl.gross
+  FROM scoped_lines sl
+  JOIN reconciled r ON r.org_id = sl.org_id AND r.bill = sl.bill
+ WHERE NOT EXISTS (
+   SELECT 1 FROM public.payroll_remittance_coverage cov
+    WHERE cov.org_id = sl.org_id
+      AND cov.bill_document_id = sl.bill
+      AND cov.stub_line_id = sl.line
+ );
+
+-- Live bills that do not reconcile keep no backfill rows: their lines stay
+-- outside line coverage and the bill keeps the fail-closed window-overlap
+-- refusal until it is voided and recreated. App rows are never removed.
+-- (The reconciliation chain is restated — one statement cannot share
+-- another's WITH, and a temp staging table would not survive the
+-- statement-by-statement no-transaction application.)
+DELETE FROM public.payroll_remittance_coverage cov
+ USING (
+   WITH sane_bills AS (
+     SELECT b.org_id, b.id, b.total, b.subsidiary_id,
+            CASE WHEN (b.custom -> 'payrollRemittance' ->> 'from') ~ '^\d{4}-\d{2}-\d{2}$'
+                 THEN (b.custom -> 'payrollRemittance' ->> 'from')::date END AS from_date,
+            CASE WHEN (b.custom -> 'payrollRemittance' ->> 'to') ~ '^\d{4}-\d{2}-\d{2}$'
+                 THEN (b.custom -> 'payrollRemittance' ->> 'to')::date END AS to_date,
+            CASE WHEN (b.custom -> 'payrollRemittance' ->> 'partyId') ~ '^[0-9a-fA-F-]{36}$'
+                 THEN (b.custom -> 'payrollRemittance' ->> 'partyId')::uuid END AS party_id,
+            CASE WHEN (b.custom -> 'payrollRemittance' ->> 'filingAccountId') IS NULL
+                   OR (b.custom -> 'payrollRemittance' ->> 'filingAccountId') ~ '^[0-9a-fA-F-]{36}$'
+                 THEN (b.custom -> 'payrollRemittance' ->> 'filingAccountId')::uuid END AS filing_id,
+            ((b.custom -> 'payrollRemittance' ->> 'filingAccountId') IS NULL
+             OR (b.custom -> 'payrollRemittance' ->> 'filingAccountId') ~ '^[0-9a-fA-F-]{36}$') AS filing_ok
+       FROM public.documents b
+      WHERE b.kind = 'vendor_bill' AND b.status <> 'voided'
+        AND (b.custom -> 'payrollRemittance') IS NOT NULL
+   ),
+   scoped AS (
+     SELECT s.* FROM sane_bills s
+     JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+    WHERE b.status <> 'voided'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.payroll_remittance_coverage c
+         WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
+      )
+   ),
+   scoped_lines AS (
+     SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
+            l.liability_account_id AS acct,
+            CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
+       FROM scoped s
+       JOIN public.pay_stub_lines l ON l.org_id = s.org_id
+       JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
+       JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+      WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
+        AND s.filing_ok
+        AND r.run_status = 'committed'
+        AND l.kind IN ('deduction', 'employer_contribution', 'credit')
+        AND st.pay_date BETWEEN s.from_date AND s.to_date
+        AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+        AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
+        AND EXISTS (
+          SELECT 1 FROM public.documents d
+           WHERE d.id = r.document_id AND d.org_id = r.org_id
+             AND d.subsidiary_id IS NOT DISTINCT FROM s.subsidiary_id
+        )
+   ),
+   accrual_groups AS (
+     SELECT org_id, bill, acct, sum(net) AS net
+       FROM scoped_lines
+      GROUP BY org_id, bill, acct
+     HAVING sum(net) <> 0
+   ),
+   bill_groups AS (
+     SELECT s.org_id, s.id AS bill, dl.account_id AS acct, sum(dl.amount) AS net
+       FROM scoped s
+       JOIN public.document_lines dl ON dl.org_id = s.org_id AND dl.document_id = s.id
+      WHERE dl.amount <> 0
+      GROUP BY s.org_id, s.id, dl.account_id
+   ),
+   party_bad AS (
+     SELECT s.org_id, s.id AS bill FROM scoped s
+     JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+    WHERE b.party_id IS DISTINCT FROM s.party_id
+   ),
+   line_bad AS (
+     SELECT s.org_id, s.id AS bill FROM scoped s
+      WHERE EXISTS (
+        SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+        EXCEPT
+        SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+      ) OR EXISTS (
+        SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+        EXCEPT
+        SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+      )
+   )
+   -- Scoped bills minus the reconciling ones below: only the dead empty.
+   SELECT org_id, id AS bill FROM scoped
+   EXCEPT
+   SELECT org_id, bill FROM (
+     SELECT org_id, id AS bill FROM scoped
+     EXCEPT
+     SELECT org_id, bill FROM party_bad
+     EXCEPT
+     SELECT org_id, bill FROM line_bad
+   ) reconciled_keep
+ ) dead
+ WHERE cov.created_by IS NULL
+   AND cov.org_id = dead.org_id AND cov.bill_document_id = dead.bill;
+
+-- Voiding frees the lines: backfill rows for voided bills go, app rows stay
+-- with their writer (the void path owns them).
+DELETE FROM public.payroll_remittance_coverage cov
+ WHERE cov.created_by IS NULL
    AND EXISTS (
-     SELECT 1 FROM public.documents d
-      WHERE d.id = r.document_id AND d.org_id = r.org_id
-        AND d.subsidiary_id IS NOT DISTINCT FROM sane.subsidiary_id
-   )
-   AND (
-     SELECT coalesce(sum(
-       CASE WHEN grp.kind = 'credit' THEN -grp.gross ELSE grp.gross END
-     ), 0)
-       FROM (
-         SELECT l2.component_id, l2.kind, l2.liability_account_id, sum(l2.amount) AS gross
-           FROM public.pay_stub_lines l2
-           JOIN public.pay_stubs s2 ON s2.id = l2.stub_id AND s2.org_id = l2.org_id
-           JOIN public.pay_runs r2 ON r2.document_id = s2.pay_run_document_id AND r2.org_id = s2.org_id
-          WHERE l2.org_id = sane.org_id
-            AND r2.run_status = 'committed'
-            AND l2.kind IN ('deduction', 'employer_contribution', 'credit')
-            AND s2.pay_date BETWEEN sane.from_date AND sane.to_date
-            AND l2.remittance_party_id IS NOT DISTINCT FROM sane.party_id
-            AND s2.filing_account_id IS NOT DISTINCT FROM sane.filing_id
-            AND EXISTS (
-              SELECT 1 FROM public.documents d2
-               WHERE d2.id = r2.document_id AND d2.org_id = r2.org_id
-                 AND d2.subsidiary_id IS NOT DISTINCT FROM sane.subsidiary_id
-            )
-          GROUP BY l2.component_id, l2.kind, l2.liability_account_id
-       ) grp
-      WHERE grp.gross <> 0
-   ) = sane.total;
+     SELECT 1 FROM public.documents b
+      WHERE b.org_id = cov.org_id AND b.id = cov.bill_document_id AND b.status = 'voided'
+   );
+
+-- Bills that keep the fail-closed overlap refusal are named, never silent.
+-- (The reconciliation chain is restated for the same reason as above.)
+DO $remittance_coverage_repair_notice$
+DECLARE
+  named_count integer := 0;
+  named_list text := '';
+  rec record;
+BEGIN
+  FOR rec IN
+  WITH sane_bills AS (
+    SELECT b.org_id, b.id, b.total, b.subsidiary_id,
+           CASE WHEN (b.custom -> 'payrollRemittance' ->> 'from') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN (b.custom -> 'payrollRemittance' ->> 'from')::date END AS from_date,
+           CASE WHEN (b.custom -> 'payrollRemittance' ->> 'to') ~ '^\d{4}-\d{2}-\d{2}$'
+                THEN (b.custom -> 'payrollRemittance' ->> 'to')::date END AS to_date,
+           CASE WHEN (b.custom -> 'payrollRemittance' ->> 'partyId') ~ '^[0-9a-fA-F-]{36}$'
+                THEN (b.custom -> 'payrollRemittance' ->> 'partyId')::uuid END AS party_id,
+           CASE WHEN (b.custom -> 'payrollRemittance' ->> 'filingAccountId') IS NULL
+                  OR (b.custom -> 'payrollRemittance' ->> 'filingAccountId') ~ '^[0-9a-fA-F-]{36}$'
+                THEN (b.custom -> 'payrollRemittance' ->> 'filingAccountId')::uuid END AS filing_id,
+           ((b.custom -> 'payrollRemittance' ->> 'filingAccountId') IS NULL
+            OR (b.custom -> 'payrollRemittance' ->> 'filingAccountId') ~ '^[0-9a-fA-F-]{36}$') AS filing_ok
+      FROM public.documents b
+     WHERE b.kind = 'vendor_bill' AND b.status <> 'voided'
+       AND (b.custom -> 'payrollRemittance') IS NOT NULL
+  ),
+  scoped AS (
+    SELECT s.* FROM sane_bills s
+    JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+   WHERE b.status <> 'voided'
+     AND NOT EXISTS (
+       SELECT 1 FROM public.payroll_remittance_coverage c
+        WHERE c.org_id = s.org_id AND c.bill_document_id = s.id AND c.created_by IS NOT NULL
+     )
+  ),
+  scoped_lines AS (
+    SELECT s.org_id, s.id AS bill, l.id AS line, l.amount AS gross,
+           l.liability_account_id AS acct,
+           CASE WHEN l.kind = 'credit' THEN -l.amount ELSE l.amount END AS net
+      FROM scoped s
+      JOIN public.pay_stub_lines l ON l.org_id = s.org_id
+      JOIN public.pay_stubs st ON st.id = l.stub_id AND st.org_id = l.org_id
+      JOIN public.pay_runs r ON r.document_id = st.pay_run_document_id AND r.org_id = st.org_id
+     WHERE s.from_date IS NOT NULL AND s.to_date IS NOT NULL AND s.party_id IS NOT NULL
+       AND s.filing_ok
+       AND r.run_status = 'committed'
+       AND l.kind IN ('deduction', 'employer_contribution', 'credit')
+       AND st.pay_date BETWEEN s.from_date AND s.to_date
+       AND l.remittance_party_id IS NOT DISTINCT FROM s.party_id
+       AND st.filing_account_id IS NOT DISTINCT FROM s.filing_id
+       AND EXISTS (
+         SELECT 1 FROM public.documents d
+          WHERE d.id = r.document_id AND d.org_id = r.org_id
+            AND d.subsidiary_id IS NOT DISTINCT FROM s.subsidiary_id
+       )
+  ),
+  accrual_groups AS (
+    SELECT org_id, bill, acct, sum(net) AS net
+      FROM scoped_lines
+     GROUP BY org_id, bill, acct
+    HAVING sum(net) <> 0
+  ),
+  bill_groups AS (
+    SELECT s.org_id, s.id AS bill, dl.account_id AS acct, sum(dl.amount) AS net
+      FROM scoped s
+      JOIN public.document_lines dl ON dl.org_id = s.org_id AND dl.document_id = s.id
+     WHERE dl.amount <> 0
+     GROUP BY s.org_id, s.id, dl.account_id
+  ),
+  flagged AS (
+    SELECT b.document_number AS number,
+           (b.party_id IS DISTINCT FROM s.party_id) AS party_bad,
+           (EXISTS (
+              SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+              EXCEPT
+              SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+            ) OR EXISTS (
+              SELECT bg.acct, bg.net FROM bill_groups bg WHERE bg.org_id = s.org_id AND bg.bill = s.id
+              EXCEPT
+              SELECT ag.acct, ag.net FROM accrual_groups ag WHERE ag.org_id = s.org_id AND ag.bill = s.id
+            )) AS line_bad
+      FROM scoped s
+      JOIN public.documents b ON b.org_id = s.org_id AND b.id = s.id
+  )
+    SELECT number,
+           concat_ws(',', CASE WHEN party_bad THEN 'party-mismatch' END,
+                        CASE WHEN line_bad THEN 'line-mismatch' END) AS reasons
+      FROM flagged
+     WHERE party_bad OR line_bad
+     ORDER BY number
+  LOOP
+    named_count := named_count + 1;
+    IF named_count <= 50 THEN
+      named_list := named_list || rec.number || ' (' || rec.reasons || '), ';
+    END IF;
+  END LOOP;
+  IF named_count > 0 THEN
+    named_list := rtrim(named_list, ', ');
+    IF named_count > 50 THEN
+      named_list := named_list || ' (+' || (named_count - 50) || ' more)';
+    END IF;
+    RAISE NOTICE 'payroll remittance coverage repair: % live bill(s) do not reconcile and keep the fail-closed overlap refusal — void and recreate them (do not correct-and-post): %',
+      named_count, named_list;
+  ELSE
+    RAISE NOTICE 'payroll remittance coverage repair: every in-scope live bill reconciles';
+  END IF;
+END
+$remittance_coverage_repair_notice$;
 
 SELECT public.openbooks_refresh_query_catalog();

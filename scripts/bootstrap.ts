@@ -1451,20 +1451,30 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "65164ea1ba89df3dde63064a76bf931f3704ca0c8c802368247858d26d2f2c37",
-    to: "5589a8b5b31dfcabd8ccd74ce4d5d6eeca95b141844b6282bfdda4b6ce45f62b",
+    to: "097ed6dd7492562a23147fca19d013c22da682373c17c7793b008f123ab58704",
     strategy: "reapply",
     reason:
-      "corrective revision U1 (payroll-remittance shard): legacy markers are "
-      + "unconstrained jsonb, and the backfill's shape regexes admit values the casts "
-      + "reject (an impossible calendar date, a 36-dash non-uuid), aborting the whole "
-      + "upgrade with a bare conversion error. The revision adds a marker precheck "
-      + "that refuses first, naming each bill and field, and makes every statement "
-      + "idempotent against the picked revision (IF NOT EXISTS DDL, a guarded "
-      + "constraint add, DROP-then-CREATE trigger and policy, an anti-joined "
-      + "backfill). A database recorded at 65164ea1 that re-runs the current body "
-      + "converges idempotently; a database whose 0296 failed on a malformed marker "
-      + "retries against the named precheck. Reapply, not restamp: the revision "
-      + "adds a real guard the old state lacks.",
+      "corrective revisions U1+U2 (payroll-remittance shard) supersede the U1-only "
+      + "5589a8b5: U1 adds the marker precheck that refuses first, naming each bill "
+      + "and field, over unconstrained legacy markers whose shape-valid values the "
+      + "casts reject. U2 replaces the grand-total backfill with an exact "
+      + "reconciliation repair (recorded party equals the marker party, lines per "
+      + "liability account equal the accrual groups): reconciling bills fill "
+      + "anti-joined, anything else empties to no backfill rows and is named by "
+      + "notice, backfill rows for voided bills are deleted, app-recorded rows are "
+      + "never rewritten. Every statement stays idempotent against every published "
+      + "revision. Reapply, not restamp: the revisions add real guards and repair "
+      + "semantics the old states lack.",
+  },
+  {
+    filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
+    from: "5589a8b5b31dfcabd8ccd74ce4d5d6eeca95b141844b6282bfdda4b6ce45f62b",
+    to: "097ed6dd7492562a23147fca19d013c22da682373c17c7793b008f123ab58704",
+    strategy: "reapply",
+    reason:
+      "same U1+U2 revision as the entry above, for databases that recorded the "
+      + "U1-only 5589a8b5: re-running the current body upgrades their grand-total "
+      + "backfill rows to the exact-reconciliation repair idempotently.",
   },
 ];
 
