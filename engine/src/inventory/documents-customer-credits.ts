@@ -28,6 +28,7 @@ import {
   isJsonRecord,
   type DocumentInventoryLine,
 } from "./document-lines.ts";
+import { postedReturnQuantity } from "./return-quantities.ts";
 
 /**
  * Immutable operational document created when stock physically leaves on a
@@ -225,18 +226,14 @@ async function validateCustomerReturnSource(
   }
   // An issue movement stores a negative quantity; the shipped quantity is its
   // absolute value, and prior returns against it are positive receipts.
+  // The already-returned total shares the picker's rule (unreversed posted
+  // returns only): a return that was itself reversed is returnable again.
   const shipped = fromUnits(-toUnits(source.quantity));
-  const alreadyReturned = (await runner.execute<{ quantity: string }>(sql`
-    select coalesce(sum(returned.quantity), 0)::text as quantity
-      from inventory_movements returned
-      join document_lines credit_line
-        on credit_line.id = returned.document_line_id
-       and credit_line.org_id = returned.org_id
-     where returned.org_id = ${orgId}
-       and returned.kind = 'receipt'
-       and returned.status = 'posted'
-       and credit_line.custom #>> '{inventoryReturn,sourceIssueMovementId}' = ${source.id}
-  `)).rows[0]?.quantity ?? "0";
+  const alreadyReturned = await postedReturnQuantity(runner, orgId, {
+    returnKind: "receipt",
+    evidenceKey: "sourceIssueMovementId",
+    sourceMovementId: source.id,
+  });
   if (cmp(add(alreadyReturned, line.quantity), shipped) > 0) {
     throw new InventoryError(
       `${label} return quantity exceeds the unreturned quantity on its source shipment ` +

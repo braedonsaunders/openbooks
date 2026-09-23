@@ -12,6 +12,7 @@ import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockIn
 import { consumeLayers, recordConsumptions } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
 import { loadDocumentInventoryLines, inventoryPostingEffectKey, UUID_RE, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { postedReturnQuantity } from "./return-quantities.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "./documents-purchasing.ts";
 
 export interface VendorCreditInventoryReturnSelection {
@@ -209,17 +210,14 @@ async function validateVendorReturnSource(
       `${label} cannot select lot or serial evidence for an untracked item`,
     );
   }
-  const allocated = (await runner.execute<{ quantity: string }>(sql`
-    select coalesce(sum(-returned.quantity), 0)::text as quantity
-      from inventory_movements returned
-      join document_lines credit_line
-        on credit_line.id = returned.document_line_id
-       and credit_line.org_id = returned.org_id
-     where returned.org_id = ${orgId}
-       and returned.kind = 'return'
-       and returned.status = 'posted'
-       and credit_line.custom #>> '{inventoryReturn,sourceReceiptMovementId}' = ${source.id}
-  `)).rows[0]?.quantity ?? "0";
+  // The already-returned total shares the picker's rule (unreversed posted
+  // returns only, read as absolute values like the picker's remaining math),
+  // so save, picker and post can never disagree on what is left to return.
+  const allocated = await postedReturnQuantity(runner, orgId, {
+    returnKind: "return",
+    evidenceKey: "sourceReceiptMovementId",
+    sourceMovementId: source.id,
+  });
   if (cmp(add(allocated, line.quantity), source.quantity) > 0) {
     throw new InventoryError(
       `${label} return quantity exceeds the unreturned quantity on its source receipt`,

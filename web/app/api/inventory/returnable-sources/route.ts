@@ -70,16 +70,37 @@ export async function GET(req: Request) {
   const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
-  // A restricted reader must not learn of movements in entities it cannot see.
-  // One allowed entity narrows the query; several leave it party-scoped, which
-  // the party's own scope check above already bounded.
+  // A restricted reader must not learn of movements in entities it cannot
+  // see. One allowed entity narrows the query at SQL level; several leave
+  // it party-scoped, which the party's own scope check above already
+  // bounded — exactly the old scoping, through the new typed parameter.
+  // Passing the full grant set (and failing a grant of none closed)
+  // follows in the legal-entity commit.
   const allowed = gate.allowedSubsidiaryIds
-  const sources = await returnableSources(db, gate.user.orgId, {
+  const limitParam = url.searchParams.get('limit')
+  const offsetParam = url.searchParams.get('offset')
+  let limit: number | undefined
+  let offset: number | undefined
+  if (limitParam !== null) {
+    limit = Number(limitParam)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+      return NextResponse.json({ error: 'limit must be an integer between 1 and 200' }, { status: 400 })
+    }
+  }
+  if (offsetParam !== null) {
+    offset = Number(offsetParam)
+    if (!Number.isInteger(offset) || offset < 0) {
+      return NextResponse.json({ error: 'offset must be a non-negative integer' }, { status: 400 })
+    }
+  }
+  const page = await returnableSources(db, gate.user.orgId, {
     side: rules.side,
     partyId,
     itemId,
     stockLocationId,
-    subsidiaryId: allowed && allowed.size === 1 ? [...allowed][0]! : null,
+    subsidiaryIds: allowed && allowed.size === 1 ? [[...allowed][0]!] : null,
+    limit,
+    offset,
   })
-  return NextResponse.json({ sources })
+  return NextResponse.json({ sources: page.sources, hasMore: page.hasMore })
 }
