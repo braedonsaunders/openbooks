@@ -52,19 +52,20 @@ async function makeTaxCode(orgId: string, code: string, accounts: ScratchOrg["ac
 /** Seed one approved taxable document under an explicit subsidiary. */
 async function seedEntityDocument(
   org: ScratchOrg,
-  opts: { subsidiaryId: string; kind: DocKind; number: string; taxCodeId: string; amount: string; taxAmount: string; currency: string },
+  opts: { subsidiaryId: string; kind: DocKind; number: string; taxCodeId: string; amount: string; taxAmount: string; currency: string; date?: string },
 ): Promise<void> {
   const documentId = randomUUID();
   const lineId = randomUUID();
   const sales = SALES_KINDS.has(opts.kind);
   const accountId = sales ? org.accounts.revenue : org.accounts.cogs;
+  const date = opts.date ?? org.date;
   await db.transaction(async (tx) => {
     await tx.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
       values (${documentId}, ${org.orgId}, ${opts.kind}, 'draft', ${opts.number}, ${opts.subsidiaryId},
-              ${sales ? org.customerId : org.vendorId}, ${org.date}, ${org.date},
+              ${sales ? org.customerId : org.vendorId}, ${date}, ${date},
               ${opts.currency}, '1', ${opts.amount}, ${opts.taxAmount}, ${(Number(opts.amount) + Number(opts.taxAmount)).toFixed(4)})`);
     await tx.execute(sql`
       insert into document_lines
@@ -437,6 +438,79 @@ test("a registration effective on the window end clamps the return to its first 
     assert.equal(result.from, "2026-08-01");
     assert.equal(result.to, "2026-08-01");
     assert.equal(boxesOf(result).get("BASE"), "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a pinned registration clamps to its own window, never a sibling's", { skip: !DB }, async () => {
+  // One form, two registrations splitting July: A covers Jul 1–15, B covers
+  // Jul 16–31, with activity in each half. The clamp used to match the FIRST
+  // obligation by form alone, so pinning B clamped to A's Jul 1–15 window,
+  // B resolved to from Jul 16 > to Jul 15, and the return falsely refused
+  // "nothing reportable" although B holds Jul 16–31 activity.
+  const org = await createScratchOrg();
+  try {
+    const code = await makeTaxCode(org.orgId, "SPLIT-BASE", org.accounts);
+    await seedEntityDocument(org, {
+      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-EARLY",
+      taxCodeId: code, amount: "200.0000", taxAmount: "20.0000", currency: "CAD",
+      date: "2026-07-05",
+    });
+    await seedEntityDocument(org, {
+      subsidiaryId: org.subsidiaryId, kind: "customer_invoice", number: "INV-LATE",
+      taxCodeId: code, amount: "300.0000", taxAmount: "30.0000", currency: "CAD",
+      date: "2026-07-20",
+    });
+    const formCode = "SPLIT-WIN";
+    await makeEntityForm(org.orgId, formCode, [
+      { lineCode: "BASE", taxCodeId: code, basis: "taxable_base", sign: 1, sequence: 10 },
+      { lineCode: "TAX", taxCodeId: code, basis: "tax_collected", sign: -1, sequence: 20 },
+    ]);
+    const jurisdictionId = randomUUID();
+    await db.execute(sql`
+      insert into tax_jurisdictions (id, org_id, code, name, country, level, tax_type)
+      values (${jurisdictionId}, ${org.orgId}, 'SPLIT', 'Split jurisdiction', 'CA', 'country', 'gst')`);
+    const regA = randomUUID();
+    const regB = randomUUID();
+    await db.execute(sql`
+      insert into tax_registrations
+        (id, org_id, jurisdiction_id, registration_number, filing_frequency, return_form_code,
+         is_active, effective_from, effective_to)
+      values (${regA}, ${org.orgId}, ${jurisdictionId}, 'AAAA111111 RT0001', 'monthly', ${formCode},
+              true, '2026-07-01', '2026-07-15'),
+             (${regB}, ${org.orgId}, ${jurisdictionId}, 'BBBB222222 RT0001', 'monthly', ${formCode},
+              true, '2026-07-16', '2026-07-31')`);
+
+    const late = await computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31", {}, {
+      filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regB },
+    });
+    assert.equal(late.from, "2026-07-16");
+    assert.equal(late.to, "2026-07-31");
+    assert.equal(late.registrationId, regB);
+    assert.equal(boxesOf(late).get("BASE"), "300.0000");
+    assert.equal(boxesOf(late).get("TAX"), "30.0000");
+
+    const early = await computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31", {}, {
+      filingEntity: { subsidiaryIds: [org.subsidiaryId], registrationId: regA },
+    });
+    assert.equal(early.from, "2026-07-01");
+    assert.equal(early.to, "2026-07-15");
+    assert.equal(early.registrationId, regA);
+    assert.equal(boxesOf(early).get("BASE"), "200.0000");
+    assert.equal(boxesOf(early).get("TAX"), "20.0000");
+
+    // Unpinned with two same-form registrations active in the period, the
+    // return refuses by name instead of arbitrarily clamping to one — and the
+    // refusal names BOTH registrations so the operator can pin one.
+    await assert.rejects(
+      computeTaxReturn(org.orgId, formCode, "2026-07-01", "2026-07-31"),
+      (e: unknown) =>
+        e instanceof TaxReturnError &&
+        new RegExp(`has 2 registrations active in this period — choose one`).test(e.message) &&
+        e.message.includes("AAAA111111 RT0001") &&
+        e.message.includes("BBBB222222 RT0001"),
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

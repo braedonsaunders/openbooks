@@ -578,8 +578,10 @@ async function clampTaxReturnWindowInSnapshot(
   formCode: string,
   from: string,
   to: string,
+  pinnedId?: string | null,
 ): Promise<{ from: string; to: string }> {
   const registrations = await runner.execute<{
+    id: string;
     jurisdiction_id: string;
     jurisdiction_name: string;
     jurisdiction_code: string;
@@ -590,37 +592,77 @@ async function clampTaxReturnWindowInSnapshot(
     effective_from: string | null;
     effective_to: string | null;
   }>(sql`
-    select r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
+    select r.id, r.jurisdiction_id, j.name as jurisdiction_name, j.code as jurisdiction_code,
            j.country, r.filing_frequency, r.return_form_code, r.registration_number,
            r.effective_from::text, r.effective_to::text
       from tax_registrations r
       join tax_jurisdictions j on j.id = r.jurisdiction_id and j.org_id = r.org_id
-     where r.org_id = ${orgId} and r.is_active
+     where r.org_id = ${orgId} and r.is_active and r.return_form_code = ${formCode}
   `);
-  const calendar = buildFilingCalendar(
-    registrations.rows.map((r) => ({
-      jurisdictionId: r.jurisdiction_id,
-      jurisdictionName: r.jurisdiction_name,
-      jurisdictionCode: r.jurisdiction_code,
-      country: r.country,
-      filingFrequency: r.filing_frequency,
-      returnFormCode: r.return_form_code,
-      registrationNumber: r.registration_number,
-      effectiveFrom: r.effective_from,
-      effectiveTo: r.effective_to,
-    })),
-    from,
-    to,
+  const regs = registrations.rows.map((r) => ({
+    id: r.id,
+    jurisdictionId: r.jurisdiction_id,
+    jurisdictionName: r.jurisdiction_name,
+    jurisdictionCode: r.jurisdiction_code,
+    country: r.country,
+    filingFrequency: r.filing_frequency,
+    returnFormCode: r.return_form_code,
+    registrationNumber: r.registration_number,
+    effectiveFrom: r.effective_from,
+    effectiveTo: r.effective_to,
+  }));
+  const overlapping = (reg: (typeof regs)[number]) =>
+    buildFilingCalendar([reg], from, to).find(
+      (o) => o.periodStart <= to && o.periodEnd >= from,
+    );
+  // A pinned registration resolves FIRST: the window clamps to ITS filing
+  // obligation, never to a sibling registration's. An unknown, inactive or
+  // malformed pin is left for resolveReturnRegistration, which owns the named
+  // refusal — clamping must not invent a refusal the resolver already names.
+  if (pinnedId) {
+    let pinOk = true;
+    try {
+      uuidArray([pinnedId]);
+    } catch {
+      pinOk = false;
+    }
+    const pin = pinOk ? regs.find((r) => r.id === pinnedId) : undefined;
+    if (!pin) return { from, to };
+    const match = overlapping(pin);
+    return match
+      ? { from: match.reportableFrom, to: match.reportableTo }
+      : { from, to };
+  }
+  // Unpinned: group matches by registration so sibling registrations sharing
+  // one form can never silently win by calendar sort order. One registration
+  // keeps the historical first-obligation clamp; several fail closed by name.
+  const matches = regs.flatMap((reg) => {
+    const match = overlapping(reg);
+    return match ? [{ reg, match }] : [];
+  });
+  if (matches.length === 0) return { from, to };
+  if (matches.length === 1) {
+    const only = matches[0]!;
+    return { from: only.match.reportableFrom, to: only.match.reportableTo };
+  }
+  const choices = [...matches]
+    .sort(
+      (a, b) =>
+        a.match.reportableFrom.localeCompare(b.match.reportableFrom) ||
+        labelFor(a.reg).localeCompare(labelFor(b.reg)),
+    )
+    .map(
+      (m) =>
+        `${labelFor(m.reg)} (${m.match.reportableFrom} to ${m.match.reportableTo})`,
+    );
+  throw new TaxReturnError(
+    `tax return "${formCode}" has ${matches.length} registrations active in this period — choose one: ${choices.join(", ")}`,
   );
-  const match = calendar.find(
-    (o) =>
-      o.returnFormCode === formCode &&
-      o.periodStart <= to &&
-      o.periodEnd >= from,
-  );
-  return match
-    ? { from: match.reportableFrom, to: match.reportableTo }
-    : { from, to };
+}
+
+/** Human name for a registration in a refusal: its number, else its jurisdiction. */
+function labelFor(reg: { registrationNumber: string | null; jurisdictionCode: string }): string {
+  return reg.registrationNumber ?? reg.jurisdictionCode;
 }
 
 /**
@@ -944,14 +986,25 @@ async function computeTaxReturnInSnapshot(
   const form = formRes.rows[0];
   if (!form) throw new TaxReturnError(`tax return form "${formCode}" is not configured`);
 
-  const window = await clampTaxReturnWindowInSnapshot(runner, orgId, formCode, from, to);
+  // A pinned registration clamps to ITS own filing obligation first (never a
+  // sibling's); unpinned, the clamp fails closed when several registrations
+  // share the form instead of arbitrarily picking one.
+  const window = await clampTaxReturnWindowInSnapshot(
+    runner,
+    orgId,
+    formCode,
+    from,
+    to,
+    opts?.filingEntity?.registrationId,
+  );
   from = window.from;
   to = window.to;
 
   // The filing identity resolves before any amount is summed: a pinned
   // registration narrows the clamped window to its own effective window (the
-  // calendar already did this when it matched that registration; the
-  // intersection only bites when several registrations name one form).
+  // clamp above already matched that registration's obligation; the
+  // intersection only bites when the registration's effective window is
+  // narrower than its period).
   const registration = await resolveReturnRegistration(
     runner,
     orgId,
