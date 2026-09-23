@@ -1426,7 +1426,9 @@
       },
       "serviceItem": "Service Item",
       "employee": "Employee",
-      "item": "Item"
+      "item": "Item",
+      "loadMore": "Load more",
+      "loaded": "Showing {loaded} of {total}"
     },
     "loading": "Loading…",
     "error": {

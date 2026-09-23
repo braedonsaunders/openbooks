@@ -122,6 +122,14 @@ interface Entry {
   itemName: string; employeeName: string; customerName: string; memo: string
 }
 
+interface ServerGroup { label: string; hours: string; billableHours: string }
+interface EntriesResponse {
+  entries: Entry[]
+  total: { count: number; hours: string; billableHours: string }
+  groups: { byPeer: ServerGroup[]; byCustomer: ServerGroup[] }
+  page: { limit: number; nextCursor: string | null; hasMore: boolean }
+}
+
 /** Native Drawer listing raw time entries behind an employee / item drill. */
 function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
@@ -130,6 +138,12 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   const money0 = (n: MoneyValue) => fmtMoney(n)
   const t = useTranslations('analytics.utilization')
   const [entries, setEntries] = useState<Entry[] | null>(null)
+  const [total, setTotal] = useState<EntriesResponse['total'] | null>(null)
+  const [peerGroups, setPeerGroups] = useState<ServerGroup[]>([])
+  const [custServerGroups, setCustServerGroups] = useState<ServerGroup[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
   // Reset the drill state when its inputs change, during render (same
@@ -145,6 +159,11 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
     setPrevFrom(from)
     setPrevTo(to)
     setEntries(null)
+    setTotal(null)
+    setPeerGroups([])
+    setCustServerGroups([])
+    setNextCursor(null)
+    setHasMore(false)
     setError(false)
     setView('entries')
   }
@@ -152,27 +171,42 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
     let live = true
     fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((j) => { if (live) setEntries(j.entries) })
+      .then((j: EntriesResponse) => {
+        if (!live) return
+        setEntries(j.entries)
+        setTotal(j.total)
+        setPeerGroups(j.groups.byPeer)
+        setCustServerGroups(j.groups.byCustomer)
+        setNextCursor(j.page.nextCursor)
+        setHasMore(j.page.hasMore)
+      })
       .catch(() => { if (live) setError(true) })
     return () => { live = false }
   }, [kind, id, from, to])
 
-  const total = (entries ?? []).reduce((a, e) => a + e.hours, 0)
-  const billable = (entries ?? []).reduce((a, e) => a + (e.billable ? e.hours : 0), 0)
-
-  // Group entries by a key → { hours, billable }.
-  const groupBy = (keyFn: (e: Entry) => string) => {
-    const m = new Map<string, { hours: number; billable: number }>()
-    for (const e of entries ?? []) {
-      const k = keyFn(e) || '—'
-      const g = m.get(k) ?? { hours: 0, billable: 0 }
-      g.hours += e.hours; g.billable += e.billable ? e.hours : 0
-      m.set(k, g)
-    }
-    return [...m.entries()].map(([label, g]) => ({ label, ...g })).sort((a, b) => b.hours - a.hours)
+  const loadMore = () => {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    fetch(`/api/analytics/utilization/entries?${kind}=${encodeURIComponent(id)}&from=${from}&to=${to}&cursor=${encodeURIComponent(nextCursor)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((j: EntriesResponse) => {
+        setEntries((prev) => [...(prev ?? []), ...j.entries])
+        setNextCursor(j.page.nextCursor)
+        setHasMore(j.page.hasMore)
+        setLoadingMore(false)
+      })
+      .catch(() => { setError(true); setLoadingMore(false) })
   }
-  const itemGroups = view === 'byItem' ? groupBy((e) => (kind === 'employee' ? e.itemName : e.employeeName)) : []
-  const custGroups = view === 'byCustomer' ? groupBy((e) => e.customerName) : []
+
+  // Headline and shares read the server aggregates over the FULL population —
+  // the visible page is only ever a window into it.
+  const totalHours = total ? Number(total.hours) : 0
+  const billableHours = total ? Number(total.billableHours) : 0
+
+  // Server groups arrive pre-aggregated; numbers below are render-only.
+  const toGroup = (g: ServerGroup) => ({ label: g.label || '—', hours: Number(g.hours), billable: Number(g.billableHours) })
+  const itemGroups = view === 'byItem' ? peerGroups.map(toGroup) : []
+  const custGroups = view === 'byCustomer' ? custServerGroups.map(toGroup) : []
 
   return (
     <Drawer open onClose={onClose} size="lg" title={name} description={sub ?? t('entries.title')} bodyClassName="overflow-hidden flex flex-col p-0">
@@ -190,9 +224,9 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
       ) : null}
 
       <div className="flex items-center gap-4 border-b border-slate-100 px-4 py-2.5 text-sm dark:border-slate-800">
-        <span className="text-slate-500 dark:text-slate-400">{entries ? t('entries.count', { count: entries.length, suffix: entries.length === 500 ? '+' : '' }) : '…'}</span>
-        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{t('entries.hrs', { hours: hrs0(total) })}</span>
-        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{total > 0 ? t('entries.billableOf', { pct: pct1((billable / total) * 100) }) : '—'}</span>
+        <span className="text-slate-500 dark:text-slate-400">{total ? t('entries.count', { count: total.count, suffix: hasMore ? '+' : '' }) : '…'}</span>
+        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">{t('entries.hrs', { hours: hrs0(totalHours) })}</span>
+        <span className="tabular-nums text-emerald-600 dark:text-emerald-400">{totalHours > 0 ? t('entries.billableOf', { pct: pct1((billableHours / totalHours) * 100) }) : '—'}</span>
       </div>
 
       {/* View pills */}
@@ -223,7 +257,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
                   <td className="max-w-48 truncate px-4 py-2 text-slate-700 dark:text-slate-300" title={g.label}>{g.label}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-800 dark:text-slate-200">{g.hours.toFixed(1)}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{g.hours > 0 ? pct1((g.billable / g.hours) * 100) : '—'}</td>
-                  <td className="px-4 py-2"><span className="block h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><span className="block h-full rounded-full bg-teal-400" style={{ width: `${total > 0 ? (g.hours / total) * 100 : 0}%` }} /></span></td>
+                  <td className="px-4 py-2"><span className="block h-1.5 w-24 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800"><span className="block h-full rounded-full bg-teal-400" style={{ width: `${totalHours > 0 ? (g.hours / totalHours) * 100 : 0}%` }} /></span></td>
                 </tr>
               ))}
             </tbody>
@@ -256,6 +290,19 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
             </tbody>
           </table>
         )}
+        {view === 'entries' && hasMore && entries ? (
+          <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <span className="tabular-nums">{t('entries.loaded', { loaded: entries.length, total: total?.count ?? entries.length })}</span>
+            <button
+              type="button"
+              onClick={loadMore}
+              disabled={loadingMore}
+              className="rounded-full border border-teal-500 px-3 py-1 font-medium text-teal-700 disabled:opacity-40 dark:text-teal-300"
+            >
+              {loadingMore ? t('loading') : t('entries.loadMore')}
+            </button>
+          </div>
+        ) : null}
       </div>
     </Drawer>
   )

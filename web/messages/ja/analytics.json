@@ -1400,6 +1400,8 @@
       "employee": "従業員",
       "hrs": "{hours}時間",
       "item": "品目",
+      "loadMore": "さらに読み込む",
+      "loaded": "{total}件中{loaded}件を表示",
       "peers": "ピア比較：{title}（{count}名）",
       "pills": {
         "byCustomer": "得意先別",
