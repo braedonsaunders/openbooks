@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
+import { appliedLegAmountExpr } from "../records/balance-due.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
@@ -186,8 +187,9 @@ type OpenItem = {
  * applications dated on/before it. Bills/invoices carry the side's normal
  * sign; credit memos carry the opposite sign on the same control account, so
  * an unapplied credit nets against the party's bills (or scheduled outflow
- * overstates cash need). Translated at the closing spot — raw functionals
- * would mix subsidiary currencies.
+ * overstates cash need). Each leg nets through its own carrying column via
+ * the shared balance-due helper, never a bare sum for both legs. Translated
+ * at the closing spot — raw functionals would mix subsidiary currencies.
  */
 async function sideOpenItems(
   orgId: string,
@@ -211,7 +213,7 @@ async function sideOpenItems(
              d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
              (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - coalesce((
-               select sum(x.amount) from applications x
+               select sum(${appliedLegAmountExpr("x", sql`jl.id`, "base")}) from applications x
                 where x.org_id = ${orgId}
                   and (x.to_line_id = jl.id or x.from_line_id = jl.id)
                   and x.applied_on <= ${asOf}

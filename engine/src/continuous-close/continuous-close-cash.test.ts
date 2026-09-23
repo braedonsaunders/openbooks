@@ -55,6 +55,11 @@ test("cash alerts reuse the cockpit's liquidity primitives, not copies", () => {
   assert.match(source, /\.\.\/records\/open-item-kinds\.ts/);
   assert.match(source, /AP_OPEN_ITEM_KINDS/);
   assert.match(source, /AR_OPEN_ITEM_KINDS/);
+  // The applied sum reads each leg through its own carrying column from the
+  // shared balance-due helper — a bare sum(x.amount) for both legs mixes
+  // denominations on cross-currency credits and must fail this test.
+  assert.match(source, /appliedLegAmountExpr/);
+  assert.doesNotMatch(source, /sum\(x\.amount\)/);
   // Settlement stats come from the maintained rollup (sufficient statistics
   // per party-day), weighted globally, 45-day default without history.
   assert.match(source, /from party_payment_stats/);

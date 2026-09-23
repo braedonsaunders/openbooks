@@ -7,7 +7,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, withBypassContext } from "../platform/db.ts";
 import { cashFindings } from "../agents/cash.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
  * Live-PostgreSQL proofs for the cash-alerts pack (background agent pack B):
@@ -60,6 +60,19 @@ async function seedVendorBill(
   amount: string,
   dueDate: string | null,
 ): Promise<void> {
+  await seedVendorDoc(org, number, "vendor_bill", amount, dueDate, "CAD", "1");
+}
+
+/** An approved, posted vendor-side document (bill or credit memo) with currency. Returns the document id. */
+async function seedVendorDoc(
+  org: ScratchOrg,
+  number: string,
+  kind: "vendor_bill" | "vendor_credit",
+  amount: string,
+  dueDate: string | null,
+  currency: string,
+  fxRate: string,
+): Promise<string> {
   const documentId = randomUUID();
   const lineId = randomUUID();
   await withBypassContext(async () => {
@@ -67,9 +80,9 @@ async function seedVendorBill(
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, posting_date, due_date, currency, fx_rate, subtotal, tax_total, total)
-      values (${documentId}, ${org.orgId}, 'vendor_bill', 'draft', ${number}, ${org.subsidiaryId},
+      values (${documentId}, ${org.orgId}, ${kind}, 'draft', ${number}, ${org.subsidiaryId},
               ${org.vendorId}, ${org.date}, ${org.date}, ${dueDate},
-              'CAD', '1', ${amount}, '0.0000', ${amount})`);
+              ${currency}, ${fxRate}, ${amount}, '0.0000', ${amount})`);
     await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
@@ -82,6 +95,7 @@ async function seedVendorBill(
   await withBypassContext(() =>
     postDocument(documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }),
   );
+  return documentId;
 }
 
 test(
@@ -182,6 +196,45 @@ test(
       const sunday = new Date(pushed.getTime() - pushed.getUTCDay() * MS_DAY);
       assert.equal(only.summary.lowestWeek, sunday.toISOString().slice(0, 10));
       assert.equal(only.summary.lowestCash, "-8000.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "the crunch nets a foreign credit through its source leg",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await seedBankCash(org, "CRUNCH-FX-CASH", "4900.0000");
+      const billId = await seedVendorDoc(org, "BILL-FX-1", "vendor_bill", "5000", await daysFromToday(org.orgId, 5), "CAD", "1");
+      const creditId = await seedVendorDoc(org, "CR-FX-1", "vendor_credit", "60", await daysFromToday(org.orgId, 5), "USD", "1.35");
+      // USD 20 of the USD 60 credit settles CAD 25 of the bill: the bill nets
+      // through amount (4975) and the credit is consumed through source_amount
+      // (27), so the crunch nets 4975 - 54 = 4921 against 4900 cash (excess
+      // 21). A bare sum(x.amount) for both legs would net 4975 - 56 = 4919
+      // (excess 19).
+      const actor = await createScratchUser(org.orgId, "FX Clerk", "admin");
+      await withBypassContext(async () => {
+        const lines = await db.execute<{ id: string; doc: string }>(sql`select jl.id, je.source_document_id as doc
+          from journal_lines jl join journal_entries je on je.id = jl.entry_id
+          where jl.org_id = ${org.orgId} and jl.is_open_item and je.source_document_id in (${billId}, ${creditId})`);
+        const lineOf = (doc: string) => lines.rows.find((row) => row.doc === doc)!.id;
+        await db.execute(sql`insert into applications
+          (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
+           source_transaction_currency, target_transaction_amount, target_transaction_currency,
+           settlement_rate, settlement_rate_source, settlement_rate_reference, created_by, updated_by)
+          values (${org.orgId}, ${lineOf(creditId)}, ${lineOf(billId)}, '25', ${org.date}, '27', '20', 'USD', '25', 'CAD',
+            '1.25', 'manual', 'FX-CREDIT-AGENT-TEST', ${actor}, ${actor})`);
+      });
+
+      const findings = await scan(org.orgId, "10.0000");
+      const crunch = findings.filter((finding) => finding.findingType === "cash_bill_crunch");
+      assert.equal(crunch.length, 1, `one crunch finding, got ${fingerprints(findings)}`);
+      assert.equal(crunch[0]!.materiality, "21.0000");
+      assert.equal(crunch[0]!.summary.billCount, 2);
     } finally {
       await dropScratchOrg(org.orgId);
     }
