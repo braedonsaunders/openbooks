@@ -119,3 +119,34 @@ test('a targeted adjustment with no line context matches nothing, never everythi
     assert.equal(priceAdjustments([labor('1000.00')], [a]).length, 0, targetType)
   }
 })
+
+test('an item_category target measures only that category', () => {
+  const a = adjustment({ targets: [{ targetType: 'item_category', targetValueId: null, targetValueText: 'Consulting' }] })
+  const lines: AdjustableLine[] = [
+    { amount: '1000.00', isLabor: true, itemCategory: 'Consulting' },
+    { amount: '2000.00', isLabor: true, itemCategory: 'Travel' },
+  ]
+  const charges = priceAdjustments(lines, [a])
+  assert.equal(charges.length, 1)
+  assert.equal(charges[0]!.basis, '1000.0000')
+})
+
+test('a trade target measures every active role the worker holds', () => {
+  const a = adjustment({ targets: [{ targetType: 'trade', targetValueId: 'trade-electric', targetValueText: null }] })
+  const matched = priceAdjustments(
+    [{ ...labor('1000.00'), tradeIds: ['trade-plumbing', 'trade-electric'] }], [a])
+  assert.equal(matched.length, 1)
+  const unmatched = priceAdjustments(
+    [{ ...labor('1000.00'), tradeIds: ['trade-plumbing'] }], [a])
+  assert.equal(unmatched.length, 0)
+  assert.equal(priceAdjustments([labor('1000.00')], [a]).length, 0)
+})
+
+test("a job_title target measures the worker's titles", () => {
+  const a = adjustment({ targets: [{ targetType: 'job_title', targetValueId: null, targetValueText: 'Foreman' }] })
+  const matched = priceAdjustments(
+    [{ ...labor('1000.00'), jobTitles: ['Foreman'] }], [a])
+  assert.equal(matched.length, 1)
+  assert.equal(priceAdjustments(
+    [{ ...labor('1000.00'), jobTitles: ['Apprentice'] }], [a]).length, 0)
+})

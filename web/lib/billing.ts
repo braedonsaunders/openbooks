@@ -114,6 +114,9 @@ interface BillingTimeRow extends Record<string, unknown> {
   item_kind: string | null
   item_category: string | null
   time_type_name: string | null
+  /** Every active trade / job title held by the time entry's employee. */
+  trades: string[] | null
+  job_titles: string[] | null
 }
 
 /** One jsonb rate-component object behind a materials line. */
@@ -148,6 +151,9 @@ interface BillingCostRow extends Record<string, unknown> {
   item_kind: string | null
   item_category: string | null
   bill_components: BillRateComponent[] | null
+  /** Every active trade / job title held by the cost line's employee, if any. */
+  trades: string[] | null
+  job_titles: string[] | null
 }
 
 /** Negate a decimal safely — prefixing '-' breaks when the value is already negative. */
@@ -299,6 +305,9 @@ export async function generateInvoiceFromBillingRequest(
       /** Item classification + time bucket, for rate-card adjustment targeting. */
       itemKind?: string | null
       itemCategory?: string | null
+      /** Every active trade / job title held by the line's employee. */
+      tradeIds?: string[] | null
+      jobTitles?: string[] | null
       departmentId?: string | null
       /** Owning subsidiary + work location/class, for adjustment targeting. */
       subsidiaryId?: string | null
@@ -423,10 +432,19 @@ export async function generateInvoiceFromBillingRequest(
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
                te.employee_party_id, te.memo, te.department_id, te.worked_on,
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
-               i.kind as item_kind, i.category as item_category, tt.name as time_type_name
+               i.kind as item_kind, i.category as item_category, tt.name as time_type_name,
+               er.trades, er.job_titles
           from time_entries te
           left join items i on i.id = te.item_id and i.org_id = te.org_id
           left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
+          -- Adjustment targets can select the worker's trade: every active
+          -- role counts, so a second active role cannot hide the match.
+          left join lateral (
+            select coalesce(array_agg(distinct r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+              from employee_roles r
+             where r.org_id = te.org_id and r.party_id = te.employee_party_id and r.is_active
+          ) er on true
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable
            and te.billing_status = 'unbilled'
@@ -471,6 +489,8 @@ export async function generateInvoiceFromBillingRequest(
           isLabor: true,
           itemKind: te.item_kind ?? 'labor',
           itemCategory: te.item_category ?? null,
+          tradeIds: te.trades ?? null,
+          jobTitles: te.job_titles ?? null,
           timeKind: timeKindOf(te.time_type_name),
           departmentId: te.department_id ?? null,
           // Time carries no subsidiary of its own: the work belongs to the
@@ -530,10 +550,17 @@ export async function generateInvoiceFromBillingRequest(
                coalesce(dl.subsidiary_id, d.subsidiary_id) as subsidiary_id,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category,
-               coalesce(rc.components, '[]'::jsonb) as bill_components
+               coalesce(rc.components, '[]'::jsonb) as bill_components,
+               er.trades, er.job_titles
           from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
           left join items i on i.id = dl.item_id and i.org_id = dl.org_id
+          left join lateral (
+            select coalesce(array_agg(distinct r.trade_id) filter (where r.trade_id is not null), '{}') as trades,
+                   coalesce(array_agg(distinct r.job_title) filter (where r.job_title is not null), '{}') as job_titles
+              from employee_roles r
+             where r.org_id = dl.org_id and r.party_id = dl.employee_id and r.is_active
+          ) er on true
           left join lateral (
             select jsonb_agg(jsonb_build_object(
               'unitCode', c.unit_code, 'unitName', c.unit_name, 'quantity', c.quantity::text,
@@ -590,6 +617,8 @@ export async function generateInvoiceFromBillingRequest(
             rateVersionId: cl.rate_version_id,
             itemKind: cl.item_kind ?? null,
             itemCategory: cl.item_category ?? null,
+            tradeIds: cl.trades ?? null,
+            jobTitles: cl.job_titles ?? null,
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
             subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
@@ -610,6 +639,8 @@ export async function generateInvoiceFromBillingRequest(
             sourceCostLineId: cl.id,
             itemKind: cl.item_kind ?? null,
             itemCategory: cl.item_category ?? null,
+            tradeIds: cl.trades ?? null,
+            jobTitles: cl.job_titles ?? null,
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
             subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
@@ -737,6 +768,8 @@ export async function generateInvoiceFromBillingRequest(
           return priceAdjustments(
             built.filter((l) => (l.departmentId ?? null) === departmentId).map((l) => ({
               amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
+              itemCategory: l.itemCategory ?? null,
+              tradeIds: l.tradeIds ?? null, jobTitles: l.jobTitles ?? null,
               departmentId, customerId: project.customer_id, projectId: req.project_id,
               subsidiaryId: l.subsidiaryId ?? null,
               // The line's own location/class arrive with PRC13; until then

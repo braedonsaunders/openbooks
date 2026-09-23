@@ -12,12 +12,16 @@
  * import it directly.
  */
 
-/** Dimensions of an invoice line an adjustment can select. */
+/**
+ * Dimensions of an invoice line an adjustment can select. Every entry here
+ * must have a matcher case in `lineMatchesAdjustment`: a saved type with no
+ * case bills zero forever, so unmatchable dimensions (`transaction_type`,
+ * `other`) are not listed and the save refuses them by name.
+ */
 export const ADJUSTMENT_TARGET_TYPES = [
   'item',
   'item_kind',
   'item_category',
-  'transaction_type',
   'department',
   'subsidiary',
   'location',
@@ -26,7 +30,6 @@ export const ADJUSTMENT_TARGET_TYPES = [
   'job_title',
   'project',
   'customer',
-  'other',
 ] as const
 export type AdjustmentTargetType = (typeof ADJUSTMENT_TARGET_TYPES)[number]
 
@@ -62,7 +65,5 @@ export const ADJUSTMENT_PRESENTATIONS = ['included', 'separate', 'informational'
 export const ADJUSTMENT_TEXT_TARGETS: ReadonlySet<string> = new Set([
   'item_kind',
   'item_category',
-  'transaction_type',
   'job_title',
-  'other',
 ])

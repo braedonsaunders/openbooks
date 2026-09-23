@@ -51,6 +51,10 @@ export interface AdjustableLine {
   amount: string
   itemId?: string | null
   itemKind?: string | null
+  itemCategory?: string | null
+  /** Every active trade / job title held by the line's employee. */
+  tradeIds?: string[] | null
+  jobTitles?: string[] | null
   departmentId?: string | null
   /** Who the work is for and where it sits — the card assignment selects the
    * card, but an adjustment's own targets still constrain which lines it
@@ -83,6 +87,9 @@ export function lineMatchesAdjustment(line: AdjustableLine, adjustment: Resolved
       case 'material': return line.isLabor !== true
       case 'item': return !!line.itemId && line.itemId === t.targetValueId
       case 'item_kind': return !!line.itemKind && line.itemKind === (t.targetValueText ?? '')
+      case 'item_category': return !!line.itemCategory && line.itemCategory === (t.targetValueText ?? '')
+      case 'trade': return !!t.targetValueId && (line.tradeIds ?? []).includes(t.targetValueId)
+      case 'job_title': return !!t.targetValueText && (line.jobTitles ?? []).includes(t.targetValueText)
       case 'department': return !!line.departmentId && line.departmentId === t.targetValueId
       // The card assignment selects WHICH adjustments apply; each
       // adjustment's own targets still select WHICH lines they measure. A

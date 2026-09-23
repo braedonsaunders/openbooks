@@ -65,14 +65,28 @@ async function seedCard(fx: Fixture, target: { targetType: string; targetValueId
   })
 }
 
-async function seedTime(fx: Fixture, hours: string, rate: string): Promise<string> {
+async function seedTime(fx: Fixture, hours: string, rate: string): Promise<{ entry: string; employee: string }> {
   const { org, project } = fx
   const employee = randomUUID(), entry = randomUUID()
   await withBypassContext(async () => {
     await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id) values (${employee}, ${org.orgId}, 'employee', 'Billable worker', ${org.subsidiaryId})`)
     await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${org.date}, ${hours}, ${project}, ${org.items.service}, true, 'approved', 'unbilled', ${rate})`)
   })
-  return entry
+  return { entry, employee }
+}
+
+async function seedTrade(fx: Fixture, name: string): Promise<string> {
+  const id = randomUUID()
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into trades (id, org_id, name, is_active) values (${id}, ${fx.org.orgId}, ${name}, true)`)
+  })
+  return id
+}
+
+async function seedRole(fx: Fixture, employee: string, tradeId: string | null, jobTitle: string | null): Promise<void> {
+  await withBypassContext(async () => {
+    await db.execute(sql`insert into employee_roles (org_id, party_id, trade_id, job_title, is_active) values (${fx.org.orgId}, ${employee}, ${tradeId}, ${jobTitle}, true)`)
+  })
 }
 
 async function invoiceLines(fx: Fixture, entry: string): Promise<{ description: string | null; amount: string }[]> {
@@ -90,7 +104,8 @@ test('a customer-targeted surcharge charges only its own customer', { skip: !DB 
   const fx = await setup()
   try {
     await seedCard(fx, { targetType: 'customer', targetValueId: fx.org.customerId })
-    const lines = await invoiceLines(fx, await seedTime(fx, '10', '100'))
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
     const surcharge = lines.filter((l) => l.description === 'Probe surcharge')
     assert.equal(surcharge.length, 1)
     assert.equal(surcharge[0]!.amount, '100.0000')
@@ -103,9 +118,39 @@ test('a surcharge targeted at another customer charges nothing', { skip: !DB }, 
   const fx = await setup()
   try {
     await seedCard(fx, { targetType: 'customer', targetValueId: fx.otherCustomer })
-    const lines = await invoiceLines(fx, await seedTime(fx, '10', '100'))
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
     assert.deepEqual(lines.filter((l) => l.description === 'Probe surcharge'), [])
     assert.equal(lines.length, 1)
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a trade-targeted surcharge follows the worker, not the card', { skip: !DB }, async () => {
+  const fx = await setup()
+  try {
+    const trade = await seedTrade(fx, 'Electrician')
+    await seedCard(fx, { targetType: 'trade', targetValueId: trade })
+    const spark = await seedTime(fx, '10', '100')
+    await seedRole(fx, spark.employee, trade, 'Journeyman')
+    const lines = await invoiceLines(fx, spark.entry)
+    assert.equal(lines.filter((l) => l.description === 'Probe surcharge')[0]?.amount, '100.0000')
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a trade-targeted surcharge ignores other trades', { skip: !DB }, async () => {
+  const fx = await setup()
+  try {
+    const trade = await seedTrade(fx, 'Electrician')
+    const otherTrade = await seedTrade(fx, 'Plumber')
+    await seedCard(fx, { targetType: 'trade', targetValueId: trade })
+    const wrench = await seedTime(fx, '10', '100')
+    await seedRole(fx, wrench.employee, otherTrade, 'Journeyman')
+    const lines = await invoiceLines(fx, wrench.entry)
+    assert.deepEqual(lines.filter((l) => l.description === 'Probe surcharge'), [])
   } finally {
     await dropScratchOrg(fx.org.orgId)
   }
