@@ -83,7 +83,7 @@ async function seedCard(
   fx: Fixture,
   target: { targetType: string; targetValueId: string | null; targetValueText?: string | null },
   value = '10.0000',
-  opts: { assignmentLocationId?: string | null; effectiveFrom?: string; effectiveTo?: string | null } = {},
+  opts: { assignmentLocationId?: string | null; effectiveFrom?: string; effectiveTo?: string | null; calculation?: string; unit?: string | null } = {},
 ): Promise<void> {
   const { org, project } = fx
   const book = randomUUID(), version = randomUUID(), adjustment = randomUUID()
@@ -91,7 +91,7 @@ async function seedCard(
     await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_active) values (${book}, ${org.orgId}, 'ADJ-RATES', 'Adjustment rates', 'CAD', true)`)
     await db.execute(sql`insert into item_rate_versions (id, org_id, rate_book_id, effective_from, effective_to, status) values (${version}, ${org.orgId}, ${book}, ${opts.effectiveFrom ?? '2026-07-01'}, ${opts.effectiveTo ?? null}, 'draft')`)
     await db.execute(sql`insert into labor_rate_version_policies (org_id, version_id, derivation_policy) values (${org.orgId}, ${version}, 'explicit')`)
-    await db.execute(sql`insert into labor_rate_adjustments (id, org_id, version_id, code, name, category, calculation, value, presentation) values (${adjustment}, ${org.orgId}, ${version}, 'SURCH', 'Probe surcharge', 'surcharge', 'percent', ${value}, 'separate')`)
+    await db.execute(sql`insert into labor_rate_adjustments (id, org_id, version_id, code, name, category, calculation, value, unit, presentation) values (${adjustment}, ${org.orgId}, ${version}, 'SURCH', 'Probe surcharge', 'surcharge', ${opts.calculation ?? 'percent'}, ${value}, ${opts.unit ?? null}, 'separate')`)
     await db.execute(sql`insert into labor_rate_adjustment_targets (org_id, adjustment_id, target_type, target_value_id, target_value_text) values (${org.orgId}, ${adjustment}, ${target.targetType}, ${target.targetValueId}, ${target.targetValueText ?? null})`)
     await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
     await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, location_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, ${opts.assignmentLocationId ?? null}, 'usage_date', true)`)
@@ -146,12 +146,12 @@ async function invoiceProject(fx: Fixture): Promise<{ description: string | null
   return rows.rows
 }
 
-async function seedTime(fx: Fixture, hours: string, rate: string): Promise<{ entry: string; employee: string }> {
+async function seedTime(fx: Fixture, hours: string, rate: string, workedOn?: string): Promise<{ entry: string; employee: string }> {
   const { org, project } = fx
   const employee = randomUUID(), entry = randomUUID()
   await withBypassContext(async () => {
     await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id) values (${employee}, ${org.orgId}, 'employee', 'Billable worker', ${org.subsidiaryId})`)
-    await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${org.date}, ${hours}, ${project}, ${org.items.service}, true, 'approved', 'unbilled', ${rate})`)
+    await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${workedOn ?? org.date}, ${hours}, ${project}, ${org.items.service}, true, 'approved', 'unbilled', ${rate})`)
   })
   return { entry, employee }
 }
@@ -170,14 +170,17 @@ async function seedRole(fx: Fixture, employee: string, tradeId: string | null, j
   })
 }
 
-async function invoiceLines(fx: Fixture, entry: string): Promise<{ description: string | null; amount: string }[]> {
+async function invoiceLines(fx: Fixture, entry: string): Promise<{ description: string | null; amount: string; quantity: string; unitPrice: string; unit: string | null }[]>;
+async function invoiceLines(fx: Fixture, entries: string[]): Promise<{ description: string | null; amount: string; quantity: string; unitPrice: string; unit: string | null }[]>;
+async function invoiceLines(fx: Fixture, entryOrEntries: string | string[]): Promise<{ description: string | null; amount: string; quantity: string; unitPrice: string; unit: string | null }[]> {
   const { org, actor, project } = fx
+  const entries = Array.isArray(entryOrEntries) ? entryOrEntries : [entryOrEntries]
   const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
-    projectId: project, basis: 'time_selection', selectedTimeEntryIds: [entry],
+    projectId: project, basis: 'time_selection', selectedTimeEntryIds: entries,
   }))
   const invoice = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
-  const rows = await withBypassContext(() => db.execute<{ description: string | null; amount: string }>(sql`
-    select description, amount::text as amount from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`))
+  const rows = await withBypassContext(() => db.execute<{ description: string | null; amount: string; quantity: string; unitPrice: string; unit: string | null }>(sql`
+    select description, amount::text as amount, quantity::text as quantity, unit_price::text as "unitPrice", unit from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id} order by line_number`))
   return rows.rows
 }
 
@@ -382,6 +385,51 @@ test('a 6dp percent saved on a card prices the invoice exactly', { skip: !DB }, 
     assert.equal(lines.filter((l) => l.description === 'Precise surcharge')[0]?.amount, '31.2300')
   } finally {
     lrcState.authz = null
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a per-hour allowance bills its hour snapshot on the invoice', { skip: !DB }, async () => {
+  // PRC12: a $5/hour allowance over 10 hours bills $50 as 10 × $5/hour.
+  const fx = await setup()
+  try {
+    await seedCard(
+      fx,
+      { targetType: 'labor', targetValueId: null, targetValueText: 'labor' },
+      '5.0000',
+      { calculation: 'per_hour', unit: 'hour' },
+    )
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
+    const allowance = lines.filter((l) => l.description === 'Probe surcharge')
+    assert.equal(allowance.length, 1)
+    assert.equal(allowance[0]!.amount, '50.0000')
+    assert.equal(allowance[0]!.quantity, '10.00000000')
+    assert.equal(allowance[0]!.unitPrice, '5.00000000')
+    assert.equal(allowance[0]!.unit, 'hour')
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a per-day allowance counts the invoiced work dates', { skip: !DB }, async () => {
+  const fx = await setup()
+  try {
+    await seedCard(
+      fx,
+      { targetType: 'labor', targetValueId: null, targetValueText: 'labor' },
+      '50.0000',
+      { calculation: 'per_day', unit: 'day' },
+    )
+    const first = await seedTime(fx, '8', '100', '2026-07-14')
+    const second = await seedTime(fx, '8', '100', '2026-07-15')
+    const lines = await invoiceLines(fx, [first.entry, second.entry])
+    const allowance = lines.filter((l) => l.description === 'Probe surcharge')
+    assert.equal(allowance.length, 1)
+    assert.equal(allowance[0]!.amount, '100.0000')
+    assert.equal(allowance[0]!.quantity, '2.00000000')
+    assert.equal(allowance[0]!.unitPrice, '50.00000000')
+  } finally {
     await dropScratchOrg(fx.org.orgId)
   }
 })
