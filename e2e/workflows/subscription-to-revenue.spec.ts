@@ -750,11 +750,18 @@ test.describe("subscription to revenue", () => {
       const subs = ok(await api(req, origin, "GET", "/api/subscriptions"), "subs after cancel");
       expect((subs.subscriptions as { id: string; status: string }[]).find((s) => s.id === S.subBId)?.status).toBe("canceled");
 
-      // Billing a cancelled schedule mints nothing new: the run returns the
-      // existing period invoice instead of a second document.
+      // Billing a cancelled schedule mints nothing new: the run is refused
+      // with the control's own 422 naming the remedy (pinned with zero
+      // mutation by subscription-billing-canceled), and the subscription
+      // still points at the last period invoice — no second document exists.
       const rebill = await api(req, origin, "POST", "/api/subscriptions", { action: "billNow", id: S.subBId });
-      expect(rebill.status).toBe(200);
-      expect(str(rebill.json?.invoiceId, "rebill invoice")).toBe(S.invBId);
+      expect(rebill.status).toBe(422);
+      expect(String((rebill.json as { error?: unknown } | null)?.error ?? "")).toContain("subscription is canceled");
+      const subsAfterRebill = ok(await api(req, origin, "GET", "/api/subscriptions"), "subs after refused rebill");
+      expect(
+        (subsAfterRebill.subscriptions as { id: string; lastInvoiceId: string }[]).find((s) => s.id === S.subBId)?.lastInvoiceId,
+        "refused rebill leaves the last invoice untouched",
+      ).toBe(S.invBId);
 
       // Plan A recognises to term end: Apr–Dec posts 749.9998, so the full
       // twelve months sum to exactly 1,000.00 — no residue in the last period.
