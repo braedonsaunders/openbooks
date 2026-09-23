@@ -11,7 +11,7 @@ import {
 import { isFeatureEnabled } from "../features";
 import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
 import type { ApplicationContext } from "./context";
-import { assertApplicationPermission } from "./context";
+import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
@@ -80,9 +80,20 @@ export async function convertApplicationOrder(
     expectedUpdatedAt?: string;
     creditOverrideReason?: string;
     idempotencyKey: string;
+    /** The route's own order kind: the source must be this kind, never a
+     * sibling kind reached by id. */
+    expectedKind?: OrderKind;
   },
 ): Promise<{ replayed: boolean; result: { id: string; documentNumber: string; kind: string } }> {
-  const sourceKind = await sourceOrderKind(context.authz.user.orgId, input.documentId);
+  const source = await sourceOrder(context.authz.user.orgId, input.documentId);
+  // The route converts one order kind: a quote id on the purchase-orders
+  // route (or any sibling-kind id) is not this route's order — refuse it as
+  // not found rather than converting across kinds.
+  if (input.expectedKind !== undefined && source.kind !== input.expectedKind) {
+    throw notFound("order");
+  }
+  assertSubsidiaryAccess(context, source.subsidiaryId);
+  const sourceKind = source.kind;
   assertApplicationPermission(context, orderWritePermission(sourceKind));
   if (!(await isFeatureEnabled(context.authz.user.orgId, "orders"))) throw notFound("order");
   const allowed = CONVERSION_TARGETS[sourceKind] ?? [];
@@ -122,12 +133,12 @@ export async function convertApplicationOrder(
   return { replayed: outcome.replayed, result: outcome.value };
 }
 
-async function sourceOrderKind(orgId: string, documentId: string): Promise<OrderKind> {
-  const row = (await db.execute<{ kind: string }>(sql`
-    select kind from documents
+async function sourceOrder(orgId: string, documentId: string): Promise<{ kind: OrderKind; subsidiaryId: string | null }> {
+  const row = (await db.execute<{ kind: string; subsidiary_id: string | null }>(sql`
+    select kind, subsidiary_id from documents
      where id = ${documentId} and org_id = ${orgId}
        and kind in ('quote', 'sales_order', 'purchase_order')
   `)).rows[0];
   if (!row) throw notFound("order");
-  return row.kind as OrderKind;
+  return { kind: row.kind as OrderKind, subsidiaryId: row.subsidiary_id };
 }
