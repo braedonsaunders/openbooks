@@ -6,7 +6,9 @@ import { can } from './authz'
 import { disabledDocKinds } from "./documents.ts";
 import { isFeatureEnabled } from './features'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { formatMoney } from '@openbooks/engine/src/money/money.ts'
 import { JOURNAL_GL_NATIVE_ORIGINS, journalScopeWhere } from './customization/entity-list-query/journal-entries'
+import { canonicalDecimal } from './exact-decimal'
 import {
   moduleDrawerHref,
   TRANSACTION_KINDS,
@@ -109,10 +111,39 @@ function masterDataSubsidiaryFilter(
   return sql`and (${column} is null or ${column} = any(${`{${ids.join(',')}}`}::uuid[]))`
 }
 
+/**
+ * Display an amount from its stored decimal string — never through Number.
+ * Beyond 2^53 a float rounds the very amount shown (9007199254740993
+ * renders as …992), and grouping through toLocaleString is locale hostage.
+ * Exact half-away rounding to cents (formatMoney) plus manual grouping is
+ * deterministic everywhere.
+ */
 function money(v: unknown): string {
-  const n = Number(v)
-  if (!Number.isFinite(n)) return ''
-  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (typeof v !== 'string' && typeof v !== 'number') return ''
+  let rounded: string
+  try {
+    rounded = formatMoney(v, 2)
+  } catch {
+    return ''
+  }
+  const negative = rounded.startsWith('-')
+  const [whole = '', fraction = ''] = (negative ? rounded.slice(1) : rounded).split('.')
+  return `${negative ? '-' : ''}${whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction}`
+}
+
+/**
+ * Exact amount reading for numeric search. Only strictly-formed shapes
+ * count: plain digits or correctly grouped thousands, an optional $ prefix,
+ * and at most two decimal places. A malformed comma ("1,2") is NOT a
+ * number — stripping its comma invents 12 from a mark decimal-comma
+ * locales read as 1.2 — so it stays a text query and never reaches the
+ * amount leg. Values never cross Number: past 2^53 a float rounds the
+ * amount the leg compares, so the leg binds the exact decimal string.
+ */
+function parseSearchAmount(q: string): string | null {
+  const compact = q.trim().replace(/^\$\s*/, '')
+  if (!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(compact)) return null
+  return canonicalDecimal(compact.replace(/,/g, ''), 2)
 }
 
 const PER_GROUP = 6
@@ -135,8 +166,8 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
 
   const orgId = authz.user.orgId
   const like = `%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`
-  const numeric = /^\$?\s*[\d,]+(\.\d{1,2})?$/.test(q)
-  const num = numeric ? Number(q.replace(/[^0-9.]/g, '')) : null
+  const amount = parseSearchAmount(q)
+  const numeric = amount !== null
 
   // Permission gates per entity.
   const transactionKinds = allowedTransactionKinds(authz)
@@ -164,7 +195,7 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
     canContacts ? searchContacts(orgId, q, like, scope) : empty(),
     transactionKinds.length
-      ? visibleKinds.then((kinds) => searchTransactions(orgId, q, like, num, scope, kinds))
+      ? visibleKinds.then((kinds) => searchTransactions(orgId, q, like, amount, scope, kinds))
       : empty(),
     canAccounts ? searchAccounts(orgId, q, like, scope) : empty(),
     canItems ? searchItems(orgId, q, like) : empty(),
@@ -275,7 +306,7 @@ async function searchTransactions(
   orgId: string,
   q: string,
   like: string,
-  num: number | null,
+  amount: string | null,
   scope: ReadonlySet<string> | null,
   visibleKinds: string[],
 ): Promise<SearchHit[]> {
@@ -304,16 +335,16 @@ async function searchTransactions(
   const partySubsidiaryFilter = masterDataSubsidiaryFilter(sql`p.subsidiary_id`, scope)
   const resultPartySubsidiaryFilter = masterDataSubsidiaryFilter(sql`pr.subsidiary_id`, scope)
   const amtLeg =
-    num != null
+    amount != null
       ? sql`
         union
         (select dl.document_id as id from document_lines dl
           join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num}) ${visibleKindFilter}${documentSubsidiaryFilter}
+          where dl.org_id = ${orgId} and dl.amount in (${amount}::numeric, ${`-${amount}`}::numeric) ${visibleKindFilter}${documentSubsidiaryFilter}
           limit 200)`
       : sql``
   const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
-  const numOrder = num != null ? sql`(${amtExpr} = ${num}) desc, ` : sql``
+  const numOrder = amount != null ? sql`(${amtExpr} = ${amount}::numeric) desc, ` : sql``
   // Exact document numbers bypass the recency-capped fuzzy legs: on a large
   // tenant the newest-200 cap can exclude an old exact row (and admit a
   // different neighbor set as new documents arrive), so an exact query
