@@ -50,6 +50,14 @@ your store, e.g. with MinIO:
 `mc admin user add`, a custom policy limited to the app bucket, and
 `mc admin policy set`).
 
+Local SFTP bank-feed storage (no S3 above): set `OPENBOOKS_DATA_DIR` to an
+absolute directory on a volume mounted into BOTH the web and worker pods.
+The SFTP listener runs in web while the statement importer runs in the
+worker — a relative or per-pod directory would hide partner uploads from
+the importer, so the daemon refuses to start (and every import refuses)
+without an absolute shared root here. Prefer S3 whenever web and worker do
+not share a filesystem.
+
 `openbooks-bootstrap` must provide `OPENBOOKS_MIGRATION_DB_URL` and
 `OPENBOOKS_RUNTIME_DB_URL`. The migration URL is exposed only to the one-shot
 Job. For a first installation it must also provide `ORG_CURRENCY` and

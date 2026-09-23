@@ -10,7 +10,17 @@ import {
   type DaemonConfig,
 } from "./manager.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { generateHostKey } from "./server.ts";
+
+// Enabling the daemon requires configured storage (see backend.ts): hand the
+// engine env snapshot a throwaway absolute data root before exercising the
+// listener lifecycle, so these stay pure bind/cutover tests.
+const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-manager-"));
+const { env } = await import("../platform/db.ts");
+env.OPENBOOKS_DATA_DIR = scratchDataDir;
 
 /**
  * Listener lifecycle for the shared SFTP daemon — DB-free: the reconcile
@@ -179,4 +189,35 @@ test("a first-load that cannot observe a persisted row after a lost insert fails
     () => loadDaemonConfig(lostInsertRaceRunner({ persistWinner: false })),
     /sftp_daemon row 'default' is missing after provision.*retry the load/i,
   );
+});
+
+test.after(() => {
+  rmSync(scratchDataDir, { recursive: true, force: true });
+});
+
+test("enabling the daemon without shared storage configured refuses by name before binding", async () => {
+  // Listener-start gate: local storage with no absolute shared root must name
+  // the misconfiguration instead of serving logins whose uploads the
+  // importer never sees.
+  // Pin the whole storage selection surface: ambient S3 variables would
+  // otherwise select object storage and this would bind instead of refusing.
+  const storageVars = ["S3_ENDPOINT", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY", "S3_BUCKET", "OPENBOOKS_DATA_DIR"];
+  const saved = new Map(storageVars.map((name) => [name, { process: process.env[name], snapshot: (env as Record<string, string | undefined>)[name] }]));
+  for (const name of storageVars) {
+    delete process.env[name];
+    delete (env as Record<string, string | undefined>)[name];
+  }
+  try {
+    await assert.rejects(
+      ensureSftpServer(() => Promise.resolve(config(2222))),
+      /Local SFTP storage needs OPENBOOKS_DATA_DIR/,
+    );
+    assert.deepEqual(sftpListenerState(), { listening: false, port: null });
+  } finally {
+    for (const name of storageVars) {
+      const { process: processValue, snapshot: snapshotValue } = saved.get(name)!;
+      if (processValue !== undefined) process.env[name] = processValue;
+      if (snapshotValue !== undefined) (env as Record<string, string>)[name] = snapshotValue;
+    }
+  }
 });
