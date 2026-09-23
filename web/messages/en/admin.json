@@ -1026,6 +1026,7 @@
     "save": "Save settings",
     "saved": "AI settings saved.",
     "saveFailed": "The settings could not be saved.",
+    "featureDisabled": "Continuous Close is turned off. Turn it on in Company Settings → Features to enable agent packs.",
     "keyCleared": "API key removed.",
     "removeKey": "Remove API key",
     "testConnection": "Test connection",

@@ -1026,6 +1026,7 @@
     "save": "Enregistrer les paramètres",
     "saved": "Paramètres d'IA enregistrés.",
     "saveFailed": "Les paramètres n'ont pas pu être enregistrés.",
+    "featureDisabled": "La Clôture continue est désactivée. Activez-la dans Configuration → Fonctionnalités pour activer les packs d'agents.",
     "keyCleared": "Clé API supprimée.",
     "removeKey": "Supprimer la clé API",
     "testConnection": "Tester la connexion",

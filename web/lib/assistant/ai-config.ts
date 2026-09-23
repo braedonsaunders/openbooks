@@ -252,25 +252,45 @@ export async function getOrgAiConfig(orgId: string): Promise<AiConfig | null> {
 }
 
 /**
+ * Human remedy for the pack-enable refusal below, naming the switch and the
+ * path that clears it. The legacy admin APIs return this body with a 409 so
+ * a raw caller reads the remedy; the translated provider form maps the 409
+ * to its own catalog copy, and Setup keeps returning the bare
+ * `feature_disabled` code its client already translates.
+ */
+export const CONTINUOUS_CLOSE_DISABLED_REMEDY =
+  "Continuous Close is turned off. Turn it on in Company Settings → Features to enable agent packs.";
+
+/**
  * The ONE enable-gate every agent-pack save shares — the bulk provider form,
  * the per-agent drawer, and the Setup adapters all funnel through the two
- * commands below, so the check lives here and nowhere per route. Enabling a
- * pack while the authoritative continuousClose switch is off throws
+ * commands below, so the check lives here and nowhere per route. Turning a
+ * pack ON while the authoritative continuousClose switch is off throws
  * `feature_disabled` (the Setup surface's own refusal) before anything is
- * written; disabling packs, or saving provider settings with no pack
- * enabled, stays allowed so operators can clean up while the module is off.
- * Runs inside the caller's write transaction under the feature-gate fence,
- * so a concurrent Company Settings disable cannot slip between this check
- * and the policy writes.
+ * written. Only the TRANSITION to enabled refuses: the bulk provider form
+ * resubmits every pack's current state, so an org with a pack enabled before
+ * the switch went off must still save unrelated provider settings — the
+ * submitted flags are compared against the stored policy under the same
+ * fence-held lock, and an absent row means disabled (fail closed).
+ * Disabling packs stays allowed so operators can clean up while off. Runs
+ * inside the caller's write transaction under the feature-gate fence, so a
+ * concurrent Company Settings disable cannot slip between this check and
+ * the policy writes.
  */
 async function refusePackEnableWhileFeatureOff(
   tx: SqlExecutor,
   orgId: string,
   agents: Pick<AgentSettingsInput, "agentKey" | "enabled">[],
 ): Promise<void> {
-  if (!agents.some((agent) => agent.enabled)) return;
+  const enabling = agents.filter((agent) => agent.enabled);
+  if (enabling.length === 0) return;
   await acquireOrgFeatureGateLock(tx, orgId);
-  if (!(await lockAndCheckOrgFeature(tx, orgId, "continuousClose"))) {
+  if (await lockAndCheckOrgFeature(tx, orgId, "continuousClose")) return;
+  const stored = await tx.execute<{ agent_key: string; enabled: boolean }>(sql`
+    select agent_key, enabled from ai_agent_policies where org_id = ${orgId} for update
+  `);
+  const enabledByKey = new Map(stored.rows.map((row) => [row.agent_key, row.enabled]));
+  if (enabling.some((agent) => enabledByKey.get(agent.agentKey) !== true)) {
     throw new Error("feature_disabled");
   }
 }

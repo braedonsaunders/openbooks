@@ -1026,6 +1026,7 @@
     "save": "Guardar configuración",
     "saved": "Configuración de IA guardada.",
     "saveFailed": "No se pudo guardar la configuración.",
+    "featureDisabled": "El Cierre continuo está desactivado. Actívelo en Configuración → Funciones para activar los paquetes de agentes.",
     "keyCleared": "Clave API eliminada.",
     "removeKey": "Eliminar la clave API",
     "testConnection": "Probar la conexión",

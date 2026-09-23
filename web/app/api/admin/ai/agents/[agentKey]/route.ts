@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
 import { guardPermission } from '../../../../../../lib/authz'
-import { saveOrgAiAgentSettings } from '../../../../../../lib/assistant/ai-config'
+import { CONTINUOUS_CLOSE_DISABLED_REMEDY, saveOrgAiAgentSettings } from '../../../../../../lib/assistant/ai-config'
 
 export const runtime = 'nodejs'
 
@@ -29,6 +29,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ agen
     })
     return NextResponse.json(policy)
   } catch (error) {
+    // Same refusal as the bulk form: 409 with the remedy, not a bare code.
+    if ((error as Error).message === 'feature_disabled') {
+      return NextResponse.json({ error: CONTINUOUS_CLOSE_DISABLED_REMEDY }, { status: 409 })
+    }
     return NextResponse.json({ error: (error as Error).message }, { status: 422 })
   }
 }

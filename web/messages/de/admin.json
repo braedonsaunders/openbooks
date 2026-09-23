@@ -1023,6 +1023,7 @@
     "save": "Einstellungen speichern",
     "saved": "KI-Einstellungen gespeichert.",
     "saveFailed": "Die Einstellungen konnten nicht gespeichert werden.",
+    "featureDisabled": "„Kontinuierlicher Abschluss“ ist ausgeschaltet. Schalten Sie die Funktion unter Einrichtung → Funktionen ein, um Agent-Packs zu aktivieren.",
     "keyCleared": "API-Schlüssel entfernt.",
     "removeKey": "API-Schlüssel entfernen",
     "testConnection": "Verbindung testen",
