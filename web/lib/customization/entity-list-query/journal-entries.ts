@@ -98,7 +98,7 @@ export const JOURNAL_ENTRY_TABLE = `(
  * (the journal default view carries none), so the three counts agree by
  * construction instead of by copy. Alias `e` matches the list table alias.
  */
-export function journalScopeWhere(orgId: string, allowedSubsidiaryIds?: Set<string> | null): SQL {
+export function journalScopeWhere(orgId: string, allowedSubsidiaryIds?: ReadonlySet<string> | null): SQL {
   const parts: SQL[] = [sql`e.org_id = ${orgId}`]
   if (allowedSubsidiaryIds) {
     const ids = [...allowedSubsidiaryIds]

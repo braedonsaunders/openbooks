@@ -43,6 +43,8 @@ interface JournalEntryFixture {
   memo: string | null
   status: string
   subsidiary_id: string
+  /** Subsidiaries of the entry's lines — visibility follows these, never the header. */
+  lineSubsidiaryIds: string[]
 }
 
 interface SearchTestState {
@@ -111,6 +113,7 @@ const JE_POSTED: JournalEntryFixture = {
   memo: 'je-posted:memo:confidential',
   status: 'posted',
   subsidiary_id: ALLOWED_SUBSIDIARY,
+  lineSubsidiaryIds: [ALLOWED_SUBSIDIARY],
 }
 
 const state: SearchTestState = {
@@ -176,13 +179,14 @@ const mockSources = new Map<string, string>([
           }
           if (query.text.includes('from journal_entries')) {
             let rows = state.entries
-            // Entries keep the documents rule: restricted callers see only
-            // their subsidiaries (entries never have a null subsidiary).
+            // Entries keep the canonical journal-list rule: an entry is
+            // visible when a LINE is visible (the journal_lines exists
+            // fence), never by header subsidiary alone.
             const subsidiaryIds = new Set(query.values
               .filter((value) => typeof value === 'string' && /^\\{.*\\}$/.test(value))
               .flatMap((value) => value.slice(1, -1).split(',').filter(Boolean)))
-            if (query.text.includes('e.subsidiary_id') && subsidiaryIds.size > 0) {
-              rows = rows.filter((row) => subsidiaryIds.has(row.subsidiary_id))
+            if (query.text.includes('journal_lines visible') && subsidiaryIds.size > 0) {
+              rows = rows.filter((row) => row.lineSubsidiaryIds.some((id) => subsidiaryIds.has(id)))
             }
             return { rows }
           }
@@ -728,17 +732,36 @@ test('journal entries stay gated by the journal read permission', async () => {
   )
 })
 
-test('journal entries keep the documents subsidiary rule', async () => {
+test('journal entries keep the canonical line-visibility subsidiary rule', async () => {
   const deniedEntry: JournalEntryFixture = {
     ...JE_POSTED,
     id: 'je-denied',
     entry_number: 'JE-DENIED',
     memo: 'denied:memo:confidential',
     subsidiary_id: DENIED_SUBSIDIARY,
+    lineSubsidiaryIds: [DENIED_SUBSIDIARY],
   }
-  reset({ entries: [JE_POSTED, deniedEntry] })
+  // The leak: a header in scope whose lines are ALL out of scope must not
+  // disclose its memo — visibility follows the lines, never the header.
+  const headerAllowedLinesDenied: JournalEntryFixture = {
+    ...JE_POSTED,
+    id: 'je-header-only',
+    entry_number: 'JE-HEADER-ONLY',
+    memo: 'header-only:memo:confidential',
+    subsidiary_id: ALLOWED_SUBSIDIARY,
+    lineSubsidiaryIds: [DENIED_SUBSIDIARY],
+  }
+  reset({ entries: [JE_POSTED, deniedEntry, headerAllowedLinesDenied] })
   const response = await globalSearch(scopedAuthz([ALLOWED_SUBSIDIARY], 'gl.read'), 'JE-')
   assert.ok(transactionHitIds(response).includes('je-posted'))
   assert.ok(!transactionHitIds(response).includes('je-denied'))
-  assert.ok(!JSON.stringify(response).includes('denied:memo:confidential'))
+  assert.ok(!transactionHitIds(response).includes('je-header-only'))
+  const payload = JSON.stringify(response)
+  assert.ok(!payload.includes('denied:memo:confidential'))
+  assert.ok(!payload.includes('header-only:memo:confidential'))
+
+  const entriesQuery = state.queries.find((query) => query.text.includes('from journal_entries'))
+  assert.ok(entriesQuery, 'entries must be queried')
+  assert.match(entriesQuery.text, /journal_lines visible/, 'canonical line-visibility fence')
+  assert.doesNotMatch(entriesQuery.text, /\be\.subsidiary_id/, 'no header-subsidiary predicate')
 })

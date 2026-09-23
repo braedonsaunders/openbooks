@@ -6,7 +6,7 @@ import { can } from './authz'
 import { disabledDocKinds } from "./documents.ts";
 import { isFeatureEnabled } from './features'
 import { subsidiaryVisibleFilter } from './subsidiaries'
-import { JOURNAL_GL_NATIVE_ORIGINS } from './customization/entity-list-query/journal-entries'
+import { JOURNAL_GL_NATIVE_ORIGINS, journalScopeWhere } from './customization/entity-list-query/journal-entries'
 import {
   moduleDrawerHref,
   TRANSACTION_KINDS,
@@ -382,14 +382,18 @@ async function searchJournalEntries(
   like: string,
   scope: ReadonlySet<string> | null,
 ): Promise<SearchHit[]> {
-  const subsidiaryFilter = subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)
+  // Subsidiary visibility is the canonical journal predicate — an entry is
+  // visible when a LINE is visible (journalScopeWhere, shared with the
+  // journal list) — never the header's subsidiary alone. A header in scope
+  // whose lines are all out of scope must not disclose its memo here.
+  const visibility = journalScopeWhere(orgId, scope)
   // UNION forbids expression ORDER BY, so the merged legs sit in a
   // subquery and the exact-first ordering applies outside it.
   const r = (await db.execute<SearchJournalEntryRow>(sql`
     select u.id, u.entry_number, u.memo, u.status, u.created_at from (
       select e.id, e.entry_number, e.memo, e.status, e.created_at
         from journal_entries e
-       where e.org_id = ${orgId} ${subsidiaryFilter}
+       where ${visibility}
          and (e.entry_number % ${q} or e.entry_number ilike ${like} or e.memo ilike ${like})
          and (exists (select 1 from documents d
                        where d.posted_entry_id = e.id and d.org_id = e.org_id and d.kind in ('journal', 'pay_run'))
@@ -399,7 +403,7 @@ async function searchJournalEntries(
       union
       (select e.id, e.entry_number, e.memo, e.status, e.created_at
          from journal_entries e
-        where e.org_id = ${orgId} ${subsidiaryFilter}
+        where ${visibility}
           and e.entry_number = ${q}
         limit 5)
     ) u
