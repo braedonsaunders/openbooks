@@ -13,6 +13,7 @@ import { logDecision, syncCapabilities, updateCapability } from "./governance.ts
 import {
   checkPayrollFinalizeAllowed,
   listFlags,
+  runAnomalyScan,
   scanAnomalies,
   transitionFlag,
 } from "./anomalies.ts";
@@ -279,6 +280,31 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
       orgId: org.orgId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
     });
     assert.equal(check.openBlockCount, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("concurrent rescans share one flag row without aborting either scan", async () => {
+  const { org, adminId } = await setup();
+  try {
+    await seedTerminatedWithInput(org.orgId, adminId);
+    const query = { orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30" };
+    // Two scans on two connections at once through the single-transaction
+    // entry point: the unique index arbitrates each flag, the loser counts
+    // it already open, and neither scan aborts (a 23505 caught inside the
+    // open scan transaction used to fail every later statement with 25P02
+    // and roll the whole scan back).
+    const outcomes = await Promise.allSettled([runAnomalyScan(query), runAnomalyScan(query)]);
+    assert.equal(outcomes[0]!.status, "fulfilled", "first scan survives the race");
+    assert.equal(outcomes[1]!.status, "fulfilled", "second scan survives the race");
+    const flags = await listFlags(db, {
+      orgId: org.orgId, actorId: adminId,
+      periodFrom: "2026-09-01", periodTo: "2026-09-30", kind: "terminated_with_pay",
+    });
+    assert.equal(flags.length, 1, "the race persists exactly one flag row");
+    const created = outcomes.reduce((total, outcome) => total + (outcome.status === "fulfilled" ? outcome.value.created : 0), 0);
+    assert.ok(created >= 1, "one of the two scans created the flag");
   } finally {
     await dropScratchOrg(org.orgId);
   }

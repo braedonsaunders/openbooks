@@ -272,90 +272,111 @@ async function generateForElection(
   return out;
 }
 
-async function upsertInputRow(
+type InputRow = {
+  readonly enrollmentId: string;
+  readonly employeePartyId: string;
+  readonly employmentId: string;
+  readonly kind: BenefitPayrollInputKind;
+  readonly payComponentId: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly coveredFrom: string;
+  readonly coveredTo: string;
+};
+
+async function findInputRow(
   exec: SqlExecutor,
   orgId: string,
-  actorId: string,
-  row: {
-    readonly enrollmentId: string;
-    readonly employeePartyId: string;
-    readonly employmentId: string;
-    readonly kind: BenefitPayrollInputKind;
-    readonly payComponentId: string;
-    readonly amount: string;
-    readonly currency: string;
-    readonly coveredFrom: string;
-    readonly coveredTo: string;
-  },
-): Promise<BenefitPayrollInputDTO> {
-  const existing = (
+  row: Pick<InputRow, "enrollmentId" | "kind" | "coveredFrom">,
+): Promise<BenefitPayrollInputDTO | undefined> {
+  return (
     await exec.execute<Record<string, unknown>>(sql`
       select ${INPUT_COLUMNS} from hrm_benefit_payroll_inputs
        where org_id = ${orgId} and enrollment_id = ${row.enrollmentId}
          and kind = ${row.kind} and coverage_from = ${row.coveredFrom}::date
     `)
   ).rows.map(toInputDTO)[0];
-  if (existing) {
-    // Voided wins over consumed: a voided-after-consume row carries both,
-    // and its answer is always that a voided month stays voided.
-    if (existing.status === "voided") {
-      throw new BenefitsError(
-        "REFUSED",
-        `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is voided and stays voided — change or end the enrolment and regenerate so the correction carries a new election`,
-      );
-    }
-    if (existing.consumedByRunDocumentId !== null) {
-      throw new BenefitsError(
-        "REFUSED",
-        `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is already consumed by pay run ${existing.consumedByRunDocumentId} — recalculate the run; HR never rewrites a consumed month`,
-      );
-    }
-    if (
-      existing.amount !== row.amount ||
-      existing.payComponentId !== row.payComponentId ||
-      existing.currency !== row.currency ||
-      existing.coverageTo !== row.coveredTo ||
-      existing.employeePartyId !== row.employeePartyId
-    ) {
-      throw new BenefitsError(
-        "REFUSED",
-        `a pending input already covers ${row.coveredFrom}..${existing.coverageTo} with a different amount — void it with a reason first, then regenerate`,
-      );
-    }
-    return existing;
-  }
-  try {
-    const inserted = requireOneRow(
-      (
-        await exec.execute<Record<string, unknown>>(sql`
-          insert into hrm_benefit_payroll_inputs
-            (org_id, enrollment_id, employee_party_id, employment_id, kind,
-             pay_component_id, amount, currency, coverage_from, coverage_to,
-             created_by, updated_by)
-          values (${orgId}, ${row.enrollmentId}, ${row.employeePartyId}, ${row.employmentId},
-                  ${row.kind}, ${row.payComponentId}, ${row.amount}, ${row.currency},
-                  ${row.coveredFrom}::date, ${row.coveredTo}::date, ${actorId}, ${actorId})
-          returning ${INPUT_COLUMNS}
-        `)
-      ).rows,
-      "writing the benefit payroll input",
+}
+
+/**
+ * The idempotency rules for a month the unique key already covers, applied
+ * identically to a pre-existing row and to a concurrent generator's winning
+ * row. Every material field is compared — amount, component, currency,
+ * coverage end, and both identity columns — so a same-key row with
+ * different terms is refused by name instead of silently adopted.
+ */
+function resolveExistingInputRow(existing: BenefitPayrollInputDTO, row: InputRow): BenefitPayrollInputDTO {
+  // Voided wins over consumed: a voided-after-consume row carries both,
+  // and its answer is always that a voided month stays voided.
+  if (existing.status === "voided") {
+    throw new BenefitsError(
+      "REFUSED",
+      `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is voided and stays voided — change or end the enrolment and regenerate so the correction carries a new election`,
     );
-    return toInputDTO(inserted);
-  } catch (error) {
-    // A concurrent generation for the same month may win the unique race;
-    // re-read and apply the same idempotency rules rather than failing.
-    if (error instanceof Error && /duplicate key|unique/i.test(error.message)) {
-      const raced = (
-        await exec.execute<Record<string, unknown>>(sql`
-          select ${INPUT_COLUMNS} from hrm_benefit_payroll_inputs
-           where org_id = ${orgId} and enrollment_id = ${row.enrollmentId}
-             and kind = ${row.kind} and coverage_from = ${row.coveredFrom}::date
-        `)
-      ).rows.map(toInputDTO)[0];
-      if (raced && raced.amount === row.amount && raced.status === "pending") return raced;
-    }
-    throw error;
   }
+  if (existing.consumedByRunDocumentId !== null) {
+    throw new BenefitsError(
+      "REFUSED",
+      `coverage ${row.coveredFrom}..${row.coveredTo} for this enrolment is already consumed by pay run ${existing.consumedByRunDocumentId} — recalculate the run; HR never rewrites a consumed month`,
+    );
+  }
+  const differing: string[] = [];
+  if (existing.amount !== row.amount) differing.push(`amount ${existing.amount} vs ${row.amount}`);
+  if (existing.payComponentId !== row.payComponentId) {
+    differing.push(`component ${existing.payComponentId} vs ${row.payComponentId}`);
+  }
+  if (existing.currency !== row.currency) differing.push(`currency ${existing.currency} vs ${row.currency}`);
+  if (existing.coverageTo !== row.coveredTo) differing.push(`coverage end ${existing.coverageTo} vs ${row.coveredTo}`);
+  if (existing.employeePartyId !== row.employeePartyId) {
+    differing.push(`employee ${existing.employeePartyId} vs ${row.employeePartyId}`);
+  }
+  if (existing.employmentId !== row.employmentId) {
+    differing.push(`employment ${existing.employmentId} vs ${row.employmentId}`);
+  }
+  if (differing.length > 0) {
+    throw new BenefitsError(
+      "REFUSED",
+      `a pending input already covers ${row.coveredFrom}..${existing.coverageTo} with different terms (${differing.join("; ")}) — void it with a reason first, then regenerate`,
+    );
+  }
+  return existing;
+}
+
+async function upsertInputRow(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  row: InputRow,
+): Promise<BenefitPayrollInputDTO> {
+  const existing = await findInputRow(exec, orgId, row);
+  if (existing) return resolveExistingInputRow(existing, row);
+  // The unique constraint arbitrates concurrent generators: DO NOTHING
+  // reports the loser with zero rows instead of a 23505, which would abort
+  // this transaction and fail every statement after it (25P02).
+  const inserted = (
+    await exec.execute<Record<string, unknown>>(sql`
+      insert into hrm_benefit_payroll_inputs
+        (org_id, enrollment_id, employee_party_id, employment_id, kind,
+         pay_component_id, amount, currency, coverage_from, coverage_to,
+         created_by, updated_by)
+      values (${orgId}, ${row.enrollmentId}, ${row.employeePartyId}, ${row.employmentId},
+              ${row.kind}, ${row.payComponentId}, ${row.amount}, ${row.currency},
+              ${row.coveredFrom}::date, ${row.coveredTo}::date, ${actorId}, ${actorId})
+      on conflict on constraint hrm_benefit_payroll_inputs_enrollment_kind_month_unique do nothing
+      returning ${INPUT_COLUMNS}
+    `)
+  ).rows.map(toInputDTO)[0];
+  if (inserted) return inserted;
+  // Lost the race (or a row landed between the read and the write):
+  // re-read the winner and apply the same full-field rules as above.
+  const raced = await findInputRow(exec, orgId, row);
+  if (!raced) {
+    throw new BenefitsError(
+      "REFUSED",
+      `the benefit payroll input for ${row.coveredFrom} was not stored and no row covers it — retry the request`,
+    );
+  }
+  return resolveExistingInputRow(raced, row);
 }
 
 /**
