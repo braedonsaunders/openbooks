@@ -960,6 +960,7 @@
     "backToHub": "Analytik",
     "configureInSetup": "In den Einstellungen konfigurieren →",
     "openReport": "Bericht öffnen",
+    "openAnalytics": "Analyse öffnen",
     "scenarios": {
       "hire": "{count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} mit {util} % Auslastung einzustellen ergibt {hours} zusätzliche abrechenbare Stunden pro Monat.",
       "terminate": "{count, plural, one {# Mitarbeiter} other {# Mitarbeiter}} abzubauen spart {savings} an Gemeinkosten, kostet aber {hours} abrechenbare Stunden.",

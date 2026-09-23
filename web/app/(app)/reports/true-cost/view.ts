@@ -29,9 +29,13 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
  * the native page's query, permission and formatting logic verbatim.
  *
  * The filter bar carries one non-standard action: an outline small Button to
- * the recovery-plan planner, placed via the shared `link-button` widget (the
- * same widget the budget page uses for its manage action). `link-button`
- * renders no icon unless `iconKey` names one, so no icon prop is passed.
+ * the True Cost analytics dashboard — the surface that owns the interactive
+ * recovery (absorption) and selling planning tabs — placed via the shared
+ * `link-button` widget (the same widget the budget page uses for its manage
+ * action). `link-button` renders no icon unless `iconKey` names one, so no
+ * icon prop is passed. There is no separate planner page: the former
+ * /analytics/true-cost/planner route rendered this same dashboard and now
+ * redirects to it, so the report links to the planning that exists.
  */
 
 export interface TrueCostData {
@@ -62,13 +66,18 @@ export async function loadTrueCost(
     trueCostExportData(authz.user.orgId, period), orgBranding(authz.user.orgId), reportScheduleAnchor('true-cost'),
     getTranslations('reports'), getTranslations('analytics.trueCost'),
   ])
+  // The analytics dashboard keeps the report's period query, exactly as the
+  // dashboard's own open-report link does in reverse.
+  const dashboardQuery = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) if (value) dashboardQuery.set(key, value)
+  const dashboardQs = dashboardQuery.toString()
   return {
     title: data.title,
     description: period.label,
     backHref: '/reports',
     backLabel: t('hub.title'),
-    plannerHref: '/analytics/true-cost/planner',
-    plannerLabel: tc('panels.recoveryPlan'),
+    plannerHref: `/analytics/true-cost${dashboardQs ? `?${dashboardQs}` : ''}`,
+    plannerLabel: tc('openAnalytics'),
     hasScheduleDef: Boolean(definitionId),
     scheduleDefId: definitionId ?? '',
     scheduleParams: scheduleParamsFrom(sp),

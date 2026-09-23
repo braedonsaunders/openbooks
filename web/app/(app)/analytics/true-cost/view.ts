@@ -25,10 +25,12 @@ import type { TrueCostView } from './TrueCostView'
  * drill targets live in the view, and decomposing them into generic blocks
  * would reimplement the component rather than compose it.
  *
- * Loader work mirrors the planner (the eighth family member over the same
- * data and view): the `reports.read` gate, the `projects` feature gate, the
+ * Loader work is the `reports.read` gate, the `projects` feature gate, the
  * period query, and the reader's subsidiary fence handed straight to
- * `trueCostData`.
+ * `trueCostData`. The former /analytics/true-cost/planner route rendered
+ * this same dashboard and now redirects to it — the interactive recovery
+ * (absorption) and selling planning tabs live here, not on a separate
+ * planner page.
  */
 
 type ViewProps = Parameters<typeof TrueCostView>[0]

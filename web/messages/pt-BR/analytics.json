@@ -960,6 +960,7 @@
     "backToHub": "Análises",
     "configureInSetup": "Configurar em Configuração →",
     "openReport": "Abrir relatório",
+    "openAnalytics": "Abrir análises",
     "scenarios": {
       "hire": "Adicionar {count, plural, one {# funcionário} other {# funcionários}} com {util} % de utilização adiciona {hours} horas faturáveis mensais.",
       "terminate": "Reduzir {count, plural, one {# funcionário} other {# funcionários}} economiza {savings} em despesas gerais, mas perde {hours} horas faturáveis.",

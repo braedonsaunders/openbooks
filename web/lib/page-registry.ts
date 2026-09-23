@@ -103,10 +103,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/ai': {
     route: '/admin/ai',
     segments: [],
-    // The page takes search params (the governance ledger's filters), so
-    // the registry-driven host must hand them over too -- otherwise the
-    // agent surface silently renders the unfiltered page and the caller
-    // never learns its filter was dropped.
     searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/ai/view')
@@ -725,18 +721,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadTrueCost(input.searchParams ?? {}),
         spec: (data) => m.trueCostSpec(data as never),
-      }
-    },
-  },
-  '/analytics/true-cost/planner': {
-    route: '/analytics/true-cost/planner',
-    segments: [],
-    searchParams: true,
-    module: async () => {
-      const m = await import('../app/(app)/analytics/true-cost/planner/view')
-      return {
-        load: (input) => m.loadTrueCostPlanner(input.searchParams ?? {}),
-        spec: (data) => m.trueCostPlannerSpec(data as never),
       }
     },
   },
@@ -1691,7 +1675,6 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/me': {
     route: '/me',
     segments: [],
-    // Me takes search params too (the payslip the explain drawer opens).
     searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/me/view')
