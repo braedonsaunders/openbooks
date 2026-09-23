@@ -6,6 +6,7 @@ import {
   nextLockoutState,
   normalizeLoginEmail,
   publicLoginFailure,
+  publicMfaSecurityFailure,
   safeReturnTo,
   slidingWindowRetryAfter,
   secureCookiesEnabled,
@@ -160,4 +161,28 @@ test("invalid-login responses do not reveal whether an account is locked", () =>
     retryAfterHeader: null,
   });
   assert.equal(publicLoginFailure({ kind: "rate_limited", retryAfter: 30 }).status, 429);
+});
+
+test("MFA security-change refusals separate bad credentials from throttles", () => {
+  // A wrong password and a wrong MFA code share one generic refusal.
+  assert.deepEqual(publicMfaSecurityFailure({ reason: "invalid_credentials", retryAfter: 0 }), {
+    status: 401,
+    body: { error: "invalid credentials" },
+    retryAfterHeader: null,
+  });
+  // Throttling and lockout are distinct from bad credentials and carry a
+  // retry delay in both the body and the Retry-After header.
+  for (const reason of ["rate_limited", "locked"] as const) {
+    assert.deepEqual(publicMfaSecurityFailure({ reason, retryAfter: 45 }), {
+      status: 429,
+      body: { error: "invalid credentials", retryAfter: 45 },
+      retryAfterHeader: "45",
+    });
+  }
+  // A dead caller session reads as unauthorized, never as bad credentials.
+  assert.deepEqual(publicMfaSecurityFailure({ reason: "caller_session_revoked", retryAfter: 0 }), {
+    status: 401,
+    body: { error: "unauthorized" },
+    retryAfterHeader: null,
+  });
 });

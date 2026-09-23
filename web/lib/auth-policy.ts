@@ -169,3 +169,36 @@ export function publicLoginFailure(input: {
     retryAfterHeader: null,
   };
 }
+
+/**
+ * Refusals for an authenticated MFA security change (factor disable,
+ * recovery-code rotation). A wrong password and a wrong MFA code share one
+ * generic refusal so neither oracle reveals the other; throttling and
+ * lockout are distinct from bad credentials and carry a retry delay. The
+ * caller already holds a live session, so reporting a throttle does not
+ * enumerate anything anonymous login must hide.
+ */
+export function publicMfaSecurityFailure(input: {
+  reason: "invalid_credentials" | "rate_limited" | "locked" | "caller_session_revoked";
+  retryAfter: number;
+}) {
+  if (input.reason === "rate_limited" || input.reason === "locked") {
+    return {
+      status: 429 as const,
+      body: { error: "invalid credentials", retryAfter: input.retryAfter },
+      retryAfterHeader: String(input.retryAfter),
+    };
+  }
+  if (input.reason === "caller_session_revoked") {
+    return {
+      status: 401 as const,
+      body: { error: "unauthorized" },
+      retryAfterHeader: null,
+    };
+  }
+  return {
+    status: 401 as const,
+    body: { error: "invalid credentials" },
+    retryAfterHeader: null,
+  };
+}
