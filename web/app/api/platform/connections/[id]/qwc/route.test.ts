@@ -16,8 +16,10 @@ const mockSources = new Map<string, string>([
     "mock:connection",
     `
       export async function getConnection() {
-        return { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", orgId: "org-1", source: "qbd", displayName: "Desktop" }
+        return { id: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", orgId: "org-1", source: "qbd", displayName: "Desktop", config: { region: "US" } }
       }
+      // Mirrors the real declared list (engine/src/sync/connection.ts).
+      export const QBD_WEB_CONNECTOR_REGIONS = ["US", "CA", "UK"]
     `,
   ],
   ["mock:email-tokens", `export function appBaseUrl() { return "https://books.example"; }`],
