@@ -142,6 +142,8 @@
     "emptyDescription": "Create an opportunity to begin building the pipeline.",
     "undatedOnly": "Undated only",
     "showAll": "Show all",
+    "noTrackedAccounts": "Only tracked customers can be chosen. Open the customer in Parties, then choose Start tracking in its Relationship tab.",
+    "openParties": "Open Parties",
     "lines": "Products and services",
     "addLine": "Add line",
     "totalCost": "Total cost",

@@ -142,6 +142,8 @@
     "emptyDescription": "Crie uma oportunidade para começar a construir o pipeline.",
     "undatedOnly": "Somente sem data",
     "showAll": "Mostrar tudo",
+    "noTrackedAccounts": "Somente clientes acompanhados podem ser escolhidos. Abra o cliente em Partes e escolha Iniciar acompanhamento na guia Relacionamento.",
+    "openParties": "Abrir Partes",
     "lines": "Produtos e serviços",
     "addLine": "Adicionar linha",
     "totalCost": "Custo total",

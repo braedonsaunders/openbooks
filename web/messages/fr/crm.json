@@ -142,6 +142,8 @@
     "emptyDescription": "Créez une occasion pour alimenter le pipeline.",
     "undatedOnly": "Sans date uniquement",
     "showAll": "Tout afficher",
+    "noTrackedAccounts": "Seuls les clients suivis peuvent être choisis. Ouvrez le client dans Tiers, puis choisissez Lancer le suivi dans son onglet Relation.",
+    "openParties": "Ouvrir Tiers",
     "lines": "Produits et services",
     "addLine": "Ajouter une ligne",
     "totalCost": "Coût total",

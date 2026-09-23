@@ -142,6 +142,8 @@
     "emptyDescription": "Crea una oportunidad para comenzar a desarrollar el canal.",
     "undatedOnly": "Solo sin fecha",
     "showAll": "Mostrar todo",
+    "noTrackedAccounts": "Solo se pueden elegir clientes con seguimiento. Abra el cliente en Terceros y elija Iniciar seguimiento en su pestaña Relación.",
+    "openParties": "Abrir Terceros",
     "lines": "Productos y servicios",
     "addLine": "Añadir línea",
     "totalCost": "Coste total",

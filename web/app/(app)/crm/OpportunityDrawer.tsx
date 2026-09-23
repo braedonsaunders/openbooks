@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -73,7 +74,7 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
   return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{row.opportunity_number} · {form.title||t('opportunities.newFallback')}<Badge>{displayOpportunityStatusName(row.status_name,(key)=>t(`opportunities.statuses.${key}`))}</Badge></span>} headerActions={canManage?<><Button variant="outline" onClick={estimate} disabled={busy||!form.partyId||isDirty} title={estimateBlockedReason??undefined}>{t('opportunities.createEstimate')}</Button><Button onClick={save} disabled={busy}>{busy?tc('actions.saving'):tc('actions.save')}</Button></>:undefined}>
     <div className="grid gap-4 sm:grid-cols-3">
       <div className="sm:col-span-2"><Field label={t('fields.title')}><Input value={form.title} onChange={e=>set('title',e.target.value)} disabled={!canManage}/></Field></div>
-      <Field label={t('fields.account')}><Select value={form.partyId} onChange={e=>{set('partyId',e.target.value);set('primaryContactId','')}} disabled={!canManage}><option value="">{tc('labels.none')}</option>{accounts.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
+      <Field label={t('fields.account')} hint={accounts.length===0?t('opportunities.noTrackedAccounts'):undefined} hintAction={accounts.length===0?{href:'/parties',label:t('opportunities.openParties')}:undefined}><Select value={form.partyId} onChange={e=>{set('partyId',e.target.value);set('primaryContactId','')}} disabled={!canManage}><option value="">{tc('labels.none')}</option>{accounts.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.primaryContact')}><Select value={form.primaryContactId} onChange={e=>set('primaryContactId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{accountContacts.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.owner')}><Select value={form.ownerUserId} onChange={e=>set('ownerUserId',e.target.value)} disabled={!canManage}><option value="">{t('fields.unassigned')}</option>{owners.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <Field label={t('fields.salesTeam')}><Select value={form.salesTeamId} onChange={e=>set('salesTeamId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{teams.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
@@ -99,5 +100,5 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
     <div className="mt-6 grid gap-4 sm:grid-cols-2"><Field label={t('fields.description')}><Textarea rows={5} value={form.description} onChange={e=>set('description',e.target.value)} disabled={!canManage}/></Field><Field label={t('fields.winLossReason')}><Textarea rows={5} value={form.winLossReason} onChange={e=>{set('winLossReason',e.target.value);setLossReasonError(false)}} disabled={!canManage} aria-invalid={lossReasonError}/>{lossReasonError?<p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('validation.lossReasonRequired')}</p>:null}</Field></div>
   </UrlDrawer>
 }
-function Field({label,hint,hintId,children}:{label:string;hint?:string;hintId?:string;children:React.ReactNode}){return <div className="space-y-1.5"><Label>{label}</Label>{children}{hint?<p id={hintId} className="text-xs text-slate-500 dark:text-slate-400">{hint}</p>:null}</div>}
+function Field({label,hint,hintId,hintAction,children}:{label:string;hint?:string;hintId?:string;hintAction?:{href:string;label:string};children:React.ReactNode}){return <div className="space-y-1.5"><Label>{label}</Label>{children}{hint?<p id={hintId} className="text-xs text-slate-500 dark:text-slate-400">{hint}{hintAction?<> <Link href={hintAction.href as never} className="font-medium text-teal-700 underline-offset-2 hover:underline dark:text-teal-300">{hintAction.label}</Link></>:null}</p>:null}</div>}
 function Summary({label,value}:{label:string;value:string}){return <div className="space-y-0.5"><div className="text-xs text-slate-500 dark:text-slate-400">{label}</div><div className="font-medium tabular-nums">{value}</div></div>}
