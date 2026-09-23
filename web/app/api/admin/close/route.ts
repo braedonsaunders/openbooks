@@ -141,7 +141,14 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
     throw new CloseError("week-based calendars require an anchor date");
   const isDefault = bool(body, "isDefault");
   return db.transaction(async (tx) => {
+    // Serialize concurrent calendar saves: two admins swapping the default
+    // (or deactivating it) at once could each pass the stranded-periods
+    // guard below and commit an org with periods but no active default.
+    await tx.execute(
+      sql`select id from fiscal_calendars where org_id = ${orgId} for update`,
+    );
     let before: Record<string, unknown> | null = null;
+    let savedId: string;
     if (id) {
       const current = ((await tx.execute(sql`
         select c.*, exists(select 1 from accounting_periods p where p.fiscal_calendar_id = c.id and p.org_id = ${orgId}) as has_periods
@@ -181,23 +188,41 @@ async function saveCalendar(orgId: string, actorId: string, body: Body) {
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'fiscal_calendars', ${id}, 'update',
                 ${JSON.stringify({ before, after })}::jsonb, ${actorId})`);
-      return id;
+      savedId = id;
+    } else {
+      const inserted = (await tx.execute(sql`
+        insert into fiscal_calendars
+          (org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone,
+           adjustment_period_enabled, is_default, is_active, config, created_by, updated_by)
+        values (${orgId}, ${name}, ${cadence}, ${yearStartMonth}, ${weekStartsOn}, ${anchorDate},
+                ${text(body, "timeZone") ?? "UTC"}, ${bool(body, "adjustmentPeriodEnabled")},
+                ${isDefault}, ${isActive}, ${JSON.stringify(object(body, "config"))}::jsonb,
+                ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
+      const after = inserted.rows[0];
+      if (!after) throw new CloseError("calendar could not be created");
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'fiscal_calendars', ${after.id}, 'insert',
+                ${JSON.stringify({ before: null, after })}::jsonb, ${actorId})`);
+      savedId = after.id as string;
     }
-    const inserted = (await tx.execute(sql`
-      insert into fiscal_calendars
-        (org_id, name, cadence, year_start_month, week_starts_on, anchor_date, time_zone,
-         adjustment_period_enabled, is_default, is_active, config, created_by, updated_by)
-      values (${orgId}, ${name}, ${cadence}, ${yearStartMonth}, ${weekStartsOn}, ${anchorDate},
-              ${text(body, "timeZone") ?? "UTC"}, ${bool(body, "adjustmentPeriodEnabled")},
-              ${isDefault}, ${isActive}, ${JSON.stringify(object(body, "config"))}::jsonb,
-              ${actorId}, ${actorId}) returning *`)) as { rows: Array<Record<string, unknown>> };
-    const after = inserted.rows[0];
-    if (!after) throw new CloseError("calendar could not be created");
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'fiscal_calendars', ${after.id}, 'insert',
-              ${JSON.stringify({ before: null, after })}::jsonb, ${actorId})`);
-    return after.id as string;
+    // Date-derived posting resolution reads the org's ACTIVE DEFAULT
+    // calendar, so an org left with periods but no active default would
+    // have every posting refused. Fail this save (rolling it back) and
+    // name the fix: saving one ACTIVE calendar with the default flag on
+    // performs the swap atomically through this same endpoint.
+    const guard = (await tx.execute(sql`
+      select exists(select 1 from accounting_periods where org_id = ${orgId}) as has_periods,
+             exists(select 1 from fiscal_calendars
+                     where org_id = ${orgId} and is_default and is_active) as has_default`)) as {
+      rows: Array<{ has_periods: boolean; has_default: boolean }>;
+    };
+    if (guard.rows[0]?.has_periods && !guard.rows[0]?.has_default) {
+      throw new CloseError(
+        "this change would leave the organization with periods but no active default fiscal calendar, and new postings would be refused; save one active calendar with the default flag switched on first",
+      );
+    }
+    return savedId;
   });
 }
 
