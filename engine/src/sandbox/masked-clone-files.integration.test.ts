@@ -12,6 +12,22 @@ import {
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 
+/**
+ * Attempt every teardown step even when one fails, then report all failures
+ * together instead of swallowing them.
+ */
+async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "test teardown failed");
+}
+
 // D2: a masked sandbox never receives production file bytes. The blob table
 // is not copied at all and version/file rows carry the MASKED_STORAGE_KIND
 // tombstone instead of 'db'/'s3'; every bytes-dispatch site must refuse the
@@ -87,7 +103,10 @@ test("masked clone tombstones file rows and copies no bytes", async () => {
       select count(*)::int as n from file_blobs where version_id = ${versionId}`)).rows[0]!.n;
     assert.equal(prodBlobs, 1);
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
+    const sid = sandboxId;
+    await runTeardowns(
+      ...(sid ? [() => deleteSandbox(sid)] : []),
+      () => dropScratchOrg(org.orgId),
+    );
   }
 });

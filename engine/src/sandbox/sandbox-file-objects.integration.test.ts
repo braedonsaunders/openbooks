@@ -15,6 +15,23 @@ import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { copyClonedFileObjects } from "./clone.ts";
 import { createSandbox, deleteSandbox, refreshSandbox } from "./lifecycle.ts";
 
+/**
+ * Attempt every teardown step even when one fails, then report all failures
+ * together. A swallowed drop strands a scratch org (and its sandbox rows)
+ * on the shared test database for the next shard to trip over.
+ */
+async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "test teardown failed");
+}
+
 // D3: S3-backed attachments must survive an unmasked clone (objects copied to
 // the rebased keys), must never be copied for masked clones (see D2), must be
 // cleaned up when the copy fails, and must die with the sandbox on
@@ -84,8 +101,11 @@ test("unmasked clone copies S3 objects to the rebased keys", async () => {
     assert.equal(await getS3Blob(sbx.id), null);
     assert.equal((await getS3Blob(seeded.versionId))?.toString(), seeded.bytes.toString());
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
+    const sid = sandboxId;
+    await runTeardowns(
+      ...(sid ? [() => deleteSandbox(sid)] : []),
+      () => dropScratchOrg(org.orgId),
+    );
     setFileBlobStoreForTests(null);
   }
 });
@@ -112,8 +132,11 @@ test("masked clone copies no S3 objects", async () => {
     const sbx = await sandboxVersionId(created.sandboxOrgId);
     assert.equal(sbx.storage_kind, "masked");
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    await dropScratchOrg(org.orgId);
+    const sid = sandboxId;
+    await runTeardowns(
+      ...(sid ? [() => deleteSandbox(sid)] : []),
+      () => dropScratchOrg(org.orgId),
+    );
     setFileBlobStoreForTests(null);
   }
 });
@@ -155,8 +178,10 @@ test("failed object copy cleans up partial keys and reports the failure", async 
     await deleteS3Blobs([rebased]);
     assert.equal(await getS3Blob(rebased), null);
   } finally {
-    await dropScratchOrg(sbx.orgId).catch(() => undefined);
-    await dropScratchOrg(prod.orgId).catch(() => undefined);
+    await runTeardowns(
+      () => dropScratchOrg(sbx.orgId),
+      () => dropScratchOrg(prod.orgId),
+    );
     setFileBlobStoreForTests(null);
   }
 });
