@@ -13,5 +13,16 @@
     // whose transitive graph resolves web's @/ alias.
     "paths": { "@/*": ["../web/*"] }
   },
-  "include": ["**/*.ts", "**/*.mts"]
+  "include": ["**/*.ts", "**/*.mts"],
+  // The kernel-driven rehearsal seeders are engine-tree programs: rehearse.mjs
+  // copies them to engine/src/upgrade-rehearsal-seed/ and they run on the
+  // source release's runtime, so their engine-relative imports only resolve
+  // there (the engine-import-free legacy-shapes.ts stays covered above).
+  // They are typechecked under engine/tsconfig.json in that location, linted
+  // by npm run lint, and exercised end to end on every supported source tag
+  // by the release-gated rehearsal cells.
+  "exclude": [
+    "upgrade-rehearsal/seeders/multi-entity.ts",
+    "upgrade-rehearsal/seeders/perf-1m.ts"
+  ]
 }

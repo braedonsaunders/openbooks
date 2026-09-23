@@ -92,6 +92,14 @@ test('review-tenant fixtures may seed functional connector-branch rows', () => {
   assert.deepEqual(auditPublicSnapshot(['scripts/review-tenant-fixtures.sql']), [])
 })
 
+test('the perf-1m seeder may seed functional connector-branch rows', () => {
+  // scripts/upgrade-rehearsal/seeders/perf-1m.ts writes qbd_requests hanging
+  // off a qbd connection (the stable source key the connector reads): display
+  // copy stays vendor-neutral, only the functional key names a system.
+  assert.equal(isConnectorPath('scripts/upgrade-rehearsal/seeders/perf-1m.ts'), true)
+  assert.deepEqual(auditPublicSnapshot(['scripts/upgrade-rehearsal/seeders/perf-1m.ts']), [])
+})
+
 test('the audit still rejects vendor names outside connector scope', () => {
   const dir = mkdtempSync(join(tmpdir(), 'neutrality-audit-'))
   try {

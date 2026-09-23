@@ -125,6 +125,11 @@ const connectorPaths = [
   // Display copy in the fixture stays vendor-neutral; only the functional
   // keys may name a system.
   /^scripts\/review-tenant-fixtures\.sql$/,
+  // The perf-1m rehearsal seeder writes functional connector-branch rows:
+  // its qbd_requests hang off a qbd connection, the stable source key the
+  // connector reads. Display copy in the seeder stays vendor-neutral; only
+  // the functional key may name a system.
+  /^scripts\/upgrade-rehearsal\/seeders\/perf-1m\.ts$/,
   /^web\/app\/\(app\)\/sync\//,
   /^web\/app\/api\/(?:platform\/connections|qbd)\//,
   /^web\/lib\/docs\/articles\/(?:netsuite-bridge|quickbooks-desktop-connector)\.ts$/,
