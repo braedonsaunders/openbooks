@@ -37,6 +37,7 @@ import {
   type RevenueModificationTreatment,
 } from "./contract-modification-measurement.ts";
 import {
+  addDays,
   buildRecognitionScheduleOn,
   lockRevenueContract,
   recognitionUnearnedRemaining,
@@ -107,6 +108,8 @@ type Obligation = {
   recognition_rule_id: string;
   recognition_starts_on: string | null;
   recognition_ends_on: string | null;
+  /** The OLD rule's start offset, pinned by recognition_rule_id. */
+  start_offset_days: number;
   percent_complete: string | null;
   deferred_account_id: string | null;
   recognized_account_id: string | null;
@@ -252,7 +255,16 @@ function recognized(lines: PlanLine[]) {
   );
 }
 /** Elapsed part of a time-based old promise, measured on actual service days.
- * It posts separately before the amendment, never under the revised price. */
+ * It posts separately before the amendment, never under the revised price.
+ *
+ * The stub is measured from the OLD rule's effective start — the recognition
+ * start shifted by the rule's start_offset_days through the same addDays
+ * helper the schedule builder uses — never from the unshifted contract or
+ * period start. A point-in-time promise earns nothing before its event date
+ * and the full amount on or after it; a straight-line promise earns only the
+ * post-offset days. A previously amended promise (change basis) was already
+ * rebuilt from its amendment date with a zeroed offset, so its stub measures
+ * from the stored recognition start with no further shift. */
 function accruedBeforeChange(
   o: Obligation,
   lines: PlanLine[],
@@ -260,6 +272,7 @@ function accruedBeforeChange(
   total: string,
   earned: string,
   basis?: RevenueChangeBasis | null,
+  oldPolicy?: { startOffsetDays: number; contractStartsOn: string | null },
 ) {
   const method = basis?.method ?? o.method;
   if (method === "percent_complete")
@@ -275,17 +288,22 @@ function accruedBeforeChange(
       l.ends_on >= effectiveOn,
   );
   if (method === "milestone" || method === "usage") return "0.0000";
+  const anchor =
+    o.recognition_starts_on ?? oldPolicy?.contractStartsOn ?? null;
+  // A schedule already rewritten by a prior amendment runs from its stored
+  // recognition start; only a first-generation schedule still carries the
+  // rule offset the builder applied when it planned the lines.
+  const offset = basis ? 0 : (oldPolicy?.startOffsetDays ?? 0);
   return sum(
     rows.map((l) => {
+      const ruleStart = anchor ? addDays(anchor, offset) : null;
       const start =
-        o.recognition_starts_on && o.recognition_starts_on > l.starts_on
-          ? o.recognition_starts_on
-          : l.starts_on;
+        ruleStart && ruleStart > l.starts_on ? ruleStart : l.starts_on;
       const end =
         o.recognition_ends_on && o.recognition_ends_on < l.ends_on
           ? o.recognition_ends_on
           : l.ends_on;
-      if (effectiveOn <= start) return "0.0000";
+      if (effectiveOn < start) return "0.0000";
       if (method === "point_in_time") return l.planned_amount;
       const day = (s: string) => BigInt(Date.parse(s) / 86400000);
       const elapsed = day(effectiveOn) - day(start),
@@ -340,7 +358,7 @@ async function snapshot(
       "a modification cannot move a contract to another legal entity",
     );
   const obligations = (
-    await tx.execute<Obligation>(sql`select o.id,o.contract_id,o.description,o.status,o.allocated_price::text,o.recognition_rule_id,
+    await tx.execute<Obligation>(sql`select o.id,o.contract_id,o.description,o.status,o.allocated_price::text,o.recognition_rule_id,r.start_offset_days,
     o.recognition_starts_on::text,o.recognition_ends_on::text,o.percent_complete::text,
     coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id) as deferred_account_id,
     coalesce(o.recognized_account_id,r.recognized_account_id,i.income_account_id) as recognized_account_id,
@@ -578,6 +596,7 @@ async function snapshot(
         schedule.total_amount,
         earned,
         schedule.change_basis,
+        { startOffsetDays: o.start_offset_days, contractStartsOn: c.starts_on },
       );
       const stub =
         cmp(rawStub, "0") > 0 && cmp(rawStub, cap.remaining) > 0
