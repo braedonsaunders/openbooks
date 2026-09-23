@@ -1919,11 +1919,30 @@
     "exportsEmpty": "Noch keine Exporte angefordert.",
     "exportsColumns": {
       "requested": "Angefordert",
-      "status": "Status"
+      "status": "Status",
+      "detail": "Detail"
     },
     "requestExport": "Meine Daten exportieren",
     "requestExportDone": "Ihr Export ist angereiht — er erscheint unten, sobald er fertig ist.",
-    "download": "Herunterladen"
+    "download": "Herunterladen",
+    "status": {
+      "queued": "In Warteschlange",
+      "building": "In Erstellung",
+      "ready": "Bereit",
+      "incomplete": "Unvollständig",
+      "delivered": "Übermittelt",
+      "failed": "Fehlgeschlagen",
+      "draft": "Entwurf",
+      "sent": "Versendet",
+      "viewed": "Gelesen",
+      "partially_signed": "Teilweise unterschrieben",
+      "signed": "Unterschrieben",
+      "acknowledged": "Bestätigt",
+      "declined": "Abgelehnt",
+      "voided": "Annulliert",
+      "expired": "Abgelaufen",
+      "deleted": "Gelöscht"
+    }
   },
   "meSurveys": {
     "title": "Offene Befragungen",

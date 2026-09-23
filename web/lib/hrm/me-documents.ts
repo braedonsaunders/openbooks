@@ -41,6 +41,24 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
   const exportOn = await isFeatureEnabled(authz.orgId, 'hrmDataSubjectExport')
   const statusLabel = (value: string): string =>
     t.has(`meDocuments.status.${value}`) ? t(`meDocuments.status.${value}`) : value
+  // The stored scope manifest names each omitted document with its reason;
+  // surface that evidence on the requester's row so an incomplete export
+  // arrives with its explanation, never as a bare status.
+  const incompleteDetail = (scope: unknown): string | null => {
+    if (!Array.isArray(scope)) return null
+    for (const entry of scope) {
+      if (typeof entry !== 'object' || entry === null) continue
+      const { module, status, detail } = entry as {
+        module?: unknown
+        status?: unknown
+        detail?: unknown
+      }
+      if (module === 'documents' && status === 'incomplete' && typeof detail === 'string' && detail.length > 0) {
+        return detail
+      }
+    }
+    return null
+  }
 
   return {
     title: t('meDocuments.title'),
@@ -72,6 +90,7 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
     exportColumns: {
       requested: t('meDocuments.exportsColumns.requested'),
       status: t('meDocuments.exportsColumns.status'),
+      detail: t('meDocuments.exportsColumns.detail'),
     },
     exportRows: exports.map((e) => ({
       id: e.id,
@@ -82,6 +101,7 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
       // requester's, and the row keeps showing its incomplete status.
       downloadable: e.status === 'ready' || e.status === 'incomplete' || e.status === 'delivered',
       downloadHref: `/api/hrm/data-subject-exports/${e.id}/download`,
+      incompleteDetail: incompleteDetail(e.scope),
       error: e.error,
     })),
     requestExportLabel: t('meDocuments.requestExport'),
