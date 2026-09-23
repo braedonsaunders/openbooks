@@ -24,6 +24,12 @@ export interface ObligationRow {
   method: string;
   rule_name: string;
   recognition_rule_id?: string;
+  /**
+   * True while the pinned rule's pre-upgrade history is legacy-unverified
+   * (0326) and the obligation was never reconciled (0328): rebuilds refuse
+   * and the drawer offers reconciliation instead.
+   */
+  legacy_unverified: boolean;
   standalone_selling_price?: string | null;
   percent_complete?: string | null;
   deferred_account_id?: string | null;
@@ -119,12 +125,17 @@ export async function loadContract(
     fair_value_high: string | null;
     method: string;
     rule_name: string;
+    legacy_unverified: boolean;
   }>(sql`
     select o.id, o.description, o.allocated_price, o.recognition_starts_on, o.recognition_ends_on, o.status,
            o.fair_value_flag, o.fair_value_low, o.fair_value_high,
            r.method, r.name as rule_name,o.recognition_rule_id,o.standalone_selling_price::text,o.percent_complete::text,
            coalesce(o.deferred_account_id,i.deferred_account_id,r.deferred_account_id) as deferred_account_id,
-           coalesce(o.recognized_account_id,r.recognized_account_id,i.income_account_id) as recognized_account_id
+           coalesce(o.recognized_account_id,r.recognized_account_id,i.income_account_id) as recognized_account_id,
+           (o.legacy_reconciled_at is null and exists(
+             select 1 from upgrade_legacy_provenance p
+              where p.org_id = o.org_id and p.table_name = 'recognition_rules' and p.row_id = o.recognition_rule_id
+           )) as legacy_unverified
       from performance_obligations o
       join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
       left join items i on i.id=o.item_id and i.org_id=o.org_id

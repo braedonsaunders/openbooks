@@ -1,0 +1,1 @@
+0328 only adds three nullable attestation columns (legacy_reconciled_at/by/reason) plus a shape CHECK to performance_obligations; it writes no rows, backfills nothing, and offers no operator decision. The rebuild refusal and the reconcile path that consume these columns ship in application code, not in the migration.

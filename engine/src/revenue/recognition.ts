@@ -11,6 +11,7 @@ import {
   type AccretionPeriod,
 } from "../money/present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { isLegacyProvenance } from "../platform/legacy-provenance.ts";
 import {
   MAX_RECOGNITION_DAY_OFFSET,
   MAX_RECOGNITION_INITIAL_PERCENT,
@@ -771,6 +772,121 @@ export interface BuildRecognitionResult {
 }
 
 /**
+ * A legacy-provenance rebuild block: the obligation pins a rule whose
+ * pre-upgrade history is unverified (0326), it was never reconciled (0328),
+ * and it already carries schedule lines that a rebuild would destroy or
+ * extend under a policy the obligation may not have been built under.
+ */
+export interface LegacyRebuildBlock {
+  ruleId: string;
+  lineCount: number;
+  message: string;
+}
+
+function legacyRebuildRemedy(obligationId: string): string {
+  return (
+    `verify the existing schedule against the policy in force when the obligation was created, ` +
+    `then reconcile the obligation with a reason via reconcileLegacyObligationProvenance ` +
+    `(POST /api/revenue/obligations/${obligationId}/reconcile-legacy); the rebuild proceeds once reconciled`
+  );
+}
+
+/**
+ * Null when a rebuild may proceed; a block naming the remedy otherwise.
+ * Shared by buildRecognitionScheduleOn (which refuses) and the project
+ * revenue sync (which skips the project with a named problem instead of
+ * aborting every other project), so the two predicates cannot drift.
+ */
+export async function legacyRebuildBlock(
+  runner: SqlExecutor,
+  orgId: string,
+  obligationId: string,
+): Promise<LegacyRebuildBlock | null> {
+  const o = (await runner.execute<{
+    recognition_rule_id: string;
+    rule_version: number | null;
+    rule_superseded_by: string | null;
+    reconciled_at: string | null;
+  }>(sql`
+    select o.recognition_rule_id, r.version as rule_version,
+           r.superseded_by as rule_superseded_by,
+           o.legacy_reconciled_at::text as reconciled_at
+      from performance_obligations o
+      join recognition_rules r on r.id = o.recognition_rule_id and r.org_id = o.org_id
+     where o.id = ${obligationId} and o.org_id = ${orgId}`)).rows[0];
+  if (!o) throw new Error("obligation not found");
+  if (o.reconciled_at) return null;
+  const legacy = await isLegacyProvenance(runner, orgId, "recognition_rules", o.recognition_rule_id, {
+    // Before 0326 applies there is no registry: an unsurpassed version 1 is
+    // exactly what the backfill stamps, so it stays suspect.
+    fallback: o.rule_version === 1 && o.rule_superseded_by == null,
+  });
+  if (!legacy) return null;
+  const lines = (await runner.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from recognition_schedule_lines l
+      join recognition_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+     where s.obligation_id = ${obligationId} and s.org_id = ${orgId}`)).rows[0];
+  const lineCount = Number(lines?.n ?? "0");
+  if (lineCount === 0) return null;
+  return {
+    ruleId: o.recognition_rule_id,
+    lineCount,
+    message:
+      `obligation ${obligationId} pins recognition rule ${o.recognition_rule_id}, whose pre-upgrade history is ` +
+      `legacy-unverified (0297): rebuilding would re-time its ${lineCount} existing schedule line(s) under a ` +
+      `policy the obligation may not have been built under. ${legacyRebuildRemedy(obligationId)}`,
+  };
+}
+
+/**
+ * Record the operator's attestation that an obligation's existing schedule
+ * matches the policy actually in force at its creation, lifting the
+ * legacy-rebuild refusal for that obligation only (0328). Reconciliation is
+ * per obligation because one legacy rule can pin obligations built under
+ * different policies — clearing the rule would re-open the still-wrong one.
+ */
+export async function reconcileLegacyObligationProvenance(
+  runner: SqlExecutor,
+  orgId: string,
+  obligationId: string,
+  actorId: string | null,
+  reason: string,
+): Promise<void> {
+  const clean = reason.trim();
+  if (clean.length < 5 || clean.length > 500) {
+    throw new RevenueRecognitionError(
+      "a reconciliation reason of 5 to 500 characters is required — name the evidence the existing schedule was verified against",
+    );
+  }
+  await lockObligationContract(runner, orgId, obligationId);
+  const o = (await runner.execute<{ reconciled_at: string | null }>(sql`
+    select legacy_reconciled_at::text as reconciled_at
+      from performance_obligations
+     where id = ${obligationId} and org_id = ${orgId}
+     for update of performance_obligations`)).rows[0];
+  if (!o) throw new Error("obligation not found");
+  if (o.reconciled_at) {
+    throw new RevenueRecognitionError("this obligation is already reconciled — its rebuild refusal is lifted");
+  }
+  const block = await legacyRebuildBlock(runner, orgId, obligationId);
+  if (!block) {
+    throw new RevenueRecognitionError(
+      "nothing to reconcile: the pinned rule is not legacy-unverified, or there is no schedule evidence to verify against",
+    );
+  }
+  // A write that matches zero rows is a failure, not a success.
+  const updated = (await runner.execute<{ id: string }>(sql`
+    update performance_obligations
+       set legacy_reconciled_at = now(), legacy_reconciled_by = ${actorId},
+           legacy_reconciliation_reason = ${clean},
+           updated_at = now(), updated_by = coalesce(${actorId}, updated_by)
+     where id = ${obligationId} and org_id = ${orgId}
+     returning id`)).rows;
+  if (updated.length !== 1) throw new Error("the reconciliation could not be recorded");
+}
+
+/**
  * (Re)build the recognition schedule for an obligation on a book from its rule
  * and resolved term. Existing UNPOSTED lines are replaced; posted lines are
  * preserved so a rebuild after some periods have recognized never disturbs
@@ -848,6 +964,12 @@ export async function buildRecognitionScheduleOn(
   const revision = existing.rows[0]?.revision ?? 1;
   const scheduleTotal = basis?.totalAmount ?? o.allocated_price;
   if (basis?.retired) return {scheduleId:existing.rows[0]!.id,lineCount:0,skippedMonths:[]};
+  // Legacy provenance (0326/0328): a pre-versioning rule edited in place
+  // cannot be trusted to re-time this obligation's existing lines. Refuse
+  // before any line is destroyed; the remedy is a per-obligation
+  // reconciliation, never a silent rebuild.
+  const block = await legacyRebuildBlock(runner, orgId, obligationId);
+  if (block) throw new RevenueRecognitionError(block.message);
   let scheduleId: string;
   if (existing.rows[0]) {
     scheduleId = existing.rows[0].id;

@@ -14,6 +14,7 @@ import {
 } from "@openbooks/ui";
 import { add, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { CancelRecognitionButton } from "./CancelRecognitionButton";
+import { ReconcileLegacyButton } from "./ReconcileLegacyButton";
 import { RunRecognitionButton } from "./RunRecognitionButton";
 import Link from "next/link";
 import { ModifyContractButton } from "./ModifyContractButton";
@@ -162,6 +163,11 @@ export function ContractDrawer({
                 <span className="text-xs text-slate-500 dark:text-slate-400">
                   {t(`method.${o.method}`)} · {money(o.allocated_price)}
                 </span>
+                {o.legacy_unverified ? (
+                  <Badge variant="warning">
+                    {t("drawer.legacyUnverified")}
+                  </Badge>
+                ) : null}
                 {o.fair_value_flag ? (
                   <Badge variant="warning">
                     {t("drawer.fairValueOutOfRange", {
@@ -179,6 +185,9 @@ export function ContractDrawer({
               </div>
               {canRun ? (
                 <RunRecognitionButton obligationId={o.id} obligationDescription={o.description} />
+              ) : null}
+              {canRun && o.legacy_unverified ? (
+                <ReconcileLegacyButton obligationId={o.id} />
               ) : null}
             </div>
             {o.lines.length === 0 ? (

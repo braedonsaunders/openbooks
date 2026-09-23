@@ -48,7 +48,15 @@
     "recognized": "認識済み",
     "postedStatus": "記帳済み",
     "plannedStatus": "計画",
-    "fairValueOutOfRange": "公正価値レンジ外（{low} – {high}）"
+    "fairValueOutOfRange": "公正価値レンジ外（{low} – {high}）",
+    "legacyUnverified": "レガシー — ルール履歴が未検証",
+    "reconcile": "レガシールールを照合",
+    "reconcileTitle": "レガシールール履歴を照合",
+    "reconcileReason": "既存スケジュールを照合した証跡",
+    "reconcilePlaceholder": "スケジュールを照合したポリシーメモまたは記録を記入",
+    "reconcileConfirm": "照合を記録",
+    "reconcileFailed": "照合に失敗しました",
+    "reconciled": "この債務についてレガシールールを照合済み"
   },
   "cancel": {
     "button": "認識をキャンセル",

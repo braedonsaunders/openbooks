@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, formatMoney, mulRatio, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { buildAllRecognitionSchedulesInTransaction, revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
+import { buildAllRecognitionSchedulesInTransaction, legacyRebuildBlock, revenueRecognitionFeatureEnabled } from "../revenue/recognition.ts";
 import { recognitionAccounts } from "./recognition.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 
@@ -285,6 +285,15 @@ export async function syncProjectRevenueContractsInTransaction(
     let obligationId: string;
     if (existingObl.rows[0]) {
       obligationId = existingObl.rows[0].id;
+      // Legacy provenance (0326/0328): refusing before the obligation
+      // update keeps this project's obligation and schedules untouched and
+      // names the remedy in problems, instead of aborting every other
+      // project's sync with one throw.
+      const block = await legacyRebuildBlock(tx, orgId, obligationId);
+      if (block) {
+        result.problems.push(`${p.code}: ${block.message}`);
+        continue;
+      }
       await tx.execute(sql`
         update performance_obligations
            set booked_amount = case when last_change_id is null then ${p.contract_value} else booked_amount end,
