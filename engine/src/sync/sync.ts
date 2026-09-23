@@ -503,6 +503,10 @@ export async function verifyCurrentLedgerState(
        and e.status in ('posted', 'reversed')
        and ${sourceProjection}
        and a.custom->>${refKey} is not null
+       -- Opening-balance journals are point-in-time, not monthly activity:
+       -- the period comparator checks target-only buckets, so counting them
+       -- here would hold every opening balance against its posting month.
+       and coalesce(e.custom->'sourceProjection'->>'openingBalance', 'false') <> 'true'
      group by 1, 2, 3
     having sum(l.amount) <> 0
   `));

@@ -3,11 +3,11 @@ import { businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { latestWebConnectorHeartbeat, prepareCapture, releaseCapture, waitForCapture, type CaptureResponse } from "../qbd/bridge.ts";
-import { nodes, parseQbdReportDate, parseReportRows, parseXml } from "../qbd/qbxml.ts";
+import { assertQbdResponsePayload, nodes, parseQbdReportDate, parseReportRows, parseXml } from "../qbd/qbxml.ts";
 import type { NativeContext } from "./native.ts";
 import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 import { buildQbdLedgerDocuments } from "./qbd-native.ts";
-import type { EntityStream, MigrationSource, NativeChanges, SourceAccountMonthRow, SourceEntity, SourceTrialBalanceRow } from "./source.ts";
+import type { EntityStream, MigrationSource, NativeChanges, SourceAccountMonthRow, SourceEntity, SourceOpeningBalance, SourceTrialBalanceRow } from "./source.ts";
 
 export interface QbdSourceConfig {
   orgId: string;
@@ -331,6 +331,45 @@ export class QbdSource implements MigrationSource {
         return [];
       }
       return [{ accountRef, balance: fromUnits(balance) }];
+    });
+  }
+
+  /**
+   * Carried balances as of the day before the history window, from the
+   * dated opening trial balance the capture plan requests. A missing family
+   * refuses the bounded range by name — without it an old balance has no
+   * imported leg and parity stays red forever — as does a structurally
+   * absent report (never a zero opening) or a nonzero unmapped account.
+   */
+  async openingBalances(): Promise<SourceOpeningBalance[]> {
+    const start = new Date(`${this.config.historyStartDate}T00:00:00.000Z`);
+    if (Number.isNaN(start.getTime())) throw new Error(`invalid QuickBooks history start date: ${this.config.historyStartDate}`);
+    const asOf = new Date(start.getTime() - 86_400_000).toISOString().slice(0, 10);
+    const responses = await this.responseRows("opening-trial-balance");
+    if (responses.length === 0) {
+      throw new Error(`QuickBooks capture omitted the opening trial balance as of ${asOf}; bounded history from ${this.config.historyStartDate} cannot reconcile its opening balances — re-run the capture`);
+    }
+    const accounts = await this.accountRecords();
+    const byName = new Map(accounts.flatMap((a) => {
+      const id = text(a.ListID);
+      return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
+    }));
+    const openingDate = this.config.historyStartDate;
+    return responses.flatMap((response) => {
+      assertQbdResponsePayload({ family: "opening-trial-balance", requestKind: "TrialBalance", expectedRs: "GeneralSummaryReportQueryRs", responseXml: response.responseXml });
+      return parseReportRows(response.responseXml).flatMap((row) => {
+        if (row.rowType !== "DataRow") return [];
+        const accountRef = byName.get(row.columns.Account ?? "");
+        const balance = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+        if (!accountRef) {
+          if (balance !== 0n) {
+            throw new Error(`QuickBooks opening trial balance as of ${asOf} reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before sync can proceed`);
+          }
+          return [];
+        }
+        if (balance === 0n) return [];
+        return [{ accountRef, openingDate, amount: fromUnits(balance) }];
+      });
     });
   }
 

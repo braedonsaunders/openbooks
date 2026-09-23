@@ -101,9 +101,22 @@ export function buildCapturePlan(historyStartDate: string, through: Date): QbdRe
     // transaction sweep is being used for a mirror.
     requests.push({ family: name.toLowerCase(), requestKind: `${name}Query`, requestXml: listQuery(name) });
   }
-  for (const month of calendarMonths(historyStartDate, through)) {
+  const months = calendarMonths(historyStartDate, through);
+  for (const month of months) {
     requests.push({ family: `ledger:${month.month}`, requestKind: "GeneralLedger", requestXml: generalLedgerRequest(month.from, month.to) });
   }
+  // A dated opening trial balance as of the day before the history window.
+  // Ledger months cover historyStartDate onward while the cumulative trial
+  // balance runs through today, so without this an account whose balance
+  // predates the window (and never moves inside it) has no imported leg and
+  // no source month row — parity could never reconcile. calendarMonths above
+  // already validated historyStartDate, so the day-before arithmetic is safe.
+  const windowStart = new Date(`${historyStartDate}T00:00:00.000Z`);
+  requests.push({
+    family: "opening-trial-balance",
+    requestKind: "TrialBalance",
+    requestXml: trialBalanceRequest(new Date(windowStart.getTime() - 86_400_000)),
+  });
   requests.push({ family: "trial-balance", requestKind: "TrialBalance", requestXml: trialBalanceRequest(through) });
   return requests;
 }

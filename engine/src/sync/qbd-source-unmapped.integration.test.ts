@@ -14,7 +14,7 @@ function envelope(inner: string): string {
 }
 
 function accountListXml(): string {
-  return envelope(`<AccountQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><AccountRet><ListID>CASH-1</ListID><Name>Cash</Name><FullName>Cash</FullName><AccountType>Bank</AccountType><IsActive>true</IsActive></AccountRet></AccountQueryRs>`);
+  return envelope(`<AccountQueryRs statusCode="0" statusSeverity="Info" statusMessage="Status OK"><AccountRet><ListID>CASH-1</ListID><Name>Cash</Name><FullName>Cash</FullName><AccountType>Bank</AccountType><IsActive>true</IsActive></AccountRet><AccountRet><ListID>EQ-1</ListID><Name>Opening Equity</Name><FullName>Opening Equity</FullName><AccountType>Equity</AccountType><IsActive>true</IsActive></AccountRet></AccountQueryRs>`);
 }
 
 function trialBalanceXml(rows: Array<{ account: string; debit: string; credit: string }>): string {
@@ -98,6 +98,56 @@ test("a nonzero trial-balance row for an unmapped account refuses verification b
       },
     ]);
     assert.deepEqual(await zeroed.trialBalance(), [{ accountRef: "CASH-1", balance: "100.0000" }]);
+  } finally {
+    await db.execute(sql`delete from qbd_requests where connection_id = ${connectionId}`);
+    await db.execute(sql`delete from qbd_captures where connection_id = ${connectionId}`);
+    await db.execute(sql`delete from connections where id = ${connectionId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the opening trial balance returns carried balances dated at the history start", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const connectionId = await createConnection(org.orgId);
+  try {
+    const source = await seedCapture(org.orgId, connectionId, [
+      { family: "account", requestKind: "AccountQuery", responseXml: accountListXml() },
+      {
+        family: "opening-trial-balance",
+        requestKind: "TrialBalance",
+        responseXml: trialBalanceXml([
+          { account: "Cash", debit: "100.00", credit: "" },
+          { account: "Opening Equity", debit: "", credit: "100.00" },
+          { account: "Ghost", debit: "", credit: "" },
+        ]),
+      },
+    ]);
+    assert.deepEqual(await source.openingBalances(), [
+      { accountRef: "CASH-1", openingDate: "2024-01-01", amount: "100.0000" },
+      { accountRef: "EQ-1", openingDate: "2024-01-01", amount: "-100.0000" },
+    ]);
+
+    // A missing opening family refuses the bounded range by name instead of
+    // leaving parity permanently red.
+    const missing = await seedCapture(org.orgId, connectionId, [
+      { family: "account", requestKind: "AccountQuery", responseXml: accountListXml() },
+    ]);
+    await assert.rejects(
+      () => missing.openingBalances(),
+      /omitted the opening trial balance as of 2023-12-31; bounded history from 2024-01-01 cannot reconcile/,
+    );
+
+    // A nonzero unmapped opening row refuses by name, like the live trial
+    // balance above.
+    const unmapped = await seedCapture(org.orgId, connectionId, [
+      { family: "account", requestKind: "AccountQuery", responseXml: accountListXml() },
+      {
+        family: "opening-trial-balance",
+        requestKind: "TrialBalance",
+        responseXml: trialBalanceXml([{ account: "Ghost", debit: "50.00", credit: "" }]),
+      },
+    ]);
+    await assert.rejects(() => unmapped.openingBalances(), /opening trial balance as of 2023-12-31 reports 50.*unmapped account "Ghost"/);
   } finally {
     await db.execute(sql`delete from qbd_requests where connection_id = ${connectionId}`);
     await db.execute(sql`delete from qbd_captures where connection_id = ${connectionId}`);

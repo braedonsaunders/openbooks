@@ -180,6 +180,14 @@ export interface SourceAccountMonthRow {
   amount: string; // signed decimal string, debit-positive, in home currency
 }
 
+/** One account's carried balance as of the day before a bounded history window. */
+export interface SourceOpeningBalance {
+  accountRef: string;
+  /** The history start date the opening journal posts on (YYYY-MM-DD). */
+  openingDate: string;
+  amount: string; // signed decimal string, debit-positive, in home currency
+}
+
 /**
  * Source-ledger activity for one project, account, and calendar posting month.
  *
@@ -351,6 +359,18 @@ export interface MigrationSource {
    * P&L / balance sheet). Values are source-ledger home-currency amounts.
    */
   monthlyActivity(): Promise<SourceAccountMonthRow[]>;
+
+  /**
+   * Optional carried opening balances for bounded-history connectors. Each
+   * row is one account's balance as of the day before the migration's
+   * history start, posted by the true-up as a single labelled
+   * opening-balance journal on the history start date. Without this, an
+   * account whose balance predates the window (and never moves inside it)
+   * appears in the cumulative trial balance but has no imported leg and no
+   * source month row, so parity can never reconcile. Values are
+   * source-ledger home-currency amounts, debit-positive.
+   */
+  openingBalances?(): Promise<SourceOpeningBalance[]>;
 
   /** Ledger/book selected for authoritative verification, when applicable. */
   ledgerContext?(): Promise<SourceLedgerContext>;
