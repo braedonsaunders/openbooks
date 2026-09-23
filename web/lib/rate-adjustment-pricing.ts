@@ -4,7 +4,7 @@
  * Split from the resolver so the arithmetic deciding what a customer is charged
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
-import { add, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, fromUnits, isZero, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /** How a percentage charge lands on the cent. */
 export type AdjustmentRounding = 'half_up' | 'down'
@@ -104,21 +104,23 @@ export function priceAdjustments(
   for (const adjustment of adjustments) {
     if (adjustment.presentation !== 'separate') continue
     if (adjustment.calculation !== 'percent' && adjustment.calculation !== 'fixed') continue
-    if (!adjustment.value || Number(adjustment.value) === 0) continue
+    if (!adjustment.value || isZero(adjustment.value)) continue
 
     const matched = lines.filter((l) => lineMatchesAdjustment(l, adjustment))
     if (!matched.length) continue
     const basis = sum(matched.map((l) => l.amount))
     // A threshold is a floor on the basis, not on the charge: below it the
-    // negotiated term simply does not trigger.
-    if (adjustment.threshold && Number(basis) < Number(adjustment.threshold)) continue
+    // negotiated term simply does not trigger. Compared as exact decimals —
+    // Number() collapses 4dp neighbors at numeric(19,4) magnitude and would
+    // charge below the floor.
+    if (adjustment.threshold && cmp(basis, adjustment.threshold) < 0) continue
 
     const amount = adjustment.calculation === 'fixed'
       ? adjustment.value
       : rounding === 'down'
         ? floorToCents(mulPercent(basis, adjustment.value, 4))
         : mulPercent(basis, adjustment.value, 2)
-    if (Number(amount) === 0) continue
+    if (isZero(amount)) continue
     charges.push({ adjustment, basis, amount })
   }
   return charges
