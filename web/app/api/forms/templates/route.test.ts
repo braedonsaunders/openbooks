@@ -38,15 +38,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       export async function guardPermission() {
@@ -103,7 +94,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/setup/audit', 'mock:audit'],
