@@ -1659,6 +1659,8 @@
     },
     "jointDue": "共同で評価",
     "generate": "スナップショット生成",
+    "groupA": "グループA",
+    "groupB": "グループB",
     "emptyTitle": "スナップショットなし",
     "emptyDescription": "スナップショットを生成して格差を測定してください。"
   },

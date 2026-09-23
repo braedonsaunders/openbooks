@@ -1659,6 +1659,8 @@
     },
     "jointDue": "Avaliar em conjunto",
     "generate": "Gerar medição",
+    "groupA": "Grupo A",
+    "groupB": "Grupo B",
     "emptyTitle": "Sem medição",
     "emptyDescription": "Gere uma medição para medir diferenças."
   },

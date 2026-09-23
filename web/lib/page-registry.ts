@@ -1387,11 +1387,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/hrm/compensation': {
     route: '/hrm/compensation',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/hrm/compensation/view')
       return {
-        load: () => m.loadCompensationPage(),
+        load: (input) => m.loadCompensationPage(input.searchParams ?? {}),
         spec: (data) => m.compensationSpec(data as never),
       }
     },
@@ -1411,11 +1411,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/hrm/compensation/equity': {
     route: '/hrm/compensation/equity',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/hrm/compensation/equity/view')
       return {
-        load: () => m.loadEquityPage(),
+        load: (input) => m.loadEquityPage(input.searchParams ?? {}),
         spec: (data) => m.equitySpec(data as never),
       }
     },

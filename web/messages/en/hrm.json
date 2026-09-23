@@ -1716,6 +1716,8 @@
     },
     "jointDue": "Assess jointly",
     "generate": "Generate snapshot",
+    "groupA": "Group A",
+    "groupB": "Group B",
     "emptyTitle": "No snapshot yet",
     "emptyDescription": "Compute a snapshot to measure gaps."
   },

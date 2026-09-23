@@ -18,6 +18,6 @@ export default async function EquityPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadEquityPage()
+  const data = await loadEquityPage(sp)
   return <ModuleView spec={equitySpec(data)} data={data} searchParams={sp} trusted />
 }

@@ -115,6 +115,13 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
       widgetBlock('setup-section', { entityKey: 'hrm-job-families', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
       widgetBlock('setup-section', { entityKey: 'hrm-job-levels', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
       widgetBlock('setup-section', { entityKey: 'hrm-pay-bands', sp: {}, basePath: '/hrm/compensation' }, f('canSetup')),
+      // The create dialogs (?cycle=new / ?plan=new), mirroring the
+      // change-request queue's propose/detail trio — the loader owns the
+      // open state and the return href, closing navigates the param away.
+      // A requested dialog always resolves: the form, or a named refusal
+      // with its remedy when a prerequisite is missing.
+      widgetBlock('hrm-comp-cycle-dialog', { dialog: f('cycleDialog') }, f('cycleOpen')),
+      widgetBlock('hrm-comp-plan-dialog', { dialog: f('planDialog') }, f('planOpen')),
     ],
   })
 }
@@ -124,10 +131,10 @@ export async function compensationTitle(): Promise<string> {
   return t('compensation.title')
 }
 
-export async function loadCompensationPage() {
+export async function loadCompensationPage(sp: Record<string, string | undefined>) {
   const authz = await compensationAuthz()
   if (!authz) notFound()
-  const data = await loadCompensationHome(authz)
+  const data = await loadCompensationHome(authz, sp)
   if (!data) notFound()
   return data
 }

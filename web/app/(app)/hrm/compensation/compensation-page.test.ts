@@ -24,7 +24,7 @@ test("compensation pages carry the gates where the route-gate scanner reads them
   assert.match(loader, /can\(authz, 'hrm\.compensation\.manage'\)/, "writers carry the compensation manage grant");
   assert.match(loader, /can\(authz, 'hrm\.compensation\.approve'\)/, "deciders carry the compensation approve grant");
   assert.match(loader, /hrmRewardsViewTabs/, "Compensation rides the Rewards viewTabs so Benefits stays one hop away");
-  assert.match(page, /loadCompensationPage\(\)/, "the page renders only after the view gate resolves");
+  assert.match(page, /loadCompensationPage\(sp\)/, "the page hands its query string to the loader, so ?plan=new / ?cycle=new resolve to dialogs");
   assert.match(page, /searchParams=\{sp\}/, "the query string reaches the loader and the spec host");
   assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");
   assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");

@@ -96,6 +96,69 @@ export interface CompPlanRow {
   href: string
 }
 
+/**
+ * A computed dialog refusal travels as data with the dialog that requested
+ * it: a missing manage grant or a switched-off sub-feature renders a NAMED
+ * refusal with its remedy inside the open dialog — never an empty drawer,
+ * never a silent close. Null when the dialog may render its form.
+ */
+export interface CompDialogRefusal {
+  title: string
+  message: string
+}
+
+/** State for the new-cycle URL dialog (?cycle=new) on the compensation home. */
+export interface CompCycleDialogState {
+  open: boolean
+  closeHref: string
+  title: string
+  kinds: { value: string; label: string }[]
+  kindLabel: string
+  nameLabel: string
+  effectiveLabel: string
+  currencyLabel: string
+  failed: string
+  submit: string
+  cancel: string
+  refusal: CompDialogRefusal | null
+  /** Setup managers get the real switch: the Features switchboard href. */
+  remedyHref: string | null
+  remedyLabel: string | null
+}
+
+/** State for the new-plan URL dialog (?plan=new) on the compensation home. */
+export interface CompPlanDialogState {
+  open: boolean
+  closeHref: string
+  title: string
+  nameLabel: string
+  fromLabel: string
+  toLabel: string
+  failed: string
+  submit: string
+  cancel: string
+  refusal: CompDialogRefusal | null
+  /** Setup managers get the real switch: the Features switchboard href. */
+  remedyHref: string | null
+  remedyLabel: string | null
+}
+
+/** State for the snapshot-generate URL dialog (?generate=1) on equity. */
+export interface CompEquityDialogState {
+  open: boolean
+  closeHref: string
+  title: string
+  asOfLabel: string
+  groupALabel: string
+  groupBLabel: string
+  failed: string
+  submit: string
+  cancel: string
+  refusal: CompDialogRefusal | null
+  remedyHref: string | null
+  remedyLabel: string | null
+}
+
 export interface CompHomeData {
   title: string
   description: string
@@ -120,6 +183,20 @@ export interface CompHomeData {
   newCycleLabel: string
   newPlanHref: string
   newPlanLabel: string
+  /**
+   * The shared return href for both create dialogs: the home route with
+   * every dialog param navigated away (the change-request queue's
+   * dialogCloseHref pattern).
+   */
+  dialogCloseHref: string
+  /** True while ?cycle=new is present — the spec renders the cycle dialog. */
+  cycleOpen: boolean
+  /** Null unless ?cycle=new is present; carries the form or its refusal. */
+  cycleDialog: CompCycleDialogState | null
+  /** True while ?plan=new is present — the spec renders the plan dialog. */
+  planOpen: boolean
+  /** Null unless ?plan=new is present; carries the form or its refusal. */
+  planDialog: CompPlanDialogState | null
   equityHref: string
   equityLabel: string
   architectureTitle: string
@@ -153,7 +230,15 @@ async function workerNames(orgId: string, employmentIds: string[]): Promise<Map<
   return names
 }
 
-export async function loadCompensationHome(authz: Authz): Promise<CompHomeData | null> {
+/** First of a search param that may repeat; Next hands arrays for ?x=a&x=b. */
+function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
+}
+
+export async function loadCompensationHome(
+  authz: Authz,
+  sp: Record<string, string | string[] | undefined> = {},
+): Promise<CompHomeData | null> {
   if (!can(authz, 'hrm.compensation.read')) return null
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
@@ -162,16 +247,14 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
   const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
   const today = await businessToday(orgId)
   const canManage = can(authz, 'hrm.compensation.manage')
-  const canRunCycles = canManage && (await isFeatureEnabled(orgId, 'hrmMeritCycles'))
+  const meritOn = await isFeatureEnabled(orgId, 'hrmMeritCycles')
+  const plansOn = await isFeatureEnabled(orgId, 'hrmHeadcountPlans')
+  const canRunCycles = canManage && meritOn
   const [bands, levels, cycles, plans] = await Promise.all([
     listPayBands({ orgId, actorId: authz.user.id, asOf: today }).catch(() => []),
     listJobLevels({ orgId, actorId: authz.user.id }).catch(() => []),
-    (await isFeatureEnabled(orgId, 'hrmMeritCycles')
-      ? listCycles({ orgId, actorId: authz.user.id }).catch(() => [])
-      : []),
-    (await isFeatureEnabled(orgId, 'hrmHeadcountPlans')
-      ? listPlans({ orgId, actorId: authz.user.id }).catch(() => [])
-      : []),
+    (meritOn ? listCycles({ orgId, actorId: authz.user.id }).catch(() => []) : []),
+    (plansOn ? listPlans({ orgId, actorId: authz.user.id }).catch(() => []) : []),
   ])
   const levelById = new Map(levels.map((l) => [l.id, l]))
   // Headcount per band scope: employments whose position level the band
@@ -265,6 +348,87 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
       href: `/hrm/compensation/plans/${plan.id}`,
     })
   }
+  // The create dialogs (?cycle=new / ?plan=new): the loader owns the open
+  // state and the return href, exactly like the change-request queue's
+  // propose/detail trio. A requested dialog ALWAYS resolves — with its form
+  // when every prerequisite holds, with a NAMED refusal (and its remedy)
+  // otherwise. Permission gates match the header buttons (canRunCycles for
+  // cycles, canManage for plans); the sub-feature switches ride alongside.
+  // The gate-explanation copy is shared with the feature-required and
+  // access-denied pages (shell.routeState), and the feature display names
+  // with the Features switchboard (admin.features) — no second source.
+  const dialogCloseHref = '/hrm/compensation'
+  const cycleOpen = firstParam(sp.cycle) === 'new'
+  const planOpen = firstParam(sp.plan) === 'new'
+  let cycleDialog: CompCycleDialogState | null = null
+  let planDialog: CompPlanDialogState | null = null
+  if (cycleOpen || planOpen) {
+    const g = await getTranslations('shell.routeState')
+    const adminT = await getTranslations('admin')
+    const canSetup = can(authz, 'admin.setup.manage')
+    const manageRefusal = (): CompDialogRefusal => ({
+      title: g('deniedTitle'),
+      message: `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
+    })
+    const featureRefusal = (featureKey: 'hrmMeritCycles' | 'hrmHeadcountPlans'): CompDialogRefusal => {
+      const nameKey = `features.${featureKey}.title`
+      const name = adminT.has(nameKey) ? adminT(nameKey) : featureKey
+      return {
+        title: g('featureOffTitle', { name }),
+        message: `${g('featureOffDescription', { name })}${canSetup ? '' : ` ${g('askAdministrator')}`}`,
+      }
+    }
+    // Setup managers get the real switch beside a feature-off refusal; the
+    // route is the switchboard the Features hierarchy owns (the
+    // feature-required page links the same destination).
+    const featureRemedy = canSetup
+      ? { remedyHref: '/admin/setup/features' as string | null, remedyLabel: g('turnOnFeature') as string | null }
+      : { remedyHref: null as string | null, remedyLabel: null as string | null }
+    if (cycleOpen) {
+      // Permission first: without the grant the switch cannot help. The
+      // Features link rides only the feature-off refusal (a person is the
+      // remedy for a missing grant, never a link).
+      const refusal = !canManage ? manageRefusal() : !meritOn ? featureRefusal('hrmMeritCycles') : null
+      const featureOff = canManage && !meritOn
+      cycleDialog = {
+        open: true,
+        closeHref: dialogCloseHref,
+        title: t('compensation.newCycle'),
+        kinds: (['merit', 'promotion', 'adjustment', 'cola'] as const).map((kind) => ({
+          value: kind,
+          label: t.has(`compensation.cycleKind.${kind}`) ? t(`compensation.cycleKind.${kind}`) : kind,
+        })),
+        kindLabel: t('compensation.columns.kind'),
+        nameLabel: t('compensation.columns.name'),
+        effectiveLabel: t('compensation.columns.effective'),
+        currencyLabel: t('recruiting.offerCard.currency'),
+        failed: t('compensation.drawer.failed'),
+        submit: t('compensation.drawer.submit'),
+        cancel: t('compensation.drawer.cancel'),
+        refusal,
+        remedyHref: featureOff ? featureRemedy.remedyHref : null,
+        remedyLabel: featureOff ? featureRemedy.remedyLabel : null,
+      }
+    }
+    if (planOpen) {
+      const refusal = !canManage ? manageRefusal() : !plansOn ? featureRefusal('hrmHeadcountPlans') : null
+      const featureOff = canManage && !plansOn
+      planDialog = {
+        open: true,
+        closeHref: dialogCloseHref,
+        title: t('compensation.newPlan'),
+        nameLabel: t('compensation.columns.name'),
+        fromLabel: t('performance.periodStart'),
+        toLabel: t('performance.periodEnd'),
+        failed: t('compensation.drawer.failed'),
+        submit: t('compensation.drawer.submit'),
+        cancel: t('compensation.drawer.cancel'),
+        refusal,
+        remedyHref: featureOff ? featureRemedy.remedyHref : null,
+        remedyLabel: featureOff ? featureRemedy.remedyLabel : null,
+      }
+    }
+  }
   return {
     title: t('compensation.title'),
     description: t('compensation.description'),
@@ -303,6 +467,11 @@ export async function loadCompensationHome(authz: Authz): Promise<CompHomeData |
     newCycleLabel: t('compensation.newCycle'),
     newPlanHref: '/hrm/compensation?plan=new',
     newPlanLabel: t('compensation.newPlan'),
+    dialogCloseHref,
+    cycleOpen,
+    cycleDialog,
+    planOpen,
+    planDialog,
     equityHref: '/hrm/compensation/equity',
     equityLabel: t('compensation.equity'),
     architectureTitle: t('compensation.architectureTitle'),
@@ -649,6 +818,10 @@ export interface EquityData {
   canManage: boolean
   generateHref: string
   generateLabel: string
+  /** True while ?generate is present — the spec renders the generate dialog. */
+  generateOpen: boolean
+  /** Null unless ?generate is present; carries the form or its refusal. */
+  generateDialog: CompEquityDialogState | null
   emptyTitle: string
   emptyDescription: string
   /**
@@ -667,11 +840,44 @@ export interface EquityData {
   hasContent: boolean
 }
 
-export async function loadEquity(authz: Authz): Promise<EquityData | null> {
+export async function loadEquity(
+  authz: Authz,
+  sp: Record<string, string | string[] | undefined> = {},
+): Promise<EquityData | null> {
   if (!can(authz, 'hrm.compensation.read')) return null
   await requireFeatureEnabled(authz.user.orgId, 'hrmPayTransparency')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
+  const canManage = can(authz, 'hrm.compensation.manage')
+  // The generate dialog (?generate=1): the loader owns the open state and
+  // the return href, like the home create dialogs. A requested dialog ALWAYS
+  // resolves — the form for managers, a NAMED permission refusal otherwise.
+  // The feature switch cannot be off here (this loader redirects above), so
+  // no feature-off refusal exists on this surface.
+  const generateOpen = firstParam(sp.generate) !== undefined
+  let generateDialog: CompEquityDialogState | null = null
+  if (generateOpen) {
+    const g = await getTranslations('shell.routeState')
+    generateDialog = {
+      open: true,
+      closeHref: '/hrm/compensation/equity',
+      title: t('equity.generate'),
+      asOfLabel: t('orgChart.asOf'),
+      groupALabel: t('equity.groupA'),
+      groupBLabel: t('equity.groupB'),
+      failed: t('compensation.drawer.failed'),
+      submit: t('compensation.drawer.submit'),
+      cancel: t('compensation.drawer.cancel'),
+      refusal: canManage
+        ? null
+        : {
+            title: g('deniedTitle'),
+            message: `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
+          },
+      remedyHref: null,
+      remedyLabel: null,
+    }
+  }
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
   const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation/equity')
   // A refused snapshot read travels as data with its remedy intact — never
@@ -726,9 +932,11 @@ export async function loadEquity(authz: Authz): Promise<EquityData | null> {
       flagTone: (c.jointAssessmentDue ? 'warning' : 'default') as 'default' | 'warning',
     })),
     categoriesEmpty: t('equity.categoriesEmpty'),
-    canManage: can(authz, 'hrm.compensation.manage'),
+    canManage,
     generateHref: '/hrm/compensation/equity?generate=1',
     generateLabel: t('equity.generate'),
+    generateOpen,
+    generateDialog,
     emptyTitle: t('equity.emptyTitle'),
     emptyDescription: t('equity.emptyDescription'),
     refusal,

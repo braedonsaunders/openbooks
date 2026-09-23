@@ -1,4 +1,5 @@
-import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
+import Link from 'next/link'
+import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import {
   CompensationSettingsForm,
   CycleCreateForm,
@@ -10,7 +11,13 @@ import {
   PlanCreateForm,
   PlanLineApproveButton,
 } from './islands'
-import type { CompLineRow } from '../../../../lib/hrm/compensation'
+import type {
+  CompCycleDialogState,
+  CompDialogRefusal,
+  CompEquityDialogState,
+  CompLineRow,
+  CompPlanDialogState,
+} from '../../../../lib/hrm/compensation'
 
 /**
  * Compensation sections (server components): the band placement bar
@@ -162,87 +169,100 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
   )
 }
 
-export interface CompDialogData {
-  open: boolean
-  closeHref: string
-  title: string
-  kinds: { value: string; label: string }[]
-  kindLabel: string
-  nameLabel: string
-  effectiveLabel: string
-  currencyLabel: string
-  failed: string
-  submit: string
-  cancel: string
+/**
+ * The create-dialog payloads live in the loader (web/lib/hrm/compensation),
+ * next to the permission and feature gates that arm them — these aliases
+ * keep the historic names the widget adapters resolve.
+ */
+export type CompDialogData = CompCycleDialogState
+export type PlanDialogData = CompPlanDialogState
+export type EquityDialogData = CompEquityDialogState
+
+/**
+ * A computed prerequisite refusal inside an open create dialog: the dialog
+ * stays open on its named title with the remedy beside it — never an empty
+ * drawer, never a silent close. Setup managers get the real switch (the
+ * Features switchboard link); everyone else gets the person to ask.
+ */
+export function DialogRefusal({
+  refusal,
+  remedyHref,
+  remedyLabel,
+}: {
+  refusal: CompDialogRefusal
+  remedyHref: string | null
+  remedyLabel: string | null
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <h3 className="text-sm font-semibold">{refusal.title}</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400">{refusal.message}</p>
+      {remedyHref && remedyLabel ? (
+        <div>
+          <Button asChild>
+            <Link href={remedyHref}>{remedyLabel}</Link>
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function CompCycleDialog({ dialog }: { dialog: CompDialogData }) {
   if (!dialog.open) return null
   return (
     <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
-      <CycleCreateForm
-        labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-        closeHref={dialog.closeHref}
-        kinds={dialog.kinds}
-        kindLabel={dialog.kindLabel}
-        nameLabel={dialog.nameLabel}
-        effectiveLabel={dialog.effectiveLabel}
-        currencyLabel={dialog.currencyLabel}
-      />
+      {dialog.refusal ? (
+        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+      ) : (
+        <CycleCreateForm
+          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          closeHref={dialog.closeHref}
+          kinds={dialog.kinds}
+          kindLabel={dialog.kindLabel}
+          nameLabel={dialog.nameLabel}
+          effectiveLabel={dialog.effectiveLabel}
+          currencyLabel={dialog.currencyLabel}
+        />
+      )}
     </UrlDrawer>
   )
-}
-
-export interface PlanDialogData {
-  open: boolean
-  closeHref: string
-  title: string
-  nameLabel: string
-  fromLabel: string
-  toLabel: string
-  failed: string
-  submit: string
-  cancel: string
 }
 
 export function CompPlanDialog({ dialog }: { dialog: PlanDialogData }) {
   if (!dialog.open) return null
   return (
     <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
-      <PlanCreateForm
-        labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-        closeHref={dialog.closeHref}
-        nameLabel={dialog.nameLabel}
-        fromLabel={dialog.fromLabel}
-        toLabel={dialog.toLabel}
-      />
+      {dialog.refusal ? (
+        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+      ) : (
+        <PlanCreateForm
+          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          closeHref={dialog.closeHref}
+          nameLabel={dialog.nameLabel}
+          fromLabel={dialog.fromLabel}
+          toLabel={dialog.toLabel}
+        />
+      )}
     </UrlDrawer>
   )
-}
-
-export interface EquityDialogData {
-  open: boolean
-  closeHref: string
-  title: string
-  asOfLabel: string
-  groupALabel: string
-  groupBLabel: string
-  failed: string
-  submit: string
-  cancel: string
 }
 
 export function CompEquityDialog({ dialog }: { dialog: EquityDialogData }) {
   if (!dialog.open) return null
   return (
     <UrlDrawer open closeHref={dialog.closeHref} title={dialog.title}>
-      <EquityGenerateForm
-        labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
-        closeHref={dialog.closeHref}
-        asOfLabel={dialog.asOfLabel}
-        groupALabel={dialog.groupALabel}
-        groupBLabel={dialog.groupBLabel}
-      />
+      {dialog.refusal ? (
+        <DialogRefusal refusal={dialog.refusal} remedyHref={dialog.remedyHref} remedyLabel={dialog.remedyLabel} />
+      ) : (
+        <EquityGenerateForm
+          labels={{ failed: dialog.failed, submit: dialog.submit, cancel: dialog.cancel }}
+          closeHref={dialog.closeHref}
+          asOfLabel={dialog.asOfLabel}
+          groupALabel={dialog.groupALabel}
+          groupBLabel={dialog.groupBLabel}
+        />
+      )}
     </UrlDrawer>
   )
 }
