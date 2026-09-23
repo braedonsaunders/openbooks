@@ -65,25 +65,55 @@ export type ResolvedPdfTemplate = {
   footerHtml: string | null
   /**
    * Immutable evidence of which design produced the PDF: the saved
-   * template's id + revision plus the sha256 of the compiled HTML actually
-   * printed. A starter fallback has no id or revision — its content hash
-   * still identifies the design byte-for-byte. Every issuance channel
-   * (download headers, email_log meta, backup manifest) records this.
+   * template's id + revision plus the hash of the whole printed design
+   * (body, header, footer, paper, orientation, margins). A starter fallback
+   * has no id or revision — its content hash still identifies the design.
+   * Every issuance channel (download headers, email_log meta, backup
+   * manifest) records this.
    */
   provenance: PdfTemplateProvenance
 }
+
+/**
+ * Every field the renderer consumes: the compiled body plus the chrome and
+ * page geometry around it. render.ts takes exactly this Pick list, so the
+ * hash below and the printed bytes can never disagree about what "the
+ * design" is.
+ */
+export type PdfPrintDesign = Pick<
+  ResolvedPdfTemplate,
+  'compiledHtml' | 'paperSize' | 'orientation' | 'marginMm' | 'headerHtml' | 'footerHtml'
+>
 
 /** Which template design produced an issued PDF. */
 export type PdfTemplateProvenance = {
   /** Null for the built-in starter (no saved row, no revision). */
   templateId: string | null
   revision: number | null
-  /** sha256 hex of the compiled HTML actually printed. */
+  /** sha256 hex of the canonical PdfPrintDesign actually printed. */
   contentHash: string
 }
 
-function contentHash(compiledHtml: string): string {
-  return createHash('sha256').update(compiledHtml, 'utf8').digest('hex')
+/**
+ * Hash the whole printed design, not just the body: header, footer, paper
+ * size, orientation and margins all shape the bytes. Fixed key order and
+ * empty-string normalization ('' prints exactly like null) keep the digest
+ * stable for identical designs.
+ */
+export function printDesignHash(design: PdfPrintDesign): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        compiledHtml: design.compiledHtml,
+        paperSize: design.paperSize,
+        orientation: design.orientation,
+        marginMm: design.marginMm,
+        headerHtml: design.headerHtml || null,
+        footerHtml: design.footerHtml || null,
+      }),
+      'utf8',
+    )
+    .digest('hex')
 }
 
 /**
@@ -105,7 +135,7 @@ export async function resolvePdfTemplate(
     if (tpl && tpl.recordType === recordType && tpl.isActive) {
       return {
         ...tpl,
-        provenance: { templateId: tpl.id, revision: tpl.revision, contentHash: contentHash(tpl.compiledHtml) },
+        provenance: { templateId: tpl.id, revision: tpl.revision, contentHash: printDesignHash(tpl) },
       }
     }
     return null
@@ -120,7 +150,7 @@ export async function resolvePdfTemplate(
   if (found) {
     return {
       ...found,
-      provenance: { templateId: found.id, revision: found.revision, contentHash: contentHash(found.compiledHtml) },
+      provenance: { templateId: found.id, revision: found.revision, contentHash: printDesignHash(found) },
     }
   }
 
@@ -137,6 +167,17 @@ export async function resolvePdfTemplate(
     marginMm: 14,
     headerHtml: starter.headerHtml || null,
     footerHtml: starter.footerHtml || null,
-    provenance: { templateId: null, revision: null, contentHash: contentHash(compiledHtml) },
+    provenance: {
+      templateId: null,
+      revision: null,
+      contentHash: printDesignHash({
+        compiledHtml,
+        paperSize: 'letter',
+        orientation: 'portrait',
+        marginMm: 14,
+        headerHtml: starter.headerHtml || null,
+        footerHtml: starter.footerHtml || null,
+      }),
+    },
   }
 }
