@@ -13,12 +13,14 @@ import { uuidArray } from "../organization/subsidiaries.ts";
  * per-table moved counts. Re-running the same pair is a no-op.
  *
  * Posted-structure conflicts fail closed before anything moves: lines on
- * non-draft documents (frozen by the storage immutability guard), a merge
- * cycle, a change-order number present on both sides (numbers are unique per
- * project in storage), or a budget/retro allocation cell key the survivor
- * already holds. Posted journal dimensions move with everything else — for a
- * true duplicate the split itself is the data error — and the preview
- * reports those counts so the admin sees the posted impact before committing.
+ * non-draft documents (frozen by the storage immutability guard), posted
+ * journal lines in a controller-closed GL period (reopen the period first),
+ * a merge cycle, a change-order number present on both sides (numbers are
+ * unique per project in storage), or a budget/retro allocation cell key the
+ * survivor already holds. Posted journal lines in open periods move with
+ * everything else through the governed amend path — the same paired
+ * transaction-local authority party merges use — and the preview reports
+ * those counts so the admin sees the posted impact before committing.
  */
 
 export class ProjectMergeError extends Error {
@@ -331,6 +333,25 @@ async function planMerge(
       `cannot move lines of ${frozenLines} non-draft document(s); void or correct them first`,
     );
   }
+  // Posted journal lines move through the governed amend path (the same
+  // paired transaction-local authority party merges use), but a
+  // controller-closed GL period still refuses: those lines cannot follow
+  // the merge while the period is closed. Checked here — with the same
+  // migration-aware lens the journal guard will see under the amend pair —
+  // so both preview and commit refuse by name instead of the guard firing
+  // a raw storage error mid-merge.
+  const closedLines = (await runner.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from journal_lines jl
+      join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id
+     where jl.org_id = ${orgId} and jl.project_id = ${duplicateId}
+       and e.status in ('posted', 'reversed')
+       and period_module_blocks_write(${orgId}, e.period_id, e.book_id, jl.subsidiary_id, 'gl', true)`)).rows[0]?.n;
+  if (closedLines !== "0") {
+    throw new ProjectMergeError(
+      `cannot merge: ${closedLines} posted journal line(s) sit in a closed GL period; reopen the period before merging`,
+    );
+  }
   // Storage-level collisions fail closed before anything moves.
   const budgetCollision = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n
@@ -423,8 +444,33 @@ export async function mergeProjects(
 ): Promise<MergeResult> {
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
+      // Re-pointing posted journal lines runs through the governed amend
+      // path, the same paired transaction-local authority party merges and
+      // historical replay use: the journal guard admits posted-line project
+      // moves, while controller-closed periods still block (those pairs
+      // refuse by name in planMerge before anything moves). Either setting
+      // alone is deliberately not a bypass. Previous values are restored on
+      // success; after a failure only rollback is legal, and the settings
+      // last only until the transaction ends either way.
+      const prior = (await tx.execute<{ name: string; value: string }>(sql`
+        select 'openbooks.amend' as name, coalesce(current_setting('openbooks.amend', true), 'off') as value
+         union all
+        select 'openbooks.migration', coalesce(current_setting('openbooks.migration', true), 'off')`)).rows;
+      const restore = new Map(prior.map((r) => [r.name, r.value]));
+      const restoreSettings = () =>
+        Promise.all([
+          tx.execute(
+            sql`select set_config('openbooks.amend', ${restore.get("openbooks.amend") ?? "off"}, true)`,
+          ),
+          tx.execute(
+            sql`select set_config('openbooks.migration', ${restore.get("openbooks.migration") ?? "off"}, true)`,
+          ),
+        ]);
+      await tx.execute(sql`set local openbooks.amend = on`);
+      await tx.execute(sql`set local openbooks.migration = on`);
       const plan = await planMerge(tx, orgId, opts.survivorId, opts.duplicateId, true, opts.allowedSubsidiaryIds);
       if (plan.alreadyMerged) {
+        await restoreSettings();
         return {
           survivorId: opts.survivorId,
           duplicateId: opts.duplicateId,
@@ -483,6 +529,7 @@ export async function mergeProjects(
                   reason: "duplicate project merge",
                 })}::jsonb, ${opts.actorId})
         returning id`)).rows[0];
+      await restoreSettings();
       return {
         survivorId: opts.survivorId,
         duplicateId: opts.duplicateId,
