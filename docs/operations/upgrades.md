@@ -126,8 +126,20 @@ A cell runs `scripts/upgrade-rehearsal/rehearse.mjs`:
 4. Upgrade with the candidate's bootstrap and record each migration's time.
 5. Refuse unless every candidate migration is recorded as applied, a second
    bootstrap applies nothing, the ledger fingerprint is identical, the
-   candidate's golden harness passes on every org with activity, and the
-   upgraded schema catalog equals a fresh install's.
+   candidate's golden harness passes on every org with activity, the
+   dataset's post-upgrade assertions pass (below), and the upgraded schema
+   catalog equals a fresh install's.
+
+**Post-upgrade assertions.** Some legacy handling is only observable on the
+upgraded install: a frozen-or-refused executed waiver, a paused unbound
+schedule, provenance rows. A dataset with such shapes carries
+`scripts/upgrade-rehearsal/assertions/<dataset>.mjs`, which the rehearsal
+runs on the candidate runtime after the candidate harness (the upgraded
+install in `OPENBOOKS_DB_URL`, seeded orgs in `UPGRADE_SEEDED_ORGS` as a
+JSON array; `assertions.json` in the report dir). The script prints a final
+JSON line shaped `{"assertions": [{"name", "ok", "detail"?}]}` and exits 0;
+any failed check — or a result declaring no checks — refuses the cell by
+check name. A dataset with no assertions file skips the phase.
 
 The job summary lists each cell's phases and slowest migrations. The artifact
 holds the before and after fingerprints and the catalog comparison.

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { compareSnapshots, activeOrgIds, candidateHarnessOrgIds, rowHashQuery } from "./ledger.mjs";
 import { REMEDY_DIR_PREFIX, coverageGaps, loadConfig, planMatrix, validateConfig } from "./plan.mjs";
-import { classifyHarnessFailures, diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
+import { assertionsFileFor, assertionsRefusal, classifyHarnessFailures, diffFindingKeys, findingKeys, summarize } from "./rehearse.mjs";
 
 const WORKFLOW = readFileSync(".github/workflows/upgrade-rehearsal.yml", "utf8");
 const PUBLISH = readFileSync(".github/workflows/publish-container.yml", "utf8");
@@ -290,6 +290,35 @@ test("only harness checks a source release declares broken may fail at the sourc
     unexpected: ["subledger-tieout"],
   });
   assert.deepEqual(classifyHarnessFailures(out, new Set(["open-balance-fresh", "subledger-tieout"])).unexpected, []);
+});
+
+test("the assertions file lives per dataset under assertions/", () => {
+  assert.ok(assertionsFileFor("edge-legacy").endsWith("scripts/upgrade-rehearsal/assertions/edge-legacy.mjs"));
+  assert.ok(assertionsFileFor("edge-refusals").endsWith("assertions/edge-refusals.mjs"));
+});
+
+test("a clean assertions result passes, naming nothing", () => {
+  assert.equal(
+    assertionsRefusal("edge-legacy", { assertions: [{ name: "waiver-frozen-or-legacy", ok: true }] }),
+    null,
+  );
+});
+
+test("a failed post-upgrade assertion refuses by check name", () => {
+  const refusal = assertionsRefusal("edge-legacy", {
+    assertions: [
+      { name: "waiver-frozen-or-legacy", ok: true },
+      { name: "unbound-schedule-paused", ok: false, detail: "no notice row" },
+    ],
+  });
+  assert.match(refusal, /edge-legacy.*unbound-schedule-paused/);
+  assert.doesNotMatch(refusal, /waiver-frozen-or-legacy/);
+});
+
+test("a result that declares no checks refuses instead of reading green", () => {
+  for (const result of [{ assertions: [] }, {}, null, { assertions: [{ name: "x", ok: 1 }] }]) {
+    assert.match(assertionsRefusal("edge-legacy", result) ?? "", /edge-legacy/, JSON.stringify(result));
+  }
 });
 
 test("a declared source harness defect must name its check and say why the tagged check is wrong", () => {
