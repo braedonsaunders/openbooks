@@ -224,6 +224,18 @@ interface LockedSchedule extends Record<string, unknown> {
  * in place. Inactive rows are retained history and cannot be edited except
  * by reactivating them.
  */
+/**
+ * Mandatory optimistic-concurrency token, mirroring the compliance-record
+ * and equipment-unit fences: the caller echoes the revision it read, which
+ * is compared under the row lock inside the write transaction. A save
+ * without it never reaches the row (400), and a stale writer is refused
+ * (409) instead of overwriting the winner's schedule and break set.
+ */
+function parseRevision(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null
+  return value
+}
+
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
@@ -234,6 +246,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const body = parsedBody.data as Record<string, unknown>
   const scheduleId = String(body.id ?? '')
   if (!isUuid(scheduleId)) return NextResponse.json({ error: 'Schedule id is required' }, { status: 400 })
+  const expectedRevision = parseRevision(body.revision)
+  if (expectedRevision === null) return NextResponse.json({ error: 'A current schedule revision is required; reload the schedule and try again' }, { status: 400 })
   const parsed = parseSchedule(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const reason = String(body.reason ?? '').trim()
@@ -246,6 +260,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
          where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
         .rows[0] as LockedSchedule | undefined
       if (!locked) return { kind: 'missing' as const }
+      // The row is locked BEFORE it is read: the revision comparison, the
+      // lifecycle checks, the mutation and the audit are one serialized
+      // unit, so a racing request sees the winner's committed revision and
+      // is refused instead of overwriting it.
+      if (Number(locked.revision) !== expectedRevision) {
+        return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+      }
       const before = {
         priceLevelId: locked.price_level_id,
         customerId: locked.customer_id,
@@ -307,9 +328,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const truncates = before.toDay === null || before.toDay >= parsed.effectiveFrom
         const truncatedTo = addDays(parsed.effectiveFrom, -1)
         if (truncates && truncatedTo < before.fromDay) throw new Error('The successor must start after the current schedule begins')
-        const after = truncates
-          ? (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${truncatedTo},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
-          : locked
+        // Every applied change bumps the counter under a revision predicate:
+        // zero rows means a racer committed first, and the loser is refused
+        // instead of merged.
+        const truncated = truncates
+          ? (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${truncatedTo},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+          : undefined
+        if (truncates && !truncated) {
+          return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+        }
+        const after = truncated ?? locked
         if (truncates) {
           await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...after, breaks: priorBreaks } }, actorId: gate.user.id }, tx)
         }
@@ -323,13 +351,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // and the prior row is retired but retained. The predecessor is
         // retired BEFORE the insert so the two active windows never coexist
         // under the overlap exclusion.
-        const retired = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set is_active=false,updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+        const retired = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set is_active=false,updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+        if (!retired) {
+          return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+        }
         await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...retired, breaks: priorBreaks }, reason }, actorId: gate.user.id }, tx)
         const versionId = await insertVersion(scheduleId, reason)
         return { kind: 'saved' as const, scheduleId: versionId }
       }
 
-      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set price_level_id=${parsed.priceLevelId},customer_id=${parsed.customerId},currency=${parsed.currency},quantity_basis=${parsed.quantityBasis},effective_from=${parsed.effectiveFrom},effective_to=${parsed.effectiveTo},is_active=${parsed.isActive},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+      if (!after) {
+        return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+      }
       await tx.execute(sql`delete from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId}`)
       for (const price of parsed.breaks) await tx.execute(sql`insert into item_price_breaks (org_id,schedule_id,minimum_quantity,unit_price,created_by,updated_by) values (${gate.user.orgId},${scheduleId},${price.minimumQuantity},${price.unitPrice},${gate.user.id},${gate.user.id})`)
       await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...after, breaks: parsed.breaks }, ...(reason ? { reason } : {}) }, actorId: gate.user.id }, tx)
@@ -352,6 +386,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const scheduleId = query.get('schedule') ?? ''
   if (!isUuid(id) || !isUuid(scheduleId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const reason = (query.get('reason') ?? '').trim()
+  const expectedRevision = parseRevision(Number(query.get('revision')))
+  if (query.get('revision') === null || expectedRevision === null) {
+    return NextResponse.json({ error: 'A current schedule revision is required; reload the schedule and try again' }, { status: 400 })
+  }
   const outcome = await db.transaction(async (tx) => {
     const today = String((await tx.execute<{ today: string }>(sql`select current_date::text as today`)).rows[0]!.today)
     const locked = (await tx.execute(sql`
@@ -360,6 +398,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
        where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} for update`))
       .rows[0] as LockedSchedule | undefined
     if (!locked) return { kind: 'missing' as const }
+    if (Number(locked.revision) !== expectedRevision) {
+      return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+    }
     const breaks = (await tx.execute(sql`select minimum_quantity::text,unit_price::text from item_price_breaks where org_id=${gate.user.orgId} and schedule_id=${scheduleId} order by minimum_quantity`)).rows
     const fromDay = toDay(locked.from_day)
     const toDayValue = locked.to_day === null ? null : toDay(locked.to_day)
@@ -376,13 +417,20 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
         return { kind: 'refused' as const, status: 400, error: 'This schedule is already effective. Provide a reason to end it; the schedule stays in history with an effective-to date' }
       }
       const endedTo = toDayValue === null || toDayValue > today ? today : toDayValue
-      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${endedTo},change_reason=${reason},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning *`)).rows[0]!
+      const after = (await tx.execute<LockedSchedule>(sql`update item_price_schedules set effective_to=${endedTo},change_reason=${reason},updated_at=now(),updated_by=${gate.user.id},revision=revision+1 where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} and revision=${expectedRevision} returning *`)).rows[0]
+      if (!after) {
+        return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+      }
       await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks }, after: { ...after, breaks }, reason, requestedAction: 'delete (end-dated)' }, actorId: gate.user.id }, tx)
       return { kind: 'ended' as const }
     }
     // A future schedule never priced anything: hard-delete it with its breaks.
-    const deleted = await tx.execute(sql`delete from item_price_schedules where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} returning id`)
-    if (!deleted.rows[0]) throw new Error('Pricing schedule was not deleted')
+    // A write that matches zero rows is a failure, not a success: under the
+    // revision predicate it means a racer committed first.
+    const deleted = await tx.execute(sql`delete from item_price_schedules where org_id=${gate.user.orgId} and item_id=${id} and id=${scheduleId} and revision=${expectedRevision} returning id`)
+    if (!deleted.rows[0]) {
+      return { kind: 'refused' as const, status: 409, error: 'This pricing schedule changed since you loaded it — reload and try again' }
+    }
     await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'delete', changes: { before: { ...locked, breaks } }, actorId: gate.user.id }, tx)
     return { kind: 'deleted' as const }
   })

@@ -96,9 +96,10 @@ async function patchSchedule(f: Fixture, body: Record<string, unknown>) {
   }), { params: Promise.resolve({ id: f.itemId }) })
 }
 
-async function deleteSchedule(f: Fixture, scheduleId: string, reason?: string) {
+async function deleteSchedule(f: Fixture, scheduleId: string, revision?: number, reason?: string) {
   routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
   const params = new URLSearchParams({ schedule: scheduleId })
+  if (revision !== undefined) params.set('revision', String(revision))
   if (reason !== undefined) params.set('reason', reason)
   return DELETE(new Request(`http://openbooks.test/api/items/${f.itemId}/prices?${params}`, { method: 'DELETE' }),
     { params: Promise.resolve({ id: f.itemId }) })
@@ -123,7 +124,7 @@ test('a retroactive price change without a reason is refused and changes nothing
   try {
     const now = await today()
     const scheduleId = await postSchedule(f, shift(now, -60), '100.0000')
-    const response = await patchSchedule(f, { id: scheduleId, ...scheduleBody(f, shift(now, -60), '70.0000') })
+    const response = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, shift(now, -60), '70.0000') })
     assert.equal(response.status, 400)
     assert.match(String((await response.json()).error), /reason/i)
     assert.deepEqual(await scheduleRows(f), [{
@@ -141,7 +142,7 @@ test('a reasoned correction creates a version while the prior version is retaine
     const now = await today()
     const effectiveFrom = shift(now, -60)
     const scheduleId = await postSchedule(f, effectiveFrom, '100.0000')
-    const response = await patchSchedule(f, { id: scheduleId, ...scheduleBody(f, effectiveFrom, '70.0000'), reason: 'Supplier list price was entered net of discount' })
+    const response = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, effectiveFrom, '70.0000'), reason: 'Supplier list price was entered net of discount' })
     assert.equal(response.status, 200)
     const versionId = String((await response.json()).id)
     assert.notEqual(versionId, scheduleId)
@@ -171,7 +172,7 @@ test('a prospective successor leaves a late transaction in the old window under 
     const now = await today()
     const scheduleId = await postSchedule(f, shift(now, -60), '100.0000')
     const successorFrom = shift(now, 30)
-    const response = await patchSchedule(f, { id: scheduleId, ...scheduleBody(f, successorFrom, '70.0000') })
+    const response = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, successorFrom, '70.0000') })
     assert.equal(response.status, 200)
     const versionId = String((await response.json()).id)
     assert.notEqual(versionId, scheduleId)
@@ -195,11 +196,14 @@ test('DELETE of an effective schedule needs a reason and then end-dates instead 
   try {
     const now = await today()
     const scheduleId = await postSchedule(f, shift(now, -60), '100.0000')
-    const refused = await deleteSchedule(f, scheduleId)
+    const unversioned = await deleteSchedule(f, scheduleId)
+    assert.equal(unversioned.status, 400)
+    assert.match(String((await unversioned.json()).error), /revision/i)
+    const refused = await deleteSchedule(f, scheduleId, 0)
     assert.equal(refused.status, 400)
     assert.match(String((await refused.json()).error), /reason/i)
     assert.equal((await scheduleRows(f)).length, 1)
-    const ended = await deleteSchedule(f, scheduleId, 'Promotion ended')
+    const ended = await deleteSchedule(f, scheduleId, 0, 'Promotion ended')
     assert.equal(ended.status, 200)
     assert.deepEqual(await ended.json(), { ok: true, endDated: true })
     assert.deepEqual(await scheduleRows(f), [{
@@ -220,7 +224,7 @@ test('DELETE of a never-effective schedule removes it, and of an ended schedule 
   try {
     const now = await today()
     const futureId = await postSchedule(f, shift(now, 30), '100.0000')
-    const deleted = await deleteSchedule(f, futureId)
+    const deleted = await deleteSchedule(f, futureId, 0)
     assert.equal(deleted.status, 200)
     assert.deepEqual(await deleted.json(), { ok: true, endDated: false })
     assert.deepEqual(await scheduleRows(f), [])
@@ -235,7 +239,7 @@ test('DELETE of a never-effective schedule removes it, and of an ended schedule 
     }), { params: Promise.resolve({ id: f.itemId }) })
     assert.equal(endedResponse.status, 201)
     const endedId = String((await endedResponse.json()).id)
-    const refused = await deleteSchedule(f, endedId, 'cleanup')
+    const refused = await deleteSchedule(f, endedId, 0, 'cleanup')
     assert.equal(refused.status, 422)
     assert.match(String((await refused.json()).error), /retained as pricing history/)
     assert.equal((await scheduleRows(f)).length, 1)
@@ -253,7 +257,7 @@ test('POST over a retained prior version is refused instead of forking history',
     // Deactivating a never-effective schedule is future-only, so no reason
     // is needed — but the row is retained, and a create over its window
     // must edit it instead of forking a second row.
-    const deactivated = await patchSchedule(f, { id: scheduleId, ...scheduleBody(f, effectiveFrom, '100.0000'), isActive: false })
+    const deactivated = await patchSchedule(f, { id: scheduleId, revision: 0, ...scheduleBody(f, effectiveFrom, '100.0000'), isActive: false })
     assert.equal(deactivated.status, 200)
     routeState.authz = { user: { orgId: f.orgId, id: f.actorId } }
     const forked = await POST(new Request(`http://openbooks.test/api/items/${f.itemId}/prices`, {

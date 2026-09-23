@@ -107,7 +107,12 @@ export function ItemPriceMatrixEditor({ itemId, canManage }: { itemId: string; c
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => null)
-        const message = responseError(payload, t('saveFailed')); setError(message); toast.error(message); await load(); return
+        const message = responseError(payload, t('saveFailed')); setError(message); toast.error(message); await load()
+        // A 409 names a conflict the form cannot merge (a stale revision or
+        // an overlapping scope): the server's remedy is to reload, so the
+        // editor closes instead of offering a retry on a dead token.
+        if (response.status === 409) { setEditingId(null); setCreateRequestId('') }
+        return
       }
       toast.success(t('saved')); setEditingId(null); setCreateRequestId(''); await load()
     } catch {
