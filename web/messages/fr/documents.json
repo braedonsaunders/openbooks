@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "Déplier",
-    "collapse": "Replier"
+    "collapse": "Replier",
+    "label": "Liste des dossiers"
   },
   "actions": {
     "newFolder": "Nouveau dossier",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · jusqu'à 25 Mo",
     "tooLarge": "{name} dépasse la limite de 25 Mo",
     "uploading": "{count, plural, one {Téléversement de # fichier…} other {Téléversement de # fichiers…}}",
-    "selectFolder": "Sélectionnez un dossier de destination…"
+    "selectFolder": "Sélectionnez un dossier de destination…",
+    "noFolderHint": "Les téléversements nécessitent une destination : choisissez d’abord un dossier dans la liste.",
+    "selectFolderAction": "Choisir un dossier"
   },
   "attach": {
     "title": "Joindre un fichier",

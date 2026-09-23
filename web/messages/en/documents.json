@@ -26,7 +26,8 @@
   },
   "folderTree": {
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "label": "Folder list"
   },
   "actions": {
     "newFolder": "New Folder",
@@ -117,7 +118,9 @@
     "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · up to 25 MB",
     "tooLarge": "{name} exceeds the 25 MB limit",
     "uploading": "{count, plural, one {Uploading # file…} other {Uploading # files…}}",
-    "selectFolder": "Select a folder to upload to…"
+    "selectFolder": "Select a folder to upload to…",
+    "noFolderHint": "Uploads need a destination: pick a folder in the folder list first.",
+    "selectFolderAction": "Select folder"
   },
   "attach": {
     "title": "Attach File",

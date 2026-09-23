@@ -117,7 +117,12 @@ export function FolderTree({
   const allHref = buildHref(null)
 
   return (
-    <div className="hidden w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50/50 p-2 dark:border-slate-800 dark:bg-slate-900/30 sm:block">
+    <div
+      id="documents-folder-tree"
+      tabIndex={-1}
+      aria-label={t('folderTree.label')}
+      className="hidden w-56 shrink-0 overflow-y-auto border-r border-slate-200 bg-slate-50/50 p-2 outline-none focus-visible:ring-2 focus-visible:ring-teal-600 dark:border-slate-800 dark:bg-slate-900/30 sm:block"
+    >
       <Link
         href={allHref}
         scroll={false}

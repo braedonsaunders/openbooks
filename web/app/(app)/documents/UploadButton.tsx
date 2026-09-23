@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
@@ -51,16 +51,43 @@ export function UploadButton({ folderId }: { folderId?: string }) {
     }
   }
 
+  // No folder selected: the button stays honestly disabled (there is no
+  // destination to upload into), but the reason is visible beside it and
+  // described to assistive tech — and the folder list is one action away.
+  function focusFolderTree(event: ReactMouseEvent) {
+    const tree = document.getElementById('documents-folder-tree')
+    if (tree) {
+      event.preventDefault()
+      tree.focus({ preventScroll: false })
+      tree.scrollIntoView({ block: 'nearest' })
+    }
+  }
+
   return (
     <>
+      <span className="inline-flex items-center gap-2">
       <Button
         variant="default"
         disabled={!folderId || uploading > 0}
+        aria-describedby={!folderId ? 'documents-upload-hint' : undefined}
         onClick={() => inputRef.current?.click()}
       >
         {uploading > 0 ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
         {uploading > 0 ? t('upload.uploading', { count: uploading }) : t('actions.upload')}
       </Button>
+      {!folderId ? (
+        <span id="documents-upload-hint" className="text-xs text-slate-500 dark:text-slate-400">
+          {t('upload.noFolderHint')}{' '}
+          <a
+            href="#documents-folder-tree"
+            onClick={focusFolderTree}
+            className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {t('upload.selectFolderAction')}
+          </a>
+        </span>
+      ) : null}
+      </span>
       <input
         ref={inputRef}
         type="file"

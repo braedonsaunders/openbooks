@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "展开",
-    "collapse": "折叠"
+    "collapse": "折叠",
+    "label": "文件夹列表"
   },
   "actions": {
     "newFolder": "新建文件夹",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF、图片、CSV、XLSX、DOCX、TXT · 最大 25 MB",
     "tooLarge": "{name} 超过 25 MB 限制",
     "uploading": "{count, plural, one {正在上传 # 个文件…} other {正在上传 # 个文件…}}",
-    "selectFolder": "选择要上传到的文件夹…"
+    "selectFolder": "选择要上传到的文件夹…",
+    "noFolderHint": "上传需要目标位置：请先在文件夹列表中选择一个文件夹。",
+    "selectFolderAction": "选择文件夹"
   },
   "attach": {
     "title": "附加文件",

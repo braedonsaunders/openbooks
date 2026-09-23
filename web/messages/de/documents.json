@@ -28,7 +28,8 @@
   },
   "folderTree": {
     "expand": "Erweitern",
-    "collapse": "Reduzieren"
+    "collapse": "Reduzieren",
+    "label": "Ordnerliste"
   },
   "actions": {
     "newFolder": "Neuer Ordner",
@@ -119,7 +120,9 @@
     "acceptHint": "PDF, Bilder, CSV, XLSX, DOCX, TXT · bis zu 25 MB",
     "tooLarge": "{name} überschreitet das Limit von 25 MB",
     "uploading": "{count, plural, one {# Datei wird hochgeladen…} other {# Dateien werden hochgeladen…}}",
-    "selectFolder": "Wählen Sie einen Ordner zum Hochladen aus…"
+    "selectFolder": "Wählen Sie einen Ordner zum Hochladen aus…",
+    "noFolderHint": "Uploads benötigen ein Ziel: Wählen Sie zuerst einen Ordner in der Ordnerliste.",
+    "selectFolderAction": "Ordner wählen"
   },
   "attach": {
     "title": "Datei anhängen",
