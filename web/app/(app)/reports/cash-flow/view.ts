@@ -99,7 +99,7 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
       deriveHref: '/close',
     }
   }
-  const [opts, org] = await Promise.all([dimensionOptions(), orgInfo()])
+  const [opts, org] = await Promise.all([dimensionOptions(undefined, undefined, subView?.subsidiary?.ids), orgInfo()])
   // Resolves empty when blocked; drills only render beside the paper.
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const m = (v: ExactDecimal) => formatMoney(v, { currency: org?.base_currency })

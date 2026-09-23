@@ -119,7 +119,7 @@ export async function loadBalanceSheet(
     }
   }
   const [opts, org] = await Promise.all([
-    dimensionOptions(),
+    dimensionOptions(undefined, undefined, subView?.subsidiary?.ids),
     orgInfo(),
   ])
 

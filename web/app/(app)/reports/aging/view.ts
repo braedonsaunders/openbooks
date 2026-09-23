@@ -191,7 +191,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   const [scope, opts, org] = subView
     ? await Promise.all([
         agingCurrenciesInScope(side, asOf, dims),
-        dimensionOptions(),
+        dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])
     : [null, await dimensionOptions(), await orgInfo()] as const

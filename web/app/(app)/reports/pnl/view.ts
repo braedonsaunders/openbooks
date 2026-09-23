@@ -124,7 +124,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
     }
   }
   const [opts, org] = await Promise.all([
-    dimensionOptions(),
+    dimensionOptions(undefined, undefined, subView?.subsidiary?.ids),
     orgInfo(),
   ])
 
