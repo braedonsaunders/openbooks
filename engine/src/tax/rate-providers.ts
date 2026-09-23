@@ -41,6 +41,8 @@ export interface TaxComponentQuote {
   rateIsBlendedFallback?: boolean;
 }
 
+export type ProviderDocumentKind = "customer_invoice" | "vendor_bill" | "customer_credit" | "vendor_credit";
+
 export interface TaxQuoteRequest {
   taxableAmount: string;
   currency?: string | null;
@@ -48,6 +50,8 @@ export interface TaxQuoteRequest {
   shipTo: Address;
   /** Optional line item code for reduced/zero bands. */
   itemCode?: string | null;
+  /** Source document kind; selects the provider's document typing. */
+  documentKind?: ProviderDocumentKind;
   quotedOn?: string;
   /** Optional immutable document-line provenance for persisted quotes. */
   documentLineId?: string | null;
@@ -858,6 +862,20 @@ export interface AvalaraQuoteConfig {
   quotedOn: string;
 }
 
+/**
+ * Non-committing Avalara document type for a source kind. Types ending in
+ * `Order` are temporary estimates Avalara does not preserve; `Invoice`
+ * types would record permanent transactions, so quotes never use them.
+ * Credits ride as ReturnOrder with their (positive) document amounts —
+ * return documents are treated as negative amounts downstream, and
+ * OpenBooks credit memos carry positive totals, so no sign change applies.
+ */
+export function avalaraDocumentType(documentKind: ProviderDocumentKind | undefined): string {
+  if (documentKind === "vendor_bill") return "PurchaseOrder";
+  if (documentKind === "customer_credit" || documentKind === "vendor_credit") return "ReturnOrder";
+  return "SalesOrder";
+}
+
 /** Wire-level Avalara quote: basic-auth accountId:licenseKey create-transaction. */
 export async function quoteViaAvalara(
   req: TaxQuoteRequest,
@@ -868,7 +886,7 @@ export async function quoteViaAvalara(
   // to 'US', quoting every foreign document under US rules (or a false zero).
   const destinationCountry = requiredCountry(req.shipTo.country, "Avalara", "a destination country");
   const body = {
-    type: "SalesOrder",
+    type: avalaraDocumentType(req.documentKind),
     companyCode: String(config.companyCode ?? "DEFAULT"),
     date: config.quotedOn,
     customerCode: "OPENBOOKS",
@@ -952,7 +970,12 @@ async function quoteAvalara(
   );
 }
 
-/** Wire-level TaxJar quote: bearer API key, JSON v2/taxes. */
+/** Wire-level TaxJar quote: bearer API key, JSON v2/taxes. The endpoint models an untagged estimate — its parameter
+ * list carries no document type, so the request kind is deliberately NOT
+ * sent; the returned magnitude flows into kind-aware booking downstream
+ * (credits keep their positive document amounts, the ledger applying credit
+ * semantics at posting).
+ */
 export async function quoteViaTaxJar(
   req: TaxQuoteRequest,
   config: { apiKey: string; baseUrl?: string },
@@ -1064,6 +1087,8 @@ async function quoteTaxJar(
  * settings.customHeadlineJurisdiction (which must name a mapped jurisdiction),
  * and refused when no such mapping exists, so the quote always reconciles
  * before approval. A headline that disagrees with its components is refused.
+ * The request's documentKind crosses verbatim when the caller sets it, so a
+ * hook can distinguish sales, purchases, and returns.
  */
 export async function quoteViaCustomHttp(
   req: TaxQuoteRequest,

@@ -245,6 +245,43 @@ test("TaxJar carries a coded line's product tax code; uncoded lines stay aggrega
   }
 });
 
+test("Avalara quotes carry the non-committing document type for every kind", async () => {
+  const local = { allowPrivateEndpoints: true } as const;
+  const seenTypes: Array<{ type: unknown; amount: unknown }> = [];
+  const server = createServer(async (req, res) => {
+    const body = JSON.parse(await readBody(req)) as { type?: unknown; lines?: Array<{ amount?: unknown }> };
+    seenTypes.push({ type: body.type, amount: body.lines?.[0]?.amount });
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ totalTax: 8.25, code: "Q", summary: [] }));
+  });
+  const origin = await listen(server);
+  const config = {
+    accountId: AVALARA_ACCOUNT_ID,
+    licenseKey: AVALARA_LICENSE_KEY,
+    baseUrl: origin,
+    quotedOn: quoteRequest.quotedOn!,
+  };
+  try {
+    for (const documentKind of ["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"] as const) {
+      await quoteViaAvalara({ ...quoteRequest, documentKind }, config, local);
+    }
+    // Kind-less test quotes keep the historical SalesOrder wire type.
+    await quoteViaAvalara(quoteRequest, config, local);
+    assert.deepEqual(
+      seenTypes.map((seen) => seen.type),
+      ["SalesOrder", "PurchaseOrder", "ReturnOrder", "ReturnOrder", "SalesOrder"],
+    );
+    // Credit memos carry positive document amounts under ReturnOrder: return
+    // documents are treated as negative downstream, so no sign change applies.
+    assert.deepEqual(
+      seenTypes.map((seen) => seen.amount),
+      [100, 100, 100, 100, 100],
+    );
+  } finally {
+    await close(server);
+  }
+});
+
 test("normal provider responses pass with credentials confined to the configured origin", async () => {
   interface SeenCall {
     pathname: string;

@@ -6,6 +6,7 @@ import {
   quoteFromRate,
   readTaxRateProviderConfigView,
   saveTaxRateProviderConfig,
+  type ProviderDocumentKind,
   type TaxRateProviderKey,
 } from "@openbooks/engine/src/tax/rate-providers.ts";
 import { guardPermission } from "../../../../lib/authz";
@@ -74,6 +75,13 @@ export async function POST(req: Request) {
     if (body.currency != null && typeof body.currency !== "string") return NextResponse.json({ error: "invalid currency" }, { status: 422 });
     if (body.itemCode != null && typeof body.itemCode !== "string") return NextResponse.json({ error: "invalid item code" }, { status: 422 });
     if (body.quotedOn != null && typeof body.quotedOn !== "string") return NextResponse.json({ error: "invalid quotedOn" }, { status: 422 });
+    const documentKinds: ProviderDocumentKind[] = ["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"];
+    const documentKind = typeof body.documentKind === "string" && (documentKinds as string[]).includes(body.documentKind)
+      ? (body.documentKind as ProviderDocumentKind)
+      : undefined;
+    if (body.documentKind != null && documentKind === undefined) {
+      return NextResponse.json({ error: "invalid document kind" }, { status: 422 });
+    }
     const result = await quoteExternalTax(
       gate.user.orgId,
       {
@@ -82,6 +90,7 @@ export async function POST(req: Request) {
         shipFrom: body.shipFrom ?? {},
         shipTo: body.shipTo ?? {},
         itemCode: typeof body.itemCode === "string" ? body.itemCode : null,
+        documentKind,
         quotedOn: typeof body.quotedOn === "string" ? body.quotedOn : undefined,
       },
       gate.user.id,
