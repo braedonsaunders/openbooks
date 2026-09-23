@@ -31,6 +31,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('./authz');
 const { executeAssistantTool } = await import('./assistant/registry');
+const { applyFindingAnalyses } = await import('./assistant/continuous-close-agent');
 
 async function seedFinding(orgId: string, agentKey: string, fingerprint: string): Promise<string> {
   return withBypassContext(async () => {
@@ -99,6 +100,61 @@ test('agent findings narrow to the caller readable packs', { skip: !process.env.
       const one = await executeAssistantTool(authz, 'get_continuous_close_finding', { findingId });
       assert.equal(one.ok, true);
     });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test('a superseded enrichment analysis is reported, never counted as applied', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The overlap defect's silent half: the first enrichment's work-item UPDATE
+  // matched zero rows (the fingerprint had moved on under a second run) and
+  // the analysis was discarded while counted as applied. Each UPDATE must
+  // check its affected row count: a lost update lands in
+  // supersededFindingIds, leaves the stored summary untouched, and is never
+  // counted in applied.
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const runA = randomUUID();
+    const runB = randomUUID();
+    await withBypassContext(async () => {
+      for (const runId of [runA, runB]) {
+        await db.execute(sql`insert into ai_agent_runs
+          (id, org_id, agent_key, trigger, status, detector_version)
+          values (${runId}, ${org.orgId}, 'accounting', 'manual', 'completed', 'test')`);
+      }
+      await db.execute(sql`insert into ai_work_items
+        (id, org_id, agent_key, finding_type, detector_version, fingerprint, severity, confidence, materiality, summary, last_detected_run_id)
+        values (${randomUUID()}, ${org.orgId}, 'accounting', 'unmatched_bank_activity', 'test',
+                'fp-superseded-1', 'warning', '0.9', '1500', '{}'::jsonb, ${runA})`);
+    });
+    const found = await withBypassContext(async () =>
+      await db.execute<{ id: string }>(sql`select id from ai_work_items
+         where org_id = ${org.orgId} and fingerprint = 'fp-superseded-1'`));
+    const findingId = found.rows[0]!.id;
+    const analysis = {
+      findingId,
+      headline: 'stale analysis',
+      explanation: '',
+      rootCauses: [],
+      recommendations: [],
+      citations: [],
+    };
+
+    // runB's analysis targets a finding runA owns: zero rows, reported loss.
+    const stale = await withOrgContext(org.orgId, () => applyFindingAnalyses(org.orgId, runB, [analysis]));
+    assert.equal(stale.applied, 0, 'a zero-row write is never counted as applied');
+    assert.deepEqual(stale.supersededFindingIds, [findingId], 'the lost update is reported by id');
+
+    const stored = await withBypassContext(async () =>
+      await db.execute<{ summary: Record<string, unknown> }>(sql`select summary from ai_work_items
+         where id = ${findingId}`));
+    const summary = stored.rows[0]!.summary;
+    assert.equal('aiAnalysis' in summary, false, 'the lost update wrote nothing');
+
+    // The owning run's analysis still applies exactly once.
+    const fresh = await withOrgContext(org.orgId, () => applyFindingAnalyses(org.orgId, runA, [analysis]));
+    assert.equal(fresh.applied, 1);
+    assert.deepEqual(fresh.supersededFindingIds, []);
   } finally {
     await dropScratchOrg(org.orgId);
   }

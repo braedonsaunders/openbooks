@@ -26,7 +26,7 @@ const MAX_TEXT = 4_000;
 const MAX_LIST = 12;
 
 type Citation = { label: string; href: string };
-type FindingAnalysis = {
+export type FindingAnalysis = {
   findingId: string;
   headline: string;
   explanation: string;
@@ -421,26 +421,63 @@ export async function enrichContinuousCloseRun(
       throw new Error(`continuous_close_evidence_validation:${issues.join(",")}`);
     }
   }
-  for (const analysis of cleaned.analyses) {
-    await db.execute(sql`
-      update ai_work_items
-         set summary = jsonb_set(summary, '{aiAnalysis}', ${JSON.stringify({
-           ...analysis,
-           generatedAt: new Date().toISOString(),
-           runId: input.runId,
-         })}::jsonb, true),
-             updated_at = now()
-       where id = ${analysis.findingId} and org_id = ${input.orgId}
-         and last_detected_run_id = ${input.runId}
-    `);
-  }
+  const applied = await applyFindingAnalyses(input.orgId, input.runId, cleaned.analyses);
   const model = (input.analysis.modelTier === "smart" ? config?.modelSmart : config?.modelFast)
     || (config ? defaultModel(config.provider, input.analysis.modelTier) : null);
+  if (applied.supersededFindingIds.length > 0) {
+    // A zero-row write is a lost update, never an applied one: the finding
+    // moved on under another run (or left this org), so the analysis names
+    // its run but no read can observe it. Fail the enrichment by name with
+    // the superseded ids on the record instead of counting them as applied.
+    return {
+      status: "failed",
+      analyzedFindings: applied.applied,
+      narrative: cleaned.narrative,
+      model,
+      toolCalls: (evidence?.calls ?? 0) + result.toolCalls,
+      reason: "enrichment_superseded",
+      supersededFindings: applied.supersededFindingIds,
+    };
+  }
   return {
     status: "completed",
-    analyzedFindings: cleaned.analyses.length,
+    analyzedFindings: applied.applied,
     narrative: cleaned.narrative,
     model,
     toolCalls: (evidence?.calls ?? 0) + result.toolCalls,
   };
+}
+
+/**
+ * Persist one run's finding analyses onto their work items. Each UPDATE is
+ * scoped to the analysis's own run (`last_detected_run_id = runId`): when an
+ * overlapping scan has refreshed the fingerprint, the row no longer belongs
+ * to this run and the UPDATE matches zero rows. The affected row count is
+ * checked per analysis — a lost update is reported in `supersededFindingIds`
+ * and never counted in `applied`.
+ */
+export async function applyFindingAnalyses(
+  orgId: string,
+  runId: string,
+  analyses: FindingAnalysis[],
+): Promise<{ applied: number; supersededFindingIds: string[] }> {
+  let applied = 0;
+  const supersededFindingIds: string[] = [];
+  for (const analysis of analyses) {
+    const updated = await db.execute<{ id: string }>(sql`
+      update ai_work_items
+         set summary = jsonb_set(summary, '{aiAnalysis}', ${JSON.stringify({
+           ...analysis,
+           generatedAt: new Date().toISOString(),
+           runId,
+         })}::jsonb, true),
+             updated_at = now()
+       where id = ${analysis.findingId} and org_id = ${orgId}
+         and last_detected_run_id = ${runId}
+      returning id
+    `);
+    if (updated.rows.length) applied += 1;
+    else supersededFindingIds.push(analysis.findingId);
+  }
+  return { applied, supersededFindingIds };
 }
