@@ -221,7 +221,75 @@ async function loadRule(tx: Tx, orgId: string, ruleId: string): Promise<RuleRow>
   return rule;
 }
 
+/**
+ * Refuse a run whose period is crossed by a version's effective window: a
+ * period sweep prices the whole period's pool under one version, so a
+ * version starting or ending strictly inside the run period would silently
+ * reprice activity from before (or after) the change. Names every crossing
+ * version and the crossing date — never picks one silently. Legacy windows
+ * published before the publish-time boundary proof are caught here; the
+ * check runs on preview, on post (for runs previewed before the proof
+ * existed), and through rerun's version load.
+ */
+async function assertNoVersionEdgeInsidePeriod(
+  tx: Tx,
+  rule: { id: string; org_id: string; key: string },
+  period: PeriodRow,
+): Promise<void> {
+  const rows = (await tx.execute<{
+    id: string;
+    version_no: number;
+    effective_from: string;
+    effective_to: string | null;
+  }>(sql`
+    select id, version_no, effective_from::text, effective_to::text
+      from allocation_rule_versions
+     where org_id = ${rule.org_id} and rule_id = ${rule.id} and status = 'published'
+       and effective_from <= ${period.ends_on}
+       and (effective_to is null or effective_to >= ${period.starts_on})
+     order by version_no for share`)).rows;
+  // A from-edge on the period's first day (and a to-edge on its last day)
+  // governs the whole period — only strictly interior edges mix regimes.
+  const fromInside = (date: string): boolean => date > period.starts_on && date <= period.ends_on;
+  const toInside = (date: string): boolean => date >= period.starts_on && date < period.ends_on;
+  const crossing = rows.filter(
+    (version) =>
+      fromInside(version.effective_from) ||
+      (version.effective_to !== null && toInside(version.effective_to)),
+  );
+  if (crossing.length === 0) return;
+  const describe = (version: (typeof crossing)[number]): string =>
+    `version ${version.version_no} (${version.effective_from}..${version.effective_to ?? "open"})`;
+  const edgeDates = [
+    ...new Set(
+      crossing.flatMap((version) => [
+        ...(fromInside(version.effective_from) ? [version.effective_from] : []),
+        ...(version.effective_to !== null && toInside(version.effective_to) ? [version.effective_to] : []),
+      ]),
+    ),
+  ].sort();
+  const subject = (() => {
+    if (crossing.length !== 1) {
+      return `${crossing.map(describe).join(" and ")} change the rules inside the period on ${edgeDates.join(", ")}`;
+    }
+    const only = crossing[0]!;
+    const startsInside = fromInside(only.effective_from);
+    const endsInside = only.effective_to !== null && toInside(only.effective_to);
+    const verb = startsInside && endsInside ? "starts and ends" : endsInside ? "ends" : "starts";
+    return `${describe(only)} ${verb} inside the period on ${edgeDates.join(", ")}`;
+  })();
+  throw new AllocationRunError(
+    "INVALID",
+    `allocation rule ${rule.key} cannot run for period ${period.name}: ${subject}, ` +
+      `so the run would price pre-change activity under post-change rules. ` +
+      `Retire ${crossing.length === 1 ? describe(crossing[0]!) : "these versions"} and publish ` +
+      `boundary-aligned replacements, then re-run.`,
+  );
+}
+
 async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Promise<VersionRow> {
+  // A period pool cannot be split by day: refuse before selecting anything.
+  await assertNoVersionEdgeInsidePeriod(tx, rule, period);
   const load = async (id: string): Promise<VersionRow | undefined> =>
     (await tx.execute<VersionRow>(sql`
       select id, org_id, rule_id, status, effective_from::text, effective_to::text,
@@ -1722,6 +1790,10 @@ export async function postAllocationRun(
         `allocation rule ${ruleKey} version ${run.version_id} is ${version?.status ?? "missing"} and cannot take postings`,
       );
     }
+    // The preview may predate the boundary proof (or a mid-period version
+    // may have been hand-published since): re-prove the run's period before
+    // money moves or an approval gate opens.
+    await assertNoVersionEdgeInsidePeriod(tx, { id: rule.id, org_id: orgId, key: ruleKey }, period);
     const approvalFlowId = version?.approval_flow_id ?? null;
     if (approvalFlowId && !opts.viaApproval) {
       return openRunApproval(tx, {

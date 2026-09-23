@@ -36,6 +36,7 @@ export {
   validateRuleVersion,
   type AllocationValidationProblem,
   type KnownDriver,
+  type PeriodBoundary,
   type PublishedSiblingWindow,
   type RuleVersionValidationContext,
 } from "./validate.ts";

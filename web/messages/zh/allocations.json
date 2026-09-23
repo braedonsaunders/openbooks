@@ -259,6 +259,7 @@
       "fixed_percent_sum": "固定百分比合计须为100或指定剩余对象。",
       "effective_window": "有效期倒置或缺失。",
       "effective_overlap": "有效期与另一已发布版本重叠。",
+      "effective_boundary": "基于期间的版本必须在会计期间边界开始和结束。",
       "book_scope": "账簿范围未指明可用过账账簿。",
       "apply_policy": "录入规则需要明细行为。",
       "targets_empty": "至少需要一个对象。",

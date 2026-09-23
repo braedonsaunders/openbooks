@@ -259,6 +259,7 @@
       "fixed_percent_sum": "Feste Prozentsätze müssen 100 ergeben oder ein Restziel nennen.",
       "effective_window": "Das Gültigkeitsfenster ist verdreht oder fehlt.",
       "effective_overlap": "Das Gültigkeitsfenster überschneidet eine andere veröffentlichte Version.",
+      "effective_boundary": "Periodenbasierte Versionen müssen an den Grenzen der Buchungsperioden beginnen und enden.",
       "book_scope": "Der Buchbereich nennt kein nutzbares Buchungsbuch.",
       "apply_policy": "Erfassungsregeln brauchen ein Zeilenverhalten.",
       "targets_empty": "Mindestens ein Ziel ist erforderlich.",

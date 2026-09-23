@@ -19,6 +19,8 @@ function publishedCtx() {
     publishedVersions: [],
     driver: { id: DRIVER_ID, dimension: "project", isActive: true },
     activePostingBookIds: ["55555555-5555-4555-8555-555555555555"],
+    // Boundary proof is period-mode only; this derived version is post-mode.
+    periods: [],
   };
 }
 

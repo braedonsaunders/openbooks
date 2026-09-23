@@ -429,6 +429,8 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
       publishedVersions: [],
       driver: { id: driverId, dimension: "project", isActive: true },
       activePostingBookIds: books.rows.map((row) => row.id),
+      // Boundary proof is period-mode only; this derived version is post-mode.
+      periods: [],
     });
     if (problems.length > 0) {
       throw new OverheadSyncError(
