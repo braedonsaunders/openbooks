@@ -166,10 +166,17 @@ function qbwcGuessBucket(connectionId: string): string {
 
 async function qbwcGuessesTripped(connectionId: string): Promise<boolean> {
   return withBypassContext(async () => {
+    // The ceiling is per sliding window: a bucket whose window started more
+    // than QBWC_AUTH_GUESS_WINDOW_S ago no longer trips, so a flood cannot
+    // refuse the correct password forever (only recordQbwcGuessFailure could
+    // reset the window, and it is unreachable once tripped).
     const result = (await db.execute<{ tripped: boolean }>(sql`
-      select attempt_count > ${QBWC_AUTH_GUESS_LIMIT} as tripped
-        from auth_rate_limit_buckets
-       where bucket_key = ${qbwcGuessBucket(connectionId)}`));
+      select exists(
+        select 1 from auth_rate_limit_buckets
+         where bucket_key = ${qbwcGuessBucket(connectionId)}
+           and attempt_count > ${QBWC_AUTH_GUESS_LIMIT}
+           and window_started_at > now() - (${QBWC_AUTH_GUESS_WINDOW_S} * interval '1 second')
+      ) as tripped`));
     return result.rows[0]?.tripped ?? false;
   });
 }
@@ -208,6 +215,9 @@ export async function authenticateWebConnector(connectionId: string, username: s
     return { ticket: "", companyFile: "nvu" };
   }
   return withBypassContext(async () => {
+    // A successful authentication proves possession: the guessing bucket
+    // starts clean instead of carrying a stale flood count into the window.
+    await db.execute(sql`delete from auth_rate_limit_buckets where bucket_key = ${qbwcGuessBucket(connectionId)}`);
     await db.execute(sql`delete from qbd_sessions where expires_at < now() - interval '30 days'`);
     await db.execute(sql`
       update qbd_requests set status = 'queued', session_id = null, sent_at = null, updated_at = now()
