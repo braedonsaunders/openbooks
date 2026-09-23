@@ -56,8 +56,6 @@ const { PDFDocument } = await import('pdf-lib')
 }
 const DB = !!process.env.OPENBOOKS_DB_URL
 
-type Org = Awaited<ReturnType<typeof createScratchOrg>>
-
 async function setup() {
   const org = await withBypassContext(() => createScratchOrg())
   const actor = await withBypassContext(async () => {
@@ -73,12 +71,6 @@ async function setup() {
   const project = randomUUID()
   await withBypassContext(() => db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'BACKUP', 'Backup probe', ${org.customerId}, 'active', true)`))
   return { org, actor, project }
-}
-
-async function backupRowCount(org: Org, documentId: string): Promise<number> {
-  const r = await withBypassContext(() => db.execute<{ n: string }>(sql`
-    select count(*)::text as n from invoice_backups where org_id = ${org.orgId} and document_id = ${documentId}`))
-  return Number(r.rows[0]?.n ?? 0)
 }
 
 test('the documents action mapper keeps the backup refusal as a 422', () => {
