@@ -53,7 +53,12 @@ const mockSources = new Map<string, string>([
       export function registerRequestOrgResolver() {}
     `,
   ],
-  ['mock:business-date', `export async function businessToday() { return '2026-08-28' }; export function addCalendarDays(date, days) { return date }`],
+  // Star re-export of the real pure date helpers (addCalendarDays plus the
+  // civil helpers accounting reaches through gl-summary): pure date math with
+  // nothing to isolate, so a hand copy could only drift. businessToday stays
+  // pinned — the explicit export shadows the re-exported one. The old
+  // identity addCalendarDays stub is gone: it dated the 7-day window as today.
+  ['mock:business-date', `export * from "@openbooks/engine/src/platform/business-date.ts"; export async function businessToday() { return '2026-08-28' }`],
   ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') }`],
 ])
 
@@ -66,6 +71,13 @@ const mockUrls = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    // The business-date double re-exports the real module, so its own star
+    // import must resolve past this hook to the real file instead of looping
+    // back into the mock. Re-based to this file so the workspace alias
+    // resolves through node_modules like any other real import.
+    if (context.parentURL?.startsWith('mock:')) {
+      return nextResolve(specifier, { ...context, parentURL: import.meta.url })
+    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
