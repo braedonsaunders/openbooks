@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 
@@ -70,6 +70,24 @@ export async function POST(req: Request) {
       { error: `an exception cannot run longer than ${MAX_WAIVER_DAYS} days — change the policy instead` },
       { status: 422 },
     )
+  }
+
+  // Subsidiary fence: no exception for a vendor — or under a project —
+  // the caller cannot see. Missing and hidden both read as 404, so the
+  // refusal never oracles which ids exist elsewhere.
+  const waiverParty = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
+  `)).rows[0]
+  if (!waiverParty) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const waiverPartyDenied = guardSubsidiaryScope(gate, waiverParty.subsidiaryId, { orgWideNull: true })
+  if (waiverPartyDenied) return waiverPartyDenied
+  if (body.projectId !== undefined && body.projectId !== null) {
+    const waiverProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
+    `)).rows[0]
+    if (!waiverProject) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const waiverProjectDenied = guardSubsidiaryScope(gate, waiverProject.subsidiaryId, { orgWideNull: true })
+    if (waiverProjectDenied) return waiverProjectDenied
   }
 
   try {

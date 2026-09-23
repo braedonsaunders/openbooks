@@ -24,8 +24,9 @@ registerHooks({
       return virtual(`
         export async function guardPermission() {
           const s = globalThis.__waiverDateState;
-          return { user: { orgId: s.orgId, id: s.actorId } };
+          return { user: { orgId: s.orgId, id: s.actorId }, allowedSubsidiaryIds: null };
         }
+        export function guardSubsidiaryScope() { return null }
       `);
     if (specifier.endsWith("/lib/compliance")) return virtual("export async function guardComplianceFeature() { return null }");
     if (specifier.startsWith("@/")) return next(root + "web/" + specifier.slice(2) + ".ts", context);
