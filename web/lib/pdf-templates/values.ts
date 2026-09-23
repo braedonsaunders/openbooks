@@ -54,18 +54,27 @@ type OrgRow = { name: string; base_currency: string; brand_primary: string | nul
  * formatted in the DOCUMENT's currency, else the ORG's base currency — the
  * same chain every loader below uses, so the formatter and the printed
  * `currency` value can never disagree again (they once said USD and CAD for
- * the same question). The org-missing row below is the last resort for a
- * state the schema forbids (every record carries its org's id): it keeps the
- * return type total, and its lowercase name reads as the placeholder it is.
+ * the same question). A missing org row is a state the schema forbids
+ * (every record carries its org's id, base_currency is NOT NULL): it is
+ * REFUSED with a named error, never papered over with an invented
+ * denomination — a printed amount in a guessed currency is indistinguishable
+ * from a correct one.
  */
-const MISSING_ORG_FALLBACK: OrgRow = { name: 'openbooks', base_currency: 'CAD', brand_primary: null }
+export class MissingPdfOrgError extends Error {
+  constructor(orgId: string) {
+    super(`organization ${orgId} was not found — refusing to print amounts in an invented currency`)
+    this.name = 'MissingPdfOrgError'
+  }
+}
 
 async function orgRow(orgId: string): Promise<OrgRow> {
   const r = (await db.execute<OrgRow>(sql`
     select name, base_currency, settings ->> 'brandPrimary' as brand_primary
       from orgs where id = ${orgId}
   `))
-  return r.rows[0] ?? MISSING_ORG_FALLBACK
+  const row = r.rows[0]
+  if (!row) throw new MissingPdfOrgError(orgId)
+  return row
 }
 
 async function customFieldValues(

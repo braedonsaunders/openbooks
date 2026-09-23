@@ -13,7 +13,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { loadPdfRecordValues } = await import('./values')
+const { loadPdfRecordValues, MissingPdfOrgError } = await import('./values')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 test('document PDF amounts print in the document currency, not a fallback', { skip: !DB }, async () => {
@@ -34,6 +34,39 @@ test('document PDF amounts print in the document currency, not a fallback', { sk
     assert.equal(loaded.values['currency'], 'EUR')
     assert.match(String(loaded.values['total']), /€/)
     assert.doesNotMatch(String(loaded.values['total']), /\$/)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+test('a record whose org row is gone is refused, never printed in an invented currency', { skip: !DB }, async () => {
+  // base_currency is NOT NULL, so the only way the org lookup misses is a
+  // missing org row — a state the schema forbids. The loader must refuse by
+  // name instead of falling back to an invented denomination (it once
+  // printed CAD for a missing org). documents.org_id carries no FK, so the
+  // test orphans the record by pointing it at a uuid with no org row.
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const id = randomUUID()
+    const orphanOrg = randomUUID()
+    await withBypassContext(() => db.execute(sql`
+      insert into documents (id, org_id, kind, document_number, document_date, currency, subtotal, tax_total, total)
+      values (${id}, ${org.orgId}, 'customer_invoice', 'INV-ORPHAN-1', '2026-07-15', 'EUR', '100', '0', '100')`))
+    await withBypassContext(() => db.execute(sql`
+      update documents set org_id = ${orphanOrg} where id = ${id}`))
+    try {
+      await assert.rejects(
+        withOrgContext(orphanOrg, () => loadPdfRecordValues('customer_invoice', orphanOrg, id)),
+        (e: unknown) => {
+          assert.ok(e instanceof MissingPdfOrgError, `expected MissingPdfOrgError, got ${e}`)
+          assert.match((e as Error).message, /invented currency/)
+          return true
+        },
+      )
+    } finally {
+      await withBypassContext(() => db.execute(sql`
+        update documents set org_id = ${org.orgId} where id = ${id}`))
+    }
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
