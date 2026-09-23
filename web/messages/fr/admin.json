@@ -604,6 +604,9 @@
       "defaultLanguageHint": "La langue dans laquelle l’application s’affiche pour toute personne qui n’a pas choisi la sienne dans le menu du compte.",
       "baseCurrency": "Devise de base",
       "baseCurrencyHint": "La devise de présentation dans laquelle le grand livre s’équilibre. Ajoutez d’autres devises avant d’en changer.",
+      "timeZone": "Fuseau horaire d’activité",
+      "timeZoneHint": "Le fuseau horaire dans lequel les journées d’activité sont datées — les écritures proches de minuit tombent sur ce jour calendaire, pas sur le jour UTC.",
+      "timeZonePlaceholder": "Sélectionner un fuseau horaire…",
       "reportPdfStyle": "Style PDF des rapports financiers",
       "reportPdfStyleModern": "Moderne (avec marque)",
       "reportPdfStyleFormal": "Formel (PCGR)",
@@ -4045,8 +4048,9 @@
         "legalNamePlaceholder": "Nom de l'entité juridique enregistrée",
         "country": "Pays",
         "currency": "Devise de base",
+        "timeZone": "Fuseau horaire d’activité",
         "fiscalYear": "L'exercice commence en",
-        "selectedSummary": "Sélection : {country} · {currency} · l’exercice commence en {fiscalMonth}."
+        "selectedSummary": "Sélection : {country} · {currency} · l’exercice commence en {fiscalMonth} · journée d’activité en {timeZone}."
       },
       "industry": {
         "title": "Quel est votre secteur d'activité ?",
@@ -4227,6 +4231,7 @@
         "country": "Pays",
         "currency": "Devise",
         "fiscalYear": "Début de l'exercice",
+        "timeZone": "Fuseau horaire d’activité",
         "teamSize": "Équipe OpenBooks",
         "complexity": "Espace de départ",
         "bookStart": "Point de départ du grand livre",

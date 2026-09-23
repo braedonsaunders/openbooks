@@ -8,6 +8,7 @@ import {
   type ControlAccountRecord,
   type OrgControlAccounts,
 } from "@openbooks/engine/src/records/control-accounts.ts";
+import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
 import { isFeatureEnabled } from "./features";
 import { isUuid } from "./list-params";
 import { DEFAULT_LOCALE, isLocale } from "../i18n/config";
@@ -73,6 +74,7 @@ export async function readCompanySettings(orgId: string): Promise<CompanySetting
       defaultLocale: isLocale(settings.defaultLocale)
         ? settings.defaultLocale
         : DEFAULT_LOCALE,
+      timeZone: canonicalTimeZone(settings.timeZone) ?? "UTC",
       reportingFramework:
         settings.reportingFramework === "ifrs" ||
         settings.reportingFramework === "us_gaap"
@@ -110,6 +112,7 @@ export async function updateCompanySettings(
     taxFramework?: unknown;
     controlAccounts?: unknown;
     defaultLocale?: unknown;
+    timeZone?: unknown;
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
     requireVendorBillApproval?: unknown;
@@ -379,6 +382,35 @@ export async function updateCompanySettings(
       nextSettings.defaultLocale = nextDefaultLocale;
       changes.defaultLocale = [curDefaultLocale, nextDefaultLocale];
       settingsChanged = true;
+    }
+    // --- business time zone (IANA; aliases canonicalized at save) ---
+    // The zone dates every business day, so an unknown value refuses by
+    // name instead of accruing UTC days. Clearing (null/"") returns the
+    // org to the UTC default. Changing it needs no activity lock: business
+    // dates are computed live from this key, and already-posted rows keep
+    // the dates they were posted with.
+    if (body.timeZone !== undefined) {
+      if (
+        body.timeZone === null ||
+        (typeof body.timeZone === "string" && body.timeZone.trim() === "")
+      ) {
+        if (settings.timeZone !== undefined && settings.timeZone !== null) {
+          const before = settings.timeZone;
+          delete nextSettings.timeZone;
+          changes.timeZone = [before, null];
+          settingsChanged = true;
+        }
+      } else {
+        const canonical = canonicalTimeZone(body.timeZone);
+        if (!canonical) {
+          return { status: 400, body: { error: `timeZone ${JSON.stringify(body.timeZone) ?? "null"} is not a known IANA time zone` } };
+        }
+        if (canonical !== canonicalTimeZone(settings.timeZone)) {
+          nextSettings.timeZone = canonical;
+          changes.timeZone = [settings.timeZone ?? null, canonical];
+          settingsChanged = true;
+        }
+      }
     }
     // --- financial report PDF style (formal GAAP / modern branded) ---
     if (body.reportPdfStyle !== undefined) {

@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
 import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'
@@ -44,6 +45,7 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
         country: row?.country ?? '',
         baseCurrency: row?.base_currency ?? '',
         fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+        timeZone: canonicalTimeZone(settings.timeZone) ?? null,
         industry: (settings.industry as string) ?? null,
         workspaceProfile: {
           teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
@@ -75,6 +77,7 @@ export async function OnboardingWizard({ authz }: { authz: Authz }) {
       isRerun={false}
       suppressOnWizardRoute
       payrollPacks={installablePayrollPacks()}
+      timeZones={listCanonicalTimeZones()}
     />
   )
 }

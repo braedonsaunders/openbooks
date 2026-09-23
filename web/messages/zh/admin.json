@@ -606,6 +606,9 @@
       "defaultLanguageHint": "对于尚未在账户菜单中自选语言的所有人，应用所呈现的语言。",
       "baseCurrency": "基准币种",
       "baseCurrencyHint": "总账用以平衡的报表币种。切换前请先添加更多币种。",
+      "timeZone": "营业时区",
+      "timeZoneHint": "营业日期所采用的时区——午夜前后录入的凭证归属此时区的日历日，而非UTC日。",
+      "timeZonePlaceholder": "选择时区…",
       "reportPdfStyle": "财务报表 PDF 样式",
       "reportPdfStyleModern": "现代（品牌化）",
       "reportPdfStyleFormal": "正式（GAAP）",
@@ -4055,8 +4058,9 @@
         "legalNamePlaceholder": "注册法定实体名称",
         "country": "国家",
         "currency": "本位币",
+        "timeZone": "营业时区",
         "fiscalYear": "会计年度起始月",
-        "selectedSummary": "已选：{country} · {currency} · 财政年度自 {fiscalMonth} 开始。"
+        "selectedSummary": "已选：{country} · {currency} · 财政年度自 {fiscalMonth} 开始 · 营业日时区 {timeZone}。"
       },
       "industry": {
         "title": "您属于哪个行业？",
@@ -4237,6 +4241,7 @@
         "country": "国家",
         "currency": "币种",
         "fiscalYear": "会计年度起始",
+        "timeZone": "营业时区",
         "teamSize": "OpenBooks 团队",
         "complexity": "起始工作区",
         "bookStart": "账簿起点",

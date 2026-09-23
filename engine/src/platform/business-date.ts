@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { now } from "./clock.ts";
+import { canonicalTimeZone } from "./time-zone.ts";
 
 /**
  * Business "today" — the calendar day in the org's configured time zone.
@@ -9,19 +10,11 @@ import { now } from "./clock.ts";
  * entry, dunning notice, or bank file dated near local midnight must land on
  * the org's calendar day, not the UTC day. The zone is read from the same
  * key close.ts uses for fiscal calendars (`orgs.settings->>'timeZone'`); an
- * absent or unrecognized zone falls back to the plain UTC day rather than
- * guessing. Defaults read `now()` (clock.ts) so a pinned simulation clock
- * keeps driving period-driven engines deterministically.
+ * absent zone falls back to the plain UTC day rather than guessing, while a
+ * stored value no runtime accepts refuses by name instead of silently
+ * mis-dating on UTC. Defaults read `now()` (clock.ts) so a pinned
+ * simulation clock keeps driving period-driven engines deterministically.
  */
-
-const supportedZones: ReadonlySet<string> | null = (() => {
-  if (typeof Intl.supportedValuesOf !== "function") return null;
-  try {
-    return new Set<string>(Intl.supportedValuesOf("timeZone"));
-  } catch {
-    return null;
-  }
-})();
 
 /**
  * Format an instant as YYYY-MM-DD in an IANA zone — pure, so tests need no
@@ -73,25 +66,27 @@ export function formatTimestampInZone(date: Date, timeZone: string): string {
   return `${formatInZone(date, timeZone)}T${hhmm.slice(0, 2)}:${hhmm.slice(2)}:00`;
 }
 
-/** Accept only zones this runtime actually knows; anything else means UTC. */
-function validZone(value: string | null | undefined): string | null {
-  const zone = value?.trim();
-  if (!zone) return null;
-  if (supportedZones) return supportedZones.has(zone) ? zone : null;
-  try {
-    formatInZone(now(), zone);
-    return zone;
-  } catch {
-    return null;
-  }
-}
-
-/** The org's configured IANA time zone; UTC when it is absent or invalid. */
+/**
+ * The org's configured IANA time zone: the canonical name when a zone is
+ * stored (aliases resolve through the shared validator, so a stored
+ * "US/Eastern" days as America/New_York); UTC when no zone is stored or the
+ * org does not exist. A stored value no runtime accepts is a misconfigured
+ * org, not a UTC org — it refuses by name so the operator fixes the setting
+ * instead of posting on the wrong day.
+ */
 export async function businessTimeZone(orgId: string): Promise<string> {
   const r = (await db.execute<{ time_zone: string | null }>(sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
   `));
-  return validZone(r.rows[0]?.time_zone) ?? "UTC";
+  const stored = r.rows[0]?.time_zone;
+  if (!stored || !stored.trim()) return "UTC";
+  const canonical = canonicalTimeZone(stored);
+  if (!canonical) {
+    throw new Error(
+      `Stored business time zone ${JSON.stringify(stored)} is not a known IANA time zone — set Business time zone in Company Settings → Organization`,
+    );
+  }
+  return canonical;
 }
 
 /** The org's business day (YYYY-MM-DD); UTC day when no valid zone is set. */

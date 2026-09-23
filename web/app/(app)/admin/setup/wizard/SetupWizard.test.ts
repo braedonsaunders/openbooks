@@ -28,6 +28,22 @@ test('review step renders the served pack name', () => {
   assert.match(code, /packTitle\(t, payrollPack, payrollPackName\)/)
 })
 
+// TZ1: the company step offers the business time zone (server-declared
+// canonical list, never hardcoded here), sends it on apply, and shows it
+// on the review step — the org's business zone is settable during setup.
+test('setup wizard company step carries the business time zone', () => {
+  assert.match(code, /setup-time-zone/, 'the company step must render a time-zone picker')
+  assert.match(code, /company\.timeZone/, 'the picker label must resolve through copy')
+  assert.match(code, /timeZones\.map/, 'the options must come from the server-declared list')
+  assert.match(code, /^\s*timeZone,$/m, 'apply must send the chosen zone to the wizard route')
+  assert.match(code, /review\.timeZone/, 'the review step must show the chosen zone')
+})
+
+test('setup wizard names no time zone in code', () => {
+  assert.doesNotMatch(code, /America\/Toronto/, 'zones travel as server data, never literals')
+  assert.doesNotMatch(code, /supportedValuesOf/, 'enumeration belongs to the shared platform validator')
+})
+
 // Preselect only what is derived: a sole installable pack, else nothing.
 test('wizard preselects no pack unless exactly one is installable', () => {
   const pack = (country: string) => ({ country, name: `${country} name` })

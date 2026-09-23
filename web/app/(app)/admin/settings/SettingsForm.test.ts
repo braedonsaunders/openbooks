@@ -36,6 +36,27 @@ test('the approvals card exposes the vendor-bill requirement and the no-flow war
   )
 })
 
+// TZ1: the org business time zone is settable on Company Settings — the
+// ~155 businessToday/businessTimeZone call sites ran on UTC around local
+// midnight because no surface wrote orgs.settings->>'timeZone'.
+test('the organization card exposes the business time zone picker', () => {
+  assert.match(
+    source,
+    /organization\.timeZone\b/,
+    'the form must carry the business time zone field',
+  )
+  assert.match(
+    source,
+    /timeZones\.map|timeZoneOptions/,
+    'the picker must offer the canonical zone list, not a hardcoded few',
+  )
+  assert.match(
+    source,
+    /organization\.timeZoneHint/,
+    'the field must explain what the zone dates',
+  )
+})
+
 test('a blank display name pins an inline required error on the field', () => {
   assert.match(
     source,

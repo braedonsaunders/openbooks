@@ -606,6 +606,9 @@
       "defaultLanguageHint": "O idioma em que o aplicativo é exibido para todos que ainda não escolheram o seu próprio no menu da conta.",
       "baseCurrency": "Moeda base",
       "baseCurrencyHint": "A moeda de relatório em que o razão se equilibra. Adicione mais moedas antes de trocar.",
+      "timeZone": "Fuso horário comercial",
+      "timeZoneHint": "O fuso horário em que os dias úteis são datados — lançamentos próximos à meia-noite caem neste dia do calendário, não no dia UTC.",
+      "timeZonePlaceholder": "Selecione um fuso horário…",
       "reportPdfStyle": "Estilo de PDF de relatório financeiro",
       "reportPdfStyleModern": "Moderno (com marca)",
       "reportPdfStyleFormal": "Formal (GAAP)",
@@ -4055,8 +4058,9 @@
         "legalNamePlaceholder": "Razão social registrada",
         "country": "País",
         "currency": "Moeda-base",
+        "timeZone": "Fuso horário comercial",
         "fiscalYear": "Ano fiscal começa em",
-        "selectedSummary": "Selecionado: {country} · {currency} · ano fiscal começa em {fiscalMonth}."
+        "selectedSummary": "Selecionado: {country} · {currency} · ano fiscal começa em {fiscalMonth} · dia útil em {timeZone}."
       },
       "industry": {
         "title": "Qual é seu setor?",
@@ -4237,6 +4241,7 @@
         "country": "País",
         "currency": "Moeda",
         "fiscalYear": "Ano fiscal começa em",
+        "timeZone": "Fuso horário comercial",
         "teamSize": "Equipe no OpenBooks",
         "complexity": "Workspace inicial",
         "bookStart": "Ponto de partida",

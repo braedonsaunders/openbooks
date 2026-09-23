@@ -76,11 +76,44 @@ test("businessTimeZone resolves a valid org zone and preserves the UTC fallback"
        where id = ${org.orgId}`);
     assert.equal(await businessTimeZone(org.orgId), "Pacific/Auckland");
 
-    for (const settings of ["{}", JSON.stringify({ timeZone: "Not/AZone" })]) {
-      await db.execute(sql`update orgs set settings = ${settings}::jsonb where id = ${org.orgId}`);
-      assert.equal(await businessTimeZone(org.orgId), "UTC");
-    }
+    await db.execute(sql`update orgs set settings = ${"{}"}::jsonb where id = ${org.orgId}`);
+    assert.equal(await businessTimeZone(org.orgId), "UTC");
     assert.equal(await businessTimeZone("00000000-0000-0000-0000-000000000000"), "UTC");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("businessTimeZone days a stored alias in its canonical zone, never UTC", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // US/Eastern is accepted by Intl but absent from supportedValuesOf; the
+    // old membership test dropped it to UTC.
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({ timeZone: "US/Eastern" })}::jsonb
+       where id = ${org.orgId}`);
+    assert.equal(await businessTimeZone(org.orgId), "America/New_York");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("businessTimeZone refuses a stored zone no runtime accepts, naming the remedy", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({ timeZone: "Not/AZone" })}::jsonb
+       where id = ${org.orgId}`);
+    await assert.rejects(
+      () => businessTimeZone(org.orgId),
+      (error: unknown) => {
+        const message = (error as Error).message;
+        return message.includes('"Not/AZone"')
+          && message.includes("Business time zone")
+          && message.includes("Company Settings");
+      },
+      "an invalid stored zone must refuse by name, not fall back to UTC",
+    );
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -96,16 +129,47 @@ test("businessToday honours the org's zone and falls back to the UTC day", { ski
     await withSimClock("2026-06-15T13:00:00Z", async () => {
       assert.equal(await businessToday(org.orgId), "2026-06-16");
     });
-    // An absent or unrecognized zone must fall back to the plain UTC day.
-    for (const settings of ["{}", JSON.stringify({ timeZone: "Not/AZone" })]) {
-      await db.execute(sql`update orgs set settings = ${settings}::jsonb where id = ${org.orgId}`);
-      await withSimClock("2026-06-15T23:30:00Z", async () => {
-        assert.equal(await businessToday(org.orgId), "2026-06-15");
-      });
-    }
+    // An absent zone must fall back to the plain UTC day.
+    await db.execute(sql`update orgs set settings = ${"{}"}::jsonb where id = ${org.orgId}`);
+    await withSimClock("2026-06-15T23:30:00Z", async () => {
+      assert.equal(await businessToday(org.orgId), "2026-06-15");
+    });
     // An org that does not exist has no zone either.
     await withSimClock("2026-06-15T23:30:00Z", async () => {
       assert.equal(await businessToday("00000000-0000-0000-0000-000000000000"), "2026-06-15");
+    });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("businessToday days a zone-midnight instant on the zone's calendar day", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // 2026-09-23T03:30Z is still Sep 22 in Toronto (EDT, UTC−4).
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({ timeZone: "America/Toronto" })}::jsonb
+       where id = ${org.orgId}`);
+    await withSimClock("2026-09-23T03:30:00Z", async () => {
+      assert.equal(await businessToday(org.orgId), "2026-09-22");
+    });
+    await db.execute(sql`update orgs set settings = ${"{}"}::jsonb where id = ${org.orgId}`);
+    await withSimClock("2026-09-23T03:30:00Z", async () => {
+      assert.equal(await businessToday(org.orgId), "2026-09-23");
+    });
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("businessToday refuses an invalid stored zone instead of dating on UTC", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await db.execute(sql`
+      update orgs set settings = ${JSON.stringify({ timeZone: "Not/AZone" })}::jsonb
+       where id = ${org.orgId}`);
+    await withSimClock("2026-06-15T23:30:00Z", async () => {
+      await assert.rejects(() => businessToday(org.orgId), /Company Settings/);
     });
   } finally {
     await dropScratchOrgReporting(org.orgId);

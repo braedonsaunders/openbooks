@@ -16,6 +16,7 @@ import {
   isTeamSize,
 } from '../../../../../lib/workspace-profile'
 import { installablePayrollPacks } from '@openbooks/engine/src/payroll/packs.ts'
+import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import type { SetupWizard } from './SetupWizard'
 
 /**
@@ -57,6 +58,8 @@ export interface WizardData {
   isRerun: boolean
   /** Installable payroll packs, in registry order — declared by the packs. */
   payrollPacks: { country: string; name: string }[]
+  /** Canonical zone names for the business-time-zone picker. */
+  timeZones: string[]
 }
 
 export async function loadWizard(): Promise<WizardData> {
@@ -80,12 +83,14 @@ export async function loadWizard(): Promise<WizardData> {
     open: true,
     industries: INDUSTRIES,
     payrollPacks: installablePayrollPacks(),
+    timeZones: listCanonicalTimeZones(),
     initial: {
       name: row?.name ?? '',
       legalName: row?.legal_name ?? '',
       country: row?.country ?? '',
       baseCurrency: row?.base_currency ?? '',
       fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+      timeZone: canonicalTimeZone(settings.timeZone) ?? null,
       industry: (settings.industry as string) ?? null,
       workspaceProfile: {
         teamSize: isTeamSize(storedProfile?.teamSize) ? storedProfile.teamSize : 'solo',
@@ -138,6 +143,7 @@ export function wizardSpec(data: WizardData): PageSpec {
         canSwitchIndustry: data.canSwitchIndustry,
         isRerun: data.isRerun,
         payrollPacks: data.payrollPacks,
+        timeZones: data.timeZones,
       }),
     ],
   })
