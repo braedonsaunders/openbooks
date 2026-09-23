@@ -960,3 +960,81 @@ test("a stuck sending delivery with a live attempt is left alone", async () => {
   }
 });
 
+/** A queued scheduled run with a renderable definition, for lease-race tests. */
+async function seedLeaseRaceRun(orgId: string, tag: string): Promise<{ runId: string }> {
+  const definitionId = randomUUID();
+  await db.execute(sql`
+    insert into report_definitions
+      (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+    values (${definitionId}, ${orgId}, 'custom', 'query', ${`lease-race-${tag}`},
+            'Lease race', '{}'::jsonb, null, null)
+  `);
+  const runId = randomUUID();
+  await db.execute(sql`
+    insert into report_runs
+      (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+       recipient_emails, next_attempt_at)
+    values (${runId}, ${orgId}, null, ${definitionId}, 'scheduled', 'queued',
+            ${new Date(Date.now() - 3_600_000)}, '["lease-race@example.com"]'::jsonb, now())
+  `);
+  return { runId };
+}
+
+test("a superseded renderer's late failure cannot overwrite another renderer's success", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedLeaseRaceRun(org.orgId, "late-failure");
+    const outcome = await processScheduledReportRun(runId, async () => {
+      // Mid-render, the stale sweep reassigns the lease and a second
+      // renderer claims it and succeeds — exactly the race the lease guards.
+      await db.execute(sql`
+        update report_runs set status='queued', locked_at=null, updated_at=now()
+         where id=${runId} and org_id=${org.orgId} and status='running'
+      `);
+      await db.execute(sql`
+        update report_runs set status='succeeded', finished_at=now(), locked_at=null,
+               next_attempt_at=null, error=null, updated_at=now()
+         where id=${runId} and org_id=${org.orgId} and status='queued'
+      `);
+      throw new Error("renderer A failed after losing the lease");
+    });
+    assert.deepEqual(outcome, { skipped: true });
+    const row = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error from report_runs where id=${runId}
+    `)).rows[0]!;
+    assert.equal(row.status, "succeeded", "the late failure must not overwrite success");
+    assert.equal(row.error, null);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a superseded renderer's late success stands down instead of double-completing", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedLeaseRaceRun(org.orgId, "late-success");
+    const pdf = Buffer.from("%PDF-1.7\nlease race late success");
+    const outcome = await processScheduledReportRun(runId, async () => {
+      // Same steal, but the current owner already succeeded before this
+      // render finished: this renderer's completion must not land twice.
+      await db.execute(sql`
+        update report_runs set status='queued', locked_at=null, updated_at=now()
+         where id=${runId} and org_id=${org.orgId} and status='running'
+      `);
+      await db.execute(sql`
+        update report_runs set status='succeeded', finished_at=now(), locked_at=null,
+               next_attempt_at=null, error=null, updated_at=now()
+         where id=${runId} and org_id=${org.orgId} and status='queued'
+      `);
+      return pdf;
+    });
+    assert.deepEqual(outcome, { skipped: true });
+    const rows = (await db.execute<{ status: string; attempt_count: number }>(sql`
+      select status, attempt_count from report_runs where id=${runId}
+    `)).rows;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.status, "succeeded");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
