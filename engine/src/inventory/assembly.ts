@@ -12,6 +12,7 @@ import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, ty
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
 import { consumeLayers, recordConsumptions, addLayerAtCost, type Consumption } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
+import { assertItemsActive } from "./item-active.ts";
 import { type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement, removeInboundLayer, restoreIssueLayers, reverseInventoryJournal } from "./reversal.ts";
 
 // ---------------------------------------------------------------------------
@@ -128,39 +129,14 @@ export async function buildAssembly(
       profileByItemId.set(itemId, await resolveProfile(orgId, itemId, tx, true));
     }
     // A build mints NEW stock of the finished good, so every subject item
-    // must be active — not just profiled. Lock each items row FOR SHARE and
-    // hold it through posting: the item PATCH takes FOR UPDATE on the same
-    // row, so a deactivation racing a build serializes against it either
-    // way (the build re-reads the committed state; the deactivation waits
-    // for the in-flight build), and an inactive item refuses by name here
-    // before any consumption, movement, or journal line is written.
-    const itemStates = (await tx.execute<{
-      id: string;
-      name: string | null;
-      is_active: boolean;
-    }>(sql`
-      select id, name, is_active
-        from items
-       where org_id = ${orgId}
-         and id in (${sql.join(
-           profileItemIds.map((itemId) => sql`${itemId}::uuid`),
-           sql`, `,
-         )})
-       order by id
-       for share`));
-    if (itemStates.rows.length !== profileItemIds.length) {
-      throw new InventoryError(
+    // must be active — not just profiled. Shared INV-ACTIVE fence: locks
+    // each items row FOR SHARE through posting and refuses by name before
+    // any consumption, movement, or journal line is written.
+    const itemNameById = await assertItemsActive(tx, orgId, profileItemIds, {
+      inactiveRemedy: "reactivate it or change the recipe before building",
+      outsideOrganization:
         "assembly build references an item outside this organization — check the bill of materials",
-      );
-    }
-    const itemNameById = new Map(itemStates.rows.map((row) => [row.id, row.name ?? row.id]));
-    for (const row of itemStates.rows) {
-      if (!row.is_active) {
-        throw new InventoryError(
-          `${itemNameById.get(row.id)} is inactive — reactivate it or change the recipe before building`,
-        );
-      }
-    }
+    });
     const assembly = profileByItemId.get(input.assemblyItemId)!;
     if (assembly.tracking !== "none") {
       throw new InventoryError(
@@ -399,6 +375,10 @@ export async function reverseAssemblyBuild(
   actorId: string,
   input: ReverseInventoryInput,
 ): Promise<ReverseInventoryResult> {
+  // Deliberately NOT fenced by assertItemsActive (see item-active.ts): a
+  // reversal restores exact prior state rather than minting a new position,
+  // so it must stay possible after deactivation — otherwise the build could
+  // never be corrected once its items are discontinued.
   const reason = input.reason.trim();
   if (reason.length < 5 || reason.length > 500) {
     throw new InventoryError(

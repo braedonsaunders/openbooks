@@ -279,6 +279,10 @@ async function returnVendorCreditInventoryLine(
   date: string,
   line: VendorCreditInventoryReturnLine,
 ): Promise<MovementResult> {
+  // Deliberately NOT fenced by assertItemsActive (see item-active.ts): every
+  // return names a specific posted source receipt and is capped at its
+  // unreturned quantity — it unwinds that receipt rather than minting a new
+  // position, so it must stay possible after deactivation.
   const profile = await resolveProfile(orgId, line.itemId, runner, true);
   assertTracking(
     profile,
