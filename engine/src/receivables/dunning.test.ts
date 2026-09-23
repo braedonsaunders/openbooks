@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -203,6 +203,49 @@ async function stagedNotice(invoiceId: string): Promise<{
      where kind = 'flow_email' and occurrence_key like ${`dunning:${invoiceId}:%`}
   `);
   return { logRows: log.rows, outboxRows: outbox.rows };
+}
+
+/**
+ * Durable email evidence for a dunning claim, as the email worker would have
+ * left it: one email_log row per delivery identity, each carrying the claim
+ * id in its meta. `status` is the row verdict and `attempts` its lineage.
+ */
+async function seedDunningEmailEvidence(
+  org: ScratchOrg,
+  claimId: string,
+  rows: { key: string; status: string; attempts: { attempt: number; outcome: string; detail: string }[] }[],
+): Promise<void> {
+  for (const row of rows) {
+    // Delivery keys honor the email_log format guard (obem_<40-hex>, one
+    // distinct identity per delivery) exactly as the worker derives them.
+    const deliveryKey = `obem_${createHash("sha256").update(row.key).digest("hex").slice(0, 40)}`;
+    await db.execute(sql`
+      insert into email_log (org_id, delivery_key, provider, recipients, recipient_primary,
+                             subject, status, category_key, meta)
+      values (${org.orgId}, ${deliveryKey}, 'test', '["billing@acme.test"]'::jsonb, 'billing@acme.test',
+              'Reminder', ${row.status}, 'dunning',
+              ${JSON.stringify({
+                category: "dunning",
+                dunningLogId: claimId,
+                attempts: row.attempts.map((a) => ({ ...a, at: new Date().toISOString() })),
+              })}::jsonb)
+    `);
+  }
+}
+
+async function dunningClaim(invoiceId: string): Promise<{ id: string; status: string; detail: string | null }> {
+  const row = (
+    await db.execute<{ id: string; status: string; detail: string | null }>(sql`
+      select id, status, detail from dunning_log where document_id = ${invoiceId}
+    `)
+  ).rows[0]!;
+  return { id: row.id, status: row.status, detail: row.detail };
+}
+
+async function ageDunningClaim(claimId: string): Promise<void> {
+  await db.execute(sql`
+    update dunning_log set updated_at = now() - interval '24 hours' where id = ${claimId}
+  `);
 }
 
 test("a fired dunning stage commits its staged claim and its mail deferral together", { skip: !DB }, async () => {
@@ -956,6 +999,176 @@ test("an abandoned staged claim is re-armed by name", { skip: !DB }, async () =>
     assert.ok(keys[1]!.startsWith(`${base}:`), `re-arm must rotate the key, got ${keys[1]}`);
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an accepted letter with a lost claim-settle is reconciled sent, never re-sent", { skip: !DB }, async () => {
+  // Defect path A end to end: the provider accepted the letter and the
+  // worker recorded the acceptance in email_log, but the staged→sent claim
+  // write was lost (and the worker's retries exhausted the same way), so
+  // the claim sits staged past the outbox retry horizon. The next tick must
+  // settle it sent from the delivery evidence — exactly one letter ever
+  // deferred, never a second send under a fresh identity.
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const claim = await dunningClaim(invoiceId);
+    assert.equal(claim.status, "staged");
+
+    await seedDunningEmailEvidence(org, claim.id, [
+      {
+        key: `test-dunning-accept:${claim.id}`,
+        status: "sent",
+        attempts: [{ attempt: 1, outcome: "sent", detail: "provider-1" }],
+      },
+    ]);
+    await ageDunningClaim(claim.id);
+
+    const second = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(second.sent, 0);
+    assert.equal(second.failed, 0);
+    const { logRows, outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(outboxRows.length, 1, "the accepted letter must never defer a second time");
+    assert.equal(logRows.length, 1);
+    assert.equal((await dunningClaim(invoiceId)).status, "sent");
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await db.execute(sql`delete from email_log where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an uncertain delivery past the horizon is held staged, never re-sent", { skip: !DB }, async () => {
+  // The provider may already have accepted the first letter — its outcome
+  // is unresolved — so re-arming would risk a duplicate collections letter,
+  // which is worse than a delayed one. The claim stays staged with the
+  // reconciliation need named on it, and no second letter defers.
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const claim = await dunningClaim(invoiceId);
+
+    await seedDunningEmailEvidence(org, claim.id, [
+      {
+        key: `test-dunning-uncertain:${claim.id}`,
+        status: "uncertain",
+        attempts: [{ attempt: 1, outcome: "uncertain", detail: "acceptance state unresolved: provider timeout" }],
+      },
+    ]);
+    await ageDunningClaim(claim.id);
+
+    const second = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(second.sent, 0);
+    assert.equal(second.failed, 0);
+    const { logRows, outboxRows } = await stagedNotice(invoiceId);
+    assert.equal(outboxRows.length, 1, "an unresolved letter must never defer a second time");
+    assert.equal(logRows.length, 1);
+    const held = await dunningClaim(invoiceId);
+    assert.equal(held.status, "staged");
+    assert.match(held.detail ?? "", /reconciliation/);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await db.execute(sql`delete from email_log where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an acceptance under an older occurrence key settles the claim", { skip: !DB }, async () => {
+  // The claim re-armed once (its first delivery definitively failed), then
+  // the retry's letter was accepted but that settle was lost. The evidence
+  // read must span every occurrence key the claim ever used: the older
+  // key's failure must not shadow the newer key's acceptance, and no third
+  // letter may defer.
+  const org = await createScratchOrg();
+  try {
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const claim = await dunningClaim(seeded.invoiceId);
+
+    await seedDunningEmailEvidence(org, claim.id, [
+      {
+        key: `test-dunning-old-fail:${claim.id}`,
+        status: "failed",
+        attempts: [{ attempt: 1, outcome: "notSent", detail: "550 mailbox unavailable" }],
+      },
+    ]);
+    await db.execute(sql`
+      update dunning_log set status = 'failed', detail = '550 mailbox unavailable'
+       where id = ${claim.id} and org_id = ${org.orgId}
+    `);
+    const retried = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(retried.sent, 1);
+    assert.equal((await stagedNotice(seeded.invoiceId)).outboxRows.length, 2);
+
+    await seedDunningEmailEvidence(org, claim.id, [
+      {
+        key: `test-dunning-new-accept:${claim.id}`,
+        status: "sent",
+        attempts: [{ attempt: 1, outcome: "sent", detail: "provider-2" }],
+      },
+    ]);
+    await ageDunningClaim(claim.id);
+
+    const third = await runDunningForOrg(org.orgId, "2026-07-11");
+    assert.equal(third.sent, 0);
+    const { logRows, outboxRows } = await stagedNotice(seeded.invoiceId);
+    assert.equal(outboxRows.length, 2, "the accepted retry must never defer a third letter");
+    assert.equal(logRows.length, 1);
+    assert.equal((await dunningClaim(seeded.invoiceId)).status, "sent");
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await db.execute(sql`delete from email_log where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a claim whose deliveries all definitively failed still re-arms", { skip: !DB }, async () => {
+  // The evidence gate must keep the existing retry behaviour: a letter the
+  // provider definitively rejected (with the failure recorded in email_log,
+  // as the worker leaves it) re-arms past the horizon and sends once more.
+  const org = await createScratchOrg();
+  try {
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+    });
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    const claim = await dunningClaim(seeded.invoiceId);
+
+    await seedDunningEmailEvidence(org, claim.id, [
+      {
+        key: `test-dunning-fail:${claim.id}`,
+        status: "failed",
+        attempts: [{ attempt: 1, outcome: "notSent", detail: "550 mailbox unavailable" }],
+      },
+    ]);
+    await db.execute(sql`
+      update dunning_log set status = 'failed', detail = '550 mailbox unavailable'
+       where id = ${claim.id} and org_id = ${org.orgId}
+    `);
+    await ageDunningClaim(claim.id);
+
+    const retried = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(retried.sent, 1);
+    const { logRows, outboxRows } = await stagedNotice(seeded.invoiceId);
+    assert.equal(logRows.length, 1);
+    assert.equal((logRows[0] as { status: string }).status, "staged");
+    assert.equal(outboxRows.length, 2);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await db.execute(sql`delete from email_log where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
   }
 });

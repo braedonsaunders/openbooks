@@ -32,6 +32,32 @@ import {
 } from "../delivery/report-delivery.ts";
 
 /**
+ * A post-acceptance bookkeeping fault: the provider already accepted the
+ * letter, so a failure settling the dunning claim, the payment remittance,
+ * or the report delivery is a bookkeeping fault, never a send failure. The
+ * worker logs it by name and rethrows it marked; the send-failure catch
+ * below rethrows marked faults untouched (no notSent event, no failed
+ * marks), so the BullMQ retry reconciles onto the recorded acceptance
+ * without transmitting and re-attempts only the bookkeeping. If the fault
+ * persists past exhaustion, the email_log acceptance stands as the durable
+ * evidence and the owning runner reconciles from it — the letter is never
+ * sent twice.
+ */
+class PostAcceptanceBookkeepingError extends Error {
+  readonly emailLogId: string;
+  constructor(emailLogId: string, cause: unknown) {
+    super(
+      `email ${emailLogId} was accepted by the provider but post-acceptance bookkeeping failed — ` +
+        `leaving the acceptance for reconciliation, never re-sending: ` +
+        `${cause instanceof Error ? cause.message : String(cause)}`,
+      { cause },
+    );
+    this.name = "PostAcceptanceBookkeepingError";
+    this.emailLogId = emailLogId;
+  }
+}
+
+/**
  * Consumes the `emails` queue: one job = one recipient.
  *
  * Delivery identity + uncertain-outcome reconciliation (#52): all attempts of
@@ -265,12 +291,25 @@ export function createEmailWorker(): Worker<EmailJobData> {
           });
           await markEmailSent(d.orgId, canonical.id, outcome.providerMessageId);
           await dropStagedAttachments();
-          // Provider acceptance moves the staged dunning claim to sent.
-          await settleDunningClaim("sent", null);
-          if (paymentRemittanceId) {
-            await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+          // The provider already accepted the letter: everything below is
+          // bookkeeping, not the send. A fault here must never reach the
+          // send-failure catch — that path means "the customer got nothing"
+          // and would orphan the claim as staged until a later tick re-arms
+          // it under a fresh delivery identity and sends the letter twice.
+          try {
+            // Provider acceptance moves the staged dunning claim to sent.
+            await settleDunningClaim("sent", null);
+            if (paymentRemittanceId) {
+              await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
+            }
+            if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId);
+          } catch (bookkeepingError) {
+            console.error(
+              `[worker] email ${canonical.id} was accepted by the provider but post-acceptance bookkeeping failed — leaving the acceptance for reconciliation, never re-sending:`,
+              bookkeepingError instanceof Error ? bookkeepingError.message : bookkeepingError,
+            );
+            throw new PostAcceptanceBookkeepingError(canonical.id, bookkeepingError);
           }
-          if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId);
           return { id: outcome.providerMessageId };
         }
         // Unresolved acceptance state: park it explicitly. BullMQ will retry,
@@ -297,6 +336,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
         }
         throw new Error(outcome.reason);
       } catch (e) {
+        // A post-acceptance bookkeeping fault is not a send failure — the
+        // provider already accepted the letter — so recording notSent /
+        // failed evidence here would orphan the claim and invite a duplicate
+        // re-send. Rethrow untouched: the BullMQ retry reconciles onto the
+        // recorded acceptance without transmitting.
+        if (e instanceof PostAcceptanceBookkeepingError) throw e;
         const message = e instanceof Error ? e.message : String(e);
         const alreadyRecorded =
           e instanceof Error &&

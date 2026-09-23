@@ -10,6 +10,7 @@ const state = {
   dunningFailed: [],
   emailFailed: 0,
   emailUncertain: 0,
+  claimSentError: null,
 }
 globalThis.__dunningEmailTest = state
 
@@ -42,7 +43,7 @@ const sources = {
     export const markPaymentRemittanceAttempt = async () => {};
     export const markPaymentRemittanceFailed = async () => {};
     export const markPaymentRemittanceSent = async () => {};
-    export const markDunningClaimSent = async (_org, id) => { globalThis.__dunningEmailTest.dunningSent.push(id); return true; };
+    export const markDunningClaimSent = async (_org, id) => { const s = globalThis.__dunningEmailTest; if (s.claimSentError) throw s.claimSentError; s.dunningSent.push(id); return true; };
     export const markDunningClaimFailed = async (_org, id, detail) => { globalThis.__dunningEmailTest.dunningFailed.push([id, detail]); return true; };
   `,
   '../delivery/report-delivery.ts': `
@@ -130,6 +131,31 @@ test('uncertain acceptance stays staged with the detail on the email row', async
     assert.equal(state.emailUncertain, 1)
   } finally {
     state.mode = 'sent'
+  }
+})
+
+test('a claim-settle fault after provider acceptance is bookkeeping, never a send failure', async () => {
+  // The provider accepted the letter; only the staged→sent write threw (a
+  // DB/trigger fault). Routing that into the send-failure catch recorded a
+  // notSent event, marked the accepted email failed, and — once retries
+  // exhausted — settled the claim failed while it stayed staged, so the next
+  // tick re-armed it under a fresh delivery identity and sent the letter
+  // twice. The fault must instead surface named, with no failure evidence,
+  // leaving the email_log acceptance for reconciliation.
+  state.claimSentError = new Error('claim settle write failed')
+  const failedBefore = state.emailFailed
+  const dunningFailedBefore = state.dunningFailed.length
+  try {
+    await assert.rejects(state.handler(job({ attempts: 1 })), (err) => {
+      assert.equal(err.name, 'PostAcceptanceBookkeepingError')
+      assert.match(err.message, /post-acceptance bookkeeping failed/)
+      assert.match(err.message, /claim settle write failed/)
+      return true
+    })
+    assert.equal(state.emailFailed, failedBefore, 'acceptance must never record a send failure')
+    assert.equal(state.dunningFailed.length, dunningFailedBefore, 'acceptance must never settle the claim failed')
+  } finally {
+    state.claimSentError = null
   }
 })
 

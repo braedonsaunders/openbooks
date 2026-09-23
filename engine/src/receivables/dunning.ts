@@ -24,10 +24,17 @@ import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../scheduli
  * A later tick re-arms failed and suppressed claims back to staged for retry
  * once the cause is fixed, each round deferring under a FRESH occurrence key
  * so the retry never collapses onto a dead outbox row; a staged claim older
- * than the outbox retry horizon is abandoned and re-armed by name. 'sent'
- * rows are terminal delivery evidence; the storage guard (dunning_log_guard)
- * refuses every other transition, so the log reconciles exactly with what
- * the customer was sent — never with what was merely queued.
+ * than the outbox retry horizon is abandoned and re-armed by name. Before
+ * ANY re-arm, the tick reconciles the claim against the durable email
+ * evidence for that claim — every delivery identity it ever used, since a
+ * re-armed claim has earlier deliveries under older keys: an accepted
+ * delivery settles the claim sent instead of re-firing it, an unresolved
+ * acceptance keeps it staged under a named reconciliation hold, and only a
+ * claim whose deliveries all definitively failed (or that was never
+ * attempted at all) re-arms. 'sent' rows are terminal delivery evidence;
+ * the storage guard (dunning_log_guard) refuses every other transition, so
+ * the log reconciles exactly with what the customer was sent — never with
+ * what was merely queued.
  *
  * Collections never touches the ledger — it is a communications layer, so it
  * lives outside the posting kernel entirely.
@@ -162,6 +169,73 @@ function isAbandonedStagedClaim(updatedAt: Date | string | null): boolean {
     return false;
   }
   return Date.now() - claimedAt > SCHEDULER_OUTBOX_RETRY_HORIZON_MS;
+}
+
+/**
+ * The durable email evidence for one dunning claim: every email_log row
+ * carrying this claim's id in its meta, across EVERY occurrence key the
+ * claim has ever deferred under (the rung's base key and each re-arm's
+ * rotated key). Reading by claim id — never by delivery key — is what lets
+ * an acceptance under an older key settle the claim instead of re-firing it.
+ *
+ * - "accepted": some delivery was accepted by the provider (a sent row, or a
+ *   sent record in its attempt lineage). The customer got the letter.
+ * - "uncertain": no acceptance anywhere, but some delivery's acceptance
+ *   state is unresolved (an uncertain row or lineage record — including a
+ *   dangling "started" event whose worker never reported back and may have
+ *   transmitted before it died). The letter may have gone out.
+ * - "rejected-or-absent": every recorded delivery definitively failed, or no
+ *   delivery evidence exists at all (the outbox row died before the worker
+ *   ran, or the letter was suppressed before any attempt).
+ */
+type DunningDeliveryVerdict = "accepted" | "uncertain" | "rejected-or-absent";
+
+async function readDunningDeliveryVerdict(
+  orgId: string,
+  claimId: string,
+): Promise<DunningDeliveryVerdict> {
+  const rows = (await db.execute<{ status: string; attempts: unknown }>(sql`
+    select status, meta -> 'attempts' as attempts
+      from email_log
+     where org_id = ${orgId} and meta ->> 'dunningLogId' = ${claimId}
+  `)).rows;
+  let sawUncertain = false;
+  for (const row of rows) {
+    if (row.status === "sent") return "accepted";
+    // Decided outcomes by attempt number; annotation events ("blocked",
+    // "suppressed", "started") carry no verdict and are dropped — except a
+    // dangling "started", handled below.
+    const decided = new Map<number, string>();
+    const attempts = Array.isArray(row.attempts) ? row.attempts : [];
+    for (const entry of attempts) {
+      if (!entry || typeof entry !== "object") continue;
+      const record = entry as { outcome?: unknown; attempt?: unknown };
+      if (
+        (record.outcome === "sent" || record.outcome === "notSent" || record.outcome === "uncertain") &&
+        typeof record.attempt === "number"
+      ) {
+        decided.set(record.attempt, record.outcome);
+      }
+    }
+    if ([...decided.values()].includes("sent")) return "accepted";
+    let uncertain = [...decided.values()].includes("uncertain") || row.status === "uncertain";
+    if (!uncertain) {
+      // A "started" event with no outcome for the same attempt number means
+      // the worker was lost mid-flight — the transmission may already have
+      // been accepted. That synthesizes to uncertain, never to a clean
+      // slate, or the re-arm would re-send a possibly-delivered letter.
+      for (const entry of attempts) {
+        if (!entry || typeof entry !== "object") continue;
+        const record = entry as { outcome?: unknown; attempt?: unknown };
+        if (record.outcome === "started" && typeof record.attempt === "number" && !decided.has(record.attempt)) {
+          uncertain = true;
+          break;
+        }
+      }
+    }
+    if (uncertain) sawUncertain = true;
+  }
+  return sawUncertain ? "uncertain" : "rejected-or-absent";
 }
 
 /**
@@ -381,10 +455,92 @@ async function runDunningInternal(
               );
               continue;
             }
+            // Delivery-evidence gate: a re-arm defers under a FRESH delivery
+            // identity, so re-arming a claim whose letter was (or may have
+            // been) accepted sends the customer a duplicate collections
+            // letter. The horizon above only proves no outcome is still IN
+            // FLIGHT; what already happened is read here, by claim id
+            // across every occurrence key the claim ever used. Only a claim
+            // whose deliveries all definitively failed, or that was never
+            // attempted at all, falls through to the re-arm below.
+            const verdict = await readDunningDeliveryVerdict(orgId, existing.id);
+            if (verdict === "accepted") {
+              // The customer got the letter under some earlier delivery
+              // identity: settle the claim instead of re-firing it. From
+              // staged that is the legal staged→sent transition; a claim
+              // the worker already moved out of staged carries the same
+              // verdict either way, so a lost race is logged, never
+              // re-fired and never crashed into the rest of the tick.
+              if (existing.status === "staged") {
+                const settled = await db.execute<{ id: string }>(sql`
+                  update dunning_log set status = 'sent', sent_at = now(), updated_at = now()
+                   where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
+                  returning id
+                `);
+                if (!settled.rows[0]) {
+                  const current = (await db.execute<{ status: string }>(sql`
+                    select status from dunning_log where id = ${existing.id} and org_id = ${orgId}
+                  `)).rows[0]?.status;
+                  console.error(
+                    `[dunning] ${doc.documentNumber} stage ${stage.id} has accepted delivery evidence but the claim is now ${current ?? "missing"} — not re-firing`,
+                  );
+                }
+                continue;
+              }
+              console.error(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} is ${existing.status} but has accepted delivery evidence — not re-arming a delivered letter`,
+              );
+              continue;
+            }
+            if (verdict === "uncertain") {
+              // Acceptance unresolved: the first letter may already have
+              // been accepted, so re-arming risks a duplicate collections
+              // letter — worse than a delayed one. Keep the claim staged
+              // and record by name that it needs reconciliation. Staged
+              // rows are never updated in place (the guard refuses
+              // staged→staged), so the note hops through failed and back;
+              // the refreshed timestamp also keeps the next tick from
+              // re-examining it until another horizon passes. A claim the
+              // worker already moved out of staged is left exactly as the
+              // worker left it — still never re-armed.
+              if (existing.status === "staged") {
+                const blockedNote =
+                  `dunning letter acceptance unresolved in email delivery evidence for this claim — ` +
+                  `needs reconciliation; re-arm refused so the customer is never sent a duplicate letter`;
+                const parked = await db.execute<{ id: string }>(sql`
+                  update dunning_log set status = 'failed', detail = ${blockedNote}, updated_at = now()
+                   where id = ${existing.id} and org_id = ${orgId} and status = 'staged'
+                  returning id
+                `);
+                if (!parked.rows[0]) {
+                  console.error(
+                    `[dunning] ${doc.documentNumber} stage ${stage.id} has uncertain delivery evidence but the claim left staged under this tick — not re-firing`,
+                  );
+                  continue;
+                }
+                const restaged = await db.execute<{ id: string }>(sql`
+                  update dunning_log
+                     set status = 'staged', detail = ${blockedNote}, updated_at = now()
+                   where id = ${existing.id} and org_id = ${orgId} and status = 'failed'
+                  returning id
+                `);
+                if (!restaged.rows[0]) {
+                  throw new Error(
+                    `[dunning] ${doc.documentNumber} stage ${stage.id} reconciliation hold matched zero rows — refusing to send unclaimed`,
+                  );
+                }
+                continue;
+              }
+              console.error(
+                `[dunning] ${doc.documentNumber} stage ${stage.id} is ${existing.status} but has unresolved delivery evidence — not re-arming until it is reconciled`,
+              );
+              continue;
+            }
             // Re-arm this attempt: a failed or suppressed claim from an
             // earlier tick, or a staged claim abandoned past the outbox retry
             // horizon (its letter's outbox row is terminal or long dead, so
-            // the worker will never settle it). Either way the evidence is
+            // no outcome is still in flight — and the gate above proved none
+            // already happened). Either way the evidence is
             // refreshed to the retry's inputs (the customer may have gained
             // a billing email since); the abandonment names itself on the
             // re-armed row as the audit trail. The guard admits exactly
