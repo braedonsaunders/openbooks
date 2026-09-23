@@ -66,8 +66,24 @@ test("stale upload reconciliation requires exact object hash and size", () => {
   assert.match(scheduler, /cannot reconcile .* will retry/);
 });
 
+test("stale upload reconciliation claims the row before touching storage", () => {
+  // The delete must sit behind a locked re-check: a heartbeat or completion
+  // racing the scan wins the lock first and the tick stands down, so an
+  // object belonging to a completed backup is never deleted.
+  const scan = scheduler.indexOf("const staleRunning = await withBypassContext");
+  const verdict = scheduler.indexOf("const verdict = await withOrgTransaction(run.org_id");
+  const finalize = scheduler.indexOf("if (verdict.recovered) {");
+  assert.ok(scan >= 0 && scan < verdict && verdict < finalize);
+  const claim = scheduler.slice(verdict, finalize);
+  assert.match(claim, /for update/);
+  assert.match(claim, /await headBackupObject\(run\.object_key\)/);
+  assert.match(claim, /await deleteBackupObject\(run\.object_key\)/);
+  assert.ok(claim.indexOf("for update") < claim.indexOf("await headBackupObject"));
+  assert.ok(claim.indexOf("await headBackupObject") < claim.indexOf("await deleteBackupObject"));
+});
+
 test("reconciled completion stamps its ledger row and evidence in one tenant transaction", () => {
-  const start = scheduler.indexOf("if (recovered) {");
+  const start = scheduler.indexOf("if (verdict.recovered) {");
   const unit = scheduler.slice(start, scheduler.indexOf("} else {", start));
   const transaction = unit.indexOf("await withOrgTransaction(run.org_id");
   const stamp = unit.indexOf("set status = 'completed'");

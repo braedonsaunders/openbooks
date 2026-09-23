@@ -69,20 +69,47 @@ export async function tick(): Promise<void> {
        where status = 'running' and updated_at < now() - interval '6 hours'
        limit 25`));
     for (const run of staleRunning.rows) {
-      let recovered = false;
-      if (run.object_key && run.sha256 && run.byte_size) {
-        try {
-          const object = await headBackupObject(run.object_key);
-          recovered = object.Metadata?.sha256 === run.sha256 && String(object.ContentLength) === run.byte_size;
-          if (!recovered) await deleteBackupObject(run.object_key);
-        } catch (error) {
-          if ((error as { name?: string }).name !== "NotFound" && (error as { name?: string }).name !== "NoSuchKey") {
-            console.error(`[backup-scheduler] cannot reconcile ${run.id}; will retry:`, (error as Error).message);
-            continue;
+      // Claim the row under its lock FIRST, then probe storage while holding
+      // it. A heartbeat or completion racing this scan either wins the lock
+      // first (the re-check below observes it and this tick stands down) or
+      // waits behind it — so the destructive delete below can never land on
+      // an object belonging to a backup that completed, nor on bytes a live
+      // worker finished uploading between a pre-lock probe and the delete.
+      // Storage outages (or a missing probe) decide nothing: the row stays
+      // running and a later tick retries without destroying evidence.
+      const verdict = await withOrgTransaction(run.org_id, async () => {
+        const locked = (await db.execute<{ id: string }>(sql`
+          select id from backup_runs
+           where id = ${run.id} and org_id = ${run.org_id} and status = 'running'
+             and updated_at < now() - interval '6 hours'
+           for update
+        `));
+        if (!locked.rows[0]) return null;
+        if (run.object_key && run.sha256 && run.byte_size) {
+          try {
+            const object = await headBackupObject(run.object_key);
+            const matches =
+              object.Metadata?.sha256 === run.sha256 && String(object.ContentLength) === run.byte_size;
+            if (!matches) {
+              try {
+                await deleteBackupObject(run.object_key);
+              } catch (error) {
+                console.error(`[backup-scheduler] cannot delete mismatched object for ${run.id}; will retry:`, (error as Error).message);
+                return null;
+              }
+            }
+            return { recovered: matches } as const;
+          } catch (error) {
+            if ((error as { name?: string }).name !== "NotFound" && (error as { name?: string }).name !== "NoSuchKey") {
+              console.error(`[backup-scheduler] cannot reconcile ${run.id}; will retry:`, (error as Error).message);
+              return null;
+            }
           }
         }
-      }
-      if (recovered) {
+        return { recovered: false } as const;
+      });
+      if (!verdict) continue;
+      if (verdict.recovered) {
         // The reconciled run names its tenant: its ledger stamp and completion
         // evidence commit as one unit inside that tenant's scope. An audit
         // outage rolls the stamp back to 'running' (updated_at still stale),
