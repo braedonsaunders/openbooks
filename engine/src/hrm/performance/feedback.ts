@@ -134,7 +134,24 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
+/**
+ * The one probe for the feedback surface: every feature key the service
+ * asserts, in one place. Readers (like the inbox leg) call this BEFORE
+ * touching the service and list nothing when any key is off; the
+ * assertion below funnels through it too, so the probe and the refusal
+ * can never drift apart when a key is added or removed.
+ */
+export async function feedbackFeatureEnabled(db: SqlExecutor, orgId: string): Promise<boolean> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) return false;
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) return false;
+  return lockAndCheckOrgFeature(db, orgId, HRM_FEEDBACK_KEY);
+}
+
 async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<void> {
+  if (await feedbackFeatureEnabled(db, orgId)) return;
+  // Name the missing switch so the operator knows what to flip. The probe
+  // above is the authority on which keys matter; these messages only label
+  // the first one found off.
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
@@ -147,12 +164,10 @@ async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<vo
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before writing feedback",
     );
   }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEEDBACK_KEY))) {
-    throw new HrmPerformanceError(
-      "FEATURE_OFF",
-      "hrmFeedback feature is disabled: enable it on Company Settings → Features before writing feedback",
-    );
-  }
+  throw new HrmPerformanceError(
+    "FEATURE_OFF",
+    "hrmFeedback feature is disabled: enable it on Company Settings → Features before writing feedback",
+  );
 }
 
 /**

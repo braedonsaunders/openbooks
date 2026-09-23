@@ -6,16 +6,17 @@
  * Fulfilment writing stays in the feedback surface (link-only with the
  * remedy named) — the adapter never writes feedback itself.
  *
- * While the hrm feature is off the adapter lists nothing (fail-closed) —
- * the inbox stays up for every org. Past that probe only a missing person
- * identity lists nothing; any other service failure propagates with its
- * message intact rather than masquerading as "no work".
+ * While any feedback-surface feature is off the adapter lists nothing
+ * (fail-closed) — the inbox stays up for every org. The probe is the
+ * service's own feedbackFeatureEnabled, so the leg can never observe a
+ * feature combination the service would refuse. Past that probe only a
+ * missing person identity lists nothing; any other service failure
+ * propagates with its message intact rather than masquerading as "no work".
  */
 
 import { HrmAuthorizationError } from "../../hrm/authorization.ts";
-import { listOpenRequestsForParty } from "../../hrm/performance/feedback.ts";
+import { feedbackFeatureEnabled, listOpenRequestsForParty } from "../../hrm/performance/feedback.ts";
 import { db } from "../../platform/db.ts";
-import { hrmOn } from "../guard.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
@@ -23,7 +24,7 @@ import { inboxItemId } from "../types.ts";
 export const hrmFeedbackRequestAdapter: InboxAdapter = {
   kind: "hrm_feedback_request",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await hrmOn(db, ctx.orgId))) return [];
+    if (!(await feedbackFeatureEnabled(db, ctx.orgId))) return [];
     let requests;
     try {
       requests = await listOpenRequestsForParty({ orgId: ctx.orgId, actorId: ctx.actorId });
