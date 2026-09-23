@@ -125,7 +125,25 @@
         "amount": "金額",
         "status": "ステータス"
       },
-      "noneYet": "仕入諸掛証憑はまだありません。"
+      "noneYet": "仕入諸掛証憑はまだありません。",
+      "reverse": {
+        "openButton": "仕入諸掛証憑を取り消す",
+        "title": "仕入諸掛証憑の取消",
+        "description": "元の証憑、配賦および仕訳はそのまま残ります。逆仕訳が総勘定元帳を取り消し、マイナスの配賦証跡がレイヤーを取り消します。",
+        "voucher": "証憑",
+        "selectVoucher": "記帳済みの証憑を選択",
+        "nonePosted": "記帳済みの仕入諸掛証憑はありません。",
+        "voucherRequired": "記帳済みの証憑が必要です",
+        "reversalDate": "取消日",
+        "reason": "理由",
+        "reasonPlaceholder": "この証憑を取り消す理由（5〜500文字）",
+        "reasonLength": "取消理由は5〜500文字で入力してください",
+        "reverse": "証憑を取り消す",
+        "reversed": "仕入諸掛証憑を取り消しました",
+        "alreadyReversed": "その証憑は既に取り消されています",
+        "reverseFailed": "証憑の取消に失敗しました",
+        "loadFailed": "仕入諸掛証憑を読み込めませんでした"
+      }
     },
     "lots": {
       "lotNumber": "ロット番号",

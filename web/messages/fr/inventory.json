@@ -125,7 +125,25 @@
         "amount": "Montant",
         "status": "Statut"
       },
-      "noneYet": "Aucun bon de coûts rendus pour l’instant."
+      "noneYet": "Aucun bon de coûts rendus pour l’instant.",
+      "reverse": {
+        "openButton": "Extourner le bon de coûts rendus",
+        "title": "Extourner le bon de coûts rendus",
+        "description": "Le bon d’origine, les répartitions et le journal restent intacts. Un journal de contre-passation annule la comptabilité générale, et les répartitions négatives annulent les couches.",
+        "voucher": "Bon",
+        "selectVoucher": "Sélectionner un bon comptabilisé",
+        "nonePosted": "Aucun bon de coûts rendus comptabilisé.",
+        "voucherRequired": "Un bon comptabilisé est requis",
+        "reversalDate": "Date d’extourne",
+        "reason": "Motif",
+        "reasonPlaceholder": "Pourquoi ce bon doit être annulé (5 à 500 caractères)",
+        "reasonLength": "Le motif d’extourne doit compter entre 5 et 500 caractères",
+        "reverse": "Extourner le bon",
+        "reversed": "Bon de coûts rendus extourné",
+        "alreadyReversed": "Ce bon a déjà été extourné",
+        "reverseFailed": "L’extourne du bon a échoué",
+        "loadFailed": "Impossible de charger les bons de coûts rendus"
+      }
     },
     "lots": {
       "lotNumber": "Numéro de lot",

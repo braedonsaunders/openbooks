@@ -125,7 +125,25 @@
         "amount": "金额",
         "status": "状态"
       },
-      "noneYet": "尚无到岸成本凭证。"
+      "noneYet": "尚无到岸成本凭证。",
+      "reverse": {
+        "openButton": "冲销到岸成本凭证",
+        "title": "冲销到岸成本凭证",
+        "description": "原凭证、分摊和日记账保持不变。冲销凭证冲回总账，负数分摊证据冲回成本层。",
+        "voucher": "凭证",
+        "selectVoucher": "选择一张已记账凭证",
+        "nonePosted": "没有已记账的到岸成本凭证。",
+        "voucherRequired": "需要一张已记账凭证",
+        "reversalDate": "冲销日期",
+        "reason": "原因",
+        "reasonPlaceholder": "该凭证需要冲销的原因（5-500个字符）",
+        "reasonLength": "冲销原因必须为5到500个字符",
+        "reverse": "冲销凭证",
+        "reversed": "到岸成本凭证已冲销",
+        "alreadyReversed": "该凭证已被冲销",
+        "reverseFailed": "凭证冲销失败",
+        "loadFailed": "无法加载到岸成本凭证"
+      }
     },
     "lots": {
       "lotNumber": "批号",

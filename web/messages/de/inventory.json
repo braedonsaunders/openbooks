@@ -125,7 +125,25 @@
         "amount": "Betrag",
         "status": "Status"
       },
-      "noneYet": "Noch keine Bezugskostenbelege."
+      "noneYet": "Noch keine Bezugskostenbelege.",
+      "reverse": {
+        "openButton": "Bezugskostenbeleg stornieren",
+        "title": "Bezugskostenbeleg stornieren",
+        "description": "Der ursprüngliche Beleg, die Umlagen und das Journal bleiben unverändert. Ein Stornojournal bucht das Hauptbuch zurück, und negative Umlagennachweise buchen die Schichten zurück.",
+        "voucher": "Beleg",
+        "selectVoucher": "Verbuchten Beleg auswählen",
+        "nonePosted": "Keine verbuchten Bezugskostenbelege.",
+        "voucherRequired": "Ein verbuchter Beleg ist erforderlich",
+        "reversalDate": "Stornodatum",
+        "reason": "Grund",
+        "reasonPlaceholder": "Warum dieser Beleg aufzulösen ist (5–500 Zeichen)",
+        "reasonLength": "Die Stornobegründung muss zwischen 5 und 500 Zeichen lang sein",
+        "reverse": "Beleg stornieren",
+        "reversed": "Bezugskostenbeleg storniert",
+        "alreadyReversed": "Dieser Beleg wurde bereits storniert",
+        "reverseFailed": "Stornierung des Belegs fehlgeschlagen",
+        "loadFailed": "Bezugskostenbelege konnten nicht geladen werden"
+      }
     },
     "lots": {
       "lotNumber": "Chargennummer",
