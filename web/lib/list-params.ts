@@ -95,6 +95,33 @@ export function pickString(v: string | string[] | undefined): string | undefined
   return v
 }
 
+/**
+ * The search params a rehomed `setup-section` widget needs from its host
+ * page's query string. The generic SetupEntitySection opens its New/edit
+ * drawer from `sp.row` (the host's New button writes `row=new` onto the
+ * CURRENT url client-side) and reads its list controls from `q` /
+ * `showInactive` / `sort` / `dir` / `page` / `perPage` plus the registry-
+ * declared enum filters (`f_<key>`); every other key rides along through
+ * mergeHref on the section's own links. A host loader that builds its own
+ * narrowed params (a status segment, a tab) must spread these beside them —
+ * otherwise the section renders with a dead New button (OM-18).
+ */
+export function setupSectionParams(
+  searchParams: Search,
+): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const key of ['row', 'q', 'showInactive', 'sort', 'dir', 'page', 'perPage']) {
+    const value = pickString(searchParams[key])
+    if (value !== undefined) out[key] = value
+  }
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (!key.startsWith('f_')) continue
+    const picked = pickString(value)
+    if (picked !== undefined) out[key] = picked
+  }
+  return out
+}
+
 export function clamp(n: number, min: number, max: number): number {
   if (!Number.isFinite(n)) return min
   return Math.max(min, Math.min(max, Math.trunc(n)))
