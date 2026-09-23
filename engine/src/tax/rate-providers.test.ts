@@ -15,6 +15,7 @@ import {
   quoteViaTaxJar,
   saveTaxRateProviderConfig,
   TaxRateProviderError,
+  validateTaxProviderEndpointUrl,
   type TaxQuoteRequest,
 } from "./rate-providers.ts";
 
@@ -87,24 +88,32 @@ const CUSTOM_HOOK_KEY = "CUSTOM-HOOK-KEY";
 function callEachProviderAt(
   origin: string,
 ): Array<{ name: string; call: () => Promise<unknown> }> {
+  // Local stub servers speak plain http on loopback: the test switch opts out
+  // of the public-address guard explicitly per call — production callers
+  // never pass it.
+  const local = { allowPrivateEndpoints: true } as const;
   return [
     {
       name: "avalara",
       call: () =>
-        quoteViaAvalara(quoteRequest, {
-          accountId: AVALARA_ACCOUNT_ID,
-          licenseKey: AVALARA_LICENSE_KEY,
-          baseUrl: origin,
-          quotedOn: quoteRequest.quotedOn!,
-        }),
+        quoteViaAvalara(
+          quoteRequest,
+          {
+            accountId: AVALARA_ACCOUNT_ID,
+            licenseKey: AVALARA_LICENSE_KEY,
+            baseUrl: origin,
+            quotedOn: quoteRequest.quotedOn!,
+          },
+          local,
+        ),
     },
     {
       name: "taxjar",
-      call: () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: origin }),
+      call: () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: origin }, local),
     },
     {
       name: "custom_http",
-      call: () => quoteViaCustomHttp(quoteRequest, { url: `${origin}/hook-quote`, apiKey: CUSTOM_HOOK_KEY }),
+      call: () => quoteViaCustomHttp(quoteRequest, { url: `${origin}/hook-quote`, apiKey: CUSTOM_HOOK_KEY }, local),
     },
   ];
 }
@@ -236,16 +245,21 @@ test("normal provider responses pass with credentials confined to the configured
 
   const originalFetch = globalThis.fetch;
   const redirectModes = spyRedirectMode(originalFetch);
+  const local = { allowPrivateEndpoints: true } as const;
   try {
     const [avalaraQuote, taxjarQuote, customQuote] = await Promise.all([
-      quoteViaAvalara(quoteRequest, {
-        accountId: AVALARA_ACCOUNT_ID,
-        licenseKey: AVALARA_LICENSE_KEY,
-        baseUrl: avalaraOrigin,
-        quotedOn: quoteRequest.quotedOn!,
-      }),
-      quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarOrigin }),
-      quoteViaCustomHttp(quoteRequest, { url: `${customOrigin}/hook-quote`, apiKey: CUSTOM_HOOK_KEY }),
+      quoteViaAvalara(
+        quoteRequest,
+        {
+          accountId: AVALARA_ACCOUNT_ID,
+          licenseKey: AVALARA_LICENSE_KEY,
+          baseUrl: avalaraOrigin,
+          quotedOn: quoteRequest.quotedOn!,
+        },
+        local,
+      ),
+      quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarOrigin }, local),
+      quoteViaCustomHttp(quoteRequest, { url: `${customOrigin}/hook-quote`, apiKey: CUSTOM_HOOK_KEY }, local),
     ]);
 
     // Avalara: license key crosses as basic auth on the configured origin only,
@@ -287,7 +301,7 @@ test("normal provider responses pass with credentials confined to the configured
     assert.deepEqual(customSeen[0]?.body.taxableAmount, "100.0000");
 
     // Same hook without a key sends no Authorization header at all.
-    await quoteViaCustomHttp(quoteRequest, { url: `${customOrigin}/hook-quote` });
+    await quoteViaCustomHttp(quoteRequest, { url: `${customOrigin}/hook-quote` }, local);
     assert.equal(customSeen[1]?.authorization, undefined);
 
     // The redirect opt-out is structural on every request, success paths included.
@@ -311,22 +325,27 @@ test("provider error statuses surface as TaxRateProviderError without leaking cr
     res.end(JSON.stringify({ error: { message: "nope" } }));
   });
   const errorsOrigin = await listen(errors);
+  const local = { allowPrivateEndpoints: true } as const;
   try {
     await assert.rejects(
-      quoteViaAvalara(quoteRequest, {
-        accountId: AVALARA_ACCOUNT_ID,
-        licenseKey: AVALARA_LICENSE_KEY,
-        baseUrl: errorsOrigin,
-        quotedOn: quoteRequest.quotedOn!,
-      }),
+      quoteViaAvalara(
+        quoteRequest,
+        {
+          accountId: AVALARA_ACCOUNT_ID,
+          licenseKey: AVALARA_LICENSE_KEY,
+          baseUrl: errorsOrigin,
+          quotedOn: quoteRequest.quotedOn!,
+        },
+        local,
+      ),
       (e: unknown) => e instanceof TaxRateProviderError && /Avalara 400:/.test(e.message),
     );
     await assert.rejects(
-      quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: errorsOrigin }),
+      quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: errorsOrigin }, local),
       (e: unknown) => e instanceof TaxRateProviderError && /TaxJar 401:/.test(e.message),
     );
     await assert.rejects(
-      quoteViaCustomHttp(quoteRequest, { url: `${errorsOrigin}/hook-error`, apiKey: CUSTOM_HOOK_KEY }),
+      quoteViaCustomHttp(quoteRequest, { url: `${errorsOrigin}/hook-error`, apiKey: CUSTOM_HOOK_KEY }, local),
       (e: unknown) => e instanceof TaxRateProviderError && /custom tax hook 502/.test(e.message),
     );
   } finally {
@@ -356,29 +375,181 @@ test("a 200 response without the amount it owes is refused by name, never quoted
   const avalaraOrigin = await listen(avalara);
   const taxjarOrigin = await listen(taxjar);
   const taxjarNoRateOrigin = await listen(taxjarNoRate);
+  const local = { allowPrivateEndpoints: true } as const;
   try {
     await assert.rejects(
       () =>
-        quoteViaAvalara(quoteRequest, {
-          accountId: AVALARA_ACCOUNT_ID,
-          licenseKey: AVALARA_LICENSE_KEY,
-          baseUrl: avalaraOrigin,
-          quotedOn: quoteRequest.quotedOn!,
-        }),
+        quoteViaAvalara(
+          quoteRequest,
+          {
+            accountId: AVALARA_ACCOUNT_ID,
+            licenseKey: AVALARA_LICENSE_KEY,
+            baseUrl: avalaraOrigin,
+            quotedOn: quoteRequest.quotedOn!,
+          },
+          local,
+        ),
       (e: unknown) => e instanceof TaxRateProviderError && /missing totalTax/.test(e.message),
     );
     await assert.rejects(
-      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarOrigin }),
+      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarOrigin }, local),
       (e: unknown) => e instanceof TaxRateProviderError && /missing amount_to_collect/.test(e.message),
     );
     await assert.rejects(
-      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarNoRateOrigin }),
+      () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: taxjarNoRateOrigin }, local),
       (e: unknown) => e instanceof TaxRateProviderError && /missing tax\.rate/.test(e.message),
     );
   } finally {
     await close(avalara);
     await close(taxjar);
     await close(taxjarNoRate);
+  }
+});
+
+test("endpoint save validation refuses internal targets and names the settings field", async () => {
+  // Loopback, RFC1918, link-local/metadata and IPv6-internal literals are
+  // refused without any DNS round trip; the message names the settings field
+  // holding the URL so the operator knows exactly what to change.
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://127.0.0.1/quote" }),
+    (e: unknown) =>
+      e instanceof TaxRateProviderError &&
+      /127\.0\.0\.1.*public address/.test(e.message) &&
+      /settings\.quoteUrl/.test(e.message),
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://10.0.0.5/quote" }),
+    /did not resolve to a public address/,
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://169.254.169.254/latest/" }),
+    /did not resolve to a public address/,
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://[::1]/quote" }),
+    /did not resolve to a public address/,
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://[::ffff:127.0.0.1]/quote" }),
+    /did not resolve to a public address/,
+  );
+  // Plain http is refused even for a public-looking host: credentials must
+  // never cross cleartext.
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("avalara", { baseUrl: "http://rest.avatax.com" }),
+    (e: unknown) => e instanceof TaxRateProviderError && /must use HTTPS/.test(e.message) && /baseUrl/.test(e.message),
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("taxjar", { baseUrl: "http://127.0.0.1:9/v2/taxes" }),
+    /must use HTTPS/,
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "not a url" }),
+    /is not a URL/,
+  );
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: 42 }),
+    /must be an https URL string/,
+  );
+  // A hostname whose DNS answers are private is refused at save, before any
+  // key travels; a public answer passes.
+  await assert.rejects(
+    validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "https://tax-stub.test/hook" }, { lookup: async () => ["10.9.9.9"] }),
+    /tax-stub\.test.*public address/,
+  );
+  await validateTaxProviderEndpointUrl(
+    "custom_http",
+    { quoteUrl: "https://tax-stub.test/hook" },
+    { lookup: async () => ["93.184.216.34"] },
+  );
+  // Unset means the vendor's built-in public https origin — nothing to check
+  // here; the fetch layer still verifies at connect time. Manual reads no URL.
+  await validateTaxProviderEndpointUrl("avalara", {});
+  await validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "  " });
+  await validateTaxProviderEndpointUrl("manual", { quoteUrl: "http://127.0.0.1/quote" });
+  // The explicit test switch is the only bypass, and it is per call.
+  await validateTaxProviderEndpointUrl("custom_http", { quoteUrl: "http://127.0.0.1:9/quote" }, { allowPrivateEndpoints: true });
+});
+
+test("fetch refuses internal targets on every adapter before credentials travel", async () => {
+  let requests = 0;
+  let authorization = "";
+  const stub = createServer((req, res) => {
+    requests += 1;
+    authorization = req.headers.authorization ?? "";
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ taxAmount: "1.0000", components: [] }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    stub.once("error", reject);
+    stub.listen(0, "127.0.0.1", () => resolve());
+  });
+  const address = stub.address();
+  if (!address || typeof address === "string") throw new Error("stub did not bind");
+  const port = address.port;
+  try {
+    // Literal loopback on every adapter WITHOUT the test switch: refused,
+    // never connected. (callEachProviderAt carries the switch for the stub
+    // servers above, so these calls are spelled out bare.)
+    const guarded: Array<{ name: string; call: () => Promise<unknown> }> = [
+      {
+        name: "avalara",
+        call: () =>
+          quoteViaAvalara(quoteRequest, {
+            accountId: AVALARA_ACCOUNT_ID,
+            licenseKey: AVALARA_LICENSE_KEY,
+            baseUrl: `https://127.0.0.1:${port}`,
+            quotedOn: quoteRequest.quotedOn!,
+          }),
+      },
+      {
+        name: "taxjar",
+        call: () => quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: `https://127.0.0.1:${port}` }),
+      },
+      {
+        name: "custom_http",
+        call: () => quoteViaCustomHttp(quoteRequest, { url: `https://127.0.0.1:${port}/hook`, apiKey: CUSTOM_HOOK_KEY }),
+      },
+    ];
+    for (const provider of guarded) {
+      await assert.rejects(
+        provider.call(),
+        (e: unknown) => e instanceof TaxRateProviderError && /public address/.test(e.message),
+        `${provider.name} must refuse loopback at fetch`,
+      );
+    }
+    // A hostname that answers loopback at fetch time (rebound after a clean
+    // save) is refused the same way.
+    await assert.rejects(
+      quoteViaCustomHttp(
+        quoteRequest,
+        { url: `https://rebound.test:${port}/hook`, apiKey: CUSTOM_HOOK_KEY },
+        { lookup: async () => ["127.0.0.1"] },
+      ),
+      (e: unknown) => e instanceof TaxRateProviderError && /rebound\.test.*public address/.test(e.message),
+    );
+    // A hostname that answers public at the pre-check and private at connect
+    // time is still refused: the shared guard pins the socket to an address
+    // it verified itself.
+    let resolutions = 0;
+    await assert.rejects(
+      quoteViaTaxJar(
+        quoteRequest,
+        { apiKey: TAXJAR_API_KEY, baseUrl: `https://flapping.test:${port}` },
+        {
+          lookup: async () => {
+            resolutions += 1;
+            return resolutions === 1 ? ["93.184.216.34"] : ["127.0.0.1"];
+          },
+        },
+      ),
+      TaxRateProviderError,
+    );
+    assert.ok(resolutions >= 2, "both the pre-check and the connect must resolve");
+    assert.equal(requests, 0, "no credential-bearing request may reach an internal host");
+    assert.equal(authorization, "");
+  } finally {
+    await close(stub);
   }
 });
 
@@ -663,6 +834,9 @@ test(
         orgId,
         { provider: "custom_http", isEnabled: true, settings: { quoteUrl: "https://tax.example.internal/quote" } },
         admin1,
+        // Documentation-only hostname: stub public DNS so the save-time
+        // address check stays hermetic.
+        { lookup: async () => ["93.184.216.34"] },
       );
       assert.equal((await committedConfig(orgId))!.secrets, null);
 
@@ -680,7 +854,9 @@ test(
         orgId,
         { provider: "custom_http", isEnabled: true, apiKey: "RACING-KEY-VALUE" },
         admin2,
-        { reason: "rotate api key" },
+        // The row carries the documentation-only stub hostname; keep its
+        // re-validation hermetic with the same stub DNS.
+        { reason: "rotate api key", lookup: async () => ["93.184.216.34"] },
       );
 
       // Deterministic barrier: the save must be parked on the editor's lock
@@ -806,6 +982,46 @@ test(
       assert.equal(after.updatedBy, admin1);
       // No audit row leaked from the rolled-back attempt either.
       assert.equal((await configAuditRows(orgId)).length, 1);
+    } finally {
+      await dropTaxConfigOrg(orgId);
+    }
+  },
+);
+
+test(
+  "provider config save refuses internal endpoints and writes nothing",
+  { skip: !DB },
+  async () => {
+    const orgId = await seedTaxConfigOrg();
+    try {
+      const admin = randomUUID();
+      // Plain-http loopback is refused at save, before any row exists.
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          orgId,
+          { provider: "custom_http", isEnabled: true, settings: { quoteUrl: "http://127.0.0.1:9/quote" } },
+          admin,
+        ),
+        (e: unknown) => e instanceof TaxRateProviderError && /must use HTTPS/.test(e.message),
+      );
+      await assert.rejects(
+        saveTaxRateProviderConfig(
+          orgId,
+          { provider: "avalara", isEnabled: true, settings: { baseUrl: "https://10.0.0.5/avatax" } },
+          admin,
+        ),
+        (e: unknown) => e instanceof TaxRateProviderError && /public address/.test(e.message),
+      );
+      assert.equal(await committedConfig(orgId), null, "refused saves must not create a row");
+      assert.deepEqual(await configAuditRows(orgId), [], "refused saves must not write audit evidence");
+      // The explicit test switch is the only bypass, and it is per call.
+      await saveTaxRateProviderConfig(
+        orgId,
+        { provider: "custom_http", isEnabled: true, settings: { quoteUrl: "http://127.0.0.1:9/quote" } },
+        admin,
+        { allowPrivateEndpoints: true, reason: "test stub" },
+      );
+      assert.equal((await committedConfig(orgId))!.provider, "custom_http");
     } finally {
       await dropTaxConfigOrg(orgId);
     }

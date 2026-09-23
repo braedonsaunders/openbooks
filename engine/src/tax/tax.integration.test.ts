@@ -510,6 +510,9 @@ test("approved sales and purchases use the configured provider atomically and re
       }));
     });
     const origin = await listenTaxServer(provider);
+    // Local stub on loopback: the explicit per-call test switch, exactly as
+    // the wire tests use — production callers never pass it.
+    const stubOutbound = { allowPrivateEndpoints: true } as const;
     await saveTaxRateProviderConfig(
       org.orgId,
       {
@@ -517,6 +520,7 @@ test("approved sales and purchases use the configured provider atomically and re
         settings: { quoteUrl: `${origin}/quote`, jurisdictionTaxCodes: { CA: taxCodeId } },
       },
       null,
+      stubOutbound,
     );
 
     async function seedDocument(
@@ -556,22 +560,32 @@ test("approved sales and purchases use the configured provider atomically and re
     const purchase = await seedDocument("vendor_bill", "EXT-PURCHASE", "9.5000");
     // Draft calculation is the only provider call and persists the immutable
     // line quote before approval. Posting must only replay this evidence.
-    await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000",
-      currency: "CAD",
-      shipFrom: {},
-      shipTo: {},
-      quotedOn: org.date,
-      documentLineId: sales.lineId,
-    });
-    await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000",
-      currency: "CAD",
-      shipFrom: {},
-      shipTo: {},
-      quotedOn: org.date,
-      documentLineId: purchase.lineId,
-    });
+    await quoteExternalTax(
+      org.orgId,
+      {
+        taxableAmount: "100.0000",
+        currency: "CAD",
+        shipFrom: {},
+        shipTo: {},
+        quotedOn: org.date,
+        documentLineId: sales.lineId,
+      },
+      null,
+      { allowPrivateEndpoints: true },
+    );
+    await quoteExternalTax(
+      org.orgId,
+      {
+        taxableAmount: "100.0000",
+        currency: "CAD",
+        shipFrom: {},
+        shipTo: {},
+        quotedOn: org.date,
+        documentLineId: purchase.lineId,
+      },
+      null,
+      { allowPrivateEndpoints: true },
+    );
     assert.equal(calls, 2, "draft calculation invokes the configured provider for sales and purchases");
     const deps = { control: {
       ar: org.accounts.ar,
@@ -601,14 +615,19 @@ test("approved sales and purchases use the configured provider atomically and re
     // A persisted line quote is the replay authority. Once it exists, a retry
     // does not call a changed/outage endpoint and reuses the same provenance.
     const replay = await seedDocument("customer_invoice", "EXT-REPLAY", "9.5000");
-    await quoteExternalTax(org.orgId, {
-      taxableAmount: "100.0000",
-      currency: "CAD",
-      shipFrom: {},
-      shipTo: {},
-      quotedOn: org.date,
-      documentLineId: replay.lineId,
-    });
+    await quoteExternalTax(
+      org.orgId,
+      {
+        taxableAmount: "100.0000",
+        currency: "CAD",
+        shipFrom: {},
+        shipTo: {},
+        quotedOn: org.date,
+        documentLineId: replay.lineId,
+      },
+      null,
+      { allowPrivateEndpoints: true },
+    );
     assert.equal(calls, 3);
     await saveTaxRateProviderConfig(
       org.orgId,
@@ -617,6 +636,7 @@ test("approved sales and purchases use the configured provider atomically and re
         settings: { quoteUrl: `${origin}/outage`, jurisdictionTaxCodes: { CA: taxCodeId } },
       },
       null,
+      stubOutbound,
     );
     await postDocument(replay.id, deps, { deferEffects: true, suppressAutomation: true });
     assert.equal(calls, 3, "retry uses the persisted quote instead of re-firing the provider");
@@ -627,6 +647,9 @@ test("approved sales and purchases use the configured provider atomically and re
       org.orgId,
       { provider: "custom_http", isEnabled: true, preferProvider: false },
       null,
+      // Inherits the loopback stub URL from the previous save, which
+      // re-validates: same explicit switch.
+      stubOutbound,
     );
     const local = await seedDocument("customer_invoice", "LOCAL-TAX");
     await postDocument(local.id, deps, { deferEffects: true, suppressAutomation: true });
@@ -639,6 +662,7 @@ test("approved sales and purchases use the configured provider atomically and re
       org.orgId,
       { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/outage` } },
       null,
+      stubOutbound,
     );
     const failed = await seedDocument("vendor_bill", "EXT-OUTAGE");
     await assert.rejects(
@@ -779,6 +803,9 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
         settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
       },
       null,
+      // Documentation-only hostname: resolve it to a public stub address so
+      // the save-time DNS check stays hermetic.
+      { lookup: async () => ["93.184.216.34"] },
     );
     const config = await readTaxRateProviderConfig(org.orgId);
     const quoteComponents = [
