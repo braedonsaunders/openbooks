@@ -111,7 +111,11 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
     group.items.push({ kind: 'link', href: contribution.href, label: contribution.label, iconKey: contribution.iconKey, extensionKey: args.extensionKey, requiredPermission: contribution.requiredPermission });
     changed = true;
   }
-  if (config.groups.reduce((n, group) => n + group.items.length, 0) > 256) throw new ExtensionProjectionError('navigation exceeds 256 items');
+  // Capacity is a visible-navigation property: retired hidden rows are history
+  // (kept for audit evidence), not live shortcuts, so only visible rows count
+  // toward the limit. Retired links therefore never block a new install.
+  const visibleNavItems = config.groups.reduce((n, group) => n + group.items.filter((item) => !item.hidden).length, 0);
+  if (visibleNavItems > 256) throw new ExtensionProjectionError('navigation exceeds 256 items');
   if (changed) {
     const row = (await tx.execute<{ id: string }>(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
       values (${args.orgId}, ${JSON.stringify(config)}::jsonb, ${args.actorId}, ${args.actorId})
