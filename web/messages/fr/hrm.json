@@ -675,6 +675,7 @@
       "amount": "Montant",
       "currency": "Devise",
       "basis": "Base",
+      "employer": "Employeur",
       "expires": "Expire",
       "submit": "Rédiger l'offre",
       "failed": "L'offre n'a pas pu être rédigée."

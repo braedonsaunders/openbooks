@@ -675,6 +675,7 @@
       "amount": "Valor",
       "currency": "Moeda",
       "basis": "Base",
+      "employer": "Empregador",
       "expires": "Expira",
       "submit": "Redigir oferta",
       "failed": "Não foi possível redigir a oferta."

@@ -675,6 +675,7 @@
       "amount": "Betrag",
       "currency": "Währung",
       "basis": "Grundlage",
+      "employer": "Arbeitgeber",
       "expires": "Läuft ab",
       "submit": "Angebot entwerfen",
       "failed": "Das Angebot konnte nicht entworfen werden."

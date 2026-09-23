@@ -450,15 +450,48 @@ export function InterviewActionsIsland({
   )
 }
 
+/**
+ * The draft-offer POST body. The employer rides every submission — the form
+ * defaults it to the requisition's legal entity, and the route refuses an
+ * out-of-scope one by name.
+ */
+export function buildOfferDraftBody(input: {
+  applicationId: string
+  employerSubsidiaryId: string
+  jobTitle: string
+  proposedStartOn: string
+  compensationAmount: string
+  compensationCurrency: string
+  compensationBasis: string
+  expiresOn: string | null
+}): Record<string, unknown> {
+  return {
+    applicationId: input.applicationId,
+    employerSubsidiaryId: input.employerSubsidiaryId,
+    jobTitle: input.jobTitle.trim(),
+    proposedStartOn: input.proposedStartOn,
+    compensationAmount: input.compensationAmount.trim(),
+    compensationCurrency: input.compensationCurrency.trim().toUpperCase(),
+    compensationBasis: input.compensationBasis,
+    expiresOn: input.expiresOn,
+  }
+}
+
 /** Draft the terms on the application. */
 export function OfferCreateIsland({
   applicationId,
   bases,
+  employer,
+  employers,
   labels,
 }: {
   applicationId: string
   bases: Option[]
-  labels: { job: string; start: string; amount: string; currency: string; basis: string; expires: string; submit: string; failed: string }
+  /** The requisition's legal entity: the deterministic employer default (name for the eye). */
+  employer: { value: string; label: string }
+  /** The authorized employers the caller may instead choose. */
+  employers: Option[]
+  labels: { employer: string; job: string; start: string; amount: string; currency: string; basis: string; expires: string; submit: string; failed: string }
 }) {
   const refresh = useRefresh()
   const [job, setJob] = useState('')
@@ -467,6 +500,11 @@ export function OfferCreateIsland({
   const [currency, setCurrency] = useState('USD')
   const [basis, setBasis] = useState(bases[0]?.value ?? 'annual')
   const [expires, setExpires] = useState('')
+  // The picker shows only when the caller may genuinely choose: several
+  // authorized employers including the requisition's own. Otherwise the
+  // inherited entity renders as fixed text — never a raw id.
+  const showPicker = employers.length > 1 && employers.some((option) => option.value === employer.value)
+  const [employerId, setEmployerId] = useState(employer.value)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -475,15 +513,20 @@ export function OfferCreateIsland({
     setBusy(true)
     setError(null)
     try {
-      const res = await postJson('/api/hrm/recruiting/offers', 'POST', {
-        applicationId,
-        jobTitle: job.trim(),
-        proposedStartOn: start,
-        compensationAmount: amount.trim(),
-        compensationCurrency: currency.trim().toUpperCase(),
-        compensationBasis: basis,
-        expiresOn: expires || null,
-      })
+      const res = await postJson(
+        '/api/hrm/recruiting/offers',
+        'POST',
+        buildOfferDraftBody({
+          applicationId,
+          employerSubsidiaryId: employerId,
+          jobTitle: job,
+          proposedStartOn: start,
+          compensationAmount: amount,
+          compensationCurrency: currency,
+          compensationBasis: basis,
+          expiresOn: expires || null,
+        }),
+      )
       if (!res.ok) {
         setError(await readApiErrorMessage(res, labels.failed))
         setBusy(false)
@@ -499,6 +542,20 @@ export function OfferCreateIsland({
 
   return (
     <form className="space-y-2" onSubmit={submit}>
+      <div>
+        <Label>{labels.employer}</Label>
+        {showPicker ? (
+          <Select value={employerId} onChange={(event) => setEmployerId(event.target.value)}>
+            {employers.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{employer.label}</p>
+        )}
+      </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label>{labels.job}</Label>

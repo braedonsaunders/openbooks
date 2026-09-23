@@ -394,6 +394,25 @@ export async function loadRecruitingPage(
          where e.org_id = ${authz.user.orgId}::uuid
            ${authz.allowedSubsidiaryIds ? sql`and e.employer_subsidiary_id in (${sql.join([...authz.allowedSubsidiaryIds].map((id) => sql`${id}::uuid`), sql`, `)})` : sql``}
          order by p.display_name limit 200`)).rows
+      // The offer draft inherits the opening's legal entity: resolve its
+      // display name (never the raw id) plus the authorized employers the
+      // caller may instead choose. The POST route stays authoritative.
+      const offerEmployerName = (await db.execute<{ name: string }>(sql`
+        select name from subsidiaries
+         where org_id = ${authz.user.orgId}::uuid and id = ${detail.employerSubsidiaryId}
+         limit 1`)).rows[0]?.name
+      if (!offerEmployerName) {
+        throw new Error(`requisition ${detail.requisitionNumber} names an employer outside this organization`)
+      }
+      const offerVisible = await subsidiaryUiOptions(authz.user.orgId)
+      const offerScoped = offerVisible.filter(
+        (option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
+      )
+      let offerEmployerOptions = offerScoped.map((option) => ({ value: option.id, label: option.name }))
+      if (offerEmployerOptions.length === 0 && offerVisible.length === 0) {
+        const root = await rootSubsidiary()
+        offerEmployerOptions = [{ value: root.id, label: root.name }]
+      }
       requisition = {
         ...detail,
         closeHref: hrefFor(status, null),
@@ -444,6 +463,7 @@ export async function loadRecruitingPage(
           completeFailed: t('recruiting.interview.failed'),
           cancelLabel: t('recruiting.interview.cancel'),
           offerTitle: t('recruiting.offerCard.title'),
+          offerEmployer: t('recruiting.offerCard.employer'),
           offerJob: t('recruiting.offerCard.job'),
           offerStart: t('recruiting.offerCard.start'),
           offerAmount: t('recruiting.offerCard.amount'),
@@ -472,6 +492,8 @@ export async function loadRecruitingPage(
             failed: t('recruiting.lifecycle.failed'),
           },
         },
+        offerEmployer: { value: detail.employerSubsidiaryId, label: offerEmployerName },
+        offerEmployerOptions,
         employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
           kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map((value) => ({
             value,

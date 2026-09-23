@@ -99,7 +99,7 @@ test("drawer islands post through the recruiting routes with refusals intact", (
   }
   assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/applications'/, "funnel acts post through the applications route");
   assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/interviews'/, "interview acts post through the interviews route");
-  assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/offers'/, "offer acts post through the offers route");
+  assert.match(actions, /(fetch|postJson)\(\s*'\/api\/hrm\/recruiting\/offers'/, "offer acts post through the offers route");
   assert.match(actions, /readApiErrorMessage/, "islands render refusals, never swallow them");
   assert.match(actions, /!res\.ok/, "error bodies are checked before they are parsed");
   assert.match(sections, /from '@openbooks\/ui'/, "forms use the house primitives");
