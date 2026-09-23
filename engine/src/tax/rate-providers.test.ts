@@ -209,6 +209,42 @@ test("Avalara and TaxJar refuse an empty destination instead of defaulting it to
   }
 });
 
+test("TaxJar carries a coded line's product tax code; uncoded lines stay aggregate", async () => {
+  const local = { allowPrivateEndpoints: true } as const;
+  const bodies: Array<Record<string, unknown>> = [];
+  const server = createServer(async (req, res) => {
+    bodies.push(JSON.parse(await readBody(req)) as Record<string, unknown>);
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        tax: {
+          amount_to_collect: 1.0,
+          rate: 0.01,
+          breakdown: { state_tax_collectable: 1.0, state_tax_rate: 0.01 },
+        },
+      }),
+    );
+  });
+  const origin = await listen(server);
+  try {
+    const coded = await quoteViaTaxJar(
+      { ...quoteRequest, itemCode: "20010" },
+      { apiKey: TAXJAR_API_KEY, baseUrl: origin },
+      local,
+    );
+    const codedItems = (bodies[0] as { line_items?: unknown }).line_items;
+    assert.deepEqual(codedItems, [{ id: "1", quantity: 1, unit_price: 100, product_tax_code: "20010" }]);
+    assert.equal((bodies[0] as { amount?: unknown }).amount, 100);
+    assert.equal(coded.taxAmount, "1.0000");
+
+    const plain = await quoteViaTaxJar(quoteRequest, { apiKey: TAXJAR_API_KEY, baseUrl: origin }, local);
+    assert.ok(!("line_items" in (bodies[1] as Record<string, unknown>)));
+    assert.equal(plain.taxAmount, "1.0000");
+  } finally {
+    await close(server);
+  }
+});
+
 test("normal provider responses pass with credentials confined to the configured origin", async () => {
   interface SeenCall {
     pathname: string;
