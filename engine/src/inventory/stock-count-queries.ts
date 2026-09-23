@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { add, neg } from "../money/money.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import { InventoryError } from "./contracts.ts";
 import {
   loadCountHeader,
@@ -39,6 +40,11 @@ export interface StockCountSummary {
 }
 
 export interface StockCountListQuery {
+  /**
+   * Legal entities the caller may see. Null/undefined reads org-wide (full
+   * access); an empty set matches nothing — an empty grant fails closed.
+   */
+  subsidiaryIds?: readonly string[] | null;
   /** Page size, 1..500 (default 500). */
   limit?: number;
   /** Opaque cursor from a previous page's nextCursor. */
@@ -53,6 +59,11 @@ export interface StockCountListPage {
 }
 
 const LIST_ORDER = sql`c.counted_on desc, c.created_at desc, c.id`;
+
+function subsidiaryScope(subsidiaryIds: readonly string[] | null | undefined): ReturnType<typeof sql> {
+  if (subsidiaryIds == null) return sql``;
+  return sql`and c.subsidiary_id = any(${uuidArray(subsidiaryIds)}::uuid[])`;
+}
 
 interface ListCursor {
   countedOn: string;
@@ -77,6 +88,10 @@ function parseListCursor(cursor: string): ListCursor {
 export async function listStockCounts(orgId: string, query: StockCountListQuery = {}): Promise<StockCountListPage> {
   const wanted = Math.floor(Number(query.limit ?? 500));
   const limit = Number.isFinite(wanted) ? Math.min(Math.max(wanted, 1), 500) : 500;
+  if (query.subsidiaryIds != null && query.subsidiaryIds.length === 0) {
+    return { counts: [], totalCount: 0, nextCursor: null };
+  }
+  const scope = subsidiaryScope(query.subsidiaryIds);
   const after = query.cursor ? parseListCursor(query.cursor) : null;
   const cursorScope = after
     ? sql`and (c.counted_on < ${after.countedOn}::date
@@ -84,7 +99,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
             or (c.counted_on = ${after.countedOn}::date and c.created_at = ${after.createdAt}::timestamptz and c.id > ${after.id}))`
     : sql``;
   const total = (await db.execute<{ n: string }>(sql`
-    select count(*)::text as n from stock_counts c where c.org_id = ${orgId}`)).rows[0]!.n;
+    select count(*)::text as n from stock_counts c where c.org_id = ${orgId} ${scope}`)).rows[0]!.n;
   const r = (await db.execute<{
     id: string;
     status: string;
@@ -109,7 +124,7 @@ export async function listStockCounts(orgId: string, query: StockCountListQuery 
                and l.counted_quantity is not null
                and l.counted_quantity <> l.expected_quantity) as discrepant_count
       from stock_counts c
-     where c.org_id = ${orgId} ${cursorScope}
+     where c.org_id = ${orgId} ${scope} ${cursorScope}
      order by ${LIST_ORDER}
      limit ${limit + 1}`));
   const hasMore = r.rows.length > limit;

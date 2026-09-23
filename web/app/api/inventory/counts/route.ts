@@ -85,6 +85,8 @@ export async function GET(req: Request) {
       }
       return NextResponse.json({ ok: true, ...(await getStockCountDetail(user.orgId, id)) })
     }
+    // The list is subsidiary-scoped server-side: a restricted caller sees
+    // only the entities in their grant, and an empty grant sees nothing.
     // Pages are cursor-bounded — count #501+ is reachable, never truncated.
     const limitParam = params.get('limit')
     let limit: number | undefined
@@ -95,6 +97,7 @@ export async function GET(req: Request) {
       }
     }
     const page = await listStockCounts(user.orgId, {
+      subsidiaryIds: gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null,
       limit,
       cursor: params.get('cursor'),
     })
