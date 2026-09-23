@@ -10,6 +10,11 @@ test("capture plan splits the ledger into bounded calendar months", () => {
   ]);
   assert.match(plan.find((r) => r.family === "ledger:2024-01")!.requestXml, /<FromReportDate>2024-01-15<\/FromReportDate>/);
   assert.match(plan.find((r) => r.family === "ledger:2024-03")!.requestXml, /<ToReportDate>2024-03-12<\/ToReportDate>/);
+  // Bounded history also captures a dated opening trial balance as of the
+  // day before the window, so carried balances can reconcile.
+  const opening = plan.find((r) => r.family === "opening-trial-balance")!;
+  assert.equal(opening.requestKind, "TrialBalance");
+  assert.match(opening.requestXml, /<ToReportDate>2024-01-14<\/ToReportDate>/);
   assert.deepEqual(calendarMonths("2024-02-29", through)[0], { month: "2024-02", from: "2024-02-29", to: "2024-02-29" });
 });
 
