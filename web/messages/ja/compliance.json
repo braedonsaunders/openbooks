@@ -204,7 +204,11 @@
     "revoke": "取り消す",
     "revokeTitle": "この例外を取り消す",
     "revokeReason": "取り消す理由を入力してください",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "承認待ち",
+    "approve": "承認する",
+    "requestFiled": "要求を登録しました。別の担当者が承認するまで適用されません。",
+    "requestHint": "要求は別の担当者が承認するまで適用されません。"
   },
   "lienWaivers": {
     "title": "留置権放棄書",

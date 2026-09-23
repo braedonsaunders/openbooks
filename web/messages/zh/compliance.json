@@ -204,7 +204,11 @@
     "revoke": "撤销",
     "revokeTitle": "撤销此豁免",
     "revokeReason": "撤销原因？",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "待审批",
+    "approve": "批准",
+    "requestFiled": "请求已提交，在其他人批准之前不生效。",
+    "requestHint": "请求在其他人批准之前不生效。"
   },
   "lienWaivers": {
     "title": "留置权弃权书",

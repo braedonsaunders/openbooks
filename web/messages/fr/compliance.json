@@ -204,7 +204,11 @@
     "revoke": "Révoquer",
     "revokeTitle": "Révoquer cette dérogation",
     "revokeReason": "Pour quel motif ?",
-    "window": "{from} → {to}"
+    "window": "{from} → {to}",
+    "pendingApproval": "Approbation en attente",
+    "approve": "Approuver",
+    "requestFiled": "Demande enregistrée. Elle ne s'applique que lorsqu'une autre personne l'approuve.",
+    "requestHint": "Une demande ne s'applique que lorsqu'une autre personne l'approuve."
   },
   "lienWaivers": {
     "title": "Renonciations au privilège",

@@ -93,6 +93,8 @@ export function VendorComplianceDrawer({
   const today = useBusinessToday()
   const [tab, setTab] = useState<Tab>('certificates')
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<Record<string, string>>({})
   const [pending, startTransition] = useTransition()
   const [newCert, setNewCert] = useState({
     requirementId: '',
@@ -129,6 +131,7 @@ export function VendorComplianceDrawer({
 
   async function call(url: string, method: string, body: unknown): Promise<boolean> {
     setError(null)
+    setNotice(null)
     const res = await fetch(url, {
       method,
       headers: { 'content-type': 'application/json' },
@@ -199,7 +202,34 @@ export function VendorComplianceDrawer({
       reason: exception.reason,
       expiresOn: exception.expiresOn,
     })
-    if (ok) setException({ requirementId: '', projectId: '', reason: '', expiresOn: '' })
+    if (ok) {
+      setException({ requirementId: '', projectId: '', reason: '', expiresOn: '' })
+      // Filing is not granting: say so where the request was made, so nobody
+      // reads the cleared form as coverage.
+      setNotice(t('exceptions.requestFiled'))
+    }
+  }
+
+  async function approveException(id: string) {
+    setRowError((prev) => {
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    const res = await fetch(`/api/compliance/waivers/${id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'approve' }),
+    })
+    if (!res.ok) {
+      // The refusal belongs to the row it refused — a request decided
+      // elsewhere while this screen was open reads the server's reason
+      // here, pinned to its row, rather than as a detached toast.
+      const payload = (await res.json().catch(() => ({}))) as { error?: string }
+      setRowError((prev) => ({ ...prev, [id]: payload.error ?? t('errors.saveFailed') }))
+      return
+    }
+    startTransition(() => router.refresh())
   }
 
   async function revokeException(id: string) {
@@ -642,29 +672,54 @@ export function VendorComplianceDrawer({
               <p className="text-sm text-slate-500 dark:text-slate-400">{t('exceptions.empty')}</p>
             ) : (
               <ul className="space-y-2">
-                {data.exceptions.map((row) => (
-                  <li
-                    key={row.id}
-                    className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {row.requirementCode} · {row.requirementName}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">{row.reason}</p>
-                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                        {t('exceptions.window', { from: row.effectiveFrom, to: row.expiresOn })}
-                        {row.projectName ? ` · ${row.projectName}` : ''}
-                        {row.approvedByName ? ` · ${row.approvedByName}` : ''}
-                      </p>
-                    </div>
-                    {canWaive ? (
-                      <Button size="sm" variant="ghost" disabled={pending} onClick={() => revokeException(row.id)}>
-                        {t('exceptions.revoke')}
-                      </Button>
-                    ) : null}
-                  </li>
-                ))}
+                {data.exceptions.map((row) => {
+                  const isPending = row.status === 'pending_approval'
+                  // The requester never gets the button — the server would
+                  // refuse them anyway — but everyone else holding the waive
+                  // permission does.
+                  const mayApprove = canWaive && isPending && row.requestedById !== currentUserId
+                  return (
+                    <li
+                      key={row.id}
+                      className="flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-900/60 dark:bg-amber-950/20"
+                    >
+                      <div className="min-w-0">
+                        <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-slate-800 dark:text-slate-100">
+                          {row.requirementCode} · {row.requirementName}
+                          {isPending ? (
+                            <Badge variant="warning">{t('exceptions.pendingApproval')}</Badge>
+                          ) : null}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">{row.reason}</p>
+                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                          {t('exceptions.window', { from: row.effectiveFrom, to: row.expiresOn })}
+                          {row.projectName ? ` · ${row.projectName}` : ''}
+                          {row.approvedByName ? ` · ${row.approvedByName}` : ''}
+                        </p>
+                        {rowError[row.id] ? (
+                          <p className="mt-1 text-xs text-red-600 dark:text-red-400">{rowError[row.id]}</p>
+                        ) : null}
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {mayApprove ? (
+                          <Button size="sm" disabled={pending} onClick={() => approveException(row.id)}>
+                            {t('exceptions.approve')}
+                          </Button>
+                        ) : null}
+                        {canWaive ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={pending}
+                            onClick={() => revokeException(row.id)}
+                          >
+                            {t('exceptions.revoke')}
+                          </Button>
+                        ) : null}
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             )}
 
@@ -722,7 +777,14 @@ export function VendorComplianceDrawer({
                     <Button disabled={pending} onClick={grantException}>
                       {t('exceptions.grant')}
                     </Button>
-                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('exceptions.grantHint')}</p>
+                    {notice ? (
+                      <p role="status" className="mt-2 text-xs text-emerald-600 dark:text-emerald-400">
+                        {notice}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      {t('exceptions.grantHint')} {t('exceptions.requestHint')}
+                    </p>
                   </div>
                 </div>
               </section>
