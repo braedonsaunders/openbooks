@@ -228,6 +228,69 @@ test("preview runs the real engine", { skip: !DB }, async () => {
   }
 });
 
+test("S1: restricted preview without a pin is refused and persists nothing", { skip: !DB }, async () => {
+  const s = await setup();
+  try {
+    const runCount = async (): Promise<number> => {
+      const rows = (await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from allocation_runs where org_id = ${s.orgId}`)).rows;
+      return Number(rows[0]?.count ?? 0);
+    };
+    const before = await runCount();
+    // Restricted to their own subsidiary but no pin: the sweep would read
+    // every legal entity, so refuse by name instead of previewing org-wide.
+    authenticate(s.orgId, s.actorId, ["allocations.run"], [s.subsidiaryId]);
+    const omitted = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", {
+        ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId,
+      }),
+    );
+    assert.equal(omitted.status, 403);
+    assert.match(((await omitted.json()) as { error: string }).error, /subsidiary pin is required/);
+    assert.equal(await runCount(), before);
+    // A visible pin still previews.
+    const pinned = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", {
+        ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId, subsidiaryId: s.subsidiaryId,
+      }),
+    );
+    assert.equal(pinned.status, 200);
+    assert.equal(await runCount(), before + 1);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(s.orgId);
+  }
+});
+
+test("S1: preview validates id shapes at the boundary", { skip: !DB }, async () => {
+  const s = await setup();
+  try {
+    authenticate(s.orgId, s.actorId, ["allocations.run"]);
+    const good = { ruleId: s.ruleId, periodId: s.periodId, bookId: s.bookId };
+    for (const [field, value] of [
+      ["ruleId", "nope"],
+      ["periodId", "nope"],
+      ["bookId", "nope"],
+      ["subsidiaryId", "nope"],
+    ] as const) {
+      const res = await previewRoute.POST(
+        jsonRequest("/api/allocations/runs/preview", "POST", { ...good, [field]: value }),
+      );
+      assert.equal(res.status, 400, `${field} must be refused as 400`);
+      assert.match(((await res.json()) as { error: string }).error, new RegExp(`${field} must be a uuid`));
+    }
+    // Well-formed but unknown ids stay tenant-opaque 404s, never 22P02 500s.
+    const unknown = randomUUID();
+    const missing = await previewRoute.POST(
+      jsonRequest("/api/allocations/runs/preview", "POST", { ...good, ruleId: unknown }),
+    );
+    assert.equal(missing.status, 404);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(s.orgId);
+  }
+});
+
 test("preview resolves report drivers through the production composition", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;

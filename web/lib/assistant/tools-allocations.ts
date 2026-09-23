@@ -40,6 +40,7 @@ import {
   runDriverReport,
 } from "../../../engine/src/allocations/report-runner.ts";
 import { previewAllocationRun } from "../../../engine/src/allocations/period-run.ts";
+import { previewPinError } from "../../../engine/src/allocations/subsidiary-scope.ts";
 import {
   RunQueryError,
   getRun,
@@ -498,11 +499,10 @@ const previewAllocation: AssistantToolDef = {
     };
     // Restricted callers must pin a subsidiary they can see. Omitting the pin
     // would pass null into previewAllocationRun and sweep every legal entity.
-    if (authz.allowedSubsidiaryIds !== null) {
-      if (a.subsidiaryId === undefined || !authz.allowedSubsidiaryIds.has(a.subsidiaryId)) {
-        return { ok: false, error: "forbidden" };
-      }
-    }
+    // One shared helper with the preview route and the engine backstop, so
+    // the refusal names the same remedy everywhere.
+    const pinRefusal = previewPinError(authz.allowedSubsidiaryIds, a.subsidiaryId ?? null);
+    if (pinRefusal) return { ok: false, error: pinRefusal };
     const off = await allocationsOff(authz);
     if (off) return off;
     const ruleId = await resolveRuleId(authz.user.orgId, a);
@@ -525,6 +525,7 @@ const previewAllocation: AssistantToolDef = {
           subsidiaryId: a.subsidiaryId ?? null,
           actorId: authz.user.id,
           trigger: "manual",
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         },
         { driverResolver: postDriverResolver },
       );

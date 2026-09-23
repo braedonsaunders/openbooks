@@ -111,22 +111,24 @@ test("preview_allocation refuses an omitted subsidiary pin before persist", asyn
     new Set([UUID]),
   );
   // Restricted + omitted pin must be a named refusal, never previewAllocationRun.
-  assert.deepEqual(
-    await tool.execute({ ruleKey: "sweep", periodId: UUID }, restricted),
-    { ok: false, error: "forbidden" },
-  );
+  assert.deepEqual(await tool.execute({ ruleKey: "sweep", periodId: UUID }, restricted), {
+    ok: false,
+    error: "a subsidiary pin is required for subsidiary-restricted callers",
+  });
   assert.deepEqual(
     await tool.execute(
       { ruleKey: "sweep", periodId: UUID, subsidiaryId: "22222222-2222-4222-8222-222222222222" },
       restricted,
     ),
-    { ok: false, error: "forbidden" },
+    { ok: false, error: "subsidiary outside the caller's scope" },
   );
   const preview = tools.slice(tools.indexOf('name: "preview_allocation"'));
   const persistAt = preview.indexOf("previewAllocationRun(");
-  const omittedAt = preview.indexOf("a.subsidiaryId === undefined");
-  assert.ok(omittedAt >= 0, "restricted callers must refuse an omitted subsidiaryId");
-  assert.ok(omittedAt < persistAt, "omitted-pin refusal must run before persist");
+  // One shared helper with the preview route: the pin check must run before
+  // persist and must name the remedy (never a bare "forbidden").
+  const pinAt = preview.indexOf("previewPinError(");
+  assert.ok(pinAt >= 0, "restricted callers must refuse an omitted subsidiaryId");
+  assert.ok(pinAt < persistAt, "omitted-pin refusal must run before persist");
   assert.doesNotMatch(
     preview.slice(0, persistAt),
     /a\.subsidiaryId !== undefined && authz\.allowedSubsidiaryIds !== null/,

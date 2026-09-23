@@ -6,6 +6,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
+import { previewPinError } from "./subsidiary-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
 import {
@@ -85,6 +86,13 @@ export interface PreviewAllocationRunOptions {
   subsidiaryId?: string | null;
   actorId: string;
   trigger?: AllocationRunTrigger;
+  /**
+   * The caller's subsidiary scope (null = unrestricted system context). A
+   * restricted caller must pin a visible subsidiary — the route refuses
+   * first, and this backstop covers every other entry point so an omitted
+   * pin can never sweep every legal entity.
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }
 
 export interface AllocationRunRecord {
@@ -1590,6 +1598,8 @@ export async function previewAllocationRun(
   deps: PeriodRunDeps = {},
 ): Promise<AllocationRunRecord> {
   requireActor(opts.actorId);
+  const pinRefusal = previewPinError(opts.allowedSubsidiaryIds ?? null, opts.subsidiaryId ?? null);
+  if (pinRefusal) throw new AllocationRunError("INVALID", pinRefusal);
   return inDbTransaction(async (tx) => {
     const subsidiaryId = opts.subsidiaryId ?? null;
     const period = await loadPeriod(tx, opts.orgId, opts.periodId);
