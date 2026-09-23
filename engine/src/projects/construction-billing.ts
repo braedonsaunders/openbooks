@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { roundCurrencyMoney, settleCumulativeRetainage } from "../fx/currencies.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
@@ -119,11 +120,18 @@ function persistPreviousMaterialsStored(value: unknown): string {
 }
 
 async function assertProjectsEnabled(tx: SqlExecutor, orgId: string): Promise<void> {
-  const result = (await tx.execute<{ enabled: boolean }>(sql`
-    select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
-      from orgs where id = ${orgId}
-  `));
-  if (!result.rows[0]?.enabled) throw new ConstructionBillingError("Projects feature is disabled");
+  // Fenced recheck inside the write transaction. The advisory fence
+  // serializes this creator against a concurrent feature disable's blocker
+  // checks (a new draft pay application IS a disable blocker), and the
+  // shared org-row lock serializes the gate read against the disable's
+  // exclusive flag write — so neither the blocker count nor the gate answer
+  // can go stale between this check and the inserts below. A disabled
+  // Projects gate refuses by name instead of committing a hidden pay
+  // application.
+  await acquireOrgFeatureGateLock(tx, orgId);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "projects"))) {
+    throw new ConstructionBillingError("Projects feature is disabled");
+  }
 }
 
 async function assertApplicationProcedure(tx: SqlExecutor, orgId: string, projectId: string): Promise<void> {

@@ -210,8 +210,12 @@ test("deductive change orders cannot reduce below already-billed work", () => {
 
 test("createPayApplication rejects a period before the previous invoiced Date", async (t) => {
   const projectId = "project-1";
+  // Lead responses mirror the transaction's query order: the feature-gate
+  // fence (advisory lock), the fenced Projects recheck, then the procedure
+  // check and the application writes.
   const responses = [
-    { rows: [{ enabled: true }] },
+    { rows: [] },
+    { rows: [{ features: { projects: true } }] },
     { rows: [{ supported: true }] },
     { rows: [{ id: projectId }] },
     { rows: [{ has_open: false, last_period: new Date("2026-07-31T00:00:00.000Z") }] },
@@ -245,6 +249,78 @@ test("createPayApplication rejects a period before the previous invoiced Date", 
     await createPayApplication("org-1", "user-1", projectId, "2026-08-01"),
     { id: "app-1", applicationNumber: 1 },
   );
+});
+
+/** Flatten a drizzle SQL chunk into raw text for lock-keyword assertions. */
+function sqlText(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
+    })
+    .join("");
+}
+
+test("createPayApplication takes the feature-gate fence and rechecks Projects under a shared row lock", async (t) => {
+  const seen: string[] = [];
+  const tx = {
+    execute: async (query: unknown) => {
+      seen.push(sqlText(query));
+      return { rows: [{ features: { projects: false } }] };
+    },
+  };
+  const transactionDb = db as unknown as {
+    transaction(callback: (transaction: typeof tx) => Promise<unknown>): Promise<unknown>;
+  };
+  t.mock.method(
+    transactionDb,
+    "transaction",
+    async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  );
+
+  // The refusal names the gate. A concurrent disable commits first, so the
+  // new application must be refused, never committed hidden behind the gate.
+  await assert.rejects(
+    createPayApplication("org-1", "user-1", "project-1", "2026-08-31"),
+    (error: unknown) =>
+      error instanceof ConstructionBillingError && error.message === "Projects feature is disabled",
+  );
+  // Refused before any other database work: the advisory fence first (it
+  // serializes this creator against the disable path's blocker checks),
+  // then the fenced gate read under a shared org-row lock (which serializes
+  // against the disable path's exclusive row lock).
+  assert.equal(seen.length, 2);
+  assert.match(seen[0]!, /pg_advisory_xact_lock/);
+  assert.match(seen[1]!, /from orgs/);
+  assert.match(seen[1]!, /for share/);
+});
+
+test("createPayApplication proceeds past an enabled gate to the procedure check", async (t) => {
+  let calls = 0;
+  const tx = {
+    execute: async (_query: unknown) => {
+      calls += 1;
+      if (calls === 1) return { rows: [] };
+      if (calls === 2) return { rows: [{ features: { projects: true } }] };
+      throw new Error("beyond-gate");
+    },
+  };
+  const transactionDb = db as unknown as {
+    transaction(callback: (transaction: typeof tx) => Promise<unknown>): Promise<unknown>;
+  };
+  t.mock.method(
+    transactionDb,
+    "transaction",
+    async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
+  );
+
+  // An enabled gate must not refuse: the flow continues to the next check.
+  await assert.rejects(createPayApplication("org-1", "user-1", "project-1", "2026-08-31"), /beyond-gate/);
 });
 
 test("period-ending dates are validated as calendar days before any database work", async (t) => {
