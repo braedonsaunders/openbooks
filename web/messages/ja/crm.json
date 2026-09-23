@@ -152,6 +152,7 @@
     "estimateCreated": "見積を作成しました",
     "estimateFailed": "見積を作成できませんでした。",
     "estimateNeedsAccount": "見積を作成する前に取引先を設定してください",
+    "saveFirstForEstimate": "先にこの商談を保存してください — 見積は保存済みの顧客と明細から作成されます。",
     "statuses": {
       "qualification": "適格化",
       "discovery": "ヒアリング",

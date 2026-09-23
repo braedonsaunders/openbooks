@@ -152,6 +152,7 @@
     "estimateCreated": "Devis créé",
     "estimateFailed": "Le devis n’a pas pu être créé.",
     "estimateNeedsAccount": "Sélectionnez un compte avant de créer un devis",
+    "saveFirstForEstimate": "Enregistrez d'abord cette opportunité — les devis reprennent le client et les lignes enregistrés.",
     "statuses": {
       "qualification": "Qualification",
       "discovery": "Découverte",

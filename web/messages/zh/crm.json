@@ -152,6 +152,7 @@
     "estimateCreated": "报价单已创建",
     "estimateFailed": "无法创建报价单。",
     "estimateNeedsAccount": "创建估算前请先设置客户",
+    "saveFirstForEstimate": "请先保存此商机——报价单将转换已保存的客户和明细。",
     "statuses": {
       "qualification": "资格确认",
       "discovery": "需求发现",

@@ -152,6 +152,7 @@
     "estimateCreated": "Presupuesto creado",
     "estimateFailed": "No se pudo crear el presupuesto.",
     "estimateNeedsAccount": "Seleccione una cuenta antes de crear una estimación",
+    "saveFirstForEstimate": "Guarde primero esta oportunidad — los presupuestos convierten el cliente y las líneas guardados.",
     "statuses": {
       "qualification": "Calificación",
       "discovery": "Descubrimiento",
