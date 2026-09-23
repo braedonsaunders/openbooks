@@ -12,6 +12,7 @@ import {
 import { listEntryRulesInEffect } from '@openbooks/engine/src/allocations/match.ts'
 import type { RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { assertGeneratedBillingEdit, BillingSourceIntegrityError } from '@openbooks/engine/src/projects/billing-source-integrity.ts'
+import { assertRemittanceBillEdit, RemittanceSourceIntegrityError } from '@openbooks/engine/src/payroll/remittance.ts'
 import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
 import { sql } from 'drizzle-orm'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
@@ -1651,6 +1652,18 @@ export async function applyDocumentEdit(
         if (generated) preparedLines = null
       } catch (error) {
         if (error instanceof BillingSourceIntegrityError) throw new DocumentEditError(422, error.message)
+        throw error
+      }
+
+      try {
+        // A remittance bill's lines are generated from its recorded coverage:
+        // replacing them would break the receipt the posting check
+        // reconciles, so the edit refuses by name with the regenerate remedy.
+        // Header-only saves pass through with the stored lines kept.
+        const remittance = await assertRemittanceBillEdit(tx, orgId, id, preparedLines)
+        if (remittance) preparedLines = null
+      } catch (error) {
+        if (error instanceof RemittanceSourceIntegrityError) throw new DocumentEditError(422, error.message)
         throw error
       }
 
