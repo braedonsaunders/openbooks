@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address } from "../tax/rate-providers.ts";
+import { providerBindingMismatch, providerEvidenceMismatch, readTaxRateProviderConfig, readTaxQuoteForDocumentLine, sumComponentTax, type Address, type PersistedTaxQuote } from "../tax/rate-providers.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "../tax/tax.ts";
 import { type Doc, type DocLine, type PostingDeps, type TaxPostingComponent, PostingError } from "./posting-contracts.ts";
 type ProviderTaxPlan = {
@@ -137,6 +137,44 @@ function sameProviderAddress(a: Address, b: Address): boolean {
 }
 
 /**
+ * Compare the document's OWN tax location (custom.taxProviderAddresses) with
+ * the frozen approval-time snapshot. A side the document still declares must
+ * equal the snapshot; a side it no longer declares (or never did) leaves the
+ * snapshot standing, so party-default edits can never invalidate it. Returns
+ * a human-readable change, or null when the snapshot still governs.
+ */
+export function documentLocationChange(
+  custom: unknown,
+  snapshot: Pick<PersistedTaxQuote, "shipFrom" | "shipTo">,
+): string | null {
+  if (!custom || typeof custom !== "object") return null;
+  const raw = (custom as { taxProviderAddresses?: unknown }).taxProviderAddresses;
+  if (raw == null) return null;
+  if (typeof raw !== "object" || Array.isArray(raw)) return "tax location override is not an object";
+  for (const side of ["shipFrom", "shipTo"] as const) {
+    const override = (raw as Record<string, unknown>)[side];
+    if (override == null) continue;
+    if (typeof override !== "object" || Array.isArray(override)) {
+      return `${side} tax location override is not an address`;
+    }
+    const coerced: Address = {};
+    for (const [key, value] of Object.entries(override)) {
+      if (key !== "line1" && key !== "city" && key !== "region" && key !== "postalCode" && key !== "country") {
+        return `${side} tax location override has an unknown field "${key}"`;
+      }
+      if (value != null && typeof value !== "string") {
+        return `${side} tax location override field "${key}" must be text`;
+      }
+      coerced[key] = value ?? null;
+    }
+    if (!sameProviderAddress(coerced, snapshot[side])) {
+      return `${side} address changed after the quote`;
+    }
+  }
+  return null;
+}
+
+/**
  * Resolve provider tax before posting by replaying the immutable quote and
  * calculation snapshot minted by the draft writer. Posting never performs
  * provider I/O or persists tax evidence: an absent, stale, or mismatched
@@ -153,11 +191,6 @@ export async function resolveProviderTaxPlans(
   // of external authority must never trigger a hidden HTTP call.
   if (!config?.isEnabled || !config.preferProvider || config.provider === "manual") return [];
 
-  const partyAddress = await defaultPartyAddress(
-    doc.orgId,
-    doc.partyId,
-    doc.kind === "customer_invoice" || doc.kind === "customer_credit",
-  );
   const plans: ProviderTaxPlan[] = [];
   for (const line of lines) {
     if (!line.taxCodeId && !line.taxGroupId) continue;
@@ -165,12 +198,6 @@ export async function resolveProviderTaxPlans(
     if (existingComponents.length === 0) {
       throw new PostingError(`line ${line.lineNumber} has a tax profile but no calculation evidence`);
     }
-    const request = providerRequestForLine(
-      doc,
-      line,
-      doc.kind === "vendor_bill" || doc.kind === "vendor_credit" ? partyAddress : {},
-      doc.kind === "vendor_bill" || doc.kind === "vendor_credit" ? {} : partyAddress,
-    );
     const persisted = await readTaxQuoteForDocumentLine(doc.orgId, line.id);
     if (!persisted) {
       throw new PostingError(
@@ -180,6 +207,19 @@ export async function resolveProviderTaxPlans(
     if (persisted.providerConfigId !== config.id || persisted.provider !== config.provider) {
       throw new PostingError(`line ${line.lineNumber} has ambiguous tax-provider provenance; refusing to post`);
     }
+    // The tax-location snapshot froze at draft approval inside the persisted
+    // quote. Posting replays THAT snapshot — never the party's live default
+    // address, which may have been edited since approval without touching the
+    // approved document. Only the document's OWN location (its
+    // custom.taxProviderAddresses) can invalidate the snapshot, and changing
+    // it requires recalculating the draft and re-approving.
+    const locationChange = documentLocationChange(doc.custom, persisted);
+    if (locationChange) {
+      throw new PostingError(
+        `line ${line.lineNumber} document tax location changed after the quote (${locationChange}); recalculate the draft and re-approve before posting`,
+      );
+    }
+    const request = providerRequestForLine(doc, line, persisted.shipFrom, persisted.shipTo);
     if (
       persisted.quotedOn !== doc.documentDate ||
       persisted.currency !== (doc.currency ?? null) ||
