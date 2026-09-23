@@ -1352,6 +1352,76 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "origin identity; the installed trigger and its guard semantics are "
       + "equivalent on both sides, so only the recorded bytes move.",
   },
+  {
+    filename: "generated/0252_ca_eht_remuneration_opening_ytd.sql",
+    from: "52c4b7e9f43fdc4fea907142bf55de7089644849d243ee6f9c4a395b22aa06aa",
+    to: "e6727002bfba426eb8bbf67ccf1d380ea9191fb9b3f7592fe4686e3c98c16c20",
+    strategy: "reapply",
+    reason:
+      "corrective revision eb5311a73 hardens the governed payroll_opening_balances "
+      + "view replacement: CREATE OR REPLACE cannot reorder a drifted view's columns, "
+      + "so the revision drops and recreates the view (nothing depends on it), restores "
+      + "the read-role grant explicitly, and adds the five standard header SETs. A "
+      + "database that recorded 52c4b7e9 already has the eht_remuneration_ytd column and "
+      + "an equivalent view; re-running the current body only re-adds the column (IF NOT "
+      + "EXISTS), rebuilds the identical view, and re-issues the grant. Reapply, not "
+      + "restamp: the installed view definition text changed, so only executing the body "
+      + "converges it.",
+  },
+  {
+    filename: "generated/0257_provisional_cost_subsidiary.sql",
+    from: "569040393f4ccd6c64186c49c9d0f7e917a78228d2aacaf5e01a22027099fc43",
+    to: "ecd2626b775e72025ce26251643930f1bf676ec06fcfae4f1605d35374c734f3",
+    strategy: "reapply",
+    reason:
+      "corrective revision b8403c9a drops the forbidden lock_timeout SET and wraps "
+      + "both provisional-cost constraint adds in IF NOT EXISTS guards, so runner "
+      + "retries on lock timeouts are re-runnable. The resulting schema is unchanged; "
+      + "a database that recorded 56904039 already holds both constraints, so re-running "
+      + "the current body is a no-op there. Reapply, not restamp: the body text changed "
+      + "and only execution proves the guarded path converges.",
+  },
+  {
+    filename: "generated/0258_payment_run_file_created_at.sql",
+    from: "5f259721c26016d4642a4ae0c6c7a6d5bd4759116c0576ee7cb61240cde02393",
+    to: "acb659bbcd9ac6929267c771070ec4c8f6ca8b34c6e69440ad22d14e5f662f24",
+    strategy: "reapply",
+    reason:
+      "corrective revision af3bf4e appends the billing anchor-day columns (IF NOT "
+      + "EXISTS DDL, NULL-guarded backfills, guarded check constraints) to the original "
+      + "file_created_at migration. A database recorded at 5f259721 that re-runs the "
+      + "current body gains the anchor-day schema idempotently; targeting the current "
+      + "digest also carries the later sync-overlap append in the same run. Reapply, not "
+      + "restamp: the revision adds real schema the old state lacks.",
+  },
+  {
+    filename: "generated/0258_payment_run_file_created_at.sql",
+    from: "2190304596efb06ee372ee695dcd0be042f864dac02801faeda66f49b5fd9381",
+    to: "acb659bbcd9ac6929267c771070ec4c8f6ca8b34c6e69440ad22d14e5f662f24",
+    strategy: "reapply",
+    reason:
+      "corrective revision 313d85e appends the bank_feed_connections sync_overlap_days "
+      + "column (IF NOT EXISTS DDL, guarded range check; null means the 14-day default, "
+      + "so no backfill) to the anchor-day revision. A database recorded at 21903045 "
+      + "that re-runs the current body converges to the published schema idempotently. "
+      + "Reapply, not restamp: the revision adds real schema the old state lacks.",
+  },
+  {
+    filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
+    from: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
+    to: "84fe8ca15877116d6f7cb221907a13c2163a1f38f13019afa85962ec80912498",
+    strategy: "reapply",
+    reason:
+      "divergent-line reconciliation (0079/0080 precedent): the tax-nexus shard line "
+      + "published 0265 with the documents ship-to snapshot appended (ship_to_country / "
+      + "ship_to_region DDL plus an evidence-only backfill limited to untouched rows), "
+      + "while main still publishes the filings-only bytes. A ledger recorded at the "
+      + "shard-line digest already has the snapshot columns; re-running main's current "
+      + "body re-applies the filings DDL (all IF NOT EXISTS) and its NULL-guarded "
+      + "backfill idempotently, and moves the recorded identity back to the published "
+      + "one. When the shard's snapshot half lands on main as its own corrective "
+      + "revision, this entry's to must advance with it.",
+  },
 ];
 
 async function executeTrackedMigration(
