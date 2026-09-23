@@ -395,6 +395,9 @@ export async function shipTransferOrder(
         subsidiaryId: order.subsidiary_id,
         date: shipDate,
         memo: `Transfer ${order.document_number} shipped`,
+        // The in-transit reclass below already moves this value out of the
+        // source asset account; a location reclass here would credit it twice.
+        suppressJournal: order.in_transit_account_id !== null,
       });
       await tx.execute(sql`
         update transfer_order_lines
@@ -494,6 +497,10 @@ export async function receiveTransferOrder(
         expectedSourceValue: shipment[0]!.total_value,
         postingBookId: postingBookId ?? undefined,
         memo: `Transfer ${order.document_number} received`,
+        // The in-transit reclass below already moves this value into the
+        // destination asset account; a location reclass here would debit it
+        // twice.
+        suppressJournal: order.in_transit_account_id !== null,
       });
       await tx.execute(sql`
         update transfer_order_lines

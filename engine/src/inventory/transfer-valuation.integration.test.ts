@@ -187,18 +187,28 @@ async function seedTransit(orgId: string, locationId: string): Promise<string> {
   return id;
 }
 
+/** A distinct balance-sheet asset account eligible to hold goods in transit. */
+async function seedTransitAccount(orgId: string): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`insert into accounts
+    (id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children)
+    values (${id},${orgId},'1390','Goods in transit','asset_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
+  return id;
+}
+
 test("transfer receipt refuses a disabled shipment book despite an active alternate and retries cleanly", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await seedTransit(org.orgId, org.locationId);
+    const inTransitAccountId = await seedTransitAccount(org.orgId);
     await receiveInventory(org.orgId, actor, {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "2.5", unitCost: "10",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     });
     const order = await createTransferOrder(org.orgId, actor, {
       fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
-      transitStockLocationId: transitId, inTransitAccountId: org.accounts.bank,
+      transitStockLocationId: transitId, inTransitAccountId,
       subsidiaryId: org.subsidiaryId, orderedOn: org.date,
       lines: [{ itemId: org.items.fifo, quantity: "2.5" }],
     });
@@ -220,7 +230,7 @@ test("transfer receipt refuses a disabled shipment book despite an active altern
     assert.equal(receiptBook, org.bookId);
     const balance = (await db.execute<{ balance: string }>(sql`select sum(l.amount)::text as balance
       from journal_lines l join journal_entries j on j.id=l.entry_id and j.org_id=l.org_id
-      where l.org_id=${org.orgId} and l.account_id=${org.accounts.bank} and j.book_id=${org.bookId}`)).rows[0]!.balance;
+      where l.org_id=${org.orgId} and l.account_id=${inTransitAccountId} and j.book_id=${org.bookId}`)).rows[0]!.balance;
     assert.equal(balance, "0.0000");
     assert.equal((await db.execute(sql`select id from journal_entries where org_id=${org.orgId} and book_id=${alternate}`)).rows.length, 0);
   } finally { await dropScratchOrg(org.orgId); }
@@ -231,6 +241,7 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
     const transitId = await seedTransit(org.orgId, org.locationId);
+    const inTransitAccountId = await seedTransitAccount(org.orgId);
     for (const itemId of [org.items.fifo, org.items.movingAvg]) {
       await receiveInventory(org.orgId, actor, {
         itemId, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "10",
@@ -239,7 +250,7 @@ test("transfer receipt refuses replacement transit stock and rolls back earlier 
     }
     const order = await createTransferOrder(org.orgId, actor, {
       fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
-      transitStockLocationId: transitId, inTransitAccountId: org.accounts.bank,
+      transitStockLocationId: transitId, inTransitAccountId,
       subsidiaryId: org.subsidiaryId, orderedOn: org.date,
       lines: [org.items.fifo, org.items.movingAvg].map((itemId) => ({ itemId, quantity: "5" })),
     });
@@ -299,9 +310,10 @@ test("transfer-order shipment cannot be reversed independently of its lifecycle 
       itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "10",
       subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
     });
+    const inTransitAccountId = await seedTransitAccount(org.orgId);
     const order = await createTransferOrder(org.orgId, actor, {
       fromStockLocationId: org.stockLocationId, toStockLocationId: org.stockLocationId2,
-      transitStockLocationId: transitId, inTransitAccountId: org.accounts.bank,
+      transitStockLocationId: transitId, inTransitAccountId,
       subsidiaryId: org.subsidiaryId, orderedOn: org.date,
       lines: [{ itemId: org.items.fifo, quantity: "5" }],
     });

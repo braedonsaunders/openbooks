@@ -109,7 +109,19 @@ export async function transferInventoryTx(
   tx: Runner,
   orgId: string,
   actorId: string | null,
-  input: TransferInput & { sourceReceiptMovementId?: string; expectedSourceValue?: string; postingBookId?: string },
+  input: TransferInput & {
+    sourceReceiptMovementId?: string;
+    expectedSourceValue?: string;
+    postingBookId?: string;
+    /**
+     * Skip the location-dimension reclass entry: the caller posts the value
+     * movement itself (a transfer order's in-transit reclass). Without this
+     * the same asset value posts twice — once per location dimension here,
+     * once per in-transit account there — doubling every location balance
+     * while the aggregate still nets to zero.
+     */
+    suppressJournal?: boolean;
+  },
 ): Promise<{
   fromMovementId: string;
   toMovementId: string;
@@ -239,8 +251,9 @@ export async function transferInventoryTx(
   const unitCost = unitCostPerQuantity(cost, input.quantity)!;
 
   // Optional location-reclass entry (value nets to zero, dimensions differ).
+  // Suppressed when the caller carries the GL leg itself — see suppressJournal.
   let entryId: string | null = null;
-  if (fromDim && toDim && fromDim !== toDim && !isZero(cost)) {
+  if (fromDim && toDim && fromDim !== toDim && !isZero(cost) && !input.suppressJournal) {
     entryId = await postInventoryEntry(tx, {
       orgId,
       bookId,
