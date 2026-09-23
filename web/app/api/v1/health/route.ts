@@ -84,16 +84,18 @@ export async function GET(req: Request) {
     return NextResponse.json({ status: "ok", service: "openbooks-api", version });
   }
   if (include === "dependencies" || include === "readiness") {
-    const { dependencies, renderer } = await dependencyReadiness();
+    const { dependencies } = await dependencyReadiness();
     // Routing readiness covers the infrastructure every request needs. The
-    // renderer is reported (dependencies.pdfRenderer plus the renderer
-    // detail carrying the remedy) but excluded: PDF routes refuse
-    // individually, and a renderer-only incident must not drain the pool.
+    // renderer is reported (dependencies.pdfRenderer) but excluded: PDF
+    // routes refuse individually, and a renderer-only incident must not
+    // drain the pool. This route is unauthenticated, so it carries only the
+    // ok/unavailable flag, never the executable path or remedy detail;
+    // those reach signed-in users through the PDF routes' named 503.
     const ready = (['database', 'redis', 'objectStorage'] as const).every(
       (key) => dependencies[key] === "ok" || dependencies[key] === "disabled",
     );
     return NextResponse.json(
-      { status: ready ? "ok" : "degraded", service: "openbooks-api", version, dependencies, renderer },
+      { status: ready ? "ok" : "degraded", service: "openbooks-api", version, dependencies },
       { status: ready ? 200 : 503 },
     );
   }
