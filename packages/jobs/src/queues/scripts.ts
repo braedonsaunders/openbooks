@@ -15,6 +15,14 @@ export type ScriptJobData = {
   kind: 'scheduled' | 'bulk'
   /** Who pressed Run now (absent for cron ticks). */
   actorId?: string
+  /**
+   * Immutable occurrence identity for scheduled runs (the scheduler's
+   * occurrence key: script + scheduled fire time). The worker forwards it
+   * as the run's journal idempotency scope, so a recovery retry of the same
+   * occurrence replays instead of double-posting. Absent on bulk runs and
+   * on jobs enqueued before the key existed.
+   */
+  occurrenceKey?: string
 }
 
 let scriptsQueue: Queue<ScriptJobData> | undefined
