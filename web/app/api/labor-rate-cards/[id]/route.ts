@@ -267,7 +267,11 @@ export async function PUT(
     if (!PRESENTATIONS.includes(adjustment.presentation as never))
       return error("presentation");
     if (adjustment.calculation !== "text") {
-      const value = nonnegativeDecimal(adjustment.value, 10);
+      // Percents price through the exact 10dp helper; every other
+      // calculation is a money rate, capped at the ledger's 4dp — a fixed
+      // 5.12345 the ledger cannot store is refused here, not at invoicing.
+      const scale = adjustment.calculation === "percent" ? 10 : 4;
+      const value = nonnegativeDecimal(adjustment.value, scale);
       if (value === false) return error("value");
       adjustment.value = value;
     }

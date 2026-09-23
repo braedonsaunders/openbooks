@@ -3,7 +3,9 @@ import test from 'node:test'
 import {
   lineMatchesAdjustment,
   mergeCharges,
+  mulPercentExact,
   priceAdjustments,
+  RateAdjustmentPricingError,
   type AdjustableLine,
   type ResolvedAdjustment,
 } from './rate-adjustment-pricing'
@@ -147,6 +149,27 @@ test('a trade target measures every active role the worker holds', () => {
     [{ ...labor('1000.00'), tradeIds: ['trade-plumbing'] }], [a])
   assert.equal(unmatched.length, 0)
   assert.equal(priceAdjustments([labor('1000.00')], [a]).length, 0)
+})
+
+test('a percent stored past 4dp prices instead of throwing', () => {
+  // The save keeps 10dp; the old 4dp percent reader threw on these, so a
+  // 3.123456% surcharge made invoice generation throw.
+  const a = adjustment({ value: '3.123456' })
+  const [charge] = priceAdjustments([labor('1000.00')], [a])
+  assert.equal(charge!.amount, '31.2300')
+})
+
+test('a ten-decimal percent rounds the exact result once', () => {
+  assert.equal(mulPercentExact('100.00', '33.3333333333'), '33.3300')
+  assert.equal(mulPercentExact('1000.00', '3.1234567891'), '31.2300')
+  // 0.05% of 10.00 is 0.005: halves away from zero, never truncated.
+  assert.equal(mulPercentExact('10.00', '0.05'), '0.0100')
+  assert.equal(mulPercentExact('10.00', '0.05', 4), '0.0050')
+})
+
+test('a non-numeric percent is refused by name', () => {
+  assert.throws(() => mulPercentExact('100.00', 'abc'), RateAdjustmentPricingError)
+  assert.throws(() => mulPercentExact('100.00', '1.00000000001'), RateAdjustmentPricingError)
 })
 
 test("a job_title target measures the worker's titles", () => {
