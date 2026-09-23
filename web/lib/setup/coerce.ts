@@ -115,6 +115,11 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       if (!present) return { column, value: null }
       const exact = canonicalDecimal(raw, SETUP_DECIMAL_SCALE)
       if (exact === null) return { error: `${field.key} must be a number` }
+      if (field.kind === 'percent') {
+        const n = Number(exact)
+        if (field.min !== undefined && n < field.min) return { error: `${field.key} must be at least ${field.min}` }
+        if (field.max !== undefined && n > field.max) return { error: `${field.key} must be at most ${field.max}` }
+      }
       try {
         return { column, value: normalizeDecimal(exact, SETUP_DECIMAL_SCALE) }
       } catch {

@@ -16,6 +16,13 @@
  */
 
 import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciation-limits.ts'
+import {
+  MAX_RECOGNITION_INITIAL_PERCENT,
+  MAX_RECOGNITION_TERM_MONTHS,
+  MIN_RECOGNITION_INITIAL_PERCENT,
+  MIN_RECOGNITION_PERIOD_OFFSET,
+  MIN_RECOGNITION_TERM_MONTHS,
+} from '@openbooks/engine/src/revenue/recognition-limits.ts'
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 import { LEAVE_POLICIES_ENTITY, LEAVE_TYPES_ENTITY } from './hrm-leave'
@@ -143,7 +150,7 @@ export interface SetupField {
   key: string
   kind: SetupFieldKind
   required?: boolean
-  /** Inclusive resource/domain bounds for integer fields. */
+  /** Inclusive resource/domain bounds for integer and percent fields. */
   min?: number
   max?: number
   /** select options; labelKey is under `admin.setup.options.*`. */
@@ -1627,12 +1634,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'name', kind: 'text', required: true },
       { key: 'method', kind: 'select', options: RECOGNITION_METHODS, required: true },
       { key: 'isForecast', kind: 'boolean' },
-      { key: 'recognitionPeriods', kind: 'integer' },
+      { key: 'recognitionPeriods', kind: 'integer', min: MIN_RECOGNITION_TERM_MONTHS, max: MAX_RECOGNITION_TERM_MONTHS },
       { key: 'startDateSource', kind: 'select', options: START_DATE_SOURCES, keepDefault: true },
       { key: 'endDateSource', kind: 'select', options: END_DATE_SOURCES, keepDefault: true },
-      { key: 'periodOffset', kind: 'integer', keepDefault: true },
+      { key: 'periodOffset', kind: 'integer', keepDefault: true, min: MIN_RECOGNITION_PERIOD_OFFSET, max: MAX_RECOGNITION_TERM_MONTHS },
       { key: 'startOffsetDays', kind: 'integer', keepDefault: true },
-      { key: 'initialAmountPercent', kind: 'percent', keepDefault: true },
+      { key: 'initialAmountPercent', kind: 'percent', keepDefault: true, min: Number(MIN_RECOGNITION_INITIAL_PERCENT), max: Number(MAX_RECOGNITION_INITIAL_PERCENT) },
       { key: 'deferredAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'recognizedAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'isActive', kind: 'boolean' },
