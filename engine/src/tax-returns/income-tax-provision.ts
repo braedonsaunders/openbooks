@@ -212,6 +212,19 @@ function percentOf(amount: string, base: string): string | null {
 export function buildProvision(
   input: ProvisionComputationInput,
 ): ProvisionComputation {
+  // Fail closed on negative contra-inputs: subtracting a NEGATIVE loss
+  // benefit would increase taxable income, and maxZero below would silently
+  // store a negative valuation allowance as zero. Both refuse by field name.
+  if (cmp(input.lossCarryforwardUsed, "0") < 0) {
+    throw new IncomeTaxProvisionError(
+      "lossCarryforwardUsed cannot be negative — enter a non-negative amount",
+    );
+  }
+  if (cmp(input.valuationAllowance, "0") < 0) {
+    throw new IncomeTaxProvisionError(
+      "valuationAllowance cannot be negative — enter a non-negative amount",
+    );
+  }
   const rate = input.enactedRatePercent;
   const permanentTotal = sum(input.permanentDifferences.map((p) => p.amount));
 
@@ -1301,6 +1314,29 @@ export async function computeProvisionRun(
             `provision entities["${id}"] is outside your authorized subsidiary scope — remove it or request access`,
           );
         }
+      }
+    }
+
+    // Non-negative service-boundary guard: a negative loss benefit would
+    // INCREASE taxable income when subtracted, and maxZero would silently
+    // store a negative valuation allowance as zero. Refuse by field name —
+    // root and per-entity overrides alike — before any draft or audit row
+    // exists. (No upper bound is enforced: loss attributes usable against
+    // taxable income are not tracked as a separate balance, so any cap would
+    // invent a limit the ledger cannot verify.)
+    const assertNonNegative = (field: string, amount: string | undefined, where: string): void => {
+      if (amount !== undefined && cmp(amount, "0") < 0) {
+        throw new IncomeTaxProvisionError(
+          `${field} cannot be negative${where} — enter a non-negative amount`,
+        );
+      }
+    };
+    assertNonNegative("lossCarryforwardUsed", opts.lossCarryforwardUsed, "");
+    assertNonNegative("valuationAllowance", opts.valuationAllowance, "");
+    if (opts.entities) {
+      for (const [id, entry] of Object.entries(opts.entities)) {
+        assertNonNegative("lossCarryforwardUsed", entry.lossCarryforwardUsed, ` for subsidiary ${id}`);
+        assertNonNegative("valuationAllowance", entry.valuationAllowance, ` for subsidiary ${id}`);
       }
     }
 

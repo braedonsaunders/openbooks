@@ -1534,6 +1534,48 @@ test("reposting a superseded run refuses by status instead of returning its reve
   }
 });
 
+test("negative loss benefits and valuation allowances refuse by field name with zero writes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Negativity Tester", "admin");
+    await seedTaxControlAccounts(org.orgId);
+    await seedEnactedRate(org.orgId, "Federal", "21", { userId });
+    await postInvoice(org, { subsidiaryId: org.subsidiaryId, amount: "100000", number: "INV-NEG-1", userId });
+
+    // Root request: a negative allowance would otherwise be stored as 0.
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, { valuationAllowance: "-500.0000" }, userId),
+      (error: unknown) => {
+        assert.ok(error instanceof IncomeTaxProvisionError);
+        assert.match(error.message, /valuationAllowance cannot be negative/);
+        return true;
+      },
+    );
+    // Per-entity request: a negative loss benefit would otherwise inflate
+    // taxable income. The refusal names the field and the subsidiary.
+    await assert.rejects(
+      () => computeProvisionRun(org.orgId, 2026, {
+        entities: { [org.subsidiaryId]: { lossCarryforwardUsed: "-500.0000" } },
+      }, userId),
+      (error: unknown) => {
+        assert.ok(error instanceof IncomeTaxProvisionError);
+        assert.match(error.message, new RegExp(`lossCarryforwardUsed cannot be negative for subsidiary ${org.subsidiaryId}`));
+        return true;
+      },
+    );
+
+    // Both refusals happened before any draft or audit row could exist.
+    const runs = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from tax_provision_runs where org_id = ${org.orgId}`));
+    assert.equal(runs.rows[0]!.n, 0);
+    const audits = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log where org_id = ${org.orgId} and table_name = 'tax_provision_runs'`));
+    assert.equal(audits.rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("restricted reads expose only a visible entity's journal entry, never the hidden first entity's", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
