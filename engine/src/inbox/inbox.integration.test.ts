@@ -33,7 +33,7 @@ import {
 } from "../hrm/leave.ts";
 import { createProcessTemplate, openProcess, upsertProcessTemplateStep } from "../hrm/processes.ts";
 import { createChangeRequestDraft, submitChangeRequest } from "../hrm/change-requests.ts";
-import { actOnInboxItem, InboxError, listInbox } from "./registry.ts";
+import { actOnInboxItem, countInbox, InboxError, listInbox } from "./registry.ts";
 import { writeNotification } from "./adapters/notification.ts";
 import "./index.ts";
 
@@ -305,6 +305,37 @@ test("notices: unread rows surface as items and mark-read completes in place", {
       select read_at::text as read_at from notifications where org_id = ${org.orgId} and user_id = ${userId}
     `)).rows[0]!;
     assert.ok(row.read_at !== null, "mark-read stamps the row the route reads");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("notices: the badge counts past the list window and pages read through it", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Inbox Counter", "inbox_counter");
+    const ctx = { orgId: org.orgId, actorId: userId, asOf: nowIso() };
+    for (let n = 0; n < 120; n++) {
+      await writeNotification(db, {
+        orgId: org.orgId,
+        userId,
+        kind: "approval",
+        title: `Notice ${String(n).padStart(3, "0")}`,
+      });
+    }
+    // The count is real, not the list length: 120 unread badge as 120.
+    assert.equal(await countInbox(ctx, { kinds: ["notification"] }), 120);
+    // The default read is a bounded window (100), newest first — no caller
+    // materializes the whole table by accident.
+    const windowed = await listInbox(ctx, { kinds: ["notification"] });
+    assert.equal(windowed.length, 100);
+    // Explicit windows page through the full set exactly.
+    const first = await listInbox(ctx, { kinds: ["notification"], page: { limit: 50, offset: 0 } });
+    const rest = await listInbox(ctx, { kinds: ["notification"], page: { limit: 100, offset: 50 } });
+    assert.equal(first.length, 50);
+    assert.equal(rest.length, 70);
+    const covered = new Set([...first, ...rest].map((item) => item.id));
+    assert.equal(covered.size, 120, "paged windows cover all 120 with no overlap and no gaps");
   } finally {
     await dropScratchOrg(org.orgId);
   }
