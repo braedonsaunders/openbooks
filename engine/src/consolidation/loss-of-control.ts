@@ -190,13 +190,15 @@ export async function loadLossOfControlProposalData(
   // entity is shared by unrelated families, so a subsidiary-restricted caller
   // cannot tell this interest's lines from another family's. Offer them only
   // to unrestricted callers; restricted callers see none (L2). Selecting a
-  // line likewise requires an unrestricted proposer (see scope()).
+  // line likewise requires an unrestricted proposer (see scope()). Only
+  // net-active evidence is offered: fully reversed entries are not
+  // outstanding balances (L5).
   const adjustmentLines =
     allowedSubsidiaryIds || !eliminations.length
       ? []
       : (
           await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
-            sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status in('posted','reversed') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
+            sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
           )
         ).rows;
   return {
@@ -633,6 +635,9 @@ async function measure(
   // lock each source line in a stable order, then cap the cumulative absolute
   // attribution (this request plus every other pending, approved or
   // applied-and-active loss-of-control change) at the source amount (L3).
+  // Only net-active source evidence counts: a fully reversed entry is not an
+  // outstanding balance, so reversed entries and entries with a posted
+  // reversing journal are neither offered nor measurable (L5).
   // Reversal and rejection release the reservation because only active
   // changes count below; the serializable source transaction turns a
   // concurrent over-attribution into a conflict retry instead of a double
@@ -654,7 +659,7 @@ async function measure(
         name: string;
         amount: string;
       }>(
-        sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
+        sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
       )
     ).rows[0];
     if (!line)
