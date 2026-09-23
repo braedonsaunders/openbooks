@@ -1400,6 +1400,8 @@
       "employee": "员工",
       "hrs": "{hours}小时",
       "item": "项目",
+      "loadMore": "加载更多",
+      "loaded": "已显示{loaded}/{total}条",
       "peers": "对比{title}同级（{count}人）",
       "pills": {
         "byCustomer": "按客户",

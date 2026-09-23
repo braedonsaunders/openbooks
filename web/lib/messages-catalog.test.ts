@@ -2963,8 +2963,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     'analytics.categoryManager.',
   ]
   const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
-  assert.equal(icuWanted.length, 1274, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
-  assert.equal(wanted.length, 1914, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(icuWanted.length, 1276, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1916, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3272,7 +3272,7 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
   ]
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
-  assert.equal(wanted.length, 1274, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 1276, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)

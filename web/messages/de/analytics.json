@@ -1400,6 +1400,8 @@
       "employee": "Mitarbeiter",
       "hrs": "{hours} Std.",
       "item": "Artikel",
+      "loadMore": "Mehr laden",
+      "loaded": "{loaded} von {total} angezeigt",
       "peers": "vs {count} {title}-Kollegen",
       "pills": {
         "byCustomer": "Nach Kunde",
