@@ -14,19 +14,36 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `export async function guardFeaturePermission() {
-       return { user: { id: "user-1", orgId: "org-1" } }
+       // Unrestricted caller: subsidiary scope is covered by the DB-backed
+       // scope test; here the drill must not filter.
+       return { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null }
      }`,
   ],
+  ["mock:server-only", `export {}`],
   [
     "mock:db",
     `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
-     export const db = { execute: async () => ({ rows: state.rows }) }`,
+     export const ambientTenantOrgId = () => null
+     export const withBypassContext = (fn) => fn()
+     export const db = { execute: async (query) => {
+       // The route resolves the presentation currency through the org row;
+       // entry fixture rows carry no currency, so they translate 1:1.
+       // (The entry query also names base_currency — match the org lookup,
+       // whose projection aliases it as "baseCurrency".)
+       try {
+         if (JSON.stringify(query?.queryChunks ?? "").includes("baseCurrency")) {
+           return { rows: [{ baseCurrency: "CAD" }] };
+         }
+       } catch { /* fall through to entry rows */ }
+       return { rows: state.rows };
+     } }`,
   ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["server-only", "mock:server-only"],
 ]);
 
 const hooks = registerHooks({
