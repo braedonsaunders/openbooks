@@ -179,7 +179,7 @@ function issuanceFailureResponse(error: unknown, persisted: "user is saved" | "n
   }
   console.error("[admin-invite] set-password issuance failed", error);
   const retry = persisted === "user is saved"
-    ? "the user is saved; retry the invite"
+    ? "the user is saved; retry the invite to re-issue the link"
     : "retry to re-issue the link";
   return NextResponse.json(
     { error: `failed to issue the set-password link — ${retry}` },
@@ -616,7 +616,8 @@ export async function POST(req: Request) {
       const name = deriveInviteDisplayName(email);
       // The user row, its first role, and both audit rows commit atomically.
       // ON CONFLICT DO NOTHING keeps a concurrent double-invite to a single
-      // user: the loser sees no row and reports 409 instead of 500.
+      // user: the loser sees no row and resumes the winner's pending row
+      // below (re-issuing) instead of failing.
       const created = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
         const role = await db.execute<{ id: string; key: string; permissions: unknown; subsidiary_restriction: unknown }>(sql`
           select id, key, permissions, subsidiary_restriction from app_roles where id = ${roleId} and org_id = ${actor.orgId} for share`);
@@ -647,41 +648,81 @@ export async function POST(req: Request) {
           on conflict do nothing
           returning id`);
         const newUserId = inserted.rows[0]?.id;
-        if (!newUserId) {
+        if (newUserId) {
+          const assignment = await db.execute<{ id: string }>(sql`
+            insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+            values (${actor.orgId}, ${newUserId}, ${roleId}, ${actor.id}, ${actor.id})
+            returning id`);
+          await audit(db, {
+            orgId: actor.orgId,
+            tableName: "users",
+            rowId: newUserId,
+            action: "insert",
+            changes: {
+              email: [null, email],
+              name: [null, name],
+            },
+            actorId: actor.id,
+          });
+          if (assignment.rows[0]) {
+            await audit(db, {
+              orgId: actor.orgId,
+              tableName: "role_assignments",
+              rowId: assignment.rows[0].id,
+              action: "insert",
+              changes: {
+                userId: [null, newUserId],
+                roleId: [null, roleId],
+              },
+              actorId: actor.id,
+            });
+          }
+          return { userId: newUserId, email, name, resumed: false };
+        }
+        // Resumable retry: the address already exists. A still-pending
+        // invite (never activated, never set a password) re-issues its
+        // link instead of dead-ending in 409 — so a retry after a lost
+        // link or a rate-cap refusal can still complete. A real account
+        // (active with a password, or deactivated) keeps the 409: the
+        // address is taken.
+        const existing = (await db.execute<{
+          id: string;
+          email: string;
+          name: string | null;
+          is_active: boolean;
+          password_hash: string;
+        }>(sql`
+          select id, email, name, is_active, password_hash from users
+           where org_id = ${actor.orgId} and lower(email) = ${email}
+           for update`)).rows[0];
+        if (!existing || !existing.is_active || existing.password_hash !== UNUSABLE_PASSWORD_HASH) {
           return NextResponse.json(
             { error: "a user with this email already exists" },
             { status: 409 },
           );
         }
-        const assignment = await db.execute<{ id: string }>(sql`
+        // The requested role passed this caller's ceiling above; ensure it
+        // idempotently, then re-issue. The mint step re-verifies the
+        // target's FULL stored set under lock before any link exists.
+        const reassign = await db.execute<{ id: string }>(sql`
           insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-          values (${actor.orgId}, ${newUserId}, ${roleId}, ${actor.id}, ${actor.id})
+          values (${actor.orgId}, ${existing.id}, ${roleId}, ${actor.id}, ${actor.id})
+          on conflict (org_id, user_id, role_id) do nothing
           returning id`);
-        await audit(db, {
-          orgId: actor.orgId,
-          tableName: "users",
-          rowId: newUserId,
-          action: "insert",
-          changes: {
-            email: [null, email],
-            name: [null, name],
-          },
-          actorId: actor.id,
-        });
-        if (assignment.rows[0]) {
+        if (reassign.rows[0]) {
           await audit(db, {
             orgId: actor.orgId,
             tableName: "role_assignments",
-            rowId: assignment.rows[0].id,
+            rowId: reassign.rows[0].id,
             action: "insert",
             changes: {
-              userId: [null, newUserId],
+              userId: [null, existing.id],
               roleId: [null, roleId],
             },
             actorId: actor.id,
           });
         }
-        return { userId: newUserId };
+        return { userId: existing.id, email: existing.email, name: existing.name, resumed: true };
       }));
       if (created instanceof NextResponse) return created;
       // The set-password link travels the ordinary password-reset mail path,
@@ -696,7 +737,7 @@ export async function POST(req: Request) {
       let issuance: { raw: string; emailQueued: boolean } | null = null;
       try {
         issuance = await issueInviteSetPasswordLink({
-          user: { id: created.userId, org_id: actor.orgId, name, email },
+          user: { id: created.userId, org_id: actor.orgId, name: created.name, email: created.email },
           context: authRequestContext(req),
           authorize: () => authorizeInviteIssuance({
             orgId: actor.orgId,
@@ -706,8 +747,9 @@ export async function POST(req: Request) {
         });
       } catch (error) {
         // Truthful mapping: a refusal passes through with its own status,
-        // an infrastructure failure is a 500 — the per-user hourly cap
-        // alone (`null` issuance below) is a 429.
+        // an infrastructure failure is a 500 with a resumable remedy — the
+        // per-user hourly cap alone (`null` issuance below) is a 429, and a
+        // retry for this pending user re-issues instead of conflicting.
         return issuanceFailureResponse(error, "user is saved");
       }
       if (!issuance) {
@@ -715,6 +757,18 @@ export async function POST(req: Request) {
           { error: "too many invites — try again later" },
           { status: 429 },
         );
+      }
+      if (created.resumed) {
+        await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+          await audit(db, {
+            orgId: actor.orgId,
+            tableName: "users",
+            rowId: created.userId,
+            action: "update",
+            changes: { inviteReissued: [null, true] },
+            actorId: actor.id,
+          });
+        }));
       }
       return NextResponse.json({
         ok: true,
