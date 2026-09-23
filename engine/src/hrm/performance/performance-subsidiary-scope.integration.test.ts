@@ -12,6 +12,7 @@ import {
 import { HrmAuthorizationError } from "../authorization.ts";
 import { createCycle, openCycle } from "./review-cycles.ts";
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
+import { listFeedback, writeFeedback } from "./feedback.ts";
 
 /**
  * g11_performance_exits: legal-entity scope across the performance module
@@ -254,6 +255,28 @@ test("a restricted HR shares only inside their legal-entity scope", { skip: !DB 
     );
     const shared = await shareReview({ orgId: h.org.orgId, actorId: h.hrA, reviewId });
     assert.equal(shared.status, "shared");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("a restricted HR reads only the feedback whose subject they cover", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
+      kind: "feedback", visibility: "manager_and_subject", body: "A-side feedback",
+    });
+    await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.b.employmentId,
+      kind: "feedback", visibility: "manager_and_subject", body: "B-side feedback",
+    });
+    const seenByA = await listFeedback({ orgId: h.org.orgId, actorId: h.hrA });
+    assert.deepEqual(seenByA.map((f) => f.body).sort(), ["A-side feedback"]);
+    const seenByB = await listFeedback({ orgId: h.org.orgId, actorId: h.hrB });
+    assert.deepEqual(seenByB.map((f) => f.body).sort(), ["B-side feedback"]);
+    const seenByFull = await listFeedback({ orgId: h.org.orgId, actorId: h.hrFull });
+    assert.deepEqual(seenByFull.map((f) => f.body).sort(), ["A-side feedback", "B-side feedback"]);
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
