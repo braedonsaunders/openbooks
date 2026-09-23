@@ -2,11 +2,14 @@
  * HR-15 field_ticket_signature adapter — tickets awaiting my signature.
  *
  * A ticket waits on the actor when they are its foreman (or submitted it)
- * and an unanswered signature request is open on it (sent, not responded,
- * not revoked, not expired), or the ticket's role signature is simply
- * missing. Link-only: signing captures a typed attestation through the
- * ticket signing surface (token + e-sign), which the inbox does not
- * duplicate — the subtitle names that remedy.
+ * and an unanswered CUSTOMER signature request is open on it (sent, not
+ * responded, not revoked, not expired) with the customer signature still
+ * missing. Signature requests carry no role column — every request the
+ * ticket surface sends is a customer-signature request (the signing
+ * endpoint records role='customer'), so the pending role is that literal.
+ * Link-only: signing captures a typed attestation through the ticket
+ * signing surface (token + e-sign), which the inbox does not duplicate —
+ * the subtitle names that remedy.
  */
 
 import { sql } from "drizzle-orm";
@@ -32,7 +35,7 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
       select distinct t.document_id::text as ticket_id,
              coalesce(p.name, 'field ticket') as project_name,
              t.period_start::text as period_start,
-             r.role as role
+             'customer' as role
         from field_tickets t
         join field_ticket_signature_requests r
           on r.org_id = t.org_id and r.field_ticket_id = t.document_id
@@ -50,8 +53,8 @@ export const fieldTicketSignatureAdapter: InboxAdapter = {
            select 1 from field_ticket_signatures s
             where s.org_id = t.org_id
               and s.field_ticket_id = t.document_id
-              and s.role = r.role)
-       order by t.period_start, t.document_id
+              and s.role = 'customer')
+       order by period_start, ticket_id
        limit 20
     `)).rows;
     return rows.map((row) => ({
