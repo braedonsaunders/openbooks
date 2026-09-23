@@ -73,7 +73,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const before = (await db.execute<Record<string, unknown>>(sql`
-    select id, status, party_id, requirement_id, created_by, effective_from, expires_on,
+    select id, status, party_id, requirement_id, supersedes_id, created_by, effective_from, expires_on,
            coverage_amount, aggregate_amount, coverage_currency, additional_insured,
            waiver_of_subrogation, primary_noncontributory, issuer_name, policy_number
       from compliance_records where org_id = ${orgId} and id = ${id}
@@ -130,8 +130,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // transaction. If recording the evidence fails, PostgreSQL rolls back the
     // action as well, so callers never observe a committed change without a
     // corresponding legal audit event.
+    let supersession: { supersededId: string | null; stale: boolean } = { supersededId: null, stale: false }
     await db.transaction(async (tx) => {
       if (action === 'verify') {
+        // Verification retires the predecessor the renewal pointed at: the
+        // supersession happens here, not at upload, so the prior certificate
+        // stays in force while its replacement is still unattested. The
+        // retirement runs BEFORE activation because the renewal guard
+        // (0071) only honours a pending same-scope successor. A link gone
+        // stale since upload (concurrently superseded) does not block the
+        // attestation — it is recorded and the verification stands.
+        const link = before.rows[0]!['supersedes_id'] as string | null
+        if (link) {
+          const retired = (await tx.execute<{ id: string }>(sql`
+            update compliance_records
+               set status = 'superseded', superseded_by_id = ${id},
+                   updated_at = now(), updated_by = ${actorId}
+             where org_id = ${orgId} and id = ${link}
+               and status in ('pending_review', 'active')
+            returning id
+          `))
+          if (retired.rows.length === 0) supersession = { supersededId: null, stale: true }
+          else supersession = { supersededId: link, stale: false }
+        }
         await tx.execute(sql`
           update compliance_records
              set status = 'active', verified_at = now(), verified_by = ${actorId},
@@ -175,7 +196,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_records', ${id}, ${action === 'update' ? 'update' : action},
-                ${JSON.stringify({ before: record, after: body })}::jsonb, ${actorId})`)
+                ${JSON.stringify({ before: record, after: body, supersession })}::jsonb, ${actorId})`)
     })
     return NextResponse.json({ id })
   } catch (e) {

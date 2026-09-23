@@ -147,14 +147,19 @@ export async function POST(req: Request) {
 
   try {
     const id = await db.transaction(async (tx) => {
+      // A renewal files as pending and only POINTS at its predecessor: the
+      // prior certificate stays in force until the renewal is verified, so a
+      // still-valid certificate is never superseded by an unattested upload.
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into compliance_records
-          (org_id, party_id, requirement_id, project_id, status, issuer_name, policy_number,
+          (org_id, party_id, requirement_id, project_id, status, supersedes_id,
+           issuer_name, policy_number,
            effective_from, expires_on, coverage_amount, aggregate_amount, coverage_currency,
            additional_insured, waiver_of_subrogation, primary_noncontributory, notes,
            created_by, updated_by)
         values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
-                'pending_review', ${body.issuerName ?? null}, ${body.policyNumber ?? null},
+                'pending_review', ${rawSupersedesId !== null && rawSupersedesId !== '' ? rawSupersedesId : null},
+                ${body.issuerName ?? null}, ${body.policyNumber ?? null},
                 ${body.effectiveFrom}, ${body.expiresOn ?? null},
                 ${coverageAmount}, ${aggregateAmount},
                 ${body.coverageCurrency ?? null},
@@ -164,25 +169,6 @@ export async function POST(req: Request) {
         returning id
       `))
       const newId = inserted.rows[0]!.id
-      if (rawSupersedesId !== null && rawSupersedesId !== '') {
-        // Renewal: the prior certificate keeps its dates and verification trail
-        // and points forward, so the history of what was on file when survives.
-        // The predicate repeats the pre-write validation so a concurrent
-        // supersede cannot silently redirect this one; zero rows means the
-        // prior certificate stopped being current between the two statements.
-        const superseded = (await tx.execute<{ id: string }>(sql`
-          update compliance_records
-             set status = 'superseded', superseded_by_id = ${newId},
-                 updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${rawSupersedesId}
-             and party_id = ${body.partyId} and requirement_id = ${body.requirementId}
-             and status in ('pending_review', 'active')
-          returning id
-        `))
-        if (superseded.rows.length === 0) {
-          throw new Error('the certificate to supersede is no longer current — reload and try again')
-        }
-      }
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_records', ${newId}, 'insert',
