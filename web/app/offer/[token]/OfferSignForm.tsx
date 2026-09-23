@@ -8,7 +8,16 @@ import { useState } from 'react'
  * stored. A signed offer stays signed — resubmission surfaces the recorded
  * state instead of a second signature.
  */
-export function OfferSignForm({ token, candidateName }: { token: string; candidateName: string }) {
+export function OfferSignForm({
+  token,
+  candidateName,
+  documentHash,
+}: {
+  token: string
+  candidateName: string
+  /** Hash of the displayed terms — returned with the signature to prove what was shown. */
+  documentHash: string
+}) {
   const [signerName, setSignerName] = useState(candidateName === 'candidate' ? '' : candidateName)
   const [reason, setReason] = useState('')
   const [mode, setMode] = useState<'sign' | 'decline'>('sign')
@@ -22,7 +31,7 @@ export function OfferSignForm({ token, candidateName }: { token: string; candida
     try {
       const body =
         mode === 'sign'
-          ? { action: 'sign', signerName }
+          ? { action: 'sign', signerName, documentHash }
           : { action: 'decline', reason }
       const res = await fetch(`/api/recruiting/offer/${encodeURIComponent(token)}`, {
         method: 'POST',

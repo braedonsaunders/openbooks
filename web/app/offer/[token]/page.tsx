@@ -35,6 +35,10 @@ export default async function OfferSigningPage({ params }: { params: Promise<{ t
       <p className="mt-1 text-sm text-slate-500">
         {t('public.offer.for', { name: offer.candidateName })} · {t('public.offer.version', { version: offer.version })}
       </p>
+      <section aria-label={t('public.offer.terms')} className="mt-6 rounded-md border border-slate-200 bg-slate-50 p-4">
+        <h2 className="text-sm font-semibold text-slate-700">{t('public.offer.terms')}</h2>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-800">{offer.letter}</p>
+      </section>
       {offer.signatureStatus === 'signed' ? (
         <p role="status" className="mt-6 rounded-md bg-green-50 p-4 text-sm text-green-800">
           {t('public.offer.alreadySigned')}
@@ -45,7 +49,11 @@ export default async function OfferSigningPage({ params }: { params: Promise<{ t
         </p>
       ) : (
         <div className="mt-6">
-          <OfferSignForm token={decodeURIComponent(token)} candidateName={offer.candidateName} />
+          <OfferSignForm
+            token={decodeURIComponent(token)}
+            candidateName={offer.candidateName}
+            documentHash={offer.documentHash}
+          />
         </div>
       )}
     </main>

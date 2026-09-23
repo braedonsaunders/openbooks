@@ -2010,6 +2010,7 @@
       "closed": "This letter is closed.",
       "for": "for {name}",
       "kicker": "Offer",
+      "terms": "Terms you are signing",
       "version": "version {version}"
     }
   },
