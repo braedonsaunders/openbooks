@@ -201,6 +201,9 @@
     "description": "Nada é salvo até você escolher Criar ativo. A depreciação é configurada depois no registro.",
     "create": "Criar ativo",
     "created": "Ativo criado",
+    "noCategories": "Ainda não há categorias de ativos. É necessária uma categoria antes de criar um ativo.",
+    "manageCategories": "Configurar categorias de ativos",
+    "noCategoriesNoGrant": "Peça a um administrador com acesso de configuração para criar uma.",
     "assetNumberHint": "Deixe em branco para atribuir o próximo número ao salvar",
     "errors": {
       "name_required": "Informe um nome para este ativo.",

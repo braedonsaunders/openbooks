@@ -182,6 +182,9 @@
     "description": "Es wird nichts gespeichert, bis Sie „Anlage erstellen“ wählen. Die Abschreibung konfigurieren Sie anschließend im Datensatz.",
     "create": "Anlage erstellen",
     "created": "Anlage erstellt",
+    "noCategories": "Noch keine Anlagenkategorien. Eine Kategorie ist erforderlich, bevor eine Anlage angelegt werden kann.",
+    "manageCategories": "Anlagenkategorien einrichten",
+    "noCategoriesNoGrant": "Bitten Sie einen Administrator mit Setup-Zugriff, eine anzulegen.",
     "assetNumberHint": "Leer lassen, um beim Speichern die nächste Nummer zu vergeben",
     "errors": {
       "name_required": "Geben Sie einen Namen für diese Anlage ein.",

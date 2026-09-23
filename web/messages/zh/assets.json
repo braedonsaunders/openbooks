@@ -182,6 +182,9 @@
     "description": "在选择“创建资产”之前不会保存任何内容。折旧设置可在创建后于记录中完成。",
     "create": "创建资产",
     "created": "资产已创建",
+    "noCategories": "尚无资产类别。创建资产之前需要先设置类别。",
+    "manageCategories": "设置资产类别",
+    "noCategoriesNoGrant": "请具有设置权限的管理员创建一个。",
     "assetNumberHint": "留空可在保存时分配下一个编号",
     "errors": {
       "name_required": "请输入此资产的名称。",

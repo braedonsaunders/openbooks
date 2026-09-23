@@ -182,6 +182,9 @@
     "description": "Rien n’est enregistré tant que vous ne choisissez pas Créer l’immobilisation. L’amortissement se configure ensuite dans la fiche.",
     "create": "Créer l’immobilisation",
     "created": "Immobilisation créée",
+    "noCategories": "Aucune catégorie d'immobilisations pour l'instant. Une catégorie est requise avant de pouvoir créer une immobilisation.",
+    "manageCategories": "Configurer les catégories d'immobilisations",
+    "noCategoriesNoGrant": "Demandez à un administrateur disposant de l'accès de configuration d'en créer une.",
     "assetNumberHint": "Laissez vide pour attribuer le prochain numéro lors de l’enregistrement",
     "errors": {
       "name_required": "Saisissez un nom pour cette immobilisation.",

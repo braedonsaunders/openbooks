@@ -117,6 +117,7 @@ export function AssetDrawer({
   taxConfigurations,
   subsidiaries,
   canManage,
+  canManageSetup = false,
   canCustomize,
   layout,
   forms,
@@ -133,6 +134,9 @@ export function AssetDrawer({
   taxConfigurations: TaxConfiguration[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
+  /** May manage Admin Setup (asset-categories): gates the setup link in the
+   *  empty-category prerequisite. Readers without it name the grant instead. */
+  canManageSetup?: boolean
   canCustomize: boolean
   layout?: FormLayoutConfig
   forms: FormOpt[]
@@ -453,7 +457,17 @@ export function AssetDrawer({
       case 'name': return <>{fieldLabel(placement, tCommon('labels.name'), true)}{editable ? <Input id={fieldId(placement)} value={name} onChange={(e) => setName(e.target.value)} /> : <p className="text-sm">{textValue(name)}</p>}</>
       case 'asset_number': return <>{fieldLabel(placement, t('labels.number'), true)}{editable ? <Input id={fieldId(placement)} className="font-mono" value={assetNumber} placeholder={createMode ? t('create.assetNumberHint') : undefined} onChange={(e) => setAssetNumber(e.target.value)} /> : <p className="font-mono text-sm">{textValue(assetNumber)}</p>}</>
       case 'status': return <>{fieldLabel(placement, tCommon('labels.status'))}<Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></>
-      case 'category_id': return <>{fieldLabel(placement, t('labels.category'), true)}{editable ? <Select id={fieldId(placement)} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</Select> : <p className="text-sm">{categories.find((category) => category.id === categoryId)?.name ?? '—'}</p>}</>
+      case 'category_id': return <>{fieldLabel(placement, t('labels.category'), true)}{editable ? <>
+        <Select id={fieldId(placement)} value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</Select>
+        {categories.length === 0 ? (
+          <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+            {t('create.noCategories')}{' '}
+            {canManageSetup ? (
+              <Link href="/admin/setup/asset-categories" className="font-medium text-teal-700 hover:underline dark:text-teal-300">{t('create.manageCategories')}</Link>
+            ) : t('create.noCategoriesNoGrant')}
+          </p>
+        ) : null}
+      </> : <p className="text-sm">{categories.find((category) => category.id === categoryId)?.name ?? '—'}</p>}</>
       case 'subsidiary_id': return subsidiaries.length === 0 ? null : <>{fieldLabel(placement, tCommon('labels.subsidiary'), true)}{editable ? <SearchSelect id={fieldId(placement)} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} options={subsidiaryOptions} ariaLabel={labelFor(placement, tCommon('labels.subsidiary'))} /> : <p className="text-sm">{subsidiaryOptions.find((option) => option.value === subsidiaryId)?.label.trim() ?? '—'}</p>}</>
       case 'serial_number': return <>{fieldLabel(placement, t('labels.serialNumber'))}{editable ? <Input id={fieldId(placement)} value={serialNumber} onChange={(e) => setSerialNumber(e.target.value)} /> : <p className="text-sm">{textValue(serialNumber)}</p>}</>
       case 'description': return <>{fieldLabel(placement, t('labels.description'))}{editable ? <Textarea id={fieldId(placement)} rows={2} value={description} onChange={(e) => setDescription(e.target.value)} /> : <p className="whitespace-pre-wrap text-sm">{textValue(description)}</p>}</>
