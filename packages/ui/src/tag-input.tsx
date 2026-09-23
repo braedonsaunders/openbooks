@@ -113,7 +113,7 @@ export function TagInput({
   }
 
   function commitHighlighted() {
-    if (highlight < filtered.length && filtered[highlight]) add(filtered[highlight].value)
+    if (highlightCapped < filtered.length && filtered[highlightCapped]) add(filtered[highlightCapped].value)
     else if (queryIsNew) add(trimmedQuery)
   }
 
@@ -148,9 +148,15 @@ export function TagInput({
     }
   }, [open])
 
-  // Clamp the highlight when the option list shrinks beneath it. Adjusted
-  // during render (same committed value, no extra render).
-  if (highlight >= rowCount) setHighlight(Math.max(0, rowCount - 1))
+  // Clamp the highlight when the option list shrinks beneath it. This is
+  // DERIVED, never stored: a render-phase setHighlight re-renders forever
+  // here (React #301 "Too many re-renders") because with an empty list the
+  // condition `highlight >= rowCount` (0 >= 0) stays true after the update —
+  // a render-phase update has no eager bailout. A ref-less stringArray
+  // field mounts exactly that state (no options, empty query) and crashed
+  // its drawer. A setState-in-effect clamp would also loop the linter, so
+  // readers use the capped value and writers keep setting raw indices.
+  const highlightCapped = Math.min(highlight, Math.max(0, rowCount - 1))
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown') {
@@ -218,7 +224,7 @@ export function TagInput({
           aria-expanded={showMenu}
           aria-controls={listId}
           aria-autocomplete="list"
-          aria-activedescendant={showMenu ? `${listId}-${highlight}` : undefined}
+          aria-activedescendant={showMenu ? `${listId}-${highlightCapped}` : undefined}
           aria-label={ariaLabel}
           disabled={disabled}
           value={query}
@@ -249,7 +255,7 @@ export function TagInput({
                       type="button"
                       role="option"
                       id={`${listId}-${i}`}
-                      aria-selected={i === highlight}
+                      aria-selected={i === highlightCapped}
                       onMouseEnter={() => setHighlight(i)}
                       // mousedown, not click: keeps focus in the input.
                       onMouseDown={(e) => {
@@ -258,7 +264,7 @@ export function TagInput({
                       }}
                       className={cn(
                         'flex h-9 w-full items-center px-3 text-left text-sm text-slate-700 dark:text-slate-200',
-                        i === highlight && 'bg-teal-50 dark:bg-teal-950/50',
+                        i === highlightCapped && 'bg-teal-50 dark:bg-teal-950/50',
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{o.label ?? o.value}</span>
@@ -271,7 +277,7 @@ export function TagInput({
                       type="button"
                       role="option"
                       id={`${listId}-${filtered.length}`}
-                      aria-selected={highlight === filtered.length}
+                      aria-selected={highlightCapped === filtered.length}
                       onMouseEnter={() => setHighlight(filtered.length)}
                       onMouseDown={(e) => {
                         e.preventDefault()
@@ -279,7 +285,7 @@ export function TagInput({
                       }}
                       className={cn(
                         'flex h-9 w-full items-center px-3 text-left text-sm text-teal-700 dark:text-teal-300',
-                        highlight === filtered.length && 'bg-teal-50 dark:bg-teal-950/50',
+                        highlightCapped === filtered.length && 'bg-teal-50 dark:bg-teal-950/50',
                       )}
                     >
                       <span className="min-w-0 flex-1 truncate">{t('add', { value: trimmedQuery })}</span>
