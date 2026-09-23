@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { civilDateFromParts, daysInCivilMonth } from "../platform/business-date.ts";
+import { civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
 import {
   filingAccountRef,
@@ -536,12 +536,34 @@ export function makeRemittanceDestinationResolver(
   };
 }
 
+/**
+ * The period's own validity, before any row is read. Shape alone admits
+ * impossible dates ('2026-02-30', month 13) that PostgreSQL then refuses
+ * with a driver error instead of a named refusal — so the range is proven a
+ * real calendar date pair first, at every entry point that accepts one.
+ * Pure, so the rule is verifiable without a database.
+ */
+export function remittancePeriodProblem(from: unknown, to: unknown): string | null {
+  if (!isIsoCalendarDate(from)) {
+    return `invalid from (YYYY-MM-DD calendar date required) — got ${JSON.stringify(from) ?? "nothing"}`;
+  }
+  if (!isIsoCalendarDate(to)) {
+    return `invalid to (YYYY-MM-DD calendar date required) — got ${JSON.stringify(to) ?? "nothing"}`;
+  }
+  if (to < from) {
+    return `from "${from}" is after to "${to}" — the period must start on or before it ends`;
+  }
+  return null;
+}
+
 export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
   executor: RemittanceExecutor = db,
 ): Promise<RemittanceGroup[]> {
+  const periodProblem = remittancePeriodProblem(range.from, range.to);
+  if (periodProblem) throw new PayrollError(periodProblem);
   const rawSettings = await rawPayrollSettings(orgId, executor);
   // No org-wide unknown-filing-account refusal here: one legacy run must not
   // poison the summary for the rest. Stubs whose filing account was never
@@ -1840,13 +1862,8 @@ export async function createRemittanceBill(
   },
 ): Promise<{ documentId: string; documentNumber: string }> {
   const filingAccountId = input.filingAccountId ?? null;
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(input.from)
-    || !/^\d{4}-\d{2}-\d{2}$/.test(input.to)
-    || input.from > input.to
-  ) {
-    throw new PayrollError("remittance period must be valid dates with from on or before to");
-  }
+  const periodProblem = remittancePeriodProblem(input.from, input.to);
+  if (periodProblem) throw new PayrollError(periodProblem);
 
   // Auto mode must discover WHICH entity before it can fence it. This
   // preflight read may go stale — the canonical summary inside the

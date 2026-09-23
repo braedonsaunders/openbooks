@@ -10,6 +10,7 @@ import {
   pickRemittanceSlice,
   remittanceBillLockKey,
   remittanceGroupRegionalCalendar,
+  remittancePeriodProblem,
   remittanceRegionalCalendarsFor,
   type RemittanceRow,
 } from "./remittance.ts";
@@ -378,6 +379,21 @@ test("a region-scoped remittance vendor splits the group; same-vendor provinces 
   assert.equal(rq.components.length, 1);
   assert.equal(rq.components[0]!.amount, "25.00");
   assert.equal(rq.total, "25.0000");
+});
+
+// -- Remittance period validity ----------------------------------------------
+
+test("shape-valid but impossible dates are refused before any row is read", () => {
+  // February 30th and month 13 pass a YYYY-MM-DD shape check but name no
+  // day: each refuses naming its bound, instead of reaching PostgreSQL as a
+  // driver error.
+  assert.match(remittancePeriodProblem("2026-02-30", "2026-03-31")!, /invalid from/);
+  assert.match(remittancePeriodProblem("2026-02-30", "2026-03-31")!, /calendar date required/);
+  assert.match(remittancePeriodProblem("2026-01-01", "2026-13-01")!, /invalid to/);
+  assert.match(remittancePeriodProblem("2026-10-01", "2026-09-01")!, /is after to/);
+  // Real dates pass, including a leap day and a one-day period.
+  assert.equal(remittancePeriodProblem("2024-02-29", "2024-02-29"), null);
+  assert.equal(remittancePeriodProblem("2026-09-01", "2026-09-30"), null);
 });
 
 // -- Remittance bill idempotency ---------------------------------------------
