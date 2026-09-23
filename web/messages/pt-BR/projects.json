@@ -234,6 +234,21 @@
     "totalJobCost": "Custo total da obra",
     "committedHint": "Compromissos de pedidos de compra em aberto.",
     "grossProfit": "Lucro bruto",
+    "pricingMethod": {
+      "contract_field": "Preço fixo",
+      "billable_value": "Tempo e materiais",
+      "not_to_exceed": "Preço máximo",
+      "cost_plus": "Custo mais margem"
+    },
+    "pricingBasis": {
+      "contract_field": "O valor contratual salvo define o preço da obra",
+      "billable_value": "Valor faturável do trabalho precificado",
+      "not_to_exceed": "O menor entre o valor contratual e o valor faturável do trabalho precificado",
+      "cost_plus": "Custo incorrido mais a margem do projeto"
+    },
+    "unratedWorkNote": "O trabalho sem taxa faturável não está precificado e adiciona $0 ao valor faturável.",
+    "contractValueReference": "Valor contratual (referência)",
+    "contractValueReferenceHint": "O valor de referência salvo — o preço total segue a base indicada acima.",
     "crewToday": "Equipe hoje",
     "unknownWorker": "(trabalhador desconhecido)",
     "sinceTime": "desde {since}",

@@ -234,6 +234,21 @@
     "totalJobCost": "Costo total del trabajo",
     "committedHint": "Compromisos de órdenes de compra abiertas.",
     "grossProfit": "Utilidad bruta",
+    "pricingMethod": {
+      "contract_field": "Precio fijo",
+      "billable_value": "Tiempo y materiales",
+      "not_to_exceed": "Precio máximo",
+      "cost_plus": "Costo más margen"
+    },
+    "pricingBasis": {
+      "contract_field": "El valor contractual guardado fija el precio del trabajo",
+      "billable_value": "Valor facturable del trabajo tarifado",
+      "not_to_exceed": "El menor entre el valor contractual y el valor facturable del trabajo tarifado",
+      "cost_plus": "Costo incurrido más el margen del proyecto"
+    },
+    "unratedWorkNote": "El trabajo sin tarifa facturable no está tarifado y aporta $0 al valor facturable.",
+    "contractValueReference": "Valor contractual (referencia)",
+    "contractValueReferenceHint": "El importe de referencia guardado — el precio total sigue la base indicada arriba.",
     "crewToday": "Cuadrilla hoy",
     "unknownWorker": "(trabajador desconocido)",
     "sinceTime": "desde {since}",

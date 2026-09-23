@@ -181,6 +181,8 @@ export async function loadProjectCockpit(
       projectType: financials.projectType,
       costBudgetApplies: projectType.financialProfile.totalPrice.method === 'not_to_exceed',
       overheadIncludedInTotalCost: projectType.financialProfile.totalCost.components.includes('overhead'),
+      pricingMethod: projectType.financialProfile.totalPrice.method,
+      contractValue: financials.contractValue,
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,

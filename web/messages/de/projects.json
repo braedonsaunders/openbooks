@@ -234,6 +234,21 @@
     "totalJobCost": "Gesamte Auftragskosten",
     "committedHint": "Offene Bestellverpflichtungen.",
     "grossProfit": "Bruttogewinn",
+    "pricingMethod": {
+      "contract_field": "Festpreis",
+      "billable_value": "Zeit & Material",
+      "not_to_exceed": "Preisobergrenze",
+      "cost_plus": "Kosten plus Zuschlag"
+    },
+    "pricingBasis": {
+      "contract_field": "Der gespeicherte Auftragswert bepreist den Auftrag",
+      "billable_value": "Abrechenbarer Wert der kalkulierten Leistungen",
+      "not_to_exceed": "Niedrigerer Wert aus Auftragswert und abrechenbarem Wert der kalkulierten Leistungen",
+      "cost_plus": "Angefallene Kosten plus Projektzuschlag"
+    },
+    "unratedWorkNote": "Leistungen ohne Abrechnungssatz sind nicht kalkuliert und tragen $0 zum abrechenbaren Wert bei.",
+    "contractValueReference": "Auftragswert (Referenz)",
+    "contractValueReferenceHint": "Der gespeicherte Referenzbetrag — der Gesamtauftragspreis folgt der oben genannten Grundlage.",
     "crewToday": "Team heute",
     "unknownWorker": "(unbekannter Mitarbeiter)",
     "sinceTime": "seit {since}",

@@ -234,6 +234,21 @@
     "totalJobCost": "案件総原価",
     "committedHint": "未消化の発注書コミットメントです。",
     "grossProfit": "売上総利益",
+    "pricingMethod": {
+      "contract_field": "固定価格",
+      "billable_value": "実費精算",
+      "not_to_exceed": "上限付き",
+      "cost_plus": "コストプラス"
+    },
+    "pricingBasis": {
+      "contract_field": "保存済みの契約額が案件価格になります",
+      "billable_value": "単価設定済み作業の請求可能額",
+      "not_to_exceed": "契約額と単価設定済み作業の請求可能額のいずれか低い方",
+      "cost_plus": "発生原価にプロジェクトのマージンを加算"
+    },
+    "unratedWorkNote": "請求単価のない作業は未設定であり、請求可能額に$0として加算されます。",
+    "contractValueReference": "契約額（参考）",
+    "contractValueReferenceHint": "保存済みの参考額 — 案件総額は上記の基準に従います。",
     "crewToday": "今日の班",
     "unknownWorker": "（不明な作業員）",
     "sinceTime": "{since}から",

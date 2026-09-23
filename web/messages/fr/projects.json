@@ -234,6 +234,21 @@
     "totalJobCost": "Coût total du projet",
     "committedHint": "Engagements de bons de commande ouverts.",
     "grossProfit": "Bénéfice brut",
+    "pricingMethod": {
+      "contract_field": "Prix fixe",
+      "billable_value": "Temps et matériaux",
+      "not_to_exceed": "Prix plafond",
+      "cost_plus": "Coût majoré"
+    },
+    "pricingBasis": {
+      "contract_field": "La valeur contractuelle enregistrée fixe le prix du projet",
+      "billable_value": "Valeur facturable des travaux chiffrés",
+      "not_to_exceed": "Le plus bas entre la valeur contractuelle et la valeur facturable des travaux chiffrés",
+      "cost_plus": "Coût engagé plus la marge du projet"
+    },
+    "unratedWorkNote": "Les travaux sans taux facturable ne sont pas chiffrés et apportent $0 à la valeur facturable.",
+    "contractValueReference": "Valeur contractuelle (référence)",
+    "contractValueReferenceHint": "Le montant de référence enregistré — le prix total suit la base indiquée ci-dessus.",
     "crewToday": "Équipe du jour",
     "unknownWorker": "(ouvrier inconnu)",
     "sinceTime": "depuis {since}",
