@@ -33,6 +33,13 @@ import type { CustomFieldDefClient } from "../../../../../components/custom-fiel
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
 import { mergeHref } from "../../../../../lib/list-params";
+import {
+  ADJUSTMENT_CALCULATIONS,
+  ADJUSTMENT_CATEGORIES,
+  ADJUSTMENT_PRESENTATIONS,
+  ADJUSTMENT_TARGET_TYPES,
+  ADJUSTMENT_TEXT_TARGETS,
+} from "../../../../../lib/rate-adjustment-types";
 
 export interface BillCardRow {
   id: string;
@@ -102,21 +109,10 @@ type OptionMap = Record<string, NamedOption[]>;
 type ItemOption = NamedOption & { kind: string; category: string | null };
 type FormOption = { id: string; name: string };
 
-const TARGET_TYPES = [
-  "item",
-  "item_kind",
-  "item_category",
-  "transaction_type",
-  "department",
-  "subsidiary",
-  "location",
-  "class",
-  "trade",
-  "job_title",
-  "project",
-  "customer",
-  "other",
-] as const;
+// The accepted adjustment vocabulary is shared with the save route and the
+// pricing engine — this UI offers exactly what they accept and price (see
+// the top-of-file import).
+const TARGET_TYPES = ADJUSTMENT_TARGET_TYPES;
 const SCOPE_TYPES = [
   "department",
   "subsidiary",
@@ -126,13 +122,7 @@ const SCOPE_TYPES = [
   "job_title",
   "other",
 ] as const;
-const TEXT_TARGETS = new Set([
-  "item_kind",
-  "item_category",
-  "transaction_type",
-  "job_title",
-  "other",
-]);
+const TEXT_TARGETS = ADJUSTMENT_TEXT_TARGETS;
 
 function subsidiaryAwareTypes<T extends readonly string[]>(types: T, options: OptionMap): string[] {
   return options.subsidiary?.length ? [...types] : types.filter((type) => type !== "subsidiary");
@@ -1066,14 +1056,7 @@ function AdjustmentSection({
                           setAdjustment(i, { category: e.target.value })
                         }
                       >
-                        {[
-                          "markup",
-                          "travel",
-                          "allowance",
-                          "minimum",
-                          "surcharge",
-                          "other",
-                        ].map((x) => (
+                        {ADJUSTMENT_CATEGORIES.map((x) => (
                           <option key={x} value={x}>
                             {t(`categories.${x}`)}
                           </option>
@@ -1137,15 +1120,7 @@ function AdjustmentSection({
                           setAdjustment(i, { calculation: e.target.value })
                         }
                       >
-                        {[
-                          "percent",
-                          "fixed",
-                          "per_hour",
-                          "per_day",
-                          "distance",
-                          "time",
-                          "text",
-                        ].map((x) => (
+                        {ADJUSTMENT_CALCULATIONS.map((x) => (
                           <option key={x} value={x}>
                             {t(`calculations.${x}`)}
                           </option>
@@ -1193,7 +1168,7 @@ function AdjustmentSection({
                           setAdjustment(i, { presentation: e.target.value })
                         }
                       >
-                        {["included", "separate", "informational"].map((x) => (
+                        {ADJUSTMENT_PRESENTATIONS.map((x) => (
                           <option key={x} value={x}>
                             {t(`presentations.${x}`)}
                           </option>

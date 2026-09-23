@@ -300,6 +300,10 @@ export async function generateInvoiceFromBillingRequest(
       itemKind?: string | null
       itemCategory?: string | null
       departmentId?: string | null
+      /** Owning subsidiary + work location/class, for adjustment targeting. */
+      subsidiaryId?: string | null
+      locationId?: string | null
+      classId?: string | null
       /** Date the work happened — the date its price is negotiated as of. */
       workedOn?: string | null
       /** True when the source line carried its own negotiated markup. */
@@ -469,6 +473,9 @@ export async function generateInvoiceFromBillingRequest(
           itemCategory: te.item_category ?? null,
           timeKind: timeKindOf(te.time_type_name),
           departmentId: te.department_id ?? null,
+          // Time carries no subsidiary of its own: the work belongs to the
+          // billed project's subsidiary.
+          subsidiaryId: project.subsidiary_id ?? null,
           workedOn: te.worked_on ? String(te.worked_on).slice(0, 10) : null,
         })
       }
@@ -585,6 +592,7 @@ export async function generateInvoiceFromBillingRequest(
             itemCategory: cl.item_category ?? null,
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
+            subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
           }))
         } else {
@@ -604,6 +612,7 @@ export async function generateInvoiceFromBillingRequest(
             itemCategory: cl.item_category ?? null,
             sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
+            subsidiaryId: cl.subsidiary_id != null ? String(cl.subsidiary_id) : null,
             hasLineMarkup: cl.markup_percent != null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
             unit: cl.unit,
@@ -728,7 +737,13 @@ export async function generateInvoiceFromBillingRequest(
           return priceAdjustments(
             built.filter((l) => (l.departmentId ?? null) === departmentId).map((l) => ({
               amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
-              departmentId, isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
+              departmentId, customerId: project.customer_id, projectId: req.project_id,
+              subsidiaryId: l.subsidiaryId ?? null,
+              // The line's own location/class arrive with PRC13; until then
+              // a location/class-targeted adjustment matches nothing rather
+              // than everything.
+              locationId: l.locationId ?? null, classId: l.classId ?? null,
+              isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
             await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: cardDate, departmentId }),
             invoicing.surchargeRounding ?? 'half_up',
