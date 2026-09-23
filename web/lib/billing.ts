@@ -377,11 +377,21 @@ export async function generateInvoiceFromBillingRequest(
         req.basis === 'time_selection' && Array.isArray(req.selected_time_entry_ids)
           ? (req.selected_time_entry_ids as string[])
           : null
+      // A request created with an explicitly empty selection names no work to
+      // bill: invoicing it would silently fall through to every eligible
+      // entry on the project. Refuse with the way forward instead.
+      if (req.basis === 'time_selection' && selected !== null && selected.length === 0) {
+        throw new BillingError('This billing request was created with an empty time selection — cancel it and create a new request selecting the entries to bill')
+      }
+      if (selected?.some((id) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) {
+        throw new BillingError('A time entry selected on this billing request is invalid — cancel it and create a new request with valid entry ids')
+      }
       // A FINAL invoice without an explicit source selection closes the job and
-      // bills all remaining work. An explicit Field Ticket selection remains an
-      // immutable scope even on a final invoice; silently widening it would bill
-      // work the approver did not select.
+      // bills all remaining work. An explicit Field Ticket or time-entry
+      // selection remains an immutable scope even on a final invoice; silently
+      // widening it would bill work the approver did not select.
       const isFinal = req.invoice_type === 'final'
+      const hasTimeSelection = selected !== null && selected.length > 0
       const dateFilter = sql.join(
         [
           req.start_date ? sql` and te.worked_on >= ${req.start_date}` : sql``,
@@ -390,8 +400,8 @@ export async function generateInvoiceFromBillingRequest(
         sql``,
       )
       const selFilter =
-        selected && selected.length
-          ? sql` and te.id = any(${`{${selected.join(',')}}`}::uuid[])`
+        hasTimeSelection
+          ? sql` and te.id = any(${`{${selected!.join(',')}}`}::uuid[])`
           : sql``
       // Field Ticket selection is relational, immutable, tenant-scoped, and
       // validated at request creation. It is the exact unit of work to invoice.
