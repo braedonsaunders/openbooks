@@ -1,5 +1,9 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
+// Relative (not the bare workspace specifier): worktree node_modules resolves
+// bare @openbooks/* to the main checkout, so engine predicates must bind this
+// checkout by path — a bare import would scope reads by main's code.
+import { apOpenAccountScope as sharedApOpenAccountScope } from '../../engine/src/records/open-item-scopes.ts'
 
 /**
  * The one shared answer to "which ACCOUNTS carry open payables/receivables"
@@ -21,15 +25,13 @@ import { sql, type SQL } from 'drizzle-orm'
 
 /**
  * AP-side open-item account scope over an accounts table expression (pass
- * sql`a` for a join aliased `a`). A payable-side balance lives on a
- * liability_payable account OR on the org's designated employee-payable
- * control, which the industry presets type liability_current_other. The
- * settings writer validates the stored mapping, so the scalar subquery's
- * uuid cast cannot meet garbage — the same trust resolveOpenItemAccounts
- * already places on it.
+ * sql`a` for a join aliased `a`). The predicate lives once in the engine
+ * (./open-item-scopes.ts — the cash agent reads it directly and cannot
+ * import this server-only module); this delegates so the web readers and the
+ * agent can never disagree on which accounts carry payables.
  */
 export function apOpenAccountScope(accounts: SQL, orgId: string): SQL {
-  return sql`(${accounts}.type = 'liability_payable' or ${accounts}.id = (select (settings->'controlAccounts'->>'employeePayable')::uuid from orgs where id = ${orgId}))`
+  return sharedApOpenAccountScope(accounts, orgId)
 }
 
 /**

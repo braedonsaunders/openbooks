@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
 import { appliedLegAmountExpr } from "../records/balance-due.ts";
+import { apOpenAccountScope } from "../records/open-item-scopes.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
@@ -197,7 +198,6 @@ async function sideOpenItems(
   side: "ar" | "ap",
   asOf: string,
 ): Promise<OpenItem[]> {
-  const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
   const lineFilter =
     side === "ap"
@@ -223,7 +223,8 @@ async function sideOpenItems(
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
          and je.posting_date <= ${asOf}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
+        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
+         and ${side === "ap" ? apOpenAccountScope(sql`a`, orgId) : sql`a.type = 'asset_receivable'`}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
     )
