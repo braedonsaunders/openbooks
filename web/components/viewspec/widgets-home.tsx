@@ -13,6 +13,7 @@ import { InsightsTabs } from '../../app/(app)/insights/InsightsTabs'
 import { CardNameCell, VizCell } from '../../app/(app)/insights/sections'
 import { NewCardButton } from '../../app/(app)/insights/NewCardButton'
 import { CardStudio } from '../../app/(app)/insights/CardStudio'
+import { studioInstanceKey } from '../../app/(app)/insights/card-save'
 import { NewTypeButton } from '../../app/(app)/records/types/NewTypeButton'
 import { QueryConsole } from '../../app/(app)/query/sections'
 import { HealthHero } from '../../app/(app)/accounting/sections'
@@ -306,7 +307,12 @@ export const HOME_WIDGETS = {
   'card-studio': (props) => {
     const studio = props.studio as ComponentProps<typeof CardStudio> | null
     if (!studio) return null
-    return <CardStudio {...studio} />
+    // One studio instance per card identity: without the key, navigating
+    // from `?card=new` to `?card=<uuid>` (or card A to card B) reuses the
+    // instance, so the next autosave carries the previous card's revision
+    // token — or none — and every save fails generically. See
+    // studioInstanceKey.
+    return <CardStudio key={studioInstanceKey(studio.card.id, studio.createMode === true)} {...studio} />
   },
   'dashboard-name-cell': (props) => (
     <DashboardNameCell

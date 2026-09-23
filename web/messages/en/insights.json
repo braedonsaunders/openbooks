@@ -32,7 +32,9 @@
   "autosave": {
     "saved": "All changes saved",
     "unsaved": "Unsaved changes…",
-    "failed": "Autosave failed"
+    "failed": "Autosave failed",
+    "missingRevision": "Couldn't save — the card has no revision yet. Reload the card and keep editing.",
+    "unusableRevision": "Couldn't confirm the save — reload the card and keep editing."
   },
   "errors": {
     "queryFailed": "Query failed",
@@ -100,7 +102,11 @@
     "draftToast": "Card returned to draft",
     "deleteConfirm": "Delete this card? It will be removed from any dashboards.",
     "deleteFailed": "Could not delete the card",
-    "deletedToast": "Card deleted"
+    "deletedToast": "Card deleted",
+    "retrySave": "Retry",
+    "reloadLatest": "Reload latest",
+    "overwriteSave": "Save anyway",
+    "reloadConfirm": "Reload the latest saved version? Your unsaved changes will be discarded."
   },
   "vizSettings": {
     "category": "Category",

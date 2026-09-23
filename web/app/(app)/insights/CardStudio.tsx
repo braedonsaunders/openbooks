@@ -1,10 +1,19 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Filter, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { readApiErrorMessage } from '../../../lib/api-error'
+import {
+  INITIAL_CARD_SAVE,
+  cardSaveReducer,
+  isCurrentSave,
+  requestCardSave,
+  shouldAdoptRevision,
+  type CardSaveDraft,
+} from './card-save'
 import {
   AGG_FUNCTIONS,
   FILTER_OPERATOR_MAP,
@@ -168,8 +177,11 @@ export function CardStudio({
   }, [runPreview])
 
   // -- autosave (debounced PATCH) -------------------------------------------
-  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
-  const savePayload = useMemo(
+  // The machine owns status/error/conflict; the field states above stay the
+  // single owner of the edit, so a refused save keeps it by construction —
+  // the refusal paths below never touch them.
+  const [save, dispatchSave] = useReducer(cardSaveReducer, INITIAL_CARD_SAVE)
+  const savePayload: CardSaveDraft = useMemo(
     () => ({
       name: name.trim() || UNTITLED_CARD,
       description: description.trim() || null,
@@ -179,6 +191,15 @@ export function CardStudio({
     }),
     [name, description, query, vizType, vizSettings],
   )
+  const saveMessages = useMemo(
+    () => ({
+      missingRevision: t('autosave.missingRevision'),
+      saveFailed: t('autosave.failed'),
+      unusableRevision: t('autosave.unusableRevision'),
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
 
   // The server loads the displayed values and this revision in one SQL read.
   // Fetching a newer token alone would let stale local fields overwrite it.
@@ -187,6 +208,47 @@ export function CardStudio({
   const first = useRef(true)
   const saveSeq = useRef(0)
   const saveAbort = useRef<AbortController | null>(null)
+
+  /** One save attempt for an already-fenced sequence number. */
+  async function runSave(seq: number, draft: CardSaveDraft) {
+    const controller = new AbortController()
+    saveAbort.current = controller
+    dispatchSave({ type: 'save-start' })
+    try {
+      const outcome = await requestCardSave({
+        fetchFn: fetch,
+        cardId: card.id,
+        draft,
+        revision: revisionRef.current,
+        messages: saveMessages,
+        signal: controller.signal,
+      })
+      // A request can commit just as its fetch is aborted. Adopt its token
+      // for the next save — but only forward, and only the token: a late
+      // response for a superseded draft must never set saved or touch the
+      // newer local state below, even when the server accepted that older
+      // write (the server then holds older content than the studio shows,
+      // and the newer save's own outcome reports it).
+      if (outcome.kind === 'saved' && shouldAdoptRevision(outcome.revision, revisionRef.current)) {
+        revisionRef.current = outcome.revision
+      }
+      if (!isCurrentSave(seq, saveSeq.current)) return
+      if (outcome.kind === 'saved') {
+        dispatchSave({ type: 'save-ok' })
+        router.refresh()
+      } else {
+        dispatchSave({ type: 'save-refused', message: outcome.message, conflict: outcome.conflict })
+        toast.error(outcome.message)
+      }
+    } catch (error) {
+      if (!isCurrentSave(seq, saveSeq.current) || (error as { name?: string })?.name === 'AbortError') return
+      dispatchSave({ type: 'save-refused', message: t('autosave.failed'), conflict: false })
+      toast.error(t('autosave.failed'))
+    } finally {
+      if (saveAbort.current === controller) saveAbort.current = null
+    }
+  }
+
   useEffect(() => {
     // Create mode is local-only until Save: no revision exists to echo and no
     // row exists to autosave into, so the debounced PATCH never arms.
@@ -198,48 +260,9 @@ export function CardStudio({
     const seq = ++saveSeq.current
     saveAbort.current?.abort()
     saveAbort.current = null
-    setSaveState('dirty')
+    dispatchSave({ type: 'edit', draft: savePayload })
     const timer = setTimeout(() => {
-      void (async () => {
-        if (seq !== saveSeq.current) return
-        const expectedUpdatedAt = revisionRef.current
-        if (!expectedUpdatedAt) {
-          setSaveState('error')
-          toast.error(t('autosave.failed'))
-          return
-        }
-
-        const controller = new AbortController()
-        saveAbort.current = controller
-        setSaveState('saving')
-        try {
-          const res = await fetch(`/api/insights/cards/${card.id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ...savePayload, expectedUpdatedAt }),
-            signal: controller.signal,
-          })
-          const data = (await res.json().catch(() => null)) as { error?: unknown; updated_at?: unknown } | null
-          // A request can commit just as its fetch is aborted. Keep its token
-          // for the next save even when this completion is no longer current.
-          if (res.ok && typeof data?.updated_at === 'string') revisionRef.current = data.updated_at
-          if (seq !== saveSeq.current) return
-          if (res.ok) {
-            if (typeof data?.updated_at !== 'string') throw new Error('card revision unavailable')
-            setSaveState('saved')
-            router.refresh()
-          } else {
-            setSaveState('error')
-            toast.error(typeof data?.error === 'string' ? data.error : t('autosave.failed'))
-          }
-        } catch (error) {
-          if (seq !== saveSeq.current || (error as { name?: string })?.name === 'AbortError') return
-          setSaveState('error')
-          toast.error(t('autosave.failed'))
-        } finally {
-          if (saveAbort.current === controller) saveAbort.current = null
-        }
-      })()
+      void runSave(seq, savePayload)
     }, 600)
     return () => {
       clearTimeout(timer)
@@ -248,6 +271,46 @@ export function CardStudio({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savePayload, ro])
+
+  /** Retry a failed autosave with the kept edit and the current token. */
+  async function retrySave() {
+    const seq = ++saveSeq.current
+    saveAbort.current?.abort()
+    saveAbort.current = null
+    await runSave(seq, save.draft ?? savePayload)
+  }
+
+  /**
+   * Overwrite path for a revision conflict: adopt the latest server token,
+   * then save the kept local edit on top of it. The reload path (discard)
+   * is the sibling button; this one never drops the edit.
+   */
+  async function saveAnyway() {
+    const latest = await fetch(`/api/insights/cards/${card.id}`, { cache: 'no-store' })
+    if (!latest.ok) {
+      toast.error(await readApiErrorMessage(latest, t('errors.updateFailed')))
+      return
+    }
+    const data = (await latest.json().catch(() => null)) as { updated_at?: unknown } | null
+    if (typeof data?.updated_at !== 'string') {
+      dispatchSave({ type: 'save-refused', message: t('autosave.unusableRevision'), conflict: true })
+      toast.error(t('autosave.unusableRevision'))
+      return
+    }
+    revisionRef.current = data.updated_at
+    const seq = ++saveSeq.current
+    saveAbort.current?.abort()
+    saveAbort.current = null
+    await runSave(seq, save.draft ?? savePayload)
+  }
+
+  /** Reload path for a revision conflict: adopt the server state, discarding
+   *  the local edit by explicit choice (confirmed — this is the only path
+   *  that drops an edit, and it never runs silently). */
+  function reloadLatest() {
+    if (!confirm(t('cardStudio.reloadConfirm'))) return
+    window.location.reload()
+  }
 
   const [busy, setBusy] = useState(false)
   async function setPublished(next: boolean) {
@@ -371,7 +434,7 @@ export function CardStudio({
             ) : null}
             {canPublish ? (
               status === 'published' ? (
-                <Button variant="outline" disabled={busy || saveState !== 'saved'} onClick={() => setPublished(false)}>
+                <Button variant="outline" disabled={busy || save.status !== 'saved'} onClick={() => setPublished(false)}>
                   {t('actions.unpublish')}
                 </Button>
               ) : (
@@ -379,7 +442,7 @@ export function CardStudio({
                   {!nameValid ? (
                     <span className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.nameRequiredToPublish')}</span>
                   ) : null}
-                  <Button disabled={busy || !nameValid || saveState !== 'saved'} onClick={() => setPublished(true)}>
+                  <Button disabled={busy || !nameValid || save.status !== 'saved'} onClick={() => setPublished(true)}>
                     {t('actions.publish')}
                   </Button>
                 </>
@@ -405,19 +468,37 @@ export function CardStudio({
           <div className="flex w-full items-center gap-3">
             <span
               className={
-                'text-xs ' + (saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
+                'text-xs ' + (save.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
               }
             >
               {canCreate
-                ? saveState === 'saved'
+                ? save.status === 'saved'
                   ? t('autosave.saved')
-                  : saveState === 'saving'
+                  : save.status === 'saving'
                     ? tCommon('actions.saving')
-                    : saveState === 'error'
-                      ? t('cardStudio.saveFailedRetry')
+                    : save.status === 'error'
+                      ? (save.error ?? t('cardStudio.saveFailedRetry'))
                       : t('autosave.unsaved')
                 : null}
             </span>
+            {canCreate && save.status === 'error' ? (
+              <span className="ml-auto flex items-center gap-2">
+                {save.conflict ? (
+                  <>
+                    <Button variant="outline" size="sm" onClick={reloadLatest}>
+                      {t('cardStudio.reloadLatest')}
+                    </Button>
+                    <Button size="sm" onClick={saveAnyway}>
+                      {t('cardStudio.overwriteSave')}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={retrySave}>
+                    {t('cardStudio.retrySave')}
+                  </Button>
+                )}
+              </span>
+            ) : null}
           </div>
         )
       }
