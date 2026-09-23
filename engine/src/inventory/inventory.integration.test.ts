@@ -16,7 +16,7 @@ import { transferInventory } from "./transfers.ts";
 import { reverseInventoryMovement } from "./reversal.ts";
 import { buildAssembly, reverseAssemblyBuild } from "./assembly.ts";
 import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
-import { createTransferOrder, shipTransferOrder } from "./transfer-orders.ts";
+import { createTransferOrder } from "./transfer-orders.ts";
 import { postLandedCostVoucher, reverseLandedCostVoucher } from "./landed-cost.ts";
 import {
   createScratchOrg,
@@ -896,22 +896,31 @@ test("inventory locks prevent oversell and transfer-order failures roll back eve
          'asset_current_other', true, true, false, false, '[]'::jsonb,
          '{}'::jsonb, true)
     `);
-    const order = await createTransferOrder(org.orgId, actor, {
-      fromStockLocationId: org.stockLocationId2,
-      toStockLocationId: org.stockLocationId,
-      transitStockLocationId: transitLocationId,
-      inTransitAccountId: summaryAccountId,
-      subsidiaryId: org.subsidiaryId,
-      orderedOn: org.date,
-      lines: [{ itemId: org.items.fifo, quantity: "1" }],
-    });
+    // An unusable in-transit account refuses at creation, before any draft,
+    // movement, or GL line exists — the operator learns the remedy up front
+    // instead of at shipment.
     const beforeSource = await getOnHand(
       org.orgId,
       org.items.fifo,
       org.stockLocationId2,
     );
     await assert.rejects(
-      shipTransferOrder(org.orgId, actor, order.id, org.date),
+      createTransferOrder(org.orgId, actor, {
+        fromStockLocationId: org.stockLocationId2,
+        toStockLocationId: org.stockLocationId,
+        transitStockLocationId: transitLocationId,
+        inTransitAccountId: summaryAccountId,
+        subsidiaryId: org.subsidiaryId,
+        orderedOn: org.date,
+        lines: [{ itemId: org.items.fifo, quantity: "1" }],
+      }),
+      /active, non-summary/,
+    );
+    assert.equal(
+      (await db.execute<{ count: number }>(sql`
+        select count(*)::int as count from transfer_orders where org_id = ${org.orgId}`)).rows[0]!.count,
+      0,
+      "a refused creation must persist no draft",
     );
     assert.equal(
       toUnits(
@@ -927,16 +936,6 @@ test("inventory locks prevent oversell and transfer-order failures roll back eve
       ),
       0n,
     );
-    const orderState = (await db.execute<{ status: string; ship_movement_id: string | null }>(sql`
-      select o.status, l.ship_movement_id
-        from transfer_orders o
-        join transfer_order_lines l on l.transfer_order_id = o.id
-       where o.id = ${order.id} and o.org_id = ${org.orgId}
-    `));
-    assert.deepEqual(orderState.rows[0], {
-      status: "draft",
-      ship_movement_id: null,
-    });
     await assertInvariant(org);
   } finally {
     await dropScratchOrg(org.orgId);

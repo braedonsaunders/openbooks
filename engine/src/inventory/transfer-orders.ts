@@ -3,6 +3,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, isZero, neg, sum } from "../money/money.ts";
 import { businessToday } from "../platform/business-date.ts";
+import {
+  loadSubsidiaryContext,
+  SubsidiaryError,
+  validateSubsidiaryRestrictions,
+} from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { resolveProfile, assertInventoryFeature } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
@@ -58,6 +63,13 @@ export async function createTransferOrder(
   }
   return await db.transaction(async (tx) => {
     await assertInventoryFeature(tx, orgId);
+    if (input.inTransitAccountId) {
+      await assertInTransitAccountUsable(tx, orgId, {
+        inTransitAccountId: input.inTransitAccountId,
+        subsidiaryId: input.subsidiaryId,
+        itemIds: input.lines.map((line) => line.itemId),
+      });
+    }
     const documentNumber = await nextSequenceNumber(orgId, "transfer_order", "TO-", tx);
     const order = (await tx.execute<{ id: string }>(sql`
       insert into transfer_orders
@@ -79,6 +91,101 @@ export async function createTransferOrder(
     }
     return { id, documentNumber };
   });
+}
+
+/**
+ * Goods in transit are inventory owned by the order's legal entity, so the
+ * account that holds them must be a postable balance-sheet asset account of
+ * this organization — never cash, never P&L, never the item's own asset
+ * account — and its subsidiary restriction must admit the order's entity.
+ * Checked at creation AND at each posting leg: the account can be
+ * deactivated, re-typed, or re-scoped while the order sits in draft or in
+ * transit, and posting must refuse the changed reference rather than price
+ * the leg into the wrong account.
+ */
+async function assertInTransitAccountUsable(
+  tx: Runner,
+  orgId: string,
+  p: { inTransitAccountId: string; subsidiaryId: string; itemIds: string[] },
+): Promise<void> {
+  const account = (await tx.execute<{
+    id: string;
+    name: string;
+    type: string;
+    isActive: boolean;
+    isSummary: boolean;
+  }>(sql`
+    select id, name, type, is_active as "isActive", is_summary as "isSummary"
+      from accounts where org_id = ${orgId} and id = ${p.inTransitAccountId}
+      for share`)).rows[0];
+  if (!account) {
+    throw new InventoryError(
+      "in-transit account is not a postable account in this organization — choose the balance-sheet asset account that holds goods in transit",
+    );
+  }
+  if (!account.isActive || account.isSummary) {
+    throw new InventoryError(
+      `in-transit account "${account.name}" must be an active, non-summary account — choose an active asset account that holds goods in transit`,
+    );
+  }
+  if (account.type === "asset_bank") {
+    throw new InventoryError(
+      `in-transit account "${account.name}" is a cash/bank account — cash cannot hold goods in transit; choose a current-asset or other-asset account instead`,
+    );
+  }
+  if (account.type === "asset_receivable") {
+    throw new InventoryError(
+      `in-transit account "${account.name}" is a receivable account — receivables cannot hold goods in transit; choose a current-asset or other-asset account instead`,
+    );
+  }
+  if (!account.type.startsWith("asset_")) {
+    const kind =
+      account.type === "income" || account.type === "income_other" ||
+      account.type === "cogs" || account.type === "expense" ||
+      account.type === "expense_other" || account.type === "expense_deferred"
+        ? "a profit-and-loss account"
+        : "not an asset account";
+    throw new InventoryError(
+      `in-transit account "${account.name}" is ${kind} — goods in transit must sit in a balance-sheet asset account; choose a current-asset or other-asset account instead`,
+    );
+  }
+  for (const itemId of [...new Set(p.itemIds)]) {
+    const profile = await resolveProfile(orgId, itemId, tx, true);
+    const accountProblem = inventoryOffsetAccountProblem(
+      profile.assetAccountId,
+      p.inTransitAccountId,
+      "in-transit",
+    );
+    if (accountProblem) {
+      throw new InventoryError(
+        `${accountProblem} — choose a separate balance-sheet asset account to hold goods in transit`,
+      );
+    }
+  }
+  try {
+    await validateSubsidiaryRestrictions(tx, {
+      orgId,
+      ctx: await loadSubsidiaryContext(tx, orgId),
+      docSubsidiaryId: p.subsidiaryId,
+      lines: [
+        {
+          accountId: p.inTransitAccountId,
+          amount: "0",
+          subsidiaryId: p.subsidiaryId,
+        },
+      ],
+    });
+  } catch (error) {
+    // The shared restriction message names the conflict; the remedy belongs
+    // to this operation, whose only evidence the operator holds is this
+    // refusal — name an account they can actually choose.
+    if (error instanceof SubsidiaryError) {
+      throw new InventoryError(
+        `${error.message} — choose an in-transit account available to this subsidiary`,
+      );
+    }
+    throw error;
+  }
 }
 
 async function loadTransferOrderForUpdate(
@@ -267,6 +374,13 @@ export async function shipTransferOrder(
       }>(sql`
       select id, item_id, quantity, lot_id, serial_id from transfer_order_lines
        where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`));
+    if (order.in_transit_account_id) {
+      await assertInTransitAccountUsable(tx, orgId, {
+        inTransitAccountId: order.in_transit_account_id,
+        subsidiaryId: order.subsidiary_id,
+        itemIds: lines.rows.map((line) => line.item_id),
+      });
+    }
     const amounts: { assetAccountId: string; value: string; memo: string }[] =
       [];
     for (const line of lines.rows) {
@@ -339,6 +453,13 @@ export async function receiveTransferOrder(
       }>(sql`
       select id, item_id, quantity_shipped, ship_movement_id, lot_id, serial_id from transfer_order_lines
        where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`));
+    if (order.in_transit_account_id) {
+      await assertInTransitAccountUsable(tx, orgId, {
+        inTransitAccountId: order.in_transit_account_id,
+        subsidiaryId: order.subsidiary_id,
+        itemIds: lines.rows.map((line) => line.item_id),
+      });
+    }
     const amounts: { assetAccountId: string; value: string; memo: string }[] =
       [];
     for (const line of lines.rows) {
