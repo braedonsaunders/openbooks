@@ -1,6 +1,6 @@
 import ssh2 from "ssh2";
 import type { Connection } from "ssh2";
-import { backendFor, cleanPath, isSftpTempName, type SftpBackend } from "./backend.ts";
+import { backendFor, cleanPath, isSftpTempName, SftpDirectoryNotEmptyError, type SftpBackend } from "./backend.ts";
 
 const { Server, utils } = ssh2;
 const { STATUS_CODE, OPEN_MODE } = utils.sftp;
@@ -370,7 +370,18 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           };
           sftp.on("REMOVE", wrap((p) => backend.remove(p)));
           sftp.on("MKDIR", wrap((p) => backend.mkdir(p)));
-          sftp.on("RMDIR", wrap((p) => backend.rmdir(p)));
+          sftp.on("RMDIR", async (reqid, p) => {
+            try {
+              if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              await backend.rmdir(p);
+              sftp.status(reqid, STATUS_CODE.OK);
+            } catch (e) {
+              // A populated folder refuses with FAILURE and its reason —
+              // never a phantom success, never a misleading NO_SUCH_FILE.
+              if (e instanceof SftpDirectoryNotEmptyError) return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
+              fail(reqid, e);
+            }
+          });
           sftp.on("RENAME", async (reqid, from, to) => {
             try {
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);

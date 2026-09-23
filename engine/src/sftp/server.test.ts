@@ -127,6 +127,18 @@ function fsetstat(sftp: ssh2.SFTPWrapper, handle: Buffer, attrs: ssh2.InputAttri
   });
 }
 
+function mkdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
+  return new Promise((resolveMkdir, reject) => {
+    sftp.mkdir(path, (error) => error ? reject(error) : resolveMkdir());
+  });
+}
+
+function rmdir(sftp: ssh2.SFTPWrapper, path: string): Promise<void> {
+  return new Promise((resolveRmdir, reject) => {
+    sftp.rmdir(path, (error) => error ? reject(error) : resolveRmdir());
+  });
+}
+
 test("public-key authentication rejects an invalid signature but accepts a valid one", async () => {
   const untrusted = ssh2.utils.parseKey(keyPair.private);
   if (untrusted instanceof Error) throw untrusted;
@@ -350,6 +362,38 @@ test("SETSTAT and FSETSTAT refuse instead of answering OK for a no-op", async ()
 
       // The refused truncate changed nothing: the original bytes survive.
       assert.deepEqual(await readFile(sftp, "truncate-me.bin"), Buffer.from("original bytes"));
+    } finally {
+      client.end();
+    }
+  });
+});
+
+test("RMDIR of a populated folder fails with the refusal instead of a phantom success", async () => {
+  await withServer(async () => {
+    const client = await connect(privateKey());
+    try {
+      const sftp = await sftpSession(client);
+      await mkdir(sftp, "populated");
+      const handle = await open(sftp, "populated/statement.ofx", "w");
+      await write(sftp, handle, Buffer.from("statement"), 0);
+      await close(sftp, handle);
+
+      // RED before the fix (S3): the daemon answered RMDIR OK after deleting
+      // only the folder marker, while the statements still imported. Now the
+      // refusal arrives with the SFTP failure status and names the folder.
+      const failure = await rmdir(sftp, "populated").then(
+        () => null,
+        (error: Error & { code?: number }) => error,
+      );
+      assert.ok(failure, "removing a populated folder must fail");
+      assert.equal(failure.code, 4, "the refusal carries the SFTP FAILURE status, not NO_SUCH_FILE");
+      assert.match(failure.message, /populated.*not empty/);
+
+      // The folder and its statement survive the refusal; an emptied folder
+      // still removes cleanly.
+      assert.deepEqual(await readFile(sftp, "populated/statement.ofx"), Buffer.from("statement"));
+      await mkdir(sftp, "void");
+      await rmdir(sftp, "void");
     } finally {
       client.end();
     }
