@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, allocateLargestRemainder, cmp, div, divRate, formatMoney, isZero, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -388,4 +388,45 @@ test("roundMoney and formatMoney keep the sign honest at every scale", () => {
   assert.equal(formatMoney("-100.5", 0), "-101");
   assert.equal(formatMoney("0.0049", 2), "0.00");
   assert.throws(() => roundMoney("1.5", 5), /decimalPlaces/);
+});
+
+test("allocateLargestRemainder keeps the invoice total equal to the approved total", () => {
+  // The finding: two 0.0050 draws round independently to 0.02 against an
+  // approved 0.01. Largest remainder deals the single cent to the first
+  // line by tie order, so the lines sum to the rounded total exactly.
+  assert.deepEqual(allocateLargestRemainder(["0.0050", "0.0050"]), ["0.0100", "0.0000"]);
+  assert.deepEqual(allocateLargestRemainder(["0.0033", "0.0033", "0.0034"]), ["0.0000", "0.0000", "0.0100"]);
+  // Whole-cent inputs pass through untouched.
+  assert.deepEqual(allocateLargestRemainder(["1.2500", "2.5000"]), ["1.2500", "2.5000"]);
+  // A single half rounds the way roundMoney rounds it (away from zero).
+  assert.deepEqual(allocateLargestRemainder(["0.0050"]), ["0.0100"]);
+  assert.deepEqual(allocateLargestRemainder(["-0.0050"]), ["-0.0100"]);
+  // Credit lines allocate symmetrically: a negative outstanding takes
+  // cents from the most negative remainders first.
+  assert.deepEqual(allocateLargestRemainder(["-0.0050", "-0.0050"]), ["-0.0100", "0.0000"]);
+  // Mixed signs whose fractions cancel allocate to zeros, not to mirrored halves.
+  assert.deepEqual(allocateLargestRemainder(["10.0050", "-0.0050"]), ["10.0000", "0.0000"]);
+  // Empty input allocates nothing; bad precision refuses.
+  assert.deepEqual(allocateLargestRemainder([]), []);
+  assert.throws(() => allocateLargestRemainder(["1.0000"], 5), /decimalPlaces/);
+});
+
+test("allocateLargestRemainder always cross-foots to the rounded total", () => {
+  const cases: string[][] = [
+    ["0.0050", "0.0050"],
+    ["0.0049", "0.0049", "0.0049"],
+    ["100.1150", "0.0050", "-50.0050"],
+    ["-0.0050", "-0.0050", "-0.0050"],
+    ["0.0001", "0.0001", "0.0001"],
+    ["999.9950", "0.0050"],
+  ];
+  for (const exact of cases) {
+    const allocated = allocateLargestRemainder(exact);
+    assert.equal(
+      sum(allocated),
+      roundMoney(sum(exact), 2),
+      `allocated ${JSON.stringify(allocated)} must sum to the rounded total of ${JSON.stringify(exact)}`,
+    );
+    assert.equal(allocated.length, exact.length);
+  }
 });

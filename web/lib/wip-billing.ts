@@ -3,7 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { add, cmp, mul, mulPercent, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money/money.ts'
+import { add, allocateLargestRemainder, cmp, mul, mulPercent, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { canonicalDecimal } from './exact-decimal'
 import { pgTextArrayLiteral } from './pg-array'
@@ -1211,8 +1211,17 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     const billedAmounts: string[] = []
     const billedTaxes: string[] = []
 
+    // Approved lines price at four decimals but the invoice settles whole
+    // minor units. Rounding each line independently can certify a total
+    // nobody approved (two 0.0050 draws round to 0.02 against an approved
+    // 0.01), so the rounded approved total is allocated across the lines by
+    // largest remainder: the invoice lines sum to the approved total exactly.
+    const settledAmounts = allocateLargestRemainder(
+      lines.rows.map((line) => String(line.proposed_bill_amount)),
+      2,
+    )
     for (const [index, line] of lines.rows.entries()) {
-      const inputAmount = roundMoney(String(line.proposed_bill_amount), 2)
+      const inputAmount = settledAmounts[index]!
       const taxConfig = line.tax_code_id
         ? await loadTaxComponentConfig(orgId, line.tax_code_id, worksheet.period_end, tx)
         : []

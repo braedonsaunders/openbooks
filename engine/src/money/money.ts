@@ -290,6 +290,49 @@ export function roundMoney(value: string | number, decimalPlaces = 4): string {
   return fromUnits(roundDiv(toUnits(value), quantum) * quantum);
 }
 
+/**
+ * Largest-remainder allocation of a rounded total across exact line amounts.
+ * Each line rounds to `decimalPlaces`, but the whole cents are dealt to the
+ * lines with the largest fractional remainders, so the allocated lines sum
+ * to the rounded TOTAL exactly — per-line rounding can otherwise certify a
+ * total nobody approved (two 0.0050 lines round to 0.02 against an approved
+ * 0.01). Halves round the same way roundMoney rounds them (away from zero);
+ * ties break by line order, so the allocation is deterministic. Negative
+ * (credit) lines allocate symmetrically: truncation is toward zero and a
+ * negative outstanding takes cents from the most negative remainders first.
+ * An empty input allocates nothing; whole-cent inputs pass through.
+ */
+export function allocateLargestRemainder(exactAmounts: string[], decimalPlaces = 2): string[] {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new Error("decimalPlaces must be an integer from 0 through 4");
+  }
+  if (exactAmounts.length === 0) return [];
+  const quantum = 10n ** BigInt(4 - decimalPlaces);
+  const units = exactAmounts.map(toUnits);
+  const target = roundDiv(
+    units.reduce((total, amount) => total + amount, 0n),
+    quantum,
+  );
+  // Truncate toward zero: BigInt division discards the fractional remainder,
+  // which keeps each line's sign on its own remainder below.
+  const allocated = units.map((amount) => amount / quantum);
+  const remainders = units.map((amount, index) => amount - allocated[index]! * quantum);
+  const outstanding = target - allocated.reduce((total, cents) => total + cents, 0n);
+  const order = units.map((_, index) => index);
+  if (outstanding > 0n) {
+    order.sort((a, b) =>
+      remainders[b]! > remainders[a]! ? 1 : remainders[b]! < remainders[a]! ? -1 : a - b,
+    );
+    for (let dealt = 0n; dealt < outstanding; dealt++) allocated[order[Number(dealt)]!]! += 1n;
+  } else if (outstanding < 0n) {
+    order.sort((a, b) =>
+      remainders[a]! > remainders[b]! ? 1 : remainders[a]! < remainders[b]! ? -1 : a - b,
+    );
+    for (let dealt = 0n; dealt < -outstanding; dealt++) allocated[order[Number(dealt)]!]! -= 1n;
+  }
+  return allocated.map((cents) => fromUnits(cents * quantum));
+}
+
 /** Fixed-width exact decimal formatting, used by settlement/export formats. */
 export function formatMoney(value: string | number, decimalPlaces = 2): string {
   const rounded = roundMoney(value, decimalPlaces);
