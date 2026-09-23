@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "../platform/db.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { documentBalanceDueLateral } from "../records/balance-due.ts";
 import { cmp } from "../money/money.ts";
 import { enqueueFlowEmail, SCHEDULER_OUTBOX_RETRY_HORIZON_MS } from "../scheduling/outbox.ts";
@@ -133,12 +133,14 @@ function escapeHtml(value: string): string {
   );
 }
 
-function daysBetween(fromIso: string, toIsoDate: string): number {
-  const [ay, am, ad] = fromIso.split("-").map(Number);
-  const [by, bm, bd] = toIsoDate.split("-").map(Number);
-  return Math.round(
-    (Date.UTC(by!, bm! - 1, bd!) - Date.UTC(ay!, am! - 1, ad!)) / 86_400_000,
-  );
+/**
+ * Signed whole days from one ISO date to another. The single civil-date
+ * definition lives in platform/business-date.ts: Date.UTC remaps years 0-99
+ * onto 1900-1999, which made a cross-century overdue span hugely negative and
+ * selected the wrong collection rung.
+ */
+export function daysBetween(fromIso: string, toIsoDate: string): number {
+  return calendarDaysBetween(fromIso, toIsoDate);
 }
 
 export interface DunningRunResult {

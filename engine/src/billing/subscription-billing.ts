@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, orgContext, withBypass, withOrg } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
@@ -259,11 +259,15 @@ function resolveBillingSubsidiary(row: Pick<SubRow, "trustedSubsidiaryId" | "cus
   );
 }
 
-/** Whole-day count b − a (both ISO). */
+/**
+ * Whole-day count b − a (both ISO). The single civil-date definition lives in
+ * platform/business-date.ts: Date.UTC remaps years 0-99 onto 1900-1999, which
+ * made a cross-century billing period NEGATIVE, so prorate returned 0.0000
+ * and the change-proration and first-proration callers below skipped the
+ * adjustment or charged nothing.
+ */
 function dayDiff(a: string, b: string): number {
-  const [ay, am, ad] = a.split("-").map(Number);
-  const [by, bm, bd] = b.split("-").map(Number);
-  return Math.round((Date.UTC(by!, bm! - 1, bd!) - Date.UTC(ay!, am! - 1, ad!)) / 86_400_000);
+  return calendarDaysBetween(a, b);
 }
 
 /**

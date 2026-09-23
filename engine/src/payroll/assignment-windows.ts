@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import { inclusiveCalendarDays } from "../platform/business-date.ts";
 
 /**
  * The ONE overlap predicate between a recurring assignment window
@@ -25,11 +26,15 @@ export function assignmentOverlapsPeriod(
     and (${effectiveTo} is null or ${effectiveTo} >= ${periodStart})`;
 }
 
-/** Whole calendar days in the INCLUSIVE window [from, to] (both ISO dates). */
+/**
+ * Whole calendar days in the INCLUSIVE window [from, to] (both ISO dates).
+ * The single civil-date definition lives in platform/business-date.ts, which
+ * keeps literal years 0001-0099 instead of remapping them onto 1900-1999 (a
+ * 0099-12-25..0100-01-07 period used to read as -693946 days, zeroing every
+ * mid-period fixed assignment in it).
+ */
 export function inclusiveDays(from: string, to: string): number {
-  const [fy, fm, fd] = from.split("-").map(Number);
-  const [ty, tm, td] = to.split("-").map(Number);
-  return Math.round((Date.UTC(ty!, tm! - 1, td!) - Date.UTC(fy!, fm! - 1, fd!)) / 86_400_000) + 1;
+  return inclusiveCalendarDays(from, to);
 }
 
 /**

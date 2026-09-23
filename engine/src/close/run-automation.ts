@@ -4,7 +4,7 @@ import { claimCloseAutomationExecution, commitCloseEffectStage, finishCloseExecu
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { periodFingerprint, readinessChecks } from "./readiness.ts";
 import { resolveTaskDependenciesTx } from "./task-dependencies.ts";
@@ -238,15 +238,15 @@ function conditionMatches(expected: unknown, actual: unknown): boolean {
     : expected === actual;
 }
 
-/** Whole calendar days from one ISO date to another. */
-function calendarDaysBetween(fromIso: string, toIso: string): number {
-  const [fromYear, fromMonth, fromDay] = fromIso.split("-").map(Number);
-  const [toYear, toMonth, toDay] = toIso.split("-").map(Number);
-  return Math.round(
-    (Date.UTC(toYear!, toMonth! - 1, toDay!) -
-      Date.UTC(fromYear!, fromMonth! - 1, fromDay!)) /
-      86_400_000,
-  );
+/**
+ * Whether a close target date falls outside a rule's deadline window, in
+ * whole calendar days. The single civil-date definition lives in
+ * platform/business-date.ts: Date.UTC remaps years 0-99 onto 1900-1999, which
+ * misclassified deadline windows spanning the 0099/0100 boundary. Pure —
+ * unit-tested directly.
+ */
+export function outsideDeadlineWindow(automationDateIso: string, targetCloseDateIso: string, withinDays: number): boolean {
+  return calendarDaysBetween(automationDateIso, targetCloseDateIso) > withinDays;
 }
 
 /** Execute tenant-authored close automation with a leased, fenced database
@@ -301,13 +301,14 @@ export async function runCloseAutomations(
     const withinDays = typeof conditions.withinDays === "number"
       ? conditions.withinDays
       : null;
-    let outsideDeadlineWindow = false;
+    let outsideWindow = false;
     if (withinDays !== null) {
       automationDate ??= await businessToday(context.orgId);
-      outsideDeadlineWindow = calendarDaysBetween(
+      outsideWindow = outsideDeadlineWindow(
         automationDate,
         String(run.target_close_date),
-      ) > withinDays;
+        withinDays,
+      );
     }
     if (
       !conditionMatches(conditions.runStatus, run.status) ||
@@ -319,7 +320,7 @@ export async function runCloseAutomations(
         Number(run.readiness_score) < conditions.minReadiness) ||
       (typeof conditions.maxReadiness === "number" &&
         Number(run.readiness_score) > conditions.maxReadiness) ||
-      outsideDeadlineWindow
+      outsideWindow
     )
       continue;
 
