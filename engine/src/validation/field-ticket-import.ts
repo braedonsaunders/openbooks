@@ -8,9 +8,11 @@
  * by name instead of attaching the new source's header to the old document
  * or silently no-op-ing the new ticket away.
  *
- * Each write runs in its own tenant transaction, serialized per ticket
- * number: the row is re-read under lock and verified by identity before it
- * is created, replayed, or given its native header.
+ * Apply is atomic, not resumable: every ticket's project resolves before
+ * the first write, and all writes commit in one tenant transaction, so one
+ * unmapped job leaves zero writes behind — never a partial import reported
+ * as success. Within the transaction each ticket still serializes on its
+ * number and re-checks identity under lock.
  */
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
@@ -155,26 +157,39 @@ export async function importFieldTickets(input: {
     ),
   );
 
-  const unmapped: UnmappedTicket[] = [];
+  // Every ticket's project resolves before the first write: one unmapped
+  // job refuses the whole import with its source refs, before anything
+  // commits. This pre-check names every offender at once; the single
+  // transaction below is what guarantees zero writes even for failures the
+  // pre-check cannot foresee.
+  const unmapped: UnmappedTicket[] = tickets
+    .filter((ticket) => !projects.get(ticket.jobRef))
+    .map((ticket) => ({
+      sourceId: ticket.sourceId,
+      number: ticket.number,
+      jobRef: ticket.jobRef,
+    }));
   if (!input.apply) {
-    for (const ticket of tickets) {
-      if (!projects.get(ticket.jobRef)) {
-        unmapped.push({ sourceId: ticket.sourceId, number: ticket.number, jobRef: ticket.jobRef });
-      }
-    }
     return { created: 0, nativeCreated: 0, existing: 0, unmapped };
   }
+  if (unmapped.length > 0) {
+    const refs = unmapped
+      .map((row) => `source ticket ${row.sourceId} (number ${row.number}, job ${row.jobRef})`)
+      .join("; ");
+    throw new Error(
+      `refusing import: ${unmapped.length} ticket(s) reference unknown source projects: ${refs}; ` +
+        "map every job before importing — no ticket was written",
+    );
+  }
 
-  let created = 0;
-  let nativeCreated = 0;
-  let existing = 0;
-  for (const ticket of tickets) {
-    const projectId = projects.get(ticket.jobRef);
-    if (!projectId) {
-      unmapped.push({ sourceId: ticket.sourceId, number: ticket.number, jobRef: ticket.jobRef });
-      continue;
-    }
-    await withOrg(orgId, async () => {
+  // One tenant transaction for the whole import: any refusal rolls every
+  // ticket back, so automation never reads a partial import as success.
+  return withOrg(orgId, async () => {
+    let created = 0;
+    let nativeCreated = 0;
+    let existing = 0;
+    for (const ticket of tickets) {
+      const projectId = projects.get(ticket.jobRef)!;
       // Serialize concurrent importers of this number, then recheck inside
       // the lock: a row that appeared after the preload above is verified by
       // identity like any other, never assumed to be ours.
@@ -264,7 +279,7 @@ export async function importFieldTickets(input: {
         returning document_id
       `);
       nativeCreated += native.rows.length;
-    });
-  }
-  return { created, nativeCreated, existing, unmapped };
+    }
+    return { created, nativeCreated, existing, unmapped };
+  });
 }

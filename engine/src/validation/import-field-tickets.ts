@@ -97,9 +97,9 @@ const parseRows = (): Row[] =>
   const rows = parseRows();
   console.log(`export: ${tickets.length} tickets, ${rows.length} crew rows, ${rows.reduce((t, r) => t + r.hours.length, 0)} day/type hour cells`);
 
-  // Identity and all writes live in the import core: a same-number ticket
-  // from another source refuses by name instead of attaching to the old
-  // document, and every write re-checks identity under lock.
+  // Identity, project validation, and all writes live in the import core:
+  // a same-number ticket from another source refuses by name, and one
+  // unmapped job refuses the whole import atomically before anything commits.
   const result = await retry(() =>
     importFieldTickets({ orgId: ORG, sourceSystem: SOURCE_SYSTEM!, tickets, apply: APPLY }),
   );
