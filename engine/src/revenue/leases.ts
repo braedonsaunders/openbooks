@@ -24,7 +24,7 @@ import {
   sum,
   toUnits,
 } from "../money/money.ts";
-import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { addCalendarDays, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { apportion } from "./recognition.ts";
 import {
@@ -680,18 +680,19 @@ const PERIODS_PER_YEAR: Record<string, number> = {
 
 export function addMonths(date: string, months: number): string {
   const [y, m, d] = date.split("-").map(Number);
-  const base = new Date(Date.UTC(y!, m! - 1 + months, 1));
-  const lastDay = new Date(
-    Date.UTC(base.getUTCFullYear(), base.getUTCMonth() + 1, 0),
-  ).getUTCDate();
+  // Month overflow normalizes exactly like the Date.UTC idiom this replaces;
+  // only the 0-99 → 1900-1999 remap is gone.
+  const total = (m! - 1) + months;
+  const baseYear = y! + Math.floor(total / 12);
+  const baseMonth1 = (((total % 12) + 12) % 12) + 1;
+  const lastDay = daysInCivilMonth(baseYear, baseMonth1);
   const day = Math.min(d!, lastDay);
-  return new Date(Date.UTC(base.getUTCFullYear(), base.getUTCMonth(), day))
-    .toISOString()
-    .slice(0, 10);
+  return civilDateFromParts(baseYear, baseMonth1, day);
 }
 export function addDays(date: string, days: number): string {
-  const [y, m, d] = date.split("-").map(Number);
-  return new Date(Date.UTC(y!, m! - 1, d! + days)).toISOString().slice(0, 10);
+  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
+  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
+  return addCalendarDays(date, days);
 }
 
 /** Payment timing is a contractual fact, never a suggested workaround. */

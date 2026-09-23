@@ -464,6 +464,7 @@ function generationWindow(now = new Date()): { startDate: string; endDate: strin
   // Three complete accounting-period identities are enough to demonstrate
   // opening activity, a prior close, and the current period without making a
   // first-run sample import wait on an unnecessarily large simulation.
+  // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1));
   return { startDate: start.toISOString().slice(0, 10), endDate };
 }

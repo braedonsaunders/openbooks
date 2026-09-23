@@ -101,6 +101,7 @@ export function classifyCollectionSeverity(args: {
     return Math.max(
       0,
       Math.floor(
+        // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
         (Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - date) / 86_400_000,
       ),
     );
@@ -132,6 +133,7 @@ export function qualifiesForCreditHold(args: {
     ? Math.max(
         0,
         Math.floor(
+          // Year is the wall-clock `now` (live clock in production), which cannot be below 100 — see the allow-list.
           (Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - date) / 86_400_000,
         ),
       )

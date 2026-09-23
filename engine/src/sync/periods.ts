@@ -12,12 +12,23 @@ export interface SourceFiscalYear {
 
 const iso = (date: Date) => date.toISOString().slice(0, 10);
 const utc = (value: string) => new Date(`${value}T00:00:00Z`);
+/**
+ * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
+ * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
+ * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
+ * remap onto 1900-1999): this source-mapping module loads no platform stack.
+ */
+function utcCivilDate(year: number, monthIndex: number, day: number): Date {
+  const date = new Date(0);
+  date.setUTCFullYear(year, monthIndex, day);
+  return date;
+}
 const addMonths = (date: Date, months: number) => {
   const year = date.getUTCFullYear();
   const month = date.getUTCMonth() + months;
   const day = date.getUTCDate();
-  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-  return new Date(Date.UTC(year, month, Math.min(day, lastDay)));
+  const lastDay = utcCivilDate(year, month + 1, 0).getUTCDate();
+  return utcCivilDate(year, month, Math.min(day, lastDay));
 };
 const dayBefore = (date: Date) => new Date(date.getTime() - 86_400_000);
 
@@ -65,8 +76,8 @@ export function fiscalYearsForRange(start: string, end: string, startMonth: numb
   let startYear = first.getUTCFullYear();
   if (first.getUTCMonth() + 1 < startMonth) startYear--;
   for (;;) {
-    const starts = new Date(Date.UTC(startYear, startMonth - 1, 1));
-    const ends = dayBefore(new Date(Date.UTC(startYear + 1, startMonth - 1, 1)));
+    const starts = utcCivilDate(startYear, startMonth - 1, 1);
+    const ends = dayBefore(utcCivilDate(startYear + 1, startMonth - 1, 1));
     if (starts > last) break;
     const fiscalYear = startMonth === 1 ? startYear : startYear + 1;
     years.push({ key: String(fiscalYear), fiscalYear, startsOn: iso(starts), endsOn: iso(ends) });
@@ -85,8 +96,8 @@ export function fiscalYearsForEndingRule(
   const rangeEnd = utc(end);
   const years: SourceFiscalYear[] = [];
   const endFor = (year: number) => {
-    const lastDay = new Date(Date.UTC(year, endMonth, 0)).getUTCDate();
-    return new Date(Date.UTC(year, endMonth - 1, Math.min(endDay, lastDay)));
+    const lastDay = utcCivilDate(year, endMonth, 0).getUTCDate();
+    return utcCivilDate(year, endMonth - 1, Math.min(endDay, lastDay));
   };
   for (let fiscalYear = rangeStart.getUTCFullYear() - 1; fiscalYear <= rangeEnd.getUTCFullYear() + 2; fiscalYear++) {
     const ends = endFor(fiscalYear);

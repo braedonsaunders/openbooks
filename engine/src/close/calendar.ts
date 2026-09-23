@@ -1,6 +1,7 @@
 import { CloseError, CLOSE_MODULES } from "./period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { utcDateFromParts } from "../platform/business-date.ts";
 type CalendarRow = {
   id: string;
   cadence:
@@ -40,7 +41,9 @@ export function addDays(date: Date, days: number): Date {
 }
 
 function endOfMonth(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0));
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999.
+  return utcDateFromParts(date.getUTCFullYear(), date.getUTCMonth() + 1, 0);
 }
 
 function fiscalStartYear(fiscalYear: number, startMonth: number): number {
@@ -69,8 +72,11 @@ function generatedPeriods(
   if (calendar.cadence === "monthly") {
     const startYear = fiscalStartYear(fiscalYear, calendar.year_start_month);
     for (let i = 0; i < 12; i++) {
-      const start = new Date(
-        Date.UTC(startYear, calendar.year_start_month - 1 + i, 1),
+      // startYear is validated 1900-9999 above, so no civil year below 100
+      // can reach this construction; it still goes through the shared helper
+      // so the guard needs no exception.
+      const start = utcDateFromParts(
+        startYear, calendar.year_start_month - 1 + i, 1,
       );
       rows.push({
         fiscalYear,

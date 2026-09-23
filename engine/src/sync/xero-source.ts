@@ -1,4 +1,4 @@
-import { businessToday, parseIsoDate } from "../platform/business-date.ts";
+import { businessToday, parseIsoDate, utcDateFromParts } from "../platform/business-date.ts";
 import { XeroClient, xeroDate } from "../connectors/xero.ts";
 import { formatMoney, fromUnits, mulDecimal, toUnits } from "../money/money.ts";
 import { buildNativeFromXero, type XeroBuildOpts, type XeroDoc } from "./xero-native.ts";
@@ -431,7 +431,9 @@ export class XeroSource implements MigrationSource {
       const months = xeroCoverageMonths(startsOn[0]!.slice(0, 7), today);
       for (const month of months) {
         const [y, mo] = month.split("-").map(Number) as [number, number];
-        const monthEnd = new Date(Date.UTC(y, mo, 0));
+        // utcDateFromParts keeps literal years 0001-0099 that Date.UTC
+        // would remap onto 1900-1999.
+        const monthEnd = utcDateFromParts(y, mo, 0);
         const report = await this.client.get<XeroReport>("Reports/TrialBalance", {
           date: monthEnd.toISOString().slice(0, 10),
         });

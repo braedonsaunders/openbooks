@@ -70,6 +70,7 @@ export interface BackupExportStats {
 /** Next fire time (UTC) for a policy, strictly after `from`. */
 export function computeNextRunAt(p: BackupPolicyShape, from = new Date()): Date {
   const at = (day: number) =>
+    // Year is the wall-clock `from` (the scheduler passes new Date()), which cannot be below 100 — see the allow-list.
     new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), day, p.hourUtc, 0, 0, 0));
 
   if (p.frequency === "daily") {
