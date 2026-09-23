@@ -737,6 +737,15 @@
       },
       "learnMore": "En savoir plus."
     },
+    "approvals": {
+      "title": "Approbations",
+      "description": "Contrôlez quand les factures fournisseurs sont libérées après soumission.",
+      "requireVendorBillApproval": "Exiger une approbation avant de libérer les factures fournisseurs",
+      "requireVendorBillApprovalHint": "Si activé, une facture fournisseur n’est libérée que via un flux d’approbation. Une facture sans flux correspondant reste soumise, et le soumetteur est invité à configurer un flux ou à désactiver cette option.",
+      "noFlowTitle": "Aucun flux d’approbation pour les factures fournisseurs",
+      "noFlowWarningAuto": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, les factures soumises sont libérées automatiquement sans approbateur.",
+      "noFlowWarningRequired": "Aucun flux d’approbation n’est configuré pour les factures fournisseurs. <flows>Configurez-en un dans Flux</flows> — d’ici là, chaque soumission de facture fournisseur est refusée."
+    },
     "documentKinds": {
       "vendorBill": "Facture fournisseur",
       "customerInvoice": "Facture client",

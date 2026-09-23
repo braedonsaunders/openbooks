@@ -737,6 +737,15 @@
       },
       "learnMore": "Mehr erfahren."
     },
+    "approvals": {
+      "title": "Genehmigungen",
+      "description": "Steuern, wann Lieferantenrechnungen nach dem Einreichen freigegeben werden.",
+      "requireVendorBillApproval": "Freigabe für Lieferantenrechnungen erforderlich",
+      "requireVendorBillApprovalHint": "Wenn aktiviert, wird eine Lieferantenrechnung nur über einen Genehmigungs-Workflow freigegeben. Eine Rechnung ohne passenden Workflow bleibt eingereicht, und der Einreicher wird aufgefordert, einen Workflow einzurichten oder diese Option zu deaktivieren.",
+      "noFlowTitle": "Kein Genehmigungs-Workflow für Lieferantenrechnungen",
+      "noFlowWarningAuto": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin werden eingereichte Rechnungen automatisch ohne Genehmiger freigegeben.",
+      "noFlowWarningRequired": "Für Lieferantenrechnungen ist kein Genehmigungs-Workflow konfiguriert. <flows>Richten Sie einen unter Flows ein</flows> — bis dahin wird jede Einreichung einer Lieferantenrechnung abgelehnt."
+    },
     "documentKinds": {
       "vendorBill": "Eingangsrechnung",
       "customerInvoice": "Ausgangsrechnung",
