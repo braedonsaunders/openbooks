@@ -219,12 +219,14 @@ export async function loadComplianceMatrix(args: {
        where cr.org_id = ${args.orgId} and cr.status <> 'superseded'
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
     `),
+    // Revoked rows load too: the shared evaluator dates them by revoked_at,
+    // so an as-of read sees each exception exactly while it was in force.
     db.execute(sql`
       select cw.party_id as "partyId", cw.id, cw.requirement_id as "requirementId", cw.project_id as "projectId",
              cw.effective_from as "effectiveFrom", cw.expires_on as "expiresOn", cw.revoked_at as "revokedAt"
         from compliance_waivers cw
         left join projects pr on pr.id = cw.project_id and pr.org_id = cw.org_id
-       where cw.org_id = ${args.orgId} and cw.revoked_at is null
+       where cw.org_id = ${args.orgId}
          ${complianceSubsidiaryFilter(sql`pr.subsidiary_id`, args.allowedSubsidiaryIds, { orgWideNull: true })}
     `)
   ])

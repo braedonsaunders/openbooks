@@ -7,6 +7,7 @@ import {
   evaluateLienWaiverCoverage,
   evaluateRequirement,
   evaluateVendorCompliance,
+  waiverInForceOn,
   type EvidenceRecord,
   type LienWaiverEvidence,
   type RequirementPolicy,
@@ -247,6 +248,29 @@ test("expired and revoked waivers do not suppress anything", () => {
   assert.equal(evaluate(policy(), [], [waiver({ expiresOn: "2026-06-01" })]).blocksPayment, true);
   assert.equal(evaluate(policy(), [], [waiver({ effectiveFrom: "2026-08-01", expiresOn: "2026-09-01" })]).blocksPayment, true);
   assert.equal(evaluate(policy(), [], [waiver({ revokedAt: "2026-06-15T00:00:00Z" })]).blocksPayment, true);
+});
+
+test("a revoked waiver still covers as-of dates before its revocation", () => {
+  const revoked = waiver({ revokedAt: "2026-07-10T14:00:00Z" });
+  assert.equal(waiverInForceOn(revoked, "2026-07-01"), true);
+  assert.equal(waiverInForceOn(revoked, "2026-07-09"), true);
+  // Fail closed: the revocation day itself is no longer covered.
+  assert.equal(waiverInForceOn(revoked, "2026-07-10"), false);
+  assert.equal(waiverInForceOn(revoked, "2026-07-11"), false);
+  // An unrevoked waiver keeps its plain window.
+  assert.equal(waiverInForceOn(waiver(), "2026-07-01"), true);
+  assert.equal(waiverInForceOn(waiver(), "2026-08-02"), false);
+});
+
+test("revoking an exception narrows its window instead of erasing history", () => {
+  const at = (asOf: string, waivers: WaiverRecord[]) =>
+    evaluateRequirement({ policy: policy(), records: [], waivers, asOf });
+  const revoked = waiver({ revokedAt: "2026-07-10T14:00:00Z" });
+  const before = at("2026-07-01", [revoked]);
+  assert.equal(before.state, "waived");
+  assert.equal(before.waiverId, "wv-1");
+  assert.equal(at("2026-07-10", [revoked]).state, "missing");
+  assert.equal(at("2026-07-20", [revoked]).state, "missing");
 });
 
 test("a project-scoped waiver does not release other projects", () => {
