@@ -81,6 +81,7 @@
     },
     "emptyTitle": "No captured documents",
     "emptyDescription": "Upload PDF, JPEG, PNG, or TIFF vendor documents to begin.",
+    "emptyDescriptionNoGrant": "Upload PDF, JPEG, PNG, or TIFF vendor documents to begin. You need accounts-payable creation access to upload documents.",
     "selected": "{count, plural, =0 {None selected} one {# selected} other {# selected}}",
     "select": "Select",
     "selectDocument": "Select {name}",

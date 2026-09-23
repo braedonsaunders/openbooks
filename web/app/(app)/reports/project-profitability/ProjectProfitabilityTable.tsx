@@ -84,6 +84,7 @@ export function ProjectProfitabilityTable({
   periodPhrase,
   columns,
   emptyLabel,
+  emptyHint,
   currency,
   groups,
   totalLabel,
@@ -95,6 +96,8 @@ export function ProjectProfitabilityTable({
   periodPhrase: string
   columns: string[]
   emptyLabel: string
+  /** Explains the zero: what would have to be posted, or widen the period. */
+  emptyHint: string
   currency: string
   groups: ProjectProfitabilityGroup[]
   totalLabel: string
@@ -121,7 +124,10 @@ export function ProjectProfitabilityTable({
   return (
     <ReportPaper company={company} title={title} periodPhrase={periodPhrase} wide>
       {groups.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-400 italic">{emptyLabel}</p>
+        <div className="py-6 text-center">
+          <p className="text-sm text-slate-400 italic dark:text-slate-500">{emptyLabel}</p>
+          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-slate-400 dark:text-slate-500">{emptyHint}</p>
+        </div>
       ) : (
         <Table>
           <TableHeader>

@@ -81,6 +81,7 @@
     },
     "emptyTitle": "无已采集文档",
     "emptyDescription": "上传 PDF、JPEG、PNG 或 TIFF 格式的供应商文档以开始。",
+    "emptyDescriptionNoGrant": "上传 PDF、JPEG、PNG 或 TIFF 格式的供应商文档以开始。上传需要应付创建权限。",
     "selected": "{count, plural, =0 {未选择} one {已选 #} other {已选 #}}",
     "select": "选择",
     "selectDocument": "选择 {name}",

@@ -53,3 +53,19 @@ test('the blocked page shows the banner and hides the cockpit (F-t06-027)', () =
     'the cockpit hides exactly when the notice is set — no forecast beside the banner',
   )
 })
+
+// UX-20: zero bank accounts is a setup prerequisite, not a silent zero — the
+// accounts panel names it and links the Banking overview that changes it.
+test('the empty accounts panel links the Banking setup route (UX-20)', () => {
+  const cockpit = readFileSync(new URL('./CashCockpit.tsx', import.meta.url), 'utf8')
+  assert.match(
+    cockpit,
+    /\{t\('noAccounts'\)\}/,
+    'the empty panel must name the missing accounts',
+  )
+  assert.match(
+    cockpit,
+    /href="\/banking"[\s\S]*?\{t\('noAccountsAction'\)\}/,
+    'the empty panel must link the Banking overview that changes the zero',
+  )
+})

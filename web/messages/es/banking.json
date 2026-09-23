@@ -660,7 +660,8 @@
       "ending": "Efectivo final"
     },
     "totalCash": "Efectivo total",
-    "noAccounts": "No se encontraron cuentas bancarias.",
+    "noAccounts": "Aún no hay cuentas bancarias. Conecte una en el resumen de banca para ver saldos y proyección aquí.",
+    "noAccountsAction": "Ir a Banca",
     "negativeAlert": "Proyección de saldo negativo — mínimo de {amount} la semana del {date}. <ap>Ralentice pagos a proveedores</ap> o <ar>acelere cobros</ar>.",
     "deferralNote": "{amount} en cuentas por pagar no pueden pagarse dentro del horizonte con la configuración actual de capacidad de CP — los atrasos se extienden más allá de la última semana.",
     "configure": "Configurar pronóstico",

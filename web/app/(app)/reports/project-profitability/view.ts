@@ -68,6 +68,7 @@ export interface ProjectProfitabilityData {
   company: string
   periodPhrase: string
   emptyLabel: string
+  emptyHint: string
   currency: string
   columns: string[]
   groups: ProjectProfitabilityGroup[]
@@ -222,6 +223,7 @@ export async function loadProjectProfitability(
     company: branding.orgName,
     periodPhrase: t('pnl.dateRange', { from: period.from, to: period.to }),
     emptyLabel: t('projectProfitability.empty'),
+    emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', { from: period.from, to: period.to }) }),
     currency: org.base_currency,
     columns: [
       t('projectProfitability.columns.customerJob'),
@@ -301,6 +303,7 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
         periodPhrase: data.periodPhrase,
         columns: data.columns,
         emptyLabel: data.emptyLabel,
+        emptyHint: data.emptyHint,
         currency: data.currency,
         groups: data.groups,
         totalLabel: data.totalLabel,

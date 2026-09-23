@@ -35,13 +35,29 @@ export function CommitmentsSection({
   rows,
   showPurchaseOrders,
   empty,
+  emptyAction,
 }: {
   rows: ComponentProps<typeof CommitmentsTable>['rows']
   showPurchaseOrders: boolean
   empty: string
+  /** Optional next step when there is nothing to commit: a link the caller
+   *  may already take (never offered without its grant). */
+  emptyAction?: { href: string; label: string } | null
 }) {
   if (rows.length === 0) {
-    return <p className="px-6 py-16 text-center text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+    return (
+      <div className="px-6 py-16 text-center">
+        <p className="text-sm text-slate-400 dark:text-slate-500">{empty}</p>
+        {emptyAction ? (
+          <Link
+            href={emptyAction.href as never}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-slate-50 dark:border-slate-700 dark:text-teal-300 dark:hover:bg-slate-800"
+          >
+            {emptyAction.label}
+          </Link>
+        ) : null}
+      </div>
+    )
   }
   return <CommitmentsTable rows={rows} showPurchaseOrders={showPurchaseOrders} />
 }

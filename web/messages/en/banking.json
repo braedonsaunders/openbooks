@@ -667,7 +667,8 @@
       "ending": "Ending cash"
     },
     "totalCash": "Total cash",
-    "noAccounts": "No bank accounts found.",
+    "noAccounts": "No bank accounts yet. Connect one on the Banking overview to see balances and runway here.",
+    "noAccountsAction": "Go to Banking",
     "negativeAlert": "Projected to go cash-negative — low of {amount} the week of {date}. <ap>Slow payables</ap> or <ar>accelerate collections</ar>.",
     "deferralNote": "{amount} of payables can't be paid within the horizon under the current AP capacity settings — the backlog spills past the last week.",
     "configure": "Configure forecast",

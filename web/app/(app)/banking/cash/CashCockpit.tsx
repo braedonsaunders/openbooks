@@ -173,7 +173,15 @@ export function CashCockpit({
         return (
           <CockpitPanel key={key} title={t('panels.accounts')} icon={Building2} bodyClassName="p-0" className={panelCls}>
             {data.bankAccounts.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-slate-400 dark:text-slate-500">{t('noAccounts')}</p>
+              <div className="px-4 py-10 text-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">{t('noAccounts')}</p>
+                <Link
+                  href="/banking"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium text-teal-700 hover:bg-slate-50 dark:border-slate-700 dark:text-teal-300 dark:hover:bg-slate-800"
+                >
+                  {t('noAccountsAction')}
+                </Link>
+              </div>
             ) : (
               <table className="w-full text-sm">
                 <tbody>

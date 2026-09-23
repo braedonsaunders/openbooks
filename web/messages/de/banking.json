@@ -660,7 +660,8 @@
       "ending": "Endbestand"
     },
     "totalCash": "Geld gesamt",
-    "noAccounts": "Keine Bankkonten gefunden.",
+    "noAccounts": "Noch keine Bankkonten. Verbinden Sie eines in der Bankenübersicht, um Salden und Reichweite hier zu sehen.",
+    "noAccountsAction": "Zu Banking",
     "negativeAlert": "Negativer Kontostand prognostiziert — Tiefststand von {amount} in der Woche vom {date}. <ap>Lieferanten langsamer zahlen</ap> oder <ar>Forderungen schneller einziehen</ar>.",
     "deferralNote": "{amount} an Verbindlichkeiten können im Horizont mit den aktuellen Kapazitätseinstellungen nicht gezahlt werden — der Rückstand reicht über die letzte Woche hinaus.",
     "configure": "Prognose konfigurieren",

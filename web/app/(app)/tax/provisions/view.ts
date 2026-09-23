@@ -58,13 +58,17 @@ export async function loadTaxProvisions(): Promise<TaxProvisionsData> {
   const runs = await listProvisionRuns(authz.user.orgId, authz.allowedSubsidiaryIds)
   const m = (v: string) => money(v, { currency: org?.base_currency })
 
+  const canCompute = authz.allowedSubsidiaryIds === null && can(authz, 'reports.create')
+
   return {
     title: t('title'),
     description: t('description'),
     // The compute dialog posts an org-wide run, so restricted callers never
     // see the button — mirrors the native header gate exactly.
-    canCompute: authz.allowedSubsidiaryIds === null && can(authz, 'reports.create'),
-    emptyText: t('empty'),
+    canCompute,
+    // Without the grant the empty table must not invite a Compute the reader
+    // cannot open: it names the organization-wide access instead.
+    emptyText: canCompute ? t('empty') : t('emptyNoGrant'),
     columns: {
       fiscalYear: t('columns.fiscalYear'),
       version: t('columns.version'),

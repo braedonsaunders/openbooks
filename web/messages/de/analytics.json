@@ -1388,6 +1388,8 @@
       "allWithinTarget": "Alle Kennzahlen im Ziel.",
       "noDriftingTitles": "Keine driftenden Bezeichnungen",
       "noImprovements": "Keine Verbesserungschancen erkannt",
+      "noTimeTracked": "In diesem Zeitraum wurde keine Zeit erfasst, daher liegt die Auslastung bei 0 %. Erfassen Sie Zeiten in den Stundenzetteln, um sie zu messen.",
+      "noTimeTrackedAction": "Stundenzettel öffnen",
       "noIssues": "Keine Probleme erkannt",
       "noPeerTitles": "Keine Bezeichnung mit 2+ Mitarbeitern zum Vergleich",
       "noSuddenDrops": "Keine plötzlichen Einbrüche erkannt"

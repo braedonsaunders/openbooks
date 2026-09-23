@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "Rentabilidad por proyecto",
     "empty": "Sin actividad de proyectos en este período.",
+    "emptyHint": "No se contabilizó nada en proyectos en {period}. Registre horas, asigne facturas y gastos a un proyecto o elija un período más amplio.",
     "searchPlaceholder": "Buscar clientes o proyectos…",
     "noCustomer": "Cliente sin asignar",
     "unassignedProject": "Sin asignar",

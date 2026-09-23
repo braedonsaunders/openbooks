@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "Project Profitability",
     "empty": "No project activity in this period.",
+    "emptyHint": "Nothing was posted to projects in {period}. Log time, tag bills and expenses to a project, or choose a wider period.",
     "searchPlaceholder": "Search customers or jobs…",
     "noCustomer": "Unassigned customer",
     "unassignedProject": "Unassigned",

@@ -24,7 +24,9 @@
     "hero": {
       "title": "Vendor commitments",
       "hint": "Open purchase orders beside open bills, largest exposure first",
-      "empty": "No open commitments or payables.",
+      "empty": "No open commitments or payables. Create a purchase order or record a vendor bill and the exposure will appear here.",
+      "createOrder": "New purchase order",
+      "createBill": "New vendor bill",
       "vendor": "Vendor",
       "openPos": "Open POs",
       "openBills": "Bills",

@@ -85,6 +85,9 @@ export interface PurchasingData {
   heroTitle: string
   heroHint: string
   heroEmpty: string
+  /** Create action for the empty commitments hero: present only when the
+   *  caller may create purchase orders or vendor bills (ap.create). */
+  heroEmptyAction: { href: string; label: string } | null
   topExposure: VendorExposureRow[]
   hasExposure: boolean
   pulseTitle: string
@@ -242,6 +245,14 @@ export async function loadPurchasing(
     heroTitle: t('home.hero.title'),
     heroHint: t('home.hero.hint'),
     heroEmpty: t('home.hero.empty'),
+    // The empty hero names its prerequisite in copy; the action goes one
+    // step further only where the caller holds ap.create — a reader without
+    // it keeps the honest zero with no misleading button.
+    heroEmptyAction: !can(authz, 'ap.create')
+      ? null
+      : data.ordersEnabled
+        ? { href: '/purchase-orders?orderNew=1', label: t('home.hero.createOrder') }
+        : { href: '/ap/bills?doc=new&kind=vendor_bill', label: t('home.hero.createBill') },
     topExposure: data.topExposure,
     hasExposure: data.topExposure.length > 0,
     pulseTitle: t('home.pulse.title'),
@@ -388,6 +399,7 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
                 rows: data.topExposure,
                 showPurchaseOrders: data.ordersEnabled,
                 empty: data.heroEmpty,
+                emptyAction: data.heroEmptyAction,
               }),
             ],
           }),

@@ -81,6 +81,7 @@
     },
     "emptyTitle": "Nenhum documento capturado",
     "emptyDescription": "Envie documentos de fornecedor em PDF, JPEG, PNG ou TIFF para começar.",
+    "emptyDescriptionNoGrant": "Envie documentos de fornecedor em PDF, JPEG, PNG ou TIFF para começar. Você precisa de acesso de criação de contas a pagar para enviar.",
     "selected": "{count, plural, =0 {Nenhum selecionado} one {# selecionado} other {# selecionados}}",
     "select": "Selecionar",
     "selectDocument": "Selecionar {name}",

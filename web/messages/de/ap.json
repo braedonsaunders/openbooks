@@ -81,6 +81,7 @@
     },
     "emptyTitle": "Keine erfassten Dokumente",
     "emptyDescription": "Laden Sie Lieferantendokumente als PDF, JPEG, PNG oder TIFF hoch, um zu beginnen.",
+    "emptyDescriptionNoGrant": "Laden Sie Lieferantendokumente als PDF, JPEG, PNG oder TIFF hoch, um zu beginnen. Zum Hochladen benötigen Sie Kreditoren-Erstellungszugriff.",
     "selected": "{count, plural, =0 {Nichts ausgewählt} one {# ausgewählt} other {# ausgewählt}}",
     "select": "Auswählen",
     "selectDocument": "{name} auswählen",

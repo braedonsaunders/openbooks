@@ -1388,6 +1388,8 @@
       "allWithinTarget": "Tous les indicateurs dans l’objectif.",
       "noDriftingTitles": "Aucun intitulé en dérive",
       "noImprovements": "Aucune opportunité d’amélioration identifiée",
+      "noTimeTracked": "Aucun temps n’a été suivi sur cette période, l’utilisation affiche donc 0 %. Saisissez du temps dans les feuilles de temps pour la mesurer.",
+      "noTimeTrackedAction": "Ouvrir les feuilles de temps",
       "noIssues": "Aucun problème détecté",
       "noPeerTitles": "Aucun intitulé avec 2 employés ou plus à comparer",
       "noSuddenDrops": "Aucune chute brutale détectée"

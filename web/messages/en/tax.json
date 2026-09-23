@@ -112,6 +112,7 @@
     "title": "Income Tax Provision",
     "description": "ASC 740 / IAS 12 — current and deferred tax, valuation allowance, and the rate reconciliation.",
     "empty": "No provision runs yet. Compute the first fiscal-year provision to get started.",
+    "emptyNoGrant": "No provision runs yet. Only preparers with organization-wide report creation access can compute the first provision.",
     "columns": {
       "fiscalYear": "Fiscal year",
       "version": "Version",

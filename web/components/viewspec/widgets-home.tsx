@@ -54,6 +54,7 @@ export const HOME_WIDGETS = {
       rows={props.rows as ComponentProps<typeof CommitmentsSection>['rows']}
       showPurchaseOrders={props.showPurchaseOrders === true}
       empty={str(props, 'empty') ?? ''}
+      emptyAction={props.emptyAction as ComponentProps<typeof CommitmentsSection>['emptyAction'] ?? null}
     />
   ),
   'ap-pulse': (props) => (

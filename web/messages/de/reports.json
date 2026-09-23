@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "Projektrentabilität",
     "empty": "Keine Projektbewegungen in dieser Periode.",
+    "emptyHint": "Im Zeitraum {period} wurde nichts auf Projekte gebucht. Erfassen Sie Zeiten, ordnen Sie Rechnungen und Ausgaben einem Projekt zu oder wählen Sie einen größeren Zeitraum.",
     "searchPlaceholder": "Kunden oder Aufträge suchen…",
     "noCustomer": "Nicht zugeordneter Kunde",
     "unassignedProject": "Nicht zugeordnet",

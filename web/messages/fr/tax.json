@@ -108,6 +108,7 @@
     "title": "Provision d'impôt sur le résultat",
     "description": "ASC 740 / IAS 12 — impôt exigible et différé, provision pour dépréciation et rapprochement des taux.",
     "empty": "Aucune provision. Calculez la première provision annuelle pour commencer.",
+    "emptyNoGrant": "Aucun calcul de provision pour l’instant. Seuls les préparateurs disposant de l’accès de création de rapports à l’échelle de l’organisation peuvent calculer la première provision.",
     "columns": {
       "fiscalYear": "Exercice",
       "version": "Version",

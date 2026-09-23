@@ -660,7 +660,8 @@
       "ending": "期末现金"
     },
     "totalCash": "现金总额",
-    "noAccounts": "未找到银行账户。",
+    "noAccounts": "尚无银行账户。在银行总览中连接一个账户，即可在此查看余额和资金跑道。",
+    "noAccountsAction": "前往银行",
     "negativeAlert": "预计将出现现金短缺 — {date} 当周低至 {amount}。<ap>放缓应付账款支付</ap>或<ar>加快应收账款回收</ar>。",
     "deferralNote": "按当前付款能力设置，{amount} 的应付账款无法在预测期内支付 — 积压将延续到最后一周之后。",
     "configure": "配置预测",

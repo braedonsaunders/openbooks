@@ -295,6 +295,7 @@ export function apCaptureSpec(data: ApCaptureData): PageSpec {
         rows: data.rows,
         currentParams: data.currentParams,
         canCreate: data.canCreate,
+        uploadDisabled: data.uploadDisabled,
         sort: data.sort,
         dir: data.dir,
       }),

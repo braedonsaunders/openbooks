@@ -1388,6 +1388,8 @@
       "allWithinTarget": "すべて目標内。",
       "noDriftingTitles": "低下中の役職なし",
       "noImprovements": "改善機会は見つかりませんでした",
+      "noTimeTracked": "この期間は作業時間が記録されていないため、稼働率は0%です。タイムシートで時間を記録して測定してください。",
+      "noTimeTrackedAction": "タイムシートを開く",
       "noIssues": "問題は検出されませんでした",
       "noPeerTitles": "比較可能な役職なし（2名以上）",
       "noSuddenDrops": "急低下は検出されませんでした"

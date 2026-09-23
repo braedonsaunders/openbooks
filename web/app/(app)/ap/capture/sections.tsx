@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { mergeHref } from '../../../../lib/list-params'
 import { SortTh } from '../../../../components/sortable-th'
+import { CaptureUploadButton } from './CaptureUploadButton'
 
 export type CaptureListRow = {
   id: string
@@ -47,7 +48,7 @@ const VARIANT: Record<string, 'success' | 'warning' | 'destructive' | 'outline' 
  * Everything around it — the header, the search and filter row, the pager,
  * the review drawer — is ordinary spec.
  */
-export function CaptureList({ rows, currentParams, canCreate, sort, dir }: { rows: CaptureListRow[]; currentParams: Record<string, string | string[] | undefined>; canCreate: boolean; sort: string; dir: 'asc' | 'desc' }) {
+export function CaptureList({ rows, currentParams, canCreate, uploadDisabled, sort, dir }: { rows: CaptureListRow[]; currentParams: Record<string, string | string[] | undefined>; canCreate: boolean; uploadDisabled: boolean; sort: string; dir: 'asc' | 'desc' }) {
   const t = useTranslations('ap.capture')
   const locale = useLocale()
   const router = useRouter()
@@ -78,7 +79,20 @@ export function CaptureList({ rows, currentParams, canCreate, sort, dir }: { row
     }
   }
 
-  if (!rows.length) return <EmptyState icon={<FileSearch />} title={t('emptyTitle')} description={t('emptyDescription')} />
+  // The empty queue names its setup route: creators who can upload get the
+  // upload action inline; while capture is not operational the amber banner
+  // above already carries the AI setup link; readers without creation access
+  // hear the grant instead of an action they cannot take.
+  if (!rows.length) {
+    return (
+      <EmptyState
+        icon={<FileSearch />}
+        title={t('emptyTitle')}
+        description={canCreate ? t('emptyDescription') : t('emptyDescriptionNoGrant')}
+        action={canCreate && !uploadDisabled ? <CaptureUploadButton /> : undefined}
+      />
+    )
+  }
   return (
     <div className="space-y-2">
       {canCreate ? (
