@@ -123,9 +123,13 @@ test(
       const first = await db.transaction(async (tx) => {
         await tx.execute(sql`set local openbooks.amend = on`);
         await tx.execute(sql`set local openbooks.migration = on`);
+        // The correction moves the GL bucket to August, so the posting date
+        // must move with it: the shared resolver refuses an explicit period
+        // that does not cover the posting date. The commercial document date
+        // stays in July; only the posting moves.
         await tx.execute(sql`
           update documents
-             set posting_period_id = ${replacementPeriodId}, updated_at = now()
+             set posting_period_id = ${replacementPeriodId}, posting_date = '2026-08-15', updated_at = now()
            where id = ${documentId}
         `);
         return regenerateGlImpactTx(tx, documentId, deps, actorId, {
@@ -178,7 +182,7 @@ test(
           reverses_entry_id: originalEntryId,
           replacement_status: "posted",
           replacement_period_id: replacementPeriodId,
-          replacement_posting_date: org.date,
+          replacement_posting_date: "2026-08-15",
         },
       ]);
 
