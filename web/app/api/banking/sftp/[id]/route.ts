@@ -83,8 +83,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Reactivation is the update path that can reintroduce shared folders:
     // refuse waking a server whose root is equal to, inside, or containing
     // an ACTIVE sibling's root. The target row is already locked by
-    // currentRow; locking the siblings serializes concurrent toggles.
+    // currentRow; the per-org advisory lock (same key as the create gate)
+    // serializes against concurrent creates, and locking the siblings holds
+    // it against concurrent toggles.
     if (nextActive && !before.is_active) {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
       const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
         select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} and id <> ${id} for update
       `))
