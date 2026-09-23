@@ -383,18 +383,73 @@ export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<
     await assertHrmEnabled(db, orgId);
     const type = await loadLeaveType(db, orgId, leaveTypeId);
     if (!type.is_active) throw new LeaveError("REFUSED", `leave type ${type.code} is inactive — reactivate it before adding a policy`);
-    const inserted = (await db.execute<PolicyRow>(sql`
-      insert into hrm_leave_policies (org_id, leave_type_id, applies_to, accrual_rule, carryover_rule,
-        minimum_notice_days, effective_from, effective_to, created_by, updated_by)
-      values (${orgId}, ${leaveTypeId}, ${JSON.stringify(appliesTo)}::jsonb,
-              ${JSON.stringify(accrualRule)}::jsonb, ${JSON.stringify(carryoverRule)}::jsonb,
-              ${notice}, ${effectiveFrom}, ${effectiveTo}, ${actorId}, ${actorId})
-      returning id, leave_type_id, applies_to, accrual_rule, carryover_rule,
-        minimum_notice_days, effective_from::text as effective_from, effective_to::text as effective_to, is_active
-    `)).rows[0];
+    await assertNoSameScopeOverlap(db, orgId, leaveTypeId, appliesTo, effectiveFrom, effectiveTo);
+    let inserted: PolicyRow | undefined;
+    try {
+      inserted = (await db.execute<PolicyRow>(sql`
+        insert into hrm_leave_policies (org_id, leave_type_id, applies_to, accrual_rule, carryover_rule,
+          minimum_notice_days, effective_from, effective_to, created_by, updated_by)
+        values (${orgId}, ${leaveTypeId}, ${JSON.stringify(appliesTo)}::jsonb,
+                ${JSON.stringify(accrualRule)}::jsonb, ${JSON.stringify(carryoverRule)}::jsonb,
+                ${notice}, ${effectiveFrom}, ${effectiveTo}, ${actorId}, ${actorId})
+        returning id, leave_type_id, applies_to, accrual_rule, carryover_rule,
+          minimum_notice_days, effective_from::text as effective_from, effective_to::text as effective_to, is_active
+      `)).rows[0];
+    } catch (error) {
+      // A concurrent create landing first hits the storage exclusion: name
+      // the overlap instead of leaking a PG exclusion code. db.execute
+      // wraps the PG error in a DrizzleQueryError, so the code rides on
+      // cause — checking only the outer code would drop this refusal.
+      const pgCode =
+        typeof error === "object" && error !== null
+          ? ((error as { code?: string }).code ?? (error as { cause?: { code?: string } }).cause?.code)
+          : undefined;
+      if (pgCode === "23P01") {
+        throw new LeaveError(
+          "REFUSED",
+          `another policy now covers this leave type and scope over ${effectiveFrom} to ${effectiveTo ?? "open"} — reload the policy list and close the overlapping window (set its effective_to) before opening this one`,
+        );
+      }
+      throw error;
+    }
     if (!inserted) throw new LeaveError("REFUSED", "the leave policy was not stored — no row was written; retry the request");
     return toPolicyDTO(inserted);
   });
+}
+
+/**
+ * Same-scope overlap preflight for policy windows: one active window per
+ * (org, leave type, scope pins). Overlapping same-scope policies resolved
+ * arbitrarily at read time, so the create is refused with the conflicting
+ * window and the remedy. The storage exclusion (0266) arbitrates the
+ * concurrent-writer race and backstops the Setup drawer's in-place edits,
+ * which surface through the shared 409 overlap mapping, never raw PG text.
+ */
+async function assertNoSameScopeOverlap(
+  exec: SqlExecutor,
+  orgId: string,
+  leaveTypeId: string,
+  appliesTo: { employer_subsidiary_id: string | null; department_id: string | null },
+  effectiveFrom: string,
+  effectiveTo: string | null,
+): Promise<void> {
+  const clash = (await exec.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
+    select id, effective_from::text as effective_from, effective_to::text as effective_to
+      from hrm_leave_policies
+     where org_id = ${orgId} and leave_type_id = ${leaveTypeId} and is_active
+       and coalesce(applies_employer_subsidiary_id::text, '') = coalesce(${appliesTo.employer_subsidiary_id}::text, '')
+       and coalesce(applies_department_id::text, '') = coalesce(${appliesTo.department_id}::text, '')
+       and effective_from <= ${effectiveTo ?? "9999-12-31"}
+       and (effective_to is null or effective_to >= ${effectiveFrom})
+     limit 1
+  `)).rows[0];
+  if (clash) {
+    const window = `${String(clash.effective_from).slice(0, 10)} to ${clash.effective_to ? String(clash.effective_to).slice(0, 10) : "open"}`;
+    throw new LeaveError(
+      "REFUSED",
+      `policy ${clash.id} already covers this leave type and scope over ${window} — close that window (set its effective_to before ${effectiveFrom}) or deactivate it before opening ${effectiveFrom} to ${effectiveTo ?? "open"}`,
+    );
+  }
 }
 
 // --- Request lifecycle ------------------------------------------------------

@@ -860,6 +860,66 @@ test("mid-year policy change accrues per segment, never the current rule backdat
   });
 });
 
+test("same-scope overlapping policies refuse by name; other scopes and adjacent windows stay legal", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "120" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    });
+    await assertLeaveRefusal(
+      () => seedPolicy(h.org.orgId, h.managerId, type.id, {
+        accrualRule: { kind: "per_year", hours: "80" },
+        effectiveFrom: "2026-06-01",
+        effectiveTo: null,
+      }),
+      /already covers this leave type and scope/,
+      async () => (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from hrm_leave_policies
+         where org_id = ${h.org.orgId} and leave_type_id = ${type.id}
+           and (accrual_rule->>'hours') = '80'
+      `)).rows[0]?.n ?? 0,
+    );
+    // Adjacent windows share no day and stay legal.
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "80" },
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+    });
+    // The same window pinned to a department is a different scope.
+    const departmentId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${h.org.orgId}, 'Crew')`);
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentId },
+      accrualRule: { kind: "per_year", hours: "40" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    });
+    // Storage arbitrates what the service never sees: a raw overlapping
+    // insert dies on the exclusion, never as a second readable window.
+    try {
+      await db.execute(sql`
+        insert into hrm_leave_policies (org_id, leave_type_id, effective_from, effective_to)
+        values (${h.org.orgId}, ${type.id}, '2026-03-01', '2026-04-01')
+      `);
+      assert.fail("a raw overlapping insert must die on the exclusion");
+    } catch (error) {
+      // db.execute wraps the PG error: the exclusion code rides on cause.
+      const pgCode = (error as { code?: string }).code
+        ?? (error as { cause?: { code?: string } }).cause?.code;
+      assert.equal(pgCode, "23P01");
+    }
+    const windows = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_leave_policies
+       where org_id = ${h.org.orgId} and leave_type_id = ${type.id} and is_active
+    `)).rows[0]?.n ?? 0;
+    assert.equal(windows, 3, "only the three legal windows exist: two adjacent org-wide plus the department pin");
+  });
+});
+
 test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const workerParty = await linkPerson(h.org.orgId, h.employeeId);
