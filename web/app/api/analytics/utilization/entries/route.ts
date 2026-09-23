@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { mul } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,14 @@ export async function GET(req: Request) {
   }
 
   const filter = employee ? sql`t.employee_party_id = ${employee}` : sql`t.item_id = ${item}`;
+  // The same legal-entity population as the dashboard drill-down source
+  // (utilization-data fetchTimeStats): an entry is visible when the caller's
+  // scope admits coalesce(project, employee) subsidiary. Restricted callers
+  // see no out-of-scope rows — never names, hours, memos or cost.
+  const scope = subsidiaryVisibleFilter(
+    sql`coalesce(pr.subsidiary_id, emp.subsidiary_id)`,
+    gate.allowedSubsidiaryIds,
+  );
   const res = await db.execute(sql`
     select
       t.id,
@@ -46,6 +55,7 @@ export async function GET(req: Request) {
     where t.org_id = ${user.orgId} and ${filter}
       and t.worked_on >= ${from} and t.worked_on <= ${to}
       and (t.memo_is_private is not true)
+      ${scope}
     order by t.worked_on desc
     limit 500
   `);
