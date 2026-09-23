@@ -86,6 +86,13 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["lien_waivers", "party_id"],
   ["party_bank_accounts", "party_id"],
   ["pay_components", "remittance_party_id"],
+  // A frozen remittance destination follows the survivor on merge: absorbed
+  // and survivor are the same economic party, and the 0296 line guard admits
+  // the repoint only under this merge's paired amend+migration authority — a
+  // vendor edit outside a merge still refuses. Uniqueness here is id-only, so
+  // there is no collision to arbitrate; NULL snapshots never equal the
+  // absorbed id and keep resolving through pack settings.
+  ["pay_stub_lines", "remittance_party_id"],
   ["payment_cards", "holder_party_id"],
   ["payment_instructions", "payee_party_id"],
   ["payment_links", "party_id"],

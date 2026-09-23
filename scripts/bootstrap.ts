@@ -1451,41 +1451,52 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "65164ea1ba89df3dde63064a76bf931f3704ca0c8c802368247858d26d2f2c37",
-    to: "a24896ea622d91dde33b3dd8b25e47928618723d1eb60b08a9ab9f793c063ef3",
+    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
     strategy: "reapply",
     reason:
-      "corrective revisions U1+U2+U4 (payroll-remittance shard) supersede every "
-      + "earlier 0296: U1 refuses first over unparseable legacy markers, naming "
+      "corrective revisions U1+U2+U4+PR6b (payroll-remittance shard) supersede "
+      + "every earlier 0296: U1 refuses first over unparseable legacy markers, naming "
       + "each bill and field. U2 replaces the grand-total backfill with an exact "
       + "reconciliation repair (recorded party equals the marker party, lines per "
       + "liability account equal the accrual groups). U4 resolves each line's "
       + "destination pack-aware (regional key, then snapshot, then pack default, "
       + "from a frozen 0296-era map parity-pinned against the TypeScript "
       + "resolver), so legacy statutory and regional bills gain correct coverage "
-      + "instead of zero. Reconciling bills fill anti-joined, anything else "
-      + "empties to no backfill rows and is named by notice, backfill rows for "
-      + "voided bills are deleted, app-recorded rows are never rewritten. Every "
-      + "statement stays idempotent against every published revision. Reapply, "
-      + "not restamp: the revisions add real guards and repair semantics the old "
-      + "states lack.",
+      + "instead of zero. PR6b admits the frozen-destination guard for the "
+      + "merge's paired amend+migration authority, so a source-asserted merge "
+      + "re-points absorbed snapshots to the survivor. Reconciling bills fill "
+      + "anti-joined, anything else empties to no backfill rows and is named "
+      + "by notice, backfill rows for voided bills are deleted, app-recorded "
+      + "rows are never rewritten. Every statement stays idempotent against "
+      + "every published revision. Reapply, not restamp: the revisions add "
+      + "real guards and repair semantics the old states lack.",
   },
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "5589a8b5b31dfcabd8ccd74ce4d5d6eeca95b141844b6282bfdda4b6ce45f62b",
-    to: "a24896ea622d91dde33b3dd8b25e47928618723d1eb60b08a9ab9f793c063ef3",
+    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
     strategy: "reapply",
     reason:
-      "same U1+U2+U4 revision as the entry above, for databases that recorded "
+      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
       + "the U1-only 5589a8b5.",
   },
   {
     filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
     from: "097ed6dd7492562a23147fca19d013c22da682373c17c7793b008f123ab58704",
-    to: "a24896ea622d91dde33b3dd8b25e47928618723d1eb60b08a9ab9f793c063ef3",
+    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
     strategy: "reapply",
     reason:
-      "same U1+U2+U4 revision as the entry above, for databases that recorded "
+      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
       + "the U1+U2 097ed6dd.",
+  },
+  {
+    filename: "generated/0296_payroll_remittance_destination_snapshot.sql",
+    from: "a24896ea622d91dde33b3dd8b25e47928618723d1eb60b08a9ab9f793c063ef3",
+    to: "96d038a431b19b806fa36dac97ebaf5e3bbbb3001e2240091ef3cf11fe67ab70",
+    strategy: "reapply",
+    reason:
+      "same U1+U2+U4+PR6b revision as the entry above, for databases that recorded "
+      + "the U1+U2+U4 a24896ea.",
   },
 ];
 
