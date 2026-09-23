@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "設定するノードを選択してください",
         "deleteNode": "ノードを削除",
-        "nodeId": "ノード"
+        "nodeId": "ノード",
+        "connectTitle": "次のステップに接続",
+        "connectFrom": "接続元",
+        "connectTo": "接続先のステップ",
+        "connectAction": "接続",
+        "connectPlaceholder": "ステップを選択…",
+        "connectEmpty": "他のステップはまだありません — 先にノードを追加してください。"
       }
     },
     "node": {

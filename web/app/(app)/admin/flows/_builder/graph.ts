@@ -33,6 +33,66 @@ export function edgeLabel(
   return handle && handle !== 'next' ? (labels[handle] ?? handle) : undefined
 }
 
+/** A keyboard/button connect request: source node + handle, target node. */
+export interface ConnectRequest {
+  source: string
+  sourceHandle: string
+  target: string
+}
+
+/**
+ * Handles a node can connect FROM — exactly the source Handle ids the
+ * canvas renders for the kind, so the button path can never offer a handle
+ * the pointer path could not drop from.
+ */
+export function connectHandles(kind: NodeKind): string[] {
+  switch (kind) {
+    case 'trigger':
+    case 'action':
+      return ['next']
+    case 'condition':
+      return ['then', 'else']
+    case 'gate':
+      return ['approve', 'reject']
+  }
+}
+
+/**
+ * Valid keyboard/button successors for a source node: every node exposing a
+ * target Handle (triggers render none, so wiring into one would be a dead
+ * edge the pointer path cannot even draw), minus the source itself.
+ */
+export function connectTargets(sourceId: string, nodes: FlowNode[]): FlowNode[] {
+  return nodes.filter((n) => n.id !== sourceId && n.data.kind !== 'trigger')
+}
+
+/**
+ * THE single edge path: both the pointer onConnect and the inspector's
+ * keyboard connect build through here. Returns null when the connection is
+ * invalid (unknown ids, self-connect, a trigger target, or a handle the
+ * source kind does not expose) so an invalid request adds nothing, dirties
+ * nothing, and reports nothing as connected.
+ */
+export function buildConnectEdge(
+  req: ConnectRequest,
+  nodes: FlowNode[],
+  labels: Record<string, string>,
+): Edge | null {
+  const source = nodes.find((n) => n.id === req.source)
+  const target = nodes.find((n) => n.id === req.target)
+  if (!source || !target) return null
+  if (source.id === target.id) return null
+  if (target.data.kind === 'trigger') return null
+  if (!connectHandles(source.data.kind).includes(req.sourceHandle)) return null
+  return {
+    id: newId('e'),
+    source: source.id,
+    target: target.id,
+    sourceHandle: req.sourceHandle,
+    label: edgeLabel(req.sourceHandle, labels),
+  }
+}
+
 /** Stored graph → React Flow state (labels re-derived from handles). */
 export function toFlow(
   graph: AutomationGraph,

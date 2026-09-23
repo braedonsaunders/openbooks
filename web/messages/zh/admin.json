@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "选择一个节点以配置它",
         "deleteNode": "删除节点",
-        "nodeId": "节点"
+        "nodeId": "节点",
+        "connectTitle": "连接到下一步",
+        "connectFrom": "从",
+        "connectTo": "到步骤",
+        "connectAction": "连接",
+        "connectPlaceholder": "选择一个步骤…",
+        "connectEmpty": "还没有其他步骤 — 请先添加一个节点。"
       }
     },
     "node": {

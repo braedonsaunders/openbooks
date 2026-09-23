@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "Sélectionnez un nœud pour le configurer",
         "deleteNode": "Supprimer le nœud",
-        "nodeId": "Nœud"
+        "nodeId": "Nœud",
+        "connectTitle": "Connecter à l’étape suivante",
+        "connectFrom": "Depuis",
+        "connectTo": "Vers l’étape",
+        "connectAction": "Connecter",
+        "connectPlaceholder": "Choisir une étape…",
+        "connectEmpty": "Il n’y a pas encore d’autre étape — ajoutez d’abord un nœud."
       }
     },
     "node": {

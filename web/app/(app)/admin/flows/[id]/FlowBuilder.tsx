@@ -39,18 +39,20 @@ import {
   type FlowSubjectProfile,
 } from '@openbooks/forms-core'
 import {
+  buildConnectEdge,
   defaultNodeData,
-  edgeLabel,
   fromFlow,
   newId,
   nextPosition,
   toFlow,
+  type ConnectRequest,
   type FlowNode,
   type NodeData,
   type NodeKind,
   type OrgRole,
   type OrgUser,
 } from '../_builder/graph'
+import { nodeAccessibleName } from '../_builder/nodes'
 import { NODE_TYPES } from '../_builder/nodes'
 import { Inspector } from '../_builder/Inspector'
 import { RunsPanel, type FlowRunRow } from '../_builder/RunsPanel'
@@ -142,14 +144,29 @@ export default function FlowBuilder({
     [onEdgesChange, markDirty],
   )
 
+  /**
+   * The single edge path: pointer drops and the inspector's keyboard
+   * connect both build through buildConnectEdge, so a keyboard-connected
+   * edge validates exactly like a dragged one. Invalid requests connect
+   * nothing and dirty nothing.
+   */
+  const connect = useCallback(
+    (req: ConnectRequest) => {
+      const edge = buildConnectEdge(req, nodes, edgeLabels)
+      if (!edge) return false
+      setEdges((eds) => addEdge(edge, eds))
+      markDirty()
+      return true
+    },
+    [nodes, edgeLabels, setEdges, markDirty],
+  )
+
   const onConnect = useCallback(
     (c: Connection) => {
-      setEdges((eds) =>
-        addEdge({ ...c, id: newId('e'), label: edgeLabel(c.sourceHandle, edgeLabels) }, eds),
-      )
-      markDirty()
+      if (!c.source || !c.target) return
+      connect({ source: c.source, sourceHandle: c.sourceHandle ?? 'next', target: c.target })
     },
-    [setEdges, edgeLabels, markDirty],
+    [connect],
   )
 
   const addNode = (kind: NodeKind) => {
@@ -242,6 +259,14 @@ export default function FlowBuilder({
   }
 
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) ?? null
+
+  // Accessible names for the focusable canvas nodes (kind + label), derived
+  // at render so a label edit renames the node immediately — the state
+  // itself never carries a second, staler copy of the name.
+  const labeledNodes = useMemo(
+    () => nodes.map((n) => ({ ...n, ariaLabel: nodeAccessibleName(t, n.data) })),
+    [nodes, t],
+  )
 
   return (
     <div className="flex h-[calc(100vh-6.5rem)] min-h-[560px] flex-col gap-3">
@@ -376,7 +401,7 @@ export default function FlowBuilder({
             </div>
 
             <ReactFlow
-              nodes={nodes}
+              nodes={labeledNodes}
               edges={edges}
               onNodesChange={markDirtyOnNodesChange}
               onEdgesChange={markDirtyOnEdgesChange}
@@ -412,12 +437,14 @@ export default function FlowBuilder({
           <aside className="w-[360px] shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
             <Inspector
               node={selectedNode}
+              nodes={nodes}
               profile={profile}
               users={users}
               roles={roles}
               permissions={permissions}
               onChange={patchNodeData}
               onDelete={removeNode}
+              onConnect={connect}
             />
           </aside>
         </div>

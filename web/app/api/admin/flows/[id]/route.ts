@@ -18,9 +18,10 @@ export const runtime = 'nodejs'
  *   • STRUCTURAL (zod graph schema — malformed nodes/edges/caps) → 400
  *     {errors}; nothing is written.
  *   • VOCABULARY / wiring lints (lintFlowGraphForSubject: unreachable nodes,
- *     unknown fields/statuses, worker-trigger compatibility, …) → the graph
- *     still saves (authors keep work-in-progress) and the lints come back as
- *     {warnings} for the builder to surface non-blocking.
+ *     triggers without an outgoing step, unknown fields/statuses,
+ *     worker-trigger compatibility, …) → the graph still saves (authors keep
+ *     work-in-progress) and the lints come back as {warnings} for the
+ *     builder to surface non-blocking.
  */
 
 type Params = { params: Promise<{ id: string }> }

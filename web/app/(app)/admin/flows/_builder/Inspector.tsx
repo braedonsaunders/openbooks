@@ -1,10 +1,20 @@
 'use client'
 
+import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label } from '@openbooks/ui'
+import { Button, Input, Label, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile } from '@openbooks/forms-core'
-import type { FlowNode, NodeData, OrgRole, OrgUser } from './graph'
+import {
+  connectHandles,
+  connectTargets,
+  type ConnectRequest,
+  type FlowNode,
+  type NodeData,
+  type OrgRole,
+  type OrgUser,
+} from './graph'
+import { nodeAccessibleName } from './nodes'
 import { LogicRuleBuilder } from './LogicRuleBuilder'
 import { TriggerEditor } from './TriggerEditor'
 import { ActionEditor } from './ActionEditor'
@@ -28,20 +38,24 @@ const KIND_BADGE: Record<NodeData['kind'], string> = {
 
 export function Inspector({
   node,
+  nodes,
   profile,
   users,
   roles,
   permissions,
   onChange,
   onDelete,
+  onConnect,
 }: {
   node: FlowNode | null
+  nodes: FlowNode[]
   profile: FlowSubjectProfile
   users: OrgUser[]
   roles: OrgRole[]
   permissions: string[]
   onChange: (id: string, data: NodeData) => void
   onDelete: (id: string) => void
+  onConnect: (req: ConnectRequest) => boolean
 }) {
   const t = useTranslations('admin.flows')
 
@@ -129,7 +143,79 @@ export function Inspector({
             roles={roles}
           />
         ) : null}
+
+        <ConnectSection key={node.id} node={node} nodes={nodes} onConnect={onConnect} />
       </div>
     </div>
+  )
+}
+
+/**
+ * Keyboard/button edge path for the selected node: pick a source handle
+ * (branch nodes) and a successor step, then Connect. Builds through the
+ * same buildConnectEdge the pointer onConnect uses — never a second edge
+ * path — so a keyboard-connected edge validates exactly like a dragged one.
+ */
+function ConnectSection({
+  node,
+  nodes,
+  onConnect,
+}: {
+  node: FlowNode
+  nodes: FlowNode[]
+  onConnect: (req: ConnectRequest) => boolean
+}) {
+  const t = useTranslations('admin.flows')
+  const handles = connectHandles(node.data.kind)
+  const targets = connectTargets(node.id, nodes)
+  const [handle, setHandle] = useState(handles[0] ?? 'next')
+  const [targetId, setTargetId] = useState('')
+
+  return (
+    <section aria-label={t('builder.inspector.connectTitle')} className="mt-6 space-y-3 border-t border-slate-200 pt-4 dark:border-slate-800">
+      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+        {t('builder.inspector.connectTitle')}
+      </h3>
+      {targets.length === 0 ? (
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('builder.inspector.connectEmpty')}</p>
+      ) : (
+        <>
+          {handles.length > 1 ? (
+            <div className="space-y-1.5">
+              <Label>{t('builder.inspector.connectFrom')}</Label>
+              <Select value={handle} onChange={(e) => setHandle(e.target.value)}>
+                {handles.map((h) => (
+                  <option key={h} value={h}>
+                    {t(`edge.${h}`)}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          ) : null}
+          <div className="space-y-1.5">
+            <Label>{t('builder.inspector.connectTo')}</Label>
+            <Select value={targetId} onChange={(e) => setTargetId(e.target.value)}>
+              <option value="">{t('builder.inspector.connectPlaceholder')}</option>
+              {targets.map((target) => (
+                <option key={target.id} value={target.id}>
+                  {nodeAccessibleName(t, target.data)}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <Button
+            size="sm"
+            disabled={!targetId}
+            onClick={() => {
+              if (onConnect({ source: node.id, sourceHandle: handle, target: targetId })) {
+                setTargetId('')
+              }
+            }}
+          >
+            {t('builder.inspector.connectAction')}
+          </Button>
+        </>
+      )}
+    </section>
   )
 }

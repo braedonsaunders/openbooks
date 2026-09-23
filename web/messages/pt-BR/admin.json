@@ -4482,7 +4482,13 @@
       "inspector": {
         "empty": "Selecione um nó para configurá-lo",
         "deleteNode": "Excluir nó",
-        "nodeId": "Nó"
+        "nodeId": "Nó",
+        "connectTitle": "Conectar à próxima etapa",
+        "connectFrom": "De",
+        "connectTo": "Para a etapa",
+        "connectAction": "Conectar",
+        "connectPlaceholder": "Escolha uma etapa…",
+        "connectEmpty": "Ainda não há outra etapa — adicione um nó primeiro."
       }
     },
     "node": {
