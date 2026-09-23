@@ -32,6 +32,35 @@ export interface NotificationWrite {
 }
 
 /**
+ * The one conditional mark-read UPDATE, shared by PATCH /api/notifications
+ * and the inbox adapter below: org + user + unread + the named ids.
+ *
+ * Mark-read is idempotent, so the helper tells its cases apart: `flipped`
+ * counts the rows this call marked, while `own` counts the caller's own
+ * matching ids whether read or unread. Callers succeed when every
+ * requested id is the caller's own (a replay over already-read rows flips
+ * nothing and still succeeds) and refuse only when some id is foreign or
+ * nonexistent — those match zero rows under the self-scoped predicate.
+ */
+export async function markNotificationsRead(
+  exec: SqlExecutor,
+  args: { orgId: string; userId: string; ids: readonly string[] },
+): Promise<{ flipped: number; own: number }> {
+  const flipped = await exec.execute<{ id: string }>(sql`
+    update notifications set read_at = now(), updated_at = now()
+     where org_id = ${args.orgId} and user_id = ${args.userId} and read_at is null
+       and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
+    returning id
+  `);
+  const own = (await exec.execute<{ n: number }>(sql`
+    select count(*)::int as n from notifications
+     where org_id = ${args.orgId} and user_id = ${args.userId}
+       and id in (select jsonb_array_elements_text(${JSON.stringify([...args.ids])}::jsonb)::uuid)
+  `)).rows[0];
+  return { flipped: flipped.rows.length, own: own?.n ?? 0 };
+}
+
+/**
  * The existing notifications insert path, shared: every alert source
  * writes these columns, and every reader (page, API, inbox adapter)
  * scopes org + user + unread. One channel, many writers.
@@ -86,12 +115,12 @@ export const notificationAdapter: InboxAdapter = {
     if (actionKey !== "mark-read") {
       throw new Error(`action ${JSON.stringify(actionKey)} is not available on this notice`);
     }
-    const moved = (await db.execute<{ n: number }>(sql`
-      update notifications set read_at = now(), updated_at = now()
-       where org_id = ${ctx.orgId} and user_id = ${ctx.actorId}
-         and id = ${sourceId} and read_at is null
-    `)).rowCount ?? 0;
-    if (moved !== 1) {
+    const { flipped } = await markNotificationsRead(db, {
+      orgId: ctx.orgId,
+      userId: ctx.actorId,
+      ids: [sourceId],
+    });
+    if (flipped !== 1) {
       throw new Error("the notice is already read — nothing marked; reload the inbox");
     }
   },
