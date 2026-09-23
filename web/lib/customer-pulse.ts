@@ -3,7 +3,8 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { add, cmp, div, fromUnits, mul, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, div, fromUnits, mul, mulDecimal, mulRate, neg, normalizeMoney, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from './fx-presentation'
 import { openItems } from './cash/open-items'
 import { paymentStats } from './cash/core'
 import { isFeatureEnabled } from './features'
@@ -93,6 +94,13 @@ export interface CustomerPulseData {
     email: string | null
     phone: string | null
     website: string | null
+    /**
+     * Presentation currency of the whole pulse: the org base. Every
+     * aggregate in this payload is denominated in it — it is never an
+     * invented USD and never the customer's role currency (limits in a
+     * foreign role currency are translated into it; per-item timeline
+     * entries carry their own currency).
+     */
     currency: string
     subsidiaryName: string | null
     /** Credit controls live on the customer role (AR domain): present only with ar.read. */
@@ -181,6 +189,13 @@ export async function loadCustomerPulse(
   const asOf = await businessToday(orgId)
   const allowedSubArray = allowedSubsidiaryIds ? Array.from(allowedSubsidiaryIds) : undefined
 
+  // Presentation currency is the org base (the house doctrine for consolidated
+  // views): every aggregate below lands in it, and the label names it. The
+  // org row may not name one — that refuses by name here instead of
+  // inventing USD. Credit limits are denominated in the customer role's own
+  // currency and translated into the base below.
+  const base = await presentationCurrency(orgId)
+
   // 1. Party identity and credit settings
   const partyResult = await db.execute<{
     id: string
@@ -188,7 +203,7 @@ export async function loadCustomerPulse(
     email: string | null
     phone: string | null
     website: string | null
-    currency: string | null
+    cr_currency: string | null
     subsidiary_name: string | null
     terms_name: string | null
     is_on_hold: boolean | null
@@ -196,7 +211,7 @@ export async function loadCustomerPulse(
     cr_credit_limit: string | null
   }>(sql`
     select p.id, p.display_name, p.email, p.phone, p.website,
-           coalesce(cr.currency, 'USD') as currency,
+           cr.currency as cr_currency,
            sub.name as subsidiary_name,
            pt.name as terms_name,
            coalesce(cr.is_on_hold, false) as is_on_hold,
@@ -217,7 +232,16 @@ export async function loadCustomerPulse(
   // Canonical decimal text, never parseFloat (see PulseMoney).
   const creditLimitRaw = partyRow.cr_credit_limit
   const hasCreditLimit = creditLimitRaw !== null && creditLimitRaw !== undefined
-  const creditLimit = hasCreditLimit ? normalizeMoney(creditLimitRaw!) : null
+  const creditLimitCurrency = partyRow.cr_currency ?? base
+  // Translate the limit from its denominated currency into the presentation
+  // base at the closing spot. A missing rate refuses by name (fail closed),
+  // never by silently mixing currencies.
+  const limitRates = hasCreditLimit
+    ? await presentationRates(orgId, base, [creditLimitCurrency], asOf)
+    : null
+  const creditLimit = hasCreditLimit
+    ? mulRate(normalizeMoney(creditLimitRaw!), limitRates!.get(lineFunctional(creditLimitCurrency, base))!)
+    : null
 
   const party: CustomerPulseData['party'] = {
     id: partyRow.id,
@@ -225,7 +249,7 @@ export async function loadCustomerPulse(
     email: partyRow.email,
     phone: partyRow.phone,
     website: partyRow.website,
-    currency: partyRow.currency ?? 'USD',
+    currency: base,
     subsidiaryName: partyRow.subsidiary_name,
   }
   // Credit controls are AR-domain facts (same rows the directory's `crm`
@@ -290,19 +314,24 @@ export async function loadCustomerPulse(
       }
     }
 
-    // 3. Unbilled orders (approved/pending sales orders commitment)
-    const ordersResult = await db.execute<{ unbilled_total: string | null }>(sql`
-      select sum(d.total)::text as unbilled_total
+    // 3. Unbilled orders (approved/pending sales orders commitment). Order
+    // totals are transaction-currency facts: each carries its txn→functional
+    // first leg (d.fx_rate) and translates functional→base at the
+    // document-date spot (flow doctrine), so a mixed-currency book lands in
+    // the presentation base instead of summing raw across currencies.
+    const unbilledRows = (await db.execute<{ date: string; func: string | null; amount: string }>(sql`
+      select d.document_date::text as date, sub.base_currency as func,
+             round(d.total * d.fx_rate, 4)::text as amount
         from documents d
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where d.org_id = ${orgId}
          and d.party_id = ${partyId}
          and d.kind = 'sales_order'
          and d.status in ('pending_approval', 'approved')
          and d.voided_at is null
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
-    `)
-    // The SQL sum over numeric(19,4) is exact; keep it decimal text.
-    const unbilledOrdersBalance = normalizeMoney(ordersResult.rows[0]?.unbilled_total ?? '0')
+    `)).rows
+    const unbilledOrdersBalance = await translateFlows(orgId, unbilledRows)
 
     // Remaining credit headroom, exact: limit minus committed (open plus
     // unbilled), floored at zero. Utilization is a display percent derived
@@ -346,47 +375,62 @@ export async function loadCustomerPulse(
     }
   }
 
-  // 5. Commercial Pipeline (CRM section only)
+  // 5. Commercial Pipeline (CRM section only). Opportunity amounts are
+  // per-row transaction currencies with no stored functional leg, so each
+  // row translates currency→base at its expected-close spot (flow doctrine;
+  // a missing close date reads the current spot). One shared rate context
+  // covers every row; a missing rate refuses by name instead of mixing.
   let pipeline: CustomerPulseData['pipeline']
   if (sections.crm) {
-    const oppsResult = await db.execute<{
-      total_count: number
-      open_count: number
-      won_count: number
-      lost_count: number
-      projected_sum: string | null
-      weighted_sum: string | null
-      won_sum: string | null
+    const oppRows = (await db.execute<{
+      projected: string
+      weighted: string
+      currency: string
+      date: string
+      is_closed: boolean
+      is_won: boolean
     }>(sql`
-      select count(*)::int as total_count,
-             count(*) filter (where not s.is_closed)::int as open_count,
-             count(*) filter (where s.is_won)::int as won_count,
-             count(*) filter (where s.is_closed and not s.is_won)::int as lost_count,
-             sum(case when not s.is_closed then o.projected_amount else 0 end)::text as projected_sum,
-             sum(case when not s.is_closed then o.weighted_amount else 0 end)::text as weighted_sum,
-             sum(case when s.is_won then o.projected_amount else 0 end)::text as won_sum
+      select o.projected_amount::text as projected, o.weighted_amount::text as weighted,
+             o.currency, coalesce(o.expected_close_date::text, ${asOf}) as date,
+             s.is_closed, s.is_won
         from crm_opportunities o
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
        where o.org_id = ${orgId}
          and o.party_id = ${partyId}
          and o.is_active
          ${crmOpportunityScope(allowedSubsidiaryIds)}
-    `)
+    `)).rows
 
-    const oppRow = oppsResult.rows[0]
-    const wonCount = oppRow?.won_count ?? 0
-    const lostCount = oppRow?.lost_count ?? 0
+    const fx = await flowRates(orgId, oppRows.map((r) => ({ func: r.currency, date: r.date })))
+    let projected = '0'
+    let weighted = '0'
+    let won = '0'
+    let wonCount = 0
+    let lostCount = 0
+    let openCount = 0
+    for (const r of oppRows) {
+      if (!r.is_closed) {
+        openCount += 1
+        projected = add(projected, mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)))
+        weighted = add(weighted, mulDecimal(normalizeMoney(r.weighted), fx.rateAt(r.currency, r.date)))
+      } else if (r.is_won) {
+        wonCount += 1
+        won = add(won, mulDecimal(normalizeMoney(r.projected), fx.rateAt(r.currency, r.date)))
+      } else {
+        lostCount += 1
+      }
+    }
     const closedCount = wonCount + lostCount
     const winRatePercent = closedCount > 0 ? Math.round((wonCount / closedCount) * 100) : null
 
     pipeline = {
-      totalOpportunities: oppRow?.total_count ?? 0,
-      openOpportunities: oppRow?.open_count ?? 0,
+      totalOpportunities: oppRows.length,
+      openOpportunities: openCount,
       wonOpportunities: wonCount,
       lostOpportunities: lostCount,
-      projectedPipeline: normalizeMoney(oppRow?.projected_sum ?? '0'),
-      weightedPipeline: normalizeMoney(oppRow?.weighted_sum ?? '0'),
-      wonAmount: normalizeMoney(oppRow?.won_sum ?? '0'),
+      projectedPipeline: normalizeMoney(projected),
+      weightedPipeline: normalizeMoney(weighted),
+      wonAmount: normalizeMoney(won),
       winRatePercent,
     }
   }
