@@ -1219,6 +1219,31 @@ export async function importStatement(
       existingIds,
       sourceAlreadyImported,
     );
+    // Serialize with sign-off through the shared reconciliation lock. No
+    // other path takes the import lock, so acquiring it first here cannot
+    // deadlock; holding both through the insert closes the race with a
+    // concurrent sign-off's unmatched check. Then refuse lines dated inside
+    // signed-off coverage. Signed-off history is immutable: a late distinct
+    // transaction under a signed cutoff would import as unmatched evidence
+    // the closed session can never clear, and without the shared lock it
+    // could slip in beside a concurrent sign-off's unmatched check. Only
+    // fresh lines are fenced — already-imported duplicates stay idempotent
+    // so retrying a file never refuses. This runs before the dry-run return
+    // so a preview agrees with the import it previews.
+    await lockReconciliationAccount(tx, ctx.orgId, account.id);
+    const signedThrough = (await tx.execute<{ through_date: string }>(sql`
+      select through_date::text as through_date from reconciliations
+       where org_id = ${ctx.orgId} and account_id = ${account.id} and status = 'signed_off'
+       order by through_date desc limit 1
+    `)).rows[0];
+    if (signedThrough) {
+      const late = fresh.filter((line) => line.postedOn <= signedThrough.through_date);
+      if (late.length > 0) {
+        throw new BankingError(
+          `Cannot import: ${late.length} statement line(s) dated on or before the signed-off reconciliation through ${signedThrough.through_date} — signed-off history is immutable; import only lines dated after ${signedThrough.through_date}`,
+        );
+      }
+    }
     if (opts.dryRun || fresh.length === 0) {
       return {
         statementId: null,
