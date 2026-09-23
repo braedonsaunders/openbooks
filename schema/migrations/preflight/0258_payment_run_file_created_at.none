@@ -1,0 +1,1 @@
+Single nullable file_created_at column; the writer coalesces on next generation, so no existing row needs a value.

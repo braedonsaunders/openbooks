@@ -1,0 +1,1 @@
+Constraint widening proven safe against the code: the old (org, code) unique index exists in every install since the baseline and only this migration drops it, so no two rows share a code and adding country only splits equivalence classes.

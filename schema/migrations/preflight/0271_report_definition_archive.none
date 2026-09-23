@@ -1,0 +1,1 @@
+Archive columns plus CASCADE-to-RESTRICT foreign-key moves; RESTRICT gates future deletes only and validates no existing row.

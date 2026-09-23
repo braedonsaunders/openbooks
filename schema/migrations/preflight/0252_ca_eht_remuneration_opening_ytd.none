@@ -1,0 +1,1 @@
+Single NOT NULL DEFAULT 0 column; existing rows read back as zero, which is exactly what nothing-carried-in has always meant.

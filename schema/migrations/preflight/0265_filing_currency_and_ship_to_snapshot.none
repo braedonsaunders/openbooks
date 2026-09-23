@@ -1,0 +1,1 @@
+Deterministic precedence backfills (filer currency, first-posted ship-to evidence) with no constraint over existing data; readers fail closed on NULL rather than substituting current configuration.

@@ -1,0 +1,1 @@
+Single revision column DEFAULT 1, exactly what an editor who read the row before this migration holds.

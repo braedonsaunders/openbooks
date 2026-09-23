@@ -1,0 +1,1 @@
+Insert-missing backfill that cannot fail and rewrites nothing: rows whose (org_id, dimension, key) already exists are left exactly as the tenant left them (ON CONFLICT DO NOTHING), and the custom catch-all conflict is arbitrated by follow-up migration 0319, whose preflight names the conflicting scopes.

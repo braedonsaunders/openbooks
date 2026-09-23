@@ -1,0 +1,1 @@
+Pure additive shape verified against the code: revision NOT NULL DEFAULT 0 satisfies the nonnegative CHECK, change_reason and supersedes_id are nullable, and the nullable supersedes foreign key cannot conflict with existing rows.

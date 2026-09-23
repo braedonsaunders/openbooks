@@ -1,0 +1,1 @@
+Deterministic anchorDate backfill onto manual_recurring categories lacking one; the forecast still reads legacy rows without one exactly as before.
