@@ -158,7 +158,7 @@ export async function mergedRunStubsPdf(
 
   const merged = await PDFDocument.create()
   for (const stub of stubs) {
-    const record = await loadPdfRecordValues('pay_stub', orgId, stub.id)
+    const record = await loadPdfRecordValues('pay_stub', orgId, stub.id, options.allowedSubsidiaryIds ?? null)
     if (!record) continue
     const pdf = await mergeAndPrintPdf(template, record.values)
     const doc = await PDFDocument.load(pdf)
@@ -191,7 +191,7 @@ export async function mergedRunChequesPdf(
   const merged = await PDFDocument.create()
   let count = 0
   for (const cheque of batch.cheques) {
-    const record = await loadPdfRecordValues('payroll_cheque', orgId, cheque.stubId)
+    const record = await loadPdfRecordValues('payroll_cheque', orgId, cheque.stubId, allowedSubsidiaryIds ?? null)
     if (!record) continue
     const pdf = await mergeAndPrintPdf(template, record.values)
     const doc = await PDFDocument.load(pdf)
@@ -248,6 +248,9 @@ export async function emailRunStubs(
         // Encryption fails closed: a policy that cannot produce this
         // employee's password stops their email, it never downgrades it.
         encrypt: async (pdf: Buffer) => encryptPdf(pdf, { userPassword: stubPassword(policy, stub) }),
+        // The population gate above (runStubs) already fenced every stub;
+        // the load re-enforces the same scope per record.
+        scope: allowedSubsidiaryIds ?? null,
       })
       result.sent += 1
     } catch (e) {

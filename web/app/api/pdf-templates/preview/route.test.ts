@@ -14,7 +14,7 @@ interface PreviewState {
   granted: Set<string>
   allowedSubsidiaryIds: Set<string> | null
   sampleCalls: unknown[][]
-  valueCalls: string[]
+  valueCalls: unknown[][]
   renderCalls: number
 }
 const state: PreviewState = { granted: new Set(), allowedSubsidiaryIds: null, sampleCalls: [], valueCalls: [], renderCalls: 0 }
@@ -75,8 +75,8 @@ const mockSources = new Map<string, string>([
         state.sampleCalls.push(args)
         return '00000000-0000-4000-8000-00000000c001'
       }
-      export async function loadPdfRecordValues(_recordType, _orgId, id) {
-        state.valueCalls.push(id)
+      export async function loadPdfRecordValues(_recordType, _orgId, id, scope) {
+        state.valueCalls.push([id, scope === null || scope === undefined ? null : [...scope]])
         return { values: { party_name: 'Real Customer' }, reference: 'INV-000001' }
       }
     `,
@@ -166,6 +166,14 @@ test('the sample record is chosen inside the caller’s subsidiary scope', async
     assert.equal(recordType, meta.key)
     assert.equal(orgId, 'org-1')
     assert.deepEqual(scope, state.allowedSubsidiaryIds, `${meta.key}: the lookup carries the caller's subsidiary scope`)
+    // The scope is enforced again INSIDE the load: a record moved to a
+    // hidden subsidiary between sampling and loading must not render.
+    assert.equal(state.valueCalls.length, 1, `${meta.key}: exactly one record load`)
+    assert.deepEqual(
+      state.valueCalls[0]![1],
+      ['00000000-0000-4000-8000-000000000099'],
+      `${meta.key}: the load carries the same scope as the lookup`,
+    )
     assert.equal(state.renderCalls, 1)
   }
 })
@@ -178,5 +186,5 @@ test('an unrestricted designer with read authority previews the org-wide latest 
 
   assert.equal(response.status, 200)
   assert.deepEqual(state.sampleCalls, [['customer_invoice', 'org-1', null]])
-  assert.deepEqual(state.valueCalls, ['00000000-0000-4000-8000-00000000c001'])
+  assert.deepEqual(state.valueCalls, [['00000000-0000-4000-8000-00000000c001', null]])
 })

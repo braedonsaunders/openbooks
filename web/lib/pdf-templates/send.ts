@@ -70,10 +70,11 @@ export async function resolveRecordRecipient(
   recordType: string,
   orgId: string,
   id: string,
+  scope: ReadonlySet<string> | null,
 ): Promise<RecipientInfo | null> {
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
-  const record = await loadPdfRecordValues(recordType, orgId, id)
+  const record = await loadPdfRecordValues(recordType, orgId, id, scope)
   if (!record) return null
   const v = record.values as Record<string, unknown>
   const to = typeof v.party_email === 'string' && v.party_email.trim() ? v.party_email.trim() : null
@@ -122,6 +123,13 @@ export async function sendRecordPdfEmail(args: {
   message?: string
   templateId?: string | null
   /**
+   * The sender's subsidiary scope, enforced inside the record load (never
+   * trusted from an earlier check across the await boundary). Null only for
+   * the already-fenced batch paths, which gate the whole population before
+   * any send.
+   */
+  scope: ReadonlySet<string> | null
+  /**
    * Post-processing pass applied to the rendered bytes before they are
    * attached — how a confidential record (a pay stub) is emailed encrypted.
    * It throws rather than returning the plaintext when it cannot protect the
@@ -143,7 +151,7 @@ export async function sendRecordPdfEmail(args: {
 
   const [tpl, record, transport, actor] = await Promise.all([
     resolvePdfTemplate(args.orgId, args.recordType, args.templateId ?? null),
-    loadPdfRecordValues(args.recordType, args.orgId, args.id),
+    loadPdfRecordValues(args.recordType, args.orgId, args.id, args.scope),
     resolveOrgEmailTransport(args.orgId),
     resolveDeliveryActor(),
   ])

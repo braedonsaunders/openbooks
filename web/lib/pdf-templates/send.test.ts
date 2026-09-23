@@ -310,7 +310,7 @@ test('an interactive direct delivery is attributed to the sending user in the ca
   state.requestScope = true
   state.currentUser = { id: USER_ID }
 
-  const result = await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' })
+  const result = await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null })
 
   assert.equal(result.to, 'party@example.test')
   assert.equal(state.deliveries.length, 1)
@@ -338,7 +338,7 @@ test('a sent PDF pins its template design in the email_log evidence', async () =
   state.requestScope = true
   state.currentUser = { id: USER_ID }
 
-  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' })
+  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null })
 
   const meta = lastMeta()
   assert.equal(meta.templateId, 'template-1')
@@ -349,7 +349,7 @@ test('a sent PDF pins its template design in the email_log evidence', async () =
 test('a sessionless delivery records explicit system provenance instead of an anonymous row', async () => {
   reset()
 
-  const result = await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' })
+  const result = await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null })
 
   assert.equal(result.to, 'party@example.test')
   // Explicit provenance is recorded, and the delivery still happens — the
@@ -368,7 +368,7 @@ test('a signed-out request is likewise attributed as explicit system provenance'
   reset()
   state.requestScope = true
 
-  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' })
+  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null })
 
   const row = loggedRow(state.inserts.at(-1)!)
   assert.equal(row.created_by, null)
@@ -384,7 +384,7 @@ test('a failed provider send still carries attribution on the failed row', async
   state.sendError = new Error('smtp down')
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /smtp down/,
   )
 
@@ -400,7 +400,7 @@ test('an uncertain provider outcome remains uncertain instead of being overwritt
   state.sendOutcome = { kind: 'uncertain', reason: 'provider acceptance could not be confirmed' }
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /provider acceptance could not be confirmed/,
   )
 
@@ -421,7 +421,7 @@ test('an uncertainty persistence error is not relabelled as a failed delivery', 
   state.uncertaintyWriteError = new Error('uncertainty write failed')
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /uncertainty write failed/,
   )
 
@@ -438,7 +438,7 @@ test('an ambiguous uncertainty commit is not relabelled as a failed delivery', a
   state.uncertaintyWriteAmbiguous = true
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /uncertainty write commit status unknown/,
   )
 
@@ -513,7 +513,7 @@ test('a sent-state audit update that matches zero rows refuses instead of report
   state.auditUpdateMatches = false
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /was not marked sent|matched no row/u,
   )
   assert.equal(state.deliveries.length, 1, 'provider acceptance is not a substitute for the sent audit write')
@@ -528,7 +528,7 @@ test('an uncertain-state audit update that matches zero rows refuses so the fenc
   state.auditUpdateMatches = false
 
   await assert.rejects(
-    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1' }),
+    () => sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'inv-1', scope: null }),
     /was not marked uncertain|matched no row/u,
   )
   const uncertain = state.updates.filter((update) => update.text.includes("status = 'uncertain'"))

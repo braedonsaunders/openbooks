@@ -94,7 +94,7 @@ test('pay-stub YTD cannot disclose another legal entity or add another currency'
      if(sub===org.subsidiaryId&&currency==='CAD'&&!ownStub) ownStub=stub
     }
   })
-  const record=await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub',org.orgId,ownStub))
+  const record=await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub',org.orgId,ownStub,null))
   assert.ok(record)
   assert.equal(record.values.ytd_gross,'$300.00')
   assert.equal(record.values.ytd_net,'$300.00')

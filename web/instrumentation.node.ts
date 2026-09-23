@@ -88,7 +88,9 @@ export async function registerNodeInstrumentation() {
       ])
     const [tpl, record] = await Promise.all([
       resolvePdfTemplate(orgId, subjectKind, null),
-      loadPdfRecordValues(subjectKind, orgId, subjectId),
+      // System renderer: flows authorize the run, not a user subsidiary
+      // scope — null declares that posture explicitly at the load.
+      loadPdfRecordValues(subjectKind, orgId, subjectId, null),
     ])
     if (!tpl || !record) return null
     const pdf = await mergeAndPrintPdf(tpl, record.values)

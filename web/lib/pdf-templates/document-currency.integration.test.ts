@@ -29,7 +29,7 @@ test('document PDF amounts print in the document currency, not a fallback', { sk
       values (${id}, ${org.orgId}, 'customer_invoice', 'INV-EUR-1', '2026-07-15', 'EUR', '100', '0', '100')`))
     // Reads through a web reader run inside withOrgContext — importing the
     // reader pulls the web request-org resolver, which denies outside a scope.
-    const loaded = await withOrgContext(org.orgId, () => loadPdfRecordValues('customer_invoice', org.orgId, id))
+    const loaded = await withOrgContext(org.orgId, () => loadPdfRecordValues('customer_invoice', org.orgId, id, null))
     assert.ok(loaded, 'expected values for the inserted invoice')
     assert.equal(loaded.values['currency'], 'EUR')
     assert.match(String(loaded.values['total']), /€/)
@@ -56,7 +56,7 @@ test('a record whose org row is gone is refused, never printed in an invented cu
       update documents set org_id = ${orphanOrg} where id = ${id}`))
     try {
       await assert.rejects(
-        withOrgContext(orphanOrg, () => loadPdfRecordValues('customer_invoice', orphanOrg, id)),
+        withOrgContext(orphanOrg, () => loadPdfRecordValues('customer_invoice', orphanOrg, id, null)),
         (e: unknown) => {
           assert.ok(e instanceof MissingPdfOrgError, `expected MissingPdfOrgError, got ${e}`)
           assert.match((e as Error).message, /invented currency/)

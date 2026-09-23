@@ -198,6 +198,7 @@ test('an authorized sender reaches delivery exactly once with the validated reci
     to: 'cfo@buyer.test',
     message: 'Attached invoice',
     templateId: null,
+    scope: null,
   })
 })
 

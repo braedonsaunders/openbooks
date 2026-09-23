@@ -30,6 +30,11 @@ export async function sendTicketForSignature(args: {
   to: string
   message?: string | null
   appBaseUrl: string
+  /**
+   * The sender's subsidiary scope, enforced inside the ticket load — the
+   * attached PDF must never render a legal entity hidden from the sender.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ to: string }> {
   const doc = (await db.execute<{ id: string; status: string; document_number: string }>(sql`
     select id, status, document_number from documents
@@ -42,7 +47,7 @@ export async function sendTicketForSignature(args: {
 
   const [tpl, record, transport, org] = await Promise.all([
     resolvePdfTemplate(args.orgId, 'field_ticket', null),
-    loadPdfRecordValues('field_ticket', args.orgId, args.ticketId),
+    loadPdfRecordValues('field_ticket', args.orgId, args.ticketId, args.allowedSubsidiaryIds),
     resolveOrgEmailTransport(args.orgId),
     db.execute<{ name: string }>(sql`select name from orgs where id = ${args.orgId}`),
   ])
