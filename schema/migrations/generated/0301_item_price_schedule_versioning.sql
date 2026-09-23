@@ -20,6 +20,19 @@
 --
 -- No data change: existing rows start at revision 0 with no predecessor and
 -- no reason. Uses ordinal 0301 (0298 belongs to the g29 rate-profile lane).
+--
+-- Staged build (U12): each validated CHECK and the self-referential foreign
+-- key would scan the schedule history while holding the ALTER TABLE lock.
+-- Every guard arrives NOT VALID (a short lock that still enforces every new
+-- write — safe here because existing rows start at revision 0 with no
+-- predecessor and no reason, so none can violate) and a later statement
+-- VALIDATEs it under a lock that blocks neither reads nor writes. Each step
+-- is replay-safe: every ADD is guarded on pg_constraint and every VALIDATE
+-- runs only while its constraint is unvalidated, so a retry treats an
+-- already-validated guard as done. The end state is identical to the
+-- validated build: the same names, expressions and references, validated.
+-- No statement here needs CONCURRENTLY, so the file stays inside the
+-- tracked transaction.
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -34,11 +47,83 @@ ALTER TABLE public.item_price_schedules
 ALTER TABLE public.item_price_schedules
   ADD COLUMN IF NOT EXISTS change_reason text;
 
-ALTER TABLE public.item_price_schedules
-  ADD CONSTRAINT item_price_schedule_revision_nonnegative CHECK (revision >= 0);
-ALTER TABLE public.item_price_schedules
-  ADD CONSTRAINT item_price_schedule_reason_present
-  CHECK (change_reason IS NULL OR char_length(btrim(change_reason)) > 0);
-ALTER TABLE public.item_price_schedules
-  ADD CONSTRAINT item_price_schedule_supersedes_fk
-  FOREIGN KEY (org_id, supersedes_id) REFERENCES public.item_price_schedules (org_id, id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_revision_nonnegative'
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      ADD CONSTRAINT item_price_schedule_revision_nonnegative CHECK (revision >= 0)
+      NOT VALID;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_revision_nonnegative'
+       AND NOT convalidated
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      VALIDATE CONSTRAINT item_price_schedule_revision_nonnegative;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_reason_present'
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      ADD CONSTRAINT item_price_schedule_reason_present
+      CHECK (change_reason IS NULL OR char_length(btrim(change_reason)) > 0)
+      NOT VALID;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_reason_present'
+       AND NOT convalidated
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      VALIDATE CONSTRAINT item_price_schedule_reason_present;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_supersedes_fk'
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      ADD CONSTRAINT item_price_schedule_supersedes_fk
+      FOREIGN KEY (org_id, supersedes_id) REFERENCES public.item_price_schedules (org_id, id)
+      NOT VALID;
+  END IF;
+END
+$$;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+     WHERE conrelid = 'public.item_price_schedules'::regclass
+       AND conname = 'item_price_schedule_supersedes_fk'
+       AND NOT convalidated
+  ) THEN
+    ALTER TABLE public.item_price_schedules
+      VALIDATE CONSTRAINT item_price_schedule_supersedes_fk;
+  END IF;
+END
+$$;
