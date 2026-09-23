@@ -7,7 +7,7 @@ import { toUnits } from "../money/money.ts";
 import { getOnHand } from "./position.ts";
 import { issueInventory, receiveInventory } from "./movements.ts";
 import { revalueOpenLayersToStandardCost } from "./revaluation.ts";
-import { reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
+import { InventoryNrvError, reverseInventoryWritedown, writeDownInventoryToNrv } from "./nrv.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import {
   createScratchOrg,
@@ -926,6 +926,47 @@ test("standard-cost revaluation posts one balanced entry per owning legal entity
     assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subA), toUnits("-8"));
     assert.equal(await entityGlBalance(org.orgId, org.accounts.adjustment, subB), toUnits("-10"));
     await assertEntriesBalancedPerEntity(org.orgId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("NRV refuses negative and non-decimal per-unit rates with the domain error", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const position = {
+      itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+      subsidiaryId: org.subsidiaryId, date: org.date,
+    };
+    await receiveInventory(org.orgId, null, {
+      ...position, quantity: "2", unitCost: "100", offsetAccountId: org.accounts.ap,
+    });
+    const before = await getOnHand(org.orgId, position.itemId, position.stockLocationId);
+    // A negative rate would price the target below zero; garbage would
+    // previously escape as a bare money-parser Error that domain catchers
+    // miss. Both must fail as InventoryNrvError, before any lock or write.
+    for (const nrvPerUnit of ["-5", "-0.0001", "abc", "", "1.23456"]) {
+      const error = await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit })
+        .then(() => null, (e: unknown) => e);
+      assert.ok(
+        error instanceof InventoryNrvError,
+        `${JSON.stringify(nrvPerUnit)} must fail with InventoryNrvError, got ${String(error)}`,
+      );
+    }
+    const negative = await writeDownInventoryToNrv(org.orgId, null, { ...position, nrvPerUnit: "-5" })
+      .then(() => null, (e: unknown) => e);
+    assert.match(String((negative as Error)?.message ?? negative), /cannot be negative/);
+    const reversalError = await reverseInventoryWritedown(org.orgId, null, { ...position, nrvPerUnit: "abc" })
+      .then(() => null, (e: unknown) => e);
+    assert.ok(
+      reversalError instanceof InventoryNrvError,
+      `reversal garbage must fail with InventoryNrvError, got ${String(reversalError)}`,
+    );
+    // Refused inputs write nothing: layers and evidence are untouched.
+    assert.deepEqual(await getOnHand(org.orgId, position.itemId, position.stockLocationId), before);
+    const writedowns = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from inventory_writedowns where org_id = ${org.orgId}`));
+    assert.equal(writedowns.rows[0]!.n, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }

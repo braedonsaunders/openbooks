@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { fromUnits, mul, roundDiv, toUnits } from "../money/money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { cmp, fromUnits, mul, normalizeMoney, roundDiv, toUnits } from "../money/money.ts";
 import { getOnHandForEntity, lockInventoryPosition } from "./position.ts";
 import { inventoryOffsetAccountProblem, postInventoryEntry, stockLocationDim } from "./journal.ts";
 import { orgReportingFramework, type ReportingFramework } from "../platform/reporting-framework.ts";
@@ -39,6 +40,36 @@ export class InventoryNrvError extends Error {
 const SCALE = 10_000n;
 const valueAt = (quantityUnits: bigint, rateUnits: bigint): bigint =>
   roundDiv(quantityUnits * rateUnits, SCALE);
+
+/**
+ * NRV-per-unit input boundary. The rate feeds quantity × NRV straight into
+ * layer remeasurement, so a negative rate would write carrying value below
+ * zero and a non-decimal would escape as a bare money-parser Error that
+ * callers catching InventoryNrvError never see. Refuse both by name here,
+ * once, for write-downs and reversals alike.
+ */
+function persistNrvPerUnit(value: unknown): string {
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null) {
+    throw new InventoryNrvError(
+      "net realisable value per unit must be an exact decimal with at most 4 decimal places",
+    );
+  }
+  let rate: string;
+  try {
+    rate = normalizeMoney(exact);
+  } catch {
+    throw new InventoryNrvError(
+      "net realisable value per unit must be an exact decimal with at most 4 decimal places",
+    );
+  }
+  if (cmp(rate, "0") < 0) {
+    throw new InventoryNrvError(
+      "net realisable value per unit cannot be negative — enter zero or a positive amount",
+    );
+  }
+  return rate;
+}
 type RemainingLayer = {
   remaining_original_cost: string | null;
   id: string;
@@ -269,6 +300,8 @@ export async function writeDownInventoryToNrv(
   actorId: string | null,
   input: NrvWritedownInput,
 ): Promise<NrvResult> {
+  // Pure input boundary before any lock or journal opens.
+  const nrvRate = persistNrvPerUnit(input.nrvPerUnit);
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
       throw new InventoryNrvError("inventory feature is disabled");
@@ -311,7 +344,7 @@ export async function writeDownInventoryToNrv(
         owner.subsidiaryId,
       );
       const previousUnits = toUnits(onHand.value);
-      const targetUnits = toUnits(mul(onHand.quantity, input.nrvPerUnit));
+      const targetUnits = toUnits(mul(onHand.quantity, nrvRate));
       const deltaUnits = targetUnits - previousUnits;
       if (deltaUnits < 0n) {
         plans.push({
@@ -434,6 +467,7 @@ export async function reverseInventoryWritedown(
   input: NrvReversalInput,
 ): Promise<NrvResult> {
   if (!isIsoCalendarDate(input.date)) throw new InventoryNrvError("reversal date must be a valid YYYY-MM-DD date");
+  const nrvRate = persistNrvPerUnit(input.nrvPerUnit);
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "inventory"))) {
       throw new InventoryNrvError("inventory feature is disabled");
@@ -486,7 +520,7 @@ export async function reverseInventoryWritedown(
       input.subsidiaryId,
     );
     const previousUnits = toUnits(onHand.value);
-    const targetByNrv = toUnits(mul(onHand.quantity, input.nrvPerUnit));
+    const targetByNrv = toUnits(mul(onHand.quantity, nrvRate));
     const requested = targetByNrv - previousUnits;
     if (requested <= 0n) {
       throw new InventoryNrvError("revised net realisable value is not above the carrying amount — nothing to reverse");
