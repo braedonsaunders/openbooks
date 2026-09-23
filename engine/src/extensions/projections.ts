@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { actorHasPermission } from '../organization/actor-permissions.ts';
 import { db, type SqlExecutor } from '../platform/db.ts';
 import { isCataloguePermission, permissionSetCovers } from '../organization/permissions.ts';
-import { defaultNavConfig, type OrgNavConfig } from '../navigation/nav-registry.ts';
+import { defaultNavConfig, type NavGroupConfig, type OrgNavConfig } from '../navigation/nav-registry.ts';
 import { supplementalContributionSchema, type SupplementalContribution } from './contribution-schemas.ts';
 
 export async function listActiveExtensionContributions(orgId: string, tx: SqlExecutor = db) {
@@ -63,6 +63,44 @@ async function audit(tx: SqlExecutor, args: { orgId: string; actorId: string; ro
       ${JSON.stringify({ event: args.event ?? 'extension_projection', reason: args.reason, before: args.before, after: args.after })}::jsonb, ${args.actorId})`);
 }
 
+/**
+ * Hard bound on the live nav config (visible + retired rows). The visible
+ * limit is 256; retired extension history may at most match live navigation
+ * in size. Beyond that the oldest retired rows are reaped — their full
+ * lineage survives in audit_log's before/after snapshots, so the live jsonb
+ * stays bounded no matter how much an extension churns. Reaping only ever
+ * removes extension-owned retired links: user-hidden rows are never touched,
+ * and reaping can never refuse — only the visible-only 256 cap above refuses.
+ */
+export const NAV_CONFIG_TOTAL_ROW_CAP = 512;
+
+function countNavRows(config: OrgNavConfig): number {
+  return config.groups.reduce((n, group) => n + group.items.length, 0);
+}
+
+/**
+ * Reap extension-owned retired (hidden) link rows, oldest-first, until the
+ * config fits NAV_CONFIG_TOTAL_ROW_CAP. Retired rows append at group end
+ * when hidden (see the retire loop below), so traversal order IS retirement
+ * order and the first hidden row met is the oldest. Never touches a visible
+ * row or a user-hidden row: retired history can never block an install.
+ * Returns the pruned count. Pure — unit-tested directly.
+ */
+export function reapRetiredNavLinks(config: OrgNavConfig): number {
+  let pruned = 0;
+  while (countNavRows(config) > NAV_CONFIG_TOTAL_ROW_CAP) {
+    let victim: { group: NavGroupConfig; index: number } | null = null;
+    for (const group of config.groups) {
+      const index = group.items.findIndex((item) => item.kind === 'link' && item.hidden && item.extensionKey != null);
+      if (index >= 0) { victim = { group, index }; break; }
+    }
+    if (!victim) return pruned;
+    victim.group.items.splice(victim.index, 1);
+    pruned += 1;
+  }
+  return pruned;
+}
+
 /** Caller owns the extension/org transaction lock. All projections and their evidence commit together. */
 export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   orgId: string; actorId: string; extensionId: string; extensionKey: string; versionId: string;
@@ -94,8 +132,15 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   const beforeNav = navRow?.config ?? null;
   const config: OrgNavConfig = structuredClone(beforeNav ?? defaultNavConfig());
   let changed = false;
-  for (const group of config.groups) for (const item of group.items) {
-    if (item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden) { item.hidden = true; changed = true; }
+  // Retire this extension's live links by moving them to group end as hidden
+  // rows: their relative order is retirement order, which is what
+  // reapRetiredNavLinks prunes oldest-first. Visible order is untouched.
+  for (const group of config.groups) {
+    const retiring = group.items.filter((item) => item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden);
+    if (!retiring.length) continue;
+    group.items = group.items.filter((item) => !(item.kind === 'link' && item.extensionKey === args.extensionKey && !item.hidden));
+    for (const item of retiring) { item.hidden = true; group.items.push(item); }
+    changed = true;
   }
   for (const contribution of navs) {
     // Ownership is a VISIBLE-link property: withdraw hides (never deletes) an
@@ -116,6 +161,10 @@ export async function projectSupplementalContributions(tx: SqlExecutor, args: {
   // toward the limit. Retired links therefore never block a new install.
   const visibleNavItems = config.groups.reduce((n, group) => n + group.items.filter((item) => !item.hidden).length, 0);
   if (visibleNavItems > 256) throw new ExtensionProjectionError('navigation exceeds 256 items');
+  // The visible refusal above comes first: reaping retired rows can never fix
+  // a genuinely over-full live nav, and retired history can never block an
+  // install. Pruned rows survive in this write's audit before/after snapshot.
+  if (reapRetiredNavLinks(config) > 0) changed = true;
   if (changed) {
     const row = (await tx.execute<{ id: string }>(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
       values (${args.orgId}, ${JSON.stringify(config)}::jsonb, ${args.actorId}, ${args.actorId})
