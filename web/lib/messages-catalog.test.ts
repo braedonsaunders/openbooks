@@ -3789,7 +3789,7 @@ const I8_APPS_IDENTICAL_BY_FACT = new Set([
 test('I8 apps copy ships translated in fr, es, de, ja, zh and pt-BR', () => {
   const I8_source = flattenCatalog('en')
   const I8_wanted = [...I8_source.keys()].filter((I8_key) => I8_key.startsWith('apps.'))
-  assert.equal(I8_wanted.length, 331, 'apps source inventory changed; translate the new keys in fr/es/de/ja/zh/pt-BR and re-pin')
+  assert.equal(I8_wanted.length, 334, 'apps source inventory changed; translate the new keys in fr/es/de/ja/zh/pt-BR and re-pin')
   const I8_tokens = (I8_value: string): Set<string> =>
     new Set(I8_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I8_arms = (I8_value: string): string[] => I8_value.match(/, +(plural|select)/g) ?? []
