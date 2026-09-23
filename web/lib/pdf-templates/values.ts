@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money/money.ts'
@@ -25,12 +25,22 @@ export type PdfRecordValues = {
   reference: string
 }
 
+/** Local-midnight Date for civil parts. setFullYear keeps literal years
+ *  0001-0099 that new Date(y, …) would remap onto 1900-1999 (a 0096 invoice
+ *  date rendered with a 1996 year); local midnight, so the day never shifts. */
+function localMidnight(year: number, monthIndex: number, day: number): Date {
+  const date = new Date(0)
+  date.setFullYear(year, monthIndex, day)
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
 function fmtDate(v: unknown, locale: string): string {
   if (!v) return ''
   const s = String(v)
   // date columns arrive as 'YYYY-MM-DD' — parse as local so the day never shifts.
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s)
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s)
+  const d = m ? localMidnight(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(s)
   if (Number.isNaN(d.getTime())) return s
   return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
 }
@@ -512,13 +522,12 @@ async function loadFieldTicketValues(
   // Day axis: up to 7 days from periodStart.
   const days: string[] = []
   {
-    const [y, mo, d] = ft.periodStart.split('-').map(Number)
-    const cur = new Date(Date.UTC(y!, mo! - 1, d!, 12))
+    // addCalendarDays parses the ISO string (exact for years 0001-0099)
+    // instead of Date.UTC, which would remap years 0-99 onto 1900-1999.
     for (let i = 0; i < 7; i++) {
-      const dayIso = cur.toISOString().slice(0, 10)
+      const dayIso = addCalendarDays(ft.periodStart, i)
       if (dayIso > ft.periodEnd) break
       days.push(dayIso)
-      cur.setUTCDate(cur.getUTCDate() + 1)
     }
   }
   const tier = (

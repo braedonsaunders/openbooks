@@ -11,6 +11,9 @@
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
+/** en-US short month names, Jan→Dec — the exact legacy toLocaleString rendering. */
+const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export interface CustomerInsightText {
   title: string;
   message: string;
@@ -53,8 +56,13 @@ export interface CustomerStrings {
 export const englishCustomerStrings: CustomerStrings = {
   locale: "en",
   monthLabel: (ym) => {
+    // Static table, never a Date: the month index passes straight through
+    // (Date.UTC would remap years 0-99 onto 1900-1999, but the label only
+    // reads the month name and the 2-digit year suffix, so output is
+    // identical at every year — verified "Feb 26"/"Feb 96" against the old
+    // toLocaleDateString rendering).
     const [y, m] = ym.split("-").map(Number);
-    return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
+    return `${LEGACY_MONTHS[((m ?? 1) - 1 + 12) % 12] ?? ym} ${String(y ?? "").slice(-2)}`;
   },
   displayCustomerName: (name) => (name === "Unknown" ? "Unknown" : name),
   displayJobName: (name) => (name === "Untitled project" ? "Untitled project" : name),

@@ -2,6 +2,7 @@ import "server-only";
 import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { add, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
@@ -237,7 +238,9 @@ async function monthlySeries(
   strings: HealthStrings = englishHealthStrings,
 ): Promise<MonthPoint[]> {
   const end = new Date(to + "T00:00:00Z");
-  const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
+  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999; month underflow normalizes the same way.
+  const start = utcDateFromParts(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1);
   const startIso = start.toISOString().slice(0, 10);
   // A per-month P&L series is the exact shape gl_month_activity stores, so the
   // whole months read straight from it; only the final (possibly partial)
@@ -312,7 +315,7 @@ async function monthlySeries(
   }
   const out: MonthPoint[] = [];
   for (let i = 0; i < months; i++) {
-    const dt = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + i, 1));
+    const dt = utcDateFromParts(start.getUTCFullYear(), start.getUTCMonth() + i, 1);
     const ym = `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`;
     const row = by.get(ym);
     const revenue = Number(row?.revenue ?? 0);

@@ -3,7 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
 import { getHeadcountAsOf, getHeadcountTotalsAsOf } from '@openbooks/engine/src/hrm/employment-read.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { HrmChangeRequestError, listChangeRequests } from '@openbooks/engine/src/hrm/change-requests.ts'
@@ -235,8 +235,9 @@ export function monthEndsBefore(date: string, count: number): string[] {
   const [year, month] = date.split('-').map(Number) as [number, number, number]
   const out: string[] = []
   for (let back = count; back >= 1; back -= 1) {
-    // Day 0 of month m is the last day of month m-1 (UTC arithmetic only).
-    const end = new Date(Date.UTC(year, month - 1 - back + 1, 0))
+    // Day 0 of month m is the last day of month m-1; utcDateFromParts keeps
+    // literal years 0001-0099 that Date.UTC would remap onto 1900-1999.
+    const end = utcDateFromParts(year, month - 1 - back + 1, 0)
     out.push(end.toISOString().slice(0, 10))
   }
   return out

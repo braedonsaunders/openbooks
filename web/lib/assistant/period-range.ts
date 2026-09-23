@@ -13,8 +13,12 @@ export type RangeArgs = { period?: string; fromDate?: string; toDate?: string; p
 function shiftYears(iso: string, years: number): string {
   const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
   const year = y - years;
-  const lastDay = new Date(Date.UTC(year, m, 0)).getUTCDate();
-  const day = Math.min(d, lastDay);
+  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
+  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
+  // copied here so this pure DB-free module loads no platform stack).
+  const probe = new Date(0);
+  probe.setUTCFullYear(year, m, 0);
+  const day = Math.min(d, probe.getUTCDate());
   return `${String(year).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 

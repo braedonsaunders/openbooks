@@ -19,6 +19,9 @@
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
+/** en-US short month names, Jan→Dec — the exact legacy toLocaleString rendering. */
+const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 export interface TrueCostStrings {
   locale: string;
   monthLabel(ym: string): string;
@@ -48,9 +51,10 @@ export interface TrueCostStrings {
 export const englishTrueCostStrings: TrueCostStrings = {
   locale: "en",
   monthLabel: (ym) => {
+    // Static table, never a Date: the label only reads the month name and the
+    // year suffix from the parsed numbers, so output is identical at every year.
     const [y, m] = ym.split("-").map(Number);
-    const d = new Date(Date.UTC(y!, m! - 1, 1));
-    return `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} '${String(y).slice(2)}`;
+    return `${LEGACY_MONTHS[((m ?? 1) - 1 + 12) % 12] ?? ym} '${String(y ?? "").slice(2)}`;
   },
   displayEmployeeName: (name) => name,
   displayProfileName: (name) => name,
