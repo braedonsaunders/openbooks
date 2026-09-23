@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   PspSettlementError,
+  PspSettlementConflictError,
   importSettlementBatch,
   parseChargebeeSettlement,
   parseRecurlySettlement,
@@ -242,6 +243,12 @@ export async function POST(req: Request) {
   } catch (e) {
     if (e instanceof ScopeNotFoundError) {
       return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
+    if (e instanceof PspSettlementConflictError) {
+      return NextResponse.json(
+        { error: e.message, batch: e.persistedBatch },
+        { status: 409 },
+      );
     }
     if (e instanceof UnrestrictedScopeError) {
       return NextResponse.json({ error: "requires unrestricted subsidiary access" }, { status: 403 });

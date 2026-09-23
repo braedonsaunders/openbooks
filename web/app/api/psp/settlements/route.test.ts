@@ -143,6 +143,9 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
 
       export class PspSettlementError extends Error {}
+      export class PspSettlementConflictError extends PspSettlementError {
+        constructor(message, persistedBatch) { super(message); this.persistedBatch = persistedBatch }
+      }
       export class ScopeNotFoundError extends Error {}
       export class UnrestrictedScopeError extends Error {}
 
