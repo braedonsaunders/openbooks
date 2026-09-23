@@ -348,10 +348,11 @@ test('restricted callers only see runs inside their subsidiary scope', { skip: !
       assert.deepEqual(await executeAssistantTool(outside, 'explain_allocation', { runId }), {
         ok: false, error: 'allocation_run_not_found',
       });
-      // Pinning a subsidiary outside the caller's scope is refused.
+      // Pinning a subsidiary outside the caller's scope is refused by name
+      // (the shared engine scope helper's refusal, same as the preview route).
       assert.deepEqual(await executeAssistantTool(outside, 'preview_allocation', {
         ruleKey: 'tool-sweep', periodId: s.periodId, subsidiaryId: s.subsidiaryId,
-      }), { ok: false, error: 'forbidden' });
+      }), { ok: false, error: "subsidiary outside the caller's scope" });
     });
   } finally {
     await dropScratchOrg(s.orgId);
