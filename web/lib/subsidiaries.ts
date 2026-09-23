@@ -77,10 +77,19 @@ export async function subsidiaryUiOptions(
 
 /** The org's root subsidiary id. */
 export async function rootSubsidiaryId(): Promise<string> {
-  const r = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries where parent_id is null limit 1`));
+  return (await rootSubsidiary()).id;
+}
+
+/**
+ * The org's root subsidiary with its display name. Single-entity orgs (the
+ * subsidiary picker off) create against the root, and the create form must
+ * show its NAME — never the raw id as a label.
+ */
+export async function rootSubsidiary(): Promise<{ id: string; name: string }> {
+  const r = (await db.execute<{ id: string; name: string }>(sql`
+    select id, name from subsidiaries where parent_id is null limit 1`));
   if (!r.rows[0]) throw new Error("org has no root subsidiary");
-  return r.rows[0].id;
+  return r.rows[0];
 }
 
 /** `subId`'s subtree (inclusive) over a preloaded option list. */

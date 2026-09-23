@@ -33,7 +33,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
-import { rootSubsidiaryId, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
+import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
 import {
@@ -576,9 +576,20 @@ export async function loadRecruitingPage(
   if (creating) {
     const visible = await subsidiaryUiOptions(authz.user.orgId)
     const scoped = visible.filter((option) => authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id))
-    const employers = scoped.length > 0
-      ? scoped.map((option) => ({ value: option.id, label: option.name }))
-      : [{ value: await rootSubsidiaryId(), label: '' }]
+    // The employer picker shows NAMES, never ids: a single-entity org
+    // (picker off, nothing visible) creates against its named root, while a
+    // caller scoped out of every visible entity is refused by name — never
+    // offered an unauthorized root.
+    let employers = scoped.map((option) => ({ value: option.id, label: option.name }))
+    let employerRefusal: string | null = null
+    if (employers.length === 0) {
+      if (visible.length === 0) {
+        const root = await rootSubsidiary()
+        employers = [{ value: root.id, label: root.name }]
+      } else {
+        employerRefusal = t('recruiting.create.noEmployer')
+      }
+    }
     const departmentRows = (await db.execute<{ id: string; name: string }>(sql`
       select id::text as id, name from departments
        where org_id = ${authz.user.orgId}::uuid and is_active
@@ -586,6 +597,7 @@ export async function loadRecruitingPage(
     create = {
       basePath: '/hrm/recruiting',
       employers,
+      employerRefusal,
       departments: departmentRows.map((row) => ({ value: row.id, label: row.name })),
       labels: {
         title: t('recruiting.create.titleField'),

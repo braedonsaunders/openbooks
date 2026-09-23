@@ -17,6 +17,11 @@ export interface PositionCreateProps {
   effectiveDate: string
   /** Visible employer subsidiaries; one entry renders as a fixed value, never a picker. */
   employers: PositionCreateOption[]
+  /**
+   * Set when the caller may see no legal entity: the form names the remedy
+   * instead of offering an unauthorized employer. Null in the normal case.
+   */
+  employerRefusal: string | null
   departments: PositionCreateOption[]
   statuses: PositionCreateOption[]
   labels: {
@@ -42,7 +47,7 @@ export interface PositionCreateProps {
  * use — with its refusals rendered as the error, never swallowed. On
  * success the URL moves to the new position's own drawer.
  */
-export function PositionCreateForm({ basePath, effectiveDate, employers, departments, statuses, labels }: PositionCreateProps) {
+export function PositionCreateForm({ basePath, effectiveDate, employers, employerRefusal, departments, statuses, labels }: PositionCreateProps) {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const [code, setCode] = useState('')
@@ -108,16 +113,22 @@ export function PositionCreateForm({ basePath, effectiveDate, employers, departm
           <Input id="position-title" value={title} required maxLength={240} disabled={busy} onChange={(event) => setTitle(event.target.value)} />
         </div>
       </div>
-      {employers.length > 1 ? (
-        <div className="space-y-1.5">
-          <Label htmlFor="position-employer">{labels.employer}</Label>
+      <div className="space-y-1.5">
+        <Label htmlFor="position-employer">{labels.employer}</Label>
+        {employerRefusal ? (
+          <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+            {employerRefusal}
+          </p>
+        ) : employers.length === 1 ? (
+          <p className="text-sm text-slate-600 dark:text-slate-300">{employers[0]?.label}</p>
+        ) : (
           <Select id="position-employer" value={employer} disabled={busy} onChange={(event) => setEmployer(event.target.value)}>
             {employers.map((option) => (
               <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </Select>
-        </div>
-      ) : null}
+        )}
+      </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="position-department">{labels.department}</Label>
@@ -155,7 +166,7 @@ export function PositionCreateForm({ basePath, effectiveDate, employers, departm
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : null}
       <div className="flex justify-end gap-2">
-        <Button type="submit" disabled={busy}>
+        <Button type="submit" disabled={busy || employerRefusal !== null}>
           {busy ? tCommon('actions.saving') : labels.submit}
         </Button>
       </div>
