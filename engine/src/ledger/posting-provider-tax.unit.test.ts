@@ -116,14 +116,41 @@ const evidenceReads = (steps: Record<string, unknown>[][]) => {
   };
 };
 
+const codeRow = (over: Record<string, unknown> = {}) => ({
+  id: "TAX-ON",
+  code: "TX",
+  calculationType: "standard",
+  recoverablePercent: "100",
+  roundingScale: 2,
+  collectedAccountId: null,
+  paidAccountId: null,
+  withholdingAccountId: null,
+  isActive: true,
+  ...over,
+});
+
+const mappedConfig = () =>
+  configRow({ settings: { jurisdictionTaxCodes: { TX: "TAX-ON" } } });
+
 test("a matching immutable quote resolves to the stored evidence components", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[configRow()], [addressRow()], [quoteRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
   const plans = await resolveProviderTaxPlans(doc(), [line()], deps());
   assert.equal(plans.length, 1);
   const [plan] = plans;
   assert.ok(plan);
   assert.equal(plan.line.id, "line-1");
   assert.deepEqual(plan.components, [component()]);
+});
+
+test("a component bound to the wrong tax code is refused even when amounts match", async (t) => {
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
+  const swapped = deps({ taxComponentsByLine: new Map([["line-1", [component({ taxCodeId: "OTHER" })]]]) });
+  await assert.rejects(
+    () => resolveProviderTaxPlans(doc(), [line()], swapped),
+    (e: unknown) =>
+      e instanceof PostingError &&
+      /books the wrong tax code for provider jurisdiction "TX" \(mapped to "TX"\)/.test(e.message),
+  );
 });
 
 test("migrations bypass provider tax without touching evidence", async () => {
@@ -189,7 +216,7 @@ test("a stale quote that no longer matches the document is refused", async (t) =
 });
 
 test("provider evidence that changed the tax forces a draft recalculation", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[configRow()], [addressRow()], [quoteRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
   // The approved line now claims 14.00 of tax against a 13.00 quote: posting
   // revalidates instead of amending, so the draft must be recalculated.
   await assert.rejects(

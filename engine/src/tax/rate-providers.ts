@@ -1026,6 +1026,87 @@ export async function resolveProviderTaxComponents(
 }
 
 /**
+ * Compare each booked component's tax-code binding against the immutable
+ * provider quote: position by position, the quote's jurisdiction must resolve
+ * through the CURRENT mapping to the booked tax code, and the booked posting
+ * accounts and calculation type must still match that code. Amounts alone
+ * cannot prove this — equal-dollar components with swapped codes add up fine
+ * while booking every dollar to the wrong jurisdiction liability. Evidence
+ * from before the mapping (or from a mapping since changed) fails closed
+ * with a re-quote remedy instead of posting under the wrong code. Returns a
+ * human-readable mismatch, or null when every binding holds.
+ */
+export async function providerBindingMismatch(
+  orgId: string,
+  evidence: Array<{
+    sequence: number;
+    taxCodeId: string;
+    calculationType: string;
+    collectedAccountId: string | null;
+    paidAccountId: string | null;
+    withholdingAccountId: string | null;
+  }>,
+  quote: TaxComponentQuote[],
+  settings: Record<string, unknown>,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<string | null> {
+  const ordered = [...evidence].sort((a, b) => a.sequence - b.sequence);
+  if (ordered.length !== quote.length) {
+    return `booked ${ordered.length} tax component(s) but the provider quote has ${quote.length}`;
+  }
+  let mapping: Record<string, string>;
+  try {
+    mapping = readJurisdictionMapping(settings);
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  for (let index = 0; index < quote.length; index++) {
+    const quoted = quote[index]!;
+    const booked = ordered[index]!;
+    const expected = mapping[quoted.jurisdiction];
+    if (!expected) {
+      return (
+        `provider jurisdiction "${quoted.jurisdiction}" has no mapped tax code — ` +
+        `re-quote the draft against the current provider mapping before approval`
+      );
+    }
+    const code = await providerTaxCodeFields(orgId, expected, quoted.jurisdiction, runner).catch(
+      (error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        return { failed: message } as const;
+      },
+    );
+    if ("failed" in code) return `${code.failed} — re-quote the draft before approval`;
+    if (booked.taxCodeId !== code.id) {
+      return (
+        `component ${index + 1} books the wrong tax code for provider jurisdiction ` +
+        `"${quoted.jurisdiction}" (mapped to "${code.code}") — re-quote the draft before approval`
+      );
+    }
+    if (booked.calculationType !== code.calculationType) {
+      return (
+        `component ${index + 1} books ${booked.calculationType} tax under code "${code.code}" ` +
+        `which is now ${code.calculationType} — re-quote the draft before approval`
+      );
+    }
+    const accounts: Array<[string, string | null, string | null]> = [
+      ["collected", booked.collectedAccountId, code.collectedAccountId],
+      ["paid", booked.paidAccountId, code.paidAccountId],
+      ["withholding", booked.withholdingAccountId, code.withholdingAccountId],
+    ];
+    for (const [label, bookedAccount, currentAccount] of accounts) {
+      if ((bookedAccount ?? null) !== (currentAccount ?? null)) {
+        return (
+          `component ${index + 1} books ${label} account ${bookedAccount ?? "none"} but tax code ` +
+          `"${code.code}" now posts to ${currentAccount ?? "none"} — re-quote the draft before approval`
+        );
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Pure: compare booked line components against the immutable provider quote,
  * in posting order. Returns a human-readable mismatch, or null when every
  * booked per-jurisdiction amount equals the quote. Posting calls this so the
