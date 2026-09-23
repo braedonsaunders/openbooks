@@ -84,7 +84,18 @@ export interface SftpResolver {
 }
 
 interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
-interface OpenDir { entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[]; sent: boolean }
+interface OpenDir { entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[]; next: number }
+
+/**
+ * Bounds for one READDIR reply. ssh2 builds a single response packet per
+ * NAME reply and its parser rejects packets over 256 KiB (ordinary clients
+ * often cap lower), so a directory of enough or long names must be streamed
+ * in batches: at most 100 entries and at most ~32 KiB of estimated encoded
+ * names per reply, then EOF. At least one entry is always returned per call
+ * so iteration always makes progress.
+ */
+const MAX_READDIR_ENTRIES = 100;
+const MAX_READDIR_BYTES = 32 * 1024;
 
 /**
  * Per-session resource caps for one SFTP connection. Every OPEN reads the
@@ -327,7 +338,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               // name (the OPEN guard below is the second half).
               const entries = (await backend.list(p)).filter((e) => !isSftpTempName(e.name));
               const h = newHandle();
-              dirs.set(h.toString(), { entries, sent: false });
+              dirs.set(h.toString(), { entries, next: 0 });
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
           });
@@ -335,9 +346,20 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             if (!(await checkAlive(reqid))) return;
             const d = dirs.get(handle.toString());
             if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
-            if (d.sent) return sftp.status(reqid, STATUS_CODE.EOF);
-            d.sent = true;
-            sftp.name(reqid, d.entries.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) })));
+            if (d.next >= d.entries.length) return sftp.status(reqid, STATUS_CODE.EOF);
+            const batch: typeof d.entries = [];
+            let bytes = 0;
+            while (d.next < d.entries.length && batch.length < MAX_READDIR_ENTRIES) {
+              const e = d.entries[d.next]!;
+              // Estimated encoded size of this name in the reply packet:
+              // filename + longname bytes plus attribute overhead.
+              const estimate = Buffer.byteLength(e.name) + Buffer.byteLength(longname(e.name, e.isDir, e.size)) + 64;
+              if (batch.length > 0 && bytes + estimate > MAX_READDIR_BYTES) break;
+              batch.push(e);
+              bytes += estimate;
+              d.next++;
+            }
+            sftp.name(reqid, batch.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) })));
           });
 
           sftp.on("OPEN", async (reqid, filename, flags) => {

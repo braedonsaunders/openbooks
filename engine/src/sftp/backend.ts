@@ -272,17 +272,33 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
   return {
     async list(dir) {
       const Prefix = dirKey(dir);
-      const res = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix, Delimiter: "/" }));
       const out: SftpEntry[] = [];
-      for (const c of res.CommonPrefixes ?? []) {
-        const name = c.Prefix!.slice(Prefix.length).replace(/\/$/, "");
-        if (name) out.push({ name, isDir: true, size: 0, mtimeMs: Date.now() });
-      }
-      for (const o of res.Contents ?? []) {
-        const name = o.Key!.slice(Prefix.length);
-        if (!name || name.endsWith("/")) continue; // skip the folder marker itself
-        out.push({ name, isDir: false, size: o.Size ?? 0, mtimeMs: (o.LastModified ?? new Date()).getTime() });
-      }
+      // S3 returns at most 1,000 keys per ListObjectsV2 response: follow the
+      // continuation token until the listing reports complete, accumulating
+      // BOTH CommonPrefixes and Contents on every page. A single page would
+      // silently drop every key past page one from bank-import inventories
+      // and directory listings — files that could stay unimported forever.
+      let ContinuationToken: string | undefined;
+      // A prefix spanning pages repeats on every page it touches (the
+      // service may return the same CommonPrefix more than once): dedupe so
+      // one folder lists once no matter how many pages it spans.
+      const seenDirs = new Set<string>();
+      do {
+        const res = await client().send(new ListObjectsV2Command({ Bucket: bucket, Prefix, Delimiter: "/", ContinuationToken }));
+        for (const c of res.CommonPrefixes ?? []) {
+          const name = c.Prefix!.slice(Prefix.length).replace(/\/$/, "");
+          if (name && !seenDirs.has(name)) {
+            seenDirs.add(name);
+            out.push({ name, isDir: true, size: 0, mtimeMs: Date.now() });
+          }
+        }
+        for (const o of res.Contents ?? []) {
+          const name = o.Key!.slice(Prefix.length);
+          if (!name || name.endsWith("/")) continue; // skip the folder marker itself
+          out.push({ name, isDir: false, size: o.Size ?? 0, mtimeMs: (o.LastModified ?? new Date()).getTime() });
+        }
+        ContinuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+      } while (ContinuationToken);
       return out;
     },
     async stat(p) {

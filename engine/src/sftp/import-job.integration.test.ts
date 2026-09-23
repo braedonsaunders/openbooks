@@ -432,3 +432,47 @@ test(
     }
   },
 );
+
+test(
+  "a failing watch-folder file never starves the files behind it",
+  { skip: !DB },
+  async () => {
+    const f = await seedSftpFixture();
+    try {
+      // Byte-order first: a persistently unparseable file that sorts ahead
+      // of a good one. The scan must record its failure on its own outcome
+      // and still attempt every later key.
+      stageFile(f.rootPrefix, "inbound", "a-broken.ofx", Buffer.from("not a statement at all"));
+      const lateFitid = `sftp-late-${randomUUID()}`;
+      stageFile(f.rootPrefix, "inbound", "z-good.ofx", ofxStatement([lateFitid]));
+
+      const runs = await runDueSftpImports(f.org.orgId);
+      const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
+      assert.ok(authored, "the authored schedule must be scanned");
+      assert.deepEqual(
+        authored.files.map((entry) => entry.file).sort(),
+        ["a-broken.ofx", "acct.ofx", "z-good.ofx"],
+        "every listed key is attempted, including the keys behind the failure",
+      );
+      const broken = authored.files.find((entry) => entry.file === "a-broken.ofx")!;
+      assert.ok(broken.error, "the failing file records its own error");
+      assert.equal(broken.imported, 0);
+      assert.match(authored.errors.join("\n"), /^a-broken\.ofx: /m);
+      const good = authored.files.find((entry) => entry.file === "z-good.ofx")!;
+      assert.equal(good.error, undefined);
+      assert.equal(good.imported, 1, "the file behind the failure is still attempted and imported");
+      assert.equal(authored.files.find((entry) => entry.file === "acct.ofx")!.imported, 2);
+      const lines = await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from bank_statement_lines
+         where org_id = ${f.org.orgId} and bank_transaction_id = ${lateFitid}
+      `);
+      assert.equal(lines.rows[0]!.n, 1);
+      // The failure stays in the folder for a later retry; the import moves on.
+      assert.ok(listFolder(f.rootPrefix, "inbound").includes("a-broken.ofx"));
+      assert.ok(!listFolder(f.rootPrefix, "inbound").includes("z-good.ofx"));
+    } finally {
+      await dropScratchOrgReporting(f.org.orgId);
+      rmSync(scratchDataDir, { recursive: true, force: true });
+    }
+  },
+);

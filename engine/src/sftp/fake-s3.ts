@@ -16,7 +16,7 @@ import {
  * `sent` so tests can assert the serialized wire form (e.g. the encoded
  * `CopySource` header).
  *
- * Two AWS behaviors are emulated because the backend depends on them:
+ * Three AWS behaviors are emulated because the backend depends on them:
  * - LIST with a Prefix returns every key under that prefix, INCLUDING the
  *   zero-byte folder marker itself — callers must not mistake the marker for
  *   a child object.
@@ -24,6 +24,9 @@ import {
  *   a CopySource whose key portion carries a raw space, `#`, or `?` is
  *   refused exactly like the service refuses it, so a rename that forgets to
  *   encode fails here instead of silently passing.
+ * - LIST pages at 1,000 keys with IsTruncated/NextContinuationToken, so a
+ *   caller that never follows the token loses keys here exactly as against
+ *   AWS. The token is the numeric offset of the next page.
  */
 
 interface StoredObject {
@@ -87,18 +90,31 @@ export function createFakeS3(): FakeS3 {
       const delimiter = input["Delimiter"] as string | undefined;
       const maxKeys = input["MaxKeys"] as number | undefined;
       const matching = [...objects.keys()].filter((key) => key.startsWith(prefix)).sort();
+      // The service pages every listing at 1,000 keys: emulate pages over the
+      // matched keyspace so callers that ignore the continuation token lose
+      // keys here exactly as they would against AWS. The token is the numeric
+      // offset of the next page; small listings still answer in one page.
+      const rawToken = input["ContinuationToken"];
+      const parsedToken = typeof rawToken === "string" ? Number(rawToken) : 0;
+      const start = Number.isSafeInteger(parsedToken) && parsedToken >= 0 ? parsedToken : 0;
+      const pageSize = maxKeys ?? 1000;
+      const pageKeys = matching.slice(start, start + pageSize);
+      const truncated = start + pageSize < matching.length;
+      const continuation = {
+        IsTruncated: truncated,
+        NextContinuationToken: truncated ? String(start + pageSize) : undefined,
+      };
       if (delimiter === undefined) {
-        const contents = matching.map((key) => ({
+        const contents = pageKeys.map((key) => ({
           Key: key,
           Size: objects.get(key)!.bytes.length,
           LastModified: objects.get(key)!.lastModified,
         }));
-        const page = maxKeys === undefined ? contents : contents.slice(0, maxKeys);
-        return { Contents: page, KeyCount: page.length, IsTruncated: page.length < contents.length };
+        return { Contents: contents, KeyCount: contents.length, ...continuation };
       }
       const prefixes = new Set<string>();
       const contents: { Key: string; Size: number; LastModified: Date }[] = [];
-      for (const key of matching) {
+      for (const key of pageKeys) {
         const rest = key.slice(prefix.length);
         if (rest === "") {
           // The folder marker itself: listed as an object, never as a child.
@@ -113,6 +129,7 @@ export function createFakeS3(): FakeS3 {
         CommonPrefixes: [...prefixes].sort().map((entry) => ({ Prefix: entry })),
         Contents: contents,
         KeyCount: contents.length,
+        ...continuation,
       };
     }
     if (command instanceof CopyObjectCommand) {
