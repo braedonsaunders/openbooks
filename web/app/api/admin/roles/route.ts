@@ -306,6 +306,11 @@ export async function PATCH(req: Request) {
       nextRestriction = norm.value;
     }
 
+    // The role's effective permissions after this PATCH (post-edit when
+    // permissions change, otherwise the stored set). A scope widening below
+    // is judged against these: widening a role whose permissions exceed the
+    // actor's ceiling broadens every one of those grants.
+    let effectivePermissions = rolePermissionList(role.permissions);
     if (body.permissions !== undefined) {
       const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
       if (!permissions) {
@@ -314,6 +319,7 @@ export async function PATCH(req: Request) {
           { status: 400 },
         );
       }
+      effectivePermissions = permissions;
       // Only what the edit ADDS is a grant; keeping or dropping keys the actor
       // lacks does not widen anyone's access.
       const current = new Set(rolePermissionList(role.permissions));
@@ -359,6 +365,18 @@ export async function PATCH(req: Request) {
         widening = null;
       }
       if (widening) return widening;
+      // Widening the scope broadens every permission the role confers, so a
+      // scope-widening edit must also hold the role's effective (post-edit)
+      // permissions inside the actor's ceiling — even when the added scope
+      // itself is covered and no permission key changed. Narrowing-only
+      // edits (empty additions) keep the removal contract and skip this.
+      const scopeWidened =
+        edit.additions === null ||
+        (edit.additions !== undefined && edit.additions.size > 0);
+      if (scopeWidened) {
+        const escalation = ceilingViolation(gate, effectivePermissions);
+        if (escalation) return escalation;
+      }
       sets.push(sql`subsidiary_restriction = ${JSON.stringify(nextRestriction)}`);
       changes.subsidiaryRestriction = [role.subsidiary_restriction, nextRestriction];
     }

@@ -319,6 +319,65 @@ test("POST refuses an open subtree matching today's enumeration", { skip }, asyn
   } finally { await teardown(f); }
 });
 
+test("PATCH widening scope within the lens still refuses permissions the actor does not hold", { skip }, async () => {
+  // The added scope sits inside the actor's portfolio, but widening the
+  // scope broadens every permission the role confers — so the role's
+  // permissions must sit inside the actor's ceiling even when no
+  // permission key changed.
+  const f = await seed();
+  try {
+    const tag = randomUUID().slice(0, 8);
+    const ids = await withBypass(async () => {
+      const broadId = (await db.execute<{ id: string }>(sql`
+        insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
+        values (${f.orgId}, ${`broad_${tag}`}, ${`broad ${tag}`}, false,
+                '["admin.roles.manage", "gl.read"]'::jsonb,
+                ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA, f.subB] })}::jsonb)
+        returning id`)).rows[0]!.id;
+      const victimId = (await db.execute<{ id: string }>(sql`
+        insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
+        values (${f.orgId}, ${`victim_${tag}`}, ${`victim ${tag}`}, false,
+                '["gl.post"]'::jsonb,
+                ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
+        returning id`)).rows[0]!.id;
+      const heldId = (await db.execute<{ id: string }>(sql`
+        insert into app_roles (org_id, key, name, is_built_in, permissions, subsidiary_restriction)
+        values (${f.orgId}, ${`held_${tag}`}, ${`held ${tag}`}, false,
+                '["gl.read"]'::jsonb,
+                ${JSON.stringify({ mode: "list", subsidiaryIds: [f.subA] })}::jsonb)
+        returning id`)).rows[0]!.id;
+      const broadActor = randomUUID();
+      await db.execute(sql`
+        insert into users (id, org_id, email, name, password_hash, is_active)
+        values (${broadActor}, ${f.orgId}, ${`broad-${tag}@scratch.test`}, 'Broad actor', 'x', true)`);
+      await db.execute(sql`
+        insert into role_assignments (org_id, user_id, role_id)
+        values (${f.orgId}, ${broadActor}, ${broadId})`);
+      return { victimId, heldId, broadActor };
+    });
+    routeState.authz = {
+      user: { orgId: f.orgId, id: ids.broadActor, isSuperAdmin: false },
+      permissions: new Set(["admin.roles.manage", "gl.read"]),
+      allowedSubsidiaryIds: new Set([f.subA, f.subB]),
+    };
+    const auditsBefore = await auditCount(f);
+    const refused = await call("PATCH", {
+      id: ids.victimId,
+      subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
+    });
+    assert.equal(refused.status, 403);
+    assert.deepEqual((await refused.json() as { missing?: string[] }).missing, ["gl.post"]);
+    assert.deepEqual(await restrictionOf(ids.victimId), { mode: "list", subsidiaryIds: [f.subA] });
+    assert.equal(await auditCount(f), auditsBefore, "refusal wrote no audit");
+    // Control: widening a role whose permissions the actor holds succeeds.
+    const ok = await call("PATCH", {
+      id: ids.heldId,
+      subsidiaryRestriction: { mode: "list", subsidiaryIds: [f.subA, f.subB] },
+    });
+    assert.equal(ok.status, 200, await ok.text());
+  } finally { await teardown(f); }
+});
+
 test("unrestricted actor keeps full role scope authority", { skip }, async () => {
   const f = await seed();
   try {
