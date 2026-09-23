@@ -639,6 +639,60 @@ test(
       );
     }),
 );
+async function secondInterest(
+  f: Fixture & { childB: string },
+): Promise<string> {
+  const investB = randomUUID(),
+    interestB = randomUUID();
+  await db.execute(
+    sql`insert into accounts(id,org_id,number,name,type,is_active,is_summary,eliminate) values(${investB},${f.org.orgId},'C-invest-b','B investment','asset_current_other',true,false,false)`,
+  );
+  const created = await db.execute(
+    sql`insert into subsidiary_ownership_interests(id,org_id,parent_subsidiary_id,subsidiary_id,effective_from,ownership_percent,method,acquisition_date,investment_account_id,equity_income_account_id,nci_equity_account_id,nci_income_account_id,goodwill_account_id,fair_value_adjustment_account_id) values(${interestB},${f.org.orgId},${f.org.subsidiaryId},${f.childB},'2026-07-01',80,'full','2026-07-01',${investB},${f.accounts.income!},${f.accounts.nci!},${f.accounts.nciIncome!},${f.accounts.goodwill!},${f.accounts.fairValue!}) returning id`,
+  );
+  assert.equal(
+    created.rows.length,
+    1,
+    "the second family's ownership interest must be recorded",
+  );
+  return interestB;
+}
+test(
+  "L3: one elimination line cannot be attributed twice across families",
+  { skip: !DB },
+  async () =>
+    twoFamilyFixture(async (f) => {
+      const line = await bOnlyManualLine(f);
+      const interestB = await secondInterest(f);
+      const idA = await proposeLossOfControl(
+        f.org.orgId,
+        f.interest,
+        f.actors.submitterId,
+        input(f, {
+          additionalConsolidationLines: [
+            { lineId: line.id, amount: line.amount },
+          ],
+        }),
+      );
+      await approve(f, idA);
+      await applyLossOfControl(f.org.orgId, idA, f.actors.submitterId);
+      await assert.rejects(
+        proposeLossOfControl(
+          f.org.orgId,
+          interestB,
+          f.actors.submitterId,
+          input(f, {
+            parentInvestmentCarrying: "0",
+            rates: [{ subsidiaryId: f.childB, rate: "1" }],
+            additionalConsolidationLines: [
+              { lineId: line.id, amount: line.amount },
+            ],
+          }),
+        ),
+        (e) => /already attributes .* to other disposals/.test(deepest(e)),
+      );
+    }),
+);
 test(
   "L1: a proposal using another family's account refuses by name",
   { skip: !DB },
