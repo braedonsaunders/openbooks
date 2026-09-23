@@ -5,6 +5,7 @@ import { assertDocumentMutationRefsOwned } from "../records/mutation-refs.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { cancelDispatchRuns, dispatchFailureReason, findGatingRun } from "./dispatch-result.ts";
 import { runRecordFlows } from "./run.ts";
+import { isVendorBillApprovalRequired, VENDOR_BILL_KIND } from "./vendor-bill-approval.ts";
 
 /**
  * Submit a draft record for approval — the sole approval-routing entry point.
@@ -46,6 +47,13 @@ export interface SubmitResult {
 export interface SubmissionReleaseResult extends SubmitResult {
   /** No approval gate applied, so the engine released the record to approved. */
   autoApproved: boolean;
+  /**
+   * The org requires approval before vendor bills release and no flow gated
+   * this bill, so the engine refused the release by name. The submit stamps
+   * (submitted_by/at) stand — the bill stays submitted, never released — and
+   * the caller must surface VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE.
+   */
+  approvalRequired: boolean;
 }
 
 export async function submitForApproval(
@@ -198,8 +206,10 @@ async function submitForApprovalLocked(
 /**
  * Standard transaction submission primitive. Configured on_submit gates pause
  * the record; when none applies, the absence of a gate means no tenant approval
- * policy applies and the engine releases it to approved. Posting permission is
- * still enforced by the calling API.
+ * policy applies and the engine releases it to approved — UNLESS the org
+ * requires approval before vendor bills release (Company Settings → Setup):
+ * then an ungated vendor bill is refused by name and stays submitted, never
+ * released. Posting permission is still enforced by the calling API.
  */
 export async function submitAndReleaseIfUngated(
   targetKind: string,
@@ -218,7 +228,13 @@ export async function submitAndReleaseIfUngated(
   return withOrgTransaction(candidate.orgId, async () => {
     const result = await submitForApproval(targetKind, targetId, actorId);
     if (result.gated || result.flowError) {
-      return { ...result, autoApproved: false };
+      return { ...result, autoApproved: false, approvalRequired: false };
+    }
+    if (targetKind === VENDOR_BILL_KIND && (await isVendorBillApprovalRequired(candidate.orgId))) {
+      // Fail closed: the submit stamps above stand (the bill stays
+      // submitted), but the release to approved never happens. The caller
+      // answers with VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE.
+      return { ...result, autoApproved: false, approvalRequired: true };
     }
     const released = await db
       .update(schema.documents)
@@ -238,6 +254,6 @@ export async function submitAndReleaseIfUngated(
     if (released.length !== 1) {
       throw new Error("document changed while submission was being released");
     }
-    return { ...result, autoApproved: true };
+    return { ...result, autoApproved: true, approvalRequired: false };
   });
 }
