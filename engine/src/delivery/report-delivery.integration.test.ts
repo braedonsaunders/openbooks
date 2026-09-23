@@ -984,56 +984,75 @@ test("a superseded renderer's late failure cannot overwrite another renderer's s
   const org = await createScratchOrg();
   try {
     const { runId } = await seedLeaseRaceRun(org.orgId, "late-failure");
+    const live = Buffer.from("%PDF-1.7\nlive renderer bytes");
     const outcome = await processScheduledReportRun(runId, async () => {
       // Mid-render, the stale sweep reassigns the lease and a second
       // renderer claims it and succeeds — exactly the race the lease guards.
+      // The winner is a REAL second run of the same function, so the stored
+      // artifact and outbox below prove whose bytes survived.
       await db.execute(sql`
         update report_runs set status='queued', locked_at=null, updated_at=now()
          where id=${runId} and org_id=${org.orgId} and status='running'
       `);
-      await db.execute(sql`
-        update report_runs set status='succeeded', finished_at=now(), locked_at=null,
-               next_attempt_at=null, error=null, updated_at=now()
-         where id=${runId} and org_id=${org.orgId} and status='queued'
-      `);
+      const liveOutcome = await processScheduledReportRun(runId, async () => live);
+      assert.deepEqual(liveOutcome, { deliveries: 1 });
       throw new Error("renderer A failed after losing the lease");
     });
     assert.deepEqual(outcome, { skipped: true });
-    const row = (await db.execute<{ status: string; error: string | null }>(sql`
-      select status, error from report_runs where id=${runId}
+    const row = (await db.execute<{ status: string; error: string | null; attempt_count: number }>(sql`
+      select status, error, attempt_count from report_runs where id=${runId}
     `)).rows[0]!;
     assert.equal(row.status, "succeeded", "the late failure must not overwrite success");
     assert.equal(row.error, null);
+    assert.equal(row.attempt_count, 2);
+    const owned = (await db.execute<{ content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
+      select a.content_hash, a.bytes,
+             array(select d.recipient from report_delivery_outbox d
+                    where d.run_id=${runId} order by d.recipient) as recipients
+        from report_run_artifacts a where a.run_id=${runId}
+    `)).rows;
+    assert.equal(owned.length, 1, "exactly the live renderer's artifact is stored");
+    assert.equal(owned[0]!.content_hash, createHash("sha256").update(live).digest("hex"));
+    assert.deepEqual(Buffer.from(owned[0]!.bytes), live);
+    assert.deepEqual(owned[0]!.recipients, ["lease-race@example.com"]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("a superseded renderer's late success stands down instead of double-completing", async () => {
+test("a superseded renderer's bytes are never stored; the live renderer owns the artifact", async () => {
   const org = await createScratchOrg();
   try {
     const { runId } = await seedLeaseRaceRun(org.orgId, "late-success");
-    const pdf = Buffer.from("%PDF-1.7\nlease race late success");
+    const stale = Buffer.from("%PDF-1.7\nstale renderer bytes");
+    const live = Buffer.from("%PDF-1.7\nlive renderer bytes");
+    // Renderer A is slow: mid-render the sweep requeues the run, then A
+    // finishes and commits. Its stale bytes must NOT be stored — the
+    // conflict no-ops would otherwise make the live renderer's inserts skip
+    // and the stale PDF would be stored and delivered.
     const outcome = await processScheduledReportRun(runId, async () => {
-      // Same steal, but the current owner already succeeded before this
-      // render finished: this renderer's completion must not land twice.
       await db.execute(sql`
         update report_runs set status='queued', locked_at=null, updated_at=now()
          where id=${runId} and org_id=${org.orgId} and status='running'
       `);
-      await db.execute(sql`
-        update report_runs set status='succeeded', finished_at=now(), locked_at=null,
-               next_attempt_at=null, error=null, updated_at=now()
-         where id=${runId} and org_id=${org.orgId} and status='queued'
-      `);
-      return pdf;
+      return stale;
     });
     assert.deepEqual(outcome, { skipped: true });
-    const rows = (await db.execute<{ status: string; attempt_count: number }>(sql`
-      select status, attempt_count from report_runs where id=${runId}
+    const liveOutcome = await processScheduledReportRun(runId, async () => live);
+    assert.deepEqual(liveOutcome, { deliveries: 1 });
+    const owned = (await db.execute<{ status: string; attempt_count: number; content_hash: string; bytes: Buffer; recipients: string[] }>(sql`
+      select r.status, r.attempt_count, a.content_hash, a.bytes,
+             array(select d.recipient from report_delivery_outbox d
+                    where d.run_id=${runId} order by d.recipient) as recipients
+        from report_runs r join report_run_artifacts a on a.run_id=r.id
+       where r.id=${runId}
     `)).rows;
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.status, "succeeded");
+    assert.equal(owned.length, 1);
+    assert.equal(owned[0]!.status, "succeeded");
+    assert.equal(owned[0]!.attempt_count, 2);
+    assert.equal(owned[0]!.content_hash, createHash("sha256").update(live).digest("hex"));
+    assert.deepEqual(Buffer.from(owned[0]!.bytes), live, "the stale PDF must not be stored");
+    assert.deepEqual(owned[0]!.recipients, ["lease-race@example.com"]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

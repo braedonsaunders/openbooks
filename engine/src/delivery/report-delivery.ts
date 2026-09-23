@@ -204,12 +204,23 @@ export async function processScheduledReportRun(runId: string, render: ReportRen
         const hash = createHash("sha256").update(pdf).digest("hex");
         const recipients = [...new Set((row.recipient_emails ?? []).map((value) => value.trim().toLowerCase()).filter(Boolean))];
 
-        // The artifact and delivery inserts are idempotent (conflict no-ops),
-        // so a superseded renderer's transaction is harmless — but only the
-        // lease holder's status write may land. A stolen lease (locked_at no
+        // The lease is taken FIRST, before any insert: the row lock confirms
+        // this renderer still owns the run, and holding it to commit freezes
+        // out the stale sweep and any reclaim for the rest of this
+        // transaction. A superseded renderer must store NOTHING — its
+        // artifact/outbox inserts are conflict no-ops, so committing them
+        // would plant stale bytes the live renderer's inserts then skip over,
+        // storing and delivering the wrong PDF. A stolen lease (locked_at no
         // longer ours) means the sweep reassigned this run; stand down and
         // let the current owner drive it to terminal.
         const completed = await db.transaction(async (tx) => {
+          const held = (await tx.execute<{ id: string }>(sql`
+            select id from report_runs
+             where id=${runId} and org_id=${row.org_id}
+               and status='running' and locked_at=${row.locked_at}
+             for update
+          `));
+          if (held.rows.length === 0) return false;
           await tx.execute(sql`
             insert into report_run_artifacts
               (org_id, run_id, filename, content_type, size_bytes, content_hash, bytes)
