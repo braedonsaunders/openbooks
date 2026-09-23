@@ -31,7 +31,7 @@ import type { RequirementSubjectKind, RequirementSeverity } from "./requirements
  * findings where that feature is on, else a warning chip.
  */
 
-export type GateVerdictReason = "missing" | "expired" | "pending";
+export type GateVerdictReason = "missing" | "expired" | "pending" | "not_yet_effective";
 
 export interface GateFinding {
   readonly typeId: string;
@@ -192,15 +192,36 @@ function evaluateRequirement(
   }
   const projected: { row: HeldRow; status: DerivedQualificationStatus }[] = live.map((row) => ({
     row,
-    status: projectDerivedStatus({ stored: row.status, expiresOn: row.expires_on, leadDays: req.renewal_lead_days, today: on }),
+    status: projectDerivedStatus({
+      stored: row.status,
+      expiresOn: row.expires_on,
+      leadDays: req.renewal_lead_days,
+      today: on,
+      issuedOn: row.issued_on,
+    }),
   }));
+  // The strongest credential decides: a verified future-dated credential
+  // needs only time (it turns valid on its issue date), while a pending
+  // one still needs HR verification — so not-yet-effective outranks
+  // pending, and both outrank expired.
   const rank = (s: DerivedQualificationStatus) =>
-    s === "valid" ? 0 : s === "expiring" ? 1 : s === "pending_verification" ? 2 : 3;
+    s === "valid" ? 0 : s === "expiring" ? 1 : s === "not_yet_effective" ? 2 : s === "pending_verification" ? 3 : 4;
   projected.sort((a, b) => rank(a.status) - rank(b.status));
   const best = projected[0];
   // Unreachable: live is non-empty above, so projected is non-empty.
   if (!best) return null;
   if (best.status === "valid" || best.status === "expiring") return null;
+  if (best.status === "not_yet_effective") {
+    return {
+      typeId: req.type_id,
+      typeCode: req.type_code,
+      typeName: req.type_name,
+      severity: req.severity,
+      reason: "not_yet_effective",
+      qualificationId: best.row.id,
+      detail: `${req.type_name} was issued ${best.row.issued_on} and takes effect then — dispatch on or after that date, or record the in-force ${req.type_code} qualification.`,
+    };
+  }
   if (best.status === "pending_verification") {
     return {
       typeId: req.type_id,

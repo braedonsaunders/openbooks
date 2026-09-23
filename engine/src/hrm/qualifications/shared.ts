@@ -70,11 +70,12 @@ export async function runInCallerTransaction<T>(
 /** Stored statuses (what storage may hold — never expiring/expired). */
 export type StoredQualificationStatus = "valid" | "revoked" | "pending_verification";
 
-/** Read statuses (stored plus the two derived projections). */
+/** Read statuses (stored plus the three derived projections). */
 export type DerivedQualificationStatus =
   | StoredQualificationStatus
   | "expiring"
-  | "expired";
+  | "expired"
+  | "not_yet_effective";
 
 function addDaysUtc(ymd: string, days: number): string {
   const dt = new Date(`${ymd}T00:00:00Z`);
@@ -90,15 +91,22 @@ function addDaysUtc(ymd: string, days: number): string {
  * Boundary rule: expiry day itself still counts (the worker may be on the
  * job that day), so expires_on == today projects expiring, and expired
  * starts the day after. pending_verification never derives — an
- * unverified credential is pending no matter how far off expiry is.
+ * unverified credential is pending no matter how far off expiry is. A
+ * verified credential before its issue date is not yet effective no
+ * matter how far off expiry is: issued_on is the first day the worker
+ * may be dispatched on it, so a future-dated credential never counts
+ * as valid today.
  */
 export function projectDerivedStatus(args: {
   stored: StoredQualificationStatus;
   expiresOn: string | null;
   leadDays: number;
   today: string;
+  /** Issue date; null/undefined skips the not-yet-effective projection. */
+  issuedOn?: string | null;
 }): DerivedQualificationStatus {
   if (args.stored === "revoked" || args.stored === "pending_verification") return args.stored;
+  if (args.issuedOn != null && args.issuedOn > args.today) return "not_yet_effective";
   if (!args.expiresOn) return "valid";
   if (args.expiresOn < args.today) return "expired";
   if (args.expiresOn <= addDaysUtc(args.today, Math.max(0, args.leadDays))) return "expiring";

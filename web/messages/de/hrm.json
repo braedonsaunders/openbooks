@@ -1683,7 +1683,8 @@
       "expiring": "Läuft ab",
       "expired": "Abgelaufen",
       "revoked": "Widerrufen",
-      "pending_verification": "Prüfung ausstehend"
+      "pending_verification": "Prüfung ausstehend",
+      "not_yet_effective": "Noch nicht wirksam"
     },
     "emptyTitle": "Keine Qualifikationen erfasst",
     "emptyDescription": "Erfassen Sie Lizenzen und Zertifizierungen der Mannschaft, um Einsätze zu steuern.",
@@ -1697,7 +1698,8 @@
       "qualified": "Qualifiziert",
       "missing": "Fehlt",
       "expired": "Abgelaufen",
-      "pending": "Ausstehend"
+      "pending": "Ausstehend",
+      "not_yet_effective": "Noch nicht wirksam"
     },
     "alertsTitle": "Ablaufwarnungen",
     "alertsEmpty": "Keine Warnungen ausgelöst.",

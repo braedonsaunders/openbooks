@@ -122,6 +122,7 @@ function toQualification(row: LedgerRow, today: string): WorkerQualification {
       expiresOn: row.expires_on,
       leadDays: row.type_renewal_lead_days,
       today,
+      issuedOn: row.issued_on,
     }),
     evidenceFileId: row.evidence_file_id,
     verifiedBy: row.verified_by,

@@ -23,7 +23,7 @@ export async function GET(req: Request) {
   const statusRaw = params.get("status");
   const parsedStatus = statusRaw === null ? { success: true, data: undefined } : qualificationStatusFilter.safeParse(statusRaw);
   if (!parsedStatus.success) {
-    return NextResponse.json({ error: "status must be one of valid, expiring, expired, revoked, pending_verification" }, { status: 400 });
+    return NextResponse.json({ error: "status must be one of valid, expiring, expired, revoked, pending_verification, not_yet_effective" }, { status: 400 });
   }
   const status = parsedStatus.data;
   try {
