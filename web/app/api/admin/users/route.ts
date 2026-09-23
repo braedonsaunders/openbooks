@@ -17,7 +17,7 @@ import {
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { guardPermission, type Authz } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
-import { issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
+import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
 
@@ -79,6 +79,112 @@ function coverageRefusal(
   if (gate.user.isSuperAdmin) return null;
   if (grantedRestrictionWithinCoverage(coverage, granted)) return null;
   return scopeRefusedResponse(verb);
+}
+
+/**
+ * Authoritative gate for handing out an invite link. Runs INSIDE the mint
+ * transaction (as `issueInviteSetPasswordLink`'s authorize hook): it locks
+ * the target user row first so a concurrent grant serializes here, then
+ * re-verifies the caller's ceiling against the target's CURRENT stored
+ * roles plus overrides — exactly as reactivation does. Throwing rolls the
+ * mint back (no token, no email), so a lower-privilege caller can never
+ * receive a takeover link for an account elevated after an earlier check.
+ * Earlier checks on the invite/resend paths are fail-fast only; THIS is the
+ * check that guards the link.
+ */
+async function authorizeInviteIssuance(args: {
+  orgId: string;
+  targetUserId: string;
+  gate: Authz;
+}): Promise<void> {
+  const { orgId, targetUserId, gate } = args;
+  const found = (await db.execute<{
+    id: string;
+    is_active: boolean;
+    password_hash: string;
+  }>(sql`
+    select id, is_active, password_hash from users
+     where id = ${targetUserId} and org_id = ${orgId} for update`)).rows[0];
+  if (!found) {
+    throw new InviteIssuanceRefusedError({ error: "user not found", status: 409 });
+  }
+  if (!found.is_active) {
+    throw new InviteIssuanceRefusedError({
+      error: "cannot issue an invite link to a deactivated user",
+      status: 409,
+    });
+  }
+  if (found.password_hash !== UNUSABLE_PASSWORD_HASH) {
+    throw new InviteIssuanceRefusedError({
+      error: "user has already set a password",
+      status: 409,
+    });
+  }
+  if (gate.user.isSuperAdmin) return;
+  const granted = (await db.execute<{ role_id: string; permissions: unknown }>(sql`
+    select a.role_id, r.permissions from role_assignments a
+      join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+     where a.org_id = ${orgId} and a.user_id = ${found.id}`)).rows;
+  const grantedPermissions = granted.flatMap((row) =>
+    Array.isArray(row.permissions)
+      ? row.permissions.filter((p): p is string => typeof p === "string")
+      : []);
+  // Issuing restores the target's full stored access, so the ceiling runs
+  // over the canonical effective set — roles plus stored overrides. A grant
+  // override above the ceiling refuses; deny overrides only shrink the set
+  // and never block.
+  const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+    select permission, effect
+      from user_permission_overrides
+     where user_id = ${found.id} and org_id = ${orgId}
+  `);
+  const effective = resolveEffectivePermissions({
+    rolePermissionSets: [grantedPermissions],
+    overrides: overrides.rows,
+  });
+  const missing = permissionsOutsideCeiling(gate.permissions, effective);
+  if (missing.length > 0) {
+    throw new InviteIssuanceRefusedError({
+      error: `cannot issue an invite link for permissions you do not hold: ${missing.join(", ")}`,
+      missing,
+    });
+  }
+  // Issuing restores every stored role, so each stored role policy must sit
+  // in the actor's portfolio — a target holding an open-ended subtree the
+  // actor cannot grant stays out of reach.
+  const coverage = await loadSubsidiaryGrantCoverage(db, orgId, gate.user.id);
+  for (const policy of await resolveRoleGrantPolicies(
+    db, orgId, granted.map((row) => row.role_id))) {
+    const widening = coverageRefusal(gate, coverage, policy.restriction, "issue an invite link for");
+    if (widening) {
+      const body = (await widening.json()) as { error: string };
+      throw new InviteIssuanceRefusedError({ error: body.error });
+    }
+  }
+}
+
+/**
+ * Maps an `issueInviteSetPasswordLink` throw to a truthful response: an
+ * issuance refusal (already shaped with its status) passes through, while
+ * any other failure is a 500 — never the rate-cap 429, which is reserved
+ * for the per-user hourly cap (`null` issuance).
+ */
+function issuanceFailureResponse(error: unknown, persisted: "user is saved" | "nothing was changed"): NextResponse {
+  if (error instanceof InviteIssuanceRefusedError) {
+    const { error: message, missing, status } = error.refusal;
+    return NextResponse.json(
+      missing ? { error: message, missing } : { error: message },
+      { status },
+    );
+  }
+  console.error("[admin-invite] set-password issuance failed", error);
+  const retry = persisted === "user is saved"
+    ? "the user is saved; retry the invite"
+    : "retry to re-issue the link";
+  return NextResponse.json(
+    { error: `failed to issue the set-password link — ${retry}` },
+    { status: 500 },
+  );
 }
 
 async function audit(
@@ -584,14 +690,25 @@ export async function POST(req: Request) {
       // pending and the mailbox owner can always request a fresh link. When
       // no email transport exists the raw link is handed to the admin
       // one-time in this response instead — still pending, still single-use.
+      // The authorize hook re-verifies the caller's ceiling against the
+      // target's CURRENT stored access inside the mint transaction, so a
+      // grant landing after the checks above can never leak a takeover link.
       let issuance: { raw: string; emailQueued: boolean } | null = null;
       try {
         issuance = await issueInviteSetPasswordLink({
           user: { id: created.userId, org_id: actor.orgId, name, email },
           context: authRequestContext(req),
+          authorize: () => authorizeInviteIssuance({
+            orgId: actor.orgId,
+            targetUserId: created.userId,
+            gate,
+          }),
         });
       } catch (error) {
-        console.error("[admin-invite] set-password issuance failed", error);
+        // Truthful mapping: a refusal passes through with its own status,
+        // an infrastructure failure is a 500 — the per-user hourly cap
+        // alone (`null` issuance below) is a 429.
+        return issuanceFailureResponse(error, "user is saved");
       }
       if (!issuance) {
         return NextResponse.json(
@@ -613,7 +730,10 @@ export async function POST(req: Request) {
       // Re-issue the set-password link for a still-pending invite. Grants no
       // role, so the ceiling check runs against the target's CURRENT roles:
       // a resend must not become a takeover path for accounts another admin
-      // privileged above this actor's ceiling.
+      // privileged above this actor's ceiling. The pending-state checks run
+      // here (fail fast); the ceiling itself is re-verified inside the mint
+      // transaction by the authorize hook, so a grant landing between this
+      // transaction and the mint can never leak a takeover link.
       const target = await withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
         const rows = (await db.execute<{
           id: string;
@@ -638,49 +758,6 @@ export async function POST(req: Request) {
             { status: 409 },
           );
         }
-        if (!actor.isSuperAdmin) {
-          const granted = (await db.execute<{ role_id: string; permissions: unknown }>(sql`
-            select a.role_id, r.permissions from role_assignments a
-              join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-             where a.org_id = ${actor.orgId} and a.user_id = ${found.id}`)).rows;
-          const grantedPermissions = granted.flatMap((row) =>
-            Array.isArray(row.permissions)
-              ? row.permissions.filter((p): p is string => typeof p === "string")
-              : []);
-          // Re-issuing restores the target's full stored access, so the
-          // ceiling runs over the canonical effective set —
-          // roles plus stored overrides — exactly as reactivation does. A
-          // grant override above the ceiling refuses before any issuance;
-          // deny overrides only shrink the set and never block.
-          const overrides = await db.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
-            select permission, effect
-              from user_permission_overrides
-             where user_id = ${found.id} and org_id = ${actor.orgId}
-          `);
-          const effective = resolveEffectivePermissions({
-            rolePermissionSets: [grantedPermissions],
-            overrides: overrides.rows,
-          });
-          const missing = permissionsOutsideCeiling(gate.permissions, effective);
-          if (missing.length > 0) {
-            return NextResponse.json(
-              {
-                error: `cannot re-issue an invite for permissions you do not hold: ${missing.join(", ")}`,
-                missing,
-              },
-              { status: 403 },
-            );
-          }
-          // Re-issuing restores every stored role, so each stored role
-          // policy must sit in the actor's portfolio — a target holding an
-          // open-ended subtree the actor cannot grant stays out of reach.
-          const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
-          for (const policy of await resolveRoleGrantPolicies(
-            db, actor.orgId, granted.map((row) => row.role_id))) {
-            const widening = coverageRefusal(gate, coverage, policy.restriction, "re-issue an invite for");
-            if (widening) return widening;
-          }
-        }
         return { id: found.id, email: found.email, name: found.name };
       }));
       if (target instanceof NextResponse) return target;
@@ -689,9 +766,17 @@ export async function POST(req: Request) {
         issuance = await issueInviteSetPasswordLink({
           user: { id: target.id, org_id: actor.orgId, name: target.name, email: target.email },
           context: authRequestContext(req),
+          authorize: () => authorizeInviteIssuance({
+            orgId: actor.orgId,
+            targetUserId: target.id,
+            gate,
+          }),
         });
       } catch (error) {
-        console.error("[admin-invite] resend issuance failed", error);
+        // Truthful mapping: a refusal passes through with its own status,
+        // an infrastructure failure is a 500 — the per-user hourly cap alone
+        // (`null` issuance below) is a 429.
+        return issuanceFailureResponse(error, "nothing was changed");
       }
       if (!issuance) {
         return NextResponse.json(

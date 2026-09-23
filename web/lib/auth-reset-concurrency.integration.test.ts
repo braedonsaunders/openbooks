@@ -118,3 +118,54 @@ test("concurrent completion of legacy reset links changes the password only once
     });
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });
+
+test("the invite issuance gate shares the mint transaction", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // The admin invite gate must re-verify the caller's ceiling in the SAME
+  // transaction that mints the token: the gate's row lock then serializes a
+  // concurrent grant, so no elevation can land between the check and the
+  // mint. Same-transaction is observable — the gate's transaction id must
+  // equal the minted token row's xmin — and a refusal inside the gate must
+  // roll the mint back with it, leaving no token behind.
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const { userId, email } = await withBypassContext(async () => {
+      const userId = (await seedFlowActors(org.orgId)).adminId;
+      const email = (await db.execute<{ email: string }>(sql`select email from users where id=${userId}`)).rows[0]!.email;
+      await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
+      return { userId, email };
+    });
+    const { issueInviteSetPasswordLink, InviteIssuanceRefusedError } = await import("./auth-reset");
+    const context = { networkAddress: "127.0.0.1", userAgent: "isolated gate-transaction test" };
+    let gateXid: string | null = null;
+    const issuance = await issueInviteSetPasswordLink({
+      user: { id: userId, org_id: org.orgId, name: "Gate subject", email },
+      context,
+      authorize: async () => {
+        gateXid = (await db.execute<{ xid: string }>(sql`select pg_current_xact_id()::text as xid`)).rows[0]!.xid;
+      },
+    });
+    assert.ok(issuance, "issuance succeeds when the gate allows it");
+    assert.ok(gateXid, "the gate ran");
+    const minted = await withBypassContext(() => db.execute<{ xid: string }>(sql`
+      select xmin::text as xid from auth_password_resets
+       where user_id=${userId} and used_at is null and expires_at>now()
+       order by created_at desc limit 1`));
+    assert.equal(minted.rows[0]!.xid, gateXid, "gate and mint commit atomically in one transaction");
+    // A refusal thrown by the gate rolls the whole issuance back: the token
+    // count is unchanged, so no link exists to hand out.
+    await assert.rejects(
+      () => issueInviteSetPasswordLink({
+        user: { id: userId, org_id: org.orgId, name: "Gate subject", email },
+        context,
+        authorize: async () => {
+          throw new InviteIssuanceRefusedError({ error: "cannot issue this link", status: 403 });
+        },
+      }),
+      (error: unknown) => error instanceof InviteIssuanceRefusedError,
+    );
+    const live = await withBypassContext(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from auth_password_resets
+       where user_id=${userId} and used_at is null and expires_at>now()`));
+    assert.equal(live.rows[0]!.n, 1, "the refused issuance minted nothing");
+  } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
+});
