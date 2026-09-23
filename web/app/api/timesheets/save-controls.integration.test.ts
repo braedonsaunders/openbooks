@@ -154,6 +154,25 @@ test('time cannot be pinned to a party without an active employment', { skip: !p
   } finally { await f.close() }
 })
 
+test("hours cannot be booked to another legal entity's project", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await fixture(true)
+  try {
+    const otherSub = randomUUID()
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,custom)
+      values (${otherSub},${f.org.orgId},${f.org.subsidiaryId},'Other Co','CAD','CA',true,'{}'::jsonb)`)
+    const otherProject = randomUUID()
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${otherProject},${f.org.orgId},${otherSub},'XENT','Foreign project',${f.org.customerId},'active',true,'{}'::jsonb)`)
+    const refused = await f.save({ rows: [{ ...f.row, projectId: otherProject }] })
+    assert.equal(refused.status, 422, await refused.clone().text())
+    assert.match(((await refused.json()) as { error: string }).error, /different legal entity/)
+    assert.equal((await f.snapshot()).rows.length, 0, 'refused cross-entity lines store nothing')
+    // The employee's own entity still saves.
+    assert.equal((await f.save({})).status, 200)
+    assert.equal((await f.snapshot()).rows.length, 1)
+  } finally { await f.close() }
+})
+
 test('an hours cell wider than the ledger column fails closed without writing', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   // time_entries.hours is numeric(19,4): a pasted 20-digit cell cleared the
   // exact-decimal check and died in Postgres with a storage error. Fail

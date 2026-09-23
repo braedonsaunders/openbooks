@@ -168,6 +168,31 @@ async function save(req: Request) {
           timeTypeId,
           departmentId,
         }, gate.allowedSubsidiaryIds)
+        if (!ownedRefs || ownedRefs.projectId == null) {
+          return bad('Invalid project, item, time type, or department')
+        }
+        // Legal-entity isolation: a line posts its labor cost against its
+        // project's entity, so an employee of one subsidiary cannot book
+        // hours to another subsidiary's project. There is no intercompany
+        // time rule to reattribute the cost, so a cross-entity line is
+        // refused. Either side unscoped (null) keeps the existing
+        // attribution.
+        const entity = ((await db.execute<{
+          employee_sub: string | null
+          project_sub: string | null
+        }>(sql`
+          select (select subsidiary_id from parties
+                   where org_id = ${orgId} and id = ${ownedEmployee}) as employee_sub,
+                 (select subsidiary_id from projects
+                   where org_id = ${orgId} and id = ${ownedRefs.projectId}) as project_sub
+        `)).rows[0]!)
+        if (
+          entity.employee_sub != null &&
+          entity.project_sub != null &&
+          entity.employee_sub !== entity.project_sub
+        ) {
+          return bad('The project belongs to a different legal entity than the employee')
+        }
       }
       if (!ownedRefs || ownedRefs.projectId == null) {
         return bad('Invalid project, item, time type, or department')
