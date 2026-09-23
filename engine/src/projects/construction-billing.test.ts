@@ -336,3 +336,26 @@ test("period-ending dates are validated as calendar days before any database wor
   }
   assert.equal(requireIsoDate("2026-07-31", "Period ending"), "2026-07-31");
 });
+
+test("retainage math uses the validated percent, refusing garbage with the domain error", () => {
+  // A blank percent normalizes to zero through the same boundary as every
+  // other line amount — previously the raw blank reached cmp and threw a
+  // bare Error outside the domain.
+  const blank = computeApplication([line({ thisPeriodCompleted: "1000", retainagePercent: "" })]);
+  assert.equal(blank.lines[0]!.retainageThisPeriod, "0.0000");
+  assert.equal(blank.currentDue, "1000.0000");
+  // Garbage is refused as ConstructionBillingError, never a bare Error.
+  assert.throws(
+    () => computeApplication([line({ thisPeriodCompleted: "1000", retainagePercent: "abc" })]),
+    ConstructionBillingError,
+  );
+  assert.throws(
+    () => computeApplication([line({ thisPeriodCompleted: "1000", retainagePercent: "abc" })]),
+    /retainage percent must be an exact decimal/,
+  );
+  // Out-of-range input is still refused by name.
+  assert.throws(
+    () => computeApplication([line({ thisPeriodCompleted: "1000", retainagePercent: "101" })]),
+    /between 0 and 100/,
+  );
+});
