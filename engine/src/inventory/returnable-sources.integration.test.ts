@@ -387,3 +387,63 @@ test("a reversed customer return is returnable again in picker, save check and p
     await dropScratchOrg(org.orgId);
   }
 });
+
+async function extraSubsidiary(org: ScratchOrg, name: string): Promise<string> {
+  const id = randomUUID();
+  // One root per org: the scratch fixture already created it, so further
+  // legal entities hang under the root.
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${id}, ${org.orgId}, ${org.subsidiaryId}, ${name}, 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+  return id;
+}
+
+test("sources scope to the full subsidiary grant; an empty grant sees nothing", async () => {
+  const org = await createScratchOrg();
+  try {
+    const subB = await extraSubsidiary(org, "Second Co");
+    const subC = await extraSubsidiary(org, "Third Co");
+    // One shared vendor with receipts in A (the scratch subsidiary) and C.
+    // The vendor must transact with C before a bill can post there.
+    await db.execute(sql`
+      insert into party_subsidiaries (id, org_id, party_id, subsidiary_id)
+      values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, ${subC})`);
+    await postVendorBillLines(org, { subsidiaryId: org.subsidiaryId, lineCount: 1, numberPrefix: "BILL-D9A" });
+    await postVendorBillLines(org, { subsidiaryId: subC, lineCount: 1, numberPrefix: "BILL-D9C" });
+    const scoped = await returnableSources(db, org.orgId, {
+      side: "purchase", partyId: org.vendorId, subsidiaryIds: [org.subsidiaryId, subB],
+    });
+    assert.equal(scoped.sources.length, 1, "a grant of {A,B} must not surface C's receipt");
+    assert.match(scoped.sources[0]!.documentNumber ?? "", /BILL-D9A-/);
+    assert.deepEqual(
+      (await returnableSources(db, org.orgId, {
+        side: "purchase", partyId: org.vendorId, subsidiaryIds: [],
+      })).sources,
+      [],
+      "an empty grant matches nothing instead of leaking every entity",
+    );
+    assert.equal(
+      (await returnableSources(db, org.orgId, { side: "purchase", partyId: org.vendorId })).sources.length,
+      2,
+      "full access still reads org-wide",
+    );
+    // Save-time agreement: the A receipt validates under [A] and refuses
+    // under [B], naming the refusal instead of saving a foreign source.
+    const movementA = scoped.sources[0]!.movementId;
+    assert.ok(
+      (await assertReturnSourceSelectable(db, org.orgId, {
+        side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId, movementId: movementA, subsidiaryIds: [org.subsidiaryId],
+      }, "Line 1")).movementId,
+    );
+    await assert.rejects(
+      assertReturnSourceSelectable(db, org.orgId, {
+        side: "purchase", partyId: org.vendorId, itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId, movementId: movementA, subsidiaryIds: [subB],
+      }, "Line 1"),
+      /not available to return/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

@@ -640,8 +640,9 @@ async function applyInventoryReturnSelections(
         `a ${kind} has no shipment or receipt to return against; nothing was changed`,
     )
   }
-  const party = (await tx.execute<{ partyId: string | null }>(sql`
-    select party_id as "partyId" from documents where id = ${documentId} and org_id = ${orgId}
+  const party = (await tx.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
+    select party_id as "partyId", subsidiary_id as "subsidiaryId"
+      from documents where id = ${documentId} and org_id = ${orgId}
   `)).rows[0]
   for (let i = 0; i < submitted.length; i++) {
     const selection = submitted[i]!.inventoryReturnSource
@@ -667,6 +668,18 @@ async function applyInventoryReturnSelections(
           `${side === 'purchase' ? 'receipt' : 'shipment'} can be selected; nothing was changed`,
       )
     }
+    // The validator scopes to the credit's own legal entity — the same scope
+    // the picker lists and the posting guard enforces — so a source saved
+    // from another entity is refused here, at save, instead of at posting.
+    // The party guard above already threw when the credit names no party,
+    // so a missing subsidiary here names the subsidiary remedy, not the party.
+    const creditSubsidiaryId = party?.subsidiaryId ?? null
+    if (!creditSubsidiaryId) {
+      throw new DocumentEditError(
+        422,
+        `Line ${i + 1}: choose the credit's subsidiary before choosing what this credit returns; nothing was changed`,
+      )
+    }
     try {
       await assertReturnSourceSelectable(
         tx,
@@ -677,6 +690,7 @@ async function applyInventoryReturnSelections(
           itemId: prepared.itemId,
           stockLocationId: prepared.stockLocationId,
           movementId: selection.movementId,
+          subsidiaryIds: [creditSubsidiaryId],
           lotId: selection.lotId ?? null,
           serialId: selection.serialId ?? null,
         },
