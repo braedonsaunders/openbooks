@@ -8,6 +8,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import {
   createScratchOrg,
   createScratchUser,
+  dropSampleCloneOrg,
   dropScratchOrg,
   dropScratchOrgReporting,
   orgRowCounts,
@@ -269,5 +270,17 @@ test("dropScratchOrg refuses an org not named 'Scratch %'", { skip: !DB }, async
     // Rename into scope so the guarded teardown can clean up this fixture.
     await db.execute(sql`update orgs set name = ${"Scratch " + orgId.slice(0, 8)} where id = ${orgId}`);
     await dropScratchOrg(orgId);
+  }
+});
+
+test("dropSampleCloneOrg refuses an org with no sample-company marker", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await assert.rejects(dropSampleCloneOrg(org.orgId), /no sample-company marker/);
+    // Still there — the refusal happened before any delete.
+    const r = (await db.execute<{ n: number }>(sql`select count(*)::int as n from orgs where id = ${org.orgId}`));
+    assert.equal(r.rows[0]!.n, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
   }
 });

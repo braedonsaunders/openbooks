@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg, withOrgTransaction } from "../platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropSampleCloneOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { setPeriodLockState } from "../close/period-locks.ts";
@@ -48,16 +48,29 @@ async function ledgerCounts(orgId: string) {
   `)).rows[0]!;
 }
 
+/**
+ * Attempt every teardown step even when one fails, then report all failures
+ * together. A swallowed drop strands a scratch org (and its sandbox rows)
+ * on the shared test database for the next test to trip over.
+ */
+async function runTeardowns(...steps: Array<() => Promise<unknown>>): Promise<void> {
+  const failures: unknown[] = [];
+  for (const step of steps) {
+    try {
+      await step();
+    } catch (err) {
+      failures.push(err);
+    }
+  }
+  if (failures.length > 0) throw new AggregateError(failures, "test teardown failed");
+}
+
+/** Delete every sandbox cut from a production org. Loud: a missed row leaks
+ * an org behind orgs_sandbox_of_fkey, so failures propagate. */
 async function deleteSandboxesFor(productionOrgId: string): Promise<void> {
   const rows = (await db.execute<{ id: string }>(sql`
     select id from sandboxes where production_org_id = ${productionOrgId}`)).rows;
-  for (const row of rows) await deleteSandbox(row.id).catch(() => undefined);
-}
-
-async function deleteSandboxForOrg(orgId: string): Promise<void> {
-  const rows = (await db.execute<{ id: string }>(sql`
-    select id from sandboxes where org_id = ${orgId}`)).rows;
-  for (const row of rows) await deleteSandbox(row.id).catch(() => undefined);
+  for (const row of rows) await deleteSandbox(row.id);
 }
 
 /**
@@ -106,9 +119,10 @@ test("a full sandbox clones posted history sitting in a closed GL period", { ski
     assert.equal(evidence[0]!.authority, "openbooks.clone");
     assert.match(evidence[0]!.scope, /INSERT.*only/i);
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else await deleteSandboxesFor(org.orgId);
-    await dropScratchOrg(org.orgId);
+    await runTeardowns(
+      () => (sandboxId ? deleteSandbox(sandboxId) : deleteSandboxesFor(org.orgId)),
+      () => dropScratchOrg(org.orgId),
+    );
   }
 });
 
@@ -174,9 +188,10 @@ test("a clone carries recognized reporting-book history across a closed assets p
     assert.equal(carried[0]!.recorded, true);
     assert.equal(carried[0]!.stamp, sourceStamp, "the clone replays the recognition instant verbatim");
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else await deleteSandboxesFor(org.orgId);
-    await dropScratchOrg(org.orgId);
+    await runTeardowns(
+      () => (sandboxId ? deleteSandbox(sandboxId) : deleteSandboxesFor(org.orgId)),
+      () => dropScratchOrg(org.orgId),
+    );
   }
 });
 
@@ -261,9 +276,10 @@ test("cloned posted history stays immutable and the closed period stays closed",
       "posted",
     );
   } finally {
-    if (sandboxId) await deleteSandbox(sandboxId).catch(() => undefined);
-    else await deleteSandboxesFor(org.orgId);
-    await dropScratchOrg(org.orgId);
+    await runTeardowns(
+      () => (sandboxId ? deleteSandbox(sandboxId) : deleteSandboxesFor(org.orgId)),
+      () => dropScratchOrg(org.orgId),
+    );
   }
 });
 
@@ -318,6 +334,7 @@ test("a sample company cuts from a closed-period template and numbering continue
   const source = await createScratchOrg();
   const memberOrg = await createScratchOrg();
   let previewOrgId: string | null = null;
+  let templateOrgId: string | null = null;
   try {
     const actor = await createScratchUser(source.orgId, `SampleSeed ${randomUUID()}`, "admin");
     for (const n of ["INV-000001", "INV-000002", "INV-000003", "INV-000004"]) {
@@ -352,6 +369,7 @@ test("a sample company cuts from a closed-period template and numbering continue
       masked: false,
       confirmedSynthetic: true,
     });
+    templateOrgId = promoted.templateOrgId;
 
     const memberUserId = await createScratchUser(memberOrg.orgId, "Sample requester", "admin");
     const created = await createSampleCompany({
@@ -378,9 +396,35 @@ test("a sample company cuts from a closed-period template and numbering continue
       "INV-00005",
     );
   } finally {
-    if (previewOrgId) await deleteSandboxForOrg(previewOrgId).catch(() => undefined);
-    await deleteSandboxesFor(source.orgId).catch(() => undefined);
-    await dropScratchOrg(memberOrg.orgId).catch(() => undefined);
-    await dropScratchOrg(source.orgId).catch(() => undefined);
+    // Dependency order: the sample company references the promoted template
+    // via sandbox_of, and the template references the scratch source, so the
+    // leaves go first or the drops fail on orgs_sandbox_of_fkey. Every step
+    // runs and every failure is reported: a swallowed drop used to strand
+    // all three orgs on the shared database on every run.
+    await runTeardowns(
+      ...(previewOrgId ? [() => dropSampleCloneOrg(previewOrgId!)] : []),
+      ...(templateOrgId ? [() => dropSampleCloneOrg(templateOrgId!)] : []),
+      () => dropScratchOrg(memberOrg.orgId),
+      () => dropScratchOrg(source.orgId),
+    );
   }
+  // The teardown above must leave nothing behind: neither the scratch orgs
+  // nor any org cloned from them (sample company, promoted template), nor
+  // their sandbox rows.
+  const ownedOrgIds = [source.orgId, memberOrg.orgId, templateOrgId, previewOrgId]
+    .filter((id): id is string => id !== null);
+  const leakedOrgs = (await db.execute<{ id: string; name: string }>(sql`
+    select id, name from orgs
+     where id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])
+        or sandbox_of = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`)).rows;
+  assert.deepEqual(
+    leakedOrgs.map((row) => row.name).sort(),
+    [],
+    `teardown leaked orgs: ${JSON.stringify(leakedOrgs)}`,
+  );
+  const leakedSandboxes = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from sandboxes
+     where org_id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])
+        or production_org_id = any(${`{${ownedOrgIds.join(",")}}`}::uuid[])`)).rows[0]!.n;
+  assert.equal(leakedSandboxes, 0, "teardown leaked sandbox rows");
 });
