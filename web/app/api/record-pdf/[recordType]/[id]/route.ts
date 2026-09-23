@@ -50,7 +50,7 @@ export async function GET(
   }
   const [tpl, record] = await Promise.all([
     resolvePdfTemplate(user.orgId, recordType, templateId),
-    loadPdfRecordValues(recordType, user.orgId, id),
+    loadPdfRecordValues(recordType, user.orgId, id, gate.allowedSubsidiaryIds ?? null),
   ]);
   if (!tpl) return NextResponse.json({ error: "template not found" }, { status: 404 });
   if (!record) return NextResponse.json({ error: "record not found" }, { status: 404 });

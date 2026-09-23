@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { findSamplePdfRecordId } = await import('./values')
+const { findSamplePdfRecordId, loadPdfRecordValues } = await import('./values')
 
 /**
  * The template-editor preview renders the org's "most recent" record. For a
@@ -73,6 +73,47 @@ test('findSamplePdfRecordId honours the caller subsidiary scope', { skip: !proce
 })
 
 /**
+ * The preview samples a record in scope and THEN loads it: the subsidiary
+ * predicate must be enforced in the load itself, because a record moved to
+ * a hidden legal entity between the two awaits must read as not found —
+ * never render. Naming the id directly with an excluding scope is the same
+ * hole, so the load refuses that too.
+ */
+test('loadPdfRecordValues enforces the caller scope in the load itself', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const hidden = randomUUID()
+    const visibleDoc = randomUUID()
+    const hiddenDoc = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
+        values (${hidden}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden', 'CAD', 'CA')`)
+      for (const [id, sub, label] of [
+        [visibleDoc, org.subsidiaryId, 'Visible'],
+        [hiddenDoc, hidden, 'Hidden'],
+      ] as const) {
+        await db.execute(sql`insert into documents(id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate)
+          values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${label}, ${sub}, ${org.customerId}, ${org.date}, 'CAD', 1)`)
+      }
+    })
+    const load = (id: string, scope: Set<string> | null) =>
+      withOrgContext(org.orgId, () => loadPdfRecordValues('customer_invoice', org.orgId, id, scope))
+
+    // The TOCTOU case: the id is known (sampled while visible, or named
+    // directly) but the scope excludes its subsidiary — the load refuses.
+    assert.equal(await load(hiddenDoc, new Set([org.subsidiaryId])), null)
+    // The scope that owns it, and the unconstrained system context, load it.
+    assert.ok(await load(hiddenDoc, new Set([hidden])))
+    assert.ok(await load(hiddenDoc, null))
+    assert.ok(await load(visibleDoc, new Set([org.subsidiaryId])))
+    // An empty scope loads nothing at all.
+    assert.equal(await load(visibleDoc, new Set()), null)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+/**
  * The field-ticket template catalog advertises a party address merge field.
  * It must print the customer's default billing address like every sibling
  * record type — never a silent blank.
@@ -81,7 +122,6 @@ test('field-ticket merge values populate the customer party address', { skip: !p
   const { withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
   const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
   const { createFieldTicket } = await import('../field-tickets')
-  const { loadPdfRecordValues } = await import('./values')
   await withBypassContext(async () => {
     const org = await createScratchOrg()
     try {
@@ -95,7 +135,7 @@ test('field-ticket merge values populate the customer party address', { skip: !p
         (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'ADDR-1', 'Address job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
       const created = await createFieldTicket(org.orgId, actor, { projectId })
-      const record = await loadPdfRecordValues('field_ticket', org.orgId, created.id)
+      const record = await loadPdfRecordValues('field_ticket', org.orgId, created.id, null)
       assert.equal(record?.values.party_address, '400 King St W, Toronto, ON, M5V 1K2, CA')
     } finally {
       await dropScratchOrg(org.orgId)

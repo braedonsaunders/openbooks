@@ -241,6 +241,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         to: String(body.to ?? ''),
         message: body.message ? String(body.message).slice(0, 1000) : null,
         appBaseUrl: base,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
       })
     } else {
       return NextResponse.json({ error: 'unknown action' }, { status: 400 })

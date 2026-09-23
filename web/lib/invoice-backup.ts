@@ -311,7 +311,7 @@ export async function assembleInvoiceBackup(
   for (const kind of recipe) {
     if (kind === 'invoice') {
       const tpl = await resolvePdfTemplate(orgId, 'customer_invoice', null)
-      const record = await loadPdfRecordValues('customer_invoice', orgId, documentId)
+      const record = await loadPdfRecordValues('customer_invoice', orgId, documentId, allowedSubsidiaryIds)
       if (tpl && record) {
         const buf = await mergeAndPrintPdf(tpl, record.values)
         const pages = await mergePdfInto(out, buf)
@@ -339,7 +339,7 @@ export async function assembleInvoiceBackup(
         const tpl = await resolvePdfTemplate(orgId, 'field_ticket', null)
         if (tpl) {
           for (const tk of tickets.rows) {
-            const record = await loadPdfRecordValues('field_ticket', orgId, tk.field_ticket_id)
+            const record = await loadPdfRecordValues('field_ticket', orgId, tk.field_ticket_id, allowedSubsidiaryIds)
             if (!record) continue
             const buf = await mergeAndPrintPdf(tpl, record.values)
             const pages = await mergePdfInto(out, buf)

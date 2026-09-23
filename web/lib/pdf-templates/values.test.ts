@@ -190,7 +190,7 @@ const valuesUrl = new URL('./values.ts?us-ytd-tax-test', import.meta.url).href
 const { loadPdfRecordValues } = (await import(valuesUrl)) as typeof import('./values.ts')
 
 test('US pay-stub YTD income tax aggregates persisted income-tax lines and preserves pay totals', async () => {
-  const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id)
+  const record = await loadPdfRecordValues('pay_stub', 'org-1', state.stub.id, null)
 
   assert.ok(record)
   // The YTD subquery joins the persisted lines and binds the registry-derived

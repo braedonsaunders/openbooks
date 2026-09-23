@@ -59,8 +59,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: (e as Error).message }, { status: 400 });
   }
 
-  const sampleId = await findSamplePdfRecordId(meta.key, user.orgId, gate.allowedSubsidiaryIds);
-  const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId) : null;
+  const scope = gate.allowedSubsidiaryIds ?? null
+  const sampleId = await findSamplePdfRecordId(meta.key, user.orgId, scope);
+  // The scope is enforced again INSIDE the load: the sample was chosen in
+  // scope, but a record moved to a hidden subsidiary between the two awaits
+  // must read as not found (and fall back to synthetic sample values),
+  // never render a legal entity hidden from the designer.
+  const real = sampleId ? await loadPdfRecordValues(meta.key, user.orgId, sampleId, scope) : null;
   const values = real?.values ?? sampleValues(meta);
 
   try {

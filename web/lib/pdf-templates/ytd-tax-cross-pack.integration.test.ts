@@ -76,7 +76,7 @@ async function seedStub(
 }
 
 async function printedYtdTax(orgId: string, stubId: string): Promise<{ tax: number; gross: number; net: number }> {
-  const record = await withOrgContext(orgId, () => loadPdfRecordValues('pay_stub', orgId, stubId))
+  const record = await withOrgContext(orgId, () => loadPdfRecordValues('pay_stub', orgId, stubId, null))
   assert.ok(record)
   return {
     tax: parseMoney(record.values.ytd_tax),

@@ -58,7 +58,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ recordTy
   if (!owned) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
-  const info = await resolveRecordRecipient(recordType, gate.user.orgId, id)
+  const info = await resolveRecordRecipient(recordType, gate.user.orgId, id, gate.allowedSubsidiaryIds ?? null)
   if (!info) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   return NextResponse.json(info)
 }
@@ -117,6 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
       to: requestedTo || undefined,
       message: typeof body.message === 'string' ? body.message : undefined,
       templateId: requestedTemplate,
+      scope: gate.allowedSubsidiaryIds ?? null,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {

@@ -90,9 +90,9 @@ test('drawer and PDF agree on invoice and credit balances due', { skip: !process
       assert.equal(String(creditDrawer!.doc.balance_due), '35.0000')
       // PDF values are locale money-formatted: pin the number through the
       // formatting rather than the exact glyphs.
-      const invPdf = await loadPdfRecordValues('customer_invoice', scratch.orgId, ids.inv)
+      const invPdf = await loadPdfRecordValues('customer_invoice', scratch.orgId, ids.inv, null)
       assert.match(String(invPdf!.values.balance_due), /35[.,]00/)
-      const creditPdf = await loadPdfRecordValues('customer_credit', scratch.orgId, ids.credit)
+      const creditPdf = await loadPdfRecordValues('customer_credit', scratch.orgId, ids.credit, null)
       assert.match(String(creditPdf!.values.balance_due), /35[.,]00/)
     })
   } finally {

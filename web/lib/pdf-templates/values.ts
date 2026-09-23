@@ -111,10 +111,15 @@ async function loadDocumentValues(
   meta: PdfRecordTypeMeta,
   orgId: string,
   id: string,
+  scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
   // Balance due comes from the shared reader (engine/src/records/balance-due.ts) —
   // the same applied sum the drawer and dunning use, so the printed figure
   // cannot drift from what the drawer shows or what dunning acts on.
+  // The subsidiary predicate is enforced HERE, in the load — a scope checked
+  // earlier (preview sampling, print/send fences) cannot be trusted across
+  // the await boundary, and a record moved out of scope between check and
+  // load reads as not found instead of leaking.
   const r = (await db.execute<Record<string, unknown>>(sql`
     select d.*, p.display_name as party_name, p.email as party_email, p.phone as party_phone,
            a.line1, a.line2, a.city, a.region, a.postal_code, a.country,
@@ -126,7 +131,7 @@ async function loadDocumentValues(
          order by is_default_billing desc, created_at limit 1
       ) a on true
       ${documentBalanceDueLateral()}
-     where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}
+     where d.id = ${id} and d.org_id = ${orgId} and d.kind = ${meta.docKind}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
   `))
   const doc = r.rows[0]
   if (!doc) return null
@@ -196,9 +201,14 @@ async function loadDocumentValues(
   return { values, reference: String(doc.document_number ?? meta.docTitle) }
 }
 
-async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+async function loadJournalValues(
+  orgId: string,
+  id: string,
+  scope: ReadonlySet<string> | null,
+): Promise<PdfRecordValues | null> {
   const r = (await db.execute<Record<string, unknown>>(sql`
-    select e.* from journal_entries e where e.id = ${id} and e.org_id = ${orgId}
+    select e.* from journal_entries e
+     where e.id = ${id} and e.org_id = ${orgId}${subsidiaryVisibleFilter(sql`e.subsidiary_id`, scope)}
   `))
   const entry = r.rows[0]
   if (!entry) return null
@@ -248,7 +258,11 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
 }
 
 /** Load + format the merge values for one record. Null when not found. */
-async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+async function loadPayStubValues(
+  orgId: string,
+  id: string,
+  scope: ReadonlySet<string> | null,
+): Promise<PdfRecordValues | null> {
   const r = (await db.execute<Record<string, unknown>>(sql`
     select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name, p.email as employee_email
@@ -256,7 +270,7 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
-     where s.id = ${id} and s.org_id = ${orgId}
+     where s.id = ${id} and s.org_id = ${orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
   `))
   const stub = r.rows[0]
   if (!stub) return null
@@ -356,7 +370,11 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
  * is not a negotiable instrument, and printing one would put paper in the world
  * that the ledger cannot match. `issuePayRunCheques` allocates first.
  */
-async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+async function loadPayrollChequeValues(
+  orgId: string,
+  id: string,
+  scope: ReadonlySet<string> | null,
+): Promise<PdfRecordValues | null> {
   const r = (await db.execute<Record<string, unknown>>(sql`
     select s.*, r.period_start, r.period_end, d.document_number, d.subsidiary_id,
            p.display_name as employee_name,
@@ -370,7 +388,7 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
          order by is_default_billing desc, created_at limit 1
       ) a on true
      where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
-       and s.cheque_number is not null
+       and s.cheque_number is not null${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope)}
   `))
   const stub = r.rows[0]
   if (!stub) return null
@@ -434,18 +452,26 @@ async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRe
   }
 }
 
+/**
+ * Load + format the merge values for one record. Null when not found — or
+ * when the record sits outside the caller's subsidiary scope. `scope` is
+ * the caller's allowedSubsidiaryIds (null = unconstrained system context):
+ * REQUIRED at every call site so no loader can be reached without declaring
+ * the visibility posture it enforces.
+ */
 export async function loadPdfRecordValues(
   recordType: string,
   orgId: string,
   id: string,
+  scope: ReadonlySet<string> | null,
 ): Promise<PdfRecordValues | null> {
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
-  if (meta.key === 'journal_entry') return loadJournalValues(orgId, id)
-  if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id)
-  if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id)
-  if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id)
-  return loadDocumentValues(meta, orgId, id)
+  if (meta.key === 'journal_entry') return loadJournalValues(orgId, id, scope)
+  if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id, scope)
+  if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id, scope)
+  if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id, scope)
+  return loadDocumentValues(meta, orgId, id, scope)
 }
 
 
@@ -455,10 +481,14 @@ export async function loadPdfRecordValues(
  * cells (day1..day7 × tier) so a template can reproduce the classic weekly
  * grid exactly; signature images are data-URLs for <img src> embedding.
  */
-async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+async function loadFieldTicketValues(
+  orgId: string,
+  id: string,
+  scope: ReadonlySet<string> | null,
+): Promise<PdfRecordValues | null> {
   let ticket: Awaited<ReturnType<typeof loadFieldTicket>>
   try {
-    ticket = await loadFieldTicket(orgId, id, { includeRelated: false })
+    ticket = await loadFieldTicket(orgId, id, { includeRelated: false, allowedSubsidiaryIds: scope })
   } catch {
     return null
   }

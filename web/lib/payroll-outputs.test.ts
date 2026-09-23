@@ -57,7 +57,10 @@ const state = {
   recordLoadCalls: 0,
   transportResolveCalls: 0,
   chequeIssueCalls: 0,
-  chequeTemplate: { id: 'template-1' } as { id: string } | null,
+  chequeTemplate: {
+    id: 'template-1',
+    provenance: { templateId: 'template-1', revision: 1, contentHash: 'payroll-provenance' },
+  } as { id: string; provenance: { templateId: string; revision: number; contentHash: string } } | null,
   encryptionPasswords: [] as string[],
   encryptionError: null as Error | null,
   renderedPdf: plainPdfFixture,
@@ -266,7 +269,10 @@ function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string 
   state.recordLoadCalls = 0
   state.transportResolveCalls = 0
   state.chequeIssueCalls = 0
-  state.chequeTemplate = { id: 'template-1' }
+  state.chequeTemplate = {
+    id: 'template-1',
+    provenance: { templateId: 'template-1', revision: 1, contentHash: 'payroll-provenance' },
+  }
   state.encryptionPasswords.length = 0
   state.encryptionError = null
   state.renderedPdf = plainPdfFixture
@@ -312,7 +318,7 @@ test('a protected payroll PDF cannot be sent without a protection pass', async (
   reset([], { enabled: true, expression: '{surname:3|upper}' })
   for (const recordType of protectedPayrollRecordTypes) {
     await assert.rejects(
-      () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1' }),
+      () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1', scope: null }),
       /payroll compensation PDFs must be encrypted before email delivery/,
     )
   }
@@ -331,6 +337,7 @@ test('verified ciphertext is what actually reaches the transport', async () => {
       recordType,
       orgId: 'org-1',
       id: 'stub-1',
+      scope: null,
       encrypt: async (pdf) => {
         encryptionCalls += 1
         assert.deepEqual(pdf, plainPdfFixture)
@@ -359,7 +366,7 @@ test('identity, copied, alternate-plaintext, unencrypted, and malformed outputs 
   for (const recordType of protectedPayrollRecordTypes) {
     for (const [kind, encrypt] of plaintextEncryptors) {
       await assert.rejects(
-        () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1', encrypt }),
+        () => sendRecordPdfEmail({ recordType, orgId: 'org-1', id: 'stub-1', encrypt, scope: null }),
         /payroll compensation PDF encryption must return a valid encrypted PDF/,
         `${recordType} accepted ${kind}`,
       )
@@ -389,6 +396,7 @@ test('a forged encryption marker cannot smuggle plaintext past the sender', asyn
         recordType,
         orgId: 'org-1',
         id: 'stub-1',
+        scope: null,
         encrypt: async () => Buffer.from(forged),
       }),
       /payroll compensation PDF encryption must return a valid encrypted PDF/,
@@ -400,7 +408,7 @@ test('a forged encryption marker cannot smuggle plaintext past the sender', asyn
 
 test('an ordinary record still emails without encryption', async () => {
   reset([], { enabled: true, expression: '{surname:3|upper}' })
-  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'invoice-1' })
+  await sendRecordPdfEmail({ recordType: 'customer_invoice', orgId: 'org-1', id: 'invoice-1', scope: null })
   assert.equal(state.deliveryCalls.length, 1)
   assert.deepEqual(state.deliveryCalls[0]?.attachment, plainPdfFixture)
 })

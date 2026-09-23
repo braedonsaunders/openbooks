@@ -192,7 +192,7 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
       assert.ok(lines.length > 0, `${label} stub carries persisted income-tax lines`)
       const expected = lines.reduce((total, line) => total + Number(line.amount), 0)
 
-      const record = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stubId))
+      const record = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stubId, null))
       assert.ok(record)
       assert.equal(cents(parseMoney(record.values.ytd_tax)), cents(expected))
       // Gross/net scope is unchanged by the tax fix.
@@ -211,7 +211,7 @@ test('printed YTD income tax counts every jurisdiction the engine actually withh
       .reduce((total, l) => total + Number(l.amount), 0)
     assert.ok(qcProvincial > 0, 'the QC fixture is genuinely subject to provincial tax')
     assert.ok(qcFederal > 0, 'the QC fixture is genuinely subject to federal tax')
-    const qcRecord = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, qcStub))
+    const qcRecord = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, qcStub, null))
     assert.equal(cents(parseMoney(qcRecord!.values.ytd_tax)), cents(qcFederal + qcProvincial))
 
     // Ontario parity: no provincial line, federal only — the old answer.
@@ -234,7 +234,7 @@ test('a voided pay run leaves printed YTD through the real void path', { skip: !
     assert.deepEqual((await withOrgContext(fx.orgId, () => calculatePayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId }))).errors, [])
     await withOrgContext(fx.orgId, () => commitPayRun({ orgId: fx.orgId, documentId: run1.documentId, actorId: fx.actorId }))
     const stub1 = await stubIdFor(fx.orgId, run1.documentId, employee)
-    const before = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub1))
+    const before = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub1, null))
     assert.ok(before)
     assert.ok(parseMoney(before.values.ytd_tax) > 0)
 
@@ -245,7 +245,7 @@ test('a voided pay run leaves printed YTD through the real void path', { skip: !
     assert.deepEqual((await withOrgContext(fx.orgId, () => calculatePayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId }))).errors, [])
     await withOrgContext(fx.orgId, () => commitPayRun({ orgId: fx.orgId, documentId: run2.documentId, actorId: fx.actorId }))
     const stub2 = await stubIdFor(fx.orgId, run2.documentId, employee)
-    const during = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2))
+    const during = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2, null))
     assert.ok(during)
     assert.ok(cents(parseMoney(during!.values.ytd_tax)) > cents(parseMoney(before!.values.ytd_tax)))
 
@@ -262,7 +262,7 @@ test('a voided pay run leaves printed YTD through the real void path', { skip: !
 
     // stub2 still loads (its row is history), but its YTD now counts the
     // surviving committed run only — identical to the pre-run-2 print.
-    const after = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2))
+    const after = await withOrgContext(fx.orgId, () => loadPdfRecordValues('pay_stub', fx.orgId, stub2, null))
     assert.ok(after)
     assert.equal(cents(parseMoney(after.values.ytd_tax)), cents(parseMoney(before!.values.ytd_tax)))
     assert.equal(cents(parseMoney(after.values.ytd_gross)), cents(parseMoney(before!.values.ytd_gross)))
@@ -355,7 +355,7 @@ test('a US state-tax stub prints FIT plus state withholding in YTD tax', { skip:
     const state = lines.filter((l) => l.system_key === 'state_income_tax').reduce((t, l) => t + Number(l.amount), 0)
     assert.ok(state > 0, 'the CA fixture genuinely withholds California PIT')
     assert.ok(federal > 0, 'the CA fixture genuinely withholds federal FIT')
-    const record = await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub', org.orgId, stubId))
+    const record = await withOrgContext(org.orgId, () => loadPdfRecordValues('pay_stub', org.orgId, stubId, null))
     assert.ok(record)
     assert.equal(cents(parseMoney(record.values.ytd_tax)), cents(federal + state))
     const oracle = await ytdOracle(org.orgId, employee, 2026, '2026-07-21', 'USD')
