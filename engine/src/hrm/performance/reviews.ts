@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { loadApprovalPerson, requireAggregatePerformanceManage } from "../authorization.ts";
+import {
+  HrmAuthorizationError,
+  loadApprovalPerson,
+  requireAggregatePerformanceManage,
+} from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
 import { assertRatingInScale, parseRatingScale } from "./performance-math.ts";
@@ -86,6 +90,7 @@ type StoredReview = {
   cycleId: string;
   cycleStatus: string;
   employmentId: string;
+  employerSubsidiaryId: string;
   subjectPartyId: string;
   reviewerPartyId: string;
   kind: string;
@@ -131,6 +136,7 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string): P
            r.cycle_id as "cycleId",
            c.status as "cycleStatus",
            r.employment_id as "employmentId",
+           e.employer_subsidiary_id as "employerSubsidiaryId",
            r.subject_party_id as "subjectPartyId",
            r.reviewer_party_id as "reviewerPartyId",
            r.kind, r.status,
@@ -144,6 +150,8 @@ async function loadReview(exec: SqlExecutor, orgId: string, reviewId: string): P
       from hrm_reviews r
       join hrm_review_cycles c
         on c.org_id = r.org_id and c.id = r.cycle_id
+      join worker_employments e
+        on e.org_id = r.org_id and e.id = r.employment_id
      where r.org_id = ${orgId} and r.id = ${reviewId}
   `)).rows[0];
   // Zero rows is a failure: unknown id, or an id from another organization.
@@ -177,6 +185,23 @@ async function loadAnswers(
      order by position
   `)).rows;
   return rows;
+}
+
+/**
+ * HR mutations act through the aggregate manage grant, so the review's
+ * employment must sit inside the actor's allowed subsidiary set — a
+ * legal-entity-restricted HR calibrates, shares, and reopens only the
+ * reviews they cover. Self-service transitions (submit by the reviewer,
+ * acknowledge by the subject) prove authority by identity instead and
+ * never reach this check.
+ */
+function assertReviewInScope(allowed: Set<string> | null, review: StoredReview): void {
+  if (allowed === null) return;
+  if (!allowed.has(review.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      `review ${review.id} is not visible in this organization and legal-entity scope — ask an HR administrator covering its legal entity to act on it`,
+    );
+  }
 }
 
 /** The actor's person identity on the transaction runner — never caller input. */
@@ -326,8 +351,10 @@ export async function calibrateReview(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const review = toReviewDTO(await loadReview(db, orgId, reviewId));
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const stored = await loadReview(db, orgId, reviewId);
+    assertReviewInScope(allowed, stored);
+    const review = toReviewDTO(stored);
     if (review.status !== "submitted" && review.status !== "calibrated") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -386,7 +413,8 @@ export async function shareReview(args: {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const partyId = await actorParty(db, orgId, actorId);
-    const review = toReviewDTO(await loadReview(db, orgId, reviewId));
+    const stored = await loadReview(db, orgId, reviewId);
+    const review = toReviewDTO(stored);
     if (review.kind === "self") {
       throw new HrmPerformanceError(
         "REFUSED",
@@ -394,8 +422,8 @@ export async function shareReview(args: {
       );
     }
     if (review.reviewerPartyId !== partyId) {
-      // Not the reviewer: HR may still share.
-      await requireAggregatePerformanceManage(db, orgId, actorId);
+      // Not the reviewer: HR may still share, inside their legal-entity scope.
+      assertReviewInScope(await requireAggregatePerformanceManage(db, orgId, actorId), stored);
     }
     if (review.status !== "submitted" && review.status !== "calibrated") {
       throw new HrmPerformanceError(
@@ -498,8 +526,10 @@ export async function reopenReview(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const review = toReviewDTO(await loadReview(db, orgId, reviewId));
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const stored = await loadReview(db, orgId, reviewId);
+    assertReviewInScope(allowed, stored);
+    const review = toReviewDTO(stored);
     if (review.status !== "submitted" && review.status !== "calibrated") {
       throw new HrmPerformanceError(
         "BAD_STATE",
