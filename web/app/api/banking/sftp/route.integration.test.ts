@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { mkdtempSync, rmSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
@@ -105,10 +108,27 @@ const { PATCH: PLATFORM_PATCH } = (await import(daemonUrl)) as typeof import(
 );
 hooks.deregister();
 
-const { db, withBypass, withBypassContext, withOrgContext } =
+const { db, env, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
   await import("@openbooks/engine/src/testing/fixtures.ts");
+
+// Creating a server resolves storage through the production selector, which
+// requires an absolute shared OPENBOOKS_DATA_DIR (refuses by name
+// otherwise): pin a throwaway directory for this file's POST calls, in both
+// the live environment and the engine snapshot, and restore both after.
+const scratchDataDir = mkdtempSync(join(tmpdir(), "openbooks-sftp-route-"));
+const savedProcessDataDir = process.env.OPENBOOKS_DATA_DIR;
+const savedSnapshotDataDir = (env as Record<string, string | undefined>).OPENBOOKS_DATA_DIR;
+process.env.OPENBOOKS_DATA_DIR = scratchDataDir;
+(env as Record<string, string>).OPENBOOKS_DATA_DIR = scratchDataDir;
+test.after(() => {
+  if (savedProcessDataDir === undefined) delete process.env.OPENBOOKS_DATA_DIR;
+  else process.env.OPENBOOKS_DATA_DIR = savedProcessDataDir;
+  if (savedSnapshotDataDir === undefined) delete (env as Record<string, string | undefined>).OPENBOOKS_DATA_DIR;
+  else (env as Record<string, string>).OPENBOOKS_DATA_DIR = savedSnapshotDataDir;
+  rmSync(scratchDataDir, { recursive: true, force: true });
+});
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
