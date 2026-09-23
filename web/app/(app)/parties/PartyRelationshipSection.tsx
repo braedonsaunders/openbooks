@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Skeleton } from '@openbooks/ui'
@@ -78,7 +78,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()
-  const { busy, refusal, execute } = useAppAction()
+  const { busy, refusal, execute, runExclusive } = useAppAction()
   // Keyed by party so switching accounts reads as "not loaded yet" without a
   // synchronous reset inside the effect body, which would cascade a render on
   // every mount (react-hooks/set-state-in-effect).
@@ -87,30 +87,37 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
   const [storedStage, setStoredStage] = useState<Stage | null>(null)
   const [stageReason, setStageReason] = useState('')
 
+  // The section's own copy of the relationship: the POST below opens the
+  // profile server-side, but nothing re-reads it into this local
+  // result/form state — so the empty state (and its Start tracking
+  // button) stays visible until the drawer remounts, inviting a second
+  // POST. Both the mount effect and startTracking refresh through here.
+  // reload fetches and shapes only; the setStates stay at the call sites
+  // (the mount effect keeps its promise-chain shape, which never resets
+  // state synchronously inside the effect body).
+  const reload = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch(`/api/crm/accounts/${partyId}`, { signal })
+    if (!response.ok) throw new Error('load failed')
+    const body = (await response.json()) as RelationshipResponse
+    const form = body.account ? toForm(body.account.profile) : null
+    return { result: { partyId, body }, form, storedStage: form?.lifecycleStage ?? null }
+  }, [partyId])
+
   useEffect(() => {
     const controller = new AbortController()
-    fetch(`/api/crm/accounts/${partyId}`, { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error('load failed')
-        return response.json() as Promise<RelationshipResponse>
-      })
-      .then((body) => {
-        setResult({ partyId, body })
-        if (body.account) {
-          const next = toForm(body.account.profile)
-          setForm(next)
-          setStoredStage(next.lifecycleStage)
-        } else {
-          setForm(null)
-          setStoredStage(null)
-        }
-      })
-      .catch((error: unknown) => {
+    reload(controller.signal).then(
+      (applied) => {
+        setResult(applied.result)
+        setForm(applied.form)
+        setStoredStage(applied.storedStage)
+      },
+      (error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
         setResult({ partyId, body: null })
-      })
+      },
+    )
     return () => controller.abort()
-  }, [partyId])
+  }, [partyId, reload])
 
   const loaded = result?.partyId === partyId ? result.body : undefined
 
@@ -128,13 +135,29 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
     setForm((current) => (current ? { ...current, lifecycleStage: next, statusId: fallback } : current))
   }
 
-  async function startTracking() {
+  // Opening the profile refreshes this section's own state from a re-read
+  // (the POST answers 200, but router.refresh() never touches this
+  // component's local result/form state). runExclusive drops a second
+  // click landing before busy flips, and the shared busy flag disables
+  // the button for the whole flight — so one success renders the profile
+  // and retires Start tracking instead of inviting a duplicate POST.
+  const startTracking = runExclusive(async () => {
     const ok = await execute(
       () => fetchAction(`/api/crm/accounts/${partyId}`, { method: 'POST' }),
       { fallbackMessage: tc('feedback.saveFailed'), successMessage: tc('feedback.saved') },
     )
-    if (ok) router.refresh()
-  }
+    if (!ok) return
+    try {
+      const applied = await reload()
+      setResult(applied.result)
+      setForm(applied.form)
+      setStoredStage(applied.storedStage)
+    } catch {
+      // The profile exists server-side; a failed re-read keeps the empty
+      // state (and its retryable Start tracking) rather than a dead panel.
+    }
+    router.refresh()
+  })
 
   async function save() {
     if (!form) return
