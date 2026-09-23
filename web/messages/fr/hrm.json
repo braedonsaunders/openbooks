@@ -186,6 +186,18 @@
     "proposeFailed": "La liste des emplois n'a pas pu être chargée.",
     "draftBadge": "Actions",
     "openEmployee": "Ouvrir le dossier de l'employé",
+    "openRequest": "Ouvrir",
+    "detailTitle": "Demande de changement",
+    "detailLoading": "Chargement de la demande…",
+    "detailFailed": "Impossible de charger la demande.",
+    "detailSubject": "Objet",
+    "detailProposedChange": "Changement proposé",
+    "detailHistory": "Historique",
+    "detailDecision": "Décision",
+    "detailNoDecision": "Aucune décision enregistrée pour l'instant.",
+    "detailAwaitingDecision": "En attente de décision — le circuit d'approbation est encore ouvert.",
+    "detailCreated": "Enregistrée",
+    "detailApplied": "Appliquée",
     "notAvailable": "Non disponible",
     "reasonsButton": "Codes de motif",
     "verbs": {
@@ -367,7 +379,8 @@
       "filled": "ETP pourvus",
       "vacant": "ETP vacants",
       "holder": "Titulaire",
-      "unassignedHolder": "Vacant"
+      "unassignedHolder": "Vacant",
+      "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}"
     },
     "holdersCount": "{count, plural, one {# titulaire} other {# titulaires}}",
     "empty": "Aucun poste ne correspond à ce filtre.",
@@ -1993,6 +2006,7 @@
       "closed": "Ce courrier est clos.",
       "for": "pour {name}",
       "kicker": "Offre",
+      "terms": "Les conditions que vous signez",
       "version": "version {version}"
     }
   },

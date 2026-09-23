@@ -186,6 +186,18 @@
     "proposeFailed": "A lista de empregos não pôde ser carregada.",
     "draftBadge": "Ações",
     "openEmployee": "Abrir o registro do funcionário",
+    "openRequest": "Abrir",
+    "detailTitle": "Solicitação de alteração",
+    "detailLoading": "Carregando a solicitação…",
+    "detailFailed": "Não foi possível carregar a solicitação.",
+    "detailSubject": "Assunto",
+    "detailProposedChange": "Alteração proposta",
+    "detailHistory": "Histórico",
+    "detailDecision": "Decisão",
+    "detailNoDecision": "Nenhuma decisão registrada ainda.",
+    "detailAwaitingDecision": "Aguardando decisão — o fluxo de aprovação ainda está aberto.",
+    "detailCreated": "Registrada",
+    "detailApplied": "Aplicada",
     "notAvailable": "Indisponível",
     "reasonsButton": "Códigos de motivo",
     "verbs": {
@@ -367,7 +379,8 @@
       "filled": "FTE preenchido",
       "vacant": "FTE vago",
       "holder": "Titular",
-      "unassignedHolder": "Vago"
+      "unassignedHolder": "Vago",
+      "holdersCount": "{count, plural, one {# titular} other {# titulares}}"
     },
     "holdersCount": "{count, plural, one {# titular} other {# titulares}}",
     "empty": "Nenhuma posição corresponde a este filtro.",
@@ -1993,6 +2006,7 @@
       "closed": "Esta carta está encerrada.",
       "for": "para {name}",
       "kicker": "Oferta",
+      "terms": "Termos que você está assinando",
       "version": "versão {version}"
     }
   },
