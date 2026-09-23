@@ -1006,11 +1006,11 @@ test("rate application writes in chunked multi-row upserts, not one statement pe
   // STATEMENT count — one prefetch plus one multi-row upsert per chunk,
   // never one statement per pair.
   const seen: unknown[] = [];
-  const counting = {
+  const counting: Pick<typeof db, "execute"> = {
     execute: (async () => {
       seen.push(true);
       return { rows: [] };
-    }) as unknown as Pick<typeof db, "execute">,
+    }) as unknown as typeof db.execute,
   };
   const total = FX_RATE_APPLY_CHUNK * 2 + 200;
   const normalized = Array.from({ length: total }, (_, i) => ({
