@@ -48,6 +48,11 @@ export function LienWaiverDrawer({
 
   const editable = ['draft', 'requested', 'received'].includes(waiver.status)
   const isUnconditional = waiver.waiverType.startsWith('unconditional')
+  // Signed before the executed-snapshot freeze: no frozen print image exists,
+  // so the print re-reads today's rows and must never read as the release.
+  const legacyUnverified =
+    !waiver.hasExecutedSnapshot &&
+    (waiver.status === 'signed' || (waiver.status === 'void' && waiver.signedAt !== null))
 
   async function act(body: Record<string, unknown>): Promise<void> {
     setError(null)
@@ -108,6 +113,16 @@ export function LienWaiverDrawer({
           {t(`waiverTypeHint.${waiver.waiverType}`)}
         </AlertDescription>
       </Alert>
+
+      {legacyUnverified ? (
+        <Alert className="mb-4" variant="destructive">
+          <AlertDescription>
+            <strong className="mr-1">Legacy waiver — executed evidence not captured at signing.</strong>
+            The print reflects current records, not the document as signed. Verify against the attached
+            executed copy below, or void and reissue.
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
         {(

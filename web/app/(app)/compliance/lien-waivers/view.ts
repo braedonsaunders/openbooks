@@ -22,6 +22,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import {
   complianceSubsidiaryFilter,
+  isLienWaiverLegacyUnverified,
   loadLienWaivers,
   requireLienWaiverFeature,
   type LienWaiverRow,
@@ -62,6 +63,8 @@ export interface WaiverListRow {
   amount: string
   statusLabel: string
   statusVariant: 'success' | 'warning' | 'destructive' | 'secondary' | 'outline'
+  /** Signed before the snapshot freeze: the print is bannered current records, not the release. */
+  legacyUnverified: boolean
 }
 
 export interface LienWaiversData {
@@ -165,23 +168,35 @@ export async function loadLienWaiversPage(
     columnThrough: t('lienWaivers.columns.through'),
     columnAmount: t('lienWaivers.columns.amount'),
     columnStatus: t('lienWaivers.columns.status'),
-    rows: waivers.map((waiver) => {
-      const rowQuery = new URLSearchParams(query)
-      rowQuery.set('waiver', waiver.id)
-      return {
-        id: waiver.id,
-        waiverNumber: waiver.waiverNumber,
-        href: `/compliance/lien-waivers?${rowQuery}`,
-        directionLabel: t(`direction.${waiver.direction}`),
-        partyName: waiver.partyName,
-        projectName: waiver.projectName,
-        typeLabel: t(`waiverType.${waiver.waiverType}`),
-        throughDate: waiver.throughDate,
-        amount: money(waiver.amount, { currency: waiver.currency }),
-        statusLabel: t(`waiverStatus.${waiver.status}`),
-        statusVariant: STATUS_TONE[waiver.status] ?? 'secondary',
-      }
-    }),
+    rows: await Promise.all(
+      waivers.map(async (waiver) => {
+        const rowQuery = new URLSearchParams(query)
+        rowQuery.set('waiver', waiver.id)
+        // A legacy executed waiver still reads "Signed" — that is what released
+        // the payment — but the badge drops to warning so the list shows the
+        // same legacy state as the drawer and the bannered print.
+        const legacyUnverified = await isLienWaiverLegacyUnverified(orgId, {
+          id: waiver.id,
+          status: waiver.status,
+          signedAt: waiver.signedAt,
+          hasExecutedSnapshot: waiver.hasExecutedSnapshot,
+        })
+        return {
+          id: waiver.id,
+          waiverNumber: waiver.waiverNumber,
+          href: `/compliance/lien-waivers?${rowQuery}`,
+          directionLabel: t(`direction.${waiver.direction}`),
+          partyName: waiver.partyName,
+          projectName: waiver.projectName,
+          typeLabel: t(`waiverType.${waiver.waiverType}`),
+          throughDate: waiver.throughDate,
+          amount: money(waiver.amount, { currency: waiver.currency }),
+          statusLabel: t(`waiverStatus.${waiver.status}`),
+          statusVariant: legacyUnverified ? 'warning' : (STATUS_TONE[waiver.status] ?? 'secondary'),
+          legacyUnverified,
+        }
+      }),
+    ),
     drawerOpen: Boolean(open),
     drawerProps: open
       ? {

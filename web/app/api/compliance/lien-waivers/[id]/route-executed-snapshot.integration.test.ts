@@ -141,21 +141,68 @@ test("signing freezes the print image, later renames do not rewrite it", { skip:
   }
 });
 
-test("a waiver executed before the freeze still prints live rows", { skip: !DB }, async () => {
-  const { org, partyId, waiverId } = await fixture();
+test("a waiver executed before the freeze prints bannered current records, never a clean release", { skip: !DB }, async () => {
+  const { org, partyId, projectId, waiverId } = await fixture();
   try {
     // A legacy executed row: signed, but no frozen image was ever stamped.
     await withBypassContext(() => db.execute(sql`
       update lien_waivers set status = 'signed', signed_by_name = 'Old Signer',
              signed_at = '2026-04-01T00:00:00Z'::timestamptz
        where id = ${waiverId}`));
+    // Rename everything the release names after the upgrade, then print.
     await withBypassContext(() => db.execute(sql`
       update parties set display_name = 'Renamed Vendor Inc' where id = ${partyId}`));
+    await withBypassContext(() => db.execute(sql`
+      update projects set name = 'Renamed Project' where id = ${projectId}`));
     resetCapture();
     const printed = await print(waiverId);
     assert.equal(printed.status, 200, JSON.stringify(await printed.json().catch(() => null)));
     const legacyHtml = captured.html;
-    assert.ok(legacyHtml?.includes("Renamed Vendor"), "legacy rows render live rather than refusing to print");
+    assert.ok(legacyHtml, "the legacy waiver still prints instead of stranding the operator");
+    // The print is a bannered re-render of CURRENT records: the new names
+    // appear, but always under the legacy banner naming its reading date.
+    assert.ok(legacyHtml.includes("Renamed Vendor"), "the print reflects current records");
+    assert.ok(legacyHtml.includes("Legacy waiver"), "the print banners itself as legacy evidence");
+    assert.ok(
+      legacyHtml.includes("reflect current records as of"),
+      "the banner names the print as current records, not the release",
+    );
+    // A distinct filename and evidence header so the file is never archived
+    // as the executed release.
+    assert.match(
+      printed.headers.get("content-disposition") ?? "",
+      /LW-EXEC-1-legacy-unverified\.pdf/,
+      "the legacy print files under its own name",
+    );
+    assert.equal(
+      printed.headers.get("x-lien-waiver-evidence"),
+      "legacy-unverified",
+      "the legacy print carries its evidence state",
+    );
+    // The fix recovers nothing and invents nothing: no snapshot is stamped
+    // from live rows at print time.
+    const still = await snapshotOf(waiverId);
+    assert.equal(still, null, "printing a legacy waiver never backfills a snapshot");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a newly signed waiver still freezes its snapshot and prints clean", { skip: !DB }, async () => {
+  const { org, waiverId } = await fixture();
+  try {
+    const signed = await sign(waiverId);
+    assert.equal(signed.status, 200, JSON.stringify(await signed.json().catch(() => null)));
+    resetCapture();
+    const printed = await print(waiverId);
+    assert.equal(printed.status, 200, JSON.stringify(await printed.json().catch(() => null)));
+    assert.ok(!captured.html?.includes("Legacy waiver"), "a frozen print carries no legacy banner");
+    assert.equal(printed.headers.get("x-lien-waiver-evidence"), null, "a frozen print carries no legacy header");
+    assert.match(
+      printed.headers.get("content-disposition") ?? "",
+      /LW-EXEC-1\.pdf/,
+      "a frozen print files under the waiver number",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

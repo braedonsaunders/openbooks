@@ -504,6 +504,56 @@ export async function loadBlockedBills(
 // Lien waivers
 // ---------------------------------------------------------------------------
 
+/**
+ * A waiver executed before the executed-snapshot freeze existed: signed (or
+ * voided after signing) yet carrying no frozen print image. Its print
+ * re-reads today's mutable party/project rows, so every surface must present
+ * it as legacy-unverified rather than as the release as signed. Derived from
+ * `executed_snapshot IS NULL` — no backfill invents signed-time truth, and no
+ * per-migration flag can drift from the snapshot it describes.
+ */
+export function isLegacyExecutedLienWaiver(args: {
+  status: string
+  signedAt: string | null
+  hasExecutedSnapshot: boolean
+}): boolean {
+  if (args.hasExecutedSnapshot) return false
+  if (args.status === 'signed') return true
+  return args.status === 'void' && args.signedAt !== null
+}
+
+/**
+ * Distinct print filename so a legacy re-render is never filed under the
+ * executed release's own name.
+ */
+export function legacyLienWaiverFilename(waiverNumber: string): string {
+  return `${waiverNumber}-legacy-unverified`
+}
+
+/**
+ * STUB for the shared upgrade_legacy_provenance read (m74, forward migration
+ * 0326). Until that helper lands, legacy state is the derived check alone — a
+ * waiver executed before the freeze cannot gain a snapshot except through the
+ * sign transition, which stamps one, so the derived set is exactly the rows
+ * 0326 will record. The replacement body is one line:
+ *
+ *   import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
+ *   return isLegacyProvenance(db, _orgId, 'lien_waivers', row.id,
+ *     { fallback: isLegacyExecutedLienWaiver(row) })
+ *
+ * Table-presence OR the derived fallback is the fail-closed direction: a
+ * missed legacy row would silently present live rows as the executed release.
+ * Callers use this seam — never the table, never the derived check — so the
+ * swap is one function body. Reads key off row presence, never note text (the
+ * 0292 note wording is P1B-pinned and stays rewordable).
+ */
+export async function isLienWaiverLegacyUnverified(
+  _orgId: string,
+  row: { id: string; status: string; signedAt: string | null; hasExecutedSnapshot: boolean },
+): Promise<boolean> {
+  return isLegacyExecutedLienWaiver(row)
+}
+
 export type LienWaiverRow = {
   id: string
   waiverNumber: string
@@ -514,6 +564,8 @@ export type LienWaiverRow = {
   projectName: string
   waiverType: LienWaiverType
   status: string
+  /** False for waivers executed before the snapshot freeze — see isLegacyExecutedLienWaiver. */
+  hasExecutedSnapshot: boolean
   throughDate: string
   amount: string
   currency: string
@@ -547,6 +599,7 @@ export async function loadLienWaivers(args: {
            lw.project_id as "projectId",
            coalesce(pj.code || ' · ' || pj.name, pj.name) as "projectName",
            lw.waiver_type as "waiverType", lw.status,
+           lw.executed_snapshot is not null as "hasExecutedSnapshot",
            lw.through_date as "throughDate", lw.amount, lw.currency, lw.jurisdiction,
            lw.bill_document_id as "billDocumentId", bill.document_number as "billNumber",
            lw.pay_application_id as "payApplicationId",
@@ -574,7 +627,9 @@ export async function loadLienWaivers(args: {
  * One waiver's printable source: every value the executed release shows,
  * with party/project/owner/document names already resolved. The sign
  * transition freezes this row into executed_snapshot; the printable route
- * serves the frozen image for executed waivers instead of re-reading it.
+ * serves the frozen image for executed waivers instead of re-reading it. A
+ * waiver signed before the freeze carries no image (see
+ * isLegacyExecutedLienWaiver) and its print is bannered as current records.
  */
 export type LienWaiverPrintSource = {
   status: string
@@ -639,9 +694,10 @@ export async function loadLienWaiverPrintSource(
 /**
  * The single mapping from a printable source to the release the printer
  * renders. The sign transition feeds it the live row and freezes the
- * result; the printable route feeds it the live row for drafts and the
- * frozen image for executed waivers — one mapping, so the frozen print
- * can never drift from what a live print would have shown at signing.
+ * result; the printable route feeds it the live row for drafts and legacy
+ * executed waivers (the legacy print is bannered downstream) and the frozen
+ * image for executed waivers — one mapping, so the frozen print can never
+ * drift from what a live print would have shown at signing.
  */
 export function lienWaiverPrintData(source: LienWaiverPrintSource): {
   data: LienWaiverFormData
