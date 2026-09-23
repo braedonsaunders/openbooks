@@ -102,11 +102,14 @@ export function buildErpInvoice(ctx: NativeContext, inv: ErpInvoice): NativeDocu
   }
   if (lines.length === 0) return { skip: "no items" };
 
-  // Tax at ERPNext's actual amounts, per account_head → tax code.
+  // Tax at ERPNext's actual amounts, per account_head → tax code. Returns
+  // state positive magnitudes like the lines and take the is_return sign with
+  // them (detail = −base_net_amount): abs()'ing a return's tax positive onto
+  // negative lines violates the engine's same-sign rule and refuses the sync.
   const taxByHead = new Map<string, bigint>();
   for (const t of inv.taxes ?? []) {
     const b = num(t.base_tax_amount);
-    taxByHead.set(t.account_head, (taxByHead.get(t.account_head) ?? 0n) + (b < 0n ? -b : b));
+    taxByHead.set(t.account_head, (taxByHead.get(t.account_head) ?? 0n) + b * sign);
   }
   // A native line has one tax-code slot, while ERPNext stores taxes at the
   // voucher level and can post several account heads on the same invoice.
