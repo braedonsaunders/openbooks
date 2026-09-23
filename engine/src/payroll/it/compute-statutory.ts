@@ -544,6 +544,12 @@ export async function computeItStatutoryWithRates(
   rates: ItStatutoryRates,
 ): Promise<Record<string, string>> {
   const { taxYear, income, pensionable, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, bool } = ctx;
+  // The one-off share already inside the pensionable leg (the engine reports
+  // it; unit-constructed contexts omit it and keep legacy math). Annualising
+  // the whole leg and adding the one-off again below (pensBase) would count
+  // it periodsPerYear + 1 times — a December bonus priced 13 months of INPS,
+  // wiping the lavoroNet so IRPEF prices zero.
+  const pensionableOneOff = U(ctx.pensionableNonPeriodic ?? "0");
   if (taxYear !== 2025 && taxYear !== 2026) {
     throw new ItPayrollRefusal(
       `IT payroll pack has no transcribed tables for tax year ${taxYear}: 2025 and 2026 are the transcribed `
@@ -572,7 +578,13 @@ export async function computeItStatutoryWithRates(
       || countOf("figli_a_carico") > 0
       || countOf("altri_familiari_a_carico") > 0,
     annualGrossEmployment: D(U(income) * BigInt(periodsPerYear)),
-    annualPensionable: D(U(pensionable) * BigInt(periodsPerYear)),
+    // Annualise the recurring leg only; a non-taxable one-off (inside the
+    // leg but outside nonPeriodic) still occurs once, so its excess over the
+    // taxable one-offs rides as a flat annual add rather than per period.
+    annualPensionable: D(
+      max0(U(pensionable) - pensionableOneOff) * BigInt(periodsPerYear)
+        + max0(pensionableOneOff - U(nonPeriodic)),
+    ),
     nonPeriodicAnnual: nonPeriodic,
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
     periodsPerYear,

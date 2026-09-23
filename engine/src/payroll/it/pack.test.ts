@@ -170,6 +170,8 @@ function fakeCtx(overrides: {
   taxYear?: number;
   income?: string;
   pensionable?: string;
+  nonPeriodic?: string;
+  pensionableNonPeriodic?: string;
   region?: string;
   answers?: Record<string, string | null>;
 }): { ctx: PayrollStatutoryComputeContext; pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] } {
@@ -187,8 +189,11 @@ function fakeCtx(overrides: {
   const ctx = {
     taxYear: overrides.taxYear ?? 2025,
     income: overrides.income ?? "2500.00",
-    nonPeriodic: "0",
+    nonPeriodic: overrides.nonPeriodic ?? "0",
     pensionable: overrides.pensionable ?? "2500.00",
+    // Omitted on purpose unless the test passes it: unit-constructed contexts
+    // without the split keep legacy math, and the engine always provides it.
+    pensionableNonPeriodic: overrides.pensionableNonPeriodic,
     insurable: "0",
     reducedBases: reduceTaxBases(
       [],
@@ -322,6 +327,37 @@ test("a 9.500 worker is paid +141,96/month in credits, and YTD matches cash", as
     ["ti_payout", "credit", 140],
     ["somma_payout", "credit", 145],
   ]);
+});
+
+test("a one-off bonus counts once in the INPS base and still withholds IRPEF", async () => {
+  // A December bonus with no periodic income: the 20000 one-off is
+  // pensionable, so the pensionable leg carries it and nonPeriodic adds it
+  // again. Annualising the whole leg priced 13 months of INPS (a 260000
+  // base: 2160.98 a month), wiping the lavoroNet so IRPEF priced zero and no
+  // income_tax line was pushed at all. The recurring leg annualises; the
+  // one-off enters once: INPS on 20000, IRPEF on what remains.
+  const { ctx, pushed } = fakeCtx({
+    taxYear: 2026,
+    income: "0.0000",
+    pensionable: "20000.0000",
+    nonPeriodic: "20000.0000",
+    pensionableNonPeriodic: "20000.0000",
+  });
+  const factors = await computeItStatutoryWithRates(ctx, {
+    regionalRate: "1.23",
+    municipalRate: "0.8",
+    municipalExemption: null,
+  });
+  assert.equal(factors["INPS_W"], "153.1700");
+  // Hand-verified: lavoroNet 20000 − 1838.00 = 18162; lorda 23% = 4177.26;
+  // detrazione lavoro 1910 + 1190 × 9838/13000 (4dp truncated) = 2810.47;
+  // netta 1366.79, /12 half-up = 113.90.
+  assert.equal(factors["IRPEF"], "113.9000");
+  const inps = pushed.find((p) => p.systemKey === "inps" && p.kind === "deduction")!;
+  assert.equal(inps.amount, factors["INPS_W"]);
+  const irpef = pushed.find((p) => p.systemKey === "income_tax");
+  assert.ok(irpef, "IRPEF is pushed, not suppressed as zero");
+  assert.equal(irpef!.amount, factors["IRPEF"]);
 });
 
 test("wrapper pushes five lines when no payout is owed, TI/SOMMA factors zero", async () => {
