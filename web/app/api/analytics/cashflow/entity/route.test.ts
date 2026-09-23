@@ -191,21 +191,31 @@ test("entity drills scope every transaction leg and preserve exact money", async
 // F-t03-010: the drill's own live aggregate joined reversed entries without
 // the current posting projection, so an append-only correction (reversed
 // original + re-post of the same bill) listed the same bill twice and inflated
-// the dialog total past the dashboard. The drill must read the shared reader
-// and never the reversed-including aggregate.
+// the dialog total past the dashboard. The drill reads the shared reader's
+// lateral, which names both live statuses yet admits exactly one entry per
+// document: reversal entries themselves are excluded
+// (reverses_entry_id is null) and a reversed original loses to the not-exists
+// reversal filter — so reversed history is never collected as a second item.
 test("vendor drills read open items off the shared reader, never reversed entries", async () => {
   reset();
 
   const response = await GET(request());
   assert.equal(response.status, 200);
+  const body = await response.json();
 
+  const reader = routeState.calls.find((text) => text.includes("d.posted_entry_id"));
   assert.ok(
-    routeState.calls.some((text) => text.includes("d.posted_entry_id")),
+    reader,
     "the drill must project open items through the document's current posting entry",
   );
-  assert.equal(
-    routeState.calls.some((text) => text.includes("in ('posted', 'reversed')")),
-    false,
-    "no reversed-including open-items aggregate may run for the drill",
+  assert.match(reader!, /reverses_entry_id is null/, "reversal entries themselves are never collected");
+  assert.match(reader!, /not exists/, "a reversed original loses to the reversal filter");
+  assert.match(reader!, /limit 1/, "the lateral admits exactly one entry per document");
+
+  const docIds = (body.openItems as Array<{ docId: string }>).map((item) => item.docId);
+  assert.deepEqual(
+    [...new Set(docIds)].sort(),
+    [...docIds].sort(),
+    "no bill is collected twice in the drill",
   );
 });
