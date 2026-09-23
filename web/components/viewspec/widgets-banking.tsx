@@ -18,6 +18,7 @@ import { BankFeedPanel } from '../../app/(app)/banking/imports/sections'
 import { NewRuleButton, RunRulesButton, RuleDrawer } from '../../app/(app)/banking/rules/RuleDrawer'
 import { AccountStats, UnmatchedCountCell, ReconActionCell } from '../../app/(app)/banking/[accountId]/sections'
 import { ImportStatementButton } from '../../app/(app)/banking/[accountId]/ImportStatementButton'
+import { ImportAccountPicker } from '../../app/(app)/banking/imports/ImportAccountPicker'
 import { StartReconciliationButton } from '../../app/(app)/banking/[accountId]/StartReconciliationButton'
 import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDrawer'
 import { Button } from '@openbooks/ui'
@@ -305,6 +306,17 @@ export const BANKING_WIDGETS = {
     <ReconActionCell href={str(props, 'href') ?? ''} label={str(props, 'label') ?? ''} />
   ),
   'import-statement': (props) => <ImportStatementButton accountId={str(props, 'accountId') ?? ''} />,
+  /** The cross-account history page cannot name an account up front, so the
+   *  picker carries the bank context: an account select beside the canonical
+   *  per-account import dialog. One widget serves the header CTA and the
+   *  empty-state action alike. */
+  'import-statement-picker': (props) => (
+    <ImportAccountPicker
+      accounts={(props.accounts as ComponentProps<typeof ImportAccountPicker>['accounts']) ?? []}
+      selectLabel={str(props, 'selectLabel') ?? ''}
+      placeholder={str(props, 'placeholder') ?? ''}
+    />
+  ),
   'start-reconciliation': (props) => (
     <StartReconciliationButton
       accountId={str(props, 'accountId') ?? ''}

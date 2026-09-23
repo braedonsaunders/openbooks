@@ -133,7 +133,9 @@
     "description": "Tous les relevés bancaires importés sur vos comptes réconciliables.",
     "search": "Rechercher par date, source ou compte…",
     "emptyTitle": "Aucun relevé importé",
-    "emptyDescription": "Importez un relevé OFX ou CSV depuis un compte pour le voir ici."
+    "emptyDescription": "Importez un relevé OFX ou CSV depuis un compte pour le voir ici.",
+    "accountLabel": "Compte",
+    "accountPlaceholder": "Sélectionner un compte…"
   },
   "reconsPage": {
     "title": "Rapprochements bancaires",
