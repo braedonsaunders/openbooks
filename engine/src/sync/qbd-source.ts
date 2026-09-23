@@ -265,11 +265,18 @@ export class QbdSource implements MigrationSource {
         accountRefByName.set(text(a.Name), id);
       }
     }
-    const partiesByName = new Map<string, string>();
+    // Names stay per family: a customer and a vendor sharing one FullName
+    // must never overwrite each other in a single map — the ledger builder
+    // resolves each line by its account class (AR → customer, AP → vendor).
+    const partyRefByFamily = {
+      customer: new Map<string, string>(),
+      vendor: new Map<string, string>(),
+      employee: new Map<string, string>(),
+    };
     for (const [family, suffix, prefix] of [["customer", "CustomerRet", "C"], ["vendor", "VendorRet", "V"], ["employee", "EmployeeRet", "E"]] as const) {
       for (const xml of await this.parsedFamily(family)) for (const p of nodes(xml, suffix)) {
         const id = text(p.ListID);
-        if (id) partiesByName.set(text(p.FullName) || text(p.Name), `${prefix}:${id}`);
+        if (id) partyRefByFamily[family].set(text(p.FullName) || text(p.Name), `${prefix}:${id}`);
       }
     }
 
@@ -279,7 +286,7 @@ export class QbdSource implements MigrationSource {
       const built = buildQbdLedgerDocuments({
         rows: await this.ledgerRows(family),
         accountRefByName,
-        partyRefByName: partiesByName,
+        partyRefByFamily,
         ctx,
         baseCurrency: this.baseCurrency,
       });

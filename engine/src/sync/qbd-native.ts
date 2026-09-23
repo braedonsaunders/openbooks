@@ -7,10 +7,67 @@ function cleanAmount(value: string | undefined): string {
   return normalized === "" ? "0" : normalized;
 }
 
+export type QbdPartyFamily = "customer" | "vendor" | "employee";
+
+function resolveQbdLineParty(args: {
+  txnId: string;
+  sourceAccount: string;
+  accountId: string;
+  rawName: string | undefined;
+  partyRefByFamily: Record<QbdPartyFamily, Map<string, string>>;
+  ctx: NativeContext;
+}): { partyId: string | null; failure: string | null } {
+  const name = (args.rawName ?? "").trim();
+  const isAR = args.accountId === args.ctx.control.ar;
+  const isAP = args.accountId === args.ctx.control.ap;
+  const isEmployeePayable =
+    args.ctx.control.employeePayable != null && args.accountId === args.ctx.control.employeePayable;
+  // The account class picks the family — never the name: a same-named vendor
+  // never answers for an AR line. Control metadata comes from the ledger's
+  // own control accounts, never an account-name match.
+  const expected: QbdPartyFamily | null = isAR ? "customer" : isAP ? "vendor" : isEmployeePayable ? "employee" : null;
+  if (!name) {
+    // A null party is kept only when the source Name is truly empty and the
+    // account does not require one: a control posting with no party cannot
+    // reconcile to party-level AR/AP.
+    if (!expected) return { partyId: null, failure: null };
+    return {
+      partyId: null,
+      failure: `ledger transaction ${args.txnId}: ${args.sourceAccount} requires a party but the line has no name — supply the customer/vendor name before import`,
+    };
+  }
+  const families: QbdPartyFamily[] = expected ? [expected] : ["customer", "vendor", "employee"];
+  const hits = families.filter((family) => args.partyRefByFamily[family].has(name));
+  if (expected) {
+    if (hits.length === 1) {
+      const partyId = args.ctx.partyByRef.get(args.partyRefByFamily[expected].get(name)!) ?? null;
+      if (partyId) return { partyId, failure: null };
+    }
+    return {
+      partyId: null,
+      failure: `ledger transaction ${args.txnId}: party ${name} on ${args.sourceAccount} is not mapped — map the customer/vendor before import`,
+    };
+  }
+  if (hits.length === 1) {
+    const family = hits[0]!;
+    return { partyId: args.ctx.partyByRef.get(args.partyRefByFamily[family].get(name)!) ?? null, failure: null };
+  }
+  if (hits.length === 0) {
+    return {
+      partyId: null,
+      failure: `ledger transaction ${args.txnId}: party ${name} on ${args.sourceAccount} is not mapped — map the customer/vendor before import`,
+    };
+  }
+  return {
+    partyId: null,
+    failure: `ledger transaction ${args.txnId}: party ${name} on ${args.sourceAccount} is ambiguous (a ${hits[0]} and a ${hits[1]} share the name) — resolve the duplicate name before import`,
+  };
+}
+
 export function buildQbdLedgerDocuments(input: {
   rows: QbdReportRow[];
   accountRefByName: Map<string, string>;
-  partyRefByName: Map<string, string>;
+  partyRefByFamily: Record<QbdPartyFamily, Map<string, string>>;
   ctx: NativeContext;
   baseCurrency: string;
 }): { documents: NativeDocument[]; unbuildable: { ref: string; reason: string }[] } {
@@ -43,6 +100,7 @@ export function buildQbdLedgerDocuments(input: {
     const lines: NativeDocument["lines"] = [];
     let sum = 0n;
     const unmappedAccounts: string[] = [];
+    let partyFailure: string | null = null;
     for (const row of transaction) {
       const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
       const sourceAccount = row.columns.Account ?? "";
@@ -56,12 +114,23 @@ export function buildQbdLedgerDocuments(input: {
         continue;
       }
       if (amount === 0n) continue;
+      const party = resolveQbdLineParty({
+        txnId,
+        sourceAccount,
+        accountId: account.id,
+        rawName: row.columns.Name,
+        partyRefByFamily: input.partyRefByFamily,
+        ctx: input.ctx,
+      });
+      if (party.failure) {
+        if (!partyFailure) partyFailure = party.failure;
+        continue;
+      }
       sum += amount;
-      const partyRef = input.partyRefByName.get(row.columns.Name ?? "");
       lines.push({
         accountId: account.id,
         itemId: null,
-        partyId: partyRef ? input.ctx.partyByRef.get(partyRef) ?? null : null,
+        partyId: party.partyId,
         amount: fromUnits(amount),
         taxAmount: "0",
         taxOverridden: false,
@@ -78,6 +147,10 @@ export function buildQbdLedgerDocuments(input: {
         ref: txnId,
         reason: `ledger transaction ${txnId} has ${unmappedAccounts.length} line(s) on unmapped account(s): ${names.join(", ")} — map them before import`,
       });
+      continue;
+    }
+    if (partyFailure) {
+      unbuildable.push({ ref: txnId, reason: partyFailure });
       continue;
     }
     if (lines.length < 2 || sum !== 0n) {
