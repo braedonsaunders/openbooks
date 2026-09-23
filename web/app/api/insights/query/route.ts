@@ -7,6 +7,7 @@ import { pool } from '@openbooks/engine/src/platform/db.ts'
 import { runInsightQuery } from '@openbooks/analytics/server'
 import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
 import { can, guardPermission } from '../../../../lib/authz'
+import { InsightBookScopeError, resolveInsightBookScope } from '@/lib/insight-books'
 import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeQuery } from '../_lib'
@@ -60,12 +61,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `${feature} feature is disabled` }, { status: 403 })
   }
 
+  // The book basis resolves before execution: book-scoped entities default to
+  // the single active primary unless the card scopes or partitions by book.
+  // An ambiguous basis is a computed refusal — it names its remedy and must
+  // reach the operator verbatim, never as a generic failure.
+  let allowedBookIds: readonly string[] | null | undefined
+  try {
+    allowedBookIds = await resolveInsightBookScope(gate.user.orgId, query)
+  } catch (e) {
+    if (e instanceof InsightBookScopeError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
+    throw e
+  }
+
   try {
     // Column labels compile in the caller's locale (results are never persisted).
     const result = await runInsightQuery(
       pool, query, gate.user.orgId,
       gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
       await insightLabelResolver(), await businessToday(gate.user.orgId),
+      allowedBookIds,
     )
     return NextResponse.json(result)
   } catch (e) {

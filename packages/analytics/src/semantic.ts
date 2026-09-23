@@ -85,6 +85,19 @@ export type CatalogSource = {
   /** Implicit predicate ALWAYS AND-ed into every query against this source.
    *  Authored in the catalog, never from user input. */
   baseFilter?: ReportRuleGroup
+  /** Server-owned accounting-book boundary, inherited from the report entity
+   *  (e.g. `je.book_id`). Present only on GL sources whose rows inherit an
+   *  entry's book; absent by design on book-independent sources. The compiler
+   *  clamps book-scoped sources to the caller's book allowlist (the single
+   *  active primary unless the card scopes or partitions by book). */
+  bookScope?: { column: string }
+  /** Key of the text column carrying the row's transaction-currency code.
+   *  Set alongside txn-denominated money columns. */
+  currencyColumn?: string
+  /** Key of the text column carrying the row's FUNCTIONAL-currency code
+   *  (e.g. `base_currency` via the owning subsidiary). Set alongside
+   *  base-money columns; never the `currency` column. */
+  baseCurrencyColumn?: string
 }
 
 export type AnalyticsSource = Omit<CatalogSource, 'fields'> & {

@@ -71,6 +71,12 @@ export function sourceFromEntity(entity: ReportEntity): CatalogSource {
     ...(entity.featureKey ? { featureKey: entity.featureKey } : {}),
     ...(entity.requiredPermission ? { requiredPermission: entity.requiredPermission } : {}),
     ...(entity.baseFilter ? { baseFilter: entity.baseFilter } : {}),
+    // Book and currency boundaries travel with the source so the compiler can
+    // enforce the same basis rules as the report executor. Dropped boundaries
+    // would silently sum primary + tax books or blend foreign money.
+    ...(entity.bookScope ? { bookScope: entity.bookScope } : {}),
+    ...(entity.currencyColumn ? { currencyColumn: entity.currencyColumn } : {}),
+    ...(entity.baseCurrencyColumn ? { baseCurrencyColumn: entity.baseCurrencyColumn } : {}),
   }
 }
 
