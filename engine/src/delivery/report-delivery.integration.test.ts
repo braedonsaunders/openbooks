@@ -861,3 +861,102 @@ test("a stuck enqueued delivery with a live job is left alone", { skip: !DB }, a
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a stuck sending delivery rebuilds for redispatch after its worker dies", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "sending-lost");
+    // A worker that crashed after markReportDeliveryStarted but before any
+    // send: 'sending' with a long-past claim timestamp and no email outcome.
+    // The dispatch scan only takes pending/failed rows, so without recovery
+    // this delivery would sit here forever.
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, next_attempt_at, updated_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'sending-lost@example.com', 'sending', 1, 1,
+              ${new Date(Date.now() - 3_600_000)}, ${new Date(Date.now() - 3_600_000)})
+    `);
+    const enqueued: string[] = [];
+    assert.equal(await dispatchReportDeliveries(async (data) => {
+      normalizeEmailDeliveryInput(data);
+      enqueued.push(String(data.to));
+      return [];
+    }, new Date(Date.now() + 60_000)), 1);
+    assert.deepEqual(enqueued, ["sending-lost@example.com"]);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    // Recovered to failed, then redispatched by the normal scan to enqueued
+    // with a new generation — idempotent against the delivery key.
+    assert.equal(row.status, "enqueued");
+    assert.equal(row.dispatch_count, 2);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a stuck sending delivery with a sent outcome reconciles to sent", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "sending-sent");
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, next_attempt_at, updated_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'sending-sent@example.com', 'sending', 1, 1,
+              ${new Date(Date.now() - 3_600_000)}, ${new Date(Date.now() - 3_600_000)})
+    `);
+    // The provider accepted the send but the process died before the row
+    // advanced: resending would duplicate, so recovery must reconcile.
+    const claim = await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey: rebuildKey(org.orgId, logId, "sending-sent@example.com"),
+      jobId: rebuildKey(org.orgId, logId, "sending-sent@example.com"),
+      provider: "resend",
+      recipients: ["sending-sent@example.com"],
+      subject: "Recovery sweep",
+    });
+    await markEmailSent(org.orgId, claim.id, "re_sweep_sending_1");
+    assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    assert.equal(row.status, "sent");
+    assert.equal(row.dispatch_count, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a stuck sending delivery with a live attempt is left alone", async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "sending-live");
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, dispatch_count, next_attempt_at, updated_at)
+      values (${logId}, ${org.orgId}, ${runId}, 'sending-live@example.com', 'sending', 1, 1,
+              ${new Date(Date.now() - 3_600_000)}, ${new Date(Date.now() - 3_600_000)})
+    `);
+    // A recent claim with no outcome means the send may still be in flight:
+    // recovering now would risk a duplicate.
+    await claimEmailDeliveryLog({
+      orgId: org.orgId,
+      deliveryKey: rebuildKey(org.orgId, logId, "sending-live@example.com"),
+      jobId: rebuildKey(org.orgId, logId, "sending-live@example.com"),
+      provider: "resend",
+      recipients: ["sending-live@example.com"],
+      subject: "Recovery sweep",
+    });
+    assert.equal(await dispatchReportDeliveries(async () => { throw new Error("must not dispatch"); }, new Date(Date.now() + 60_000)), 0);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id = ${logId}
+    `)).rows[0]!;
+    assert.deepEqual(row, { status: "sending", dispatch_count: 1 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
