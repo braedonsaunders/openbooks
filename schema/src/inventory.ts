@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -316,7 +317,16 @@ export const stockCountLines = pgTable(
     adjustmentMovementId: uuid("adjustment_movement_id"),
     ...auditColumns,
   },
-  (t) => [index("count_lines_count").on(t.stockCountId)],
+  (t) => [
+    index("count_lines_count").on(t.stockCountId),
+    // One line per (count, item, stock location, lot). NULLS NOT DISTINCT:
+    // an untracked item's lines carry NULL lot_id, and without it the most
+    // common duplicate — the same item counted twice with no lot — would
+    // escape the guard (0293).
+    unique("stock_count_lines_no_duplicate_subject")
+      .on(t.orgId, t.stockCountId, t.itemId, t.stockLocationId, t.lotId)
+      .nullsNotDistinct(),
+  ],
 );
 
 /**

@@ -1,17 +1,22 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { createStockCount } from "./stock-counts.ts";
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
 import { receiveInventory } from "./movements.ts";
+import { createStockCount } from "./stock-counts.ts";
+import { InventoryError } from "./contracts.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
- * Stock-count lifecycle regressions (D1-lite, D2, D3). Integration partition
- * only (filename), against a scratch org.
+ * Stock-count lifecycle regressions: duplicate subjects (D2), the posting
+ * transaction contract (D1-lite), and the transactional feature fence (D3).
+ * Runs in the integration partition only (filename), against a scratch org.
  */
 
-async function receiveTen(org: ScratchOrg, itemId: string): Promise<void> {
+async function receiveTen(org: ScratchOrg): Promise<void> {
   await receiveInventory(org.orgId, null, {
-    itemId,
+    itemId: org.items.fifo,
     stockLocationId: org.stockLocationId,
     quantity: "10",
     unitCost: "4",
@@ -21,6 +26,133 @@ async function receiveTen(org: ScratchOrg, itemId: string): Promise<void> {
   });
 }
 
+test("duplicate count lines are refused at creation, naming the subject", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    const before = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from stock_counts where org_id = ${org.orgId}`)).rows[0]!.n;
+    await assert.rejects(
+      createStockCount(org.orgId, null, {
+        locationId: org.locationId,
+        subsidiaryId: org.subsidiaryId,
+        countedOn: org.date,
+        lines: [
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
+        ],
+      }),
+      (e: unknown) => {
+        assert.ok(e instanceof InventoryError, "a duplicate subject must refuse as InventoryError (HTTP 422)");
+        assert.match((e as Error).message, /duplicate count line/i);
+        assert.match((e as Error).message, /count each item, stock location and lot once/i);
+        return true;
+      },
+    );
+    const after = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from stock_counts where org_id = ${org.orgId}`)).rows[0]!.n;
+    assert.equal(after, before, "a refused creation must leave no count row behind");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("the same item at two warehouses is two subjects, not a duplicate", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    // A second stock location under the SAME business location: one count
+    // may cover both warehouses, and the same item in each is two subjects.
+    const secondBin = randomUUID();
+    await db.execute(sql`
+      insert into stock_locations (id, org_id, location_id, code, kind, is_active)
+      values (${secondBin}, ${org.orgId}, ${org.locationId}, 'STAGE2', 'warehouse', true)`);
+    const count = await createStockCount(org.orgId, null, {
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      countedOn: org.date,
+      lines: [
+        { itemId: org.items.fifo, stockLocationId: org.stockLocationId },
+        { itemId: org.items.fifo, stockLocationId: secondBin },
+      ],
+    });
+    assert.equal(count.status, "draft");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("distinct lots are distinct subjects: the refusal names duplicates, not lot validation", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    const lotA = randomUUID();
+    const lotB = randomUUID();
+    // Two different lots pass the duplicate screen and reach lot validation —
+    // the refusal must be the lot remedy, never the duplicate remedy.
+    await assert.rejects(
+      createStockCount(org.orgId, null, {
+        locationId: org.locationId,
+        subsidiaryId: org.subsidiaryId,
+        countedOn: org.date,
+        lines: [
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId, lotId: lotA },
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId, lotId: lotB },
+        ],
+      }),
+      /lot does not belong/i,
+    );
+    // The same lot twice is a duplicate even before lot validation runs.
+    await assert.rejects(
+      createStockCount(org.orgId, null, {
+        locationId: org.locationId,
+        subsidiaryId: org.subsidiaryId,
+        countedOn: org.date,
+        lines: [
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId, lotId: lotA },
+          { itemId: org.items.fifo, stockLocationId: org.stockLocationId, lotId: lotA },
+        ],
+      }),
+      /duplicate count line/i,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("storage refuses a duplicate subject, including the NULL-lot case (0293)", async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveTen(org);
+    const count = await createStockCount(org.orgId, null, {
+      locationId: org.locationId,
+      subsidiaryId: org.subsidiaryId,
+      countedOn: org.date,
+      lines: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
+    });
+    // The untracked line carries NULL lot_id: without NULLS NOT DISTINCT this
+    // insert would escape the guard and double-apply the variance at posting.
+    // The constraint name lives on the driver's cause, not the drizzle
+    // wrapper message, so the validator reads the cause chain.
+    await assert.rejects(
+      db.execute(sql`insert into stock_count_lines
+        (id, org_id, stock_count_id, item_id, stock_location_id, lot_id, expected_quantity)
+        values (${randomUUID()}, ${org.orgId}, ${count.id}, ${org.items.fifo}, ${org.stockLocationId}, null, '10')`),
+      (e: unknown) => {
+        const cause = (e as { cause?: unknown }).cause as Error | undefined;
+        assert.match(
+          String(cause?.message ?? e),
+          /stock_count_lines_no_duplicate_subject/i,
+        );
+        return true;
+      },
+      "a second NULL-lot line for the same subject must violate the 0293 constraint",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("creating a count binds its multi-id lookups as one pg array", async () => {
   // Raw JS arrays interpolate as parenthesized lists under the pinned
   // drizzle, so `= any($1)` receives a bare scalar and every creation with
@@ -28,8 +160,16 @@ test("creating a count binds its multi-id lookups as one pg array", async () => 
   // param instead. Two different items force the multi-element shape.
   const org = await createScratchOrg();
   try {
-    await receiveTen(org, org.items.fifo);
-    await receiveTen(org, org.items.component);
+    await receiveTen(org);
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.component,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "4",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
     const count = await createStockCount(org.orgId, null, {
       locationId: org.locationId,
       subsidiaryId: org.subsidiaryId,

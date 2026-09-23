@@ -302,18 +302,34 @@ export async function createStockCount(
     // foreign key. Serial-tracked items cannot be counted by quantity at
     // all; lot-tracked items must name their lot.
     const itemIds = [...new Set(input.lines.map((l) => l.itemId))];
-    const items = (await tx.execute<{ id: string }>(sql`
-      select it.id from items it where it.org_id = ${orgId} and it.id = any(${uuidArray(itemIds)}::uuid[])`));
+    const items = (await tx.execute<{ id: string; code: string | null }>(sql`
+      select it.id, it.code from items it where it.org_id = ${orgId} and it.id = any(${uuidArray(itemIds)}::uuid[])`));
     const foundItems = new Set(items.rows.map((r) => r.id));
+    const itemCodes = new Map(items.rows.map((r) => [r.id, r.code]));
     const profiles = (await tx.execute<{ item_id: string; tracking: string }>(sql`
       select item_id, tracking from item_inventory_profiles
        where org_id = ${orgId} and item_id = any(${uuidArray(itemIds)}::uuid[])`));
     const trackingByItem = new Map(profiles.rows.map((r) => [r.item_id, r.tracking]));
     const stockLocationIds = [...new Set(input.lines.map((l) => l.stockLocationId))];
-    const stockLocations = (await tx.execute<{ id: string; location_id: string }>(sql`
-      select id, location_id from stock_locations
+    const stockLocations = (await tx.execute<{ id: string; location_id: string; code: string | null }>(sql`
+      select id, location_id, code from stock_locations
        where org_id = ${orgId} and id = any(${uuidArray(stockLocationIds)}::uuid[])`));
     const businessByStockLocation = new Map(stockLocations.rows.map((r) => [r.id, r.location_id]));
+    const stockLocationCodes = new Map(stockLocations.rows.map((r) => [r.id, r.code]));
+    // One line per (item, stock location, lot) subject: duplicate lines
+    // would each post the full variance and double-apply one observation.
+    // Constraint 0293 arbitrates concurrent writers; this names the offender.
+    const seenSubjects = new Set<string>();
+    for (const line of input.lines) {
+      const subject = `${line.itemId}|${line.stockLocationId}|${line.lotId ?? ""}`;
+      if (seenSubjects.has(subject)) {
+        const where = `item ${itemCodes.get(line.itemId) ?? line.itemId} at ${stockLocationCodes.get(line.stockLocationId) ?? line.stockLocationId}${line.lotId ? ` lot ${line.lotId}` : ""}`;
+        throw new InventoryError(
+          `duplicate count line for ${where} — count each item, stock location and lot once`,
+        );
+      }
+      seenSubjects.add(subject);
+    }
     const countId = randomUUID();
     await tx.execute(sql`
       insert into stock_counts (id, org_id, location_id, subsidiary_id, status, counted_on, memo, created_by, updated_by)
