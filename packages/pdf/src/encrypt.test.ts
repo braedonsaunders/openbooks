@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import test from 'node:test'
 import { PDFDocument } from 'pdf-lib'
 import { encryptPdf, PdfEncryptionError, pdfEncryptionAvailable, verifyPdfEncryption } from './encrypt'
@@ -122,5 +125,39 @@ test('verification fails closed when qpdf is unavailable', async () => {
   } finally {
     if (previous === undefined) delete process.env.OPENBOOKS_QPDF_PATH
     else process.env.OPENBOOKS_QPDF_PATH = previous
+  }
+})
+
+test('a hung qpdf is killed after the timeout instead of pinning the worker', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'openbooks-qpdf-hang-'))
+  try {
+    // A binary-shaped stub that never exits: without a ceiling, encryptPdf
+    // would await it forever and pin the delivery worker with it.
+    const stub = join(dir, 'qpdf-hang')
+    await writeFile(stub, '#!/bin/sh\nsleep 30\n', { mode: 0o755 })
+    const previousPath = process.env.OPENBOOKS_QPDF_PATH
+    const previousTimeout = process.env.OPENBOOKS_QPDF_TIMEOUT_MS
+    process.env.OPENBOOKS_QPDF_PATH = stub
+    process.env.OPENBOOKS_QPDF_TIMEOUT_MS = '300'
+    try {
+      const started = Date.now()
+      const pdf = await samplePdf()
+      await assert.rejects(
+        () => encryptPdf(pdf, { userPassword: 'HOP12091906' }),
+        (error: unknown) => {
+          assert.ok(error instanceof PdfEncryptionError)
+          assert.match((error as Error).message, /did not finish within 300 ms/)
+          return true
+        },
+      )
+      assert.ok(Date.now() - started < 15_000, 'the hang must be cut short near the timeout')
+    } finally {
+      if (previousPath === undefined) delete process.env.OPENBOOKS_QPDF_PATH
+      else process.env.OPENBOOKS_QPDF_PATH = previousPath
+      if (previousTimeout === undefined) delete process.env.OPENBOOKS_QPDF_TIMEOUT_MS
+      else process.env.OPENBOOKS_QPDF_TIMEOUT_MS = previousTimeout
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
   }
 })
