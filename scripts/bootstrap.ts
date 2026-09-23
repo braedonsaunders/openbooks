@@ -1530,7 +1530,6 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "constraint): the guarded DROP finds nothing and the body replays "
       + "idempotently to the same catalog.",
   },
-  },
 ];
 
 async function executeTrackedMigration(
