@@ -139,7 +139,12 @@ async function loadSession(db: SqlExecutor, orgId: string, id: string): Promise<
   return rows[0] ?? null;
 }
 
-async function loadEntries(db: SqlExecutor, orgId: string, sessionId: string): Promise<StoredEntry[]> {
+async function loadEntries(
+  db: SqlExecutor,
+  orgId: string,
+  sessionId: string,
+  allowed: Set<string> | null,
+): Promise<StoredEntry[]> {
   return (await db.execute<StoredEntry>(sql`
     select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
@@ -149,7 +154,7 @@ async function loadEntries(db: SqlExecutor, orgId: string, sessionId: string): P
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
       join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
       left join parties p on p.org_id = e.org_id and p.id = we.worker_party_id
-     where e.org_id = ${orgId} and e.session_id = ${sessionId}
+     where e.org_id = ${orgId} and e.session_id = ${sessionId} ${employmentScopeFilter(allowed, "we")}
      order by e.created_at
   `)).rows;
 }
@@ -165,12 +170,14 @@ async function loadMissing(
   sessionId: string,
   cycleId: string,
   facilitatorPartyId: string | null,
+  allowed: Set<string> | null,
 ): Promise<MissingReviewDTO[]> {
   const rows = (await db.execute<{ reviewId: string; employmentId: string; status: string; kind: string; reviewerPartyId: string }>(sql`
     select r.id as "reviewId", r.employment_id as "employmentId", r.status, r.kind,
            r.reviewer_party_id as "reviewerPartyId"
       from hrm_reviews r
-     where r.org_id = ${orgId} and r.cycle_id = ${cycleId}
+      join worker_employments we on we.org_id = r.org_id and we.id = r.employment_id
+     where r.org_id = ${orgId} and r.cycle_id = ${cycleId} ${employmentScopeFilter(allowed, "we")}
        and not exists (select 1 from hrm_calibration_entries e
                         where e.org_id = ${orgId} and e.session_id = ${sessionId} and e.review_id = r.id)
      order by r.created_at
@@ -188,6 +195,34 @@ async function loadMissing(
     }
     return { reviewId: row.reviewId, employmentId: row.employmentId, status: row.status, kind: row.kind, reason };
   });
+}
+
+/**
+ * The allowed employer set threads through every read and mutation here:
+ * a scoped HR actor opens sessions, enters entries, and decides ratings
+ * only for employments inside their subsidiaries. Out-of-scope review ids
+ * answer as missing-without-a-row (never named), so the fence cannot be
+ * probed through the missing list either.
+ */
+function employmentScopeFilter(allowed: Set<string> | null, alias: string): ReturnType<typeof sql> {
+  if (allowed === null) return sql``;
+  const ids = [...allowed].map((id) => sql`${id}::uuid`);
+  return sql`and ${sql.raw(alias)}.employer_subsidiary_id in (${sql.join(ids, sql`, `)})`;
+}
+
+/** A cycle's declared subsidiary, read leniently — extra envelope keys never fail the scope read. */
+function cycleScopeSubsidiary(appliesTo: unknown): string | null {
+  if (!appliesTo || typeof appliesTo !== "object" || Array.isArray(appliesTo)) return null;
+  const raw = (appliesTo as Record<string, unknown>).employer_subsidiary_id;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+/** Uniform NOT_FOUND for a session over an out-of-scope cycle. */
+function assertCycleInScope(appliesTo: unknown, allowed: Set<string> | null): void {
+  const subsidiaryId = cycleScopeSubsidiary(appliesTo);
+  if (allowed !== null && subsidiaryId !== null && !allowed.has(subsidiaryId)) {
+    throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+  }
 }
 
 function toDTO(session: StoredSession, entries: readonly StoredEntry[], missing: readonly MissingReviewDTO[]): CalibrationSessionDTO {
@@ -247,13 +282,14 @@ export async function createCalibrationSession(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const cycle = (await db.execute<{ id: string; status: string }>(sql`
-      select id, status from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const cycle = (await db.execute<{ id: string; status: string; appliesTo: unknown }>(sql`
+      select id, status, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
     `)).rows[0];
     if (!cycle) {
       throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
     }
+    assertCycleInScope(cycle.appliesTo, allowed);
     if (cycle.status === "closed") {
       throw new HrmPerformanceError("BAD_STATE", "this cycle is closed — calibration belongs to an open or calibrating cycle");
     }
@@ -266,7 +302,7 @@ export async function createCalibrationSession(args: {
     if (!inserted) throw new HrmPerformanceError("REFUSED", "the calibration session was not stored — no row was written; retry the action");
     const session = await loadSession(db, orgId, inserted.id);
     if (!session) throw new HrmPerformanceError("REFUSED", "the calibration session was not stored — no row can be read back; retry the action");
-    return toDTO(session, [], await loadMissing(db, orgId, session.id, cycleId, session.facilitator_party_id));
+    return toDTO(session, [], await loadMissing(db, orgId, session.id, cycleId, session.facilitator_party_id, allowed));
   });
 }
 
@@ -276,20 +312,28 @@ export async function openCalibrationSession(args: { orgId: string; actorId: str
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
     if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
+    const sessionCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+      select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+    `)).rows[0];
+    if (!sessionCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    assertCycleInScope(sessionCycle.appliesTo, allowed);
     if (session.status !== "draft") {
       throw new HrmPerformanceError("BAD_STATE", `only a draft session can be opened — this one is ${session.status}`);
     }
     // Only submitted manager reviews enter; the facilitator's own
     // reviews are excluded (exclude-initiator) so the conflict cannot
     // be reached. Everything else stays on the missing list with its
-    // reason — never silently excluded.
+    // reason — never silently excluded. Entry is fenced to the actor's
+    // subsidiaries: another subsidiary's ratings never enter this grid.
     const candidates = (await db.execute<{ id: string; overall_rating: string | null; reviewer_party_id: string }>(sql`
-      select id, overall_rating::text as overall_rating, reviewer_party_id
-        from hrm_reviews
-       where org_id = ${orgId} and cycle_id = ${session.cycle_id} and kind = 'manager' and status = 'submitted'
+      select r.id, r.overall_rating::text as overall_rating, r.reviewer_party_id
+        from hrm_reviews r
+        join worker_employments we on we.org_id = r.org_id and we.id = r.employment_id
+       where r.org_id = ${orgId} and r.cycle_id = ${session.cycle_id}
+         and r.kind = 'manager' and r.status = 'submitted' ${employmentScopeFilter(allowed, "we")}
     `)).rows;
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_calibration_sessions set status = 'open', opened_at = now(), updated_by = ${actorId}, updated_at = now()
@@ -321,7 +365,7 @@ export async function openCalibrationSession(args: { orgId: string; actorId: str
     await recordEvent(db, orgId, actorId, id, null, "opened", null, null, null);
     const opened = await loadSession(db, orgId, id);
     if (!opened) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    return toDTO(opened, await loadEntries(db, orgId, id), await loadMissing(db, orgId, id, opened.cycle_id, opened.facilitator_party_id));
+    return toDTO(opened, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, opened.cycle_id, opened.facilitator_party_id, allowed));
   });
 }
 
@@ -330,12 +374,14 @@ async function requireOpenEntry(
   orgId: string,
   actorId: string,
   entryId: string,
+  allowed: Set<string> | null,
 ): Promise<{ session: StoredSession; entry: StoredEntry }> {
-  const entries = (await db.execute<StoredEntry>(sql`
+  const entries = (await db.execute<StoredEntry & { employerSubsidiaryId: string }>(sql`
     select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
            e.potential_key, e.justification,
-           e.decided_by::text as decided_by, e.decided_at::text as decided_at
+           e.decided_by::text as decided_by, e.decided_at::text as decided_at,
+           we.employer_subsidiary_id as "employerSubsidiaryId"
       from hrm_calibration_entries e
       join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
       join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
@@ -344,6 +390,11 @@ async function requireOpenEntry(
   `)).rows;
   const entry = entries[0];
   if (!entry) throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+  // The entry's subject must sit inside the decider's subsidiaries: without
+  // this, scoped HR revises another subsidiary's ratings entry by entry.
+  if (allowed !== null && !allowed.has(entry.employerSubsidiaryId)) {
+    throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+  }
   const entrySession = (await db.execute<{ session_id: string }>(sql`
     select session_id from hrm_calibration_entries where org_id = ${orgId} and id = ${entryId}
   `)).rows[0];
@@ -397,8 +448,8 @@ export async function setCalibratedRating(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
     const fromKey = entry.calibrated_rating ?? entry.proposed_rating;
     const updated = (await db.execute<StoredEntry>(sql`
       update hrm_calibration_entries
@@ -411,7 +462,7 @@ export async function setCalibratedRating(args: {
       throw new HrmPerformanceError("STALE_REVISION", "the entry changed under you — reload the grid and try again");
     }
     await recordEvent(db, orgId, actorId, session.id, entryId, "rating_changed", fromKey, args.calibratedRating, args.justification.trim());
-    const entries = await loadEntries(db, orgId, session.id);
+    const entries = await loadEntries(db, orgId, session.id, allowed);
     const decided = entries.find((e) => e.id === entryId);
     if (!decided) throw new HrmPerformanceError("REFUSED", "the rating change was not stored — no row can be read back; retry the action");
     return {
@@ -438,8 +489,8 @@ export async function setPotential(args: {
   }
   await withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_calibration_entries
          set potential_key = ${args.potentialKey.trim()}, decided_by = ${actorId}, decided_at = now(),
@@ -463,8 +514,8 @@ export async function revertEntry(args: { orgId: string; actorId: string; entryI
   }
   await withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const { session, entry } = await requireOpenEntry(db, orgId, actorId, entryId, allowed);
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_calibration_entries
          set calibrated_rating = null, potential_key = null, justification = null,
@@ -489,9 +540,14 @@ export async function closeCalibrationSession(args: {
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
     if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
+    const closeCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+      select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+    `)).rows[0];
+    if (!closeCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    assertCycleInScope(closeCycle.appliesTo, allowed);
     if (session.status !== "open") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -500,7 +556,30 @@ export async function closeCalibrationSession(args: {
           : "this session is still a draft — open it before closing",
       );
     }
-    const entries = await loadEntries(db, orgId, id);
+    // Close writes decided ratings back onto their reviews: entries outside
+    // the closer's subsidiaries fail the close instead of writing across
+    // the fence or skipping silently.
+    if (allowed !== null) {
+      const outside = (await db.execute<{ n: string }>(sql`
+        select count(*)::text as n
+          from hrm_calibration_entries e
+          join hrm_reviews r on r.org_id = e.org_id and r.id = e.review_id
+          join worker_employments we on we.org_id = e.org_id and we.id = r.employment_id
+         where e.org_id = ${orgId} and e.session_id = ${id}
+           and e.calibrated_rating is not null
+           and we.employer_subsidiary_id not in (${sql.join(
+             [...allowed].map((sid) => sql`${sid}::uuid`),
+             sql`, `,
+           )})
+      `)).rows[0];
+      if (outside && Number(outside.n) > 0) {
+        throw new HrmPerformanceError(
+          "FORBIDDEN",
+          `this session holds ${outside.n} decided entries outside your subsidiaries — ask unrestricted HR to close it instead of writing across the fence`,
+        );
+      }
+    }
+    const entries = await loadEntries(db, orgId, id, allowed);
     // Close writes every decided calibrated rating back onto its review
     // in the SAME transaction as the close: partial write-back cannot
     // exist. The share shows the calibrated rating with a note that
@@ -539,7 +618,7 @@ export async function closeCalibrationSession(args: {
     await recordEvent(db, orgId, actorId, id, null, "closed", null, null, null);
     const done = await loadSession(db, orgId, id);
     if (!done) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    return toDTO(done, await loadEntries(db, orgId, id), await loadMissing(db, orgId, id, done.cycle_id, done.facilitator_party_id));
+    return toDTO(done, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, done.cycle_id, done.facilitator_party_id, allowed));
   });
 }
 
@@ -553,10 +632,15 @@ export async function getCalibrationSession(args: {
   const id = requireId("id", args.id);
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const session = await loadSession(db, orgId, id);
     if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
-    return toDTO(session, await loadEntries(db, orgId, id), await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id));
+    const readCycle = (await db.execute<{ appliesTo: unknown }>(sql`
+      select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
+    `)).rows[0];
+    if (!readCycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the session over an existing cycle");
+    assertCycleInScope(readCycle.appliesTo, allowed);
+    return toDTO(session, await loadEntries(db, orgId, id, allowed), await loadMissing(db, orgId, id, session.cycle_id, session.facilitator_party_id, allowed));
   });
 }
 
@@ -569,13 +653,28 @@ export async function listCalibrationSessions(args: {
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const cycleFilter = args.cycleId ? sql` and cycle_id = ${args.cycleId}` : sql``;
-    return (await db.execute<{ id: string; cycleId: string; name: string; status: CalibrationSessionStatus; openedAt: string | null; closedAt: string | null }>(sql`
-      select id, cycle_id as "cycleId", name, status,
-             opened_at::text as "openedAt", closed_at::text as "closedAt"
-        from hrm_calibration_sessions where org_id = ${orgId}${cycleFilter} order by created_at desc
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const cycleFilter = args.cycleId ? sql` and s.cycle_id = ${args.cycleId}` : sql``;
+    // Sessions over cycles outside the actor's subsidiaries stay hidden:
+    // an org-wide cycle (null scope) still lists, with its entries fenced
+    // at read time.
+    const rows = (await db.execute<{
+      id: string; cycleId: string; name: string; status: CalibrationSessionStatus;
+      openedAt: string | null; closedAt: string | null; appliesTo: unknown;
+    }>(sql`
+      select s.id, s.cycle_id as "cycleId", s.name, s.status,
+             s.opened_at::text as "openedAt", s.closed_at::text as "closedAt",
+             c.applies_to as "appliesTo"
+        from hrm_calibration_sessions s
+        join hrm_review_cycles c on c.org_id = s.org_id and c.id = s.cycle_id
+       where s.org_id = ${orgId}${cycleFilter} order by s.created_at desc
     `)).rows;
+    return rows
+      .filter((row) => {
+        const subsidiaryId = cycleScopeSubsidiary(row.appliesTo);
+        return allowed === null || subsidiaryId === null || allowed.has(subsidiaryId);
+      })
+      .map(({ appliesTo: _dropped, ...session }) => session);
   });
 }
 
