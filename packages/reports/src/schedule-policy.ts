@@ -11,6 +11,8 @@
 // month boundary (including a DST fall-back day) cannot cancel out in the
 // correction.
 
+import { utcCivilDate } from './fiscal-calendar'
+
 export type ReportCadence = 'daily' | 'weekly' | 'monthly'
 export const REPORT_CADENCES: ReportCadence[] = ['daily', 'weekly', 'monthly']
 
@@ -142,7 +144,10 @@ function zonedDateTimeToUtc(
   minute: number,
   tz: string,
 ): Date {
-  let utcMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0)
+  // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto
+  // 1900-1999 (both sides of the diff remapped identically before, so
+  // contemporary schedules were unaffected — this makes ancient ones exact too).
+  let utcMs = utcCivilDate(year, month - 1, day, hour, minute).getTime()
   for (let i = 0; i < 3; i++) {
     const guess = new Date(utcMs)
     const have = tzReadAll(guess, tz)
@@ -153,8 +158,8 @@ function zonedDateTimeToUtc(
     // day as a probe on the prior month's last day; around a repeated DST
     // hour that can converge to the wrong date and skip the occurrence.
     const diff =
-      Date.UTC(want.year, want.month - 1, want.day, want.hour, want.minute) -
-      Date.UTC(have.year, have.month - 1, have.day, have.hour, have.minute)
+      utcCivilDate(want.year, want.month - 1, want.day, want.hour, want.minute).getTime() -
+      utcCivilDate(have.year, have.month - 1, have.day, have.hour, have.minute).getTime()
     if (diff === 0) break
     utcMs += diff
   }

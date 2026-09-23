@@ -35,6 +35,7 @@ import {
   type ReportRowScopeRule,
   type ReportTemporalBin,
 } from './types'
+import { utcCivilDate } from './fiscal-calendar'
 
 /** Structural pg-client contract (pg.Pool / pg.Client / pg.PoolClient). */
 export type PgQueryable = {
@@ -626,7 +627,8 @@ function binRange(v: unknown, bin: ReportTemporalBin): { from: string; to: strin
     if (!match) return null
     y = Number(match[1]); m = Number(match[2]) - 1; d = Number(match[3])
   }
-  const start = new Date(Date.UTC(y, m, d))
+  // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto 1900-1999.
+  const start = utcCivilDate(y, m, d)
   const end = new Date(start)
   switch (bin) {
     case 'day':

@@ -22,6 +22,7 @@ import {
   fiscalYearRangeFor,
   type DateRange,
   type FiscalPeriod,
+  utcCivilDate,
 } from './fiscal-calendar'
 
 /**
@@ -492,7 +493,8 @@ export function resolvePreset(id: string, input: ResolvePresetInput): DateRange 
     case 'week_to_date': {
       // ISO week starts Monday.
       const [wy, wm, wd] = [Number(today.slice(0, 4)), Number(today.slice(5, 7)), Number(today.slice(8, 10))]
-      const dow = new Date(Date.UTC(wy, wm - 1, wd)).getUTCDay() // 0=Sun..6=Sat
+      // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto 1900-1999.
+      const dow = utcCivilDate(wy, wm - 1, wd).getUTCDay() // 0=Sun..6=Sat
       const from = addDays(today, -((dow + 6) % 7))
       return { from, to: today, label: 'Week to date' }
     }
