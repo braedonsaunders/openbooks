@@ -64,3 +64,40 @@ for (const operation of ["write-down", "recovery"] as const) {
     });
   }
 }
+
+for (const bookBreak of ["inactive primary book", "non-posting primary book"] as const) {
+  test(`NRV write-down refuses through a ${bookBreak}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      await db.execute(sql`update orgs set settings=settings||'{"reportingFramework":"ifrs"}'::jsonb where id=${org.orgId}`);
+      const input = {
+        itemId: org.items.fifo, stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId, date: org.date, nrvPerUnit: "4",
+      };
+      await receiveInventory(org.orgId, actorId, {
+        ...input, quantity: "10", unitCost: "5", offsetAccountId: org.accounts.clearing,
+      });
+      const before = await getOnHand(org.orgId, org.items.fifo, org.stockLocationId);
+      // The writedown must use the same primary-posting-book rule as
+      // receipts and issues: an inactive or non-posting primary book
+      // refuses by name instead of posting into it.
+      if (bookBreak === "inactive primary book") {
+        await db.execute(sql`update accounting_books set is_active=false where org_id=${org.orgId} and is_primary`);
+      } else {
+        await db.execute(sql`update accounting_books set posts_gl=false where org_id=${org.orgId} and is_primary`);
+      }
+      await withOrgTransaction(org.orgId, async () => {
+        await assert.rejects(writeDownInventoryToNrv(org.orgId, actorId, input), /no active primary posting book/);
+        assert.deepEqual(await getOnHand(org.orgId, org.items.fifo, org.stockLocationId), before);
+      });
+      const writedowns = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from inventory_writedowns where org_id=${org.orgId}`));
+      assert.equal(writedowns.rows[0]!.n, 0);
+      await db.execute(sql`update accounting_books set is_active=true, posts_gl=true where org_id=${org.orgId} and is_primary`);
+      assert.ok((await writeDownInventoryToNrv(org.orgId, actorId, input)).entryId);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  });
+}
