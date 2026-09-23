@@ -10,6 +10,8 @@ interface RouteState {
   committedMetadataUpdates: number
   latest: { id: string; version: number; published_at: string | null } | undefined
   failSchemaWrite: boolean
+  templateLocked: boolean
+  versionUpdateKept: boolean
 }
 const routeState: RouteState = {
   calls: [],
@@ -17,6 +19,8 @@ const routeState: RouteState = {
   committedMetadataUpdates: 0,
   latest: { id: 'version-1', version: 1, published_at: null },
   failSchemaWrite: false,
+  templateLocked: true,
+  versionUpdateKept: true,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -85,6 +89,12 @@ const mockSources = new Map<string, string>([
               if (state.failSchemaWrite && text.includes('update form_template_versions')) {
                 throw new Error('schema write failed')
               }
+              if (text.includes('from form_templates') && text.includes('for update')) {
+                return { rows: state.templateLocked ? [{ id: 'template-1' }] : [] }
+              }
+              if (text.includes('update form_template_versions')) {
+                return { rows: state.versionUpdateKept && state.latest ? [{ version: state.latest.version }] : [] }
+              }
               if (text.includes('form_template_versions') && text.includes('select id')) {
                 return { rows: state.latest ? [state.latest] : [] }
               }
@@ -136,6 +146,8 @@ function reset(): void {
   routeState.committedMetadataUpdates = 0
   routeState.latest = { id: 'version-1', version: 1, published_at: null }
   routeState.failSchemaWrite = false
+  routeState.templateLocked = true
+  routeState.versionUpdateKept = true
 }
 
 function put(body: Record<string, unknown>): Promise<Response> {
@@ -178,10 +190,13 @@ test('metadata and a valid draft schema commit together in one transaction', asy
   assert.deepEqual(await response.json(), { ok: true, savedVersion: 1 })
   assert.equal(routeState.transactionStarts, 1)
   assert.equal(routeState.committedMetadataUpdates, 1)
-  assert.equal(routeState.calls.length, 3)
-  assert.match(routeState.calls[0]!.text, /update form_templates/)
-  assert.match(routeState.calls[1]!.text, /select id, version, published_at/)
-  assert.match(routeState.calls[2]!.text, /update form_template_versions/)
+  assert.equal(routeState.calls.length, 4)
+  assert.match(routeState.calls[0]!.text, /from form_templates[\s\S]*for update/)
+  assert.match(routeState.calls[1]!.text, /update form_templates/)
+  assert.match(routeState.calls[2]!.text, /select id, version, published_at/)
+  assert.match(routeState.calls[2]!.text, /for update/)
+  assert.match(routeState.calls[3]!.text, /update form_template_versions/)
+  assert.match(routeState.calls[3]!.text, /published_at is null/)
 })
 
 test('a schema write failure does not commit the transaction metadata update', async () => {
@@ -193,4 +208,31 @@ test('a schema write failure does not commit the transaction metadata update', a
   assert.equal(routeState.transactionStarts, 1)
   assert.equal(routeState.committedMetadataUpdates, 0)
   assert.ok(routeState.calls.some(({ text }) => text.includes('update form_templates')))
+})
+
+test('a publish that wins the race turns the edit into a new draft version', async () => {
+  reset()
+  // The locked latest read still saw a draft, but the guarded in-place
+  // update matched zero rows: publish committed first. The edit must land
+  // as version 2, never overwrite the published snapshot.
+  routeState.versionUpdateKept = false
+
+  const response = await put({ schema: validSchema })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(await response.json(), { ok: true, savedVersion: 2 })
+  assert.ok(
+    routeState.calls.some(({ text }) =>
+      text.includes('insert into form_template_versions'),
+    ),
+  )
+})
+
+test('a template deleted mid-request is a 404, not a silent success', async () => {
+  reset()
+  routeState.templateLocked = false
+
+  const response = await put({ name: 'Renamed intake', schema: validSchema })
+
+  assert.equal(response.status, 404)
 })

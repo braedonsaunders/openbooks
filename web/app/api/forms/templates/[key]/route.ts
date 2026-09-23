@@ -76,7 +76,19 @@ export async function PUT(req: Request, { params }: Params) {
 
   let savedVersion: number | null = null
   if (hasMetadataChanges || parsedSchema) {
-    await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
+      // Lock the parent first: publish stamps the latest version under this
+      // same lock, so a PUT that raced a publish serializes after it and
+      // observes the published row instead of overwriting the snapshot.
+      // The preflight lookup above is not authoritative — re-check inside.
+      const locked = await tx.execute(sql`
+        select id
+          from form_templates
+         where id = ${template.id} and org_id = ${user.orgId}
+         for update
+      `)
+      if (locked.rows.length === 0) return { kind: 'not-found' as const }
+
       if (hasMetadataChanges) {
         const name = body.name?.trim() || template.name
         const kind = ['form', 'wizard', 'checklist', 'register'].includes(body.kind ?? '')
@@ -101,24 +113,42 @@ export async function PUT(req: Request, { params }: Params) {
       }
 
       if (parsedSchema) {
+        // Locked: a concurrent publish either committed before this lock
+        // (observed here as published) or waits behind it.
         const latestResult = await tx.execute(sql`
           select id, version, published_at
             from form_template_versions
            where org_id = ${user.orgId} and template_id = ${template.id}
            order by version desc limit 1
+           for update
         `)
         const latest = latestResult.rows[0] as
           | { id: string; version: number; published_at: string | null }
           | undefined
         if (latest && !latest.published_at) {
-          // Editable draft — update in place.
-          await tx.execute(sql`
+          // Editable draft — update in place, predicated on still-draft so
+          // a publish that committed between the lock and this write cannot
+          // be overwritten: zero rows means the race was lost and the edit
+          // goes to a new draft version instead.
+          const stamped = await tx.execute(sql`
             update form_template_versions
                set schema = ${JSON.stringify(parsedSchema.data)}::jsonb,
                    updated_at = now(), updated_by = ${user.id}
-             where id = ${latest.id} and org_id = ${user.orgId}
+             where id = ${latest.id} and org_id = ${user.orgId} and published_at is null
+             returning version
           `)
-          savedVersion = latest.version
+          const kept = (stamped.rows[0] as { version: number } | undefined)?.version
+          if (kept !== undefined) {
+            savedVersion = kept
+          } else {
+            const next = latest.version + 1
+            await tx.execute(sql`
+              insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
+              values (${user.orgId}, ${template.id}, ${next},
+                      ${JSON.stringify(parsedSchema.data)}::jsonb, ${user.id}, ${user.id})
+            `)
+            savedVersion = next
+          }
         } else {
           // Latest is published (immutable) or missing — spawn the next draft.
           const next = (latest?.version ?? 0) + 1
@@ -130,7 +160,11 @@ export async function PUT(req: Request, { params }: Params) {
           savedVersion = next
         }
       }
+      return { kind: 'ok' as const }
     })
+    if (outcome.kind === 'not-found') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
   }
 
   return NextResponse.json({ ok: true, savedVersion })
