@@ -233,6 +233,9 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "hrm_exit_record_events", columnName: "reason", transform: "redact" },
   { tableName: "hrm_exit_record_events", columnName: "before_snapshot", transform: "null_out" },
   { tableName: "hrm_exit_record_events", columnName: "after_snapshot", transform: "null_out" },
+  // 0291: a scheduled SFTP import binds to the bank account number its
+  // statements carry — a real account identifier, never copied verbatim.
+  { tableName: "sftp_import_schedules", columnName: "expected_external_account_id", transform: "redact" },
   // HR-17 begin: 1:1 agenda prose, feedback bodies, calibration
   // justifications and talent notes assess named people in free text —
   // same redact as review answers above.
