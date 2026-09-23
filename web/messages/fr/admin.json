@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "Décider les lignes via le circuit d'approbation",
     "hrm_certifications_read": "Voir les certifications et l’aptitude à la répartition",
     "hrm_certifications_manage": "Gérer les types de certification, les exigences et les renouvellements",
+    "hrm_documents_read": "Consulter les documents RH",
+    "hrm_documents_manage": "Gérer les documents RH",
+    "hrm_surveys_manage": "Gérer les enquêtes",
     "time_clock": "Pointer sur le terrain",
     "time_crew_enter": "Saisir les lots d'équipe",
     "time_kiosk_manage": "Gérer bornes et PIN"

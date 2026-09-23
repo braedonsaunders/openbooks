@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "经审批流决定明细",
     "hrm_certifications_read": "查看认证与派工就绪情况",
     "hrm_certifications_manage": "管理认证类型、要求与续期",
+    "hrm_documents_read": "查看人事文档",
+    "hrm_documents_manage": "管理人事文档",
+    "hrm_surveys_manage": "管理调查",
     "time_clock": "外勤打卡",
     "time_crew_enter": "录入班组批次",
     "time_kiosk_manage": "管理终端与PIN"

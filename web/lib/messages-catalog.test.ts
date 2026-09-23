@@ -3020,7 +3020,7 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // tree after the AI-rails admin copy landed. Never arithmetic and never
   // a number measured on another branch -- the count is whatever the
   // English catalog actually holds here.
-  assert.equal(wanted.length, 4041, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 4044, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3393,8 +3393,8 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // HR-17 + HR-18: count and hash recomputed over the sorted key inventory
   // for the continuous-performance and recruiting-depth keys; de/ja completeness
   // asserted per-key below.
-  const ADMIN_I2_SOURCE_COUNT = 4041
-  const ADMIN_I2_SOURCE_HASH = 'bbc73baf17aa0fc49a4f315804692c74c9a1a7cd3f815b607a203ec0ab1a22a8'
+  const ADMIN_I2_SOURCE_COUNT = 4044
+  const ADMIN_I2_SOURCE_HASH = '6566a1ddee34424363940fd695ced6966bf92fe02f2e0ce002fefa5e6e2ba943'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

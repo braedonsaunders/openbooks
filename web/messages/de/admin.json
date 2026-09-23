@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "Zeilen über den Genehmigungslauf entscheiden",
     "hrm_certifications_read": "Zertifizierungen und Einsatzbereitschaft ansehen",
     "hrm_certifications_manage": "Zertifizierungsarten, Anforderungen und Erneuerungen verwalten",
+    "hrm_documents_read": "Personaldokumente anzeigen",
+    "hrm_documents_manage": "Personaldokumente verwalten",
+    "hrm_surveys_manage": "Umfragen verwalten",
     "time_clock": "Vor Ort stempeln",
     "time_crew_enter": "Team-Chargen erfassen",
     "time_kiosk_manage": "Kioskgeräte und PINs verwalten"

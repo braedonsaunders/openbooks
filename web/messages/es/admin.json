@@ -992,6 +992,9 @@
     "hrm_compensation_approve": "Decidir líneas mediante el flujo de aprobación",
     "hrm_certifications_read": "Ver certificaciones y disponibilidad de asignación",
     "hrm_certifications_manage": "Gestionar tipos de certificación, requisitos y renovaciones",
+    "hrm_documents_read": "Ver documentos de RR. HH.",
+    "hrm_documents_manage": "Gestionar documentos de RR. HH.",
+    "hrm_surveys_manage": "Gestionar encuestas",
     "time_clock": "Fichar en campo",
     "time_crew_enter": "Cargar lotes de cuadrilla",
     "time_kiosk_manage": "Gestionar quioscos y PIN"
