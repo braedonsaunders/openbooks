@@ -112,6 +112,57 @@ test('a scheduled destination names its authority, due date, and rule; legacy gr
   assert.equal(html.split('Due ').length - 1, 1)
 })
 
+test('a group with unattributed payroll offers attribution, never a bill button', () => {
+  const entitylessGroup: RemittanceGroup = {
+    partyId: '55555555-5555-4555-8555-555555555555',
+    partyName: 'Receiver General',
+    filingAccount: { id: null, accountNumber: null, name: null, remitterType: null },
+    hasUnknownFilingAccount: false,
+    hasEntitylessAccruals: true,
+    regionalCalendar: null,
+    vendorKeys: [],
+    schedule: null,
+    provinces: ['ON'],
+    components: [
+      {
+        componentId: 'c1', code: 'ITAX', name: 'Income tax', kind: 'deduction',
+        systemKey: 'income_tax', liabilityAccountId: 'liab-1', accountLabel: '2000 · Payroll liabilities',
+        amount: '150.00', currency: 'CAD',
+      },
+    ],
+    total: '150.00',
+    currency: 'CAD',
+    translated: false,
+    slices: [
+      {
+        subsidiaryId: '66666666-6666-4666-8666-666666666666',
+        subsidiaryName: 'Main subsidiary',
+        currency: 'CAD',
+        components: [],
+        total: '100.00',
+        existingBills: [],
+      },
+    ],
+    grossPayroll: '150.00',
+    employeeCount: 1,
+    existingBills: [],
+  }
+  const html = renderToStaticMarkup(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={{ payroll: messages }}>
+      <MoneyProvider currency="CAD">
+        <RemittancesView groups={[entitylessGroup]} from="2026-09-01" to="2026-09-30" canCreate={true} />
+      </MoneyProvider>
+    </NextIntlClientProvider>,
+  )
+  // The engine refuses to bill this group until its runs are attributed, so
+  // the card must not offer the action that can only fail: it names the
+  // remedy and links to the pay runs instead.
+  assert.ok(html.includes(messages.remittances.attributeEntity))
+  assert.ok(html.includes('/payroll/runs'))
+  assert.ok(!html.includes(messages.remittances.createBill))
+  assert.ok(!html.includes(messages.remittances.createAnother))
+})
+
 test('a EUR-only scope under a GBP org renders euros, never pounds', () => {
   const eurGroup: RemittanceGroup = {
     partyId: '33333333-3333-4333-8333-333333333333',

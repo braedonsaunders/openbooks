@@ -184,7 +184,14 @@ function RemittanceGroupCard({
               <Badge variant="outline">{bill.documentNumber} · {bill.status}</Badge>
             </Link>
           ))}
-          {group.partyId ? (
+          {group.hasEntitylessAccruals ? (
+            <Link
+              className="text-xs font-medium text-teal-700 underline dark:text-teal-300"
+              href={'/payroll/runs' as never}
+            >
+              {t('attributeEntity')}
+            </Link>
+          ) : group.partyId ? (
             canCreate && (
               group.slices.length > 1 ? (
                 <span className="flex flex-wrap items-center gap-2">
