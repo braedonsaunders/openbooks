@@ -63,3 +63,35 @@ test('an omitted percentComplete refuses instead of clearing the override', asyn
     await dropScratchOrg(org.orgId)
   }
 })
+
+/**
+ * The override resyncs revenue, so the change must leave the same
+ * before/after audit row every other material project write does — with the
+ * actor, in the same transaction as the write it evidences.
+ */
+test('a percent-complete override writes a before/after audit row', async () => {
+  const org = await createScratchOrg()
+  try {
+    const actor = await createScratchUser(org.orgId, 'Recognition owner', 'admin')
+    await db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,projects}', 'true'::jsonb, true) where id = ${org.orgId}`)
+    session.user = { id: actor, orgId: org.orgId, name: 'Owner', email: 'owner@example.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+    const project = randomUUID()
+    await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
+      values (${project},${org.orgId},${org.subsidiaryId},'PCT-A','Audit job',${org.customerId},'active',true,'{"percentCompleteOverride": 62}'::jsonb)`)
+    const res = await withOrgContext(org.orgId, () => PUT(new Request(`http://pct.local/api/projects/${project}/percent-complete`, {
+      method: 'PUT', body: JSON.stringify({ percentComplete: 70, expectedPercentComplete: 62 }),
+    }), { params: Promise.resolve({ id: project }) }))
+    assert.equal(res.status, 200, await res.clone().text())
+    const rows = (await db.execute<{ changes: { percentCompleteOverride: { before: unknown; after: unknown } }; actor_id: string }>(sql`
+      select changes, actor_id from audit_log
+       where org_id = ${org.orgId} and table_name = 'projects' and row_id = ${project} and action = 'update'
+       order by id desc limit 1`)).rows
+    assert.equal(rows.length, 1)
+    assert.deepEqual(rows[0]!.changes.percentCompleteOverride, { before: 62, after: 70 })
+    assert.equal(rows[0]!.actor_id, actor)
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})

@@ -92,6 +92,18 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
        returning id`))
     if (!updated.rows[0]) return null
+    // The override drives revenue recognition, so the change carries the
+    // same before/after audit row every other material project write does —
+    // written before the contract sync, in the same transaction, so a sync
+    // failure rolls the audit back with the write it evidences.
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'projects', ${id}, 'update',
+              ${JSON.stringify({
+                percentCompleteOverride: { before: liveValue, after: pct },
+                source: 'percent_complete_override',
+              })}::jsonb, ${gate.user.id})
+    `)
     return syncProjectRevenueContractsInTransaction(tx, orgId, gate.user.id, today, id)
   })
   if (sync instanceof NextResponse) return sync
