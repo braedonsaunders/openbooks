@@ -378,14 +378,88 @@ async function rebuildStuckEnqueuedDeliveries(now: Date): Promise<number> {
   return rebuilt;
 }
 
+/**
+ * Crash-recovery sweep for deliveries stuck 'sending'. `markReportDeliveryStarted`
+ * moves a row to 'sending' when its email job starts, but the dispatch scan
+ * below only takes 'pending'/'failed' rows — so a worker crash between the
+ * mark and the send strands the delivery forever. A 'sending' row whose claim
+ * timestamp (updated_at) is past the stuck horizon lost its worker: a recorded
+ * provider acceptance reconciles it to 'sent' (resending would duplicate); a
+ * live attempt is left alone; otherwise the orphaned queue job is removed
+ * best-effort and the row goes back to 'failed' for redispatch. Redispatch is
+ * idempotent against the email delivery key — the email worker resolves every
+ * generation of this delivery to the same canonical email_log row
+ * (`report:<deliveryId>`), so a surviving orphan converges to a single send.
+ */
+async function recoverStuckSendingDeliveries(now: Date): Promise<number> {
+  const horizon = new Date(now.getTime() - STUCK_ENQUEUED_REBUILD_MINUTES * 60_000);
+  const liveAfter = new Date(now.getTime() - REBUILD_LIVE_ACTIVITY_MINUTES * 60_000);
+  const stale = (await db.execute<{
+    id: string; org_id: string; recipient: string; dispatch_count: number; queue_job_id: string | null;
+  }>(sql`
+    select d.id, d.org_id, d.recipient, d.dispatch_count, d.queue_job_id
+      from report_delivery_outbox d
+     where d.status = 'sending' and d.updated_at < ${horizon}
+       and d.terminal_failed_at is null
+     order by d.updated_at
+     limit 100
+  `));
+  let recovered = 0;
+  for (const row of stale.rows) {
+    try {
+      const deliveryKey = deriveEmailDeliveryKey({ orgId: row.org_id, scope: `report:${row.id}`, to: row.recipient });
+      const log = (await db.execute<{ id: string; status: string; provider_message_id: string | null; updated_at: string | Date }>(sql`
+        select id, status, provider_message_id, updated_at from email_log
+         where org_id = ${row.org_id} and delivery_key = ${deliveryKey}
+         order by updated_at desc
+         limit 5
+      `));
+      const sent = log.rows.find((entry) => entry.status === "sent");
+      if (sent) {
+        await markReportDeliverySent(row.org_id, row.id, sent.id, sent.provider_message_id ?? "unknown");
+        continue;
+      }
+      // The driver returns timestamptz as a string; compare as Dates (a raw
+      // string >= Date comparison is always false and would recover live rows).
+      if (log.rows.some((entry) => (entry.status === "queued" || entry.status === "sending") && new Date(entry.updated_at) >= liveAfter)) {
+        continue;
+      }
+      try {
+        const queue = getEmailQueue();
+        const candidates = new Set(
+          [row.queue_job_id, `report-delivery|${row.id}|${row.dispatch_count - 1}`].filter((id): id is string => typeof id === "string" && id.length > 0),
+        );
+        for (const jobId of candidates) {
+          await queue.remove(jobId);
+        }
+      } catch {
+        // Redis down: the redispatch below fails too and retries — never a duplicate.
+      }
+      const moved = (await db.execute<{ id: string }>(sql`
+        update report_delivery_outbox set status='failed',
+               error='delivery worker lost while sending; rebuilt for redispatch',
+               next_attempt_at=${now}, updated_at=${now}
+         where id=${row.id} and org_id=${row.org_id} and status='sending'
+         returning id
+      `));
+      if (moved.rows[0]) recovered++;
+    } catch (error) {
+      console.error(`[reports] recovery of stuck sending delivery ${row.id} failed:`, error);
+    }
+  }
+  return recovered;
+}
+
 /** Dispatch per-recipient outbox rows; deterministic generation ids close the DB/Redis crash gap. */
 export async function dispatchReportDeliveries(
   enqueue: (data: EnqueueEmailData, options: { jobId: string }) => Promise<unknown> = enqueueEmail,
   now = new Date(),
 ): Promise<number> {
   // Crash-rebuild first: deliveries whose email job died after the 'enqueued'
-  // mark would otherwise sit outside the pending/failed scan forever.
+  // mark — or after the 'sending' mark — would otherwise sit outside the
+  // pending/failed scan forever.
   await rebuildStuckEnqueuedDeliveries(now);
+  await recoverStuckSendingDeliveries(now);
   const due = (await db.execute<{
     id: string; org_id: string; run_id: string; recipient: string; dispatch_count: number;
     filename: string; content_type: string; bytes: Buffer; report_name: string; org_name: string;
