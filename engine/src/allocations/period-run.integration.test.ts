@@ -1076,6 +1076,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const subB = randomUUID();
