@@ -188,10 +188,16 @@ test("entity drills scope every transaction leg and preserve exact money", async
 
   const transactionQueries = routeState.calls.slice(1);
   assert.equal(transactionQueries.length, 4);
-  assert.match(transactionQueries[0]!, /bl\.subsidiary_id = any/);
-  assert.match(transactionQueries[0]!, /be\.subsidiary_id = any/);
-  assert.match(transactionQueries[0]!, /pl\.subsidiary_id = any/);
-  assert.match(transactionQueries[0]!, /pe\.subsidiary_id = any/);
+  const payQuery = transactionQueries.find((text) => text.includes("from applications"))!;
+  // Payment stats count distinct cash settlement documents, scoped on every
+  // leg including the newly joined source document.
+  assert.match(payQuery, /bl\.subsidiary_id = any/);
+  assert.match(payQuery, /be\.subsidiary_id = any/);
+  assert.match(payQuery, /pl\.subsidiary_id = any/);
+  assert.match(payQuery, /pe\.subsidiary_id = any/);
+  assert.match(payQuery, /sp\.subsidiary_id = any/);
+  assert.match(payQuery, /sp\.kind in/);
+  assert.match(payQuery, /group by pe\.source_document_id/);
   // The open leg reads the shared reader's current-posting projection.
   assert.match(transactionQueries[1]!, /d\.posted_entry_id/);
   assert.match(transactionQueries[1]!, /jl\.subsidiary_id = any/);
