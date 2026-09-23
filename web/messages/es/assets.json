@@ -182,6 +182,9 @@
     "description": "No se guarda nada hasta que elija Crear activo. La depreciación se configura después en el registro.",
     "create": "Crear activo",
     "created": "Activo creado",
+    "noCategories": "Aún no hay categorías de activos. Se requiere una categoría antes de poder crear un activo.",
+    "manageCategories": "Configurar categorías de activos",
+    "noCategoriesNoGrant": "Pida a un administrador con acceso de configuración que cree una.",
     "assetNumberHint": "Déjelo en blanco para asignar el siguiente número al guardar",
     "errors": {
       "name_required": "Introduzca un nombre para este activo.",

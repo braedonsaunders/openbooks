@@ -198,6 +198,9 @@
     "description": "Nothing is saved until you choose Create. Depreciation is configured on the record afterwards.",
     "create": "Create asset",
     "created": "Asset created",
+    "noCategories": "No asset categories yet. A category is required before an asset can be created.",
+    "manageCategories": "Set up asset categories",
+    "noCategoriesNoGrant": "Ask an administrator with setup access to create one.",
     "assetNumberHint": "Blank assigns the next number on save",
     "errors": {
       "name_required": "Enter a name for this asset.",
