@@ -204,6 +204,8 @@
     "approveFile": "Datei genehmigen",
     "rejectFile": "Datei ablehnen",
     "reprocess": "Erneut verarbeiten",
+    "resolveDelivered": "Bankeingang bestätigen",
+    "resolveApproved": "Für erneuten Versand freigeben",
     "rollback": "Zurückrollen",
     "postPayments": "Zahlungen buchen",
     "paymentsSummary": "{count, plural, one {# Zahlung} other {# Zahlungen}} · <total>Summe {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "rückgängig gemacht",
       "cancelled": "abgebrochen"
     },
-    "fileStatus": { "generated": "erzeugt", "pending_approval": "Genehmigung ausstehend", "approved": "genehmigt", "rejected": "abgelehnt", "delivered": "übermittelt", "superseded": "ersetzt", "voided": "storniert" },
+    "fileStatus": { "generated": "erzeugt", "pending_approval": "Genehmigung ausstehend", "approved": "genehmigt", "rejected": "abgelehnt", "delivered": "übermittelt", "superseded": "ersetzt", "voided": "storniert", "delivering": "wird übermittelt", "delivery_uncertain": "Übermittlung ungewiss" },
     "events": {
       "run_created": "Zahlungslauf erstellt", "run_submitted": "Zahlungslauf eingereicht", "run_approved": "Zahlungslauf genehmigt", "run_rejected": "Zahlungslauf abgelehnt",
       "file_generated": "Zahlungsdatei erzeugt", "file_reprocessed": "Zahlungsdatei erneut verarbeitet", "file_approved": "Zahlungsdatei genehmigt", "file_rejected": "Zahlungsdatei abgelehnt",
@@ -268,6 +270,7 @@
       ,"fileApproved": "Zahlungsdatei genehmigt"
       ,"fileRejected": "Zahlungsdatei abgelehnt"
       ,"fileReprocessed": "Zahlungsdatei erneut verarbeitet"
+      ,"deliveryResolved": "Lieferentscheidung erfasst"
       ,"rolledBack": "Zahlungslauf zurückgerollt"
       ,"outcomeFailed": "Das Bankergebnis konnte nicht erfasst werden"
       ,"outcomeSaved": "Bankergebnis erfasst"

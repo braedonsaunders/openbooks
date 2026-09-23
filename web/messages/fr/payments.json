@@ -204,6 +204,8 @@
     "approveFile": "Approuver le fichier",
     "rejectFile": "Rejeter le fichier",
     "reprocess": "Retraiter",
+    "resolveDelivered": "Confirmer la réception bancaire",
+    "resolveApproved": "Libérer pour un nouvel envoi",
     "rollback": "Annuler le traitement",
     "postPayments": "Comptabiliser les paiements",
     "paymentsSummary": "{count, plural, one {# paiement} other {# paiements}} · <total>Total {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "contrepassé",
       "cancelled": "annulé"
     },
-    "fileStatus": { "generated": "généré", "pending_approval": "en attente d’approbation", "approved": "approuvé", "rejected": "rejeté", "delivered": "livré", "superseded": "remplacé", "voided": "annulé" },
+    "fileStatus": { "generated": "généré", "pending_approval": "en attente d’approbation", "approved": "approuvé", "rejected": "rejeté", "delivered": "livré", "superseded": "remplacé", "voided": "annulé", "delivering": "envoi en cours", "delivery_uncertain": "envoi incertain" },
     "events": { "run_created": "Lot de paiements créé", "run_submitted": "Lot de paiements soumis", "run_approved": "Lot de paiements approuvé", "run_rejected": "Lot de paiements rejeté", "file_generated": "Fichier de paiement généré", "file_reprocessed": "Fichier de paiement retraité", "file_approved": "Fichier de paiement approuvé", "file_rejected": "Fichier de paiement rejeté", "file_downloaded": "Fichier de paiement téléchargé", "file_delivered_sftp": "Fichier de paiement livré par SFTP", "file_delivery_failed": "Échec de la livraison du fichier de paiement", "run_cancelled": "Lot de paiements annulé", "run_rolled_back": "Traitement du lot annulé",
       "run_posting_started": "Comptabilisation du lot de paiements commencée", "run_posting_completed": "Lot de paiements comptabilisé",
       "run_posting_failed": "Échec de la comptabilisation du lot de paiements", "run_posting_recovered": "Comptabilisation du lot de paiements récupérée", "instruction_sent": "Paiement envoyé", "instruction_settled": "Paiement réglé", "instruction_returned": "Paiement retourné", "instruction_rejected": "Paiement rejeté" },
@@ -261,6 +263,7 @@
       "fileApproved": "Fichier de paiement approuvé",
       "fileRejected": "Fichier de paiement rejeté",
       "fileReprocessed": "Fichier de paiement retraité",
+      "deliveryResolved": "Résolution enregistrée",
       "rolledBack": "Traitement du lot annulé",
       "outcomeFailed": "Impossible d’enregistrer le résultat bancaire",
       "outcomeSaved": "Résultat bancaire enregistré"

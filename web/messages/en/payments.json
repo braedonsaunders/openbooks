@@ -204,6 +204,8 @@
     "approveFile": "Approve file",
     "rejectFile": "Reject file",
     "reprocess": "Reprocess",
+    "resolveDelivered": "Confirm bank receipt",
+    "resolveApproved": "Release for re-delivery",
     "rollback": "Roll back",
     "postPayments": "Post payments",
     "paymentsSummary": "{count, plural, one {# payment} other {# payments}} · <total>Total {amount}</total>",
@@ -237,7 +239,7 @@
       "reversed": "reversed",
       "cancelled": "cancelled"
     },
-    "fileStatus": { "generated": "generated", "pending_approval": "pending approval", "approved": "approved", "rejected": "rejected", "delivered": "delivered", "superseded": "superseded", "voided": "voided" },
+    "fileStatus": { "generated": "generated", "pending_approval": "pending approval", "approved": "approved", "rejected": "rejected", "delivered": "delivered", "superseded": "superseded", "voided": "voided", "delivering": "delivering", "delivery_uncertain": "delivery uncertain" },
     "events": {
       "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
       "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
@@ -268,6 +270,7 @@
       ,"fileApproved": "Payment file approved"
       ,"fileRejected": "Payment file rejected"
       ,"fileReprocessed": "Payment file reprocessed"
+      ,"deliveryResolved": "Delivery resolution recorded"
       ,"rolledBack": "Payment run rolled back"
       ,"outcomeFailed": "Could not record the bank outcome"
       ,"outcomeSaved": "Bank outcome recorded"
