@@ -1659,6 +1659,8 @@
     },
     "jointDue": "Examiner conjointement",
     "generate": "Générer la mesure",
+    "groupA": "Groupe A",
+    "groupB": "Groupe B",
     "emptyTitle": "Aucune mesure",
     "emptyDescription": "Générez une mesure pour mesurer les écarts."
   },

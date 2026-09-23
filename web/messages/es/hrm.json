@@ -1659,6 +1659,8 @@
     },
     "jointDue": "Evaluar conjuntamente",
     "generate": "Generar medición",
+    "groupA": "Grupo A",
+    "groupB": "Grupo B",
     "emptyTitle": "Sin medición",
     "emptyDescription": "Genere una medición para medir brechas."
   },

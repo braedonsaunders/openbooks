@@ -19,6 +19,6 @@ export default async function CompensationPage({
   searchParams: Promise<Record<string, string | undefined>>
 }) {
   const sp = await searchParams
-  const data = await loadCompensationPage()
+  const data = await loadCompensationPage(sp)
   return <ModuleView spec={compensationSpec(data)} data={data} searchParams={sp} trusted />
 }

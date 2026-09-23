@@ -1659,6 +1659,8 @@
     },
     "jointDue": "Gemeinsam prüfen",
     "generate": "Kennzahlen berechnen",
+    "groupA": "Gruppe A",
+    "groupB": "Gruppe B",
     "emptyTitle": "Noch keine Kennzahlen",
     "emptyDescription": "Berechnen Sie Kennzahlen, um Lücken zu messen."
   },

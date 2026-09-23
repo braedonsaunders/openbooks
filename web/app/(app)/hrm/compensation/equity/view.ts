@@ -85,6 +85,11 @@ export function equitySpec(data: NonNullable<Awaited<ReturnType<typeof loadEquit
         }),
         when: f('hasContent'),
       },
+      // The snapshot-generate dialog (?generate=1): the loader owns the
+      // open state and the return href, closing navigates the param away.
+      // A requested dialog always resolves: the form, or a named refusal
+      // with its remedy when the viewer cannot manage compensation.
+      widgetBlock('hrm-comp-equity-dialog', { dialog: f('generateDialog') }, f('generateOpen')),
     ],
   })
 }
@@ -94,10 +99,10 @@ export async function equityTitle(): Promise<string> {
   return t('equity.title')
 }
 
-export async function loadEquityPage() {
+export async function loadEquityPage(sp: Record<string, string | undefined>) {
   const authz = await compensationAuthz()
   if (!authz) notFound()
-  const data = await loadEquity(authz)
+  const data = await loadEquity(authz, sp)
   if (!data) notFound()
   return data
 }

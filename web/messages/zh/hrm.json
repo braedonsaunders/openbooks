@@ -1659,6 +1659,8 @@
     },
     "jointDue": "联合评估",
     "generate": "生成快照",
+    "groupA": "A组",
+    "groupB": "B组",
     "emptyTitle": "暂无快照",
     "emptyDescription": "生成快照以衡量差距。"
   },
