@@ -63,10 +63,66 @@ export class GateError extends Error {}
  * still commit without preserving anything from the attempt. The message
  * carries the stage, the cause, and the remedy for every caller.
  */
+/**
+ * What failed underneath a decision: a typed domain refusal from the
+ * release adapter (the approver's missing person link, an unmet business
+ * rule) versus the infrastructure giving way (a dropped connection, a
+ * statement timeout, a serialization failure). Set where the failure is
+ * constructed from the cause's CLASS — never by regexing its message —
+ * so the route answers a data condition and an outage differently.
+ */
+export type DecisionFailureCause = "domain" | "infrastructure";
+
+/**
+ * True when the error is the infrastructure giving way: a Postgres error
+ * with a connection (08), insufficient-resources (53), or operator-
+ * intervention (57) SQLSTATE, a serialization failure (40001) or deadlock
+ * (40P01), or a connection error with no SQLSTATE at all. Walks the
+ * driver-error cause chain (Drizzle wraps the pg error) exactly like the
+ * refusal helpers elsewhere: an infrastructure match on ANY level decides,
+ * and a typed domain refusal (HrmChangeRequestError REFUSED and its kin)
+ * never matches, so it stays a data condition.
+ */
+const CONNECTION_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EPIPE",
+  "ECONNRESET",
+  "ETIMEDOUT",
+]);
+const TRANSIENT_SQLSTATES = new Set(["40001", "40P01"]);
+
+export function causeKindOf(error: unknown): DecisionFailureCause {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current !== null && typeof current === "object"; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (
+      typeof code === "string" &&
+      (code.startsWith("08") ||
+        code.startsWith("53") ||
+        code.startsWith("57") ||
+        TRANSIENT_SQLSTATES.has(code) ||
+        CONNECTION_ERROR_CODES.has(code))
+    ) {
+      return "infrastructure";
+    }
+    current = (current as { cause?: unknown }).cause ?? null;
+  }
+  return "domain";
+}
+
 export class DecisionFailedError extends GateError {
   /** False when the cause is a defect (a TypeError and its kin): retrying replays it. */
   readonly retryable: boolean;
-  constructor(args: { decision: "approved" | "rejected"; stage: string; cause: string; retryable?: boolean }) {
+  /** Domain refusal vs infrastructure outage, set where constructed. */
+  readonly causeKind: DecisionFailureCause;
+  constructor(args: {
+    decision: "approved" | "rejected";
+    stage: string;
+    cause: string;
+    retryable?: boolean;
+    causeKind?: DecisionFailureCause;
+  }) {
     const retryable = args.retryable ?? true;
     super(
       `approval ${args.stage} failed: ${args.cause}. ` +
@@ -79,6 +135,7 @@ export class DecisionFailedError extends GateError {
     );
     this.name = "DecisionFailedError";
     this.retryable = retryable;
+    this.causeKind = args.causeKind ?? "domain";
   }
 }
 
@@ -98,8 +155,13 @@ export function isProgrammingError(e: unknown): boolean {
  * unified one above (nothing recorded, retry the decision).
  */
 export class ReleaseError extends DecisionFailedError {
-  constructor(decision: "approved" | "rejected", cause: string, retryable = true) {
-    super({ decision, stage: "release", cause, retryable });
+  constructor(
+    decision: "approved" | "rejected",
+    cause: string,
+    retryable = true,
+    causeKind: DecisionFailureCause = "domain",
+  ) {
+    super({ decision, stage: "release", cause, retryable, causeKind });
     this.name = "ReleaseError";
   }
 }
@@ -573,7 +635,12 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
           });
           releasedBeforeActions = true;
         } catch (e) {
-          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e), !isProgrammingError(e));
+          throw new ReleaseError(
+            decision,
+            e instanceof Error ? e.message : String(e),
+            !isProgrammingError(e),
+            causeKindOf(e),
+          );
         }
       }
 
@@ -630,7 +697,12 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
             });
           }
         } catch (e) {
-          throw new ReleaseError(decision, e instanceof Error ? e.message : String(e), !isProgrammingError(e));
+          throw new ReleaseError(
+            decision,
+            e instanceof Error ? e.message : String(e),
+            !isProgrammingError(e),
+            causeKindOf(e),
+          );
         }
       }
 
