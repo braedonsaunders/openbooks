@@ -58,8 +58,9 @@ async function postPaymentDoc(org: PayOrg, party: string, sub: string, date: str
 /**
  * Payment history lists posted sources once: a draft payment never appears,
  * and a payment posted in a parallel book is not a second payment.
+ * Amounts translate to presentation (USD 100 at 1.35 reads CAD 135).
  */
-test('entity drill lists posted payments once', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('entity drill lists posted payments once with translated amounts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Cash reviewer', 'cash_reviewer'));
@@ -88,7 +89,9 @@ test('entity drill lists posted payments once', { skip: !process.env.OPENBOOKS_D
       const response = await GET(new Request(`http://entity.local/api/analytics/cashflow/entity?party=${customer}&side=ar`));
       assert.equal(response.status, 200);
       const body = await response.json() as RecentsBody;
+      assert.equal(body.currency, 'CAD');
       assert.deepEqual(body.recentPayments.map((p) => p.docNumber), ['PAY-50', 'PAY-USD', 'PAY-100']);
+      assert.deepEqual(body.recentPayments.map((p) => Number(p.amount)), [50, 135, 100]);
       const p1row = body.recentPayments.find((p) => p.docNumber === 'PAY-100')!;
       assert.equal(p1row.entryId, p1.entryId, 'parallel-book mirror must not duplicate the payment');
     });

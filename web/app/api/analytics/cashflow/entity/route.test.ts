@@ -59,7 +59,7 @@ const mockSources = new Map<string, string>([
           if (text.includes('from applications')) return Promise.resolve({ rows: [{ avg_days: '12.5', total_paid: '999999999999999.9999', payment_count: '1' }] })
           if (text.includes('from documents d')) return Promise.resolve({ rows: [{
             doc_id: 'doc-payment', doc_kind: 'customer_payment', entry_id: 'entry-payment', document_number: 'PAY-1',
-            date: '2026-08-12', amount: '999999999999999.9999',
+            date: '2026-08-12', func_amount: '999999999999999.9999', func: 'USD',
           }] })
           throw new Error('unexpected database query: ' + text)
         },
@@ -187,8 +187,13 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.equal(body.recentPayments[0].amount, "999999999999999.9999");
 
   const transactionQueries = routeState.calls.slice(1);
-  assert.equal(transactionQueries.length, 4);
+  // pay + shared-reader leg + recents + the reader's org base + the
+  // presentation currency lookup for translated recent amounts.
+  assert.equal(transactionQueries.length, 5);
   const payQuery = transactionQueries.find((text) => text.includes("from applications"))!;
+  const readerQuery = transactionQueries.find((text) => text.includes("d.posted_entry_id"))!;
+  const recentQuery = transactionQueries.find((text) => text.includes("round(abs(d.total)"))!;
+  assert.equal(transactionQueries.filter((text) => text.includes("from orgs")).length, 2);
   // Payment stats count distinct cash settlement documents, scoped on every
   // leg including the newly joined source document.
   assert.match(payQuery, /bl\.subsidiary_id = any/);
@@ -198,19 +203,17 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.match(payQuery, /sp\.subsidiary_id = any/);
   assert.match(payQuery, /sp\.kind in/);
   assert.match(payQuery, /group by pe\.source_document_id/);
-  const recentQuery = transactionQueries.find((text) => text.includes("order by coalesce(d.document_date"))!;
+  // The open leg reads the shared reader's current-posting projection.
+  assert.match(readerQuery, /jl\.subsidiary_id = any/);
   // Recents list posted sources joined one-to-one to their statement-book
-  // posting — no drafts, no second-book duplicates.
+  // posting — no drafts, no second-book duplicates, translated amounts.
+  assert.match(recentQuery, /d\.subsidiary_id = any/);
+  assert.match(recentQuery, /je\.subsidiary_id = any/);
   assert.match(recentQuery, /d\.status = 'posted'/);
   assert.match(recentQuery, /je\.status in \('posted', 'reversed'\)/);
   assert.match(recentQuery, /je\.book_id =/);
   assert.ok(!recentQuery.includes("left join journal_entries"));
-  // The open leg reads the shared reader's current-posting projection.
-  assert.match(transactionQueries[1]!, /d\.posted_entry_id/);
-  assert.match(transactionQueries[1]!, /jl\.subsidiary_id = any/);
-  assert.match(transactionQueries[2]!, /d\.subsidiary_id = any/);
-  assert.match(transactionQueries[2]!, /je\.subsidiary_id = any/);
-  assert.match(transactionQueries[3]!, /from orgs/);
+  assert.equal(body.currency, "USD");
 });
 
 // F-t03-010: the drill's own live aggregate joined reversed entries without
