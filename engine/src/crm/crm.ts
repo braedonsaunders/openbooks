@@ -172,7 +172,10 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
            where org_id = ${orgId} and party_id = cp.party_id
           order by is_default_billing desc, created_at limit 1
         ) a on true
-       where cp.id = ${profileId} and cp.org_id = ${orgId} for update`));
+       -- The address is read-only routing context on the nullable side of an
+       -- outer join, which Postgres refuses to lock: lock the profile only.
+       -- A concurrent address edit simply re-routes on the next run.
+       where cp.id = ${profileId} and cp.org_id = ${orgId} for update of cp`));
     const row = account.rows[0];
     if (!row) return null;
     const territories = (await tx.execute<{
