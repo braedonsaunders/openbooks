@@ -282,7 +282,9 @@ holds rows; none does anywhere).
 1. Σ(children amounts) == entered amount; Σ(target amounts) == source amount; residual is
    placed per policy and recorded in lineage.
 2. A posted run is immutable; corrections are `reverse` (mirror) or `rerun` (reverse + new
-   run); at most one posted run per (rule, period, book, subsidiary).
+   run); at most one posted run per (rule, period, book, subsidiary). An approval-governed
+   rerun keeps the posted run effective while its replacement waits: approval reverses the
+   old run and posts the replacement atomically, rejection leaves the old run posted.
 3. Re-running the same rule over the same period with unchanged inputs yields the same
    fingerprint and posts nothing new.
 4. Contributed lines balance per subsidiary per contributor; kernel lines are never
