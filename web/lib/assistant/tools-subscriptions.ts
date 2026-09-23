@@ -347,7 +347,10 @@ const getSubscription: AssistantToolDef = {
              select pi.invoice_id from subscription_period_invoices pi
               where pi.org_id = ${authz.user.orgId} and pi.subscription_id = ${a.subscriptionId}
            )
-         order by dl.sent_at desc limit 10
+         -- sent_at is delivery evidence and NULL for staged/suppressed/failed
+         -- claims: NULLS LAST keeps real sends first (bare DESC would sort
+         -- unsent rows first and present them as the latest letters).
+         order by dl.sent_at desc nulls last, dl.created_at desc limit 10
       `),
       // soft-feature: the advanced term section only exists while the
       // advancedSubscriptions switch is on; otherwise it is omitted.

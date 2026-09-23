@@ -525,9 +525,10 @@ export async function markDunningClaimSent(orgId: string, claimId: string): Prom
 /**
  * Record the provider's rejection on a staged dunning claim. The failed row
  * stays out of the runner's fired set (only 'sent' fires), so a later tick
- * re-arms it onto a fresh outbox occurrence key. Same idempotent contract as
- * {@link markDunningClaimSent}: an already-failed row is success, anything
- * else unmoved is false.
+ * re-arms it onto a fresh outbox occurrence key. sent_at is deliberately
+ * untouched — the letter never went out, so it stays NULL delivery evidence.
+ * Same idempotent contract as {@link markDunningClaimSent}: an already-failed
+ * row is success, anything else unmoved is false.
  */
 export async function markDunningClaimFailed(
   orgId: string,

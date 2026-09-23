@@ -278,6 +278,9 @@ test("a fired dunning stage commits its staged claim and its mail deferral toget
     const { logRows, outboxRows } = await stagedNotice(invoiceId);
     assert.equal(logRows.length, 1);
     assert.equal((logRows[0] as { status: string }).status, "staged");
+    // Queueing is not delivery: a staged claim carries no sent_at, so no
+    // unsent letter can ever read as delivered.
+    assert.equal((logRows[0] as { sent_at: Date | null }).sent_at, null);
     assert.equal(outboxRows.length, 1);
     assert.equal(outboxRows[0]!.occurrenceKey, `dunning:${invoiceId}:${stageId}`);
     const payload = outboxRows[0]!.payload as {
@@ -418,6 +421,8 @@ test("an unsendable dunning notice leaves suppressed evidence and retries once h
     const suppressed = await stagedNotice(invoiceId);
     assert.equal(suppressed.logRows.length, 1);
     assert.equal((suppressed.logRows[0] as { status: string }).status, "suppressed");
+    // Unsendable means undelivered: the suppressed claim keeps sent_at NULL.
+    assert.equal((suppressed.logRows[0] as { sent_at: Date | null }).sent_at, null);
     assert.equal(
       (suppressed.logRows[0] as { detail: string }).detail,
       "no billing email on the customer record",
@@ -734,6 +739,8 @@ test("a failed top-rung send retries the same rung once healed", { skip: !DB }, 
     const witnessed = await stagedNotice(seeded.invoiceId);
     assert.equal(witnessed.logRows.length, 1);
     assert.equal((witnessed.logRows[0] as { status: string }).status, "failed");
+    // A failed send never went out: the claim keeps sent_at NULL.
+    assert.equal((witnessed.logRows[0] as { sent_at: Date | null }).sent_at, null);
     assert.ok(
       (witnessed.logRows[0] as { detail: string }).detail?.length > 0,
       "a failed send names its cause on the evidence row",
@@ -1197,15 +1204,25 @@ test("provider acceptance settles a staged claim to sent and retires the rung", 
       `)
     ).rows[0]!.id;
 
+    // The staged claim carries no sent_at until the provider accepts.
+    const before = (
+      await db.execute<{ sent_at: Date | null }>(sql`
+        select sent_at from dunning_log where id = ${claimId}
+      `)
+    ).rows[0]!;
+    assert.equal(before.sent_at, null);
+
     // The email worker's acceptance is the only writer that may move a
-    // staged claim to sent — the runner never does.
+    // staged claim to sent — the runner never does — and it stamps sent_at:
+    // a populated sent_at always means the customer got the letter.
     assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
     const settled = (
-      await db.execute<{ status: string }>(sql`
-        select status from dunning_log where id = ${claimId}
+      await db.execute<{ status: string; sent_at: Date | null }>(sql`
+        select status, sent_at from dunning_log where id = ${claimId}
       `)
     ).rows[0]!;
     assert.equal(settled.status, "sent");
+    assert.ok(settled.sent_at !== null && !Number.isNaN(new Date(settled.sent_at).getTime()), "a delivered letter stamps sent_at");
 
     // Replayed acceptance is success, not a failure: crash-gap worker
     // retries reconcile onto the same verdict.
@@ -1239,12 +1256,14 @@ test("provider rejection settles a staged claim to failed and the next tick retr
     // names what the provider said, and the rung stays out of the fired set.
     assert.equal(await markDunningClaimFailed(org.orgId, claimId, "550 mailbox unavailable"), true);
     const rejected = (
-      await db.execute<{ status: string; detail: string }>(sql`
-        select status, detail from dunning_log where id = ${claimId}
+      await db.execute<{ status: string; detail: string; sent_at: Date | null }>(sql`
+        select status, detail, sent_at from dunning_log where id = ${claimId}
       `)
     ).rows[0]!;
     assert.equal(rejected.status, "failed");
     assert.equal(rejected.detail, "550 mailbox unavailable");
+    // The rejection never stamps delivery evidence: sent_at stays NULL.
+    assert.equal(rejected.sent_at, null);
 
     // The settle is staged-only and idempotent: terminal rows never move,
     // and unknown rows are reported, never silently accepted.
@@ -1265,6 +1284,43 @@ test("provider rejection settles a staged claim to failed and the next tick retr
     assert.ok(keys.includes(firstKey));
     const retryKey = keys.find((k) => k !== firstKey)!;
     assert.ok(retryKey.startsWith(`${firstKey}:`), `retry must rotate the key, got ${retryKey}`);
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("sent_at stays NULL until the letter is actually delivered", { skip: !DB }, async () => {
+  // The full claim lifecycle must never present an undelivered letter as
+  // delivered: suppressed (no billing email) and re-armed staged claims
+  // carry sent_at NULL, and only the provider's acceptance stamps it.
+  const org = await createScratchOrg();
+  try {
+    const { invoiceId } = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: null,
+    });
+    const stampOf = async () =>
+      (await db.execute<{ sent_at: Date | null }>(sql`
+        select sent_at from dunning_log where document_id = ${invoiceId}
+      `)).rows[0]!.sent_at;
+
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal((await dunningClaim(invoiceId)).status, "suppressed");
+    assert.equal(await stampOf(), null);
+
+    await db.execute(sql`
+      update parties set email = 'billing@acme.test' where id = ${org.customerId} and org_id = ${org.orgId}
+    `);
+    await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal((await dunningClaim(invoiceId)).status, "staged");
+    assert.equal(await stampOf(), null);
+
+    const claimId = (await dunningClaim(invoiceId)).id;
+    assert.equal(await markDunningClaimSent(org.orgId, claimId), true);
+    assert.equal((await dunningClaim(invoiceId)).status, "sent");
+    const stamped = await stampOf();
+    assert.ok(stamped !== null && !Number.isNaN(new Date(stamped).getTime()), "delivery stamps sent_at");
   } finally {
     await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);

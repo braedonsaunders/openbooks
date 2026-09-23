@@ -689,6 +689,14 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // actor, timestamp and reason — clearing the rule would re-open
     // obligations built under different policies).
     "0328_obligation_legacy_reconciliation.sql",
+    // dunning_log.sent_at was NOT NULL DEFAULT now(), so every staged claim
+    // was stamped "sent" at claim time and failed/suppressed letters read as
+    // delivered. 0329 drops the default and the NOT NULL, and clears the
+    // claim-time stamp only on demonstrably unsent rows (staged/suppressed/
+    // failed with no delivery evidence in email_log under any occurrence
+    // key), preserving sent/skipped history exactly with one audit_log row
+    // per cleared row.
+    "0329_dunning_sent_at_delivery_evidence.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

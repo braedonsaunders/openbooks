@@ -170,6 +170,64 @@ test('subscription assistant reads: plans, list, detail, MRR, upcoming', { skip:
   }
 });
 
+test('get_subscription orders delivered dunning letters before unsent ones', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // sent_at is delivery evidence and NULL for staged/suppressed/failed
+  // claims. Bare `order by sent_at desc` sorts NULLS FIRST in Postgres, so
+  // unsent rows would present as the latest letters; the tool must order
+  // NULLS LAST and keep real sends first.
+  const org = await withBypassContext(() => createScratchOrg());
+  await enableSubscriptionBilling(org.orgId);
+  try {
+    const seed = await seedSubscriptions(org.orgId, org.subsidiaryId, org.customerId);
+    const sentDoc = randomUUID();
+    const stagedDoc = randomUUID();
+    const suppressedDoc = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into documents(id,org_id,kind,document_number,party_id,document_date,currency,total,status,subsidiary_id)
+      values (${sentDoc},${org.orgId},'customer_invoice','DUN-SENT',${org.customerId},'2026-01-05','CAD','100','draft',${org.subsidiaryId}),
+             (${stagedDoc},${org.orgId},'customer_invoice','DUN-STAGED',${org.customerId},'2026-02-05','CAD','100','draft',${org.subsidiaryId}),
+             (${suppressedDoc},${org.orgId},'customer_invoice','DUN-SUPP',${org.customerId},'2026-03-05','CAD','100','draft',${org.subsidiaryId})
+    `));
+    await withBypassContext(() => db.execute(sql`
+      insert into subscription_period_invoices(id,org_id,subscription_id,period_starts_on,period_ends_on,contract_revision,invoice_id)
+      values (${randomUUID()},${org.orgId},${seed.activeSub},'2026-01-01','2026-01-31',1,${sentDoc}),
+             (${randomUUID()},${org.orgId},${seed.activeSub},'2026-02-01','2026-02-28',1,${stagedDoc}),
+             (${randomUUID()},${org.orgId},${seed.activeSub},'2026-03-01','2026-03-31',1,${suppressedDoc})
+    `));
+    // The delivered letter first (older sent_at), then the unsent rows —
+    // explicit created_at values break the NULL tie deterministically.
+    await withBypassContext(() => db.execute(sql`
+      insert into dunning_log(org_id,document_id,policy_id,stage_id,status,sent_at)
+      values (${org.orgId},${sentDoc},${randomUUID()},${randomUUID()},'sent','2026-01-06T12:00:00Z'::timestamptz)
+    `));
+    await withBypassContext(() => db.execute(sql`
+      insert into dunning_log(org_id,document_id,policy_id,stage_id,status,created_at)
+      values (${org.orgId},${stagedDoc},${randomUUID()},${randomUUID()},'staged','2026-02-06T12:00:00Z'::timestamptz)
+    `));
+    await withBypassContext(() => db.execute(sql`
+      insert into dunning_log(org_id,document_id,policy_id,stage_id,status,created_at)
+      values (${org.orgId},${suppressedDoc},${randomUUID()},${randomUUID()},'suppressed','2026-03-06T12:00:00Z'::timestamptz)
+    `));
+    const caller = {
+      user: userFor(org.orgId, 'Billing scope reader'),
+      permissions: new Set(SUB_PERMS),
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+    };
+    await withOrgContext(org.orgId, async () => {
+      const detail = await executeAssistantTool(caller, 'get_subscription', { subscriptionId: seed.activeSub });
+      assert.equal(detail.ok, true, JSON.stringify(detail));
+      assert.ok(detail.ok);
+      const log = (detail.data as { dunningLog: { status: string; sent_at: unknown }[] }).dunningLog;
+      assert.deepEqual(log.map((row) => row.status), ['sent', 'suppressed', 'staged']);
+      assert.ok(log[0]!.sent_at !== null, 'the delivered letter carries its sent_at');
+      assert.equal(log[1]!.sent_at, null);
+      assert.equal(log[2]!.sent_at, null);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('subscription assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const orgA = await withBypassContext(() => createScratchOrg());
   const orgB = await withBypassContext(() => createScratchOrg());
