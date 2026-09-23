@@ -1,5 +1,6 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 /**
@@ -22,6 +23,7 @@ export function SignDocumentForm(props: {
   )
   const [doneAction, setDoneAction] = useState<'signed' | 'declined' | 'acknowledged'>('signed')
   const [error, setError] = useState('')
+  const router = useRouter()
 
   async function call(action: { action: string; name?: string; reason?: string }) {
     setState('busy')
@@ -37,8 +39,18 @@ export function SignDocumentForm(props: {
       setState('error')
       return
     }
-    setDoneAction(action.action as 'signed' | 'declined' | 'acknowledged')
+    // The wire action ('sign'/'acknowledge'/'decline') is not the rendered
+    // outcome: casting it through left the thank-you box empty on exactly
+    // the success paths that needed it. Map explicitly.
+    setDoneAction(
+      action.action === 'decline' ? 'declined' : action.action === 'acknowledge' ? 'acknowledged' : 'signed',
+    )
     setState('done')
+    // The document status and signer timeline above are server-rendered from
+    // pre-sign data: refresh them so Status, timeline and thank-you agree
+    // immediately instead of waiting for a manual reload. Client state is
+    // preserved, so the confirmation stays while the server parts update.
+    router.refresh()
   }
 
   if (state === 'done') {
