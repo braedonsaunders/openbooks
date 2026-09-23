@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { isDunnableDocumentKind, renderTemplate, runDunning, runDunningForOrg, selectDueStage, type DunningStage } from "./dunning.ts";
+import { daysBetween, isDunnableDocumentKind, renderTemplate, runDunning, runDunningForOrg, selectDueStage, type DunningStage } from "./dunning.ts";
 import { markDunningClaimFailed, markDunningClaimSent } from "../delivery/email-config.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
@@ -44,6 +44,16 @@ test("a fired higher rung supersedes every lower rung; a failed send retries", (
 test("selectDueStage returns null before the first threshold", () => {
   const future = [stage("x", 1, 7)];
   assert.equal(selectDueStage(future, 3, new Set(), 0), null);
+});
+
+test("overdue days cross 0099/0100 and select the due rung, not silence", () => {
+  // daysBetween used Date.UTC, which maps years 0-99 onto 1900-1999: a due
+  // date of 0099-12-25 read as ~-694,000 days overdue, so no rung's threshold
+  // was crossed and the invoice went quiet instead of escalating.
+  assert.equal(daysBetween("0099-12-25", "0100-01-07"), 13);
+  const overdue = daysBetween("0099-12-25", "0100-01-07");
+  assert.equal(selectDueStage(ladder, overdue, new Set(), 0)?.id, "a");
+  assert.equal(selectDueStage(courtesyLadder, overdue, new Set(), 0)?.id, "due");
 });
 
 const courtesyLadder = [stage("pre", 1, -7), stage("due", 2, 0)];

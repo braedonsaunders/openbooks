@@ -94,6 +94,16 @@ test("prorate bills the remaining slice of a period exactly", () => {
   assert.equal(prorate("300", "2026-06-01", "2026-06-01", "2026-06-01"), "0.0000");
 });
 
+test("prorate keeps a cross-century billing period positive", () => {
+  // dayDiff used Date.UTC, which maps years 0-99 onto 1900-1999: the
+  // 0099-12-25..0100-01-07 period read as a NEGATIVE span, prorate returned
+  // 0.0000, and the change/first-proration callers skipped the adjustment.
+  // 13-day period; nothing elapsed → the full amount.
+  assert.equal(prorate("130", "0099-12-25", "0100-01-07", "0099-12-25"), "130.0000");
+  // 6 of 13 days remain → 60.
+  assert.equal(prorate("130", "0099-12-25", "0100-01-07", "0100-01-01"), "60.0000");
+});
+
 test("first-period proration includes all service days from a backdated start", () => {
   // A first invoice is for the complete [startOn, firstBillOn] service period,
   // even when the API is called after a backdated subscription has begun.
