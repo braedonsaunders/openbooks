@@ -398,6 +398,72 @@ test("a send that read 'open' before a close commits claims nothing and records 
   }
 });
 
+test("a same-id replay with changed bytes is refused and keeps the stored payload", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    const original = companyResponse(idA);
+    const progress = await acceptWebConnectorResponse(ticket, original, "", "");
+    assert.ok(progress > 0 && progress < 100);
+    // Same requestID but different payload bytes: not a replay of what was
+    // stored, so it must be refused visibly — never acknowledged as success.
+    const mutated = original.replace("Correlation Test", "Correlation Test MUTATED");
+    assert.notEqual(mutated, original);
+    assert.equal(await acceptWebConnectorResponse(ticket, mutated, "", ""), -101);
+    assert.match(await webConnectorLastError(ticket), /a different response for an already-completed request/);
+    const stored = (await db.execute<{ status: string; xml: string | null }>(sql`
+      select status, response_xml as xml from qbd_requests where id = ${idA}`));
+    assert.equal(stored.rows[0]?.status, "complete");
+    assert.equal(stored.rows[0]?.xml, original);
+    // The refusal changed nothing: the genuine bytes still acknowledge.
+    assert.equal(await acceptWebConnectorResponse(ticket, original, "", ""), progress);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a wildcard requestID matches no completed request", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    const original = companyResponse(idA);
+    const progress = await acceptWebConnectorResponse(ticket, original, "", "");
+    assert.ok(progress > 0 && progress < 100);
+    // '%' and '_' are LIKE wildcards, not request ids: neither may match the
+    // completed request the way the old substring lookup did.
+    for (const wildcard of ["%", "_"]) {
+      assert.equal(await acceptWebConnectorResponse(ticket, companyResponse(wildcard), "", ""), -101);
+    }
+    const stored = (await db.execute<{ status: string; xml: string | null; n: number }>(sql`
+      select status, response_xml as xml,
+             (select count(*)::int from qbd_requests where capture_id = ${captureId} and status = 'complete') as n
+        from qbd_requests where id = ${idA}`));
+    assert.equal(stored.rows[0]?.status, "complete");
+    assert.equal(stored.rows[0]?.xml, original);
+    assert.equal(stored.rows[0]?.n, 1);
+    await closeWebConnectorSession(ticket);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
 test("storage refuses a second in-flight request on one ticket", { skip: !DB }, async () => {
   const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
   const orgId = orgs.rows[0]?.id;

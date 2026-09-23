@@ -390,7 +390,7 @@ type QbdTicketRequest = {
  * correlates to no request of this ticket is not a replay: null.
  */
 async function acknowledgeReplayedResponse(
-  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  tx: BridgeTx,
   current: SessionRow,
   ticket: string,
   responseXml: string,
@@ -402,13 +402,35 @@ async function acknowledgeReplayedResponse(
     return null;
   }
   if (!replayed.requestId) return null;
-  const prior = (await tx.execute<{ captureId: string; orgId: string }>(sql`
-    select capture_id as "captureId", org_id as "orgId" from qbd_requests
-     where session_id = ${ticket} and org_id = ${current.orgId} and status = 'complete'
-       and request_xml like ${`%requestID="${replayed.requestId}"%`}
-     order by completed_at desc limit 1 for update`));
+  // The requestID the bridge stamps IS the qbd_requests row id, so the
+  // completed request is found by exact id comparison — never by LIKE over a
+  // client-supplied string, where '%' or '_' would match other requests. A
+  // non-UUID id can match nothing and is refused below.
+  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(replayed.requestId)) {
+    return null;
+  }
+  const prior = (await tx.execute<{
+    captureId: string; orgId: string; storedHash: string | null; requestKind: string; requestXml: string;
+  }>(sql`
+    select capture_id as "captureId", org_id as "orgId", response_sha256 as "storedHash",
+           request_kind as "requestKind", request_xml as "requestXml"
+      from qbd_requests
+     where id = ${replayed.requestId} and session_id = ${ticket} and org_id = ${current.orgId}
+       and status = 'complete' limit 1 for update`));
   const completed = prior.rows[0];
   if (!completed) return null;
+  // A replay is acknowledged ONLY when the bytes are byte-identical to what
+  // was stored (same sha256) and the response family answers the request.
+  // Anything else with the same id is a different response for an
+  // already-completed request: refusing visibly keeps the stored payload
+  // intact instead of reporting success for bytes that were never stored.
+  const hash = createHash("sha256").update(responseXml).digest("hex");
+  const expectedRs = responseElementForRequest(completed.requestXml) ?? `${completed.requestKind}Rs`;
+  if (completed.storedHash !== hash || replayed.kind !== expectedRs) {
+    const error = `Received a different response for an already-completed request (requestID ${JSON.stringify(replayed.requestId)}); the stored response was kept unchanged — call sendRequestXML again to receive the outstanding request and submit its response`;
+    await tx.execute(sql`update qbd_sessions set last_error = ${error}, last_seen_at = now() where id = ${ticket} and org_id = ${current.orgId}`);
+    return -101;
+  }
   const counts = (await tx.execute<{ complete: number; remaining: number; total: number }>(sql`
     select count(*) filter (where status = 'complete')::int as complete,
            count(*) filter (where status in ('queued', 'sent'))::int as remaining,
