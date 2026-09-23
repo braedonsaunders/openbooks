@@ -147,6 +147,7 @@ interface SubscriptionContextRow extends Record<string, unknown> {
 interface PlanVersionRow extends Record<string, unknown> {
   id: string; planId: string; interval: Interval; intervalCount: number; billingTiming: BillingTiming;
   status: string; effectiveFrom: string; effectiveTo: string | null;
+  versionCurrency: string | null; planCurrency: string | null;
 }
 interface SubscriptionComponentRow extends Record<string, unknown> {
   componentKey: string; name: string; description: string | null; quantity: string; unitPrice: string;
@@ -634,9 +635,11 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     if (sub.status === "canceled") throw new AdvancedSubscriptionError("a canceled subscription cannot be activated");
     if (sub.lifecycleId) throw new AdvancedSubscriptionError("advanced lifecycle is already active");
     const versionResult = (await db.execute<PlanVersionRow>(sql`
-      select id, plan_id as "planId", interval, interval_count as "intervalCount", billing_timing as "billingTiming", status,
-             effective_from as "effectiveFrom", effective_to as "effectiveTo"
-        from subscription_plan_versions where id = ${input.planVersionId} and org_id = ${orgId}
+      select v.id, v.plan_id as "planId", v.interval, v.interval_count as "intervalCount", v.billing_timing as "billingTiming", v.status,
+             v.effective_from as "effectiveFrom", v.effective_to as "effectiveTo",
+             v.currency_code as "versionCurrency", p.currency_code as "planCurrency"
+        from subscription_plan_versions v join subscription_plans p on p.id = v.plan_id and p.org_id = v.org_id
+       where v.id = ${input.planVersionId} and v.org_id = ${orgId}
     `));
     const version = versionResult.rows[0];
     if (!version || version.status !== "published") throw new AdvancedSubscriptionError("a published plan version is required");
@@ -660,6 +663,26 @@ export async function activateLifecycle(orgId: string, actorId: string, input: A
     `));
     if (!requiredComponents.rows[0]?.n) {
       throw new AdvancedSubscriptionError("plan version has no required components — mark a component as required before activating");
+    }
+    // Billing posts in the pinned version's currency, so pinning a version
+    // whose currency differs from already-posted invoices would split one
+    // contract across two currencies. Refuse the mid-contract change by name
+    // instead of silently billing the old currency — or the new one.
+    const effectiveCurrency = version.versionCurrency ?? version.planCurrency;
+    if (effectiveCurrency) {
+      const billed = (await db.execute<{ currency: string }>(sql`
+        select distinct d.currency from documents d
+         where d.org_id = ${orgId}
+           and (d.id = (select last_invoice_id from subscriptions where id = ${input.subscriptionId} and org_id = ${orgId})
+             or d.id in (select invoice_id from subscription_period_invoices where org_id = ${orgId} and subscription_id = ${input.subscriptionId}))
+      `));
+      const foreign = [...new Set(billed.rows.map((row) => row.currency).filter((currency) => currency.toUpperCase() !== effectiveCurrency.toUpperCase()))];
+      if (foreign.length) {
+        throw new AdvancedSubscriptionError(
+          `subscription already has invoices in ${foreign.join(", ")} — billing currency cannot change mid-contract to ${effectiveCurrency}; ` +
+          `create a new subscription for the ${effectiveCurrency} contract instead`,
+        );
+      }
     }
     const renewalTermMonths = input.renewalTermMonths == null ? null : subscriptionPeriodCount(input.renewalTermMonths, "renewal term");
     const renewalPolicy = input.renewalPolicy ?? "auto";
