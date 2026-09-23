@@ -2316,15 +2316,50 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
     left join security_deposit_transactions d on d.lease_id=l.id and d.org_id=l.org_id and d.occurred_on<=${throughOn}
     where l.org_id=${orgId} group by l.id,t.display_name,u.code order by l.lease_number
   `));
+  // The location control balance is keyed by (liability account, location)
+  // only, so every property sharing both reads the SAME combined GL balance.
+  // Claiming a per-property variance from that shared balance manufactures a
+  // discrepancy for each balanced property in the group. Shared controls
+  // reconcile as one aggregated group; unique controls keep per-property
+  // variance.
+  const controlKeyOf = (liabilityAccountId: string | null, locationId: string | null): string | null =>
+    liabilityAccountId && locationId ? `${liabilityAccountId}|${locationId}` : null;
+  const controlGroupSize = new Map<string, number>();
+  for (const row of properties.rows) {
+    const key = controlKeyOf(row.liabilityAccountId, row.locationId);
+    if (key) controlGroupSize.set(key, (controlGroupSize.get(key) ?? 0) + 1);
+  }
+  const controlGroupSubledger = new Map<string, string>();
+  for (const row of properties.rows) {
+    const key = controlKeyOf(row.liabilityAccountId, row.locationId);
+    if (!key) continue;
+    controlGroupSubledger.set(key, add(controlGroupSubledger.get(key) ?? "0.0000", normalizeMoney(row.subledgerBalance ?? "0")));
+  }
   const rows = properties.rows.map((row) => {
     const subledgerBalance = normalizeMoney(row.subledgerBalance ?? "0");
     const linkedGlBalance = normalizeMoney(row.linkedGlBalance ?? "0");
     const locationControlBalance = row.locationControlBalance == null ? null : normalizeMoney(row.locationControlBalance);
     const linkedVariance = add(linkedGlBalance, neg(subledgerBalance));
-    const controlVariance = locationControlBalance == null ? null : add(locationControlBalance, neg(subledgerBalance));
+    const controlKey = controlKeyOf(row.liabilityAccountId, row.locationId);
+    const controlShared = controlKey != null && (controlGroupSize.get(controlKey) ?? 0) > 1;
+    const controlGroupPropertyIds = controlKey == null
+      ? []
+      : properties.rows
+        .filter((peer) => controlKeyOf(peer.liabilityAccountId, peer.locationId) === controlKey)
+        .map((peer) => peer.propertyId);
+    // A shared GL balance covers the whole group, so no per-property variance
+    // is claimed from it; the group reconciles on its combined variance.
+    const controlVariance = locationControlBalance == null || controlShared
+      ? null
+      : add(locationControlBalance, neg(subledgerBalance));
+    const controlGroupBalance = controlKey == null || locationControlBalance == null ? null : locationControlBalance;
+    const controlGroupVariance = controlGroupBalance == null || controlKey == null
+      ? null
+      : add(controlGroupBalance, neg(controlGroupSubledger.get(controlKey) ?? "0.0000"));
+    const groupVariance = controlShared && controlGroupVariance != null && cmp(controlGroupVariance, "0") !== 0;
     const status = !row.liabilityAccountId
       ? "configuration_required"
-      : cmp(linkedVariance, "0") !== 0 || (controlVariance != null && cmp(controlVariance, "0") !== 0)
+      : cmp(linkedVariance, "0") !== 0 || groupVariance || (controlVariance != null && cmp(controlVariance, "0") !== 0)
         ? "discrepancy"
         : !row.locationId
           ? "limited"
@@ -2336,6 +2371,11 @@ export async function securityDepositReconciliation(orgId: string, asOf?: string
       locationControlBalance,
       linkedVariance,
       controlVariance,
+      controlShared,
+      controlGroupPropertyIds,
+      controlGroupBalance,
+      controlGroupVariance,
+      controlNote: controlShared ? "shared control: reconciled together" : null,
       cashActivity: normalizeMoney(row.cashActivity ?? "0"),
       status,
       bankAccounts: banks.rows.filter((bank) => bank.propertyId === row.propertyId).map((bank) => ({ ...bank, cashActivity: normalizeMoney(bank.cashActivity ?? "0") })),

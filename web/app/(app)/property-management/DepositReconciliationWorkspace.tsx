@@ -18,6 +18,11 @@ type ReconciliationRow = {
   locationControlBalance: string | null;
   controlVariance: string | null;
   linkedVariance: string;
+  controlShared?: boolean;
+  controlGroupPropertyIds?: string[];
+  controlGroupBalance?: string | null;
+  controlGroupVariance?: string | null;
+  controlNote?: string | null;
   lastActivityOn: string | null;
   status: string;
 };
@@ -123,7 +128,12 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
           </TableHeader>
           <TableBody>
             {rows.map((row) => {
-              const difference = row.controlVariance ?? row.linkedVariance;
+              // A shared location control reconciles as one group: the
+              // difference shown is the combined group variance, never a
+              // per-property slice of the shared balance.
+              const difference = row.controlShared
+                ? (row.controlGroupVariance ?? row.linkedVariance)
+                : (row.controlVariance ?? row.linkedVariance);
               return (
                 <TableRow
                   key={row.propertyId}
@@ -141,6 +151,9 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
                   <TableCell>
                     <div className="font-medium">{row.propertyName}</div>
                     <div className="font-mono text-xs text-slate-500">{row.propertyCode}</div>
+                    {row.controlNote ? (
+                      <div className="text-xs text-slate-500">{row.controlNote}</div>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     {row.bankAccounts?.length
