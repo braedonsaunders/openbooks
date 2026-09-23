@@ -85,7 +85,17 @@ interface ClaimedOccurrence {
   scriptId: string;
   /** Deterministic identity shared by the Redis jobId and the ledger row. */
   occurrenceKey: string;
+  /** The cursor the claim advanced to — the next tick after the claimed one. */
+  nextRunAt: Date;
 }
+
+/**
+ * Catch-up bound: one pass claims at most this many successive occurrences
+ * of a single script, so a long outage is repaid over several ticks instead
+ * of stalling one. Every missed tick still gets its own durable row —
+ * nothing is collapsed or skipped, the cursor just walks there gradually.
+ */
+export const MAX_CATCHUP_OCCURRENCES_PER_PASS = 10;
 
 /**
  * The occurrence identity for one scheduled run: stable across processes and
@@ -135,11 +145,17 @@ async function finalizeOccurrence(
  * ledger row in the same statement. The WHERE next_run_at = $old guard means
  * only one claimer wins; the CTE guarantees the cursor advance and the queued
  * occurrence commit together or not at all.
+ *
+ * The cursor advances FROM THE CLAIMED TICK, not from now: the next tick
+ * after the occurrence just claimed. Advancing from now would permanently
+ * skip every tick between the cursor and the outage end with no ledger row.
+ * Each missed tick is therefore claimed (and run) in turn until the cursor
+ * lands on the next future tick.
  */
 export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOccurrence | null> {
   let next: Date;
   try {
-    next = computeScheduledScriptNextRunAt(s.cron);
+    next = computeScheduledScriptNextRunAt(s.cron, asDbDate(s.nextRunAt));
   } catch (error) {
     if (!(error instanceof InvalidScheduledScriptCronError)) throw error;
     // No occurrence is claimed and no source is dispatched. The CAS inside
@@ -153,6 +169,15 @@ export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOcc
         nextRunAt: s.nextRunAt,
       }),
     );
+    return null;
+  }
+  const claimedTick = asDbDate(s.nextRunAt);
+  if (next.getTime() <= claimedTick.getTime()) {
+    // The cron library must always step forward; claiming a non-advancing
+    // cursor would write a ledger row without moving past the tick, so every
+    // later pass would reclaim it again. Stay due and loud instead — the
+    // occurrence is lost to no one and skipped by no one.
+    console.error(`[scheduler] script ${s.id} cron did not advance past its claimed tick; leaving it due`);
     return null;
   }
   const occurrenceKey = scriptOccurrenceKey(s.id, s.nextRunAt);
@@ -178,7 +203,7 @@ export async function claimDueScriptOccurrence(s: DueScript): Promise<ClaimedOcc
     `));
   const row = claimed.rows[0];
   if (!row) return null;
-  return { id: row.id, orgId: s.orgId, scriptId: s.id, occurrenceKey };
+  return { id: row.id, orgId: s.orgId, scriptId: s.id, occurrenceKey, nextRunAt: next };
 }
 
 /**
@@ -273,12 +298,24 @@ export async function scanDueScripts(): Promise<DueScript[]> {
   return due.rows.map((row) => ({ ...row, nextRunAt: asDbDate(row.nextRunAt) }));
 }
 
-/** Claim and dispatch every due scheduled-script occurrence. */
-export async function runDueScripts(): Promise<void> {
+/**
+ * Claim and dispatch every due scheduled-script occurrence. A script whose
+ * cursor fell behind (scheduler outage) catches up tick by tick: each pass
+ * claims up to MAX_CATCHUP_OCCURRENCES_PER_PASS successive occurrences, one
+ * durable row per missed tick, until the cursor lands on the next future
+ * tick. A claim that loses its CAS (concurrent scanner or a repaired admin
+ * edit) stops this script's catch-up for the pass — the winner owns it.
+ */
+export async function runDueScripts(now = new Date()): Promise<void> {
   for (const s of await scanDueScripts()) {
-    const occ = await claimDueScriptOccurrence(s);
-    if (!occ) continue; // someone else claimed it (or it changed)
-    await dispatchScriptOccurrence(occ, 1);
+    let cursor: DueScript = s;
+    for (let n = 0; n < MAX_CATCHUP_OCCURRENCES_PER_PASS; n++) {
+      if (asDbDate(cursor.nextRunAt).getTime() > now.getTime()) break;
+      const occ = await claimDueScriptOccurrence(cursor);
+      if (!occ) break; // someone else claimed it (or it changed)
+      await dispatchScriptOccurrence(occ, 1);
+      cursor = { ...cursor, nextRunAt: occ.nextRunAt };
+    }
   }
 }
 
@@ -409,6 +446,7 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
         orgId: row.orgId,
         scriptId: row.scriptId,
         occurrenceKey: scriptOccurrenceKey(row.scriptId, row.at),
+        nextRunAt: asDbDate(row.at),
       },
       MAX_OCCURRENCE_ATTEMPTS,
     );

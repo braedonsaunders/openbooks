@@ -1552,6 +1552,63 @@ test("worker evidence closes only its own occurrence; a lost retry is reported, 
   }
 });
 
+// SCHED3: the cursor advances from the claimed tick, never from now. An
+// hourly script whose scheduler was down for 3+ hours must produce one
+// durable row per missed tick — not a single row for the oldest tick with
+// the rest silently skipped — and land its cursor on the next future tick.
+test("a multi-hour outage produces one run row per missed tick and advances the cursor past now", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const scriptId = randomUUID();
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,scripts}', 'true'::jsonb)
+       where id = ${org.orgId}
+    `);
+    // An exact hour boundary three hours ago: four ticks are due
+    // (dueAt, +1h, +2h, +3h), all within one pass's catch-up bound.
+    const dueAt = new Date(Date.now() - 3 * 3_600_000);
+    dueAt.setMinutes(0, 0, 0);
+    await db.execute(sql`
+      insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
+      values (${scriptId}, ${org.orgId}, ${`Scratch hourly ${scriptId.slice(0, 8)}`}, 'scheduled',
+              'function main(ctx) { return "catch-up"; }', '0 * * * *', ${dueAt}, 2000, true)
+    `);
+
+    await runDueScriptsInline();
+
+    const occurrences = (
+      await db.execute<{ scheduledFor: string; occurrence: string }>(sql`
+        select logs->0->>'scheduledFor' as "scheduledFor", logs->0->>'occurrence' as "occurrence"
+          from script_runs
+         where script_id = ${scriptId} and target_kind = 'scheduled_occurrence'
+         order by at
+      `)
+    ).rows;
+    assert.equal(occurrences.length, 4, "one durable row per missed tick");
+    const tick = dueAt.getTime();
+    occurrences.forEach((row, index) => {
+      const expected = new Date(tick + index * 3_600_000);
+      assert.equal(row.scheduledFor, expected.toISOString(), `tick ${index} keeps its own fire time`);
+      assert.equal(row.occurrence, scriptOccurrenceKey(scriptId, expected));
+    });
+    const cursor = (
+      await db.execute<{ nextRunAt: Date | string }>(sql`
+        select next_run_at as "nextRunAt" from user_scripts where id = ${scriptId}
+      `)
+    ).rows[0]!.nextRunAt;
+    assert.equal(
+      new Date(cursor).toISOString(),
+      new Date(tick + 4 * 3_600_000).toISOString(),
+      "the cursor lands on the next future tick",
+    );
+    assert.ok(new Date(cursor).getTime() > Date.now(), "nothing remains due after the pass");
+    assert.equal(await countScheduledRuns(scriptId), 4, "every missed tick executed exactly once");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 // fnd_mt97sc1r_null regression — "durable claim before script execution": the
 // audited scheduler advanced user_scripts.next_run_at in its own committed
 // statement BEFORE any durable run/job existed, so a crash inside that window
