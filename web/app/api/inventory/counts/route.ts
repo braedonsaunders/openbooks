@@ -28,8 +28,8 @@ import { isUuid } from '../../../../lib/list-params'
 export const runtime = 'nodejs'
 
 const countLineBody = z.looseObject({
-  itemId: uuidId,
-  stockLocationId: uuidId,
+  itemId: z.string().optional(),
+  stockLocationId: z.string().optional(),
   lotId: nullableUuidId.optional(),
 })
 
@@ -172,6 +172,24 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })
       }
       if (!body.date) return NextResponse.json({ error: 'count date required' }, { status: 422 })
+      // Partly filled lines are refused by row, naming the missing field —
+      // the client pins the same message to the row; direct API callers get
+      // it here instead of a schema-shaped refusal.
+      for (let i = 0; i < body.lines.length; i += 1) {
+        const line = body.lines[i]!
+        if (!line.itemId) {
+          return NextResponse.json({ error: `Line ${i + 1}: choose an item` }, { status: 422 })
+        }
+        if (!isUuid(line.itemId)) {
+          return NextResponse.json({ error: `Line ${i + 1}: invalid item id` }, { status: 422 })
+        }
+        if (!line.stockLocationId) {
+          return NextResponse.json({ error: `Line ${i + 1}: choose a stock location` }, { status: 422 })
+        }
+        if (!isUuid(line.stockLocationId)) {
+          return NextResponse.json({ error: `Line ${i + 1}: invalid stock location id` }, { status: 422 })
+        }
+      }
       const input = {
         locationId: body.locationId,
         subsidiaryId,

@@ -97,8 +97,8 @@ export default async function Inventory({
           select it.id, it.code, it.name from items it
             join item_inventory_profiles p on p.item_id = it.id and p.org_id = it.org_id
            where it.org_id = ${orgId} and it.is_active order by it.name`),
-        db.execute<{ id: string; code: string | null }>(sql`
-          select id, code from stock_locations where org_id = ${orgId} and is_active order by code`),
+        db.execute<{ id: string; code: string | null; locationId: string }>(sql`
+          select id, code, location_id as "locationId" from stock_locations where org_id = ${orgId} and is_active order by code`),
         db.execute<{ id: string; item_id: string; lot_number: string }>(sql`
           select id, item_id, lot_number from lots where org_id = ${orgId} order by lot_number`),
       ])
@@ -191,6 +191,7 @@ export default async function Inventory({
           stockLocations={countData[4].rows}
           lots={countData[5].rows}
           canPost={canPost}
+          canManageStockLocations={canSetup}
           createRequested={pickString(sp.count) === 'new'}
           selectedCountId={pickString(sp.countId)}
         />

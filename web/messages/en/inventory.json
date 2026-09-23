@@ -210,6 +210,10 @@
       "selectStockLocation": "Select stock location…",
       "selectLot": "Lot (when tracked)…",
       "missingFields": "Choose a location, a subsidiary, a date, and at least one line.",
+    "lineMissingItem": "Line {line}: choose an item.",
+    "lineMissingStockLocation": "Line {line}: choose a stock location.",
+    "noStockLocations": "This location has no stock locations yet.",
+    "manageStockLocations": "Set up stock locations",
       "lines": "Lines to count",
       "addLine": "Add line",
       "removeLine": "Remove"
