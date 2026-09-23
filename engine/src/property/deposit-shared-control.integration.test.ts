@@ -119,6 +119,7 @@ test("PM1: a genuine imbalance on a shared control still reports a group discrep
     await postManualLiability(orgId, fx.org.bookId, fx.org.subsidiaryId, fx.org.locationId, fx.org.accounts.deferred, fx.org.accounts.bank, "10", fx.org.date, fx.org.periodId);
     const recon = await securityDepositReconciliation(orgId, fx.org.date);
     assert.equal(recon.totals.discrepancies, 2);
+    assert.equal(recon.rows.length, 2);
     for (const row of recon.rows) {
       assert.equal(row.status, "discrepancy");
       assert.equal(row.linkedVariance, "0.0000");
