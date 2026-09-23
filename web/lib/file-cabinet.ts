@@ -222,12 +222,50 @@ function visibleFilePredicate(scope: ReadScope, folderIdCol: SQL, fileIdCol: SQL
 }
 
 /**
- * Record-entity fence for cabinet reads, mirroring attachmentTargetInScope
- * (web/app/api/file-cabinet/lib.ts) table by table: a file or folder inside a
- * per-record folder (record_id set) evidences that record, so a
- * subsidiary-restricted caller sees it only when the folder's record target
- * is inside their fence. Non-record folders and item-rate versions (org-wide
- * setup) are unaffected. Returns null when the caller is unrestricted.
+ * Per-table subsidiary visibility for a (table, id) record reference, mirroring
+ * attachmentTargetInScope (web/app/api/file-cabinet/lib.ts) table by table.
+ * Item-rate versions are org-wide setup (no subsidiary dimension). Unknown
+ * tables and deleted targets match nothing — fail closed. `fence` is the
+ * `{uuid,...}` array literal of the caller's allowed subsidiaries.
+ */
+function subsidiaryTargetVisibleSql(
+  orgId: string,
+  fence: string,
+  tableCol: SQL,
+  idCol: SQL,
+): SQL {
+  return sql`(
+    ${tableCol} = 'item_rate_versions'
+    or exists (select 1 from documents d
+                 where d.org_id = ${orgId} and d.id = ${idCol} and ${tableCol} = 'documents'
+                   and d.subsidiary_id = any(${fence}::uuid[]))
+    or exists (select 1 from parties p
+                 where p.org_id = ${orgId} and p.id = ${idCol} and ${tableCol} = 'parties'
+                   and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[])))
+    or exists (select 1 from fixed_assets a
+                 where a.org_id = ${orgId} and a.id = ${idCol} and ${tableCol} = 'fixed_assets'
+                   and a.subsidiary_id = any(${fence}::uuid[]))
+    or exists (select 1 from compliance_records cr
+                 join parties p on p.id = cr.party_id and p.org_id = cr.org_id
+                 left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
+                where cr.org_id = ${orgId} and cr.id = ${idCol} and ${tableCol} = 'compliance_records'
+                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
+                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+    or exists (select 1 from lien_waivers lw
+                 join parties p on p.id = lw.party_id and p.org_id = lw.org_id
+                 left join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
+                where lw.org_id = ${orgId} and lw.id = ${idCol} and ${tableCol} = 'lien_waivers'
+                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
+                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+  )`
+}
+
+/**
+ * Record-entity fence for cabinet reads: a file or folder inside a per-record
+ * folder (record_id set) evidences that record, so a subsidiary-restricted
+ * caller sees it only when the folder's record target is inside their fence.
+ * Non-record folders are unaffected. Returns null when the caller is
+ * unrestricted.
  */
 function recordTargetVisiblePredicate(
   orgId: string,
@@ -239,35 +277,40 @@ function recordTargetVisiblePredicate(
   const fence = `{${[...allowed].join(',')}}`
   return sql`(
     ${recordIdCol} is null
-    or ${recordTableCol} = 'item_rate_versions'
-    or exists (select 1 from documents d
-                 where d.org_id = ${orgId} and d.id = ${recordIdCol} and ${recordTableCol} = 'documents'
-                   and d.subsidiary_id = any(${fence}::uuid[]))
-    or exists (select 1 from parties p
-                 where p.org_id = ${orgId} and p.id = ${recordIdCol} and ${recordTableCol} = 'parties'
-                   and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[])))
-    or exists (select 1 from fixed_assets a
-                 where a.org_id = ${orgId} and a.id = ${recordIdCol} and ${recordTableCol} = 'fixed_assets'
-                   and a.subsidiary_id = any(${fence}::uuid[]))
-    or exists (select 1 from compliance_records cr
-                 join parties p on p.id = cr.party_id and p.org_id = cr.org_id
-                 left join projects pj on pj.id = cr.project_id and pj.org_id = cr.org_id
-                where cr.org_id = ${orgId} and cr.id = ${recordIdCol} and ${recordTableCol} = 'compliance_records'
-                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
-                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
-    or exists (select 1 from lien_waivers lw
-                 join parties p on p.id = lw.party_id and p.org_id = lw.org_id
-                 left join projects pj on pj.id = lw.project_id and pj.org_id = lw.org_id
-                where lw.org_id = ${orgId} and lw.id = ${recordIdCol} and ${recordTableCol} = 'lien_waivers'
-                  and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
-                  and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+    or ${subsidiaryTargetVisibleSql(orgId, fence, recordTableCol, recordIdCol)}
   )`
 }
 
 /**
- * File-level record fence: the folder-record target must be visible, unless
- * the file itself was explicitly shared with the caller (a grant re-opens its
- * file exactly like a grant re-opens a private subtree).
+ * Attachment-target fence for cabinet reads: a file evidences every record it
+ * is attached to, not just the record (if any) of the folder it sits in.
+ * Moving a file out of a scoped record leaf — or linking a common-folder file
+ * to a scoped record — must not launder its bytes into another subsidiary's
+ * list/download reach. Every attachment target must be inside the caller's
+ * fence; files with no links are unaffected. Returns null when the caller is
+ * unrestricted.
+ */
+function attachmentTargetsVisiblePredicate(
+  orgId: string,
+  allowed: ReadonlySet<string> | null | undefined,
+  fileIdCol: SQL,
+): SQL | null {
+  if (allowed === null || allowed === undefined) return null
+  const fence = `{${[...allowed].join(',')}}`
+  return sql`(
+    not exists (
+      select 1 from file_attachments fa
+       where fa.org_id = ${orgId} and fa.file_id = ${fileIdCol}
+         and not (${subsidiaryTargetVisibleSql(orgId, fence, sql`fa.target_table`, sql`fa.target_id`)})
+    )
+  )`
+}
+
+/**
+ * File-level record fence: the folder-record target AND every attachment
+ * target must be visible, unless the file itself was explicitly shared with
+ * the caller (a grant re-opens its file exactly like a grant re-opens a
+ * private subtree).
  */
 function recordScopeFilePredicate(
   orgId: string,
@@ -278,9 +321,11 @@ function recordScopeFilePredicate(
   recordIdCol: SQL,
 ): SQL {
   const targetVisible = recordTargetVisiblePredicate(orgId, allowed, recordTableCol, recordIdCol)
-  if (!targetVisible) return sql`true`
-  if (scope.grantedFileIds.length === 0) return targetVisible
-  return sql`(${targetVisible} or ${fileIdCol} in (
+  const attachmentsVisible = attachmentTargetsVisiblePredicate(orgId, allowed, fileIdCol)
+  if (!targetVisible && !attachmentsVisible) return sql`true`
+  const fenced = sql`(${targetVisible ?? sql`true`} and ${attachmentsVisible ?? sql`true`})`
+  if (scope.grantedFileIds.length === 0) return fenced
+  return sql`(${fenced} or ${fileIdCol} in (
     select value::uuid from jsonb_array_elements_text(${JSON.stringify(scope.grantedFileIds)}::jsonb) as _rg(value)
   ))`
 }
