@@ -14,7 +14,12 @@ function bad(error: string, status = 422) {
 }
 
 function fieldTime(error: unknown) {
-  if (error instanceof FieldTimeError) return bad(error.message)
+  if (error instanceof FieldTimeError) {
+    // A reused offline id with a different payload is a client conflict,
+    // not a validation failure.
+    if (error.code === 'client_event_conflict') return NextResponse.json({ error: error.message }, { status: 409 })
+    return bad(error.message)
+  }
   throw error
 }
 

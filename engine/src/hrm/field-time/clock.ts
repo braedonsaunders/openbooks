@@ -2,7 +2,10 @@
  * HR-20 clock service: record clock events, pair in<->out, produce entries.
  *
  * Idempotent on (org, client_event_id): a replayed offline event returns
- * the original recording, never a second row. Sequence violations refuse
+ * the original recording, never a second row — the key is claimed with
+ * INSERT … ON CONFLICT DO NOTHING inside the transaction, so concurrent
+ * replays serialize and the loser reads back the winner. A reused key
+ * carrying a different event conflicts by name. Sequence violations refuse
  * by name, never silently pair. Outside-geofence events are RECORDED
  * with geo_check outside and flagged — a worker must be able to clock;
  * the flag routes to the approver. Photo enforcement refuses without a
@@ -13,9 +16,9 @@
  */
 
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../../platform/db.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { FieldTimeError, refuse } from "./errors.ts";
+import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
 import {
   FIELD_TIME_GEOFENCE_FEATURE,
   FIELD_TIME_FEATURE,
@@ -30,10 +33,12 @@ import {
   insidePolygon,
   quantumUnitsToHours,
   roundHours,
+  sameClockPayload,
   splitUtcDays,
   validateClockSequence,
   validateEventChronology,
   type ClockKind,
+  type ClockPayload,
   type LatLng,
 } from "./pure.ts";
 import { prevailingWageForTimeEntry } from "../construction/labor-hook.ts";
@@ -148,7 +153,14 @@ async function checkGeofence(
   return "outside";
 }
 
-async function openPair(orgId: string, employeePartyId: string): Promise<EventRow | null> {
+async function openPair(
+  orgId: string,
+  employeePartyId: string,
+  excludeId?: string | null,
+): Promise<EventRow | null> {
+  // excludeId is the idempotency-claimed row of the event being
+  // recorded: the claim lands before validation, so the open lookup
+  // must not see the event itself as its own open pair.
   const rows = (await db.execute<EventRow>(sql`
     select id::text as id, kind, occurred_at::text as occurred_at,
            project_id::text as project_id, project_task_id::text as project_task_id,
@@ -156,6 +168,7 @@ async function openPair(orgId: string, employeePartyId: string): Promise<EventRo
       from time_clock_events
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
        and kind = 'clock_in' and status = 'recorded'
+       and (${excludeId ?? null}::text is null or id::text != ${excludeId ?? null}::text)
      order by occurred_at desc limit 1`)).rows;
   return rows[0] ?? null;
 }
@@ -369,9 +382,10 @@ async function autoCloseStale(
   employeePartyId: string,
   actorUserId: string | null,
   nowMs: number,
+  excludeId?: string | null,
 ): Promise<string | null> {
   const settings = await loadFieldTimeSettings(orgId);
-  const open = await openPair(orgId, employeePartyId);
+  const open = await openPair(orgId, employeePartyId, excludeId);
   if (!open) return null;
   const ageHours = (nowMs - Date.parse(open.occurred_at)) / 3_600_000;
   if (!(ageHours > settings.autoCloseHours)) return null;
@@ -408,29 +422,93 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     refuse("future_clock", "The clock time is in the future — check the device clock and retry");
   }
 
-  // Idempotency first: a replayed offline event returns the original result.
-  const existing = (await db.execute<EventRow & { entries: string[] }>(sql`
-    select e.id::text as id, e.kind, e.occurred_at::text as occurred_at,
-           e.project_id::text as project_id, e.project_task_id::text as project_task_id,
-           e.cost_code_ref, e.pair_id::text as pair_id, e.status, e.geo_check, e.auto_closed,
-           coalesce(array_agg(t.id::text) filter (where t.id is not null), '{}') as entries
-      from time_clock_events e
-      left join time_entries t on t.org_id = e.org_id and t.clock_pair_id = e.pair_id
-     where e.org_id = ${input.orgId} and e.client_event_id = ${input.clientEventId}
-     group by e.id limit 1`)).rows[0];
-  if (existing) {
-    return {
-      eventId: existing.id,
-      pairId: existing.pair_id,
-      geoCheck: existing.geo_check,
-      autoClosedPairId: null,
-      entryIds: existing.entries,
-      replayed: true,
-    };
-  }
-
   return withOrgTransaction(input.orgId, async () => {
-    const open = await openPair(input.orgId, input.employeePartyId);
+    // Transaction-safe get-or-create on the offline idempotency key.
+    // Reading the key outside the transaction let two simultaneous
+    // replays both see nothing, so the second died on the unique index
+    // instead of replaying. Now concurrent replays serialize on the
+    // unique index: the loser inserts nothing and reads back the
+    // winner's row below. geo_check starts at the column default and is
+    // stamped after evaluation — it never commits un-evaluated, because
+    // the stamp below runs before commit and failures roll back.
+    // A foreign-key failure means the claim references something absent
+    // (an unknown worker or photo): validation still runs first, so a
+    // sequence refusal names the remedy exactly as before the claim
+    // existed; when validation passes, the insert error stands.
+    let attempted: { id: string } | undefined;
+    let claimError: unknown = null;
+    try {
+      // The savepoint contains a failed claim: without it the aborted
+      // insert would poison the transaction and every statement after
+      // it — including the validation read that must still refuse by
+      // name — would die with an aborted-transaction error instead.
+      attempted = await withTransactionSavepoint(db, async () => (await db.execute<{ id: string }>(sql`
+        insert into time_clock_events
+          (org_id, employee_party_id, kind, occurred_at, device_id, source,
+           project_id, project_task_id, cost_code_ref, geo, geo_check,
+           photo_file_id, client_event_id, status, created_by, updated_by)
+        values
+          (${input.orgId}, ${input.employeePartyId}, ${input.kind}, ${input.occurredAt}::timestamptz,
+           ${input.deviceId ?? null}, ${input.source},
+           ${input.projectId ?? null}, ${input.projectTaskId ?? null}, ${input.costCodeRef ?? null},
+           ${input.geo ? JSON.stringify(input.geo) : null}::jsonb, 'not_required',
+           ${input.photoFileId ?? null}, ${input.clientEventId}, 'recorded',
+           ${input.actorUserId}, ${input.actorUserId})
+        on conflict (org_id, client_event_id) do nothing
+        returning id::text as id`)).rows[0]);
+    } catch (error) {
+      if (!isForeignKeyViolation(error)) throw error;
+      claimError = error;
+    }
+    if (!attempted && !claimError) {
+      const existing = (await db.execute<EventRow & { entries: string[]; employee_party_id: string; source: string }>(sql`
+        select e.id::text as id, e.kind, e.occurred_at::text as occurred_at,
+               e.employee_party_id::text as employee_party_id, e.source as source,
+               e.project_id::text as project_id, e.project_task_id::text as project_task_id,
+               e.cost_code_ref, e.pair_id::text as pair_id, e.status, e.geo_check, e.auto_closed,
+               coalesce(array_agg(t.id::text) filter (where t.id is not null), '{}') as entries
+          from time_clock_events e
+          left join time_entries t on t.org_id = e.org_id and t.clock_pair_id = e.pair_id
+         where e.org_id = ${input.orgId} and e.client_event_id = ${input.clientEventId}
+         group by e.id limit 1`)).rows[0];
+      if (!existing) {
+        throw new FieldTimeError("event_not_stored", "The clock event was not stored — no row was written; retry the clock action");
+      }
+      const winner: ClockPayload = {
+        kind: existing.kind as ClockKind,
+        occurredAtMs: Date.parse(existing.occurred_at),
+        employeePartyId: existing.employee_party_id,
+        projectId: existing.project_id,
+        projectTaskId: existing.project_task_id,
+        costCodeRef: existing.cost_code_ref,
+        source: existing.source,
+      };
+      const candidate: ClockPayload = {
+        kind: input.kind,
+        occurredAtMs: occurredMs,
+        employeePartyId: input.employeePartyId,
+        projectId: input.projectId ?? null,
+        projectTaskId: input.projectTaskId ?? null,
+        costCodeRef: input.costCodeRef ?? null,
+        source: input.source,
+      };
+      if (!sameClockPayload(winner, candidate)) {
+        refuse(
+          "client_event_conflict",
+          `The offline id ${input.clientEventId} was already used for a different clock event (${existing.kind} at ${existing.occurred_at}) — generate a fresh clientEventId for this event and retry`,
+        );
+      }
+      return {
+        eventId: existing.id,
+        pairId: existing.pair_id,
+        geoCheck: existing.geo_check,
+        autoClosedPairId: null,
+        entryIds: existing.entries,
+        replayed: true,
+      };
+    }
+
+    const open = await openPair(input.orgId, input.employeePartyId, attempted?.id ?? null);
 
     // The stale pair closes BEFORE the sequence is judged, because the
     // sequence has to be judged against the state the worker is actually
@@ -441,13 +519,13 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     // at all. That is precisely the case auto-close exists for.
     let autoClosedPairId: string | null = null;
     if (input.kind === "clock_in" && open) {
-      autoClosedPairId = await autoCloseStale(input.orgId, input.employeePartyId, input.actorUserId, occurredMs);
+      autoClosedPairId = await autoCloseStale(input.orgId, input.employeePartyId, input.actorUserId, occurredMs, attempted?.id ?? null);
     }
 
     // Re-read only when something closed: a pair inside the window is
     // still open and must still refuse, which is the sequence rule doing
     // its job rather than being skipped.
-    const current = autoClosedPairId ? await openPair(input.orgId, input.employeePartyId) : open;
+    const current = autoClosedPairId ? await openPair(input.orgId, input.employeePartyId, attempted?.id ?? null) : open;
     const onBreak = current ? await breakOpen(input.orgId, input.employeePartyId, current.id) : false;
     validateClockSequence(input.kind, { clockedIn: !!current, onBreak });
     if (current) {
@@ -459,20 +537,19 @@ export async function recordClockEvent(input: RecordClockInput): Promise<ClockRe
     await checkPhotoRequirement(input);
     const geoCheck = await checkGeofence(input.orgId, input.projectId ?? null, input.geo ?? null);
 
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into time_clock_events
-        (org_id, employee_party_id, kind, occurred_at, device_id, source,
-         project_id, project_task_id, cost_code_ref, geo, geo_check,
-         photo_file_id, client_event_id, status, created_by, updated_by)
-      values
-        (${input.orgId}, ${input.employeePartyId}, ${input.kind}, ${input.occurredAt}::timestamptz,
-         ${input.deviceId ?? null}, ${input.source},
-         ${input.projectId ?? null}, ${input.projectTaskId ?? null}, ${input.costCodeRef ?? null},
-         ${input.geo ? JSON.stringify(input.geo) : null}::jsonb, ${geoCheck},
-         ${input.photoFileId ?? null}, ${input.clientEventId}, 'recorded',
-         ${input.actorUserId}, ${input.actorUserId})
-      returning id`)).rows[0];
-    if (!inserted) throw new FieldTimeError("event_not_stored", "The clock event was not stored — no row was written; retry the clock action");
+    // Validation passed but the claim never landed: the insert error
+    // stands, exactly as before the claim existed.
+    if (!attempted) throw claimError;
+
+    // The row was claimed up front for idempotency; stamp the evaluated
+    // geofence verdict onto it. A zero-row update means the claimed row
+    // is gone — fail, never continue on a phantom event.
+    const claimed = (await db.execute<{ id: string }>(sql`
+      update time_clock_events set geo_check = ${geoCheck}, updated_at = now()
+       where org_id = ${input.orgId} and id = ${attempted.id}
+      returning id::text as id`)).rows[0];
+    if (!claimed) throw new FieldTimeError("event_not_stored", "The clock event was not stored — no row was written; retry the clock action");
+    const inserted = claimed;
 
     let entryIds: string[] = [];
     let pairId: string | null = null;
