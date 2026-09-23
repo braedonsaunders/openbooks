@@ -90,7 +90,9 @@ test('a reused key over an edited opportunity conflicts', { skip: !DB }, async (
     const key = randomUUID();
     const first = await POST(post(opp, key), paramsOf(opp));
     assert.equal(first.status, 201, await first.clone().text());
-    await db.execute(sql`update crm_opportunities set title='Bigger deal' where id=${opp}`);
+    // Fixture write, not a product call: scoped explicitly so it survives the
+    // request-org resolver that this file's eager route import installs.
+    await withBypassContext(() => db.execute(sql`update crm_opportunities set title='Bigger deal' where id=${opp}`));
     const retry = await POST(post(opp, key), paramsOf(opp));
     assert.equal(retry.status, 409);
     assert.match(await retry.json().then((b) => b.error as string), /opportunities\.estimateKeyConflict/);
