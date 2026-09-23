@@ -498,6 +498,66 @@ test('numeric amount candidates carry the same permission allowlist as text cand
   }
 })
 
+test('malformed comma amounts stay text queries instead of inventing a number', async () => {
+  for (const ambiguous of ['1,2', '12,34', '1,23,4']) {
+    reset()
+    await globalSearch(authz('ap.read'), ambiguous)
+    const query = transactionQuery()
+    assert.equal(
+      query.text.match(/d\.kind in/g)?.length,
+      4,
+      `${ambiguous}: text, party, exact-number, and final legs only — no amount leg`,
+    )
+    assert.ok(
+      !query.values.some((value) => value === 12 || value === '12' || value === '12.34'),
+      `${ambiguous}: no invented amount bound`,
+    )
+  }
+})
+
+test('well-formed amounts bind exactly, never through Number', async () => {
+  reset()
+  await globalSearch(authz('ap.read'), '$1,234.56')
+  assert.ok(transactionQuery().values.includes('1234.56'), 'grouped amount binds its exact value')
+
+  reset()
+  await globalSearch(authz('ap.read'), '9007199254740993')
+  const big = transactionQuery()
+  assert.equal(big.text.match(/d\.kind in/g)?.length, 5, 'huge input still runs the amount leg')
+  assert.ok(big.values.includes('9007199254740993'), 'amount binds exactly past 2^53')
+  assert.ok(!big.values.some((value) => value === 9007199254740992), 'no rounded float bound')
+})
+
+test('amounts display exactly, never through Number', async () => {
+  const big: SearchFixture = {
+    ...fixture('vendor_bill'),
+    id: 'vendor_bill-big',
+    document_number: 'BIG',
+    memo: 'big:memo',
+    party_name: null,
+    amount: '9007199254740993',
+  }
+  reset({ documents: [big] })
+  const response = await globalSearch(authz('ap.read'), 'BIG')
+  assert.equal(
+    transactionHits(response)[0]?.amount,
+    '9,007,199,254,740,993.00',
+    'past 2^53 the display must not round like a float',
+  )
+
+  const grouped: SearchFixture = {
+    ...fixture('vendor_bill'),
+    id: 'vendor_bill-grouped',
+    document_number: 'GROUPED',
+    memo: 'grouped:memo',
+    party_name: null,
+    amount: '987654.32',
+  }
+  reset({ documents: [grouped] })
+  const groupedResponse = await globalSearch(authz('ap.read'), 'GROUPED')
+  assert.equal(groupedResponse.groups.length > 0 && transactionHits(groupedResponse)[0]?.amount, '987,654.32')
+})
+
 test('feature-disabled document kinds remain hidden inside an allowed module', async () => {
   reset({ disabledKinds: ['pay_run'] })
   const response = await globalSearch(authz('gl.read', 'payroll.read'), 'needle')
