@@ -1616,11 +1616,28 @@ export async function postProvisionRun(
     `);
     const run = await getProvisionRun(orgId, runId);
     if (!run) throw new IncomeTaxProvisionError("provision run not found");
-    if (
-      (run.status === "posted" || run.status === "superseded") &&
-      run.journalEntryId
-    ) {
+    // Idempotent replay holds ONLY while the run is the effective posting. A
+    // superseded run's journals were reversed by its replacement: handing
+    // back the old (reversed) entry id would masquerade as an effective
+    // provision posting, so superseded and discarded runs refuse by status
+    // and name the remedy — the run to use instead.
+    if (run.status === "posted" && run.journalEntryId) {
       return { entryId: run.journalEntryId };
+    }
+    if (run.status === "superseded" || run.status === "discarded") {
+      const current = (await db.execute<{ id: string }>(sql`
+        select id from tax_provision_runs
+         where org_id = ${orgId} and fiscal_year = ${run.fiscalYear} and id <> ${runId}
+           and status in ('posted', 'draft')
+         order by case status when 'posted' then 0 else 1 end, version desc
+         limit 1
+      `));
+      const remedy = current.rows[0]
+        ? `use the current run ${current.rows[0].id}`
+        : `recompute the provision for FY${run.fiscalYear}`;
+      throw new IncomeTaxProvisionError(
+        `provision run ${runId} is ${run.status} — ${remedy}`,
+      );
     }
     if (run.status !== "draft")
       throw new IncomeTaxProvisionError(`provision run is ${run.status}`);
