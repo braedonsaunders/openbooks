@@ -14,21 +14,29 @@
 -- owner with the RLS bypass the forced-RLS catalog otherwise denies.
 begin;
 set local app.bypass_rls = 'on';
-DELETE FROM public.stock_count_lines l
-USING public.stock_counts c
-WHERE c.id = l.stock_count_id
-  AND c.org_id = l.org_id
-  AND c.status IS DISTINCT FROM 'posted'
-  AND EXISTS (SELECT 1 FROM public.stock_count_lines neg
-               WHERE neg.org_id = c.org_id
-                 AND neg.stock_count_id = c.id
-                 AND neg.counted_quantity IS NOT NULL
-                 AND neg.counted_quantity < 0);
+-- One statement: the target counts are picked ONCE in `target` (all CTEs
+-- share one snapshot), so the count delete cannot observe the line delete's
+-- effects. Two sequential DELETEs left the counts behind EMPTY, because the
+-- second EXISTS saw the first statement's deletions and matched nothing.
+WITH target AS (
+  SELECT c.id, c.org_id
+    FROM public.stock_counts c
+   WHERE c.status IS DISTINCT FROM 'posted'
+     AND EXISTS (SELECT 1 FROM public.stock_count_lines neg
+                  WHERE neg.org_id = c.org_id
+                    AND neg.stock_count_id = c.id
+                    AND neg.counted_quantity IS NOT NULL
+                    AND neg.counted_quantity < 0)
+),
+gone_lines AS (
+  DELETE FROM public.stock_count_lines l
+  USING target t
+  WHERE l.org_id = t.org_id
+    AND l.stock_count_id = t.id
+  RETURNING 1
+)
 DELETE FROM public.stock_counts c
-WHERE c.status IS DISTINCT FROM 'posted'
-  AND EXISTS (SELECT 1 FROM public.stock_count_lines neg
-               WHERE neg.org_id = c.org_id
-                 AND neg.stock_count_id = c.id
-                 AND neg.counted_quantity IS NOT NULL
-                 AND neg.counted_quantity < 0);
+USING target t
+WHERE c.org_id = t.org_id
+  AND c.id = t.id;
 commit;
