@@ -120,6 +120,7 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     sites: [
       { stance: "presence-probe", note: "every base table that carries org_id, for residue counts" },
       { stance: "feeds-a-write", note: "scratch-fixture snapshot columns copied back by name" },
+      { stance: "key-members", note: "plain-column unique-key members from the index catalog; they only build the collider delete predicate, never an insert/update column list" },
     ],
   },
   {
