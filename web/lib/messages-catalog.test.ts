@@ -3022,7 +3022,10 @@ test('admin namespace ships translated in zh and pt-BR', () => {
   // English catalog actually holds here.
   // m17_hrm_ui/F5: 4050 = 4041 plus 3 HR permission labels (b1b1c7b22) plus 6 pipeline-entity keys (2 entities x
   // title/singularTitle/description), translated in all 7 locales.
-  assert.equal(wanted.length, 4050, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
+  // m17_hrm_ui/F5-followup: 4062 = 4050 plus 12 rehomed-entity keys
+  // (ai-rails-settings, hrm-action-reasons, qualification-types,
+  // qualification-settings), translated in all 7 locales.
+  assert.equal(wanted.length, 4062, 'admin source inventory changed; translate the new keys in zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3397,8 +3400,9 @@ test('admin copy ships translated in de and ja (i2)', () => {
   // asserted per-key below.
   // m17_hrm_ui/F5: 4050 + rehash for the 3 HR permission labels and the 6 pipeline-entity keys, translated
   // in all 7 locales.
-  const ADMIN_I2_SOURCE_COUNT = 4050
-  const ADMIN_I2_SOURCE_HASH = '03efdf0600dd85c62ddbc69c2be1781d6c38559f849e27f9d829260f8503898b'
+  // m17_hrm_ui/F5-followup: 4062 + rehash for the 12 rehomed-entity keys.
+  const ADMIN_I2_SOURCE_COUNT = 4062
+  const ADMIN_I2_SOURCE_HASH = 'cf870992d82fb42cbd92636dfddf9597e8d7d2cafa9072b674ab5a849edc93eb'
   const source = flattenCatalog('en')
   const sourceKeys = [...source.keys()]
     .filter((key) => key === 'admin' || key.startsWith('admin.'))

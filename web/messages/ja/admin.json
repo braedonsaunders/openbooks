@@ -2537,6 +2537,26 @@
         "singularTitle": "採用パイプラインの段階",
         "description": "パイプラインテンプレートの順序付き段階。スクリーニング、面接、評価、オファー、採用、却下のいずれかです。"
       },
+      "ai-rails-settings": {
+        "title": "AIレール設定",
+        "singularTitle": "AIレール設定",
+        "description": "確定的HRレール用のスキャンしきい値、基準コホート、組織宣言のバイアス用語、台帳レビュー頻度。"
+      },
+      "hrm-action-reasons": {
+        "title": "アクション理由",
+        "singularTitle": "アクション理由",
+        "description": "HRアクションごとの理由コード。取消と訂正はいずれかの理由とコメントルールのもとで記録されます。"
+      },
+      "qualification-types": {
+        "title": "資格種別",
+        "singularTitle": "資格種別",
+        "description": "組織の資格体系。認定、免許、許可、研修を発行機関と有効期限とともに定義します。"
+      },
+      "qualification-settings": {
+        "title": "資格設定",
+        "singularTitle": "資格設定",
+        "description": "基本語彙を超える拡張資格カテゴリ（組織ごと）。"
+      },
       "hrm-review-templates": {
         "title": "レビューテンプレート",
         "singularTitle": "レビューテンプレート",

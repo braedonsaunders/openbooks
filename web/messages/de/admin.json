@@ -2537,6 +2537,26 @@
         "singularTitle": "Pipeline-Stufe",
         "description": "Eine geordnete Stufe einer Pipeline-Vorlage: Sichtung, Interview, Assessment, Angebot, eingestellt oder abgelehnt."
       },
+      "ai-rails-settings": {
+        "title": "KI-Leitplanken-Einstellungen",
+        "singularTitle": "KI-Leitplanken-Einstellung",
+        "description": "Scan-Schwellen, Basis-Kohorten, organisationsweite Bias-Begriffe und der Prüf-Rhythmus des Ledgers für die deterministischen HR-Leitplanken."
+      },
+      "hrm-action-reasons": {
+        "title": "Vorgangsgründe",
+        "singularTitle": "Vorgangsgrund",
+        "description": "Gründe je HR-Vorgang: Storno und Korrektur werden unter einem dieser Gründe mit Kommentarregeln erfasst."
+      },
+      "qualification-types": {
+        "title": "Qualifikationsarten",
+        "singularTitle": "Qualifikationsart",
+        "description": "Die Qualifikationstaxonomie der Organisation: Zertifizierungen, Lizenzen, Freigaben und Schulungen mit Stellen und Gültigkeit."
+      },
+      "qualification-settings": {
+        "title": "Qualifikationseinstellungen",
+        "singularTitle": "Qualifikationseinstellungen",
+        "description": "Erweiterte Qualifikationskategorien über das Basisvokabular hinaus, je Organisation."
+      },
       "hrm-review-templates": {
         "title": "Beurteilungsvorlagen",
         "singularTitle": "Beurteilungsvorlage",
