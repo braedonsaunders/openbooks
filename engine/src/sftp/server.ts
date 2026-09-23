@@ -302,14 +302,26 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             return false;
           };
 
-          sftp.on("REALPATH", async (reqid, p) => {
-            if (!(await checkAlive(reqid))) return;
+          // Single choke point for the liveness fence: EVERY operation
+          // handler below is registered through fenced(), so a new handler
+          // cannot skip the check the way RMDIR did — after a disable or
+          // credential rotation, the session's next request of ANY kind is
+          // refused and the connection ends.
+          const fenced = <A extends unknown[]>(
+            handler: (reqid: number, ...args: A) => Promise<void> | void,
+          ): ((reqid: number, ...args: A) => Promise<void>) => {
+            return async (reqid: number, ...args: A) => {
+              if (!(await checkAlive(reqid))) return;
+              await handler(reqid, ...args);
+            };
+          };
+
+          sftp.on("REALPATH", fenced(async (reqid: number, p: string) => {
             const cp = cleanPath(p === "." || p === "" ? "/" : p);
             sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) }]);
-          });
+          }));
 
-          const doStat = async (reqid: number, p: string) => {
-            if (!(await checkAlive(reqid))) return;
+          const doStat = fenced(async (reqid: number, p: string) => {
             try {
               // In-flight publishes are invisible to bank clients: report the
               // temp pattern as absent, exactly like a name that was never
@@ -319,18 +331,16 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               if (!st) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs));
             } catch (e) { fail(reqid, e); }
-          };
+          });
           sftp.on("STAT", doStat);
           sftp.on("LSTAT", doStat);
-          sftp.on("FSTAT", async (reqid, handle) => {
-            if (!(await checkAlive(reqid))) return;
+          sftp.on("FSTAT", fenced(async (reqid: number, handle: Buffer) => {
             const f = files.get(handle.toString());
             if (!f) return sftp.status(reqid, STATUS_CODE.FAILURE);
             sftp.attrs(reqid, attrsFor(false, f.buf.length, Date.now()));
-          });
+          }));
 
-          sftp.on("OPENDIR", async (reqid, p) => {
-            if (!(await checkAlive(reqid))) return;
+          sftp.on("OPENDIR", fenced(async (reqid: number, p: string) => {
             if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
             try {
               // Temp siblings of in-flight publishes never appear in a bank
@@ -342,9 +352,8 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               dirs.set(h.toString(), { entries, next: 0 });
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
-          });
-          sftp.on("READDIR", async (reqid, handle) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("READDIR", fenced(async (reqid: number, handle: Buffer) => {
             const d = dirs.get(handle.toString());
             if (!d) return sftp.status(reqid, STATUS_CODE.FAILURE);
             if (d.next >= d.entries.length) return sftp.status(reqid, STATUS_CODE.EOF);
@@ -361,10 +370,9 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               d.next++;
             }
             sftp.name(reqid, batch.map((e) => ({ filename: e.name, longname: longname(e.name, e.isDir, e.size), attrs: attrsFor(e.isDir, e.size, e.mtimeMs) })));
-          });
+          }));
 
-          sftp.on("OPEN", async (reqid, filename, flags) => {
-            if (!(await checkAlive(reqid))) return;
+          sftp.on("OPEN", fenced(async (reqid: number, filename: string, flags: number) => {
             // Neither reading a partial publish nor squatting its temp name:
             // both directions report the temp pattern as absent.
             if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
@@ -429,16 +437,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               }
               sftp.handle(reqid, h);
             } catch (e) { fail(reqid, e); }
-          });
-          sftp.on("READ", async (reqid, handle, offset, length) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("READ", fenced(async (reqid: number, handle: Buffer, offset: number, length: number) => {
             const f = files.get(handle.toString());
             if (!f || f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
             if (offset >= f.buf.length) return sftp.status(reqid, STATUS_CODE.EOF);
             sftp.data(reqid, f.buf.subarray(offset, Math.min(offset + length, f.buf.length)));
-          });
-          sftp.on("WRITE", async (reqid, handle, offset, data) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("WRITE", fenced(async (reqid: number, handle: Buffer, offset: number, data: Buffer) => {
             const f = files.get(handle.toString());
             if (!f || !f.write) return sftp.status(reqid, STATUS_CODE.FAILURE);
             const position = f.append ? f.buf.length : Number(offset);
@@ -468,9 +474,8 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             } catch {
               sftp.status(reqid, STATUS_CODE.FAILURE);
             }
-          });
-          sftp.on("CLOSE", async (reqid, handle) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("CLOSE", fenced(async (reqid: number, handle: Buffer) => {
             const key = handle.toString();
             const f = files.get(key);
             if (f) {
@@ -488,22 +493,21 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               }
             } else dirs.delete(key);
             sftp.status(reqid, STATUS_CODE.OK);
-          });
+          }));
 
           // Deleting or moving an in-flight publish's temp sibling would
           // break the atomic rename the writer is about to perform, so temp
           // names refuse here exactly as they do for open and stat.
-          const wrap = (op: (p: string) => Promise<void>) => async (reqid: number, p: string) => {
-            if (!(await checkAlive(reqid))) return;
+          const wrap = (op: (p: string) => Promise<void>) => fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, p)) return;
               await op(p); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e); }
-          };
+          });
           sftp.on("REMOVE", wrap((p) => backend.remove(p)));
           sftp.on("MKDIR", wrap((p) => backend.mkdir(p)));
-          sftp.on("RMDIR", async (reqid, p) => {
+          sftp.on("RMDIR", fenced(async (reqid: number, p: string) => {
             try {
               if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, p)) return;
@@ -515,15 +519,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
               if (e instanceof SftpDirectoryNotEmptyError) return sftp.status(reqid, STATUS_CODE.FAILURE, e.message);
               fail(reqid, e);
             }
-          });
-          sftp.on("RENAME", async (reqid, from, to) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("RENAME", fenced(async (reqid: number, from: string, to: string) => {
             try {
               if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               if (denyPublished(reqid, from) || denyPublished(reqid, to)) return;
               await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
             } catch (e) { fail(reqid, e); }
-          });
+          }));
           // Attribute mutation is not implemented and SftpBackend exposes no
           // attribute-update method, so SETSTAT/FSETSTAT must refuse instead
           // of answering OK: an OK for a no-op tells a partner its
@@ -536,17 +539,28 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           // after the liveness fence, so the published artifact's protection
           // does not depend on which refusal the generic path carries — and
           // a revoked session is ended before it can probe anything.
-          sftp.on("SETSTAT", async (reqid, p) => {
-            if (!(await checkAlive(reqid))) return;
+          sftp.on("SETSTAT", fenced(async (reqid: number, p: string) => {
             if (denyPublished(reqid, p)) return;
             sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "SETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
-          });
-          sftp.on("FSETSTAT", async (reqid, handle) => {
-            if (!(await checkAlive(reqid))) return;
+          }));
+          sftp.on("FSETSTAT", fenced(async (reqid: number, handle: Buffer) => {
             const f = files.get(handle.toString());
             if (f && denyPublished(reqid, f.path)) return;
             sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "FSETSTAT is not supported: attributes cannot be changed; re-upload the file instead");
-          });
+          }));
+          // The backend has no symlink concept, so these can never succeed —
+          // but they still go through the fence. Without an explicit handler
+          // ssh2 answers OP_UNSUPPORTED itself, which would let a revoked
+          // session probe request types without ever hitting the fence.
+          sftp.on("SYMLINK", fenced(async (reqid: number) => {
+            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
+          }));
+          sftp.on("READLINK", fenced(async (reqid: number) => {
+            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "symlinks are not supported");
+          }));
+          sftp.on("EXTENDED", fenced(async (reqid: number) => {
+            sftp.status(reqid, STATUS_CODE.OP_UNSUPPORTED, "extended requests are not supported");
+          }));
         });
       });
     });
