@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
@@ -17,13 +18,47 @@ import {
   type StatementSourceContent,
 } from "../banking/banking.ts";
 import { claimPaymentFileDelivery, generatePaymentFileArtifact, markDeliveryUncertain, reclaimExpiredDeliveryClaims, recordPaymentFileDeliveryFailure, recordPaymentFileSftpDelivery, releaseDeliveryClaim } from "../payments/operations.ts";
-import { backendFor } from "./backend.ts";
+import { backendFor, type SftpBackend } from "./backend.ts";
 import { resolveOutboundPath } from "./delivery-path.ts";
+
+/**
+ * Archive destination for one consumed watch-folder file: a unique generation
+ * under `<folder>/processed/<UTC-date>/` carrying a short content hash
+ * (`<stem>.<12-hex><ext>`), so a bank sending the same routine filename daily
+ * archives every generation instead of overwriting yesterday's. `attempt`
+ * numbers a re-import of identical bytes (or a hash collision) that must not
+ * replace the archived generation. Pure: takes the day and attempt
+ * explicitly so tests pin them; the scan passes the current UTC day.
+ */
+export function archiveDestination(folder: string, name: string, content: Buffer, utcDay: string, attempt = 1): string {
+  const hash = createHash("sha256").update(content).digest("hex").slice(0, 12);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : "";
+  const file = attempt <= 1 ? `${stem}.${hash}${ext}` : `${stem}.${hash}.${attempt}${ext}`;
+  return `${folder}/processed/${utcDay}/${file}`;
+}
+
+/**
+ * First free archive generation for a consumed file. Existence is checked
+ * through the backend, so the no-overwrite guarantee holds for local disk
+ * and S3 alike: if the destination somehow exists, the next numbered
+ * generation is taken — an archived file is never replaced silently.
+ */
+export async function archiveConsumedFile(backend: SftpBackend, folder: string, name: string, content: Buffer): Promise<string> {
+  const utcDay = new Date().toISOString().slice(0, 10);
+  for (let attempt = 1; attempt <= 1000; attempt++) {
+    const candidate = archiveDestination(folder, name, content, utcDay, attempt);
+    if ((await backend.stat(candidate)) === null) return candidate;
+  }
+  throw new Error(`could not archive ${name}: no free generation under ${folder}/processed/${utcDay}`);
+}
 
 /**
  * Inbound bank-feed loop: on each scheduler tick, walk every active SFTP import
  * schedule's watch folder, parse + import any new statement files into its bank
- * account, then move each file to `<folder>/processed/`. Outbound delivery
+ * account, then archive each file to a unique `<folder>/processed/`
+ * generation (see {@link archiveConsumedFile}). Outbound delivery
  * writes a payment run's file into a server's `outbound/` folder for the bank
  * to fetch. Both reuse the SFTP backend (MinIO/local) and the format parsers.
  *
@@ -191,8 +226,11 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
       outcome.imported = res.imported;
       outcome.duplicates = res.duplicates;
       if (res.statementId) outcome.statementIds.push(res.statementId);
-      // archive the processed file so it isn't re-imported
-      await backend.rename(filePath, `${s.folder}/processed/${e.name}`);
+      // Archive the consumed file so it isn't re-imported: a unique dated,
+      // content-hashed generation that never overwrites a previous archive
+      // (a bank reusing a routine filename daily keeps every generation).
+      const archived = await archiveConsumedFile(backend, s.folder, e.name, sourceBytes);
+      await backend.rename(filePath, archived);
     } catch (err) {
       const message = (err as Error).message;
       result.errors.push(`${e.name}: ${message}`);
