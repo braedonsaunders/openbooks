@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm';
 import { db, env, withBypassContext } from '../platform/db.ts';
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '../testing/fixtures.ts';
 import { installTestExtension, disableTestExtension } from '../testing/extension-packages.ts';
-import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from './projections.ts';
+import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting, reapRetiredNavLinks, NAV_CONFIG_TOTAL_ROW_CAP } from './projections.ts';
 import { defaultNavConfig } from '../navigation/nav-registry.ts';
 
 const permissions = ['admin.customization.manage', 'admin.setup.manage', 'admin.roles.manage'];
@@ -66,6 +66,45 @@ test('reviewed extension projects navigation, dated settings and grantable permi
   });
 });
 
+test('reapRetiredNavLinks prunes the oldest retired rows first and never touches live or user rows', () => {
+  const config = defaultNavConfig();
+  const visibleBefore = config.groups.reduce((n, group) => n + group.items.length, 0);
+  assert.ok(visibleBefore < NAV_CONFIG_TOTAL_ROW_CAP);
+  const group = config.groups.find((entry) => entry.id === 'insights')!;
+  for (let i = 0; i < 400; i++) group.items.push({ kind: 'link', href: `/old-${i}`, label: `Old ${i}`, extensionKey: 'old-ext', hidden: true });
+  for (let i = 0; i < 50; i++) group.items.push({ kind: 'link', href: `/mine-${i}`, label: 'Mine', hidden: true });
+  const total = visibleBefore + 450;
+  assert.ok(total > NAV_CONFIG_TOTAL_ROW_CAP);
+  const pruned = reapRetiredNavLinks(config);
+  assert.equal(pruned, total - NAV_CONFIG_TOTAL_ROW_CAP);
+  const items = config.groups.flatMap((entry) => entry.items);
+  assert.equal(items.length, NAV_CONFIG_TOTAL_ROW_CAP);
+  // Visible rows all survive, oldest retired extension rows are gone, the
+  // newest retired rows and every user-hidden row survive.
+  assert.equal(items.filter((item) => !item.hidden).length, visibleBefore);
+  const links = items.flatMap((item) => (item.kind === 'link' ? [item] : []));
+  assert.ok(!links.some((item) => item.href === '/old-0'));
+  const oldestSurvivor = `/old-${total - NAV_CONFIG_TOTAL_ROW_CAP}`;
+  assert.ok(links.some((item) => item.href === oldestSurvivor && item.hidden));
+  assert.ok(links.some((item) => item.href === '/old-399' && item.hidden));
+  for (let i = 0; i < 50; i++) assert.ok(links.some((item) => item.href === `/mine-${i}`), `user-hidden /mine-${i} must survive`);
+});
+
+test('reapRetiredNavLinks leaves an over-cap visible nav alone and is a no-op under the cap', () => {
+  const full = defaultNavConfig();
+  const group = full.groups.find((entry) => entry.id === 'insights')!;
+  for (let i = 0; i < 500; i++) group.items.push({ kind: 'link', href: `/live-${i}`, label: `Live ${i}`, extensionKey: 'live-ext' });
+  const total = full.groups.reduce((n, entry) => n + entry.items.length, 0);
+  assert.ok(total > NAV_CONFIG_TOTAL_ROW_CAP);
+  assert.equal(reapRetiredNavLinks(full), 0);
+  assert.equal(full.groups.reduce((n, entry) => n + entry.items.length, 0), total);
+
+  const small = defaultNavConfig();
+  const snapshot = JSON.stringify(small);
+  assert.equal(reapRetiredNavLinks(small), 0);
+  assert.equal(JSON.stringify(small), snapshot);
+});
+
 type NavProbeItem = { href?: string; hidden?: boolean; extensionKey?: string };
 
 async function navItemsAt(orgId: string, href: string): Promise<NavProbeItem[]> {
@@ -119,6 +158,66 @@ test('retired hidden links do not count toward the 256-item navigation cap', { s
       const items = stored.groups.flatMap((entry) => entry.items);
       assert.equal(items.filter((item) => item.href === '/module-fresh' && !item.hidden).length, 1);
       assert.equal(items.filter((item) => item.hidden).length, 300);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+});
+
+async function navItemCount(orgId: string): Promise<number> {
+  const config = (await db.execute<{ config: { groups: { items: unknown[] }[] } }>(sql`select config from org_nav_configs where org_id = ${orgId}`)).rows[0]!.config;
+  return config.groups.reduce((n, group) => n + group.items.length, 0);
+}
+
+test('upgrade/uninstall churn keeps the stored nav item count bounded without ever blocking an install', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, 'Approver', 'admin');
+    await db.execute(sql`update app_roles set permissions = '["*"]'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
+    const permissions = ['admin.customization.manage'];
+    try {
+      const config = defaultNavConfig();
+      const group = config.groups.find((entry) => entry.id === 'insights')!;
+      for (let i = 0; i < 510; i++) group.items.push({ kind: 'link', href: `/retired-${i}`, label: `Retired ${i}`, extensionKey: 'retired-ext', hidden: true });
+      await db.execute(sql`insert into org_nav_configs (org_id, config, created_by, updated_by)
+        values (${org.orgId}, ${JSON.stringify(config)}::jsonb, ${actorId}, ${actorId})
+        on conflict (org_id) do update set config = excluded.config, updated_by = excluded.updated_by, updated_at = now()`);
+      const seeded = await navItemCount(org.orgId);
+      assert.ok(seeded > NAV_CONFIG_TOTAL_ROW_CAP);
+
+      const install = (version: string, href: string) => installTestExtension({
+        orgId: org.orgId, actorId,
+        manifest: { key: 'churn-app', name: 'Churn', version, permissions, contributions: [{ kind: 'nav', href, label: 'Churn', group: 'insights' }] },
+      });
+      // Every install succeeds despite the over-cap history, lands exactly on
+      // the cap, and retires the oldest rows first.
+      await install('1.0.0', '/churn-1');
+      assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
+      assert.equal((await navItemsAt(org.orgId, '/churn-1')).filter((item) => !item.hidden).length, 1);
+      const pruned = seeded + 1 - NAV_CONFIG_TOTAL_ROW_CAP;
+      assert.ok((await navItemsAt(org.orgId, `/retired-${pruned - 1}`)).length === 0, 'the oldest retired rows are reaped');
+      assert.ok((await navItemsAt(org.orgId, `/retired-${pruned}`)).length === 1, 'reaping stops exactly at the cap');
+      assert.ok((await navItemsAt(org.orgId, '/retired-509')).length === 1, 'the newest retired rows survive');
+
+      // Upgrade churn: each new href retires the previous one and the count
+      // stays pinned at the cap; disable/re-enable churn behaves the same.
+      await install('1.0.1', '/churn-2');
+      await install('1.0.2', '/churn-3');
+      assert.equal(await navItemCount(org.orgId), NAV_CONFIG_TOTAL_ROW_CAP);
+      assert.equal((await navItemsAt(org.orgId, '/churn-3')).filter((item) => !item.hidden).length, 1);
+      await disableTestExtension({ orgId: org.orgId, actorId, key: 'churn-app' });
+      const storePath = '../../../web/lib/apps/store.ts';
+      const { setAppStatus } = await import(storePath);
+      await setAppStatus(org.orgId, actorId, 'churn-app', 'installed');
+      assert.ok((await navItemCount(org.orgId)) <= NAV_CONFIG_TOTAL_ROW_CAP);
+      assert.equal((await navItemsAt(org.orgId, '/churn-3')).filter((item) => !item.hidden).length, 1);
+
+      // The reaped rows survive as history in this write's audit snapshot:
+      // retired-0 was present before the first churn install and absent after.
+      const audits = (await db.execute<{ changes: { event?: string; before?: unknown; after?: unknown } }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'org_nav_configs'`)).rows;
+      assert.ok(audits.some((row) =>
+        row.changes.event === 'extension_projection' &&
+        JSON.stringify(row.changes.before).includes('/retired-0') &&
+        !JSON.stringify(row.changes.after).includes('/retired-0')));
     } finally { await dropScratchOrg(org.orgId); }
   });
 });
