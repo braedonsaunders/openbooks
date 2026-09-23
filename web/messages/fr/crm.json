@@ -205,7 +205,9 @@
     "savingSnapshot": "Enregistrement…",
     "snapshotCreated": "Instantané de prévision enregistré",
     "snapshotFailed": "L’instantané n’a pas pu être enregistré.",
-    "quotasRestrictedNotice": "Les quotas sont masqués pour l'accès restreint aux entités."
+    "quotasRestrictedNotice": "Les quotas sont masqués pour l'accès restreint aux entités.",
+    "invalidOwnerTarget": "Le responsable de la prévision doit être un identifiant d'utilisateur ou nul.",
+    "invalidTeamTarget": "L'équipe de prévision doit être un identifiant d'équipe de vente ou nul."
   },
   "setup": {
     "title": "CRM",
