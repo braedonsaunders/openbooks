@@ -376,8 +376,11 @@ export function purchasingSpec(data: PurchasingData): PageSpec {
             title: f('heroTitle'),
             iconKey: 'building',
             hint: f('heroHint'),
-            bodyClassName: 'min-h-0 overflow-y-auto p-0',
-            className: 'min-h-[24rem] lg:col-span-2',
+            // Content-sized like the banking roster hero: no fixed minimum
+            // and no inner scroll, so five rows render five rows instead of
+            // a stretched blank panel pushing the rail's next action down.
+            bodyClassName: 'p-0',
+            className: 'self-start lg:col-span-2',
             blocks: [
               // The empty state lives inside the section component, not as a
               // negated conditional pair of blocks — see ./sections.
