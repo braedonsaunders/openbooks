@@ -56,7 +56,13 @@ export async function resolveItemPrice(input: {
              schedule.quantity_basis,
              case
                when schedule.customer_id = ${input.customerId ?? null} then 1
-               when schedule.customer_id is null and schedule.price_level_id = (select price_level_id from assigned_level) then 2
+               -- The customer's level only prices when the level itself is
+               -- live as of onDate: the join above already encodes the
+               -- activation-history predicate, so a deactivated level joins
+               -- NULL and must not keep precedence 2 on the schedule's bare
+               -- foreign key (PRC15b). level.id is NULL exactly then, and
+               -- NULL never equals the assignment.
+               when schedule.customer_id is null and level.id = (select price_level_id from assigned_level) then 2
                when schedule.customer_id is null and level.is_base then 3
                else 99
              end as precedence
@@ -84,7 +90,7 @@ export async function resolveItemPrice(input: {
          and (schedule.effective_to is null or schedule.effective_to >= ${input.onDate}::date)
          and (
            schedule.customer_id = ${input.customerId ?? null}
-           or (schedule.customer_id is null and schedule.price_level_id = (select price_level_id from assigned_level))
+           or (schedule.customer_id is null and level.id = (select price_level_id from assigned_level))
            or (schedule.customer_id is null and level.is_base)
          )
     )
