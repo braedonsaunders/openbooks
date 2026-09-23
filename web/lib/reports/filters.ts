@@ -1,5 +1,5 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { segmentRegistry } from "../segments";
 import { resolveOrgId } from "../org-scope";
@@ -46,15 +46,39 @@ export function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
   return w;
 }
 
-export async function dimensionOptions(orgId?: string, selectedProjectId?: string) {
+/**
+ * Scope for dimension picker options: the subsidiary ids the report query
+ * itself carries (the caller's authz scope as resolved for the viewed
+ * entity set — every statement/register view builds it the same way).
+ * Undefined/null = unrestricted, no predicate. An explicit (possibly empty)
+ * scope filters every legal-entity-owned dimension to rows stamped with a
+ * visible subsidiary — or with none, since org-wide dimensions stay usable —
+ * and an empty scope matches nothing (fail closed). Without this the picker
+ * offered every subsidiary's departments, locations, classes and projects
+ * to a reader fenced to one legal entity.
+ */
+export type DimensionScope = readonly string[] | ReadonlySet<string> | null | undefined;
+
+function dimensionSubsidiaryFilter(column: SQL, scope: DimensionScope): SQL {
+  if (scope === null || scope === undefined) return sql``;
+  const ids = [...scope];
+  if (ids.length === 0) return sql` and false`;
+  return sql` and (${column} is null or ${column} = any(${`{${ids.join(",")}}`}::uuid[]))`;
+}
+
+export async function dimensionOptions(orgId?: string, selectedProjectId?: string, allowedSubsidiaryIds?: DimensionScope) {
   const resolvedOrgId = await resolveOrgId(orgId);
+  const deptScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
+  const projectScope = dimensionSubsidiaryFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds);
+  const locationScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
+  const classScope = dimensionSubsidiaryFilter(sql`subsidiary_id`, allowedSubsidiaryIds);
   const [depts, projects, locations, classes, registry] = await Promise.all([
-    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`),
+    db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active${deptScope} order by name`),
     db.execute(sql`
       with listed as (
         select p.id, p.name
           from projects p
-         where p.org_id = ${resolvedOrgId}
+         where p.org_id = ${resolvedOrgId}${projectScope}
            and exists (select 1 from journal_lines l where l.org_id = ${resolvedOrgId} and l.project_id = p.id)
          order by p.name
          limit 500
@@ -63,11 +87,11 @@ export async function dimensionOptions(orgId?: string, selectedProjectId?: strin
       union
       select p.id, p.name
         from projects p
-       where p.org_id = ${resolvedOrgId}
+       where p.org_id = ${resolvedOrgId}${projectScope}
          and p.id = ${selectedProjectId ?? null}::uuid
       order by name`),
-    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`),
-    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`),
+    db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active${locationScope} order by name`),
+    db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active${classScope} order by name`),
     segmentRegistry(resolvedOrgId),
   ]);
   return {

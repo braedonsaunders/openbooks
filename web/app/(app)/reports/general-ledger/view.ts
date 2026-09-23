@@ -162,10 +162,10 @@ export async function loadGeneralLedger(
           dims,
           bookId: selectedBook?.id,
         }),
-        dimensionOptions(undefined, dims.projectId),
+        dimensionOptions(undefined, dims.projectId, dims.subsidiaryIds),
         orgInfo(),
       ])
-    : [null, await dimensionOptions(undefined, dims.projectId), await orgInfo()]
+    : [null, await dimensionOptions(undefined, dims.projectId, dims.subsidiaryIds), await orgInfo()]
   const m = (v: string) => formatMoney(v, { currency: org?.base_currency })
   const openingTo = new Date(`${period.from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)

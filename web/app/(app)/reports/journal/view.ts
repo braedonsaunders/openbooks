@@ -147,7 +147,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
   const [journal, opts, org] = subView
     ? await Promise.all([
         journalReport(period.from, period.to, { dims, bookId: selectedBook?.id }),
-        dimensionOptions(),
+        dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])
     : [null, await dimensionOptions(), await orgInfo()]

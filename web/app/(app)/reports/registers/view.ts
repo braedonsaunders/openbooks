@@ -155,7 +155,7 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
   const [reg, opts, org] = subView
     ? await Promise.all([
         partyRegister(side, { bookId: selectedBook.id, from: period.from, to: period.to, dims }),
-        dimensionOptions(),
+        dimensionOptions(undefined, undefined, dims.subsidiaryIds),
         orgInfo(),
       ])
     : [null, await dimensionOptions(), await orgInfo()]

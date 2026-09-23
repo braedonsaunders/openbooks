@@ -82,7 +82,7 @@ export async function loadTrialBalance(
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
   const [opts, org, branding, startMonth] = await Promise.all([
-    dimensionOptions(), orgInfo(), orgBranding(), fiscalStartMonth(),
+    dimensionOptions(undefined, undefined, dims.subsidiaryIds), orgInfo(), orgBranding(), fiscalStartMonth(),
   ])
   const fyStart = fiscalYearStartOn(date, startMonth)
   const priorEnd = priorFiscalYearEndOn(date, startMonth)
