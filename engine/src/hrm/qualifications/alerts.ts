@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "../../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { requireHrmCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
@@ -82,13 +82,18 @@ export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]
 }
 
 /**
- * The daily scan entrypoint (worker duty). One bounded transaction per
- * eligible org: the advisory lock inside serializes same-org scanners
- * across replicas, and the org's alerts + notices commit together — a
- * failed org rolls back without touching the others.
+ * The daily scan entrypoint (worker duty). Org enumeration runs under a
+ * bypass context — and ONLY the enumeration: orgs has FORCE RLS, so on
+ * the safe runtime role a tenant-scoped select returns zero orgs and the
+ * scan would report success having scanned nothing. Each org's work then
+ * runs in its own tenant transaction below, so per-org reads and writes
+ * stay RLS-scoped. One bounded transaction per eligible org: the
+ * advisory lock inside serializes same-org scanners across replicas,
+ * and the org's alerts + notices commit together — a failed org rolls
+ * back without touching the others.
  */
 export async function runQualificationAlertScan(now: Date): Promise<AlertScanSummary[]> {
-  const orgIds = await listAlertEligibleOrgs(db);
+  const orgIds = await withBypassContext(() => listAlertEligibleOrgs(db));
   const summaries: AlertScanSummary[] = [];
   for (const orgId of orgIds) {
     summaries.push(await scanOneOrg(orgId, now));

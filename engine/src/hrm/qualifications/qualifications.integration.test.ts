@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import {
   createScratchOrg,
@@ -835,6 +835,35 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
       `)).rows[0]?.n,
       String(noticeCount),
     );
+  });
+});
+
+test("alert scan enumerates orgs past RLS: a constrained caller still scans", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "RLS Hand");
+    const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
+    const today = await businessToday(h.org.orgId);
+    const q = await recordQualification(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
+      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 30),
+    });
+    await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
+    // A second org with the alerts chain OFF is the constrained vantage
+    // point: on the safe runtime role a tenant-scoped org enumeration
+    // from inside it sees zero eligible orgs.
+    const other = await createScratchOrg();
+    try {
+      const summaries = await withOrgContext(other.orgId, () => runQualificationAlertScan(new Date()));
+      const mine = summaries.find((s) => s.orgId === h.org.orgId);
+      assert.ok(mine, "the scan must reach the eligible org from a constrained tenant context");
+      assert.equal(mine.alertsWritten, 1);
+      assert.ok(!summaries.some((s) => s.orgId === other.orgId), "the ineligible org is never scanned");
+    } finally {
+      await dropScratchOrg(other.orgId);
+    }
+    // Proof read back from storage, and the per-org work stayed
+    // tenant-scoped: exactly this org's alert exists.
+    assert.equal((await listAlerts(db, { orgId: h.org.orgId, actorId: h.adminId })).length, 1);
   });
 });
 
