@@ -9,7 +9,8 @@ import { controlDeps } from "../../engine/src/ledger/document-service.ts";
 import { resolveItemRate } from './item-rates'
 import type { RatePrice } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
 import { canonicalDecimal } from './exact-decimal'
-import { isFeatureEnabled } from './features'
+import { acquireFeatureGateLock, isFeatureEnabled } from './features'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from './list-params'
 
@@ -149,6 +150,13 @@ export async function createProjectCharge(
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await inDbTransaction(async (tx) => {
+    // Fenced recheck inside the write transaction: the entry check above may
+    // be stale by the time this write lands, and a Projects disable racing
+    // this insert must refuse one side or the other.
+    await acquireFeatureGateLock(orgId, tx)
+    if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
+      throw new ChargeError('Projects feature is disabled')
+    }
     const proj = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select id, subsidiary_id from projects where id = ${input.projectId} and org_id = ${orgId}
     `))
