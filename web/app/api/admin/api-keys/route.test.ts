@@ -710,6 +710,39 @@ test('an empty editor lens grants no entity scope, an unrestricted one grants an
   assert.equal(allowed.status, 200)
 })
 
+test('create rejects falsy non-null expiresAt impostors instead of minting a non-expiring key', async () => {
+  for (const expiresAt of [0, false, '', 1234567890, true, {}]) {
+    reset()
+
+    const response = await post({ name: 'expiry-confused key', scopes: ['gl.read'], expiresAt })
+
+    assert.equal(response.status, 400, `expiresAt=${JSON.stringify(expiresAt)} must be refused`)
+    assert.match((await response.json()).error, /expiresAt must be an ISO date string or null/)
+    assert.deepEqual(committedWrites(), [], 'a type-confused expiry never reaches storage')
+  }
+})
+
+test('create accepts an explicit null expiry and a future date, and refuses past or malformed dates', async () => {
+  reset()
+  const explicitNull = await post({ name: 'non-expiring key', scopes: ['gl.read'], expiresAt: null })
+  assert.equal(explicitNull.status, 201)
+
+  reset()
+  const future = await post({
+    name: 'expiring key',
+    scopes: ['gl.read'],
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+  })
+  assert.equal(future.status, 201)
+
+  for (const expiresAt of ['not-a-date', new Date(Date.now() - 1000).toISOString()]) {
+    reset()
+    const response = await post({ name: 'bad expiry key', scopes: ['gl.read'], expiresAt })
+    assert.equal(response.status, 400, `expiresAt=${expiresAt} must be refused`)
+    assert.deepEqual(committedWrites(), [], 'a bad expiry never reaches storage')
+  }
+})
+
 test('revocation keeps the stored fingerprint stable while destroying the credential', async () => {
   reset()
   state.keyRow = { id: KEY_ID, name: 'leaked key', key_prefix: 'ob_live_deadbee', is_active: true }
