@@ -19,6 +19,8 @@ import { enterOrg } from "../../../../lib/sandbox-session";
 export type PeriodOption = {
   id: string;
   name: string;
+  endsOn: string;
+  calendarName: string;
 };
 
 export interface SandboxRow {
@@ -95,7 +97,7 @@ export function SandboxManager({
                 <option value="">Choose a period…</option>
                 {periods.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name}
+                    {p.name} · ends {p.endsOn} · {p.calendarName}
                   </option>
                 ))}
               </Select>
@@ -120,7 +122,8 @@ export function SandboxManager({
         </div>
         {tier === "as_of" && (
           <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            The clone includes ledger entries in the chosen period and every period before it.
+            The clone includes ledger entries posted on or before the chosen period&apos;s end date,
+            whatever calendar their period belongs to.
           </p>
         )}
       </Card>

@@ -227,19 +227,6 @@ export async function rebaseSandboxControlAccounts(args: {
   return rebased;
 }
 
-async function asOfPeriodOf(
-  periodId: string | null | undefined,
-  orgId: string,
-): Promise<{ fiscalYear: number; periodNumber: number } | null> {
-  if (!periodId) return null;
-  const res = await db.execute<{ fiscal_year: number; period_number: number }>(sql`
-    select fiscal_year, period_number from accounting_periods
-     where id = ${periodId} and org_id = ${orgId}`);
-  const r = res.rows[0];
-  if (!r) throw new Error("as-of cutoff period must belong to the production organization");
-  return { fiscalYear: r.fiscal_year, periodNumber: r.period_number };
-}
-
 /** Delete a sandbox's copied rows for `tables` (org tables + org-less children).
  * Runs unscoped with the kernel-migration GUC so posted rows can be removed. */
 async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promise<void> {
@@ -330,13 +317,15 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const sandboxOrgId = randomUUID();
   const seed = randomUUID();
 
+  if (tier === "as_of" && !input.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
+  // Only the cutoff period ID crosses into the clone: runClone resolves its
+  // calendar and end date inside the copy snapshot, so no outer lookup can go
+  // stale between here and the copy.
   const prod = (await db.execute(sql`
     select name, legal_name, base_currency, country, tax_ids, settings
       from orgs where id = ${input.productionOrgId}`));
   const p = prod.rows[0];
   if (!p) throw new Error(`production org not found: ${input.productionOrgId}`);
-  const asOfPeriod = await asOfPeriodOf(input.asOfPeriodId, input.productionOrgId);
-  if (tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
 
   // The sandbox org row (orgs has no org_id, so it isn't RLS-scoped). The org
   // row is not cloned, so masking policies never see it: a masked sandbox
@@ -374,7 +363,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       seed,
       tier,
       masked,
-      asOfPeriod,
+      asOfPeriodId: input.asOfPeriodId ?? null,
     });
     // S3-backed attachments live outside the row-copy transaction: copy the
     // objects onto the rebased keys now that the rows exist. A copy failure
@@ -506,8 +495,10 @@ export async function refreshSandbox(
       if (s.masked) await seedDefaultMaskingPolicies(s.production_org_id);
 
       await inRefreshTransaction(async () => {
-        const asOfPeriod = await asOfPeriodOf(s.as_of_period_id, s.production_org_id);
-        if (s.tier === "as_of" && !asOfPeriod) throw new Error("as-of sandbox requires a cutoff period");
+        if (s.tier === "as_of" && !s.as_of_period_id) throw new Error("as-of sandbox requires a cutoff period");
+        // Only the cutoff period ID crosses into the clone: runClone resolves
+        // its calendar and end date inside the shared snapshot transaction,
+        // so the refresh resolves exactly what it copies.
         await wipeSandbox(s.org_id, target);
 
         // Re-copy only the target tables (deterministic ids → preserved
@@ -518,7 +509,7 @@ export async function refreshSandbox(
           seed: sandboxSeed,
           tier: s.tier,
           masked: s.masked,
-          asOfPeriod,
+          asOfPeriodId: s.as_of_period_id,
           onlyTables: target,
         });
         await rebaseSandboxControlAccounts({

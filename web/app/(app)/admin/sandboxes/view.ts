@@ -44,11 +44,16 @@ export async function loadSandboxes(): Promise<SandboxesData> {
   // Always manage sandboxes against the home production org.
   const rows = (await listSandboxes(authz.user.productionOrgId)) as unknown as SandboxRow[]
 
-  // Accounting periods for the as-of clone cutoff (most recent first).
+  // Accounting periods for the as-of clone cutoff (most recently ending
+  // first). The cutoff is a date, not an ordinal: each option carries its end
+  // date and calendar so the operator picks the close they mean even when two
+  // active calendars give the same fiscal year/period number different dates.
   const periodsRes = (await db.execute<PeriodOption>(sql`
-    select id, name from accounting_periods
-     where org_id = ${authz.user.productionOrgId}
-     order by fiscal_year desc, period_number desc
+    select p.id, p.name, p.ends_on::text as "endsOn", fc.name as "calendarName"
+      from accounting_periods p
+      join fiscal_calendars fc on fc.id = p.fiscal_calendar_id
+     where p.org_id = ${authz.user.productionOrgId}
+     order by p.ends_on desc, p.name
      limit 240`))
 
   return {

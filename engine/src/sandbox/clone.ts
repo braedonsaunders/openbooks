@@ -22,17 +22,89 @@ export interface CloneOptions {
   seed: string;
   tier: SandboxTier;
   masked: boolean;
-  /** for tier='as_of': trim the GL to entries in periods closing at/before this. */
-  asOfPeriod?: { fiscalYear: number; periodNumber: number } | null;
+  /** for tier='as_of': the selected cutoff period id. Only the id crosses the
+   * transaction boundary: the period's calendar and end date are resolved
+   * INSIDE the clone's snapshot transaction (see resolveAsOfCutoff), so a
+   * concurrent fiscal-period derivation can never strand the copy filter on
+   * a stale ordinal while the copied period rows carry new labels. */
+  asOfPeriodId?: string | null;
   /** Restrict the copy to these tables (used by refresh to skip the preserved
    * customization layer). Undefined = copy the tier's full set. */
   onlyTables?: Set<string>;
+}
+
+/**
+ * An as-of cutoff resolved inside the clone snapshot: the selected period's
+ * end date is the cutoff instant, qualified by its calendar for display.
+ *
+ * Policy: an entry is included iff its posting_date is on or before the
+ * cutoff end date, whatever calendar its period belongs to. Posting date —
+ * not the period ordinal — is what every other as-of feature cuts on (trial
+ * balance, aging, open items and statements all read `posting_date <= asOf`),
+ * so the sandbox's books equal production's books-as-of that date exactly.
+ * The period's only role is to supply the cutoff instant and the
+ * date-and-calendar label the UI and the refusal carry.
+ */
+export interface AsOfCutoff {
+  periodId: string;
+  periodName: string;
+  endsOn: string;
+  fiscalYear: number;
+  periodNumber: number;
+  calendarId: string;
+  calendarName: string;
 }
 
 export interface CloneResult {
   tablesCopied: number;
   rowsCopied: number;
   perTable: { table: string; rows: number }[];
+  /** The cutoff used, when tier='as_of'. */
+  asOfCutoff: Pick<AsOfCutoff, "periodId" | "periodName" | "endsOn" | "calendarName"> | null;
+}
+
+/** A cutoff end date comes out of our own snapshot as an ISO civil date. */
+function assertCutoffDate(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`as-of cutoff end date is not a civil date: ${value}`);
+  }
+  return value;
+}
+
+/**
+ * Resolve the selected cutoff period inside the caller's snapshot
+ * transaction: first statement of the clone unit, so the identity (calendar
+ * + end date) the preflight and the copy filter share is the snapshot's,
+ * never an outer lookup's. Scoped to the production org — a foreign or
+ * missing period id is a refusal, not an empty cutoff.
+ */
+export async function resolveAsOfCutoff(
+  productionOrgId: string,
+  periodId: string,
+): Promise<AsOfCutoff> {
+  const res = await db.execute<{
+    id: string; name: string; ends_on: string;
+    fiscal_year: number; period_number: number;
+    calendar_id: string; calendar_name: string;
+  }>(sql`
+    select p.id, p.name, p.ends_on::text as ends_on,
+           p.fiscal_year, p.period_number,
+           p.fiscal_calendar_id as calendar_id, fc.name as calendar_name
+      from accounting_periods p
+      join fiscal_calendars fc
+        on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+     where p.id = ${periodId} and p.org_id = ${productionOrgId}`);
+  const row = res.rows[0];
+  if (!row) throw new Error("as-of cutoff period must belong to the production organization");
+  return {
+    periodId: row.id,
+    periodName: row.name,
+    endsOn: assertCutoffDate(row.ends_on),
+    fiscalYear: row.fiscal_year,
+    periodNumber: row.period_number,
+    calendarId: row.calendar_id,
+    calendarName: row.calendar_name,
+  };
 }
 
 /** The user-built customization layer — the only tables a 'dev' sandbox copies,
@@ -74,6 +146,7 @@ function generateCopySql(
   rebaseSet: Set<string>,
   retainedTenantTables: Set<string>,
   masking: Map<string, Map<string, MaskTransform>>,
+  cutoff: AsOfCutoff | null,
 ): string | null {
   const seed = assertUuid(opts.seed);
   const sbx = assertUuid(opts.sandboxOrgId);
@@ -132,14 +205,16 @@ function generateCopySql(
     return null; // org-less, no known parent filter — skip
   }
 
-  // as_of: trim the general ledger to periods closing at/before the cutoff.
-  if (opts.tier === "as_of" && opts.asOfPeriod) {
-    const { fiscalYear: y, periodNumber: n } = opts.asOfPeriod;
-    const periodPred = `(fiscal_year < ${y} or (fiscal_year = ${y} and period_number <= ${n}))`;
+  // as_of: trim the general ledger to entries posted on or before the cutoff
+  // end date, whatever calendar their period belongs to. The date is the
+  // in-snapshot cutoff resolved by runClone and asserted to ISO shape there,
+  // so this interpolation is provably a value, not a statement.
+  if (opts.tier === "as_of" && cutoff) {
+    const endsOn = cutoff.endsOn;
     if (t.name === "journal_entries") {
-      where += ` and period_id in (select id from accounting_periods where org_id = '${prod}' and ${periodPred})`;
+      where += ` and posting_date <= '${endsOn}'`;
     } else if (t.name === "journal_lines") {
-      where += ` and entry_id in (select je.id from journal_entries je join accounting_periods p on p.id = je.period_id where p.org_id = '${prod}' and ${periodPred})`;
+      where += ` and entry_id in (select je.id from journal_entries je where je.org_id = '${prod}' and je.posting_date <= '${endsOn}')`;
     }
   }
 
@@ -190,30 +265,39 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   // deferred FK (or worse, commits FK-consistent but incomplete). The clone
   // only writes sandbox rows, so the pinned snapshot cannot conflict with
   // concurrent production writers.
-  await withMaintenanceTransaction(null, async () => {
+  const { cutoff } = await withMaintenanceTransaction(null, async () => {
+    let cutoff: AsOfCutoff | null = null;
+    // Resolve the as-of cutoff FIRST: under runClone's own REPEATABLE READ
+    // transaction this statement pins the snapshot; under a refresh reuse it
+    // joins the outer unit's snapshot. Either way the calendar and end date
+    // the preflight and the copy filter share are the snapshot's own — a
+    // concurrent period relabel can neither strand the filter on a stale
+    // ordinal nor slip between the refusal check and the copy.
+    if (opts.tier === "as_of") {
+      if (!opts.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
+      cutoff = await resolveAsOfCutoff(opts.productionOrgId, opts.asOfPeriodId);
+    }
     // As-of trims journal entries past the cutoff but copies every document,
     // so a post-cutoff posted entry would leave its documents pointing at an
     // entry that was never copied — a deferred-FK failure at commit. Refuse up
     // front with an actionable error instead. The predicate mirrors the copy
-    // filter exactly (entries whose period is not in the cutoff set, including
-    // a null period, are the ones the copy would drop).
-    if (opts.tier === "as_of" && opts.asOfPeriod) {
-      const { fiscalYear: y, periodNumber: n } = opts.asOfPeriod;
+    // filter exactly: posted/reversed entries with posting_date past the
+    // cutoff end date are precisely the posted entries the copy drops
+    // (posting_date is NOT NULL, so there is no null edge to diverge on).
+    if (opts.tier === "as_of" && cutoff) {
       const beyond = (await db.execute<{ count: string }>(sql`
         select count(*)::text as count
           from journal_entries je
          where je.org_id = ${opts.productionOrgId}
            and je.status in ('posted', 'reversed')
-           and not (je.period_id in (
-             select p.id from accounting_periods p
-              where p.org_id = ${opts.productionOrgId}
-                and (p.fiscal_year < ${y} or (p.fiscal_year = ${y} and p.period_number <= ${n}))
-           ))`)).rows[0]?.count;
+           and je.posting_date > ${cutoff.endsOn}`)).rows[0]?.count;
       if (beyond !== "0") {
         throw new Error(
-          `as-of sandbox to fiscal ${y} period ${n} excludes ${beyond ?? "?"} posted entries in later periods; ` +
+          `as-of sandbox to period "${cutoff.periodName}" ending ${cutoff.endsOn} ` +
+            `(calendar "${cutoff.calendarName}") excludes ${beyond ?? "?"} posted entries ` +
+            `dated after ${cutoff.endsOn}; ` +
             `their documents would reference entries that were never copied — ` +
-            `choose a cutoff at or after the latest posted period, or use a full tier`,
+            `choose a cutoff ending on or after the latest posted date, or use a full tier`,
         );
       }
     }
@@ -234,7 +318,7 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // tenant transaction never holds.
     await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
     for (const t of selected) {
-      const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking);
+      const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
       if (!stmt) continue;
       const res = (await db.execute(sql.raw(stmt)));
       const n = res.rowCount ?? 0;
@@ -267,9 +351,22 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
           authority: "openbooks.clone",
           scope: "INSERT of posted/reversed history into closed periods only; UPDATE and DELETE of posted history stay blocked",
         })}::jsonb, null)`);
+    return { cutoff };
   }, { isolationLevel: "REPEATABLE READ" });
 
-  return { tablesCopied: perTable.length, rowsCopied, perTable };
+  return {
+    tablesCopied: perTable.length,
+    rowsCopied,
+    perTable,
+    asOfCutoff: cutoff
+      ? {
+          periodId: cutoff.periodId,
+          periodName: cutoff.periodName,
+          endsOn: cutoff.endsOn,
+          calendarName: cutoff.calendarName,
+        }
+      : null,
+  };
 }
 
 /**

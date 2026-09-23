@@ -230,7 +230,9 @@ test("an as-of sandbox refuses posted activity after its cutoff instead of faili
 
     await assert.rejects(
       createSandbox({ productionOrgId: org.orgId, name: sandboxName, tier: "as_of", masked: false, asOfPeriodId: org.periodId }),
-      /later periods/,
+      // The refusal names the cutoff by date and calendar (not by ordinal)
+      // and the remedy that exists: a later cutoff or a full tier.
+      /ending 2026-07-31.*calendar "Default".*dated after 2026-07-31.*or use a full tier/s,
     );
   } finally {
     const failed = (await db.execute<{ id: string }>(sql`
