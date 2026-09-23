@@ -221,12 +221,28 @@ const FIELD = (label: string, value: string | null | undefined) => `
     <td>${value ? esc(value) : '<span class="blank"></span>'}</td>
   </tr>`
 
+export interface LienWaiverPrintOptions {
+  /**
+   * Org-local date the live rows behind this print were read. Set ONLY for a
+   * waiver executed before the executed-snapshot freeze existed: its print
+   * re-reads today's mutable party/project rows, so it must never be mistaken
+   * for the document as signed. The banner names the reading date.
+   */
+  legacyUnverifiedAsOf?: string | null
+}
+
 /**
  * The printable body. Renders the same document whether the waiver is still a
  * blank to be signed or already executed: an unsigned waiver prints rule lines
  * to sign on, an executed one prints the captured signature and its evidence.
+ * A legacy executed waiver (no frozen image) prints the live rows under a
+ * prominent banner naming them as current records, never as the release.
  */
-export function renderLienWaiverBody(data: LienWaiverFormData, orgName?: string | null): string {
+export function renderLienWaiverBody(
+  data: LienWaiverFormData,
+  orgName?: string | null,
+  opts?: LienWaiverPrintOptions,
+): string {
   const copy = waiverTypeCopy(data.waiverType)
   const executed = Boolean(data.signedAt && data.signedByName)
   return `
@@ -254,7 +270,11 @@ export function renderLienWaiverBody(data: LienWaiverFormData, orgName?: string 
   .notary { border: 1px solid var(--rule); padding: 10px; margin-top: 18px; font-size: 9pt; color: var(--muted); }
   .evidence { margin-top: 12px; font-size: 8pt; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .footnote { margin-top: 16px; font-size: 8pt; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 6px; }
+  .legacy-notice { border: 3px double var(--ink); padding: 10px 12px; margin-bottom: 14px; }
+  .legacy-notice strong { display: block; text-transform: uppercase; letter-spacing: 0.05em; font-size: 10.5pt; margin-bottom: 4px; }
+  .legacy-notice p { margin: 0; font-size: 9.5pt; }
 </style>
+${opts?.legacyUnverifiedAsOf ? `<div class="legacy-notice"><strong>Legacy waiver — executed evidence not captured at signing</strong><p>The names, amounts and dates below reflect current records as of ${esc(opts.legacyUnverifiedAsOf)}, not the document as signed. Rely on the scanned executed copy attached to this waiver; void and reissue it where the record cannot be verified.</p></div>` : ''}
 <div class="masthead">
   <h1>${esc(copy.title)}</h1>
   <div class="meta">
