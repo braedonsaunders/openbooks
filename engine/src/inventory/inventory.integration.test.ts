@@ -1619,10 +1619,17 @@ test("both inventory HTTP routes thread every monetary action through the idempo
   }
   assert.match(actionsRoute, /executeIdempotentInventoryAction/);
   assert.match(actionsRoute, /idempotencyKey: body\.idempotencyKey/);
+  // IN8: one retry identity per intended action — minted once, reused across
+  // transport-uncertain retries, rotated only after success or an input change.
   assert.match(
     actionDrawer,
-    /body:\s*JSON\.stringify\(\{[\s\S]*idempotencyKey:\s*crypto\.randomUUID\(\)/,
-    "the inventory action drawer mints a key for every posting",
+    /retryKeyRef\.current = crypto\.randomUUID\(\)/,
+    "the inventory action drawer mints a key for every intended posting",
+  );
+  assert.match(
+    actionDrawer,
+    /body:\s*JSON\.stringify\(\{[\s\S]*idempotencyKey,/,
+    "the inventory action drawer sends that retry key with the posting",
   );
   // Key reuse with different input maps to 409, ahead of InventoryError's 422.
   assert.match(actionsRoute, /instanceof InventoryIdempotencyConflictError[\s\S]*?\? 409/);
