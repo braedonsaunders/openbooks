@@ -4,8 +4,11 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { statementBookExpr } from "../../../../lib/gl-summary";
+import { flowRates, presentationCurrency } from "../../../../lib/fx-presentation";
 import { isUuid } from "../../../../lib/list-params";
+import { compareDecimal } from "../../../../lib/exact-decimal";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { serializeLedgerDecimal } from "./ledger-decimal";
 import type { SQL } from "drizzle-orm";
 
@@ -23,6 +26,49 @@ function joinedSubsidiaryScope(id: SQL, sub: SQL, allowed: ReadonlySet<string> |
   const ids = [...allowed];
   if (ids.length === 0) return sql` and false`;
   return sql`and (${id} is null or ${sub} = any(${`{${ids.join(",")}}`}::uuid[]))`;
+}
+
+/**
+ * Translate exact functional legs to the presentation basis at each leg's
+ * own date through the flow path. A leg without rate coverage is a named
+ * 422 refusal — amounts in different functionals must never be summed raw.
+ */
+async function translateLegs(
+  orgId: string,
+  legs: Array<{ func: unknown; date: unknown; amount: unknown }>,
+): Promise<
+  | { ok: true; amounts: string[]; currency: string }
+  | { ok: false; response: NextResponse }
+> {
+  const asFunc = (func: unknown): string | null => (typeof func === "string" ? func : null);
+  const asDate = (date: unknown): string => String(date ?? "").slice(0, 10);
+  const ratesResult = await flowRates(orgId, legs.map((l) => ({ func: asFunc(l.func), date: asDate(l.date) }))).then(
+    (rates) => ({ ok: true as const, rates }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  if (!ratesResult.ok) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "missing exchange rate", message: ratesResult.error instanceof Error ? ratesResult.error.message : String(ratesResult.error) },
+        { status: 422 },
+      ),
+    };
+  }
+  const rates = ratesResult.rates;
+  try {
+    const amounts = legs.map((l) => mulDecimal(String(l.amount ?? "0"), rates.rateAt(asFunc(l.func), asDate(l.date))));
+    const currency = rates.base || (await presentationCurrency(orgId));
+    return { ok: true, amounts, currency };
+  } catch (error) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
+        { status: 422 },
+      ),
+    };
+  }
 }
 
 /**
@@ -74,16 +120,23 @@ export async function GET(req: Request) {
   const liveDoc = sql`and (d.id is null or d.voided_at is null)`;
   const postedDoc = sql`and d.status = 'posted'`;
 
+  // Journal legs are stamped in their subsidiary's functional currency and
+  // translate to presentation at the posting date through the flow path, as
+  // the spend-velocity aggregate does — the same never-mix rule as party mode.
+  const lineJoins = sql`
+    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id`;
   if (account) {
     const [detail, monthly, byParty, agg] = await Promise.all([
       (db.execute(sql`
         select e.posting_date::text as date, e.id as entry_id, l.amount,
+          sub.base_currency as func,
           d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
           coalesce(p.display_name, '') as party_name,
           coalesce(l.memo, e.memo, '') as memo
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+        ${lineJoins}
         left join parties p on p.id = l.party_id and p.org_id = l.org_id
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
@@ -96,10 +149,45 @@ export async function GET(req: Request) {
         limit 1000
       `)),
       (db.execute(sql`
-        select to_char(e.posting_date, 'YYYY-MM') as month, sum(l.amount) as amount
+        select to_char(e.posting_date, 'YYYY-MM') as month, sub.base_currency as func,
+          sum(l.amount) as amount, max(e.posting_date)::text as late
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+        ${lineJoins}
+        where l.org_id = ${user.orgId} and l.account_id = ${account}
+          and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
+          ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
+        group by 1, 2 order by 1, 2
+      `)),
+      (db.execute(sql`
+        select coalesce(p.display_name, 'No party') as name, sub.base_currency as func,
+          sum(l.amount) as amount, count(*) as n, max(e.posting_date)::text as late
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+        ${lineJoins}
+        left join parties p on p.id = l.party_id and p.org_id = l.org_id
+        where l.org_id = ${user.orgId} and l.account_id = ${account}
+          and e.posting_date >= ${from} and e.posting_date <= ${to}
+          ${lineScope}
+          ${entryScope}
+          ${docJoinScope}
+          ${postedEntry}
+          ${liveDoc}
+        group by 1, 2 order by 1, 2
+      `)),
+      (db.execute(sql`
+        select sub.base_currency as func, count(*) as n, coalesce(sum(l.amount), 0) as amount,
+          max(e.posting_date)::text as late
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
+        ${lineJoins}
         where l.org_id = ${user.orgId} and l.account_id = ${account}
           and e.posting_date >= ${from} and e.posting_date <= ${to}
           ${lineScope}
@@ -109,41 +197,52 @@ export async function GET(req: Request) {
           ${liveDoc}
         group by 1 order by 1
       `)),
-      (db.execute(sql`
-        select coalesce(p.display_name, 'No party') as name, sum(l.amount) as amount, count(*) as n
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
-        left join parties p on p.id = l.party_id and p.org_id = l.org_id
-        where l.org_id = ${user.orgId} and l.account_id = ${account}
-          and e.posting_date >= ${from} and e.posting_date <= ${to}
-          ${lineScope}
-          ${entryScope}
-          ${docJoinScope}
-          ${postedEntry}
-          ${liveDoc}
-        group by 1 order by abs(sum(l.amount)) desc
-        limit 15
-      `)),
-      (db.execute(sql`
-        select count(*) as n, coalesce(sum(l.amount), 0) as total
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-        left join documents d on d.id = e.source_document_id and d.org_id = l.org_id
-        where l.org_id = ${user.orgId} and l.account_id = ${account}
-          and e.posting_date >= ${from} and e.posting_date <= ${to}
-          ${lineScope}
-          ${entryScope}
-          ${docJoinScope}
-          ${postedEntry}
-          ${liveDoc}
-      `)),
     ]);
+    const translated = await translateLegs(
+      user.orgId,
+      [
+        ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.amount })),
+        ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+        ...byParty.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+        ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ],
+    );
+    if (!translated.ok) return translated.response;
+    const { amounts, currency } = translated;
+    let cursor = 0;
+    const take = (n: number) => amounts.slice(cursor, (cursor += n));
+    const detailAmounts = take(detail.rows.length);
+    const monthlyTranslated = take(monthly.rows.length);
+    const partyTranslated = take(byParty.rows.length);
+    const aggTranslated = take(agg.rows.length);
+    const monthlyMerged = new Map<string, string>();
+    monthly.rows.forEach((r, i) => {
+      const month = String(r.month);
+      monthlyMerged.set(month, add(monthlyMerged.get(month) ?? "0", monthlyTranslated[i] ?? "0"));
+    });
+    const partyCounts = new Map<string, number>();
+    const partyMerged = new Map<string, string>();
+    byParty.rows.forEach((r, i) => {
+      const name = String(r.name);
+      partyCounts.set(name, (partyCounts.get(name) ?? 0) + Number(r.n ?? 0));
+      partyMerged.set(name, add(partyMerged.get(name) ?? "0", partyTranslated[i] ?? "0"));
+    });
+    const partyBreakdown = [...partyMerged.entries()]
+      .map(([name, amount]) => ({ name, amount, count: partyCounts.get(name) ?? 0 }))
+      .sort((a, b) => compareDecimal(b.amount, a.amount))
+      .slice(0, 15);
+    let total = "0";
+    let count = 0;
+    agg.rows.forEach((r, i) => {
+      total = add(total, aggTranslated[i] ?? "0");
+      count += Number(r.n ?? 0);
+    });
     return NextResponse.json({
       mode: "account",
-      total: serializeLedgerDecimal(agg.rows[0]?.total),
-      count: Number(agg.rows[0]?.n ?? 0),
-      entries: ((detail.rows)).map((r) => ({
+      currency,
+      total: serializeLedgerDecimal(total),
+      count,
+      entries: ((detail.rows)).map((r, i) => ({
         date: r.date,
         entryId: r.entry_id,
         docId: r.doc_id,
@@ -151,65 +250,127 @@ export async function GET(req: Request) {
         docNumber: r.doc_number ?? "",
         label: r.party_name || r.doc_number || "Journal",
         memo: r.memo,
-        amount: serializeLedgerDecimal(r.amount),
+        amount: serializeLedgerDecimal(detailAmounts[i] ?? "0"),
       })),
-      monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: serializeLedgerDecimal(r.amount) })),
-      breakdown: ((byParty.rows)).map((r) => ({ name: r.name, amount: serializeLedgerDecimal(r.amount), count: Number(r.n) })),
+      monthly: [...monthlyMerged.entries()]
+        .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+        .map(([month, amount]) => ({ month, amount: serializeLedgerDecimal(amount) })),
+      breakdown: partyBreakdown.map((p) => ({ name: p.name, amount: serializeLedgerDecimal(p.amount), count: p.count })),
     });
   }
 
+  // Document money reaches the drill in its native currency and translates to
+  // the presentation basis exactly as the customer aggregate does: first leg
+  // abs(total) * fx_rate at the document's own rate, second leg through the
+  // flow path at the document date. Summing native totals across currencies
+  // reads CAD 100 + USD 100 as "CAD 200" — translated legs never mix.
+  const docJoins = sql`
+    left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+    join orgs o on o.id = d.org_id`;
+  const docFunc = sql`coalesce(sub.base_currency, o.base_currency)`;
+  const docLeg = sql`round(abs(d.total) * d.fx_rate, 4)`;
+  const docDate = sql`coalesce(d.document_date, d.posting_date)`;
   const [detail, monthly, byKind, agg] = await Promise.all([
     (db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as date,
+      select ${docDate}::text as date,
         d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
-        e.id as entry_id, abs(d.total) as amount, d.status,
+        e.id as entry_id, ${docLeg} as func_amount, ${docFunc} as func,
         coalesce(d.memo, '') as memo
       from documents d
       left join journal_entries e on e.source_document_id = d.id and e.org_id = d.org_id
+      ${docJoins}
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
+        and ${docDate} >= ${from}
+        and ${docDate} <= ${to}
         ${docScope}
         ${srcEntryScope}
         ${postedDoc}
-      order by coalesce(d.document_date, d.posting_date) desc, abs(d.total) desc
+      order by ${docDate} desc, ${docLeg} desc
       limit 1000
     `)),
     (db.execute(sql`
-      select to_char(coalesce(d.document_date, d.posting_date), 'YYYY-MM') as month, sum(abs(d.total)) as amount
+      select to_char(${docDate}, 'YYYY-MM') as month, ${docFunc} as func,
+        sum(${docLeg}) as amount, max(${docDate})::text as late
       from documents d
+      ${docJoins}
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
+        and ${docDate} >= ${from}
+        and ${docDate} <= ${to}
+        ${docScope}
+        ${postedDoc}
+      group by 1, 2 order by 1, 2
+    `)),
+    (db.execute(sql`
+      select d.kind as name, ${docFunc} as func, sum(${docLeg}) as amount,
+        count(*) as n, max(${docDate})::text as late
+      from documents d
+      ${docJoins}
+      where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
+        and ${docDate} >= ${from}
+        and ${docDate} <= ${to}
+        ${docScope}
+        ${postedDoc}
+      group by 1, 2 order by 1, 2
+    `)),
+    (db.execute(sql`
+      select ${docFunc} as func, count(*) as n, coalesce(sum(${docLeg}), 0) as amount,
+        max(${docDate})::text as late
+      from documents d
+      ${docJoins}
+      where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
+        and ${docDate} >= ${from}
+        and ${docDate} <= ${to}
         ${docScope}
         ${postedDoc}
       group by 1 order by 1
     `)),
-    (db.execute(sql`
-      select d.kind as name, sum(abs(d.total)) as amount, count(*) as n
-      from documents d
-      where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
-        ${docScope}
-        ${postedDoc}
-      group by 1 order by sum(abs(d.total)) desc
-    `)),
-    (db.execute(sql`
-      select count(*) as n, coalesce(sum(abs(d.total)), 0) as total
-      from documents d
-      where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
-        ${docScope}
-        ${postedDoc}
-    `)),
   ]);
+  const translated = await translateLegs(
+    user.orgId,
+    [
+      ...detail.rows.map((r) => ({ func: r.func, date: r.date, amount: r.func_amount })),
+      ...monthly.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ...byKind.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+      ...agg.rows.map((r) => ({ func: r.func, date: r.late, amount: r.amount })),
+    ],
+  );
+  if (!translated.ok) return translated.response;
+  const { amounts, currency } = translated;
+  let cursor = 0;
+  const take = (n: number) => amounts.slice(cursor, (cursor += n));
+  const detailAmounts = take(detail.rows.length);
+  const monthlyTranslated = take(monthly.rows.length);
+  const kindTranslated = take(byKind.rows.length);
+  const aggTranslated = take(agg.rows.length);
+  const mergeTranslated = (keys: string[], legs: string[]): Array<{ key: string; amount: string }> => {
+    const merged = new Map<string, string>();
+    keys.forEach((key, i) => merged.set(key, add(merged.get(key) ?? "0", legs[i] ?? "0")));
+    return [...merged.entries()].map(([key, amount]) => ({ key, amount }));
+  };
+  const monthlyMerged = mergeTranslated(
+    monthly.rows.map((r) => String(r.month)),
+    monthlyTranslated,
+  ).sort((a, b) => (a.key < b.key ? -1 : 1));
+  const kindCounts = new Map<string, number>();
+  byKind.rows.forEach((r) => kindCounts.set(String(r.name), (kindCounts.get(String(r.name)) ?? 0) + Number(r.n ?? 0)));
+  const kindMerged = mergeTranslated(
+    byKind.rows.map((r) => String(r.name)),
+    kindTranslated,
+  )
+    .map(({ key, amount }) => ({ name: key, amount, count: kindCounts.get(key) ?? 0 }))
+    .sort((a, b) => compareDecimal(b.amount, a.amount));
+  let total = "0";
+  let count = 0;
+  agg.rows.forEach((r, i) => {
+    total = add(total, aggTranslated[i] ?? "0");
+    count += Number(r.n ?? 0);
+  });
   return NextResponse.json({
     mode: "party",
-    total: serializeLedgerDecimal(agg.rows[0]?.total),
-    count: Number(agg.rows[0]?.n ?? 0),
-    entries: ((detail.rows)).map((r) => ({
+    currency,
+    total: serializeLedgerDecimal(total),
+    count,
+    entries: ((detail.rows)).map((r, i) => ({
       date: r.date,
       entryId: r.entry_id,
       docId: r.doc_id,
@@ -217,9 +378,9 @@ export async function GET(req: Request) {
       docNumber: r.doc_number ?? "",
       label: r.doc_number || r.doc_kind,
       memo: r.memo,
-      amount: serializeLedgerDecimal(r.amount),
+      amount: serializeLedgerDecimal(detailAmounts[i] ?? "0"),
     })),
-    monthly: ((monthly.rows)).map((r) => ({ month: r.month, amount: serializeLedgerDecimal(r.amount) })),
-    breakdown: ((byKind.rows)).map((r) => ({ name: r.name, amount: serializeLedgerDecimal(r.amount), count: Number(r.n) })),
+    monthly: monthlyMerged.map(({ key, amount }) => ({ month: key, amount: serializeLedgerDecimal(amount) })),
+    breakdown: kindMerged.map((k) => ({ name: k.name, amount: serializeLedgerDecimal(k.amount), count: k.count })),
   });
 }
