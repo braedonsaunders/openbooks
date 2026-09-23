@@ -807,13 +807,60 @@ export async function listProvisionRuns(
       from tax_provision_runs where org_id = ${orgId}
      order by fiscal_year desc, version desc
   `));
-  return r.rows.flatMap(({ payload, ...row }) => {
-    if (allowedSubsidiaryIds == null) return [row];
+  const out: ProvisionRunRow[] = [];
+  for (const { payload, ...row } of r.rows) {
+    if (allowedSubsidiaryIds == null) {
+      out.push(row);
+      continue;
+    }
     const projected = projectProvisionPayload(payload, allowedSubsidiaryIds);
-    if (!projected) return [];
-    return [{ ...row, totalExpense: String(projected.totalExpense),
-      effectiveRatePercent: projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent) }];
-  });
+    if (!projected) continue;
+    out.push({ ...row,
+      totalExpense: String(projected.totalExpense),
+      effectiveRatePercent: projected.effectiveRatePercent == null ? null : String(projected.effectiveRatePercent),
+      journalEntryId: await scopedProvisionJournalEntryId(
+        orgId, row, visibleProjectedSubsidiaryIds(projected), row.journalEntryId,
+      ),
+    });
+  }
+  return out;
+}
+
+/** Subsidiary ids surviving a restricted projection, in posting order. */
+function visibleProjectedSubsidiaryIds(projected: Record<string, unknown>): string[] {
+  if (!Array.isArray(projected.entities)) return [];
+  return (projected.entities as { subsidiaryId?: unknown }[])
+    .filter((e): e is { subsidiaryId: string } => typeof e?.subsidiaryId === "string")
+    .map((e) => e.subsidiaryId)
+    .sort();
+}
+
+/** Resolve the journal entry a restricted caller may see for a run: the
+ *  first VISIBLE entity's own entry, looked up by (run, entity) within the
+ *  caller's scope — never the stored id, which is the first SORTED entity's
+ *  entry and may belong to a hidden subsidiary. Null when the stored id is
+ *  null (draft) or no visible entity posted an entry. */
+async function scopedProvisionJournalEntryId(
+  orgId: string,
+  run: { fiscalYear: number; version: number },
+  visibleSubsidiaryIds: string[],
+  storedJournalEntryId: string | null,
+): Promise<string | null> {
+  if (storedJournalEntryId == null || visibleSubsidiaryIds.length === 0) return null;
+  const numbers = visibleSubsidiaryIds.map((id) =>
+    provisionEntryNumber(run.fiscalYear, run.version, orgId, id),
+  );
+  const found = (await db.execute<{ id: string; entry_number: string }>(sql`
+    select id, entry_number from journal_entries
+     where org_id = ${orgId} and origin = 'tax_provision'
+       and entry_number in (${sql.join(numbers.map((n) => sql`${n}`), sql`, `)})
+  `));
+  const byNumber = new Map(found.rows.map((row) => [row.entry_number, row.id]));
+  for (const n of numbers) {
+    const id = byNumber.get(n);
+    if (id) return id;
+  }
+  return null;
 }
 
 export type ProvisionRunDetail = ProvisionRunRow & {
@@ -955,6 +1002,11 @@ export async function getProvisionRun(
       projected.effectiveRatePercent == null
         ? null
         : String(projected.effectiveRatePercent);
+    // The stored journal id is the first SORTED entity's entry, which may
+    // belong to a hidden subsidiary — resolve the first visible one instead.
+    run.journalEntryId = await scopedProvisionJournalEntryId(
+      orgId, run, visibleProjectedSubsidiaryIds(projected), run.journalEntryId,
+    );
   }
   const differenceScope =
     allowedSubsidiaryIds == null
