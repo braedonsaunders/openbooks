@@ -15,7 +15,7 @@ import { createCycle, closeCycle, moveToCalibrating, openCycle } from "./review-
 import { calibrateReview, reopenReview, shareReview, submitReview } from "./reviews.ts";
 import { createGoal } from "./goals.ts";
 import { getCycleDetail, getReviewDetail, listMyReviews } from "./performance-read.ts";
-import { listFeedback, writeFeedback } from "./feedback.ts";
+import { fulfillRequest, listFeedback, writeFeedback } from "./feedback.ts";
 
 /**
  * g11_performance_exits: legal-entity scope across the performance module
@@ -376,6 +376,33 @@ test("subject-facing reads strip the calibration justification; HR and reviewer 
     assert.equal(hrCycle.reviews.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
     const reviewerMine = await listMyReviews({ orgId: h.org.orgId, actorId: h.a.managerUserId });
     assert.equal(reviewerMine.asReviewer.find((r) => r.id === reviewId)?.calibrationReason, "private HR justification");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("fulfilling a request twice returns the one fulfilment", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const request = await writeFeedback({
+      orgId: h.org.orgId, actorId: h.hrFull, subjectEmploymentId: h.a.employmentId,
+      kind: "request", visibility: "manager_and_subject", body: "Tell me about the launch",
+      requestedFromPartyId: h.a.managerPartyId,
+    });
+    const first = await fulfillRequest({
+      orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
+      visibility: "manager_and_subject", body: "They led the launch",
+    });
+    const second = await fulfillRequest({
+      orgId: h.org.orgId, actorId: h.a.managerUserId, requestId: request.id,
+      visibility: "manager_and_subject", body: "They led the launch",
+    });
+    assert.equal(second.id, first.id);
+    const count = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_feedback
+       where org_id = ${h.org.orgId} and kind = 'feedback'
+         and context->>'fulfills_request_id' = ${request.id}`)).rows[0]!.n;
+    assert.equal(count, "1");
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
