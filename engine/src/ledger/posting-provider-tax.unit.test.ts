@@ -9,6 +9,7 @@ import {
   type TaxPostingComponent,
 } from "./posting-contracts.ts";
 import {
+  documentLocationChange,
   resolveProviderTaxPlans,
   taxConfigsFromEvidence,
 } from "./posting-provider-tax.ts";
@@ -75,14 +76,6 @@ const configRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const addressRow = () => ({
-  line1: "1 Main St",
-  city: "Austin",
-  region: "TX",
-  postalCode: "78701",
-  country: "US",
-});
-
 const quoteRow = (over: Record<string, unknown> = {}) => ({
   id: "q-1",
   provider_config_id: "cfg-1",
@@ -133,7 +126,7 @@ const mappedConfig = () =>
   configRow({ settings: { jurisdictionTaxCodes: { TX: "TAX-ON" } } });
 
 test("a matching immutable quote resolves to the stored evidence components", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [quoteRow()], [codeRow()]]));
   const plans = await resolveProviderTaxPlans(doc(), [line()], deps());
   assert.equal(plans.length, 1);
   const [plan] = plans;
@@ -143,7 +136,7 @@ test("a matching immutable quote resolves to the stored evidence components", as
 });
 
 test("a component bound to the wrong tax code is refused even when amounts match", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [quoteRow()], [codeRow()]]));
   const swapped = deps({ taxComponentsByLine: new Map([["line-1", [component({ taxCodeId: "OTHER" })]]]) });
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], swapped),
@@ -168,7 +161,7 @@ test("documents outside the provider-tax kinds bypass without evidence reads", a
 });
 
 test("a line without a tax profile resolves to no plan and reads no quote", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[configRow()], [addressRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[configRow()]]));
   const untaxed = line({
     id: "line-9",
     lineNumber: 9,
@@ -181,7 +174,7 @@ test("a line without a tax profile resolves to no plan and reads no quote", asyn
 });
 
 test("a missing immutable quote fails closed before posting", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[configRow()], [addressRow()], []]));
+  t.mock.method(db, "execute", evidenceReads([[configRow()], []]));
   await assert.rejects(
     () => resolveProviderTaxPlans(doc(), [line()], deps()),
     (e: unknown) =>
@@ -192,7 +185,6 @@ test("a missing immutable quote fails closed before posting", async (t) => {
 test("a quote from another provider config is refused as ambiguous provenance", async (t) => {
   t.mock.method(db, "execute", evidenceReads([
     [configRow()],
-    [addressRow()],
     [quoteRow({ provider_config_id: "cfg-2" })],
   ]));
   await assert.rejects(
@@ -205,7 +197,6 @@ test("a quote from another provider config is refused as ambiguous provenance", 
 test("a stale quote that no longer matches the document is refused", async (t) => {
   t.mock.method(db, "execute", evidenceReads([
     [configRow()],
-    [addressRow()],
     [quoteRow({ quoted_on: "2026-08-01" })],
   ]));
   await assert.rejects(
@@ -216,7 +207,7 @@ test("a stale quote that no longer matches the document is refused", async (t) =
 });
 
 test("provider evidence that changed the tax forces a draft recalculation", async (t) => {
-  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [addressRow()], [quoteRow()], [codeRow()]]));
+  t.mock.method(db, "execute", evidenceReads([[mappedConfig()], [quoteRow()], [codeRow()]]));
   // The approved line now claims 14.00 of tax against a 13.00 quote: posting
   // revalidates instead of amending, so the draft must be recalculated.
   await assert.rejects(
@@ -224,6 +215,50 @@ test("provider evidence that changed the tax forces a draft recalculation", asyn
     (e: unknown) =>
       e instanceof PostingError &&
       /changed the tax for line 1.*recalculate the draft/.test(e.message),
+  );
+});
+
+test("posting replays the frozen quote snapshot, never the party's live address", async (t) => {
+  // The quote carries a Toronto destination no live read could produce, and
+  // the mock allows exactly three reads (config, quote, code): any live
+  // address lookup would throw "unexpected database read".
+  const toronto = {
+    line1: "1 Yonge St",
+    city: "Toronto",
+    region: "ON",
+    postalCode: "M5E 1E5",
+    country: "CA",
+  };
+  t.mock.method(
+    db,
+    "execute",
+    evidenceReads([[mappedConfig()], [quoteRow({ ship_to: toronto })], [codeRow()]]),
+  );
+  const plans = await resolveProviderTaxPlans(doc(), [line()], deps());
+  assert.equal(plans.length, 1);
+});
+
+test("the document's own location change is detected against the snapshot", () => {
+  const snapshot = {
+    shipFrom: {},
+    shipTo: { line1: "1 Yonge St", city: "Toronto", region: "ON", postalCode: "M5E 1E5", country: "CA" },
+  };
+  assert.equal(documentLocationChange(null, snapshot), null);
+  assert.equal(documentLocationChange({}, snapshot), null);
+  assert.equal(
+    documentLocationChange({ taxProviderAddresses: { shipTo: { ...snapshot.shipTo } } }, snapshot),
+    null,
+  );
+  assert.equal(
+    documentLocationChange(
+      { taxProviderAddresses: { shipTo: { ...snapshot.shipTo, region: "QC" } } },
+      snapshot,
+    ),
+    "shipTo address changed after the quote",
+  );
+  assert.equal(
+    documentLocationChange({ taxProviderAddresses: "Toronto" }, snapshot),
+    "tax location override is not an object",
   );
 });
 

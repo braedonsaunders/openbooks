@@ -1242,6 +1242,113 @@ test("provider tax locations resolve from subsidiary, org, and party records —
   }
 });
 
+test("a party address edited after approval does not break posting; the document's own move does", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const stateCode = randomUUID();
+    const cityCode = randomUUID();
+    const cityAccount = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values
+        (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
+        (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      {
+        provider: "custom_http", isEnabled: true, preferProvider: true,
+        settings: { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } },
+      },
+      null,
+    );
+    const config = await readTaxRateProviderConfig(org.orgId);
+    const quoteComponents = [
+      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+    ];
+
+    async function seedSale(number: string, custom: Record<string, unknown>): Promise<{ id: string; lineId: string }> {
+      const id = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
+           currency, subtotal, tax_total, total, custom)
+        values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${number}, ${org.customerId}, ${org.subsidiaryId}, ${org.date},
+                'CAD', '100', '8.2500', '108.2500', ${JSON.stringify(custom)}::jsonb)`);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+           tax_amount, tax_code_id, quantity, unit_price)
+        values (${lineId}, ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${stateCode}, '1', '100')`);
+      const evidence = [
+        { taxCodeId: stateCode, sequence: 1, rate: "7", amount: "7.0000", collected: org.accounts.taxOutput },
+        { taxCodeId: cityCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: cityAccount },
+      ];
+      for (const component of evidence) {
+        await db.execute(sql`
+          insert into document_line_tax_components
+            (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+             tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+             price_includes_tax, compound_on_previous, rounding_scale,
+             collected_account_id, paid_account_id, overridden)
+          values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.rate},
+                  '100', ${component.amount}, ${component.amount}, '0', 'standard',
+                  false, false, 2, ${component.collected}, ${org.accounts.taxInput}, true)`);
+      }
+      await db.execute(sql`
+        insert into tax_rate_quotes
+          (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
+           taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
+        values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{"country": "CA"}'::jsonb, '{}'::jsonb,
+                '100.0000', '8.2500', ${JSON.stringify(quoteComponents)}::jsonb, 'Q-FROZEN', null, ${lineId})`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+      return { id, lineId };
+    }
+
+    const deps = { control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+      taxCollected: org.accounts.taxOutput,
+      taxPaid: org.accounts.taxInput,
+    } };
+    // The customer gains a US default address AFTER approval, with no change
+    // to the approved document: posting replays the frozen snapshot and
+    // succeeds with the quoted locations.
+    const frozen = await seedSale("FROZEN-1", {});
+    await db.execute(sql`
+      insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
+      values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '1 Main St', 'Austin', 'TX', '78701', 'US', true, true)`);
+    const entryId = await postDocument(frozen.id, deps, { deferEffects: true, suppressAutomation: true });
+    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text as amount from journal_lines
+       where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
+       order by account_id`)).rows;
+    assert.equal(taxLines.length, 2);
+    const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
+    assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
+    assert.equal(byAccount.get(cityAccount), "-1.2500");
+
+    // The document's OWN location moves after the quote: posting refuses
+    // until the draft is recalculated and re-approved.
+    const moved = await seedSale("MOVED-1", {
+      taxProviderAddresses: { shipTo: { country: "US", region: "NY" } },
+    });
+    await assert.rejects(
+      postDocument(moved.id, deps, { deferEffects: true, suppressAutomation: true }),
+      /document tax location changed after the quote \(shipTo address changed after the quote\); recalculate the draft and re-approve/,
+    );
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${moved.id}`)).rows[0]?.count, "0");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("provider evidence comparison is order-sensitive and amount-exact", () => {
   assert.equal(
     providerEvidenceMismatch(
