@@ -11,6 +11,7 @@ import {
   requireHrmDocumentsRead,
 } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { isLegacyProvenance } from "../../platform/legacy-provenance.ts";
 import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { hashHrmToken, mintDocumentSignerToken, verifyDocumentSignerToken } from "./tokens.ts";
@@ -80,6 +81,7 @@ export interface DocumentDTO {
   completedAt: string | null;
   expiresAt: string | null;
   retainUntil: string | null;
+  retentionAction: string | null;
   legalHold: boolean;
 }
 
@@ -96,13 +98,14 @@ type DocumentRow = {
   completed_at: string | null;
   expires_at: string | null;
   retain_until: string | null;
+  retention_action: string | null;
   legal_hold: boolean;
 };
 
 const DOC_COLS = sql`
   select id, employment_id, party_id, template_id, category_key, title, file_id,
          status, sent_at::text as sent_at, completed_at::text as completed_at,
-         expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+         expires_at::text as expires_at, retain_until::text as retain_until, retention_action, legal_hold
     from hrm_documents`;
 
 function toDTO(row: DocumentRow): DocumentDTO {
@@ -119,6 +122,7 @@ function toDTO(row: DocumentRow): DocumentDTO {
     completedAt: row.completed_at,
     expiresAt: row.expires_at,
     retainUntil: row.retain_until,
+    retentionAction: row.retention_action,
     legalHold: row.legal_hold,
   };
 }
@@ -498,6 +502,13 @@ export async function uploadDocument(input: {
 export interface DocumentDetail extends DocumentDTO {
   signers: SignerDTO[];
   events: { kind: string; actor: string | null; recordedAt: string }[];
+  /**
+   * True while the frozen retention action was inherited from the live
+   * schedule (0274) rather than captured at completion (0326 legacy): the
+   * drawer names it instead of presenting it as the action in force at
+   * completion.
+   */
+  retentionUnverified: boolean;
 }
 
 /** Resolve the signer parties for signer roles: employee = the subject,
@@ -1294,7 +1305,12 @@ export async function getDocumentDetail(query: {
      where org_id = ${query.orgId} and document_id = ${doc.id}
      order by recorded_at
   `)).rows;
-  return { ...toDTO(doc), signers: signers.map(toSignerDTO), events };
+  const retentionUnverified = await isLegacyProvenance(db, query.orgId, "hrm_documents", doc.id, {
+    // Before 0326 applies there is no registry: a frozen action with no
+    // provenance row is exactly what the backfill left behind.
+    fallback: doc.retention_action != null,
+  });
+  return { ...toDTO(doc), signers: signers.map(toSignerDTO), events, retentionUnverified };
 }
 
 /** Signers still waiting past the reminder threshold (the daily job reads this). */

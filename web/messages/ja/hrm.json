@@ -1822,7 +1822,9 @@
       "signed": "署名済み",
       "pending": "保留中",
       "viewed": "既読",
-      "missing": "この文書は利用できません。"
+      "missing": "この文書は利用できません。",
+      "retention": "保存",
+      "retentionUnverified": "レガシー — 完了時に記録されず継承されたアクション"
     },
     "generate": {
       "open": "新規文書",

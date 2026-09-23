@@ -1822,7 +1822,9 @@
       "signed": "已签署",
       "pending": "待处理",
       "viewed": "已查看",
-      "missing": "此文档已不可用。"
+      "missing": "此文档已不可用。",
+      "retention": "保留",
+      "retentionUnverified": "遗留 — 继承的动作，完成时未记录"
     },
     "generate": {
       "open": "新建文档",

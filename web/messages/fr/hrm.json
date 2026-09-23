@@ -1822,7 +1822,9 @@
       "signed": "Signé",
       "pending": "En attente",
       "viewed": "Lu",
-      "missing": "Ce document n’est plus disponible."
+      "missing": "Ce document n’est plus disponible.",
+      "retention": "Conservation",
+      "retentionUnverified": "Legacy — action héritée, non constatée à l'achèvement"
     },
     "generate": {
       "open": "Nouveau document",

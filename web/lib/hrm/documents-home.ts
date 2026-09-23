@@ -221,6 +221,8 @@ export async function loadDocumentsHome(
           signed: t('documents.drawer.signed'),
           pending: t('documents.drawer.pending'),
           viewed: t('documents.drawer.viewed'),
+          retention: t('documents.drawer.retention'),
+          retentionUnverified: t('documents.drawer.retentionUnverified'),
         },
       }
     } catch {
