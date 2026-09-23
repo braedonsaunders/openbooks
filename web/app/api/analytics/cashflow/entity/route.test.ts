@@ -198,6 +198,13 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.match(payQuery, /sp\.subsidiary_id = any/);
   assert.match(payQuery, /sp\.kind in/);
   assert.match(payQuery, /group by pe\.source_document_id/);
+  const recentQuery = transactionQueries.find((text) => text.includes("order by coalesce(d.document_date"))!;
+  // Recents list posted sources joined one-to-one to their statement-book
+  // posting — no drafts, no second-book duplicates.
+  assert.match(recentQuery, /d\.status = 'posted'/);
+  assert.match(recentQuery, /je\.status in \('posted', 'reversed'\)/);
+  assert.match(recentQuery, /je\.book_id =/);
+  assert.ok(!recentQuery.includes("left join journal_entries"));
   // The open leg reads the shared reader's current-posting projection.
   assert.match(transactionQueries[1]!, /d\.posted_entry_id/);
   assert.match(transactionQueries[1]!, /jl\.subsidiary_id = any/);

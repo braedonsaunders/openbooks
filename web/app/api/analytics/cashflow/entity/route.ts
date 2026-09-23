@@ -4,6 +4,7 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { statementBookExpr } from "../../../../../lib/gl-summary";
 import { toISO } from "../../../../../lib/cash/core";
 import { openItems } from "../../../../../lib/cash/open-items";
 import { isUuid } from "../../../../../lib/list-params";
@@ -94,16 +95,21 @@ export async function GET(req: Request) {
       today,
       gate.allowedSubsidiaryIds === null ? undefined : [...gate.allowedSubsidiaryIds],
     ).then((items) => items.filter((item) => item.partyId === party)),
-    // Recent payments (drawer paginates client-side).
+    // Recent payments (drawer paginates client-side): the posted source
+    // population only, joined one-to-one to its posting in the current
+    // statement book through the house resolver. Drafts never list, and a
+    // payment posted in two books appears once, not twice.
     (db.execute(sql`
       select d.id as doc_id, d.kind as doc_kind, d.document_number, je.id as entry_id,
         coalesce(d.document_date, d.posting_date)::text as date, abs(d.total) as amount
       from documents d
-      left join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
-        ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
+      join journal_entries je on je.source_document_id = d.id and je.org_id = d.org_id
+        and je.status in ('posted', 'reversed') and je.book_id = ${statementBookExpr(user.orgId)}
       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
+        and d.status = 'posted'
         and d.kind in (${settlementKinds})
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}
       order by coalesce(d.document_date, d.posting_date) desc
       limit 200
     `)),
