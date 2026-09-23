@@ -55,6 +55,10 @@ export async function GET(req: Request) {
     where t.org_id = ${user.orgId} and ${filter}
       and t.worked_on >= ${from} and t.worked_on <= ${to}
       and (t.memo_is_private is not true)
+      -- Draft, submitted and rejected hours are not worked reality (rejected
+      -- hours never will be) — the same approved-only rule as the dashboard
+      -- aggregate and project profitability hours.
+      and t.status = 'approved'
       ${scope}
     order by t.worked_on desc
     limit 500
