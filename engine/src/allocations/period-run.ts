@@ -6,7 +6,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
-import { previewPinError, targetPinViolation } from "./subsidiary-scope.ts";
+import { previewPinError, sourceScopeViolation, targetPinViolation } from "./subsidiary-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
 import {
@@ -466,6 +466,7 @@ async function readSources(
   opts: {
     orgId: string;
     ruleId: string;
+    ruleName: string;
     period: PeriodRow;
     bookId: string;
     subsidiaryId: string | null;
@@ -475,6 +476,11 @@ async function readSources(
   },
 ): Promise<SourcePool> {
   const { clause: filterClause, subsidiaryIds: filterSubs } = dimensionFilterSql(opts.dimensionFilters);
+  // The pin intersects the published rule's subsidiary filter: a B-only
+  // rule pinned to A would otherwise sweep A's ledger under a rule that
+  // does not cover A. An empty intersection refuses by name.
+  const scopeViolation = sourceScopeViolation(opts.ruleName, opts.subsidiaryId, filterSubs);
+  if (scopeViolation) throw new AllocationRunError("INVALID", scopeViolation);
   const scopeSubs = opts.subsidiaryId ? [opts.subsidiaryId] : filterSubs;
   const subClause = scopeSubs.length > 0
     ? sql`and l.subsidiary_id = any(${uuidArray(scopeSubs)}::uuid[])`
@@ -990,6 +996,7 @@ async function buildComputation(
   const pool = await readSources(tx, {
     orgId: opts.orgId,
     ruleId: opts.rule.id,
+    ruleName: opts.rule.name,
     period: opts.period,
     bookId: opts.bookId,
     subsidiaryId: opts.subsidiaryId,
