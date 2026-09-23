@@ -42,6 +42,58 @@ function requireId(field: string, value: unknown): string {
   return value;
 }
 
+/**
+ * SQL predicate restricting employment-anchored rows to the actor's allowed
+ * employer set (null = unrestricted). The set comes from
+ * requireAggregatePerformanceManage / HR read grants — never caller input —
+ * and every read and mutation below threads it through, so scoped HR revises
+ * only their own subsidiaries.
+ */
+function employmentScopeFilter(allowed: Set<string> | null, alias: string): ReturnType<typeof sql> {
+  if (allowed === null) return sql``;
+  const ids = [...allowed].map((id) => sql`${id}::uuid`);
+  // One parameter per id: bare JS arrays must never be interpolated into
+  // ANY() (they bind as row constructors, not PostgreSQL arrays).
+  return sql`and ${sql.raw(alias)}.employer_subsidiary_id in (${sql.join(ids, sql`, `)})`;
+}
+
+/** The latest live version's employer: positions carry subsidiary on their versions, not the header. */
+async function loadPositionSubsidiary(
+  exec: SqlExecutor,
+  orgId: string,
+  positionId: string,
+): Promise<string | null> {
+  const row = (await exec.execute<{ employerSubsidiaryId: string }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId"
+      from position_versions
+     where org_id = ${orgId} and position_id = ${positionId} and recorded_until is null
+     order by version_no desc limit 1
+  `)).rows[0];
+  return row?.employerSubsidiaryId ?? null;
+}
+
+/** Uniform NOT_FOUND for an out-of-scope position: existence must not be probeable across the fence. */
+function assertPositionInScope(subsidiaryId: string | null, allowed: Set<string> | null): void {
+  if (allowed !== null && (subsidiaryId === null || !allowed.has(subsidiaryId))) {
+    throw new HrmPerformanceError("NOT_FOUND", "position was not found — plan succession for a directory position");
+  }
+}
+
+/** A cycle's declared subsidiary, read leniently: extra envelope keys (potential_labels) never fail the scope read. */
+function cycleScopeSubsidiary(appliesTo: unknown): string | null {
+  if (!appliesTo || typeof appliesTo !== "object" || Array.isArray(appliesTo)) return null;
+  const raw = (appliesTo as Record<string, unknown>).employer_subsidiary_id;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+/** Uniform NOT_FOUND for an out-of-scope cycle. */
+function assertCycleInScope(appliesTo: unknown, allowed: Set<string> | null): void {
+  const subsidiaryId = cycleScopeSubsidiary(appliesTo);
+  if (allowed !== null && subsidiaryId !== null && !allowed.has(subsidiaryId)) {
+    throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the grid over an existing cycle");
+  }
+}
+
 async function assertTalentFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
@@ -105,20 +157,24 @@ export async function recordTalentReview(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const employment = (await db.execute<{ id: string }>(sql`
-      select id from worker_employments where org_id = ${orgId} and id = ${employmentId}
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    const employment = (await db.execute<{ id: string; employerSubsidiaryId: string }>(sql`
+      select id, employer_subsidiary_id as "employerSubsidiaryId"
+        from worker_employments where org_id = ${orgId} and id = ${employmentId}
     `)).rows[0];
-    if (!employment) {
+    // Uniform NOT_FOUND across missing and out-of-scope: a scoped HR actor
+    // must not probe employments of subsidiaries they cannot see.
+    if (!employment || (allowed !== null && !allowed.has(employment.employerSubsidiaryId))) {
       throw new HrmPerformanceError("NOT_FOUND", "employment was not found — record the talent review against a directory employment");
     }
     if (cycleId) {
-      const cycle = (await db.execute<{ id: string }>(sql`
-        select id from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
+      const cycle = (await db.execute<{ id: string; appliesTo: unknown }>(sql`
+        select id, applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
       `)).rows[0];
       if (!cycle) {
         throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — attach the talent review to an existing cycle");
       }
+      assertCycleInScope(cycle.appliesTo, allowed);
     }
     try {
       const inserted = (await db.execute<{ id: string }>(sql`
@@ -185,17 +241,20 @@ export async function listTalentReviews(args: {
     await assertTalentFeature(db, orgId);
     // HR-only: the subject never sees these rows. A non-HR actor gets
     // the uniform refusal, never a filtered list that leaks existence.
+    let allowed: Set<string> | null;
     try {
-      await requireAggregatePerformanceManage(db, orgId, actorId);
+      allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "talent reviews are HR-only — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
-    const cycleFilter = args.cycleId ? sql` and cycle_id = ${args.cycleId}` : sql``;
+    const cycleFilter = args.cycleId ? sql` and t.cycle_id = ${args.cycleId}` : sql``;
     const rows = (await db.execute<{ id: string }>(sql`
-      select id from hrm_talent_reviews where org_id = ${orgId}${cycleFilter} order by created_at
+      select t.id from hrm_talent_reviews t
+      join worker_employments e on e.org_id = t.org_id and e.id = t.employment_id
+       where t.org_id = ${orgId}${cycleFilter} ${employmentScopeFilter(allowed, "e")} order by t.created_at
     `)).rows;
     const out: TalentReviewDTO[] = [];
     for (const row of rows) {
@@ -223,8 +282,9 @@ export async function resolveTalentScales(args: {
   const cycleId = requireId("cycleId", args.cycleId);
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
+    let allowed: Set<string> | null;
     try {
-      await requireAggregatePerformanceManage(db, orgId, actorId);
+      allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
@@ -235,6 +295,7 @@ export async function resolveTalentScales(args: {
       select template_id::text as template_id, applies_to from hrm_review_cycles where org_id = ${orgId} and id = ${cycleId}
     `)).rows[0];
     if (!cycle) throw new HrmPerformanceError("NOT_FOUND", "review cycle was not found — open the grid over an existing cycle");
+    assertCycleInScope(cycle.applies_to, allowed);
     // A cycle may declare a separate potential axis in its applies_to
     // envelope (potential_labels); otherwise potential shares the
     // template performance scale. Either way the dimension is declared.
@@ -276,20 +337,32 @@ export async function listTalentDirectory(args: {
   const actorId = requireId("actorId", args.actorId);
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const employments = (await db.execute<{ id: string; name: string }>(sql`
       select e.id, coalesce(p.display_name, '—') as name
         from worker_employments e
         left join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
-       where e.org_id = ${orgId}
+       where e.org_id = ${orgId} ${employmentScopeFilter(allowed, "e")}
        order by name
     `)).rows;
+    // Positions are scoped by their latest live version's employer: a
+    // versionless position is undiscoverable to scoped HR (fail closed),
+    // while unrestricted HR sees every position as before.
+    const positionScope = allowed === null
+      ? sql``
+      : sql`and exists (select 1 from position_versions v
+                         where v.org_id = pos.org_id and v.position_id = pos.id
+                           and v.recorded_until is null
+                           and v.employer_subsidiary_id in (${sql.join(
+                             [...allowed].map((id) => sql`${id}::uuid`),
+                             sql`, `,
+                           )}))`;
     const positions = (await db.execute<{ id: string; code: string; title: string }>(sql`
       select pos.id, pos.position_code as code,
              coalesce((select v.title from position_versions v
                         where v.org_id = pos.org_id and v.position_id = pos.id
                         order by v.created_at desc limit 1), '—') as title
-        from positions pos where pos.org_id = ${orgId} order by pos.position_code
+        from positions pos where pos.org_id = ${orgId} ${positionScope} order by pos.position_code
     `)).rows;
     return { employments, positions };
   });
@@ -364,6 +437,36 @@ export interface SuccessionPlanDTO {
   readonly candidates: readonly SuccessionCandidateDTO[];
 }
 
+/**
+ * A succession plan's position and status, with the plan's subsidiary fence
+ * enforced: a scoped HR actor reaches only plans whose position sits in an
+ * allowed subsidiary. Uniform NOT_FOUND — plan existence must not be
+ * probeable across the fence.
+ */
+async function loadScopedPlan(
+  exec: SqlExecutor,
+  orgId: string,
+  planId: string,
+  allowed: Set<string> | null,
+): Promise<{ id: string; positionId: string; status: SuccessionPlanStatus }> {
+  const plan = (await exec.execute<{ id: string; positionId: string; status: SuccessionPlanStatus }>(sql`
+    select id, position_id as "positionId", status
+      from hrm_succession_plans where org_id = ${orgId} and id = ${planId}
+  `)).rows[0];
+  if (!plan) {
+    throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — it may belong to another organization");
+  }
+  assertPositionInScope(await loadPositionSubsidiary(exec, orgId, plan.positionId), allowed);
+  return plan;
+}
+
+/** Uniform NOT_FOUND for an out-of-scope employment. */
+function assertEmploymentInScope(subsidiaryId: string, allowed: Set<string> | null, message: string): void {
+  if (allowed !== null && !allowed.has(subsidiaryId)) {
+    throw new HrmPerformanceError("NOT_FOUND", message);
+  }
+}
+
 export async function createSuccessionPlan(args: {
   orgId: string;
   actorId: string;
@@ -378,12 +481,27 @@ export async function createSuccessionPlan(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const position = (await db.execute<{ id: string }>(sql`
       select id from positions where org_id = ${orgId} and id = ${positionId}
     `)).rows[0];
     if (!position) {
       throw new HrmPerformanceError("NOT_FOUND", "position was not found — plan succession for a directory position");
+    }
+    assertPositionInScope(await loadPositionSubsidiary(db, orgId, positionId), allowed);
+    if (args.incumbentEmploymentId !== undefined && args.incumbentEmploymentId !== null) {
+      const incumbent = (await db.execute<{ employerSubsidiaryId: string }>(sql`
+        select employer_subsidiary_id as "employerSubsidiaryId" from worker_employments
+         where org_id = ${orgId} and id = ${args.incumbentEmploymentId}
+      `)).rows[0];
+      if (!incumbent) {
+        throw new HrmPerformanceError("NOT_FOUND", "incumbent employment was not found — name a directory employment");
+      }
+      assertEmploymentInScope(
+        incumbent.employerSubsidiaryId,
+        allowed,
+        "incumbent employment was not found — name a directory employment",
+      );
     }
     try {
       const inserted = (await db.execute<{ id: string }>(sql`
@@ -421,7 +539,10 @@ export async function setSuccessionPlanStatus(args: {
   }
   await withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    // The fence first: a scoped actor never moves a plan they cannot see,
+    // and the NOT_FOUND below stays uniform either way.
+    await loadScopedPlan(db, orgId, id, allowed);
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_succession_plans set status = ${args.status}, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${id}
@@ -484,16 +605,27 @@ export async function listSuccessionPlans(args: { orgId: string; actorId: string
     await assertTalentFeature(db, orgId);
     // HR-only: a candidate's own view never exists. Non-HR actors get
     // the uniform refusal, never a filtered list.
+    let allowed: Set<string> | null;
     try {
-      await requireAggregatePerformanceManage(db, orgId, actorId);
+      allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     } catch {
       throw new HrmPerformanceError(
         "FORBIDDEN",
         "succession plans are HR-only — ask an administrator to grant hrm.performance.manage in /admin/roles",
       );
     }
+    const planScope = allowed === null
+      ? sql``
+      : sql`and exists (select 1 from position_versions v
+                         where v.org_id = hrm_succession_plans.org_id
+                           and v.position_id = hrm_succession_plans.position_id
+                           and v.recorded_until is null
+                           and v.employer_subsidiary_id in (${sql.join(
+                             [...allowed].map((id) => sql`${id}::uuid`),
+                             sql`, `,
+                           )}))`;
     const rows = (await db.execute<{ id: string }>(sql`
-      select id from hrm_succession_plans where org_id = ${orgId} order by created_at
+      select id from hrm_succession_plans where org_id = ${orgId} ${planScope} order by created_at
     `)).rows;
     const out: SuccessionPlanDTO[] = [];
     for (const row of rows) {
@@ -521,19 +653,27 @@ export async function addSuccessionCandidate(args: {
   }
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    const plan = (await db.execute<{ id: string }>(sql`
-      select id from hrm_succession_plans where org_id = ${orgId} and id = ${planId}
-    `)).rows[0];
-    if (!plan) {
-      throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — add the candidate to an existing plan");
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    try {
+      await loadScopedPlan(db, orgId, planId, allowed);
+    } catch (e) {
+      if (e instanceof HrmPerformanceError && e.code === "NOT_FOUND") {
+        throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — add the candidate to an existing plan");
+      }
+      throw e;
     }
-    const employment = (await db.execute<{ id: string }>(sql`
-      select id from worker_employments where org_id = ${orgId} and id = ${employmentId}
+    const employment = (await db.execute<{ id: string; employerSubsidiaryId: string }>(sql`
+      select id, employer_subsidiary_id as "employerSubsidiaryId"
+        from worker_employments where org_id = ${orgId} and id = ${employmentId}
     `)).rows[0];
     if (!employment) {
       throw new HrmPerformanceError("NOT_FOUND", "employment was not found — name a directory employment as the candidate");
     }
+    assertEmploymentInScope(
+      employment.employerSubsidiaryId,
+      allowed,
+      "employment was not found — name a directory employment as the candidate",
+    );
     const maxOrder = (await db.execute<{ max: number }>(sql`
       select coalesce(max(candidate_order), -1) as max from hrm_succession_candidates where org_id = ${orgId} and plan_id = ${planId}
     `)).rows[0]?.max ?? -1;
@@ -578,7 +718,9 @@ export async function removeSuccessionCandidate(args: {
   const candidateId = requireId("candidateId", args.candidateId);
   await withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
-    await requireAggregatePerformanceManage(db, orgId, actorId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    // The fence first: a scoped actor never touches a plan they cannot see.
+    await loadScopedPlan(db, orgId, planId, allowed);
     // Draft candidates may be removed; the plan itself is retained
     // history. A delete that matches zero rows is a failure.
     const deleted = (await db.execute<{ id: string }>(sql`
