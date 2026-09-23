@@ -3,7 +3,7 @@ import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 import { isZero, sum } from "../money/money.ts";
-import { mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
 import { postDriverResolver } from "../allocations/report-runner.ts";
@@ -401,8 +401,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   // -- allocation kernel: custom_gl_lines user scripts (A6) -----------------
   // Scripts observe the kernel read-only (kernel lines plus the rule
   // contributions above) and return extra balanced lines. A refusal throws
-  // before the posting transaction opens, so a refused script set leaves no
-  // partial write behind. Suppressed for replay/migration like automation.
+  // inside the posting transaction, so a refused script set rolls every
+  // document/ledger mutation back; the completed-run evidence is carried on
+  // the refusal for out-of-band re-record by the coordinator. Suppressed for
+  // replay/migration like automation.
   let customGlLines: ContributedLine[] = [];
   if (!options.suppressAutomation && !deps.migration) {
     try {
@@ -416,6 +418,13 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       });
     } catch (error) {
       if (error instanceof PostingError) throw error;
+      // The runner's in-transaction script_runs rows roll back with the
+      // refused post; carry the completed-run evidence on the refusal so the
+      // posting coordinator can re-record it out-of-band. The message is
+      // preserved verbatim — callers match on it.
+      if (error instanceof CustomGlLinesError) {
+        throw new PostingError(error.message, { customGlLineRuns: error.scriptRuns });
+      }
       throw new PostingError(
         error instanceof Error ? error.message : String(error),
       );

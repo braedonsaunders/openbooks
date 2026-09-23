@@ -1415,11 +1415,13 @@ export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
 
 // --- custom_gl_lines: allocation-kernel GL plug-in (A6) ----------------------
 // Tenant-authored extra GL lines on a document's own journal entry. The
-// posting seam (engine/src/ledger/posting.ts, after rule contributions) calls
+// posting seam (prepareDocumentPosting, after rule contributions) calls
 // runCustomGlLineScripts with the kernel lines; each active script's main(ctx)
 // returns { lines: [...] } and the host validates, resolves, and stamps every
 // line. The first refusal throws CustomGlLinesError, which halts posting
-// before the posting transaction opens — never a partial write.
+// inside the posting transaction — document/ledger mutations roll back, and
+// the completed-run evidence rides on the error for out-of-band re-record,
+// never a partial write.
 
 export const CUSTOM_GL_LINES_TRIGGER = "custom_gl_lines";
 export const MAX_CUSTOM_GL_LINES = 200;
@@ -1428,10 +1430,13 @@ export const CUSTOM_GL_LINES_ERROR_CODE = "custom_gl_lines_error";
 /** Typed refusal from the custom_gl_lines host (validation, gates, errors). */
 export class CustomGlLinesError extends Error {
   readonly code = CUSTOM_GL_LINES_ERROR_CODE;
+  /** script_runs twins for completed runs (see below): re-recorded after rollback. Empty when nothing ran. */
+  scriptRuns: CustomGlLineRunEvidence[] = [];
 
-  constructor(message: string) {
+  constructor(message: string, scriptRuns: CustomGlLineRunEvidence[] = []) {
     super(message);
     this.name = "CustomGlLinesError";
+    this.scriptRuns = scriptRuns;
   }
 }
 
@@ -1471,7 +1476,9 @@ export async function customGlLinesEnabled(orgId: string): Promise<boolean> {
  * sort_order, and collect their validated contributions. Rule contributions
  * (A5) run first at the seam; scripts observe them through kernelLines. The
  * first error — a failed run or a refused line set — throws and halts
- * posting; script_runs evidence for every script that ran is already recorded.
+ * posting; script_runs evidence for every script that ran is already recorded
+ * in the posting transaction, and the in-memory twin rides on the thrown
+ * CustomGlLinesError so the coordinator can re-record it after rollback.
  */
 export async function runCustomGlLineScripts(
   req: CustomGlLineRunRequest,
@@ -1525,6 +1532,13 @@ export async function runCustomGlLineScripts(
     : null;
 
   const out: ContributedLine[] = [];
+  // In-memory twin of every script_runs row inserted above, in run order.
+  // PA1 runs prepare inside the posting transaction, so a refusal below
+  // rolls those rows back; the error carries this list so the posting
+  // coordinator can re-record the evidence out-of-band. A run that
+  // SUCCEEDED before a later refusal keeps status "ok": the script executed
+  // fine, the post is what was refused.
+  const completed: CustomGlLineRunEvidence[] = [];
   for (const s of scripts) {
     const ctx: ScriptContext = {
       trigger: CUSTOM_GL_LINES_TRIGGER,
@@ -1540,28 +1554,69 @@ export async function runCustomGlLineScripts(
       deterministic: true,
     });
     const outcomeStatus = res.status;
-    await db.insert(schema.scriptRuns).values({
+    const evidence: CustomGlLineRunEvidence = {
       orgId: req.orgId,
       scriptId: s.id,
       targetKind: docKind || CUSTOM_GL_LINES_TRIGGER,
       targetId: req.targetId,
       status: outcomeStatus,
       logs: res.logs,
-      errorMessage: outcomeStatus === "ok" ? null : res.abortReason,
+      errorMessage: outcomeStatus === "ok" ? null : (res.abortReason ?? null),
       durationMs: res.durationMs,
       createdBy: user?.id ?? null,
+    };
+    await db.insert(schema.scriptRuns).values({
+      orgId: evidence.orgId,
+      scriptId: evidence.scriptId,
+      targetKind: evidence.targetKind,
+      targetId: evidence.targetId,
+      status: evidence.status,
+      logs: evidence.logs,
+      errorMessage: evidence.errorMessage,
+      durationMs: evidence.durationMs,
+      createdBy: evidence.createdBy,
     });
     await db.execute(
       sql`update user_scripts set last_run_at = now() where id = ${s.id} and org_id = ${req.orgId}`,
     );
+    completed.push(evidence);
     if (outcomeStatus !== "ok") {
       throw new CustomGlLinesError(
         `custom_gl_lines script "${s.name}" ${outcomeStatus}${res.abortReason ? `: ${res.abortReason}` : ""}`,
+        [...completed],
       );
     }
-    out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned, allowedSubsidiaryIds)));
+    try {
+      out.push(...(await resolveCustomGlLines(req.orgId, s.id, s.name, res.returned, allowedSubsidiaryIds)));
+    } catch (error) {
+      // A refused line set (unbalanced, unknown account, over-limit,
+      // out-of-scope subsidiary) rolls back the ok row above with the post;
+      // the coordinator re-records it from the attached list.
+      if (error instanceof CustomGlLinesError) error.scriptRuns = [...completed];
+      throw error;
+    }
   }
   return out;
+}
+
+/**
+ * One completed custom_gl_lines execution, captured in memory so its
+ * script_runs evidence can be re-recorded after a refused post rolls the
+ * in-transaction row back (PA1 made prepare+commit one unit). The row the
+ * runner inserted is byte-identical to this except id/at, which the
+ * re-record mints fresh. A run that SUCCEEDED before a later refusal keeps
+ * status "ok": the script executed fine, the post is what was refused.
+ */
+export interface CustomGlLineRunEvidence {
+  orgId: string;
+  scriptId: string;
+  targetKind: string;
+  targetId: string;
+  status: "ok" | "aborted" | "error" | "timeout";
+  logs: string[];
+  errorMessage: string | null;
+  durationMs: number;
+  createdBy: string | null;
 }
 
 const CUSTOM_GL_LINE_UUID_RE =
