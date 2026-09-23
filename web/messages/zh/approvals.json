@@ -39,7 +39,8 @@
     "quote": "报价单",
     "field_ticket": "现场工单",
     "close_run": "期间结账",
-    "budget_scenario": "预算"
+    "budget_scenario": "预算",
+    "hrm_employment_change_request": "雇佣变更"
   },
   "decide": {
     "rejectionReason": "驳回原因：",

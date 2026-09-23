@@ -3679,6 +3679,21 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   }
 })
 
+test('change-request approval rows carry a translated kind label in every locale', () => {
+  // An hrm_employment_change_request hire approval showed a generic kind
+  // with an opaque id and a blank party while offering Approve and
+  // Reject. Every locale needs the kinds label or the row falls back to
+  // the raw code.
+  const key = 'approvals.kinds.hrm_employment_change_request'
+  const source = flattenCatalog('en')
+  assert.ok(source.get(key)?.trim(), `English source is missing ${key}`)
+  for (const locale of locales.filter((candidate) => candidate !== 'en').sort()) {
+    const value = flattenCatalog(locale).get(key)
+    assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+    assert.notEqual(value, source.get(key), `${locale} must not copy English ${key}`)
+  }
+})
+
 test('budget approval rows carry a translated kind label in every locale', () => {
   // The approvals inbox renders pending budgets with a kinds label
   // (F-t13-005); without one the row falls back to the raw
@@ -5309,7 +5324,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "sync": 172,
   "login": 33,
   "accounts": 82,
-  "approvals": 69,
+  "approvals": 70,
   "assistant": 63,
   "common": 266,
   "crm": 304,

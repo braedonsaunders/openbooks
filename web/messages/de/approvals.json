@@ -39,7 +39,8 @@
     "quote": "Angebot",
     "field_ticket": "Leistungsnachweis",
     "close_run": "Periodenabschluss",
-    "budget_scenario": "Budget"
+    "budget_scenario": "Budget",
+    "hrm_employment_change_request": "Beschäftigungsänderung"
   },
   "decide": {
     "rejectionReason": "Ablehnungsgrund:",

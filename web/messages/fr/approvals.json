@@ -39,7 +39,8 @@
     "quote": "soumission",
     "field_ticket": "fiche de travail",
     "close_run": "clôture de période",
-    "budget_scenario": "budget"
+    "budget_scenario": "budget",
+    "hrm_employment_change_request": "modification d'emploi"
   },
   "decide": {
     "rejectionReason": "Motif du rejet :",

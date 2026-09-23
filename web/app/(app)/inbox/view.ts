@@ -33,6 +33,7 @@ import { getAuthz, can } from '../../../lib/authz'
 import { APPROVALS_BULK_BATCH_MAX } from '../../../lib/approvals-limits'
 import { clamp, pickString } from '../../../lib/list-params'
 import { approvalRecordHref } from '../../../lib/approvals-links'
+import { resolveApprovalSubjects } from '../../../lib/approval-subjects'
 import { pgTextArrayLiteral } from '../../../lib/pg-array'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import type { ApprovalRow } from './ApprovalsTable'
@@ -94,6 +95,7 @@ const KIND_KEYS = [
   'quote',
   'close_run',
   'budget_scenario',
+  'hrm_employment_change_request',
 ]
 
 export interface SubmittedListRow {
@@ -196,6 +198,7 @@ export async function loadApprovals(
   const t = await getTranslations('approvals')
   const tc = await getTranslations('common')
   const ti = await getTranslations('inbox')
+  const th = await getTranslations('hrm')
   const authz = await getAuthz()
   if (!authz) return null
   const user = authz.user
@@ -299,15 +302,19 @@ export async function loadApprovals(
 
   const gateToRow = (g: WorklistGate, assignee: string | null): ApprovalRow => {
     const kind = g.document?.kind ?? g.subjectKind
+    // Subject-kind detail (the employee and the decision summary for
+    // change requests): resolved in one batch below through the
+    // per-kind registry — never inline special cases here.
+    const subject = subjectDetails.get(`${g.subjectKind}:${g.subjectId}`)
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
       overdue: g.escalateAt != null && new Date(g.escalateAt).getTime() < Date.now(),
-      documentNumber: g.document?.documentNumber ?? g.subjectLabel ?? g.subjectId.slice(0, 8),
+      documentNumber: g.document?.documentNumber ?? subject?.summary ?? g.subjectLabel ?? g.subjectId.slice(0, 8),
       kind,
       kindLabel: kindLabel(kind),
       href: g.href ?? approvalRecordHref(kind, g.subjectId),
-      party: g.document?.partyName ?? null,
+      party: g.document?.partyName ?? subject?.partyName ?? null,
       amount: g.document ? formatMoney(g.document.total) : null,
       approvalTitle: g.title,
       engineName: flowNames.get(g.flowId) ?? '',
@@ -377,6 +384,17 @@ export async function loadApprovals(
     quorumAll: false,
     signatureRequired: false,
   })
+
+  // Subject-kind detail for flow gates (party + decision summary): one
+  // batched, org-scoped read through the per-kind registry — unresolvable
+  // subjects stay absent and their rows keep the id fallback.
+  const subjectDetails = await resolveApprovalSubjects(
+    orgId,
+    unified.flatMap((item) =>
+      item.kind === 'flow_gate' ? [{ kind: item.subjectKind, subjectId: item.subjectId }] : [],
+    ),
+    th,
+  )
 
   const unionToRow = (item: ApprovalWorklistItem, assignee: string | null): ApprovalRow => {
     if (item.kind === 'document') return docToRow(item)

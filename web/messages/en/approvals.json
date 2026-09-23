@@ -39,7 +39,8 @@
     "quote": "quote",
     "field_ticket": "field ticket",
     "close_run": "period close",
-    "budget_scenario": "budget"
+    "budget_scenario": "budget",
+    "hrm_employment_change_request": "employment change"
   },
   "decide": {
     "rejectionReason": "Rejection reason:",
