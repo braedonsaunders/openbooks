@@ -47,10 +47,10 @@ export type DunningStage = {
 };
 
 /**
- * Pick the one stage to fire for a document: the highest-sequence stage whose
- * offset the document has crossed and that has not already fired.
- * `daysOverdue` is signed — negative while the document is still before its
- * due date.
+ * Pick the one stage to fire for a document: the highest-sequence crossed
+ * stage that has not already fired and is not superseded by a higher rung
+ * that has. `daysOverdue` is signed — negative while the document is still
+ * before its due date.
  *
  * A stage becomes due on its exact configured day, `dueDate + offsetDays`.
  * Negative offsets are courtesy rungs anchored BEFORE the due date and come
@@ -61,7 +61,16 @@ export type DunningStage = {
  * honored as "start dunning before the due date" — that is what negative
  * offsets are for. Returning a single stage (not every crossed threshold)
  * means a document that has been late for a while gets the most-recent
- * notice, never a burst of back-dated ones. Pure — unit-tested directly.
+ * notice, never a burst of back-dated ones.
+ *
+ * Once a higher rung has fired, every lower rung is superseded and never
+ * sent — otherwise an invoice discovered 40 days late would send stage 3,
+ * then stage 2, then stage 1 on successive ticks: contradictory back-dated
+ * collection notices after an escalation. `firedStageIds` carries only
+ * SUCCESSFUL sends (dunning_log status 'sent'): a crossed stage whose send
+ * failed leaves no sent row, so it stays eligible and retries — failed and
+ * suppressed delivery rows must never enter this set. Pure — unit-tested
+ * directly.
  */
 export function selectDueStage(
   stages: DunningStage[],
@@ -70,7 +79,12 @@ export function selectDueStage(
   gracePeriodDays: number,
 ): DunningStage | null {
   const grace = Math.max(0, gracePeriodDays);
+  const firedSequences = stages
+    .filter((s) => firedStageIds.has(s.id))
+    .map((s) => s.sequence);
+  const supersededBelow = firedSequences.length > 0 ? Math.max(...firedSequences) : -Infinity;
   const candidates = stages
+    .filter((s) => s.sequence > supersededBelow)
     .filter((s) =>
       s.offsetDays < 0
         ? daysOverdue >= s.offsetDays
