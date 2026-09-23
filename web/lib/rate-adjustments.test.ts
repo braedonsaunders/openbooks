@@ -47,6 +47,17 @@ test('a threshold is a floor on the basis, so below it nothing triggers', () => 
   assert.equal(priceAdjustments([labor('3000.00')], [a]).length, 1)
 })
 
+test('a threshold compares exact decimals, never floats', () => {
+  // At numeric(19,4) magnitude Number() collapses 4dp neighbors:
+  // Number('900719925474099.0000') === Number('900719925474099.0001'), so a
+  // float comparison charges a basis one tenth-thousandth below the floor.
+  const below = adjustment({ threshold: '900719925474099.0001' })
+  assert.equal(priceAdjustments([labor('900719925474099.0000')], [below]).length, 0)
+  const above = adjustment({ threshold: '900719925474099.0000' })
+  const [charge] = priceAdjustments([labor('900719925474099.0001')], [above])
+  assert.equal(charge!.basis, '900719925474099.0001')
+})
+
 test('overtime can be excluded from a surcharge', () => {
   const a = adjustment({ appliesOvertime: false })
   assert.equal(lineMatchesAdjustment(labor('100', { timeKind: 'overtime' }), a), false)
