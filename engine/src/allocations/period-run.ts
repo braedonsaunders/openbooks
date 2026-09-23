@@ -14,6 +14,10 @@ import {
   type GlLine,
 } from "../projects/recognition.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import type {
   AccountScope,
@@ -1490,6 +1494,25 @@ function requireReason(reason: string, what: string): string {
 }
 
 /**
+ * Allocations feature fence: the authoritative posting/reversing
+ * transactions recheck the org's `allocations` switch under the per-org
+ * feature-gate advisory lock, serializing this writer against a concurrent
+ * Company Settings → Features disable (same fence the disable path and the
+ * projects creators use). Off refuses by name with zero writes — the routes
+ * and the scheduler check the flag first, but this is the check that cannot
+ * be raced.
+ */
+async function assertAllocationsEnabled(tx: Tx, orgId: string, verb: string): Promise<void> {
+  await acquireOrgFeatureGateLock(tx, orgId);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "allocations"))) {
+    throw new AllocationRunError(
+      "INVALID",
+      `Allocations are turned off for this organization — turn them on in Company Settings → Features to ${verb} this run`,
+    );
+  }
+}
+
+/**
  * Compute a period sweep and store it as a `previewed` run. Previewing never
  * writes GL — it only reads the pool, resolves the driver vector, apportions,
  * and stores the full computation with its sha256 fingerprint.
@@ -1676,6 +1699,9 @@ export async function postAllocationRun(
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be posted`);
     }
     const orgId = run.org_id;
+    // Fenced recheck before any write (including opening an approval gate):
+    // a disable that landed after preview/submit must refuse, never post.
+    await assertAllocationsEnabled(tx, orgId, "post");
     const period = await loadPeriod(tx, orgId, run.period_id);
     // The preview's world may have moved on (rule deactivated, version
     // retired): re-check the head and the pinned version before money moves,
@@ -1770,6 +1796,9 @@ export async function reverseAllocationRun(
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be reversed`);
     }
     const orgId = run.org_id;
+    // Same fence as posting: reversing writes a reversal journal, so a
+    // disable must refuse it too.
+    await assertAllocationsEnabled(tx, orgId, "reverse");
     const period = await loadPeriod(tx, orgId, run.period_id);
     const reversalDate = opts.reversalDate ?? (await businessToday(orgId));
     // The reversal lands on the reversal date AND unwinds this run's period:
@@ -1833,6 +1862,9 @@ export async function rerunAllocationRun(
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
     const orgId = run.org_id;
+    // Rerun reverses and posts inside this one transaction: fence once here
+    // before any of those writes.
+    await assertAllocationsEnabled(tx, orgId, "re-run");
     const period = await loadPeriod(tx, orgId, run.period_id);
     const book = await loadBook(tx, orgId, run.book_id);
     if (run.subsidiary_id) await requireSubsidiary(tx, orgId, run.subsidiary_id);

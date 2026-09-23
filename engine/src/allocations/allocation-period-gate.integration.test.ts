@@ -70,6 +70,19 @@ async function seedDepartment(orgId: string, name: string): Promise<string> {
   return id;
 }
 
+// The engine fences posting behind the org's `allocations` switch: these
+// tests drive the engine directly (no route gate), so every scratch org opts
+// in — including the refusal tests, which must reach the period gate rather
+// than the feature fence.
+async function enableAllocations(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(
+      settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
+    where id = ${orgId}
+  `);
+}
+
 function negate(amount: string): string {
   return amount.startsWith("-") ? amount.slice(1) : `-${amount}`;
 }
@@ -152,6 +165,7 @@ async function previewOpenRun(org: ScratchOrg, actorId: string, tag: string): Pr
 
 test("open period: the sweep still posts (setup can post, refusal is load-bearing)", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const runId = await previewOpenRun(org, actorId, "open");
@@ -165,6 +179,7 @@ test("open period: the sweep still posts (setup can post, refusal is load-bearin
 
 test("allocation posting refuses a user-closed GL period", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const runId = await previewOpenRun(org, actorId, "user");
@@ -181,6 +196,7 @@ test("allocation posting refuses a user-closed GL period", { skip: !DB }, async 
 
 test("allocation posting refuses a source-owned imported lock", { skip: !DB }, async () => {
   const org = await createScratchOrg();
+  await enableAllocations(org.orgId);
   try {
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const runId = await previewOpenRun(org, actorId, "imported");

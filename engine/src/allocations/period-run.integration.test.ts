@@ -35,6 +35,20 @@ async function seedDepartment(orgId: string, name: string): Promise<string> {
   return id;
 }
 
+/**
+ * The engine fences posting/reversing/re-running behind the org's
+ * `allocations` switch: these tests drive the engine directly (no route
+ * gate), so every scratch org opts in, the way the Features page would.
+ */
+async function enableAllocations(orgId: string): Promise<void> {
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(
+      settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"allocations":true}'::jsonb, true)
+    where id = ${orgId}
+  `);
+}
+
 interface SeedTarget {
   departmentId?: string | null;
   targetAccountId?: string | null;
@@ -204,6 +218,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const calendar = (await db.execute<{ fiscal_calendar_id: string }>(sql`
@@ -264,6 +279,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -300,6 +316,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -359,6 +376,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const depts = [
@@ -403,6 +421,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -442,6 +461,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -479,6 +499,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -534,6 +555,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -569,6 +591,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -615,6 +638,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -650,6 +674,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -688,7 +713,9 @@ test(
   { skip: !DB },
   async () => {
     const orgA = await createScratchOrg();
+    await enableAllocations(orgA.orgId);
     const orgB = await createScratchOrg();
+    await enableAllocations(orgB.orgId);
     const actorA = (await seedFlowActors(orgA.orgId)).adminId;
     try {
       const { ruleId } = await seedPeriodRule({ orgId: orgB.orgId, poolAccountId: orgB.accounts.adjustment });
@@ -725,6 +752,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -764,6 +792,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -816,6 +845,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -860,6 +890,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -892,6 +923,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -924,6 +956,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -955,6 +988,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
@@ -1003,6 +1037,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
+    await enableAllocations(org.orgId);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       const deptA = await seedDepartment(org.orgId, "Dept A");
