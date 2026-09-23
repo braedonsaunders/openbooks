@@ -17,6 +17,7 @@
 
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../../platform/db.ts";
+import { businessTimeZone } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { FieldTimeError, isForeignKeyViolation, refuse } from "./errors.ts";
 import {
@@ -34,7 +35,7 @@ import {
   quantumUnitsToHours,
   roundHours,
   sameClockPayload,
-  splitUtcDays,
+  splitZoneDays,
   validateClockSequence,
   validateEventChronology,
   type ClockKind,
@@ -291,6 +292,9 @@ async function pairAndPostEntries(input: {
   const shiftRounded = roundHours((totalNetMs / 3_600_000).toFixed(4), settings.rounding);
   const totalUnits = hoursToQuantumUnits(shiftRounded, settings.rounding);
   if (totalUnits <= 0) throw noPayable();
+  // The business zone is resolved once per close: every midnight split
+  // below days in it, so entry dates are business dates.
+  const timeZone = await businessTimeZone(input.orgId);
   interface DayCell {
     date: string;
     ms: number;
@@ -306,9 +310,10 @@ async function pairAndPostEntries(input: {
     const refs = si === segments.length - 1 && segments.length > 1
       ? input.closeRefs
       : { projectId: segment.projectId, projectTaskId: segment.projectTaskId, costCodeRef: segment.costCodeRef };
-    // UTC midnights: the org model declares no business timezone, and
-    // the rest of time tracking already days in UTC.
-    const pieces = splitUtcDays(segment.fromMs, segment.toMs);
+    // Business midnights: time-entry dates are business dates, the
+    // same basis businessToday days on — a UTC split would date a
+    // UTC-5 evening shift partly on the next day.
+    const pieces = splitZoneDays(segment.fromMs, segment.toMs, timeZone);
     const dealt = distributeProRata(netMs, pieces.map((p) => p.ms));
     pieces.forEach((piece, i) => {
       if (dealt[i]! > 0) cells.push({ date: piece.date, ms: dealt[i]!, refs });
