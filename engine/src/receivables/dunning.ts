@@ -417,6 +417,12 @@ async function runDunningInternal(
           // below decides what this tick does: this is the expected
           // concurrent-tick shape, which is why `do nothing` is correct here
           // rather than a failure.
+          // sent_at is intentionally unset here: it is delivery evidence,
+          // stamped only by a successful delivery (the email worker's
+          // staged→sent settle or the accepted-evidence reconciliation
+          // below). A staged claim — and any failed/suppressed outcome —
+          // keeps sent_at NULL, so no unsent letter can ever read as
+          // delivered. Migration 0329 removed the old DEFAULT now().
           const claimed = await db.execute<{ id: string }>(sql`
             insert into dunning_log (org_id, document_id, policy_id, stage_id, party_id, to_email,
                                      amount_due, currency_code, channel, status, detail)
@@ -583,10 +589,12 @@ async function runDunningInternal(
 
           // In-tick outcomes for claims that never reach the worker: only a
           // deferral that throws ('failed') and an unsendable notice
-          // ('suppressed'). A successfully deferred letter stays 'staged' —
-          // the email worker alone moves it to its outcome from the
-          // provider's verdict. The update names its row back — a write
-          // matching zero rows is a failure, never a reported outcome.
+          // ('suppressed'). Neither stamps sent_at — the letter never went
+          // out, so it stays NULL delivery evidence. A successfully deferred
+          // letter stays 'staged' — the email worker alone moves it to its
+          // outcome from the provider's verdict. The update names its row
+          // back — a write matching zero rows is a failure, never a reported
+          // outcome.
           const settleClaim = async (
             status: "failed" | "suppressed",
             detail: string | null,

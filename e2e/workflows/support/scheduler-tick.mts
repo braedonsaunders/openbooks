@@ -93,7 +93,7 @@ async function main(): Promise<void> {
             from dunning_log dl
             join documents d on d.id = dl.document_id
             join dunning_stages st on st.id = dl.stage_id
-           order by dl.sent_at, st.sequence
+           order by dl.sent_at nulls last, st.sequence
         `),
       );
       emit({
