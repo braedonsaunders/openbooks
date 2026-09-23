@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.ts";
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
 import { appliedLegAmountExpr } from "../records/balance-due.ts";
-import { apOpenAccountScope } from "../records/open-item-scopes.ts";
+import { apOpenAccountScope, asOfPostedEntryLateral } from "../records/open-item-scopes.ts";
 import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
@@ -189,7 +189,9 @@ type OpenItem = {
  * sign; credit memos carry the opposite sign on the same control account, so
  * an unapplied credit nets against the party's bills (or scheduled outflow
  * overstates cash need). Each leg nets through its own carrying column via
- * the shared balance-due helper, never a bare sum for both legs. Translated
+ * the shared balance-due helper, never a bare sum for both legs. The
+ * document's posting is reconstructed as of the date from journal history
+ * (shared helper) — a later correction or void never rewrites it. Translated
  * at the closing spot — raw functionals would mix subsidiary currencies.
  */
 async function sideOpenItems(
@@ -220,13 +222,14 @@ async function sideOpenItems(
                   and (x.unapplied_at is null or x.unapplied_at::date > ${asOf}::date)
              ), 0)) as remaining
         from documents d
-        join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
-         and je.posting_date <= ${asOf}
+        ${asOfPostedEntryLateral(orgId, asOf)}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
          and ${side === "ap" ? apOpenAccountScope(sql`a`, orgId) : sql`a.type = 'asset_receivable'`}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-       where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
+       where d.org_id = ${orgId}
+         and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+         and ${kindFilter}
     )
     select oi.id::text as id, oi.party_id::text as party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
