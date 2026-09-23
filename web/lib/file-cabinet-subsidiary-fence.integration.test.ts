@@ -49,7 +49,7 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
   // Seed only runs in the bypass scope. Every fenced assertion below runs
   // outside it: the verbs enforce the fence through the caller's own
   // viewer/scope, and a bypassed refusal would prove nothing.
-  const { userA, userB, subA, subB, docA, commonId, leafAId, leafRId, faId, fcId, fpId } = await withBypass(
+  const { userA, userB, subA, subB, commonId, leafAId, leafRId, faId, fcId, fpId } = await withBypass(
     async () => {
       const userA = await createScratchUser(org.orgId, 'Keeper A', 'keeper_a')
       const userB = await createScratchUser(org.orgId, 'Keeper B', 'keeper_b')
@@ -86,7 +86,7 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
       await db.execute(sql`insert into file_attachments (org_id, file_id, target_table, target_id, created_by)
         values (${org.orgId}, ${faId}, 'documents', ${docA}, ${userA}),
                (${org.orgId}, ${fcId}, 'documents', ${docA}, ${userA})`)
-      return { userA, userB, subA, subB, docA, commonId, leafAId, leafRId, faId, fcId, fpId }
+      return { userA, userB, subA, subB, commonId, leafAId, leafRId, faId, fcId, fpId }
     },
   )
   try {
