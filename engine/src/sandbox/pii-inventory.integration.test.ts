@@ -850,6 +850,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "hrm_enrollment_windows.kind",
   "hrm_enrollment_windows.name",
   "hrm_enrollment_windows.status",
+  "hrm_exit_record_events.kind",
   "hrm_exit_records.reason_kind",
   "hrm_feedback.kind",
   "hrm_feedback.visibility",
