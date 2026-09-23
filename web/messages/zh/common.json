@@ -34,6 +34,7 @@
     "rename": "重命名",
     "replace": "替换",
     "post": "过账",
+    "postRequiresPermission": "过账（需要 {permission}）",
     "posting": "过账中…",
     "void": "作废",
     "approve": "批准",

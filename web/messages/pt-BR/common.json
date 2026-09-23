@@ -34,6 +34,7 @@
     "rename": "Renomear",
     "replace": "Substituir",
     "post": "Lançar",
+    "postRequiresPermission": "Lançar (requer {permission})",
     "posting": "Lançando…",
     "void": "Anular",
     "approve": "Aprovar",

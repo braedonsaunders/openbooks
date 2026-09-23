@@ -630,6 +630,24 @@ test('partyless-control post warning ships localized in every locale', () => {
   }
 })
 
+test('row-post grant label ships localized in every locale', () => {
+  // UX-09: the document list row renders a disabled Post naming the required
+  // grant — absent outside en it falls back to English inside otherwise
+  // translated lists. The {permission} interpolation must survive in every
+  // locale.
+  const key = 'common.actions.postRequiresPermission'
+  const source = flattenCatalog('en')
+  assert.ok(source.get(key), `en is missing ${key}`)
+  for (const locale of locales) {
+    if (locale === 'en') continue
+    const catalog = flattenCatalog(locale)
+    const value = catalog.get(key)
+    assert.ok(value && value.trim(), `${locale} is missing ${key}`)
+    assert.notEqual(value, source.get(key), `${locale} must localize ${key}`)
+    assert.ok(value.includes('{permission}'), `${locale} must keep the {permission} interpolation`)
+  }
+})
+
 test('pack-declared tax filing notices resolve localized in every locale', () => {
   // F-w4-001: the generic prepare panel branched on the literal `CA_GST34`
   // code because packs had no notice channel. Packs now declare a
@@ -5331,7 +5349,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "accounts": 82,
   "approvals": 70,
   "assistant": 63,
-  "common": 266,
+  "common": 267,
   "crm": 304,
   "customization": 185,
   "dashboard": 203,

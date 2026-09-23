@@ -35,6 +35,7 @@
     "rename": "Renommer",
     "replace": "Remplacer",
     "post": "Comptabiliser",
+    "postRequiresPermission": "Comptabiliser (requiert {permission})",
     "posting": "Comptabilisation…",
     "void": "Annuler",
     "approve": "Approuver",

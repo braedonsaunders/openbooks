@@ -19,14 +19,26 @@ export function DocumentRowActions({
   status,
   config,
   openHref,
+  canPost,
 }: {
   id: string
   status: string
   config: DocKindConfig
   openHref: string
+  /**
+   * Loader-resolved post capability for the row's namespace (the same
+   * decision the drawer reads). Without it the row never offers an enabled
+   * Post: the server still refuses, but the operator learns the required
+   * grant up front instead of on click.
+   */
+  canPost: boolean
 }) {
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  // The grant the disabled Post names — the same key the API refuses with
+  // (`missing permission: ${perm}`), so the row and the refusal agree.
+  const requiredPostPermission = config.permNamespace === 'gl' ? 'gl.post' : `${config.permNamespace}.post`
+  const postBlockedLabel = tCommon('actions.postRequiresPermission', { permission: requiredPostPermission })
   const [busy, setBusy] = useState(false)
   // A refused submit/post that only fires a transient toast reads as
   // "nothing happened" once it dismisses (the F-t06-018 precedent): the
@@ -69,13 +81,42 @@ export function DocumentRowActions({
     </p>
   ) : null
 
+  // A Post the role may not take renders disabled with the required grant
+  // named — never an enabled button that only the server refuses, and never
+  // hidden so thoroughly the preparer cannot see the two-person handoff.
+  function postButton({ primary }: { primary: boolean }) {
+    if (canPost) {
+      return (
+        <Button variant={primary ? undefined : 'outline'} size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('post')} aria-label={tCommon('actions.post')} title={tCommon('actions.post')}>
+          {busy ? <LoaderCircle size={14} className="animate-spin" /> : <BookCheck size={14} />}
+        </Button>
+      )
+    }
+    return (
+      <Button variant="outline" size="icon" className="h-7 w-7" disabled aria-label={postBlockedLabel} title={postBlockedLabel}>
+        <BookCheck size={14} />
+      </Button>
+    )
+  }
+
   if (status === 'draft') {
-    const label = config.directPost ? tCommon('actions.post') : t('actions.submitForApproval')
+    // Submit-for-approval is a create-namespaced action, not a post: a
+    // preparer without post rights still submits; only direct-post drafts
+    // gate on canPost.
+    if (!config.directPost) {
+      const label = t('actions.submitForApproval')
+      return (
+        <div className="flex flex-col items-end gap-1">
+          <Button variant="outline" size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('submit')} aria-label={label} title={label}>
+            {busy ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}
+          </Button>
+          {refusalAlert}
+        </div>
+      )
+    }
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button variant="outline" size="icon" className="h-7 w-7" disabled={busy} onClick={() => act(config.directPost ? 'post' : 'submit')} aria-label={label} title={label}>
-          {busy ? <LoaderCircle size={14} className="animate-spin" /> : config.directPost ? <BookCheck size={14} /> : <Send size={14} />}
-        </Button>
+        {postButton({ primary: false })}
         {refusalAlert}
       </div>
     )
@@ -83,9 +124,7 @@ export function DocumentRowActions({
   if (status === 'approved' && !config.directPost) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <Button size="icon" className="h-7 w-7" disabled={busy} onClick={() => act('post')} aria-label={tCommon('actions.post')} title={tCommon('actions.post')}>
-          {busy ? <LoaderCircle size={14} className="animate-spin" /> : <BookCheck size={14} />}
-        </Button>
+        {postButton({ primary: true })}
         {refusalAlert}
       </div>
     )

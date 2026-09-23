@@ -34,6 +34,7 @@
     "rename": "名前を変更",
     "replace": "置き換え",
     "post": "記帳",
+    "postRequiresPermission": "記帳（{permission} が必要）",
     "posting": "記帳中…",
     "void": "無効化",
     "approve": "承認",

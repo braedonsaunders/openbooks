@@ -86,6 +86,14 @@ export interface BankingTransactionsData {
   description: string
   currentParams: Record<string, string | string[] | undefined>
   canCreate: boolean
+  /**
+   * Per-namespace post decisions for the row actions. Banking kinds span
+   * namespaces (card/check post under ap.post, deposit/transfer under
+   * gl.post), so one page-level boolean would offer Post to a holder of the
+   * wrong grant — the row widget picks by the row's kind.
+   */
+  canPostAp: boolean
+  canPostGl: boolean
   newButton: {
     items: { kind: string; label: string }[]
     basePath: string
@@ -250,6 +258,8 @@ export async function loadBankingTransactions(
     description: t('transactionsPage.description'),
     currentParams: sp,
     canCreate,
+    canPostAp: can(authz, 'ap.post'),
+    canPostGl: can(authz, 'gl.post'),
     newButton,
     drawerOpen: Boolean(drawer),
     drawer,
@@ -291,7 +301,7 @@ export function bankingTransactionsSpec(data: BankingTransactionsData): PageSpec
         sp: data.currentParams,
         drawer: data.drawer ? { widget: 'document-drawer', props: { drawer: data.drawer } } : null,
         emptyAction: data.canCreate ? newDocument : null,
-        rowActions: { widget: 'document-row-actions', props: { basePath: '/banking/transactions' } },
+        rowActions: { widget: 'document-row-actions', props: { basePath: '/banking/transactions', canPostAp: data.canPostAp, canPostGl: data.canPostGl } },
       }),
     ],
   })

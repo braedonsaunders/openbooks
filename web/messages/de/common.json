@@ -34,6 +34,7 @@
     "rename": "Umbenennen",
     "replace": "Ersetzen",
     "post": "Buchen",
+    "postRequiresPermission": "Buchen (erfordert {permission})",
     "posting": "Wird gebucht…",
     "void": "Stornieren",
     "approve": "Genehmigen",

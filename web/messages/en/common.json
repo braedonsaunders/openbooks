@@ -35,6 +35,7 @@
     "rename": "Rename",
     "replace": "Replace",
     "post": "Post",
+    "postRequiresPermission": "Post (requires {permission})",
     "posting": "Posting…",
     "void": "Void",
     "approve": "Approve",
