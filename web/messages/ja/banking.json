@@ -133,7 +133,9 @@
     "description": "消込対象の全勘定にインポートされたすべての銀行明細です。",
     "search": "日付、ソース、勘定で検索…",
     "emptyTitle": "インポートされた明細がありません",
-    "emptyDescription": "勘定から OFX または CSV 明細をインポートすると、ここに表示されます。"
+    "emptyDescription": "勘定から OFX または CSV 明細をインポートすると、ここに表示されます。",
+    "accountLabel": "口座",
+    "accountPlaceholder": "口座を選択…"
   },
   "reconsPage": {
     "title": "消込",

@@ -133,7 +133,9 @@
     "description": "所有可对账账户中已导入的每一份银行对账单。",
     "search": "按日期、来源或账户搜索…",
     "emptyTitle": "无已导入对账单",
-    "emptyDescription": "从账户导入 OFX 或 CSV 对账单即可在此查看。"
+    "emptyDescription": "从账户导入 OFX 或 CSV 对账单即可在此查看。",
+    "accountLabel": "账户",
+    "accountPlaceholder": "选择账户…"
   },
   "reconsPage": {
     "title": "对账",

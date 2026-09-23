@@ -133,7 +133,9 @@
     "description": "Todos os extratos bancários importados em suas contas conciliáveis.",
     "search": "Buscar por data, origem ou conta…",
     "emptyTitle": "Nenhum extrato importado",
-    "emptyDescription": "Importe um extrato OFX ou CSV de uma conta para vê-lo aqui."
+    "emptyDescription": "Importe um extrato OFX ou CSV de uma conta para vê-lo aqui.",
+    "accountLabel": "Conta",
+    "accountPlaceholder": "Selecione uma conta…"
   },
   "reconsPage": {
     "title": "Conciliações",

@@ -265,6 +265,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'identity-cell',
   'identity-record-card',
   'import-statement',
+  'import-statement-picker',
   'import-wizard',
   'in-nav-cell',
   // HR-15: unified inbox task rows.

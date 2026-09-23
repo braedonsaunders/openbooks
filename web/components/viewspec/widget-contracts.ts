@@ -247,6 +247,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'identity-cell': { props: ['detail', 'name'] },
   'identity-record-card': { props: ['facts', 'title'] },
   'import-statement': { props: ['accountId'] },
+  'import-statement-picker': { props: ['accounts', 'placeholder', 'selectLabel'] },
   'import-wizard': { props: [] },
   'in-nav-cell': { props: ['label', 'shown'] },
   'inbox-task-list': { props: ['actedLabel', 'delegatePlaceholder', 'openLabel', 'rows', 'users'] },

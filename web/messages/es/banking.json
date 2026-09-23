@@ -133,7 +133,9 @@
     "description": "Todos los extractos bancarios importados en tus cuentas conciliables.",
     "search": "Buscar por fecha, origen o cuenta…",
     "emptyTitle": "No hay extractos importados",
-    "emptyDescription": "Importa un extracto OFX o CSV desde una cuenta para verlo aquí."
+    "emptyDescription": "Importa un extracto OFX o CSV desde una cuenta para verlo aquí.",
+    "accountLabel": "Cuenta",
+    "accountPlaceholder": "Seleccionar una cuenta…"
   },
   "reconsPage": {
     "title": "Conciliaciones",

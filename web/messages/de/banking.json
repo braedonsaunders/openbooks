@@ -133,7 +133,9 @@
     "description": "Jeder Kontoauszug, der über Ihre abstimmbaren Konten importiert wurde.",
     "search": "Nach Datum, Quelle oder Konto suchen…",
     "emptyTitle": "Keine Auszüge importiert",
-    "emptyDescription": "Importieren Sie einen OFX- oder CSV-Auszug von einem Konto, um ihn hier zu sehen."
+    "emptyDescription": "Importieren Sie einen OFX- oder CSV-Auszug von einem Konto, um ihn hier zu sehen.",
+    "accountLabel": "Konto",
+    "accountPlaceholder": "Konto auswählen…"
   },
   "reconsPage": {
     "title": "Abstimmungen",

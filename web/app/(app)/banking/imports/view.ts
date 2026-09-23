@@ -7,10 +7,12 @@ import {
   page,
   pageHeader,
   ref,
+  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
+import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { mapBankFeedRows } from './sections'
 
@@ -21,8 +23,9 @@ import { mapBankFeedRows } from './sections'
  * The bank_statement list itself arrives through the shared `entity-list-view`
  * widget — the slot re-derives orgId/userId/permissions from the session, so
  * the spec carries only the record type and the current params, never an org
- * id. The imports page passes no drawer and no emptyAction, and the spec
- * preserves that: the slot renders nothing in either position.
+ * id. The list passes no drawer; its emptyAction is the statement-import
+ * picker (account select + the canonical per-account import dialog), the
+ * same widget as the header CTA — one implementation serving both slots.
  *
  * The feeds panel cannot be a table or a repeat: its rows are conditional
  * pairs (an error line vs nothing; a paused marker vs nothing; a last-attempt
@@ -56,6 +59,10 @@ export interface BankingImportsData {
   lastAttemptLabel: string
   neverLabel: string
   feeds: ReturnType<typeof mapBankFeedRows>
+  canImport: boolean
+  importAccounts: { id: string; label: string }[]
+  importAccountLabel: string
+  importAccountPlaceholder: string
 }
 
 export async function loadBankingImports(
@@ -68,6 +75,11 @@ export async function loadBankingImports(
   // standardized statement-history list. Connection management remains in setup.
   const features = await resolvedFeatureState(authz.user.orgId)
   const feedsEnabled = featureEnabled(features, 'bankFeeds')
+  // The import dialog is per-account, so the history page carries the bank
+  // account context as a picker over the ONE reconcilable-membership read
+  // every banking surface agrees on — never a second account query.
+  const canImport = can(authz, 'banking.reconcile')
+  const reconAccounts = canImport ? await listReconcilableBankAccounts(authz.user.orgId) : []
   const feeds = feedsEnabled
     ? ((await db.execute<FeedRow>(sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_attempt_at, c.last_error, c.is_active,
@@ -93,12 +105,31 @@ export async function loadBankingImports(
     lastAttemptLabel: t('bankFeeds.operational.lastAttempt'),
     neverLabel,
     feeds: mapBankFeedRows(feeds),
+    canImport,
+    importAccounts: reconAccounts.map((account) => ({
+      id: account.id,
+      label: [account.number, account.name].filter(Boolean).join(' · '),
+    })),
+    importAccountLabel: t('imports.accountLabel'),
+    importAccountPlaceholder: t('imports.accountPlaceholder'),
   }
 }
 
 const f = ref<BankingImportsData>()
 
 export function bankingImportsSpec(data: BankingImportsData): PageSpec {
+  // One widget serves the header CTA and the empty-state action: an account
+  // select carrying the bank context plus the canonical per-account import
+  // dialog. The header gates on the reconcile grant; the empty state
+  // additionally needs at least one reconcilable account to import into.
+  const importPicker = {
+    widget: 'import-statement-picker',
+    props: {
+      accounts: data.importAccounts,
+      selectLabel: data.importAccountLabel,
+      placeholder: data.importAccountPlaceholder,
+    },
+  }
   return page({
     route: '/banking/imports',
     layout: 'list',
@@ -107,6 +138,8 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
         back: { href: '/banking', label: f('homeTitle') },
         title: f('title'),
         description: f('description'),
+        actionsClassName: 'flex items-center gap-2',
+        actions: [widget('import-statement-picker', importPicker.props, f('canImport'))],
       }),
     ],
     body: [
@@ -125,6 +158,7 @@ export function bankingImportsSpec(data: BankingImportsData): PageSpec {
       widgetBlock('entity-list-view', {
         recordType: 'bank_statement',
         sp: data.currentParams,
+        emptyAction: data.canImport && data.importAccounts.length > 0 ? importPicker : null,
       }),
     ],
   })
