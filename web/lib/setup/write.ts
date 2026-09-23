@@ -14,6 +14,7 @@ import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-regis
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
 import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
+import { recognitionRulePolicyProblem } from '@openbooks/engine/src/revenue/recognition-limits.ts'
 import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
 // HR-18 begin: recruiting-depth Setup validation runs through the engine
 // owners of each shape (one implementation, two callers).
@@ -501,6 +502,34 @@ export async function validateEntityIntegrity(
     }
     const fraction = Number(value('firstYearFraction', 'first_year_fraction') ?? 1)
     if (!Number.isFinite(fraction) || fraction < 0 || fraction > 1) return 'first-year-fraction-out-of-range'
+  }
+  if (entity.key === 'recognition-rules') {
+    // One exact contract with the recognition engine (engine/src/revenue):
+    // periods, offsets, or an up-front percent outside the builder's domain
+    // save "successfully" and fail every later invoice attach or posting.
+    // Refuse at save, by field name, with no row change. A blank is not a
+    // choice (the drawer sends '' for untouched keepDefault inputs), so the
+    // merged stored value is validated, never the raw blank.
+    const current = rowId
+      ? (((await executor.execute(sql`
+          select recognition_periods, period_offset, start_offset_days,
+                 initial_amount_percent::text as initial_amount_percent
+            from recognition_rules where id = ${rowId} and org_id = ${orgId}`)))).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const value = (camel: string, snake: string) => {
+      const submitted = body[camel]
+      if (submitted === undefined || submitted === null || String(submitted).trim() === '') {
+        return current?.[snake] ?? null
+      }
+      return submitted
+    }
+    return recognitionRulePolicyProblem({
+      recognitionPeriods: value('recognitionPeriods', 'recognition_periods'),
+      periodOffset: value('periodOffset', 'period_offset'),
+      startOffsetDays: value('startOffsetDays', 'start_offset_days'),
+      initialAmountPercent: value('initialAmountPercent', 'initial_amount_percent'),
+    })
   }
   if (entity.key === 'accounting-books') {
     if (coerceBoolean(body.isPrimary) && body.isActive !== undefined && !coerceBoolean(body.isActive)) {

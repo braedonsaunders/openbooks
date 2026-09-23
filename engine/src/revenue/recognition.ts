@@ -11,6 +11,15 @@ import {
   type AccretionPeriod,
 } from "../money/present-value.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import {
+  MAX_RECOGNITION_DAY_OFFSET,
+  MAX_RECOGNITION_INITIAL_PERCENT,
+  MAX_RECOGNITION_TERM_MONTHS,
+  MIN_RECOGNITION_DAY_OFFSET,
+  MIN_RECOGNITION_INITIAL_PERCENT,
+} from "./recognition-limits.ts";
+
+export { MAX_RECOGNITION_TERM_MONTHS };
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
 
@@ -67,8 +76,8 @@ function recognitionDate(value: string, label = "recognition date"): Date {
 }
 
 function recognitionInteger(value: number, label: string, minimum: number): number {
-  if (!Number.isSafeInteger(value) || value < minimum || value > 2147483647) {
-    throw new RevenueRecognitionError(`${label} must be a whole number from ${minimum} through 2147483647`);
+  if (!Number.isSafeInteger(value) || value < minimum || value > MAX_RECOGNITION_DAY_OFFSET) {
+    throw new RevenueRecognitionError(`${label} must be a whole number from ${minimum} through ${MAX_RECOGNITION_DAY_OFFSET}`);
   }
   return value;
 }
@@ -127,7 +136,7 @@ function inclusiveDays(startOn: string, endOn: string): number {
 
 /** Shift a YYYY-MM-DD date by n days, returning YYYY-MM-DD. */
 export function addDays(date: string, n: number): string {
-  recognitionInteger(n, "day offset", -2147483648);
+  recognitionInteger(n, "day offset", MIN_RECOGNITION_DAY_OFFSET);
   const dt = new Date((epochDay(date) + n) * 86_400_000);
   if (Number.isNaN(dt.getTime()) || dt.getUTCFullYear() < 1 || dt.getUTCFullYear() > 9999) {
     throw new RevenueRecognitionError("recognition date exceeds the supported calendar");
@@ -543,9 +552,6 @@ export interface RecognitionInput {
   events?: { periodMonth: string; amount: string }[];
 }
 
-/** Supported recognition schedule horizon: 100 years of monthly periods. */
-export const MAX_RECOGNITION_TERM_MONTHS = 1200;
-
 export interface RecognitionLinePlan {
   sequence: number;
   /** YYYY-MM-01 — the accounting month this recognition belongs to. */
@@ -559,10 +565,10 @@ export interface RecognitionLinePlan {
 /** Cumulative-percent × total, exact to 4dp. */
 function pctOf(totalUnits: bigint, pct: string): bigint {
   try {
-    if (cmp(pct, "0") < 0 || cmp(pct, "100") > 0) throw new Error("out of range");
+    if (cmp(pct, MIN_RECOGNITION_INITIAL_PERCENT) < 0 || cmp(pct, MAX_RECOGNITION_INITIAL_PERCENT) > 0) throw new Error("out of range");
     return toUnits(mulPercent(fromUnits(totalUnits), pct, 4));
   } catch {
-    throw new RevenueRecognitionError("recognition percentage must be a decimal from 0 through 100");
+    throw new RevenueRecognitionError(`recognition percentage must be a decimal from ${MIN_RECOGNITION_INITIAL_PERCENT} through ${MAX_RECOGNITION_INITIAL_PERCENT}`);
   }
 }
 
