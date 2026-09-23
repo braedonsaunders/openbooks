@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   accrualEarned,
+  accrualEarnedAcrossSegments,
   addHours,
   carryoverApplied,
   cmpHours,
@@ -135,6 +136,66 @@ test("day splits are exact: first days take the remainder penny", () => {
   const parts = splitHoursAcrossDays("10", 7);
   assert.equal(parts.reduce((sum, part) => addHours(sum, part), "0"), "10");
   assert.throws(() => splitHoursAcrossDays("8", 0), /positive whole day count/);
+});
+
+test("segmented accrual earns the old rate before a mid-year switch, the new rate after", () => {
+  const first = { rule: { kind: "per_period" as const, hours: "8", periods_per_year: 12 }, from: "2026-01-01", to: "2026-06-30" };
+  const second = { rule: { kind: "per_period" as const, hours: "16", periods_per_year: 12 }, from: "2026-07-01", to: null };
+  // 6 × 8 + 6 × 16 = 144 — the current rule backdated to January would read 192.
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-12-31"), "144");
+  // Only whole slices vest: five complete by Jun 30, the sixth (~Jul 2) vests
+  // at the old rate once complete, the July slice only once August opens it.
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-06-30"), "40");
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-07-31"), "48");
+});
+
+test("segmented accrual matches the single-policy rule when nothing changed", () => {
+  const only = { rule: { kind: "per_period" as const, hours: "8", periods_per_year: 12 }, from: "2026-01-01", to: null };
+  assert.equal(
+    accrualEarnedAcrossSegments([only], "2026-01-01", "2026-12-31"),
+    accrualEarned({ kind: "per_period", hours: "8", periods_per_year: 12 }, "2026-01-01", "2026-12-31"),
+  );
+});
+
+test("segmented accrual earns nothing across a coverage gap", () => {
+  const first = { rule: { kind: "per_period" as const, hours: "8", periods_per_year: 12 }, from: "2026-01-01", to: "2026-06-30" };
+  const second = { rule: { kind: "per_period" as const, hours: "16", periods_per_year: 12 }, from: "2026-09-01", to: null };
+  // July and August complete no credited slice: 6 × 8 + 4 × 16 = 112.
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-12-31"), "112");
+});
+
+test("per_year grants vest to the segment holding the date", () => {
+  const first = { rule: { kind: "per_year" as const, hours: "80" }, from: "2026-01-01", to: "2026-06-30" };
+  const second = { rule: { kind: "per_year" as const, hours: "120" }, from: "2026-07-01", to: null };
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-06-01"), "80");
+  assert.equal(accrualEarnedAcrossSegments([first, second], "2026-01-01", "2026-12-31"), "120");
+});
+
+test("any unlimited segment makes the year unbounded, empty coverage earns zero", () => {
+  const capped = { rule: { kind: "per_period" as const, hours: "8", periods_per_year: 12 }, from: "2026-07-01", to: null };
+  const open = { rule: { kind: "unlimited" as const }, from: "2026-01-01", to: "2026-06-30" };
+  assert.equal(accrualEarnedAcrossSegments([open, capped], "2026-01-01", "2026-12-31"), null);
+  assert.equal(accrualEarnedAcrossSegments([], "2026-01-01", "2026-12-31"), "0");
+  assert.equal(
+    accrualEarnedAcrossSegments([{ rule: { kind: "none" as const }, from: "2026-01-01", to: null }], "2026-01-01", "2026-12-31"),
+    "0",
+  );
+});
+
+test("selection breaks exact effective_from ties by id", () => {
+  const scope = { employerSubsidiaryId: "s1", departmentId: "d1" };
+  const a = { id: "b-id", employerSubsidiaryId: "s1", departmentId: "d1", effectiveFrom: "2026-01-01" };
+  const b = { id: "a-id", employerSubsidiaryId: "s1", departmentId: "d1", effectiveFrom: "2026-01-01" };
+  assert.equal(selectPolicy([a, b], scope, "2026-06-01")?.id, "a-id");
+  assert.equal(selectPolicy([b, a], scope, "2026-06-01")?.id, "a-id");
+});
+
+test("selection skips policies whose window ended before the date", () => {
+  const scope = { employerSubsidiaryId: "s1", departmentId: "d1" };
+  const old = { id: "old", employerSubsidiaryId: null, departmentId: null, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31" };
+  const current = { id: "current", employerSubsidiaryId: null, departmentId: null, effectiveFrom: "2026-01-01", effectiveTo: null };
+  assert.equal(selectPolicy([old, current], scope, "2026-06-01")?.id, "current");
+  assert.equal(selectPolicy([old], scope, "2026-06-01"), null);
 });
 
 test("whole periods elapsed clamps to the year", () => {

@@ -191,6 +191,108 @@ export function accrualEarned(
   }
 }
 
+export interface AccrualSegment {
+  /** Accrual rule of the policy owning this window. */
+  readonly rule: AccrualRule;
+  /** Inclusive window start (YYYY-MM-DD). */
+  readonly from: string;
+  /** Inclusive window end, null = open-ended. */
+  readonly to: string | null;
+}
+
+/**
+ * Hours earned across effective-dated policy segments within one accrual
+ * year [yearStart, asOf]. Returns null when any in-window segment is
+ * unlimited: an unbounded half-year makes the total unbounded, and pricing
+ * it under the successor's rule would invent a number nobody promised.
+ *
+ * - per_period credits each whole slice of the year's grid at the rate of
+ *   the policy covering the slice's FIRST service day, so a mid-year
+ *   cadence change earns the old rate for slices begun before the switch
+ *   and the new rate after. A slice begun on an uncovered (gap) day earns
+ *   nothing, and a mid-period hire still earns nothing for the unworked
+ *   part of the slice.
+ * - per_year is an annual grant, not a time-apportioned one: it vests in
+ *   full to the segment holding asOf and lapses for earlier segments.
+ * - none earns zero.
+ */
+export function accrualEarnedAcrossSegments(
+  segments: readonly AccrualSegment[],
+  yearStart: string,
+  asOf: string,
+): string | null {
+  parseCivilDate(yearStart);
+  parseCivilDate(asOf);
+  if (asOf < yearStart) {
+    throw new LeaveMathError(
+      `as-of ${asOf} precedes accrual year start ${yearStart} — resolve the balance in the year the date belongs to`,
+    );
+  }
+  const windowed = segments.filter((seg) => {
+    parseCivilDate(seg.from);
+    if (seg.to !== null) parseCivilDate(seg.to);
+    return seg.from <= asOf && (seg.to === null || seg.to >= yearStart);
+  });
+  if (windowed.some((seg) => seg.rule.kind === "unlimited")) return null;
+  // Day-number grid of the accrual year for slice-start vesting below.
+  // Built once: every segment of the call shares the year's civil grid.
+  const yearEnd = prevDay(addYears(yearStart, 1));
+  const yearDates = eachDayOfRange(yearStart, yearEnd);
+  const yearDays = yearDates.length;
+  const dayIndex = new Map(yearDates.map((day, index) => [day, index]));
+  let total = 0n;
+  for (const seg of windowed) {
+    const rule = seg.rule;
+    if (rule.kind === "none" || rule.kind === "unlimited") continue;
+    if (rule.kind === "per_year") {
+      if (rule.hours == null) {
+        throw new LeaveMathError("a per_year accrual rule must carry hours — set hours or use kind none");
+      }
+      if (seg.from <= asOf && (seg.to === null || seg.to >= asOf)) {
+        total += parseHoursToCents(rule.hours);
+      }
+      continue;
+    }
+    if (rule.hours == null) {
+      throw new LeaveMathError("a per_period accrual rule must carry hours — set hours or use kind none");
+    }
+    const perYear = rule.periods_per_year;
+    if (!Number.isInteger(perYear) || (perYear as number) <= 0) {
+      throw new LeaveMathError(
+        "a per_period accrual rule must carry periods_per_year (a positive integer) — without it a period cannot be pro-rated",
+      );
+    }
+    const clippedStart = seg.from < yearStart ? yearStart : seg.from;
+    const clippedEnd = seg.to === null || seg.to > asOf ? asOf : seg.to;
+    if (clippedEnd < clippedStart || clippedStart > yearEnd) continue;
+    // Slice k (1-based) of this rule's grid starts on day
+    // floor(((k-1) * yearDays) / ppy) + 1 and only vests once complete,
+    // so k runs over completed slices whose start day the window holds.
+    // Exact integer bounds, no iteration over the slice count.
+    const lo = (dayIndex.get(clippedStart) ?? 0) + 1;
+    const hi = clippedEnd >= yearEnd ? yearDays : (dayIndex.get(clippedEnd) ?? yearDays - 1) + 1;
+    const completed = wholePeriodsElapsed(yearStart, asOf, perYear as number);
+    // Closed-form bounds with exact day-number verification: the float
+    // division below can sit 1 ulp off an integer boundary, so each bound
+    // is walked to the true edge (at most a step — start days are
+    // monotone in k, and the walk always terminates).
+    let first = Math.floor(((lo - 1) * (perYear as number)) / yearDays) + 1;
+    while (sliceStartDay(first, yearDays, perYear as number) < lo) first += 1;
+    while (first > 1 && sliceStartDay(first - 1, yearDays, perYear as number) >= lo) first -= 1;
+    let last = Math.min(completed, Math.floor((hi * (perYear as number)) / yearDays) + 1);
+    while (last >= first && sliceStartDay(last, yearDays, perYear as number) > hi) last -= 1;
+    while (last + 1 <= completed && sliceStartDay(last + 1, yearDays, perYear as number) <= hi) last += 1;
+    const count = Math.max(0, last - first + 1);
+    total += parseHoursToCents(rule.hours) * BigInt(count);
+  }
+  return formatCents(total);
+}
+
+/** 1-based day number of the year's grid on which slice k starts. */
+function sliceStartDay(k: number, yearDays: number, periodsPerYear: number): number {
+  return Math.floor(((k - 1) * yearDays) / periodsPerYear) + 1;
+}
+
 function prevDay(date: string): string {
   const parts = splitParts(date);
   if (parts.day > 1) return formatParts({ ...parts, day: parts.day - 1 });
@@ -299,6 +401,8 @@ export interface PolicyCandidate {
   readonly employerSubsidiaryId: string | null;
   readonly departmentId: string | null;
   readonly effectiveFrom: string;
+  /** Inclusive window end, null/undefined = open-ended. Absent = no end filter. */
+  readonly effectiveTo?: string | null;
 }
 
 /**
@@ -315,6 +419,7 @@ export function selectPolicy<T extends PolicyCandidate>(
   const scored: { policy: T; score: number }[] = [];
   for (const policy of policies) {
     if (policy.effectiveFrom > onDate) continue;
+    if (policy.effectiveTo != null && policy.effectiveTo < onDate) continue;
     const subMatch = policy.employerSubsidiaryId === null || policy.employerSubsidiaryId === scope.employerSubsidiaryId;
     const depMatch = policy.departmentId === null || policy.departmentId === scope.departmentId;
     if (!subMatch || !depMatch) continue;
@@ -324,8 +429,14 @@ export function selectPolicy<T extends PolicyCandidate>(
     if (policy.departmentId !== null) score += 1;
     scored.push({ policy, score });
   }
+  // Total order: specificity, then latest start, then id. The old comparator
+  // returned 1 on equal effective_from, so an exact tie resolved by sort
+  // internals rather than by data — two same-scope policies in force on one
+  // day picked arbitrarily.
   scored.sort((a, b) =>
-    b.score - a.score || (b.policy.effectiveFrom < a.policy.effectiveFrom ? -1 : 1),
+    b.score - a.score ||
+    (a.policy.effectiveFrom < b.policy.effectiveFrom ? 1 : a.policy.effectiveFrom > b.policy.effectiveFrom ? -1 : 0) ||
+    (a.policy.id < b.policy.id ? -1 : a.policy.id > b.policy.id ? 1 : 0),
   );
   return scored[0]?.policy ?? null;
 }

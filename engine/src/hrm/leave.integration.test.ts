@@ -836,3 +836,52 @@ test("after-the-fact recording writes the absence record and never a pay input",
     }
   });
 });
+
+test("mid-year policy change accrues per segment, never the current rule backdated", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_period", hours: "8", periods_per_year: 12 },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: "2026-06-30",
+    });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_period", hours: "16", periods_per_year: 12 },
+      effectiveFrom: "2026-07-01",
+      effectiveTo: null,
+    });
+    const december = await timeBalanceAsOf(db, h.org.orgId, employmentId, type.id, "2026-12-31");
+    // 6 × 8 + 6 × 16: pricing the December rule from January would read 192.
+    assert.equal(december.earned, "144");
+    assert.equal(december.balance, "144");
+    assert.equal(december.policyId !== null, true);
+  });
+});
+
+test("carryover is earned under the prior-year policy, not the successor", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId, { valueCrossing: "none" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "40" },
+      carryoverRule: { kind: "carry_all" },
+      effectiveFrom: "2020-01-01",
+      effectiveTo: "2025-12-31",
+    });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      accrualRule: { kind: "per_year", hours: "120" },
+      carryoverRule: { kind: "none" },
+      effectiveFrom: "2026-01-01",
+      effectiveTo: null,
+    });
+    const june = await timeBalanceAsOf(db, h.org.orgId, employmentId, type.id, "2026-06-01");
+    // Prior-year 40 unused carries under the 2025 rule; the 2026 successor
+    // reaching back would carry zero and drop the entitlement.
+    assert.equal(june.earned, "120");
+    assert.equal(june.carried, "40");
+    assert.equal(june.balance, "160");
+  });
+});
