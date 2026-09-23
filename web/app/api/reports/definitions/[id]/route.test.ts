@@ -76,6 +76,12 @@ const mockSources = new Map<string, string>([
           }
           return { rows: [] }
         },
+        // PATCH/DELETE commit the mutation with its audit evidence in one
+        // transaction; the double runs the callback against this same
+        // execute so statement assertions keep seeing every write.
+        async transaction(fn) {
+          return fn({ execute: (query) => db.execute(query) })
+        },
       }
       export const schema = {}
       export const pool = {}
