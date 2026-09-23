@@ -8,7 +8,7 @@ import { adjustInventory } from "./movements.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { assertInventoryFeature } from "./profile-policy.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
-import { getOnHandWith, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
+import { getOnHandWith, lockInventoryPosition, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
 
 /**
  * Exact-quantity gate for the stock-count lifecycle. Count quantities land in
@@ -65,10 +65,13 @@ function getCountBasisQuantity(
  * serialized by the HTTP idempotency boundary (keyed on the count); direct
  * engine callers must run one post per count inside `withOrgTransaction` —
  * called outside an ambient transaction, postStockCount refuses rather than
- * post partially. A stock movement landing in the post window after the
- * drift check is caught on the NEXT count, not this one — counts are taken
+ * post partially. A stock movement racing the post either commits before
+ * the drift re-read — and the re-read refuses as drifted — or waits out
+ * the position locks the post holds from the re-read to the outer commit
+ * and lands after it, to be caught on the NEXT count. Counts are taken
  * over a frozen area, and the drift refusal exists to catch everything up
- * to the post.
+ * to the post; no movement can slip between the re-read and the
+ * adjustments.
  */
 
 export type StockCountStatus = "draft" | "counting" | "review" | "posted" | "cancelled";
@@ -681,6 +684,23 @@ export async function postStockCount(
       throw error;
     }
     const lines = await requireAllLinesCounted(tx, orgId, count.id);
+    // Every movement writer (receive, issue, adjust, transfer, build)
+    // serializes on the position advisory lock, so take every line position
+    // in deterministic order BEFORE the drift re-read and hold the locks to
+    // the outer commit (advisory xact locks release only there). A movement
+    // racing the post then either commits first — and the re-read below
+    // refuses as drifted — or waits out the whole post and lands after it.
+    // Without these locks the re-read observed a torn area: a movement
+    // committing between the check and the adjustments posted a stale
+    // variance with no refusal. Lot-tracked lines share their position's
+    // key, so they are covered by the same lock (serial-tracked items
+    // cannot be counted at all, and refuse at creation).
+    for (const key of [
+      ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
+    ].sort()) {
+      const separator = key.indexOf(":");
+      await lockInventoryPosition(tx, key.slice(0, separator), key.slice(separator + 1));
+    }
     // Drift check under the count-row lock: live on-hand (same basis reader
     // as the snapshot) must still equal the snapshot, line by line. Lines
     // that already posted are durable evidence and exempt — re-checking them
