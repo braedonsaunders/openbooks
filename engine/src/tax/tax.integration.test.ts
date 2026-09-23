@@ -901,6 +901,10 @@ test("posting books the provider's per-jurisdiction amounts and refuses a locall
   }
 });
 
+// Local stub servers on loopback need the explicit per-call test switch
+// (never persisted, never passed by production callers).
+const LOCAL_STUB = { allowPrivateEndpoints: true } as const;
+
 test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones pass", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   let mode = "match";
@@ -948,16 +952,17 @@ test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones p
       org.orgId,
       { provider: "avalara", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, accountId: "A", licenseKey: "L" },
       null,
+      LOCAL_STUB,
     );
     const matched = await quoteExternalTax(org.orgId, {
       taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
-    });
+    }, null, LOCAL_STUB);
     assert.equal(matched.taxAmount, "8.2500");
     mode = "bad";
     await assert.rejects(
       quoteExternalTax(org.orgId, {
         taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
-      }),
+      }, null, LOCAL_STUB),
       /avalara returned tax 8.2500 but its components sum to 8.2400/,
     );
 
@@ -965,17 +970,18 @@ test("mismatched Avalara and TaxJar quotes refuse at quote time; matching ones p
       org.orgId,
       { provider: "taxjar", isEnabled: true, preferProvider: true, settings: { baseUrl: origin }, apiKey: "K" },
       null,
+      LOCAL_STUB,
     );
     mode = "match";
     const tjMatched = await quoteExternalTax(org.orgId, {
       taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
-    });
+    }, null, LOCAL_STUB);
     assert.equal(tjMatched.taxAmount, "8.2500");
     mode = "bad";
     await assert.rejects(
       quoteExternalTax(org.orgId, {
         taxableAmount: "100.0000", currency: "USD", ...address, quotedOn: org.date,
-      }),
+      }, null, LOCAL_STUB),
       /taxjar returned tax 8.2500 but its components sum to 8.2400/,
     );
   } finally {
@@ -1008,9 +1014,10 @@ test("headline-only custom hook quotes synthesize a mapped component, or refuse"
       org.orgId,
       { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook` } },
       null,
+      LOCAL_STUB,
     );
     await assert.rejects(
-      quoteExternalTax(org.orgId, request),
+      quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
       /custom tax hook returned tax 8.2500 with no components.*customHeadlineJurisdiction/,
     );
     // A headline key outside the mapping refuses too.
@@ -1018,9 +1025,10 @@ test("headline-only custom hook quotes synthesize a mapped component, or refuse"
       org.orgId,
       { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: `${origin}/hook`, customHeadlineJurisdiction: "OTHER" } },
       null,
+      LOCAL_STUB,
     );
     await assert.rejects(
-      quoteExternalTax(org.orgId, request),
+      quoteExternalTax(org.orgId, request, null, LOCAL_STUB),
       /headline jurisdiction "OTHER" has no mapped tax code/,
     );
 
@@ -1033,8 +1041,9 @@ test("headline-only custom hook quotes synthesize a mapped component, or refuse"
         settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
       },
       null,
+      LOCAL_STUB,
     );
-    const quote = await quoteExternalTax(org.orgId, request);
+    const quote = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
     assert.deepEqual(quote.components, [
       { jurisdiction: "CUSTOM", ratePercent: "8.2500", taxAmount: "8.2500" },
     ]);
@@ -1042,14 +1051,14 @@ test("headline-only custom hook quotes synthesize a mapped component, or refuse"
     // A headline that does not divide its base evenly synthesizes an
     // explicitly flagged zero rate rather than invented precision.
     hookBody = { taxAmount: "1.0000", externalRef: "H-2" };
-    const inexact = await quoteExternalTax(org.orgId, { ...request, taxableAmount: "3.0000" });
+    const inexact = await quoteExternalTax(org.orgId, { ...request, taxableAmount: "3.0000" }, null, LOCAL_STUB);
     assert.deepEqual(inexact.components, [
       { jurisdiction: "CUSTOM", ratePercent: "0.0000", taxAmount: "1.0000", rateIsBlendedFallback: true },
     ]);
 
     // A zero headline with no components is genuinely nil and passes through.
     hookBody = { taxAmount: "0.0000", externalRef: "H-3" };
-    const nil = await quoteExternalTax(org.orgId, request);
+    const nil = await quoteExternalTax(org.orgId, request, null, LOCAL_STUB);
     assert.deepEqual(nil.components, []);
     assert.equal(nil.taxAmount, "0.0000");
   } finally {
@@ -1079,6 +1088,7 @@ test("a synthesized headline component is booked, approved, and posted under its
         settings: { quoteUrl: `${origin}/hook`, jurisdictionTaxCodes: { CUSTOM: codeId }, customHeadlineJurisdiction: "CUSTOM" },
       },
       null,
+      LOCAL_STUB,
     );
     const config = await readTaxRateProviderConfig(org.orgId);
     // The draft path: quote (persisted with the synthesized component),
@@ -1099,7 +1109,7 @@ test("a synthesized headline component is booked, approved, and posted under its
     const quote = await quoteExternalTax(org.orgId, {
       taxableAmount: "100.0000", currency: "CAD", shipFrom: {}, shipTo: {},
       quotedOn: org.date, documentLineId: lineId,
-    });
+    }, null, LOCAL_STUB);
     assert.equal(quote.components.length, 1);
     const booked = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, config!.settings);
     assert.equal(booked.length, 1);
