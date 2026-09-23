@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { resolveAccountGroups } from "../records/account-groups.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { businessToday } from "../platform/business-date.ts";
-import { db, inDbTransaction } from "../platform/db.ts";
+import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
 import { previewPinError } from "./subsidiary-scope.ts";
@@ -1816,6 +1816,19 @@ export async function postAllocationRun(
         eventSource: opts.eventSource ?? "api",
       });
     }
+    // An approved rerun replacement swaps atomically: unwind the superseded
+    // posted run FIRST (frees the one-posted-run slot), then post the
+    // replacement below in the same transaction.
+    if (opts.viaApproval && run.reverses_run_id) {
+      await reverseSupersededForApproval(tx, {
+        orgId,
+        actorId,
+        freshId: run.id,
+        oldRunId: run.reverses_run_id,
+        period,
+        reason: cleanReason,
+      });
+    }
     let journalEntryId: string | null = null;
     try {
       journalEntryId = await postStoredJournal(tx, {
@@ -1852,6 +1865,69 @@ export async function postAllocationRun(
   });
 }
 
+/** Subsidiaries whose GL a run touches: unwinding it must keep each open. */
+function touchedSubsidiaries(run: RunRow): string[] {
+  const computation = run.computation;
+  if (computation.lines.length > 0) {
+    return computation.lines
+      .map((line) => line.subsidiaryId ?? run.subsidiary_id)
+      .filter((sub): sub is string => !!sub);
+  }
+  return [
+    ...(run.subsidiary_id ? [run.subsidiary_id] : []),
+    ...computation.sources.map((source) => source.subsidiaryId).filter((sub): sub is string => !!sub),
+  ];
+}
+
+/**
+ * The approval-release half of an approval-governed rerun: unwind the
+ * superseded posted run FIRST (frees the one-posted-run slot), so the
+ * caller can post the replacement in the same transaction — one atomic
+ * swap, never a half-landed approval. A rejection never reaches here (the
+ * flow adapter marks the replacement failed and the old run stands), and an
+ * old run already unwound out-of-band is left alone: the replacement then
+ * posts cleanly on its own.
+ */
+async function reverseSupersededForApproval(
+  tx: Tx,
+  opts: {
+    orgId: string;
+    actorId: string;
+    freshId: string;
+    oldRunId: string;
+    period: PeriodRow;
+    reason: string;
+  },
+): Promise<void> {
+  const old = await lockRun(tx, opts.oldRunId);
+  if (old.org_id !== opts.orgId) {
+    throw new AllocationRunError("NOT_FOUND", `allocation run ${opts.oldRunId} does not belong to this organization`);
+  }
+  if (old.status !== "posted") return;
+  const reversalDate = await businessToday(opts.orgId);
+  await assertPeriodOpen(tx, opts.orgId, opts.period, old.book_id, touchedSubsidiaries(old));
+  const reversalEntryId = await reverseStoredJournal(tx, {
+    orgId: opts.orgId,
+    actorId: opts.actorId,
+    run: old,
+    reason: opts.reason,
+    reversalDate,
+  });
+  await tx.execute(sql`
+    update allocation_runs
+       set status = 'reversed', reversal_entry_id = ${reversalEntryId},
+           superseded_by_run_id = ${opts.freshId},
+           completed_at = now(), updated_at = now(), updated_by = ${opts.actorId}
+     where id = ${old.id} and org_id = ${opts.orgId}`);
+  await writeAudit(tx, opts.orgId, old.id, opts.actorId, {
+    mode: "allocation_run_reverse",
+    reason: opts.reason,
+    reversalDate,
+    reversalEntryId,
+    approvedReplacementRunId: opts.freshId,
+  });
+}
+
 export interface ReverseAllocationRunOptions {
   reversalDate?: string;
 }
@@ -1885,14 +1961,7 @@ export async function reverseAllocationRun(
     const reversalDate = opts.reversalDate ?? (await businessToday(orgId));
     // The reversal lands on the reversal date AND unwinds this run's period:
     // both GL scopes must be open.
-    const computation = run.computation;
-    const touchedSubs = computation.lines.length > 0
-      ? computation.lines.map((line) => line.subsidiaryId ?? run.subsidiary_id).filter((sub): sub is string => !!sub)
-      : [
-        ...(run.subsidiary_id ? [run.subsidiary_id] : []),
-        ...computation.sources.map((source) => source.subsidiaryId).filter((sub): sub is string => !!sub),
-      ];
-    await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubs);
+    await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
     const reversalEntryId = await reverseStoredJournal(tx, {
       orgId,
       actorId,
@@ -1925,7 +1994,24 @@ export interface RerunAllocationRunOptions {
  * existing run is returned (idempotent). Otherwise the old run is reversed
  * (or superseded, if it never posted) and the new run carries
  * reverses_run_id while the old points back via superseded_by_run_id.
+ *
+ * Approval-governed exception: when the fresh version names an approval
+ * flow, the old posted run stays posted and effective while the replacement
+ * waits in pending_approval — reversing it now would deallocate without the
+ * configured approval, and a rejection would strand a permanent gap. The
+ * approval release reverses the old run and posts the replacement atomically
+ * (see postAllocationRun); a rejection leaves the old run posted and
+ * untouched.
  */
+/** The owning org of a run, read before its transaction opens. */
+async function readRunOrgId(runId: string): Promise<string> {
+  const rows = (await db.execute<{ org_id: string }>(sql`
+    select org_id from allocation_runs where id = ${runId}`)).rows;
+  const orgId = rows[0]?.org_id;
+  if (!orgId) throw new AllocationRunError("NOT_FOUND", `allocation run ${runId} was not found`);
+  return orgId;
+}
+
 export async function rerunAllocationRun(
   runId: string,
   actorId: string,
@@ -1938,8 +2024,16 @@ export async function rerunAllocationRun(
   if (cleanReason.length < 5 || cleanReason.length > 500) {
     throw new AllocationRunError("INVALID", "a re-run reason between 5 and 500 characters is required");
   }
-  return inDbTransaction(async (tx) => {
-    const run = await lockRun(tx, runId);
+  // Pin the org transaction FIRST: the approval dispatch below
+  // (openRunApproval → flow engine) reads the fresh run through the ambient
+  // handle, so the insert and the dispatch must share one connection — a
+  // bare inDbTransaction would leave the fresh row invisible and the
+  // approval gate could never open. inDbTransaction participates below
+  // instead of nesting, so the chain stays one atomic unit.
+  const scopeOrgId = await readRunOrgId(runId);
+  return withOrgTransaction(scopeOrgId, () =>
+    inDbTransaction(async (tx) => {
+      const run = await lockRun(tx, runId);
     if (run.status !== "posted" && run.status !== "previewed" && run.status !== "reversed") {
       throw new AllocationRunError("INVALID", `allocation run ${runId} is ${run.status} and cannot be re-run`);
     }
@@ -1982,16 +2076,53 @@ export async function rerunAllocationRun(
       bookId: book.id,
       subsidiaryId: run.subsidiary_id,
     });
+    // A re-run under a flow-governed version needs fresh approval: the new
+    // run waits in pending_approval instead of posting (same path as post).
+    // A posted old run stays posted and effective until that approval lands
+    // (it is not touched below) — the release swaps atomically, and a
+    // rejection leaves the old run standing with nothing to clean up.
+    if (version.approval_flow_id) {
+      if (run.status === "reversed") {
+        // Already unwound (reversal_entry_id kept): just chain forward.
+        await tx.execute(sql`
+          update allocation_runs
+             set superseded_by_run_id = ${fresh.id},
+                 completed_at = now(), updated_at = now(), updated_by = ${actorId}
+           where id = ${run.id} and org_id = ${orgId}`);
+      } else if (run.status !== "posted") {
+        await tx.execute(sql`
+          update allocation_runs
+             set status = 'superseded', superseded_by_run_id = ${fresh.id},
+                 completed_at = now(), updated_at = now(), updated_by = ${actorId}
+           where id = ${run.id} and org_id = ${orgId}`);
+      }
+      const waiting = await openRunApproval(tx, {
+        orgId,
+        run: fresh,
+        ruleKey: rule.key,
+        actorId,
+        reason: cleanReason,
+        approvalFlowId: version.approval_flow_id,
+        eventSource: "api",
+      });
+      await tx.execute(sql`
+        update allocation_runs
+           set reverses_run_id = ${run.id}
+         where id = ${fresh.id} and org_id = ${orgId}`);
+      await writeAudit(tx, orgId, fresh.id, actorId, {
+        mode: "allocation_run_rerun",
+        reason: cleanReason,
+        reversesRunId: run.id,
+        flowRunId: waiting.flowRunId,
+      });
+      return {
+        run: { ...waiting, reversesRunId: run.id },
+        idempotent: false,
+      };
+    }
     const reversalDate = opts.reversalDate ?? (await businessToday(orgId));
     if (run.status === "posted") {
-      const computation = run.computation;
-      const touchedSubs = computation.lines.length > 0
-        ? computation.lines.map((line) => line.subsidiaryId ?? run.subsidiary_id).filter((sub): sub is string => !!sub)
-        : [
-          ...(run.subsidiary_id ? [run.subsidiary_id] : []),
-          ...computation.sources.map((source) => source.subsidiaryId).filter((sub): sub is string => !!sub),
-        ];
-      await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubs);
+      await assertPeriodOpen(tx, orgId, period, run.book_id, touchedSubsidiaries(run));
       const reversalEntryId = await reverseStoredJournal(tx, {
         orgId,
         actorId,
@@ -2018,33 +2149,6 @@ export async function rerunAllocationRun(
            set status = 'superseded', superseded_by_run_id = ${fresh.id},
                completed_at = now(), updated_at = now(), updated_by = ${actorId}
          where id = ${run.id} and org_id = ${orgId}`);
-    }
-    // A re-run under a flow-governed version needs fresh approval: the new
-    // run waits in pending_approval instead of posting (same path as post).
-    if (version.approval_flow_id) {
-      const waiting = await openRunApproval(tx, {
-        orgId,
-        run: fresh,
-        ruleKey: rule.key,
-        actorId,
-        reason: cleanReason,
-        approvalFlowId: version.approval_flow_id,
-        eventSource: "api",
-      });
-      await tx.execute(sql`
-        update allocation_runs
-           set reverses_run_id = ${run.id}
-         where id = ${fresh.id} and org_id = ${orgId}`);
-      await writeAudit(tx, orgId, fresh.id, actorId, {
-        mode: "allocation_run_rerun",
-        reason: cleanReason,
-        reversesRunId: run.id,
-        flowRunId: waiting.flowRunId,
-      });
-      return {
-        run: { ...waiting, reversesRunId: run.id },
-        idempotent: false,
-      };
     }
     let journalEntryId: string | null = null;
     try {
@@ -2084,7 +2188,8 @@ export async function rerunAllocationRun(
       run: toRecord({ ...fresh, status: "posted", journal_entry_id: journalEntryId, reverses_run_id: run.id }),
       idempotent: false,
     };
-  });
+    }),
+  );
 }
 
 /**
