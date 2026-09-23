@@ -17,6 +17,8 @@ async function postBill(
   actor: string,
   kind: 'vendor_bill' | 'vendor_credit' | 'customer_invoice' | 'customer_credit',
   total: number,
+  currency = 'CAD',
+  fxRate = '1',
 ) {
   const id = randomUUID()
   const party = kind.startsWith('vendor_') ? scratch.vendorId : scratch.customerId
@@ -25,12 +27,13 @@ async function postBill(
     (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
      currency, fx_rate, subtotal, tax_total, total, created_by)
     values (${id}, ${scratch.orgId}, ${kind}, 'draft', ${id}, ${scratch.subsidiaryId},
-      ${party}, ${scratch.date}, 'CAD', '1', ${total}, 0, ${total}, ${actor})`)
+      ${party}, ${scratch.date}, ${currency}, ${fxRate}, ${total}, 0, ${total}, ${actor})`)
   await db.execute(sql`insert into document_lines
     (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
     values (${scratch.orgId}, ${id}, 1, ${lineAccount}, 1, ${total}, ${total}, 0, ${total})`)
   await db.execute(sql`update documents set status = 'approved' where id = ${id}`)
   await postDocument(id, { control: { ar: scratch.accounts.ar, ap: scratch.accounts.ap, bank: scratch.accounts.bank } })
+  return id
 }
 
 /**
@@ -55,6 +58,43 @@ test('open items net unapplied vendor credits against AP bills', { skip: !env.OP
     assert.equal(net.toFixed(4), '700.0000')
     const credit = items.find((item) => item.docKind === 'vendor_credit')
     assert.equal(credit?.remaining, '-300.0000')
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
+
+/**
+ * A foreign-currency credit consumed as a settlement source is consumed in
+ * ITS OWN carrying amount (source_amount), not the target leg's amount: USD
+ * 20 of a USD 60 credit settles CAD 25 of an invoice, so the credit's
+ * functional remainder is 81 - 27 = 54, not 81 - 25 = 56. Reading amount for
+ * both legs mixes denominations and leaves a false remainder.
+ */
+test('open items consume a foreign credit through its source leg', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const actor = await withBypass(() => createScratchUser(scratch.orgId, 'Credit Controller', 'admin'))
+    const { invId, creditLine, invLine } = await withBypass(async () => {
+      const invId = await postBill(scratch, actor, 'customer_invoice', 100)
+      const creditId = await postBill(scratch, actor, 'customer_credit', 60, 'USD', '1.35')
+      const lines = await db.execute<{ id: string; doc: string }>(sql`select jl.id, je.source_document_id as doc
+        from journal_lines jl join journal_entries je on je.id = jl.entry_id
+        where jl.org_id = ${scratch.orgId} and jl.is_open_item and je.source_document_id in (${invId}, ${creditId})`)
+      const lineOf = (doc: string) => lines.rows.find((row) => row.doc === doc)!.id
+      await db.execute(sql`insert into applications
+        (org_id, from_line_id, to_line_id, amount, applied_on, source_amount, source_transaction_amount,
+         source_transaction_currency, target_transaction_amount, target_transaction_currency,
+         settlement_rate, settlement_rate_source, settlement_rate_reference, created_by, updated_by)
+        values (${scratch.orgId}, ${lineOf(creditId)}, ${lineOf(invId)}, '25', '2026-07-12', '27', '20', 'USD', '25', 'CAD',
+          '1.25', 'manual', 'FX-CREDIT-CASH-TEST', ${actor}, ${actor})`)
+      return { invId, creditLine: lineOf(creditId), invLine: lineOf(invId) }
+    })
+    assert.ok(invId && creditLine && invLine)
+    const items = await withOrgContext(scratch.orgId, () => openItems(scratch.orgId, 'ar', '2026-07-31'))
+    const credit = items.find((item) => item.docKind === 'customer_credit')
+    assert.equal(credit?.remaining, '-54.0000')
+    const invoice = items.find((item) => item.docKind === 'customer_invoice')
+    assert.equal(invoice?.remaining, '75.0000')
   } finally {
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }

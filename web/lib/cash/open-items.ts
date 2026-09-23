@@ -6,6 +6,7 @@ import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '../../../engine/src/records/open-item-kinds.ts'
+import { appliedLegAmountExpr } from '../../../engine/src/records/balance-due.ts'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'
@@ -60,14 +61,16 @@ export async function openItems(
   // unapplied only after the date still counted then). Netting live
   // applications instead would let a later settlement rewrite a past forecast,
   // and gating on the live cached open_balance would hide documents settled
-  // after the date that were open on it.
+  // after the date that were open on it. The applied sum reads each leg
+  // through its own carrying column (shared engine helper — never a bare
+  // sum for both legs, which mixes denominations on cross-currency credits).
   const result = (await db.execute<OpenItemQueryRow>(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
              d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              sub.base_currency as func,
              (case when d.kind = ${creditKind} then -1 else 1 end) * (abs(jl.amount) - coalesce((
-               select sum(x.amount) from applications x
+               select sum(${appliedLegAmountExpr("x", sql`jl.id`, "base")}) from applications x
                 where x.org_id = ${orgId}
                   and (x.to_line_id = jl.id or x.from_line_id = jl.id)
                   and x.applied_on <= ${asOf}
@@ -91,8 +94,9 @@ export async function openItems(
      where oi.remaining <> 0
   `))
   // `remaining` nets in the line entity's functional currency (legs are
-  // stamped functional; applications.amount is target-functional and the sign
-  // filter keeps only target-side control lines). A consolidated view spans
+  // stamped functional; the shared leg-split helper reads the target leg in
+  // amount and the consumed leg in source_amount, and the sign filter keeps
+  // only target-side control lines). A consolidated view spans
   // functionals, so each item translates to the presentation currency at the
   // closing spot — raw functionals would mix subsidiary currencies. One rate
   // lookup per functional in view; missing coverage fails closed.
