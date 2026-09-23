@@ -460,6 +460,18 @@ export async function loadRecruitingPage(
           offerActionFailed: t('recruiting.offerActions.failed'),
           description: t('recruiting.drawer.description'),
         },
+        lifecycle: {
+          canManage,
+          labels: {
+            title: t('recruiting.lifecycle.title'),
+            open: t('recruiting.lifecycle.open'),
+            hold: t('recruiting.lifecycle.hold'),
+            resume: t('recruiting.lifecycle.resume'),
+            cancel: t('recruiting.lifecycle.cancel'),
+            reason: t('recruiting.lifecycle.reasonLabel'),
+            failed: t('recruiting.lifecycle.failed'),
+          },
+        },
         employeeOptions: employeeRows.map((option) => ({ value: option.id, label: option.name })),
           kindOptions: ['phone', 'video', 'onsite', 'panel', 'assessment'].map((value) => ({
             value,

@@ -671,6 +671,15 @@
       "submit": "Create requisition",
       "failed": "The requisition could not be created."
     },
+    "lifecycle": {
+      "title": "Lifecycle",
+      "open": "Open",
+      "hold": "Hold",
+      "resume": "Resume",
+      "cancel": "Cancel requisition",
+      "reasonLabel": "Reason",
+      "failed": "The requisition status could not be changed."
+    },
     "attach": {
       "title": "Attach a candidate",
       "name": "Name",

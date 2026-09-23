@@ -613,6 +613,15 @@
       "submit": "Créer la réquisition",
       "failed": "La réquisition n'a pas pu être créée."
     },
+    "lifecycle": {
+      "title": "Cycle de vie",
+      "open": "Ouvrir",
+      "hold": "Mettre en pause",
+      "resume": "Reprendre",
+      "cancel": "Annuler la réquisition",
+      "reasonLabel": "Motif",
+      "failed": "Le statut de la réquisition n'a pas pu être modifié."
+    },
     "attach": {
       "title": "Rattacher un candidat",
       "name": "Nom",

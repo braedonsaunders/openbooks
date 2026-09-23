@@ -613,6 +613,15 @@
       "submit": "创建需求",
       "failed": "无法创建需求。"
     },
+    "lifecycle": {
+      "title": "生命周期",
+      "open": "发布",
+      "hold": "暂停",
+      "resume": "恢复",
+      "cancel": "取消需求",
+      "reasonLabel": "原因",
+      "failed": "无法更改需求状态。"
+    },
     "attach": {
       "title": "关联候选人",
       "name": "姓名",

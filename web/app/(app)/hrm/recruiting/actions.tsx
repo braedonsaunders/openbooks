@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { promptDialog } from '../../../../lib/prompt'
 
 /**
  * Recruiting action islands: small client forms posting through the same
@@ -118,6 +119,95 @@ export function ApplicationAttachIsland({
         {labels.submit}
       </Button>
     </form>
+  )
+}
+
+/**
+ * The lifecycle transitions the requisition service accepts from each
+ * status: drafts open, open openings hold or cancel, on-hold openings
+ * resume. Filled and cancelled openings are terminal and offer nothing.
+ * The matrix mirrors transitionRequisition/openRequisition — the server
+ * stays authoritative and refuses anything else by name.
+ */
+export type RequisitionLifecycleAction = 'open' | 'hold' | 'resume' | 'cancel'
+
+export function lifecycleActionsForStatus(status: string): RequisitionLifecycleAction[] {
+  if (status === 'draft') return ['open']
+  if (status === 'open') return ['hold', 'cancel']
+  if (status === 'on_hold') return ['resume']
+  return []
+}
+
+/** Open, hold, resume, or cancel one requisition through its PATCH route. */
+export function RequisitionLifecycleIsland({
+  requisitionId,
+  status,
+  canManage,
+  labels,
+}: {
+  requisitionId: string
+  status: string
+  /** The hrm.recruiting.manage grant the API enforces — display gating only. */
+  canManage: boolean
+  labels: { title: string; open: string; hold: string; resume: string; cancel: string; reason: string; failed: string }
+}) {
+  const refresh = useRefresh()
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  if (!canManage) return null
+  const actions = lifecycleActionsForStatus(status)
+  if (actions.length === 0) return null
+
+  async function act(action: RequisitionLifecycleAction): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      let body: { action: RequisitionLifecycleAction; reason?: string } = { action }
+      if (action !== 'open') {
+        const reason = await promptDialog({ title: labels[action], label: labels.reason, confirmLabel: labels[action] })
+        if (!reason) {
+          setBusy(false)
+          return
+        }
+        body = { action, reason }
+      }
+      const res = await postJson(`/api/hrm/recruiting/requisitions/${requisitionId}`, 'PATCH', body)
+      if (!res.ok) {
+        setError(await readApiErrorMessage(res, labels.failed))
+        setBusy(false)
+        return
+      }
+      setBusy(false)
+      refresh()
+    } catch {
+      setError(labels.failed)
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{labels.title}</h4>
+      <div className="flex flex-wrap gap-2">
+        {actions.map((action) => (
+          <Button
+            key={action}
+            size="sm"
+            variant={action === 'cancel' ? 'destructive' : action === 'open' || action === 'resume' ? 'default' : 'outline'}
+            disabled={busy}
+            onClick={() => void act(action)}
+          >
+            {labels[action]}
+          </Button>
+        ))}
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+          {error}
+        </p>
+      ) : null}
+    </div>
   )
 }
 
