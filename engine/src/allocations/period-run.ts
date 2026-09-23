@@ -6,7 +6,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
 import { apportion, fixedPercentWeights } from "./apportion.ts";
-import { previewPinError } from "./subsidiary-scope.ts";
+import { previewPinError, targetPinViolation } from "./subsidiary-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
 import {
@@ -1023,6 +1023,16 @@ async function buildComputation(
     deps,
   );
   if (targetSet.resolved.length === 0) throw new AllocationRunError("INVALID", "allocation produced no targets");
+  // A run pinned to one subsidiary must not post into another: the kernel
+  // has no intercompany balancing (contributed lines balance per
+  // subsidiary), so cross-pin targets refuse by name instead of leaking
+  // foreign amounts into the caller's books.
+  const pinViolation = targetPinViolation(
+    opts.rule.key,
+    opts.subsidiaryId,
+    targetSet.resolved.map((target) => target.coordinate.subsidiaryId ?? null),
+  );
+  if (pinViolation) throw new AllocationRunError("INVALID", pinViolation);
   // Zero weights carry no basis: A1 would split equally, which invents
   // attribution for driver/manual targets, so fail closed instead. Percent
   // grids always sum to 100 and never trip this.
@@ -1329,6 +1339,14 @@ async function postStoredJournal(
   },
 ): Promise<string | null> {
   const computation = opts.run.computation;
+  // Stored runs predate the preview-time pin check: refuse them at post by
+  // the same name rather than posting foreign-subsidiary lines.
+  const storedViolation = targetPinViolation(
+    opts.ruleKey,
+    opts.run.subsidiary_id,
+    computation.targets.map((target) => target.coordinate?.subsidiaryId ?? null),
+  );
+  if (storedViolation) throw new AllocationRunError("INVALID", storedViolation);
   if (computation.lines.length === 0) return null;
   const glLines = computationGlLines(computation);
   const headerSubsidiary = opts.run.subsidiary_id ?? glLines[0]?.subsidiaryId ?? null;

@@ -12,6 +12,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
+  AllocationRunError,
   postAllocationRun,
   previewAllocationRun,
   rerunAllocationRun,
@@ -51,6 +52,7 @@ async function enableAllocations(orgId: string): Promise<void> {
 
 interface SeedTarget {
   departmentId?: string | null;
+  subsidiaryId?: string | null;
   targetAccountId?: string | null;
   fixedPercent?: string | null;
   weight?: string | null;
@@ -103,10 +105,10 @@ async function seedPeriodRule(opts: {
   for (const target of targets) {
     await db.execute(sql`
       insert into allocation_rule_targets
-        (id, org_id, version_id, sequence, target_account_id, department_id,
+        (id, org_id, version_id, sequence, target_account_id, department_id, subsidiary_id,
          fixed_percent, weight, is_remainder, label, custom)
       values (${randomUUID()}, ${opts.orgId}, ${versionId}, ${sequence},
-              ${target.targetAccountId ?? null}, ${target.departmentId ?? null},
+              ${target.targetAccountId ?? null}, ${target.departmentId ?? null}, ${target.subsidiaryId ?? null},
               ${target.fixedPercent ?? null}, ${target.weight ?? null},
               ${target.isRemainder ?? false}, ${target.label ?? null}, '{}'::jsonb)`);
     sequence += 1;
@@ -1069,3 +1071,71 @@ test(
   },
 );
 
+test(
+  "S4: a pinned run whose targets cross the pin is refused at preview and post",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const subB = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+      await seedSourceEntry(org, actorId, "100.0000");
+      const dept = await seedDepartment(org.orgId, "Branch Dept");
+      const { ruleId, versionId } = await seedPeriodRule({
+        orgId: org.orgId,
+        poolAccountId: org.accounts.adjustment,
+        targets: [{ departmentId: dept, subsidiaryId: subB, fixedPercent: "100.0000", label: "Branch" }],
+      });
+      const runCount = async (): Promise<number> => Number((await db.execute<{ count: string }>(sql`
+        select count(*)::text as count from allocation_runs where org_id = ${org.orgId}`)).rows[0]?.count ?? 0);
+      const before = await runCount();
+      // Pinned to A with a B target: refused by name, nothing persisted.
+      await assert.rejects(
+        () => previewAllocationRun({
+          orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId,
+          subsidiaryId: org.subsidiaryId, actorId, trigger: "manual",
+        }),
+        (error: unknown) =>
+          error instanceof AllocationRunError &&
+          error.message.includes(subB) &&
+          /outside the pinned subsidiary/.test(error.message),
+      );
+      assert.equal(await runCount(), before);
+      // Unpinned org-wide sweeps keep their existing behaviour.
+      const open = await previewAllocationRun({
+        orgId: org.orgId, ruleId, periodId: org.periodId, bookId: org.bookId, actorId, trigger: "manual",
+      });
+      assert.equal(open.subsidiaryId, null);
+      assert.equal(open.computation.targets[0]?.coordinate.subsidiaryId, subB);
+      // A stored crossed run is refused at post by the same name.
+      const crossedId = randomUUID();
+      const crossedComputation = {
+        ruleId, versionId, definitionHash: "testhash", periodId: org.periodId, bookId: org.bookId,
+        subsidiaryId: org.subsidiaryId, sourceMeasure: "period_activity",
+        sources: [{ accountId: org.accounts.adjustment, subsidiaryId: org.subsidiaryId, amount: "100.0000", lineCount: 1 }],
+        sourceTotal: "100.0000",
+        targets: [{ key: "t1", coordinate: { subsidiaryId: subB }, amount: "100.0000" }],
+        lines: [], residualPolicy: "largest_share", impact: "report_only",
+      };
+      await db.execute(sql`
+        insert into allocation_runs
+          (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
+           status, trigger_kind, source_total, allocated_total, residual,
+           computation, fingerprint, requested_by, created_by, updated_by)
+        values (${crossedId}, ${org.orgId}, ${ruleId}, ${versionId}, 'testhash', ${org.periodId}, ${org.bookId},
+          ${org.subsidiaryId}, 'previewed', 'manual', '100.0000', '100.0000', '0.00',
+          ${JSON.stringify(crossedComputation)}::jsonb, 'fp-crossed', ${actorId}, ${actorId}, ${actorId})`);
+      await assert.rejects(() => postAllocationRun(crossedId, actorId, "posting a crossed run"),
+        (error: unknown) =>
+          error instanceof AllocationRunError && /outside the pinned subsidiary/.test(error.message));
+      const kept = (await db.execute<{ status: string }>(sql`
+        select status from allocation_runs where org_id = ${org.orgId} and id = ${crossedId}`)).rows[0];
+      assert.equal(kept?.status, "previewed");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);

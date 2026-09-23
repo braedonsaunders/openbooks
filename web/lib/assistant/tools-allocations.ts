@@ -40,13 +40,15 @@ import {
   runDriverReport,
 } from "../../../engine/src/allocations/report-runner.ts";
 import { previewAllocationRun } from "../../../engine/src/allocations/period-run.ts";
-import { previewPinError } from "../../../engine/src/allocations/subsidiary-scope.ts";
+import {
+  allocationScopeVisible,
+  previewPinError,
+} from "../../../engine/src/allocations/subsidiary-scope.ts";
 import {
   RunQueryError,
   getRun,
   listRuns,
   queryLineage,
-  runSubsidiaryVisible,
   validateLineageAnchor,
 } from "../../../engine/src/allocations/run-queries.ts";
 
@@ -601,7 +603,7 @@ const explainAllocation: AssistantToolDef = {
       // not-found (not empty lineage): run drawer, get_journal_entry, get_document.
       if (anchor.kind === "run") {
         const run = await getRun(authz.user.orgId, anchor.id);
-        if (!runSubsidiaryVisible(authz.allowedSubsidiaryIds, run.subsidiaryId)) {
+        if (!allocationScopeVisible(authz.allowedSubsidiaryIds, run.subsidiaryId, run.computation)) {
           return { ok: false, error: "allocation_run_not_found" };
         }
       } else if (anchor.kind === "journalEntry") {

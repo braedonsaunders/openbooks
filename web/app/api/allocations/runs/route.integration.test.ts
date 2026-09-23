@@ -318,6 +318,46 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", { s
   }
 });
 
+test("S4: a pinned run with foreign targets is invisible to the pin holder", { skip: !DB }, async () => {
+  const s = await setup();
+  const subB = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+    values (${subB}, ${s.orgId}, ${s.subsidiaryId}, 'Branch Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const crossedId = randomUUID();
+  const versionId = (await db.execute<{ id: string }>(sql`
+    select id from allocation_rule_versions where org_id = ${s.orgId} and rule_id = ${s.ruleId}`)).rows[0]!.id;
+  await db.execute(sql`
+    insert into allocation_runs
+      (id, org_id, rule_id, version_id, definition_hash, period_id, book_id, subsidiary_id,
+       status, trigger_kind, source_total, allocated_total, residual, computation, fingerprint, requested_by, created_by, updated_by)
+    values (${crossedId}, ${s.orgId}, ${s.ruleId}, ${versionId}, 'hash-r', ${s.periodId}, ${s.bookId},
+      ${s.subsidiaryId}, 'previewed', 'manual', '10.00', '10.00', '0.00',
+      ${JSON.stringify({
+        subsidiaryId: s.subsidiaryId,
+        sources: [{ subsidiaryId: s.subsidiaryId }],
+        targets: [{ coordinate: { subsidiaryId: subB } }],
+        lines: [],
+      })}::jsonb, 'fp-crossed', ${s.actorId}, ${s.actorId}, ${s.actorId})`);
+  try {
+    // The pin holder sees only the pin: a run touching B is not found.
+    authenticate(s.orgId, s.actorId, ["allocations.read"], [s.subsidiaryId]);
+    const hidden = await detailRoute.GET(jsonRequest(`/api/allocations/runs/${crossedId}`, "GET"), {
+      params: Promise.resolve({ id: crossedId }),
+    });
+    assert.equal(hidden.status, 404);
+    // Unrestricted callers still read it.
+    authenticate(s.orgId, s.actorId, ["allocations.read"]);
+    const seen = await detailRoute.GET(jsonRequest(`/api/allocations/runs/${crossedId}`, "GET"), {
+      params: Promise.resolve({ id: crossedId }),
+    });
+    assert.equal(seen.status, 200);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(s.orgId);
+  }
+});
+
 test("S1: preview validates id shapes at the boundary", { skip: !DB }, async () => {
   const s = await setup();
   try {
