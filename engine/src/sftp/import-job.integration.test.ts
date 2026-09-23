@@ -176,11 +176,16 @@ test(
   async () => {
     const f = await seedSftpFixture();
     try {
-      // A destination directory with the source filename makes the local
-      // backend's rename fail after the statement transaction has committed.
-      // The source must remain visible for a later retry, while the run and
-      // its per-file outcome must make the archival failure operator-visible.
-      mkdirSync(join(localServerDir(f.rootPrefix), "inbound", "processed", "acct.ofx"), { recursive: true });
+      // A file planted where the archive's day-directory goes makes the local
+      // backend's rename fail after the statement transaction has committed
+      // (no generation can be created under it). The source must remain
+      // visible for a later retry, while the run and its per-file outcome
+      // must make the archival failure operator-visible. The blocker sits
+      // inside processed/, which the scan skips as a directory — only the
+      // archival rename trips over it.
+      const day = new Date().toISOString().slice(0, 10);
+      mkdirSync(join(localServerDir(f.rootPrefix), "inbound", "processed"), { recursive: true });
+      writeFileSync(join(localServerDir(f.rootPrefix), "inbound", "processed", day), Buffer.from("not a directory"));
 
       const runs = await runDueSftpImports(f.org.orgId);
       const authored = runs.find((run) => run.scheduleId === f.authoredScheduleId)!;
@@ -191,8 +196,7 @@ test(
       assert.ok(fileOutcome.error, "the file outcome records the archival failure");
       assert.equal(fileOutcome.imported, 2);
       assert.deepEqual(listFolder(f.rootPrefix, "inbound"), ["acct.ofx", "processed"]);
-      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), ["acct.ofx"]);
-      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed", "acct.ofx")), []);
+      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), [day]);
 
       const schedule = await loadSchedule(f.authoredScheduleId);
       assert.deepEqual(schedule.lastResult?.errors, authored.errors, "the persisted run retains the archival error");
@@ -280,9 +284,14 @@ test(
       }
 
       // The watch folder archives exactly what was consumed: only the
-      // processed/ archive folder remains, holding the consumed file.
+      // processed/ archive folder remains, holding one dated, content-hashed
+      // generation of the consumed file.
+      const day = new Date().toISOString().slice(0, 10);
       assert.deepEqual(listFolder(f.rootPrefix, "inbound"), ["processed"]);
-      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), ["acct.ofx"]);
+      assert.deepEqual(listFolder(f.rootPrefix, join("inbound", "processed")), [day]);
+      const generations = listFolder(f.rootPrefix, join("inbound", "processed", day));
+      assert.equal(generations.length, 1);
+      assert.match(generations[0]!, /^acct\.[0-9a-f]{12}\.ofx$/);
 
       // Content-hash dedupe unchanged: replaying the exact source bytes under
       // a NEW filename is recognized as already imported — counted as
@@ -292,8 +301,8 @@ test(
         select count(*)::int as n from bank_statements where org_id = ${f.org.orgId}
       `)).rows[0]!.n;
       const replayBytes = ofxStatement(["sftp-deposit-a", "sftp-deposit-b"]);
-      assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed/acct.ofx")));
-      stageFile(f.rootPrefix, "inbound", "acct-replay.ofx", replayBytes);
+      assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, generations[0]!)));
+      stageFile(f.rootPrefix, "inbound", "acct.ofx", replayBytes);
       const reruns = await runDueSftpImports(f.org.orgId);
       const rerun = reruns.find((run) => run.scheduleId === f.authoredScheduleId)!;
       assert.deepEqual(rerun.errors, []);
@@ -304,6 +313,14 @@ test(
       `)).rows[0]!.n;
       assert.equal(afterStatements, beforeStatements);
       assert.equal(await countForeignActorRows(f.org.orgId, [f.authorId, f.org.orgId]), 0);
+      // The replay archives as a numbered second generation: the first
+      // archive is never replaced, even by identical bytes.
+      const generationsAfter = listFolder(f.rootPrefix, join("inbound", "processed", day));
+      assert.equal(generationsAfter.length, 2);
+      assert.ok(generationsAfter.includes(generations[0]!), "the first generation survives the replay");
+      const second = generationsAfter.find((name) => name !== generations[0]!)!;
+      assert.match(second, /^acct\.[0-9a-f]{12}\.2\.ofx$/);
+      assert.deepEqual(replayBytes, readFileSync(join(localServerDir(f.rootPrefix), "inbound/processed", day, second)));
     } finally {
       await dropScratchOrgReporting(f.org.orgId);
       rmSync(scratchDataDir, { recursive: true, force: true });

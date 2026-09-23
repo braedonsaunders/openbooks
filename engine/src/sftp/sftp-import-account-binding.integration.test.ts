@@ -150,11 +150,18 @@ test("account identity gates the scheduled import end to end", { skip: !DB }, as
     assert.equal(plain.imported, 1, "an identifier-less file imports on folder isolation");
 
     // Refused files stay in the folder (never archived as processed);
-    // imported ones move into the processed subdirectory.
+    // imported ones move into dated, content-hashed processed generations.
+    const day = new Date().toISOString().slice(0, 10);
     assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-a").sort(), ["processed", "stranger.ofx"]);
-    assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-a", "processed")), ["own.ofx"]);
+    assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-a", "processed")), [day]);
+    const ownGenerations = listFolder(fixture.rootPrefix, join("inbound-a", "processed", day));
+    assert.equal(ownGenerations.length, 1);
+    assert.match(ownGenerations[0]!, /^own\.[0-9a-f]{12}\.ofx$/);
     assert.deepEqual(listFolder(fixture.rootPrefix, "inbound-b").sort(), ["identified.ofx", "processed"]);
-    assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-b", "processed")), ["plain.ofx"]);
+    assert.deepEqual(listFolder(fixture.rootPrefix, join("inbound-b", "processed")), [day]);
+    const plainGenerations = listFolder(fixture.rootPrefix, join("inbound-b", "processed", day));
+    assert.equal(plainGenerations.length, 1);
+    assert.match(plainGenerations[0]!, /^plain\.[0-9a-f]{12}\.ofx$/);
     // Exactly the two imported files' lines landed (one line each).
     assert.equal((await lineCount(fixture.orgId)) - before, 2);
   } finally {
