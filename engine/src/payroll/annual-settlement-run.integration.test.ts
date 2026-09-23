@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { IT_PACK_RATES } from "./it/rates.ts";
@@ -59,6 +60,7 @@ interface Harness {
   orgId: string;
   actorId: string;
   scheduleId: string;
+  subsidiaryId: string;
   bonusComponentId: string;
 }
 
@@ -127,16 +129,20 @@ async function seedHarness(orgId: string, actorId: string): Promise<Harness> {
     select id from pay_components
      where org_id = ${orgId} and code = 'BONUS' and kind = 'earning' and system_key = 'bonus'`));
   assert.equal(bonus.rows.length, 1, "shared BONUS component seeded");
-  return { orgId, actorId, scheduleId, bonusComponentId: bonus.rows[0]!.id };
+  return { orgId, actorId, scheduleId, subsidiaryId: itSubId, bonusComponentId: bonus.rows[0]!.id };
 }
 
 async function seedEmployee(
   fx: Harness, name: string, annualRate: string, opts: { eft?: boolean } = {},
 ): Promise<string> {
   const employeeId = randomUUID();
+  // The schedule is scoped to the Italy subsidiary, and a scoped schedule
+  // pays only that entity's employees — an unlinked party is silently out of
+  // the roster (zero stubs, zero errors), not refused. Link every fixture
+  // employee to the entity whose year is being settled.
   await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${employeeId}, ${fx.orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+    insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+    values (${employeeId}, ${fx.orgId}, 'person', ${name}, ${fx.subsidiaryId}, true, '{}'::jsonb)`);
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
@@ -229,301 +235,293 @@ const settlementTuples = (lines: StubLine[]) =>
 
 test(
   "a committed December run settles the year: refund, collection, and dust",
-  {
-    // An annual settlement settles the YEAR: it needs a committed December
-    // run, and createPayRun refuses a period that has not begun. There is no
-    // hook to pin "today", so this cannot run before December 2026 -- it would
-    // fail for reasons that say nothing about the settlement logic. Self-enable
-    // on the calendar rather than sit red for a quarter.
-    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
-      ? "annual settlement needs a December 2026 pay period to have begun"
-      : false,
-  },
+  // createPayRun refuses a period that has not begun, so the body pins
+  // business "today" to mid-December 2026 through withSimClock (Guard 2
+  // reads businessToday, which follows the pinned clock). The December
+  // assertions then run on every date, not only after the calendar arrives.
+  { skip: !DB },
   async () => {
-    assert.ok(IT_PAYROLL_PACK.annualSettlement, "Italy declares a settlement in this tree");
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    try {
-      const fx = await seedHarness(org.orgId, actorId);
-      // Level full year (dust), bonus year (collection), credit-band year
-      // (nonzero TI/somma through the generic keys) from January; the
-      // mid-year joiner (refund) from July.
-      const dust = await seedEmployee(fx, "Livia Livello", "24000");
-      const bonus = await seedEmployee(fx, "Bruno Bonus", "30000");
-      const credit = await seedEmployee(fx, "Tina Trattamento", "14400");
-      for (let month = 0; month < 6; month++) await calculateMonthly(fx, month);
-      const joiner = await seedEmployee(fx, "Giulia Joiner", "48000", { eft: true });
-      for (let month = 6; month < 11; month++) await calculateMonthly(fx, month);
-      const novemberId = await calculateMonthly(fx, 10);
+    await withSimClock("2026-12-15", async () => {
+      assert.ok(IT_PAYROLL_PACK.annualSettlement, "Italy declares a settlement in this tree");
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      try {
+        const fx = await seedHarness(org.orgId, actorId);
+        // Level full year (dust), bonus year (collection), credit-band year
+        // (nonzero TI/somma through the generic keys) from January; the
+        // mid-year joiner (refund) from July.
+        const dust = await seedEmployee(fx, "Livia Livello", "24000");
+        const bonus = await seedEmployee(fx, "Bruno Bonus", "30000");
+        const credit = await seedEmployee(fx, "Tina Trattamento", "14400");
+        for (let month = 0; month < 6; month++) await calculateMonthly(fx, month);
+        const joiner = await seedEmployee(fx, "Giulia Joiner", "48000", { eft: true });
+        for (let month = 6; month < 10; month++) await calculateMonthly(fx, month);
+        const novemberId = await calculateMonthly(fx, 10);
 
-      // November is an ordinary month: no settlement line, no settlement
-      // factor — the wiring must be byte-identical outside the final period.
-      for (const employeeId of [dust, bonus, credit, joiner]) {
-        const lines = await stubLines(org.orgId, novemberId, employeeId);
-        assert.deepEqual(settlementTuples(lines), [], "no conguaglio line outside December");
-        const factors = await stubFactors(org.orgId, novemberId, employeeId);
-        assert.ok(
-          !Object.keys(factors).some((key) => key.startsWith("CONG_")),
-          "no settlement factor outside December",
-        );
-      }
-
-      // A calculated-but-uncommitted December bonus draft for the joiner: its
-      // withholding must NOT enter the settlement's year-to-date, or an
-      // employee's refund would move when somebody recalculates a draft.
-      const draftBonus = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
-        runType: "bonus",
-      });
-      await addLineAdjustment(fx, draftBonus.documentId, joiner, "20000");
-      const draftResult = await calculatePayRun({
-        orgId: fx.orgId, documentId: draftBonus.documentId, actorId,
-      });
-      assert.deepEqual(draftResult.errors, [], "draft bonus calculates clean");
-      const draftLines = await stubLines(org.orgId, draftBonus.documentId, joiner);
-      const draftWithheld = draftLines
-        .filter((line) => line.system_key === "income_tax")
-        .map((line) => line.amount)
-        .reduce((acc, amount) => add(acc, amount), "0.0000");
-      assert.ok(cmp(draftWithheld, "0") > 0, "the draft withholds something worth excluding");
-
-      // December regular: the bonus-year employee's one-off lands here, so
-      // the final run prices 2500 + 5000 exactly like the pack's own fixture.
-      const december = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
-      });
-      await addLineAdjustment(fx, december.documentId, bonus, "5000");
-      const decResult = await calculatePayRun({
-        orgId: fx.orgId, documentId: december.documentId, actorId,
-      });
-      assert.deepEqual(decResult.errors, [], "December calculates clean — no settlement refusal");
-
-      // The refund: over-withheld IRPEF returns as a credit, regionale dust
-      // as a credit, comunale exactly zero pushes nothing.
-      assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, joiner)), [
-        ["income_tax", "credit", "3979.1600", 110],
-        ["regional_surtax", "credit", "0.0100", 115],
-      ]);
-      const joinerFactors = await stubFactors(org.orgId, december.documentId, joiner);
-      assert.equal(joinerFactors["CONG_IRPEF_ANNUAL"], "1534.7200");
-      assert.equal(joinerFactors["CONG_IRPEF_YTD"], "5513.8800");
-      assert.equal(joinerFactors["CONG_IRPEF_DELTA"], "-3979.1600");
-      assert.equal(joinerFactors["CONG_ADDCOM_DELTA"], "0.0000");
-
-      // The collection: under-withheld IRPEF collects as a deduction.
-      assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, bonus)), [
-        ["income_tax", "deduction", "1668.7400", 110],
-        ["regional_surtax", "deduction", "51.2400", 115],
-        ["municipal_surtax", "deduction", "33.3200", 120],
-      ]);
-      const bonusFactors = await stubFactors(org.orgId, december.documentId, bonus);
-      assert.equal(bonusFactors["CONG_IRPEF_ANNUAL"], "5042.0800");
-      assert.equal(bonusFactors["CONG_IRPEF_YTD"], "3373.3400");
-      assert.equal(bonusFactors["CONG_IRPEF_DELTA"], "1668.7400");
-
-      // The level year: only cent dust settles, and the comunale line — whose
-      // delta is exactly zero — is absent, not a zero line.
-      assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, dust)), [
-        ["income_tax", "deduction", "0.0400", 110],
-        ["regional_surtax", "credit", "0.0100", 115],
-      ]);
-      const dustFactors = await stubFactors(org.orgId, december.documentId, dust);
-      assert.equal(dustFactors["CONG_ADDCOM_DELTA"], "0.0000");
-
-      // The credit keys ride the generic map: the settlement's TI/somma paid
-      // figures reconcile to the committed stub lines AND to the monthly
-      // factors, so they were supplied, not defaulted.
-      for (const employeeId of [dust, bonus, credit, joiner]) {
-        const factors = await stubFactors(org.orgId, december.documentId, employeeId);
-        for (const key of ["ti_payout", "somma_payout"] as const) {
-          const lineSum = (await db.execute<{ total: string }>(sql`
-            select coalesce(sum(l.amount), 0)::text as total
-              from pay_stub_lines l
-              join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-              join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-              join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-             where s.org_id = ${org.orgId} and s.employee_party_id = ${employeeId}
-               and s.tax_year = 2026 and r.run_status = 'committed'
-               and c.system_key = ${key}`)).rows[0]!.total;
-          const factorKey = key === "ti_payout" ? "CONG_TI_PAID" : "CONG_SOMMA_PAID";
-          assert.equal(
-            factors[factorKey], lineSum,
-            `${factorKey} carries the committed ${key} lines`,
+        // November is an ordinary month: no settlement line, no settlement
+        // factor — the wiring must be byte-identical outside the final period.
+        for (const employeeId of [dust, bonus, credit, joiner]) {
+          const lines = await stubLines(org.orgId, novemberId, employeeId);
+          assert.deepEqual(settlementTuples(lines), [], "no conguaglio line outside December");
+          const factors = await stubFactors(org.orgId, novemberId, employeeId);
+          assert.ok(
+            !Object.keys(factors).some((key) => key.startsWith("CONG_")),
+            "no settlement factor outside December",
           );
         }
-      }
-      // Recalculation is stable: stubs are replaced wholesale, so a second
-      // calculate settles the same figures, never a second layer.
-      await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
-      const joinerAgain = await stubFactors(org.orgId, december.documentId, joiner);
-      assert.equal(joinerAgain["CONG_IRPEF_DELTA"], "-3979.1600");
-      assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, joiner)), [
-        ["income_tax", "credit", "3979.1600", 110],
-        ["regional_surtax", "credit", "0.0100", 115],
-      ]);
 
-      await commitPayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
+        // A calculated-but-uncommitted December bonus draft for the joiner: its
+        // withholding must NOT enter the settlement's year-to-date, or an
+        // employee's refund would move when somebody recalculates a draft.
+        const draftBonus = await createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
+          runType: "bonus",
+        });
+        await addLineAdjustment(fx, draftBonus.documentId, joiner, "20000");
+        const draftResult = await calculatePayRun({
+          orgId: fx.orgId, documentId: draftBonus.documentId, actorId,
+        });
+        assert.deepEqual(draftResult.errors, [], "draft bonus calculates clean");
+        const draftLines = await stubLines(org.orgId, draftBonus.documentId, joiner);
+        const draftWithheld = draftLines
+          .filter((line) => line.system_key === "income_tax")
+          .map((line) => line.amount)
+          .reduce((acc, amount) => add(acc, amount), "0.0000");
+        assert.ok(cmp(draftWithheld, "0") > 0, "the draft withholds something worth excluding");
 
-      // The run balances: net is gross less deductions plus credits on every
-      // December stub, and the journal projection sums to zero.
-      for (const employeeId of [dust, bonus, credit, joiner]) {
-        const stub = (await db.execute<{ gross: string; net_pay: string }>(sql`
-          select gross::text as gross, net_pay::text as net_pay from pay_stubs
+        // December regular: the bonus-year employee's one-off lands here, so
+        // the final run prices 2500 + 5000 exactly like the pack's own fixture.
+        const december = await createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
+        });
+        await addLineAdjustment(fx, december.documentId, bonus, "5000");
+        const decResult = await calculatePayRun({
+          orgId: fx.orgId, documentId: december.documentId, actorId,
+        });
+        assert.deepEqual(decResult.errors, [], "December calculates clean — no settlement refusal");
+
+        // The refund: over-withheld IRPEF returns as a credit, regionale dust
+        // as a credit, comunale exactly zero pushes nothing.
+        assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, joiner)), [
+          ["income_tax", "credit", "3979.1600", 110],
+          ["regional_surtax", "credit", "0.0100", 115],
+        ]);
+        const joinerFactors = await stubFactors(org.orgId, december.documentId, joiner);
+        assert.equal(joinerFactors["CONG_IRPEF_ANNUAL"], "1534.7200");
+        assert.equal(joinerFactors["CONG_IRPEF_YTD"], "5513.8800");
+        assert.equal(joinerFactors["CONG_IRPEF_DELTA"], "-3979.1600");
+        assert.equal(joinerFactors["CONG_ADDCOM_DELTA"], "0.0000");
+
+        // The collection: under-withheld IRPEF collects as a deduction.
+        assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, bonus)), [
+          ["income_tax", "deduction", "1668.7400", 110],
+          ["regional_surtax", "deduction", "51.2400", 115],
+          ["municipal_surtax", "deduction", "33.3200", 120],
+        ]);
+        const bonusFactors = await stubFactors(org.orgId, december.documentId, bonus);
+        assert.equal(bonusFactors["CONG_IRPEF_ANNUAL"], "5042.0800");
+        assert.equal(bonusFactors["CONG_IRPEF_YTD"], "3373.3400");
+        assert.equal(bonusFactors["CONG_IRPEF_DELTA"], "1668.7400");
+
+        // The level year: only cent dust settles, and the comunale line — whose
+        // delta is exactly zero — is absent, not a zero line.
+        assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, dust)), [
+          ["income_tax", "deduction", "0.0400", 110],
+          ["regional_surtax", "credit", "0.0100", 115],
+        ]);
+        const dustFactors = await stubFactors(org.orgId, december.documentId, dust);
+        assert.equal(dustFactors["CONG_ADDCOM_DELTA"], "0.0000");
+
+        // The credit keys ride the generic map: the settlement's TI/somma paid
+        // figures reconcile to the stub lines AND to the monthly factors, so
+        // they were supplied, not defaulted. The paid total is committed
+        // history PLUS the December run being settled (the guard verifies the
+        // full year including December's monthly rail — committed-only would
+        // false-refuse every December with a credit), so the December
+        // document's lines count even though it is not committed yet.
+        for (const employeeId of [dust, bonus, credit, joiner]) {
+          const factors = await stubFactors(org.orgId, december.documentId, employeeId);
+          for (const key of ["ti_payout", "somma_payout"] as const) {
+            const lineSum = (await db.execute<{ total: string }>(sql`
+              select coalesce(sum(l.amount), 0)::text as total
+                from pay_stub_lines l
+                join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+                join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+                join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+               where s.org_id = ${org.orgId} and s.employee_party_id = ${employeeId}
+                 and s.tax_year = 2026
+                 and (r.run_status = 'committed' or s.pay_run_document_id = ${december.documentId})
+                 and c.system_key = ${key}`)).rows[0]!.total;
+            const factorKey = key === "ti_payout" ? "CONG_TI_PAID" : "CONG_SOMMA_PAID";
+            assert.equal(
+              factors[factorKey], lineSum,
+              `${factorKey} carries the ${key} lines paid so far this year`,
+            );
+          }
+        }
+        // Recalculation is stable: stubs are replaced wholesale, so a second
+        // calculate settles the same figures, never a second layer.
+        await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
+        const joinerAgain = await stubFactors(org.orgId, december.documentId, joiner);
+        assert.equal(joinerAgain["CONG_IRPEF_DELTA"], "-3979.1600");
+        assert.deepEqual(settlementTuples(await stubLines(org.orgId, december.documentId, joiner)), [
+          ["income_tax", "credit", "3979.1600", 110],
+          ["regional_surtax", "credit", "0.0100", 115],
+        ]);
+
+        await commitPayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
+
+        // The run balances: net is gross less deductions plus credits on every
+        // December stub, and the journal projection sums to zero.
+        for (const employeeId of [dust, bonus, credit, joiner]) {
+          const stub = (await db.execute<{ gross: string; net_pay: string }>(sql`
+            select gross::text as gross, net_pay::text as net_pay from pay_stubs
+             where org_id = ${org.orgId} and pay_run_document_id = ${december.documentId}
+               and employee_party_id = ${employeeId}`)).rows[0]!;
+          const lines = await stubLines(org.orgId, december.documentId, employeeId);
+          const signed = (kinds: string[]) =>
+            lines.filter((line) => kinds.includes(line.kind))
+              .map((line) => line.amount).reduce((acc, amount) => add(acc, amount), "0.0000");
+          assert.equal(
+            stub.net_pay,
+            add(add(stub.gross, neg(signed(["deduction"]))), signed(["credit"])),
+            "net is gross less deductions plus credits",
+          );
+        }
+        const journal = (await db.execute<{ total: string }>(sql`
+          select coalesce(sum(amount), 0)::text as total from document_lines
+           where org_id = ${org.orgId} and document_id = ${december.documentId}`));
+        assert.equal(cmp(journal.rows[0]!.total, "0"), 0, "journal projection balances");
+
+        // The remittance ties: the payable is withholdings minus credits, so
+        // the joiner's refund reduces what the employer owes the destination.
+        const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-12-01", to: "2026-12-31" });
+        const withIncomeTax = groups.filter((group) =>
+          group.components.some((c) => c.systemKey === "income_tax"));
+        assert.equal(withIncomeTax.length, 1, "one destination carries the December withholdings");
+        const ref = (await db.execute<{ ded: string; cred: string }>(sql`
+          select coalesce(sum(l.amount) filter (where l.kind = 'deduction' or l.kind = 'employer_contribution'), 0)::text as ded,
+                 coalesce(sum(l.amount) filter (where l.kind = 'credit'), 0)::text as cred
+            from pay_stub_lines l
+            join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+            join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+           where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
+             and r.run_status = 'committed'`)).rows[0]!;
+        assert.equal(cmp(withIncomeTax[0]!.total, add(ref.ded, neg(ref.cred))), 0);
+        const incomeTaxRow = withIncomeTax[0]!.components
+          .filter((c) => c.systemKey === "income_tax")
+          .map((c) => c.amount).reduce((acc, amount) => add(acc, amount), "0.0000");
+        const incomeTaxRef = (await db.execute<{ ded: string; cred: string }>(sql`
+          select coalesce(sum(l.amount) filter (where l.kind = 'deduction'), 0)::text as ded,
+                 coalesce(sum(l.amount) filter (where l.kind = 'credit'), 0)::text as cred
+            from pay_stub_lines l
+            join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+            join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+           where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
+             and c.system_key = 'income_tax'`)).rows[0]!;
+        assert.equal(cmp(incomeTaxRow, add(incomeTaxRef.ded, neg(incomeTaxRef.cred))), 0);
+
+        // The bank-file population is whole: control plus excluded cheque still
+        // equals net pay, and the refunded employee's EFT entry carries the
+        // settlement-adjusted net.
+        const population = await payRunBankFilePopulation(org.orgId, december.documentId);
+        const netTotal = (await db.execute<{ net: string }>(sql`
+          select net_total::text as net from pay_runs
+           where org_id = ${org.orgId} and document_id = ${december.documentId}`)).rows[0]!.net;
+        assert.equal(cmp(add(population.total, population.excludedTotal), netTotal), 0);
+        assert.deepEqual(population.entries.map((e) => e.employeePartyId), [joiner]);
+        const joinerNet = (await db.execute<{ net_pay: string }>(sql`
+          select net_pay::text as net_pay from pay_stubs
            where org_id = ${org.orgId} and pay_run_document_id = ${december.documentId}
-             and employee_party_id = ${employeeId}`)).rows[0]!;
-        const lines = await stubLines(org.orgId, december.documentId, employeeId);
-        const signed = (kinds: string[]) =>
-          lines.filter((line) => kinds.includes(line.kind))
-            .map((line) => line.amount).reduce((acc, amount) => add(acc, amount), "0.0000");
-        assert.equal(
-          stub.net_pay,
-          add(add(stub.gross, neg(signed(["deduction"]))), signed(["credit"])),
-          "net is gross less deductions plus credits",
-        );
+             and employee_party_id = ${joiner}`)).rows[0]!.net_pay;
+        assert.equal(population.entries[0]!.amount, joinerNet);
+      } finally {
+        await dropScratchOrgReporting(org.orgId);
       }
-      const journal = (await db.execute<{ total: string }>(sql`
-        select coalesce(sum(amount), 0)::text as total from document_lines
-         where org_id = ${org.orgId} and document_id = ${december.documentId}`));
-      assert.equal(cmp(journal.rows[0]!.total, "0"), 0, "journal projection balances");
-
-      // The remittance ties: the payable is withholdings minus credits, so
-      // the joiner's refund reduces what the employer owes the destination.
-      const groups = await payrollRemittanceSummary(org.orgId, { from: "2026-12-01", to: "2026-12-31" });
-      const withIncomeTax = groups.filter((group) =>
-        group.components.some((c) => c.systemKey === "income_tax"));
-      assert.equal(withIncomeTax.length, 1, "one destination carries the December withholdings");
-      const ref = (await db.execute<{ ded: string; cred: string }>(sql`
-        select coalesce(sum(l.amount) filter (where l.kind = 'deduction' or l.kind = 'employer_contribution'), 0)::text as ded,
-               coalesce(sum(l.amount) filter (where l.kind = 'credit'), 0)::text as cred
-          from pay_stub_lines l
-          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-         where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
-           and r.run_status = 'committed'`)).rows[0]!;
-      assert.equal(cmp(withIncomeTax[0]!.total, add(ref.ded, neg(ref.cred))), 0);
-      const incomeTaxRow = withIncomeTax[0]!.components
-        .filter((c) => c.systemKey === "income_tax")
-        .map((c) => c.amount).reduce((acc, amount) => add(acc, amount), "0.0000");
-      const incomeTaxRef = (await db.execute<{ ded: string; cred: string }>(sql`
-        select coalesce(sum(l.amount) filter (where l.kind = 'deduction'), 0)::text as ded,
-               coalesce(sum(l.amount) filter (where l.kind = 'credit'), 0)::text as cred
-          from pay_stub_lines l
-          join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
-          join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-         where s.org_id = ${org.orgId} and s.pay_run_document_id = ${december.documentId}
-           and c.system_key = 'income_tax'`)).rows[0]!;
-      assert.equal(cmp(incomeTaxRow, add(incomeTaxRef.ded, neg(incomeTaxRef.cred))), 0);
-
-      // The bank-file population is whole: control plus excluded cheque still
-      // equals net pay, and the refunded employee's EFT entry carries the
-      // settlement-adjusted net.
-      const population = await payRunBankFilePopulation(org.orgId, december.documentId);
-      const netTotal = (await db.execute<{ net: string }>(sql`
-        select net_total::text as net from pay_runs
-         where org_id = ${org.orgId} and document_id = ${december.documentId}`)).rows[0]!.net;
-      assert.equal(cmp(add(population.total, population.excludedTotal), netTotal), 0);
-      assert.deepEqual(population.entries.map((e) => e.employeePartyId), [joiner]);
-      const joinerNet = (await db.execute<{ net_pay: string }>(sql`
-        select net_pay::text as net_pay from pay_stubs
-         where org_id = ${org.orgId} and pay_run_document_id = ${december.documentId}
-           and employee_party_id = ${joiner}`)).rows[0]!.net_pay;
-      assert.equal(population.entries[0]!.amount, joinerNet);
-    } finally {
-      await dropScratchOrgReporting(org.orgId);
-    }
+    });
   },
 );
 
 test(
   "a settlement mode the run layer cannot honour refuses by name on the final run",
-  {
-    // An annual settlement settles the YEAR: it needs a committed December
-    // run, and createPayRun refuses a period that has not begun. There is no
-    // hook to pin "today", so this cannot run before December 2026 -- it would
-    // fail for reasons that say nothing about the settlement logic. Self-enable
-    // on the calendar rather than sit red for a quarter.
-    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
-      ? "annual settlement needs a December 2026 pay period to have begun"
-      : false,
-  },
+  // Same pinned-December clock as the settlement test above: the December
+  // period must have begun for createPayRun to open it.
+  { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const pack = IT_PAYROLL_PACK;
-    const before = pack.annualSettlement;
-    try {
-      const fx = await seedHarness(org.orgId, actorId);
-      const employeeId = await seedEmployee(fx, "Dieter Dezember", "24000");
-      // Germany's December program is a different algorithm for the final
-      // period, not an extra line: a pack declaring that shape must make the
-      // run refuse, never silently skip the settlement.
-      pack.annualSettlement = (taxYear: number) => {
-        const edition = before!(taxYear);
-        return edition && { ...edition, mode: "final_period_recomputation" as const };
-      };
-      const december = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
-      });
-      await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
-      const documentId = december.documentId;
-      const stored = (await db.execute<{ errors: unknown }>(sql`
-        select calculation_errors as errors from pay_runs
-         where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
-      const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
-      const mine = errors.filter((e) => e.employeePartyId === employeeId);
-      assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");
-      assert.match(mine[0]!.message, /final_period_recomputation/);
-      assert.match(mine[0]!.message, /adjustment_line/);
-    } finally {
-      pack.annualSettlement = before;
-      await dropScratchOrgReporting(org.orgId);
-    }
+    await withSimClock("2026-12-15", async () => {
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const pack = IT_PAYROLL_PACK;
+      const before = pack.annualSettlement;
+      try {
+        const fx = await seedHarness(org.orgId, actorId);
+        const employeeId = await seedEmployee(fx, "Dieter Dezember", "24000");
+        // Germany's December program is a different algorithm for the final
+        // period, not an extra line: a pack declaring that shape must make the
+        // run refuse, never silently skip the settlement.
+        pack.annualSettlement = (taxYear: number) => {
+          const edition = before!(taxYear);
+          return edition && { ...edition, mode: "final_period_recomputation" as const };
+        };
+        const december = await createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
+        });
+        await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
+        const documentId = december.documentId;
+        const stored = (await db.execute<{ errors: unknown }>(sql`
+          select calculation_errors as errors from pay_runs
+           where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
+        const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
+        const mine = errors.filter((e) => e.employeePartyId === employeeId);
+        assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");
+        assert.match(mine[0]!.message, /final_period_recomputation/);
+        assert.match(mine[0]!.message, /adjustment_line/);
+      } finally {
+        pack.annualSettlement = before;
+        await dropScratchOrgReporting(org.orgId);
+      }
+    });
   },
 );
 
 test(
   "a settlement whose declared inputs are missing refuses by name",
-  {
-    // An annual settlement settles the YEAR: it needs a committed December
-    // run, and createPayRun refuses a period that has not begun. There is no
-    // hook to pin "today", so this cannot run before December 2026 -- it would
-    // fail for reasons that say nothing about the settlement logic. Self-enable
-    // on the calendar rather than sit red for a quarter.
-    skip: !DB || new Date().toISOString().slice(0, 10) < "2026-12-02"
-      ? "annual settlement needs a December 2026 pay period to have begun"
-      : false,
-  },
+  // Same pinned-December clock as the settlement test above: the December
+  // period must have begun for createPayRun to open it.
+  { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    const pack = IT_PAYROLL_PACK;
-    const before = pack.annualSettlement;
-    try {
-      const fx = await seedHarness(org.orgId, actorId);
-      const employeeId = await seedEmployee(fx, "Marta Mancante", "24000");
-      pack.annualSettlement = (taxYear: number) => {
-        const edition = before!(taxYear);
-        return edition && { ...edition, requiredEmployeeFacts: ["fatto_sintetico"] };
-      };
-      const december = await createPayRun({
-        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
-        periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
-      });
-      await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
-      const documentId = december.documentId;
-      const stored = (await db.execute<{ errors: unknown }>(sql`
-        select calculation_errors as errors from pay_runs
-         where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
-      const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
-      const mine = errors.filter((e) => e.employeePartyId === employeeId);
-      assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");
-      assert.match(mine[0]!.message, /fatto_sintetico/);
-    } finally {
-      pack.annualSettlement = before;
-      await dropScratchOrgReporting(org.orgId);
-    }
+    await withSimClock("2026-12-15", async () => {
+      const org = await createScratchOrg();
+      const actorId = (await seedFlowActors(org.orgId)).adminId;
+      const pack = IT_PAYROLL_PACK;
+      const before = pack.annualSettlement;
+      try {
+        const fx = await seedHarness(org.orgId, actorId);
+        const employeeId = await seedEmployee(fx, "Marta Mancante", "24000");
+        pack.annualSettlement = (taxYear: number) => {
+          const edition = before!(taxYear);
+          return edition && { ...edition, requiredEmployeeFacts: ["fatto_sintetico"] };
+        };
+        const december = await createPayRun({
+          orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+          periodStart: "2026-12-01", periodEnd: "2026-12-31", payDate: "2026-12-31",
+        });
+        await calculatePayRun({ orgId: fx.orgId, documentId: december.documentId, actorId });
+        const documentId = december.documentId;
+        const stored = (await db.execute<{ errors: unknown }>(sql`
+          select calculation_errors as errors from pay_runs
+           where org_id = ${org.orgId} and document_id = ${documentId}`)).rows[0]!;
+        const errors = (stored.errors ?? []) as { employeePartyId: string; message: string }[];
+        const mine = errors.filter((e) => e.employeePartyId === employeeId);
+        assert.equal(mine.length, 1, "the employee is refused, nobody else is affected");
+        assert.match(mine[0]!.message, /fatto_sintetico/);
+      } finally {
+        pack.annualSettlement = before;
+        await dropScratchOrgReporting(org.orgId);
+      }
+    });
   },
 );
