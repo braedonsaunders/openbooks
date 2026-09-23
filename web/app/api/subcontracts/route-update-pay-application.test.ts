@@ -46,29 +46,6 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksSqlTextSubcontracts = sqlText;
 
-const STUBS = [
-  "addSubcontractSovLine",
-  "approveSubcontract",
-  "approveSubcontractChangeOrder",
-  "approveVendorPayApplication",
-  "createSubcontract",
-  "createSubcontractChangeOrder",
-  "createSubcontractPaymentControl",
-  "createVendorPayApplication",
-  "generateVendorPayApplicationBill",
-  "releaseSubcontractPaymentControl",
-  "releaseVendorRetainage",
-  "removeSubcontractSovLine",
-  "submitSubcontract",
-  "submitVendorPayApplication",
-  "transitionSubcontract",
-  "updateDraftSubcontract",
-  "voidSubcontractChangeOrder",
-  "voidVendorPayApplication",
-]
-  .map((name) => `export async function ${name}() { throw new Error("unexpected ${name}") }`)
-  .join("\n");
-
 const mockSources = new Map<string, string>([
   [
     "mock:db",
@@ -120,7 +97,26 @@ const mockSources = new Map<string, string>([
         if (state.updateError) throw new SubcontractError(state.updateError)
         return { ok: true }
       }
-      ${STUBS}
+      // Every other export the route imports, literal so the mock-surface
+      // check can read it: each throws if the route reaches it.
+      export async function addSubcontractSovLine() { throw new Error("unexpected addSubcontractSovLine") }
+      export async function approveSubcontract() { throw new Error("unexpected approveSubcontract") }
+      export async function approveSubcontractChangeOrder() { throw new Error("unexpected approveSubcontractChangeOrder") }
+      export async function approveVendorPayApplication() { throw new Error("unexpected approveVendorPayApplication") }
+      export async function createSubcontract() { throw new Error("unexpected createSubcontract") }
+      export async function createSubcontractChangeOrder() { throw new Error("unexpected createSubcontractChangeOrder") }
+      export async function createSubcontractPaymentControl() { throw new Error("unexpected createSubcontractPaymentControl") }
+      export async function createVendorPayApplication() { throw new Error("unexpected createVendorPayApplication") }
+      export async function generateVendorPayApplicationBill() { throw new Error("unexpected generateVendorPayApplicationBill") }
+      export async function releaseSubcontractPaymentControl() { throw new Error("unexpected releaseSubcontractPaymentControl") }
+      export async function releaseVendorRetainage() { throw new Error("unexpected releaseVendorRetainage") }
+      export async function removeSubcontractSovLine() { throw new Error("unexpected removeSubcontractSovLine") }
+      export async function submitSubcontract() { throw new Error("unexpected submitSubcontract") }
+      export async function submitVendorPayApplication() { throw new Error("unexpected submitVendorPayApplication") }
+      export async function transitionSubcontract() { throw new Error("unexpected transitionSubcontract") }
+      export async function updateDraftSubcontract() { throw new Error("unexpected updateDraftSubcontract") }
+      export async function voidSubcontractChangeOrder() { throw new Error("unexpected voidSubcontractChangeOrder") }
+      export async function voidVendorPayApplication() { throw new Error("unexpected voidVendorPayApplication") }
     `,
   ],
 ]);
