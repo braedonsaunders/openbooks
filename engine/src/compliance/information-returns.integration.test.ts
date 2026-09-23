@@ -327,6 +327,63 @@ test("ensureFiling denominates in the subsidiary-functional currency, never the 
   }
 });
 
+test("finalize refuses a material reportable vendor with no form assignment", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const partyA = randomUUID();
+    const partyB = randomUUID();
+    for (const [partyId, name] of [[partyA, "Assigned Vendor 2041"], [partyB, "Unassigned Vendor 2041"]] as const) {
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${partyId}, ${org.orgId}, 'vendor', ${name}, null, true, '{}'::jsonb)`);
+    }
+    await seedInformationReturnPayment(org, actorId, "3000", "FORM-OK", {
+      partyId: partyA,
+      taxYear: 2041,
+      tinLast4: "1234",
+    });
+    await seedInformationReturnPayment(org, actorId, "3000", "FORM-MISSING", {
+      partyId: partyB,
+      taxYear: 2041,
+      tinLast4: "9999",
+    });
+    // Vendor B is reportable and paid over threshold, but nobody routed it
+    // to a form — it belongs in no filing.
+    await db.execute(sql`
+      update vendor_roles set information_return_form = null, updated_by = ${actorId}
+       where org_id = ${org.orgId} and party_id = ${partyB}`);
+    const filing = await ensureFiling({
+      orgId: org.orgId,
+      taxYear: 2041,
+      formType: "1099-NEC",
+      currency: "CAD",
+      actorId,
+    });
+    await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+
+    // One valid recipient must not let the filing freeze incomplete: the
+    // refusal names the vendor and the remedy, and writes nothing.
+    await rejectsInfo(
+      () => finalizeFiling({ orgId: org.orgId, filingId: filing.id, actorId }),
+      /Unassigned Vendor 2041.*has no information return assigned/,
+    );
+    assert.equal((await filingRow(org.orgId, filing.id)).status, "computed");
+    assert.deepEqual(await auditActions(org.orgId, filing.id), ["compute"]);
+
+    // The remedy: assign the form on the vendor record, recompute so the
+    // vendor joins the filing, then the freeze succeeds with both vendors.
+    await db.execute(sql`
+      update vendor_roles set information_return_form = '1099-NEC', updated_by = ${actorId}
+       where org_id = ${org.orgId} and party_id = ${partyB}`);
+    await recomputeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+    await finalizeFiling({ orgId: org.orgId, filingId: filing.id, actorId });
+    assert.equal((await filingRow(org.orgId, filing.id)).status, "finalized");
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("the filing lifecycle refuses to cross finalize/file and leaves frozen storage untouched", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
