@@ -6,6 +6,7 @@ import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { adjustInventory } from "./movements.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { assertInventoryFeature } from "./profile-policy.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { getOnHandWith, periodForDate, persistReceiptMoney, primaryBookId } from "./position.ts";
 
@@ -285,6 +286,7 @@ export async function createStockCount(
     throw new InventoryError("a stock count holds at most 2000 lines — split the count by area");
   }
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     await assertPeriodCovers(tx, orgId, input.countedOn);
     const location = (await tx.execute<{ id: string }>(sql`
       select id from locations where org_id = ${orgId} and id = ${input.locationId}`));
@@ -390,6 +392,7 @@ export async function startStockCount(
   countId: string,
 ): Promise<{ id: string; status: StockCountStatus }> {
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     await transitionCount(tx, orgId, actorId, count, "counting");
     return { id: count.id, status: "counting" as StockCountStatus };
@@ -404,6 +407,7 @@ export async function recordCountedQuantity(
 ): Promise<{ lineId: string; variance: string }> {
   const counted = parseCountQuantity(input.countedQuantity, "counted quantity");
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, input.countId, true);
     if (count.status !== "counting") {
       if (count.status === "review") {
@@ -448,6 +452,7 @@ export async function recountStockCountLine(
   input: { countId: string; lineId: string },
 ): Promise<{ lineId: string; expectedQuantity: string }> {
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, input.countId, true);
     if (count.status !== "counting") {
       throw new InventoryError(
@@ -521,6 +526,7 @@ export async function submitStockCountForReview(
   countId: string,
 ): Promise<{ id: string; status: StockCountStatus }> {
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     if (count.status !== "counting") {
       assertCountTransition(count.status, "review");
@@ -537,6 +543,7 @@ export async function returnStockCountToCounting(
   countId: string,
 ): Promise<{ id: string; status: StockCountStatus }> {
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     await transitionCount(tx, orgId, actorId, count, "counting");
     return { id: count.id, status: "counting" as StockCountStatus };
@@ -552,6 +559,7 @@ export async function setStockCountDate(
 ): Promise<{ id: string; countedOn: string }> {
   assertCountedOn(input.countedOn);
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, input.countId, true);
     if (count.status !== "draft" && count.status !== "counting" && count.status !== "review") {
       throw new InventoryError(
@@ -576,6 +584,7 @@ export async function cancelStockCount(
   countId: string,
 ): Promise<{ id: string; status: StockCountStatus }> {
   return db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     const postedLines = (await tx.execute<{ n: string }>(sql`
       select count(*)::text as n from stock_count_lines
@@ -624,6 +633,7 @@ export async function postStockCount(
   // Checks run row-locked; the adjustments that follow commit in their own
   // movement transactions (see module note on concurrent posters).
   const prepared = await db.transaction(async (tx) => {
+    await assertInventoryFeature(tx, orgId);
     const count = await loadCountHeader(tx, orgId, countId, true);
     if (count.status === "posted") {
       throw new InventoryError(
