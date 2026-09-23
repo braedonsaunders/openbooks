@@ -77,6 +77,14 @@ export async function materializeDueReportRuns(now = new Date(), limit = 50): Pr
              hour, minute, timezone, recipient_emails, filters, next_run_at, authorization_snapshot
         from report_schedules
        where active and next_run_at <= ${now}
+         -- Archived definitions are unschedulable: archiving deactivates
+         -- their schedules, and this backstops any schedule left active.
+         and not exists (
+           select 1 from report_definitions d
+            where d.id = report_schedules.definition_id
+              and d.org_id = report_schedules.org_id
+              and d.archived_at is not null
+         )
        order by next_run_at
        for update skip locked
        limit ${Math.max(1, Math.min(limit, 500))}

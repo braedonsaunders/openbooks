@@ -395,6 +395,7 @@ export async function loadPersonaMetrics(
       select d.name as name, s.next_run_at::text as at from report_schedules s
         join report_definitions d on d.org_id = s.org_id and d.id = s.definition_id
        where s.org_id = ${orgId} and s.next_run_at <= now() + interval '30 days'
+         and d.archived_at is null
        order by s.next_run_at limit 5`).catch(() => ({ rows: [] as { name: string; at: string }[] }))).rows
     for (const schedule of schedules) calendar.push({ label: schedule.name, date: schedule.at.slice(0, 10) })
     const remittances = (await db.execute<{ at: string }>(sql`

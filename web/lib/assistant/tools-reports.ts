@@ -83,7 +83,7 @@ const listReportDefinitions: AssistantToolDef = {
       select id, name, description, kind, coalesce(report_type, 'query') as report_type,
              slug, query->>'entity' as entity, statement->>'kind' as statement_kind, updated_at
         from report_definitions
-       where org_id = ${authz.user.orgId}
+       where org_id = ${authz.user.orgId} and archived_at is null
          ${a.reportType ? sql`and coalesce(report_type, 'query') = ${a.reportType}` : sql``}
          ${like ? sql`and name ilike ${like}` : sql``}
        order by updated_at desc
@@ -154,7 +154,7 @@ const runReport: AssistantToolDef = {
     const def = (await db.execute<{ entity: string | null; statement_kind: string | null }>(sql`
       select query->>'entity' as entity, statement->>'kind' as statement_kind
         from report_definitions
-       where id = ${a.definitionId} and org_id = ${orgId}
+       where id = ${a.definitionId} and org_id = ${orgId} and archived_at is null
     `));
     if (!def.rows[0]) return { ok: false, error: "report_not_found" };
     if (!(await definitionPermitted(authz, def.rows[0].entity, def.rows[0].statement_kind))) {
@@ -376,7 +376,7 @@ const listReportSchedules: AssistantToolDef = {
              d.query->>'entity' as entity, d.statement->>'kind' as statement_kind
         from report_schedules s
         left join report_definitions d on d.id = s.definition_id and d.org_id = s.org_id
-       where s.org_id = ${authz.user.orgId}
+       where s.org_id = ${authz.user.orgId} and (d.id is null or d.archived_at is null)
          ${a.definitionId ? sql`and s.definition_id = ${a.definitionId}` : sql``}
        order by s.next_run_at
        limit 200

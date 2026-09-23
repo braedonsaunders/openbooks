@@ -173,48 +173,45 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     )
   }
 
-  // Schedules + runs cascade via their FKs. Capture their counts and the exact
-  // deleted definition in the immutable audit log in the same transaction so
-  // a deletion can never occur without its evidence.
-  const deleted = await db.transaction(async (tx) => {
-    const dependents = (await tx.execute<{ schedule_count: string; run_count: string }>(sql`
-      select
-        (select count(*)::text from report_schedules
-          where org_id = ${user.orgId} and definition_id = ${id}) as schedule_count,
-        (select count(*)::text from report_runs
-          where org_id = ${user.orgId} and definition_id = ${id}) as run_count
-    `))
-
+  // Deletion archives: runs reference their definition (and artifacts cascade
+  // off runs), so a hard delete would wipe every materialization, its CSV
+  // evidence and its immutable PDF artifacts. The row survives stamped with
+  // archived_at/by, its schedules stop, and runs/artifacts stay downloadable
+  // by run id — all in the same transaction as the audit evidence, so an
+  // archive can never land without its before/after trace.
+  const archived = await db.transaction(async (tx) => {
     const result = (await tx.execute<Record<string, unknown>>(sql`
-      delete from report_definitions
-       where id = ${id} and org_id = ${user.orgId} and kind = 'custom'
+      update report_definitions set
+        archived_at = clock_timestamp(),
+        archived_by = ${user.id},
+        updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${user.id}
+       where id = ${id} and org_id = ${user.orgId} and kind = 'custom' and archived_at is null
        returning id, kind, report_type, slug, name, description, query, statement,
-                 system, layout, created_at, updated_at, created_by, updated_by
+                 system, layout, created_at, updated_at, created_by, updated_by,
+                 archived_at, archived_by
     `))
-    const snapshot = result.rows[0]
-    if (!snapshot) return null
+    const after = result.rows[0]
+    if (!after) return null
 
     await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (
-        ${user.orgId},
-        'report_definitions',
-        ${id},
-        'delete',
-        ${JSON.stringify({
-          before: snapshot,
-          after: null,
-          cascaded: {
-            schedules: Number(dependents.rows[0]?.schedule_count ?? 0),
-            runs: Number(dependents.rows[0]?.run_count ?? 0),
-          },
-        })}::jsonb,
-        ${user.id}
-      )
+      update report_schedules set active = false, updated_at = now()
+       where org_id = ${user.orgId} and definition_id = ${id} and active
     `)
-    return snapshot
+
+    await auditSetupChange(
+      {
+        orgId: user.orgId,
+        table: 'report_definitions',
+        rowId: id,
+        action: 'delete',
+        changes: { before: existing, after },
+        actorId: user.id,
+      },
+      tx,
+    )
+    return after
   })
 
-  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!archived) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

@@ -156,6 +156,7 @@ export async function statementDefinitionId(
      where org_id = ${orgId} and report_type = 'statement'
        and statement->>'kind' = ${kind}
        and coalesce(statement->'params', '{}'::jsonb) @> ${JSON.stringify(match)}::jsonb
+       and archived_at is null
      order by (kind = 'built_in') desc, created_at
      limit 1
   `)
@@ -189,7 +190,12 @@ export async function builtInReportDefinitionId(
   return r.rows[0]?.id ?? null
 }
 
-/** Load one definition scoped to the caller's org, or null. */
+/**
+ * Load one live definition scoped to the caller's org, or null. Archived
+ * definitions are invisible to execution: they cannot run, export, render,
+ * schedule, or be edited — their runs and artifacts survive underneath and
+ * stay downloadable by run id under the run's own authorization snapshot.
+ */
 export async function loadReportDefinition(
   orgId: string,
   id: string,
@@ -198,7 +204,7 @@ export async function loadReportDefinition(
   const r = (await db.execute<ReportDefinitionRow>(sql`
     select id, org_id, kind, report_type, slug, name, description, query, statement, system, layout, created_at, updated_at
       from report_definitions
-     where id = ${id} and org_id = ${orgId}
+     where id = ${id} and org_id = ${orgId} and archived_at is null
   `))
   return r.rows[0] ?? null
 }
