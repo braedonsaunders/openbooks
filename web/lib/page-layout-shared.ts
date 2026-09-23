@@ -12,3 +12,26 @@ export function orderPanels(defaultOrder: readonly string[], prefs: PageLayoutPr
   const savedSet = new Set(saved)
   return [...saved, ...defaultOrder.filter((k) => !savedSet.has(k))]
 }
+
+/**
+ * Reconcile two whole-layout states after an optimistic-concurrency conflict:
+ * the union of both tabs' hides, ordered by the local tab's latest order with
+ * any server-only keys appended in server order. Unioning (never intersecting)
+ * means neither tab's hide is silently dropped: when the tabs disagree on a
+ * key, hidden wins and the operator sees it — unhiding again is one explicit
+ * toggle away, while a dropped hide would reappear only as a mystery on the
+ * next reload.
+ */
+export function mergePageLayouts(
+  server: PageLayoutPrefs,
+  local: PageLayoutPrefs,
+): PageLayoutPrefs {
+  const hidden = [...new Set([...(server.hidden ?? []), ...(local.hidden ?? [])])]
+  const localOrder = local.order ?? []
+  const localSet = new Set(localOrder)
+  const order = [...localOrder, ...(server.order ?? []).filter((k) => !localSet.has(k))]
+  return {
+    ...(order.length > 0 ? { order } : {}),
+    ...(hidden.length > 0 ? { hidden } : {}),
+  }
+}
