@@ -330,7 +330,7 @@ export async function folderAccessLevel(
   folderId: string,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute<{ ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
+  const r = (await db.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -339,13 +339,18 @@ export async function folderAccessLevel(
         from folders f join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
     )
     select
+      count(*)::int as "n",
       bool_or(a.is_private and a.owner_id = ${viewer.userId}) as "ownsPrivate",
       bool_or(a.is_private and a.owner_id is distinct from ${viewer.userId}) as "foreignPrivate",
       ${grantRankOverFolders(orgId, viewer, sql`select id from ancestors`)} as "grantRank"
       from ancestors a
   `))
   const row = r.rows[0]
-  if (!row) return 'none' // folder not found / not in org
+  // The aggregate always returns exactly one row — even when the anchor folder
+  // does not exist (count zero, every other column null). An absent resource
+  // must read as 'none': without this check every documents.manage caller is a
+  // manager of every random UUID, and grant writes persist dangling rows.
+  if (!row || row.n === 0) return 'none' // folder not found / not in org
   const behindForeignBoundary = !!row.foreignPrivate
   const grantLevel = ACCESS_BY_RANK[row.grantRank] ?? 'none'
   const ownerLevel: AccessLevel = row.ownsPrivate && !behindForeignBoundary ? 'manager' : 'none'
@@ -392,6 +397,27 @@ export type GrantRow = {
 const ACCESS_VALUES: AccessLevel[] = ['viewer', 'editor', 'manager']
 export function isAccessLevel(v: unknown): v is AccessLevel {
   return typeof v === 'string' && (ACCESS_VALUES as string[]).includes(v)
+}
+
+/**
+ * The grant anchor exists inside this org. Grant routes check this BEFORE the
+ * manager gate: the gate alone cannot tell "absent" from "forbidden", so
+ * without this check a share against a random UUID persists a dangling
+ * resource_grants row plus a share audit event for a resource no read can
+ * ever observe.
+ */
+export async function cabinetResourceExists(
+  orgId: string,
+  resourceType: ResourceType,
+  resourceId: string,
+  executor?: SqlExecutor,
+): Promise<boolean> {
+  const exec = executor ?? db
+  const r =
+    resourceType === 'folder'
+      ? await exec.execute(sql`select 1 from folders where id = ${resourceId} and org_id = ${orgId} limit 1`)
+      : await exec.execute(sql`select 1 from files where id = ${resourceId} and org_id = ${orgId} limit 1`)
+  return r.rows.length > 0
 }
 
 /** The grants on a resource, with resolved principal display names. */

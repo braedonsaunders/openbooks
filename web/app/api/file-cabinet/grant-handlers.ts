@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  cabinetResourceExists,
   isAccessLevel,
   listGrants,
   removeGrant,
@@ -36,6 +37,18 @@ async function principalExists(
   return r.rows.length > 0
 }
 
+/** A grant anchor the caller's org cannot observe reads as not found. */
+async function requireAnchor(
+  authz: Authz,
+  resourceType: ResourceType,
+  resourceId: string,
+): Promise<NextResponse | null> {
+  if (!(await cabinetResourceExists(authz.user.orgId, resourceType, resourceId))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  return null
+}
+
 /** GET — list the grants on a resource. */
 export async function getGrants(
   authz: Authz,
@@ -43,6 +56,8 @@ export async function getGrants(
   resourceId: string,
 ): Promise<NextResponse> {
   if (!isUuid(resourceId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const anchor = await requireAnchor(authz, resourceType, resourceId)
+  if (anchor) return anchor
   const gate = await requireManager(authz, resourceType, resourceId)
   if (gate) return gate
   const grants = await listGrants(authz.user.orgId, resourceType, resourceId)
@@ -57,6 +72,8 @@ export async function postGrant(
   body: unknown,
 ): Promise<NextResponse> {
   if (!isUuid(resourceId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const anchor = await requireAnchor(authz, resourceType, resourceId)
+  if (anchor) return anchor
   const gate = await requireManager(authz, resourceType, resourceId)
   if (gate) return gate
 
@@ -100,6 +117,8 @@ export async function deleteGrant(
   if (!isUuid(resourceId) || !isUuid(grantId)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
+  const anchor = await requireAnchor(authz, resourceType, resourceId)
+  if (anchor) return anchor
   const gate = await requireManager(authz, resourceType, resourceId)
   if (gate) return gate
   const ok = await removeGrant(
