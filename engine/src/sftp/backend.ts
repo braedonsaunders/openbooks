@@ -184,6 +184,31 @@ function client(): S3Client {
   return s3;
 }
 
+/**
+ * Test seam: substitute the shared S3 client (the network) so tests can
+ * capture the exact commands the backend sends — including the serialized
+ * CopySource header — without touching object storage. Pass null to restore
+ * the real client. Never used outside tests.
+ */
+export function setSftpS3ClientForTests(replacement: S3Client | null): void {
+  s3 = replacement;
+}
+
+/**
+ * Build the `x-amz-copy-source` header value for an S3 rename: the bucket
+ * plus the source key with every path segment URL-encoded (`/` separators
+ * kept). The installed SDK sends CopySource verbatim, and AWS requires the
+ * encoded form — a raw `b/a #1.ofx` renames nothing and the source file is
+ * left behind to be re-scanned as a duplicate.
+ */
+export function encodeS3CopySource(bucket: string, sourceKey: string): string {
+  const encodedKey = sourceKey
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  return `${encodeURIComponent(bucket)}/${encodedKey}`;
+}
+
 export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBackend {
   // Keep the exported constructor safe on its own as well as through
   // backendFor: every S3 backend must be rooted in its owning tenant.
@@ -249,7 +274,7 @@ export function s3Backend(bucket: string, prefix: string, orgId: string): SftpBa
       await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: dirKey(p) }));
     },
     async rename(from, to) {
-      await client().send(new CopyObjectCommand({ Bucket: bucket, CopySource: `${bucket}/${key(from)}`, Key: key(to) }));
+      await client().send(new CopyObjectCommand({ Bucket: bucket, CopySource: encodeS3CopySource(bucket, key(from)), Key: key(to) }));
       await client().send(new DeleteObjectCommand({ Bucket: bucket, Key: key(from) }));
     },
   };
