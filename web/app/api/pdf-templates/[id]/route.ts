@@ -96,12 +96,13 @@ export async function PATCH(req: Request, { params }: Params) {
   }
 
   try {
-    await db.transaction(async (tx) => {
-      if (isDefault && !existing.isDefault)
-        await tx.execute(sql`
-          update pdf_templates set is_default = false, updated_at = now()
-           where org_id = ${user.orgId} and record_type = ${existing.recordType} and is_default`);
-      await tx.execute(sql`
+    const outcome = await db.transaction(async (tx) => {
+      // The self-update runs FIRST and its affected row is checked: a
+      // concurrent delete between the pre-check above and this statement
+      // matches zero rows, and that is a 404 — never {ok:true} with a phantom
+      // audit event. The default-clear below must not run before this check,
+      // or a vanished row would still lose the kind's default on a 404.
+      const updated = (await tx.execute<{ id: string }>(sql`
         update pdf_templates
            set name = ${name}, description = ${body.description !== undefined ? body.description : existing.description},
                paper_size = ${paperSize}, orientation = ${orientation}, margin_mm = ${marginMm},
@@ -109,11 +110,19 @@ export async function PATCH(req: Request, { params }: Params) {
                source_html = ${prettySource}, compiled_html = ${compiled.compiledHtml},
                is_default = ${isDefault}, is_active = ${isActive},
                updated_at = now(), updated_by = ${user.id}
-         where org_id = ${user.orgId} and id = ${id}`);
+         where org_id = ${user.orgId} and id = ${id}
+        returning id`))
+      if (updated.rows.length === 0) return 'missing' as const
+      if (isDefault && !existing.isDefault)
+        await tx.execute(sql`
+          update pdf_templates set is_default = false, updated_at = now()
+           where org_id = ${user.orgId} and record_type = ${existing.recordType} and is_default and id <> ${id}`);
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'pdf_templates', ${id}, 'update', ${JSON.stringify({ name })}, ${user.id})`);
+      return 'ok' as const
     });
+    if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     // Same Drizzle-wrapper caveat as the collection POST (F-t13-001): match
@@ -136,11 +145,18 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`delete from pdf_templates where org_id = ${user.orgId} and id = ${id}`);
+  // A concurrent delete between the pre-check above and this statement
+  // matches zero rows: that is a 404, and no audit event is written for a
+  // row this call did not remove.
+  const deleted = (await db.transaction(async (tx) => {
+    const removed = (await tx.execute<{ id: string }>(sql`
+      delete from pdf_templates where org_id = ${user.orgId} and id = ${id} returning id`))
+    if (removed.rows.length === 0) return 'missing' as const
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'pdf_templates', ${id}, 'delete', ${JSON.stringify({ name: existing.name })}, ${user.id})`);
-  });
+    return 'ok' as const
+  }));
+  if (deleted === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
