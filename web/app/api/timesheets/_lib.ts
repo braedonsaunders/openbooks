@@ -98,7 +98,15 @@ export interface WeekRow {
   immutable: boolean
 }
 
-/** Pin a party to the known tenant. Returns the owned id, or null. */
+/**
+ * Pin an actively-employed party to the known tenant. Returns the owned id,
+ * or null. A `parties` row alone proves nothing — vendors, customers and
+ * contacts all live there — so the pin additionally requires an active
+ * `employee_roles` row for an active party: time can only be recorded for
+ * someone holding an active employment. Reads fail closed the same way — a
+ * former employee's stored entries remain in the ledger and reports, but no
+ * week can be opened for them until the employment is restored.
+ */
 export async function pinTimesheetEmployee(
   orgId: string,
   employeeId: string,
@@ -107,6 +115,13 @@ export async function pinTimesheetEmployee(
   const owned = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
     select id, subsidiary_id from parties
      where org_id = ${orgId} and id = ${employeeId}
+       and is_active
+       and exists (
+         select 1 from employee_roles r
+          where r.org_id = parties.org_id
+            and r.party_id = parties.id
+            and r.is_active
+       )
      limit 1`))
   const row = owned.rows[0]
   if (!row) return null
@@ -510,9 +525,11 @@ export interface TimesheetPickers {
  * Load every picker the weekly editor needs, for one org.
  *
  * `includeEmployeeId` keeps a specific employee in the list even when they are
- * inactive or no longer hold an employee role. Their historical weeks are still
- * viewable, and without this the picker would have no option matching the
- * timesheet's own employee and would render blank.
+ * inactive or no longer hold an employee role, so the picker still names the
+ * timesheet's own employee instead of rendering blank. Opening the week still
+ * requires an active employment (see pinTimesheetEmployee): historical entries
+ * remain in the ledger and reports, but no week loads for a former employee
+ * until the employment is restored.
  */
 export async function loadPickers(
   orgId: string,

@@ -33,6 +33,7 @@ async function fixture(requireApproval: boolean) {
   })}::jsonb where id=${org.orgId}`)
   await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
     values (${employee},${org.orgId},'employee','Time worker',${org.subsidiaryId},true,'{}'::jsonb)`)
+  await db.execute(sql`insert into employee_roles(id,org_id,party_id,is_active) values (${randomUUID()},${org.orgId},${employee},true)`)
   await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
     values (${project},${org.orgId},${org.subsidiaryId},'SAVE','Time save',${org.customerId},'active',true,'{}'::jsonb)`)
   await db.execute(sql`insert into labor_cost_rates(org_id,employee_party_id,currency,rate,basis,effective_from,is_active)
@@ -130,6 +131,26 @@ test('replaying a draft grid reuses the stored rows instead of churning them', {
     assert.equal(first.length, 1)
     assert.equal((await f.save({})).status, 200)
     assert.deepEqual((await f.snapshot()).rows, first)
+  } finally { await f.close() }
+})
+
+test('time cannot be pinned to a party without an active employment', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const f = await fixture(true)
+  try {
+    assert.equal((await f.save({})).status, 200)
+    // A vendor party (no employee role at all) is not an employee.
+    const vendor = randomUUID()
+    await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id,is_active,custom)
+      values (${vendor},${f.org.orgId},'vendor','No Employment',${f.org.subsidiaryId},true,'{}'::jsonb)`)
+    const refused = await f.save({ employee: vendor })
+    assert.equal(refused.status, 422, await refused.clone().text())
+    assert.match(((await refused.json()) as { error: string }).error, /Employee not found/)
+    // Deactivating the employment closes the pin even though the party stays.
+    await db.execute(sql`update employee_roles set is_active = false where org_id=${f.org.orgId} and party_id=${f.employee}`)
+    const closed = await f.save({})
+    assert.equal(closed.status, 422, await closed.clone().text())
+    assert.match(((await closed.json()) as { error: string }).error, /Employee not found/)
+    assert.equal((await f.snapshot()).rows.length, 1, 'refused pins store nothing new')
   } finally { await f.close() }
 })
 
