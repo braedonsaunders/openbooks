@@ -509,7 +509,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       try {
         // Metadata and unchanged-account saves must retain controlled valuation
         // schedules. Financial-history assets cannot change basis through PATCH.
-        if (!hasHistory) await buildAllSchedulesWithRunner(tx, id, user.orgId, user.id)
+        // Drafts own no postable schedules at all (only in-service assets do),
+        // so a draft save never builds — partial drafts legitimately lack
+        // schedule inputs, and that absence is not the save's failure.
+        if (!hasHistory && (effectiveStatus === 'in_service' || effectiveStatus === 'fully_depreciated')) {
+          await buildAllSchedulesWithRunner(
+            tx,
+            id,
+            user.orgId,
+            user.id,
+            gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+          )
+        }
       } catch (error) {
         if (effectiveStatus === 'in_service') throw error
         // Partial drafts legitimately have no category/date/life yet.

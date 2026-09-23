@@ -420,6 +420,74 @@ export interface DisposeResult {
   status: "disposed" | "written_off";
 }
 
+/**
+ * The ONE status gate for every lifecycle path that posts journals or writes
+ * lifecycle events (direct disposeAsset/remeasureAsset and the approved
+ * asset-changes path, which enforces the same set). Only an asset placed in
+ * service — in_service or fully_depreciated — may be disposed or remeasured.
+ * Exhaustive by construction: any other status (draft, disposed, written_off,
+ * or a value no writer should produce) refuses by name, so a new status can
+ * never slip through a stale two-way check.
+ */
+export function assertAssetLifecycleOperable(
+  status: string,
+  assetNumber: string,
+  action: "dispose" | "remeasure",
+): void {
+  if (status === "disposed" || status === "written_off") {
+    throw new AssetLifecycleError(
+      `asset ${assetNumber} is already ${status}`,
+    );
+  }
+  if (status !== "in_service" && status !== "fully_depreciated") {
+    const verb = action === "dispose" ? "disposed" : "remeasured";
+    throw new AssetLifecycleError(
+      `asset ${assetNumber} must be in service before it can be ${verb} (status: ${status}) — place it in service first`,
+    );
+  }
+}
+
+/**
+ * Refuse a disposal or remeasurement while depreciation that is already due
+ * sits unposted. Carrying value is struck from POSTED depreciation plus
+ * explicit remeasurements, so an ended period whose plan line is still
+ * unposted would silently drop that charge from NBV (and flip the resulting
+ * gain/loss or misstate the impairment). Names every due period; the remedy
+ * is the explicit operator choice the message states: run depreciation
+ * through the last named period first, then dispose/remeasure.
+ *
+ * Due means the period has ENDED on or before the action date (exactly the
+ * run's postability predicate): an open stub period is never named here
+ * because no run could post it yet — the disposal stub tie below keeps its
+ * own rule for that case.
+ */
+async function assertNoDueUnpostedDepreciation(
+  tx: SqlExecutor,
+  orgId: string,
+  assetId: string,
+  bookId: string,
+  assetNumber: string,
+  date: string,
+  action: "dispose" | "remeasure",
+): Promise<void> {
+  const due = await tx.execute<{ period_name: string }>(sql`
+    select p.name as period_name
+      from depreciation_schedule_lines l
+      join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
+      join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
+     where l.org_id = ${orgId} and s.asset_id = ${assetId} and s.book_id = ${bookId}
+       and l.posted_amount is null and p.ends_on <= ${date}
+     order by p.starts_on`);
+  if (due.rows.length > 0) {
+    const names = due.rows.map((row) => row.period_name).join(", ");
+    const noun = action === "dispose" ? "gain or loss" : "carrying value";
+    const verb = action === "dispose" ? "disposing" : "remeasuring";
+    throw new AssetLifecycleError(
+      `asset ${assetNumber} has unposted depreciation for period${due.rows.length === 1 ? "" : "s"} ${names} covering the ${action === "dispose" ? "disposal" : "remeasurement"} date — post the depreciation run through ${due.rows[due.rows.length - 1]!.period_name} before ${verb} so the ${noun} ties to the schedule`,
+    );
+  }
+}
+
 /** Invariant: a direct disposal clears exactly one (primary) book, so any other
  * scheduled posting book refuses here and routes to the approved 100% change path. */
 async function assertSinglePostingBookDisposal(
@@ -464,8 +532,9 @@ export async function disposeAsset(
 ): Promise<DisposeResult> {
   assertLifecycleDate(opts.date);
   // Fail closed on contradictory or impossible sale economics before touching
-  // the database: a write-off takes no proceeds (the API coerces them to zero;
-  // a direct caller passing both is a bug), and proceeds are never negative.
+  // the database: a write-off takes no proceeds (the API passes the supplied
+  // figure through precisely so this refusal fires), and proceeds are never
+  // negative.
   const rawProceeds = opts.proceeds ?? "0";
   // A direct caller bypasses the route's format gate; junk would otherwise
   // die inside the money module with a raw Error instead of the domain
@@ -529,11 +598,7 @@ export async function disposeAsset(
        where a.org_id = ${orgId} and a.id = ${assetId}`);
     const asset = assetRes.rows[0];
     if (!asset) throw new AssetLifecycleError("asset not found");
-    if (asset.status === "disposed" || asset.status === "written_off") {
-      throw new AssetLifecycleError(
-        `asset ${asset.asset_number} is already ${asset.status}`,
-      );
-    }
+    assertAssetLifecycleOperable(asset.status, asset.asset_number, "dispose");
     if (!asset.gain_loss_account_id) {
       throw new AssetLifecycleError(
         "configure a gain/loss on disposal account on the asset category first",
@@ -541,6 +606,11 @@ export async function disposeAsset(
     }
     // Fail closed before any journal, status flip, or event.
     await assertSinglePostingBookDisposal(tx, orgId, assetId, asset.asset_number, bookId);
+    // Due (ended-period) charges first: with zero prior runs there is no
+    // posted trail, so the stub tie below cannot fire — without this, months
+    // of unposted scheduled charges would vanish from NBV. The stub tie keeps
+    // its own rule for the still-open period.
+    await assertNoDueUnpostedDepreciation(tx, orgId, assetId, bookId, asset.asset_number, opts.date, "dispose");
 
     // SCHEDULE TIE — once depreciation posting has begun, the schedule is the
     // authoritative NBV trail: refuse while a planned-but-unposted line's
@@ -1110,16 +1180,15 @@ export async function remeasureAsset(
        where a.org_id = ${orgId} and a.id = ${assetId}`);
     const asset = res.rows[0];
     if (!asset) throw new AssetLifecycleError("asset not found");
-    if (asset.status === "disposed" || asset.status === "written_off") {
-      throw new AssetLifecycleError(
-        `asset ${asset.asset_number} is ${asset.status}`,
-      );
-    }
+    assertAssetLifecycleOperable(asset.status, asset.asset_number, "remeasure");
     if (!asset.gain_loss_account_id) {
       throw new AssetLifecycleError(
         "configure a gain/loss (adjustment) account on the asset category first",
       );
     }
+    // Same due-unposted rule as disposal: carrying value is struck from posted
+    // depreciation, so an ended but unposted period would misstate the delta.
+    await assertNoDueUnpostedDepreciation(tx, orgId, assetId, bookId, asset.asset_number, opts.date, "remeasure");
     const basisChange = await assetBasisDelta(tx, orgId, assetId, bookId);
     asset.acquisition_cost = add(asset.acquisition_cost, basisChange.cost);
     asset.accumulated = add(asset.accumulated, basisChange.accumulated);

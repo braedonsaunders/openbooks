@@ -23,6 +23,29 @@ export class DepreciationRefusalError extends Error {
   readonly name = "DepreciationRefusalError";
 }
 
+/**
+ * The ONE status gate for postable depreciation schedules. Only an asset
+ * placed in service — in_service or fully_depreciated — owns schedule lines
+ * the preview/run/confirm path may GL-post. Exhaustive by construction:
+ * draft, disposed, written_off, or any unknown status refuses by name, so a
+ * draft's formula lines can never leak into a posting run (the input path
+ * already requires in_service; this keeps every other path consistent).
+ * Every schedule query below that scopes to postable assets uses exactly this
+ * set — grep POSTABLE_DEPRECIATION_STATUSES before adding another.
+ */
+export const POSTABLE_DEPRECIATION_STATUSES = ["in_service", "fully_depreciated"] as const;
+
+export function assertPostableDepreciationStatus(status: string, assetNumber: string): void {
+  if (
+    status !== "in_service" &&
+    status !== "fully_depreciated"
+  ) {
+    throw new DepreciationRefusalError(
+      `asset ${assetNumber} must be in service before depreciation can be scheduled or posted (status: ${status}) — place it in service first`,
+    );
+  }
+}
+
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
 function persistDepreciationInputValue(value: unknown): string {
   const exact = canonicalDecimal(value, 4);
@@ -319,10 +342,14 @@ async function loadUnremeasuredAssetPlan(
   assetId: string,
   orgId: string,
   forBookId?: string,
+  allowedSubsidiaryIds?: readonly string[] | null,
 ) {
   const assetRes = await runner.execute<{
     id: string;
     category_id: string;
+    asset_number: string;
+    status: string;
+    subsidiary_id: string;
     in_service_on: string | null;
     acquisition_cost: string;
     salvage_value: string;
@@ -335,7 +362,7 @@ async function loadUnremeasuredAssetPlan(
     opening_accumulated_depreciation: string | null;
     opening_accumulated_as_of: string | null;
   }>(sql`
-    select id, org_id, category_id, in_service_on, acquisition_cost, salvage_value,
+    select id, org_id, category_id, asset_number, status, subsidiary_id, in_service_on, acquisition_cost, salvage_value,
            depreciation_method, depreciation_method_id, useful_life_months, depreciation_rate_percent,
            depreciation_convention, depreciation_units_total,
            opening_accumulated_depreciation::text as opening_accumulated_depreciation,
@@ -343,6 +370,13 @@ async function loadUnremeasuredAssetPlan(
       from fixed_assets where id = ${assetId} and org_id = ${orgId} for update`);
   const asset = assetRes.rows[0];
   if (!asset) throw new DepreciationRefusalError("asset not found");
+  // The subsidiary scope is enforced inside the lock, not by the route's
+  // precheck: a concurrent PATCH could move the asset into a restricted
+  // subsidiary between the precheck and this write.
+  if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(asset.subsidiary_id)) {
+    throw new DepreciationRefusalError("asset is outside your subsidiary scope");
+  }
+  assertPostableDepreciationStatus(asset.status, asset.asset_number);
   if (!asset.in_service_on) throw new DepreciationRefusalError("asset has no in-service date");
 
   const catRes = await runner.execute<{
@@ -696,6 +730,7 @@ export async function buildScheduleWithRunner(
   orgId: string,
   actorId: string | null,
   forBookId?: string,
+  allowedSubsidiaryIds?: readonly string[] | null,
 ): Promise<BuildScheduleResult> {
   const {
     asset,
@@ -709,7 +744,7 @@ export async function buildScheduleWithRunner(
     plan,
     opening,
     basisChange,
-  } = await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId);
+  } = await loadUnremeasuredAssetPlan(runner, assetId, orgId, forBookId, allowedSubsidiaryIds);
   // Continue-from-accumulated pre-validation (migration 0156). Pre-as-of
   // native months are covered by the opening figure and must never be
   // scheduled — but a zero opening covers nothing, so dropping months for it
@@ -1118,8 +1153,9 @@ export async function buildSchedule(
   orgId: string,
   actorId: string | null,
   forBookId?: string,
+  allowedSubsidiaryIds?: readonly string[] | null,
 ): Promise<BuildScheduleResult> {
-  return db.transaction((tx) => buildScheduleWithRunner(tx, assetId, orgId, actorId, forBookId));
+  return db.transaction((tx) => buildScheduleWithRunner(tx, assetId, orgId, actorId, forBookId, allowedSubsidiaryIds));
 }
 
 /**
@@ -1130,8 +1166,9 @@ export async function buildAllSchedules(
   assetId: string,
   orgId: string,
   actorId: string | null,
+  allowedSubsidiaryIds?: readonly string[] | null,
 ): Promise<BuildScheduleResult[]> {
-  return db.transaction((tx) => buildAllSchedulesWithRunner(tx, assetId, orgId, actorId));
+  return db.transaction((tx) => buildAllSchedulesWithRunner(tx, assetId, orgId, actorId, allowedSubsidiaryIds));
 }
 
 export async function buildAllSchedulesWithRunner(
@@ -1139,12 +1176,13 @@ export async function buildAllSchedulesWithRunner(
   assetId: string,
   orgId: string,
   actorId: string | null,
+  allowedSubsidiaryIds?: readonly string[] | null,
 ): Promise<BuildScheduleResult[]> {
   const books = (await runner.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active
      order by is_primary desc, code`));
   const results: BuildScheduleResult[] = [];
-  for (const b of books.rows) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id));
+  for (const b of books.rows) results.push(await buildScheduleWithRunner(runner, assetId, orgId, actorId, b.id, allowedSubsidiaryIds));
   return results;
 }
 
@@ -1159,6 +1197,8 @@ export interface RecordDepreciationInputArgs {
   memo: string;
   evidenceFileId: string;
   actorId: string;
+  /** Enforced against the locked asset row (the route precheck alone races). */
+  allowedSubsidiaryIds?: readonly string[] | null;
 }
 
 export interface RecordDepreciationInputResult {
@@ -1235,6 +1275,12 @@ export async function recordDepreciationInput(
       throw new DepreciationRefusalError(
         "no depreciation schedule or accounting period covers the effective date",
       );
+    // The subsidiary scope is enforced against this locked row, not the
+    // route's precheck: a concurrent PATCH could move the asset into a
+    // restricted subsidiary between the precheck and this write.
+    if (args.allowedSubsidiaryIds && !args.allowedSubsidiaryIds.includes(row.subsidiary_id)) {
+      throw new DepreciationRefusalError("asset is outside your subsidiary scope");
+    }
     if (row.status !== "in_service")
       throw new DepreciationRefusalError("depreciation inputs require an in-service asset");
     if (args.effectiveDate < row.in_service_on)
@@ -1667,7 +1713,7 @@ export async function assertConfirmSetCurrent(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.id = any(${uuidArray(lineIds)}::uuid[])
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${input.asOfDate}
        ${input.bookId ? sql`and s.book_id = ${input.bookId}` : sql``}
        ${input.periodId ? sql`and l.period_id = ${input.periodId}` : sql``}
@@ -1883,7 +1929,7 @@ export async function reloadClaimLine(
      where l.id = ${lineId}
        and l.org_id = ${orgId}
        and l.posted_amount is null
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
      for update of l for share of bk`);
@@ -1965,7 +2011,7 @@ async function runConfirmBatch(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
@@ -2261,7 +2307,7 @@ export async function runDepreciation(
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
      where s.org_id = ${orgId}
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
@@ -2326,7 +2372,7 @@ export async function runDepreciation(
       join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${asOfDate}
        ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${`{${scopedAssetIds.join(",")}}`}::uuid[])` : sql``}
@@ -2623,7 +2669,7 @@ export async function runDepreciation(
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where l.org_id = ${orgId}
          and l.posted_amount is null
-         and a.status not in ('disposed', 'written_off')
+         and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
          ${allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
          ${scopedAssetIds ? sql`and a.id = any(${`{${scopedAssetIds.join(",")}}`}::uuid[])` : sql``}
          ${bookId ? sql`and s.book_id = ${bookId}` : sql``}
@@ -2869,7 +2915,7 @@ export async function previewDepreciation(
       left join locations loc on loc.id = a.location_id and loc.org_id = a.org_id
      where l.org_id = ${orgId}
        and l.posted_amount is null
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and p.ends_on <= ${input.asOfDate}
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}
@@ -2957,7 +3003,7 @@ export async function previewDepreciation(
       join fixed_assets a on a.id = s.asset_id and a.org_id = s.org_id
       join accounting_books bk on bk.id = s.book_id and bk.org_id = s.org_id and bk.is_active
      where s.org_id = ${orgId}
-       and a.status not in ('disposed', 'written_off')
+       and a.status in ('in_service', 'fully_depreciated') /* POSTABLE_DEPRECIATION_STATUSES: drafts never own postable lines */
        and (s.method not in ('manual', 'units_of_production') or s.depreciation_method_id is not null)
        ${input.allowedSubsidiaryIds ? sql`and a.subsidiary_id = any(${uuidArray(input.allowedSubsidiaryIds)}::uuid[])` : sql``}
        ${scopedAssetIds ? sql`and a.id = any(${uuidArray(scopedAssetIds)}::uuid[])` : sql``}

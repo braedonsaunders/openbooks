@@ -65,7 +65,15 @@ export async function POST(request: Request) {
   const problems: string[] = [];
   for (const assetId of assetIds) {
     try {
-      const built = await buildSchedule(assetId, user.orgId, user.id, bookId ?? undefined);
+      // The scope rides into the locked build: the ownership precheck above
+      // races a concurrent PATCH moving the asset to a restricted subsidiary.
+      const built = await buildSchedule(
+        assetId,
+        user.orgId,
+        user.id,
+        bookId ?? undefined,
+        gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+      );
       rebuilt.push({
         assetId,
         assetNumber: byId.get(assetId) ?? assetId,
