@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import {
   SubcontractError,
+  addSubcontractSovLine,
   approveSubcontractChangeOrder,
   computeVendorApplication,
   createSubcontract,
@@ -490,4 +491,130 @@ test("subcontract dates are validated as calendar days before any database work"
       `subcontract startsOn(${bad})`,
     );
   }
+});
+
+/** Flatten a drizzle SQL chunk into raw text for lock-keyword assertions. */
+function sqlText(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
+  if (!Array.isArray(chunks)) return "";
+  return chunks
+    .map((chunk) => {
+      if (typeof chunk === "string") return chunk;
+      const value = (chunk as { value?: unknown[] })?.value;
+      if (Array.isArray(value)) return value.map(String).join("");
+      if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk);
+      return "";
+    })
+    .join("");
+}
+
+type FakeTx = { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> };
+
+function mockTransaction(t: TestContext, features: Record<string, boolean>, seen: string[]): void {
+  const tx: FakeTx = {
+    execute: async (query: unknown) => {
+      seen.push(sqlText(query));
+      return { rows: [{ features }] };
+    },
+  };
+  const transactionDb = db as unknown as {
+    transaction(callback: (transaction: FakeTx) => Promise<unknown>): Promise<unknown>;
+  };
+  t.mock.method(
+    transactionDb,
+    "transaction",
+    async (callback: (transaction: FakeTx) => Promise<unknown>) => callback(tx),
+  );
+}
+
+const subcontractInput = {
+  orgId: "org-1",
+  userId: "user-1",
+  projectId: "p-1",
+  vendorId: "v-1",
+  number: "S-1",
+  title: "Roofing",
+  originalCommitment: "1000",
+};
+
+test("createSubcontract takes the fence and rechecks both gates under shared row locks", async (t) => {
+  const seen: string[] = [];
+  mockTransaction(t, { projects: true, subcontracts: false }, seen);
+  // The refusal names the gate. A concurrent disable commits first, so the
+  // new subcontract must be refused, never committed hidden behind the gate.
+  await assert.rejects(
+    createSubcontract(subcontractInput),
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
+  );
+  // Fence first, then both gates rechecked before any other database work:
+  // the advisory lock serializes against the disable path's blocker checks
+  // and each fenced read's shared org-row lock against its exclusive one.
+  assert.equal(seen.length, 3);
+  assert.match(seen[0]!, /pg_advisory_xact_lock/);
+  for (const text of seen.slice(1)) {
+    assert.match(text, /from orgs/);
+    assert.match(text, /for share/);
+  }
+});
+
+test("createSubcontract refuses a disabled Projects parent gate first", async (t) => {
+  const seen: string[] = [];
+  mockTransaction(t, { projects: false, subcontracts: true }, seen);
+  await assert.rejects(
+    createSubcontract(subcontractInput),
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Projects feature is disabled",
+  );
+  assert.equal(seen.length, 2);
+  assert.match(seen[0]!, /pg_advisory_xact_lock/);
+  assert.match(seen[1]!, /for share/);
+});
+
+test("createSubcontract proceeds past enabled gates to the project lookup", async (t) => {
+  let calls = 0;
+  const tx: FakeTx = {
+    execute: async () => {
+      calls += 1;
+      if (calls === 1) return { rows: [] };
+      if (calls <= 3) return { rows: [{ features: { projects: true, subcontracts: true } }] };
+      throw new Error("beyond-gate");
+    },
+  };
+  const transactionDb = db as unknown as {
+    transaction(callback: (transaction: FakeTx) => Promise<unknown>): Promise<unknown>;
+  };
+  t.mock.method(
+    transactionDb,
+    "transaction",
+    async (callback: (transaction: FakeTx) => Promise<unknown>) => callback(tx),
+  );
+  // Enabled gates must not refuse: the flow continues to the next check.
+  await assert.rejects(createSubcontract(subcontractInput), /beyond-gate/);
+});
+
+test("createVendorPayApplication shares the same fenced gate", async (t) => {
+  const seen: string[] = [];
+  mockTransaction(t, { projects: true, subcontracts: false }, seen);
+  await assert.rejects(
+    createVendorPayApplication({ orgId: "org-1", userId: "user-1", subcontractId: "s-1", periodEnd: "2026-08-31" }),
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Subcontracts feature is disabled",
+  );
+  assert.ok(seen.length >= 2);
+  assert.match(seen[0]!, /pg_advisory_xact_lock/);
+  assert.match(seen[1]!, /for share/);
+});
+
+test("addSubcontractSovLine shares the same fenced gate", async (t) => {
+  const seen: string[] = [];
+  mockTransaction(t, { projects: false, subcontracts: false }, seen);
+  await assert.rejects(
+    addSubcontractSovLine({ orgId: "org-1", userId: "user-1", subcontractId: "s-1", description: "Demolition", scheduledValue: "500" }),
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Projects feature is disabled",
+  );
+  assert.ok(seen.length >= 2);
+  assert.match(seen[0]!, /pg_advisory_xact_lock/);
+  assert.match(seen[1]!, /for share/);
 });
