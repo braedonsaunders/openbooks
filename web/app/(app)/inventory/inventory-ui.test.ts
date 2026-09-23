@@ -41,6 +41,13 @@ test('bill of materials replacement is atomic, build-safe, observable, and audit
   assert.match(route, /reason,\s*before: beforeResult\.rows,\s*after: components/)
 })
 
+test('the counts view feeds the costing prerequisite and the viewer empty state', () => {
+  const page = read('./page.tsx')
+  assert.match(page, /not exists \([\s\S]*?item_inventory_profiles/)
+  assert.match(page, /itemsExcludedCount=\{countData\[6\]\.rows\[0\]\?\.excluded \?\? 0\}/)
+  assert.match(page, /canManageItems=\{canManage\}/)
+})
+
 test('stock locations reuse the setup table without duplicate empty copy or a plural create title', () => {
   const section = read('../admin/setup/[entity]/SetupEntitySection.tsx')
   const registry = read('../../../lib/setup/registry.ts')

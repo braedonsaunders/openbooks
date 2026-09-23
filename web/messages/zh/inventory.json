@@ -161,6 +161,7 @@
     "description": "基于盘点单的实物盘点——快照库存、计数、复核，然后将差异过账为库存调整。",
     "newButton": "新建盘点",
     "empty": "暂无盘点单。新建一张以快照库存并开始计数。",
+    "emptyViewer": "尚无盘点。盘点由具有库存过账权限的人员发起——请其发起首次盘点。",
     "failed": "盘点请求失败",
     "created": "盘点单已创建",
     "creating": "创建中…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "第{line}行：请选择库位。",
     "noStockLocations": "此地点尚无库位。",
     "manageStockLocations": "设置库位",
+    "needsCosting": "{count, plural, other {有 # 个有效物料没有成本档案，暂时无法盘点。请在物料记录中添加档案。}}",
+    "openItems": "打开物料",
+    "needsCostingNoGrant": "添加成本档案需要物料管理权限。",
       "lines": "待盘点行",
       "addLine": "添加行",
       "removeLine": "移除"

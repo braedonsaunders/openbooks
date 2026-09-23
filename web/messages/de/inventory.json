@@ -161,6 +161,7 @@
     "description": "Körperliche Inventur über Zähllisten — Bestand erfassen, zählen, prüfen und Differenzen als Lageranpassungen verbuchen.",
     "newButton": "Neue Zählung",
     "empty": "Noch keine Zählungen. Eröffne eine, um den Bestand zu erfassen und mit dem Zählen zu beginnen.",
+    "emptyViewer": "Noch keine Zählungen. Zählungen werden von jemandem mit Inventurbuchungszugriff eröffnet — bitten Sie diese Person, die erste Zählung zu eröffnen.",
     "failed": "Bestandszählung fehlgeschlagen",
     "created": "Zählung eröffnet",
     "creating": "Wird eröffnet…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "Zeile {line}: Lagerort wählen.",
     "noStockLocations": "Dieser Standort hat noch keine Lagerorte.",
     "manageStockLocations": "Lagerorte einrichten",
+    "needsCosting": "{count, plural, one {# aktiver Artikel hat} other {# aktive Artikel haben}} noch kein Bestandsbewertungsprofil und kann noch nicht gezählt werden. Fügen Sie das Profil im Artikeldatensatz hinzu.",
+    "openItems": "Artikel öffnen",
+    "needsCostingNoGrant": "Sie benötigen Zugriff auf die Artikelverwaltung, um Bewertungsprofile hinzuzufügen.",
       "lines": "Zu zählende Zeilen",
       "addLine": "Zeile hinzufügen",
       "removeLine": "Entfernen"

@@ -161,6 +161,7 @@
     "description": "Inventaire physique par comptages — photographiez le stock, comptez, contrôlez puis comptabilisez les écarts en ajustements de stock.",
     "newButton": "Nouveau comptage",
     "empty": "Aucun comptage pour l’instant. Ouvrez-en un pour photographier le stock et commencer à compter.",
+    "emptyViewer": "Aucun comptage pour l’instant. Les comptages sont ouverts par une personne disposant de l’accès de comptabilisation des stocks — demandez-lui d’ouvrir le premier.",
     "failed": "La demande de comptage a échoué",
     "created": "Comptage ouvert",
     "creating": "Ouverture…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "Ligne {line} : choisir un emplacement de stock.",
     "noStockLocations": "Cet emplacement n'a encore aucun emplacement de stock.",
     "manageStockLocations": "Configurer les emplacements de stock",
+    "needsCosting": "{count, plural, one {# article actif n'a} other {# articles actifs n'ont}} pas encore de profil de coût et ne peut pas encore être compté. Ajoutez le profil sur la fiche article.",
+    "openItems": "Ouvrir les articles",
+    "needsCostingNoGrant": "Vous devez disposer de l'accès de gestion des articles pour ajouter des profils de coût.",
       "lines": "Lignes à compter",
       "addLine": "Ajouter une ligne",
       "removeLine": "Retirer"

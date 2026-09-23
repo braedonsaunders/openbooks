@@ -70,6 +70,8 @@ export function CountsList({
   lots,
   canPost,
   canManageStockLocations,
+  canManageItems,
+  itemsExcludedCount,
   createRequested = false,
   selectedCountId,
 }: {
@@ -83,6 +85,10 @@ export function CountsList({
   lots: { id: string; item_id: string; lot_number: string }[]
   canPost: boolean
   canManageStockLocations: boolean
+  /** May manage items: gates the Item Costing setup link in the picker note. */
+  canManageItems: boolean
+  /** Active items excluded from the picker for lacking a costing profile. */
+  itemsExcludedCount: number
   createRequested?: boolean
   selectedCountId?: string
 }) {
@@ -213,7 +219,7 @@ export function CountsList({
         rows={rows}
         columns={columns}
         searchable
-        empty={t('counts.empty')}
+        empty={canPost ? t('counts.empty') : t('counts.emptyViewer')}
         rowKey={(r) => r.id}
         onRowClick={(r) => {
           setDetail(null)
@@ -242,6 +248,8 @@ export function CountsList({
           itemOptions={itemOptions}
           stockLocations={stockLocations}
           canManageStockLocations={canManageStockLocations}
+          canManageItems={canManageItems}
+          itemsExcludedCount={itemsExcludedCount}
           lots={lots}
           onClose={() => {
             setCreateOpen(false)
@@ -288,6 +296,8 @@ function CreateCountDrawer({
   itemOptions,
   stockLocations,
   canManageStockLocations,
+  canManageItems,
+  itemsExcludedCount,
   lots,
   onClose,
 }: {
@@ -296,6 +306,8 @@ function CreateCountDrawer({
   itemOptions: { value: string; label: string }[]
   stockLocations: { id: string; code: string | null; locationId: string }[]
   canManageStockLocations: boolean
+  canManageItems: boolean
+  itemsExcludedCount: number
   lots: { id: string; item_id: string; lot_number: string }[]
   onClose: () => void
 }) {
@@ -432,6 +444,18 @@ function CreateCountDrawer({
         </div>
         <div className="space-y-3">
           <Label>{t('counts.create.lines')}</Label>
+          {itemsExcludedCount > 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {t('counts.create.needsCosting', { count: itemsExcludedCount })}{' '}
+              {canManageItems ? (
+                <Link className="underline" href="/items">
+                  {t('counts.create.openItems')}
+                </Link>
+              ) : (
+                t('counts.create.needsCostingNoGrant')
+              )}
+            </p>
+          ) : null}
           {lines.map((line, i) => {
             const lotOptions = lots
               .filter((lot) => lot.item_id === line.itemId)

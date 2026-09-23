@@ -161,6 +161,7 @@
     "description": "Inventário físico por contagens — fotografe o estoque, conte, revise e contabilize as diferenças como ajustes de estoque.",
     "newButton": "Nova contagem",
     "empty": "Ainda não há contagens. Abra uma para fotografar o estoque e começar a contar.",
+    "emptyViewer": "Ainda não há contagens. As contagens são abertas por alguém com acesso de lançamento de estoque — peça para abrir a primeira.",
     "failed": "A solicitação de contagem falhou",
     "created": "Contagem aberta",
     "creating": "Abrindo…",
@@ -214,6 +215,9 @@
     "lineMissingStockLocation": "Linha {line}: escolha um local de estoque.",
     "noStockLocations": "Este local ainda não tem locais de estoque.",
     "manageStockLocations": "Configurar locais de estoque",
+    "needsCosting": "{count, plural, one {# item ativo não tem} other {# itens ativos não têm}} perfil de custo e ainda não pode ser contado. Adicione o perfil no registro do item.",
+    "openItems": "Abrir itens",
+    "needsCostingNoGrant": "Você precisa de acesso de gerenciamento de itens para adicionar perfis de custo.",
       "lines": "Linhas a contar",
       "addLine": "Adicionar linha",
       "removeLine": "Remover"
