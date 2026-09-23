@@ -370,6 +370,27 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   }
   const orgId = scope[0].orgId;
   return withOrgTransaction(orgId, async () => {
+    // The interview's own fate gates every booking: a cancel that lands
+    // between the link lookup above and this transaction must still read
+    // cancelled, never book a dead sitting.
+    const interview = (await db.execute<{ status: string }>(sql`
+      select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId}
+    `)).rows[0];
+    if (!interview) {
+      throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
+    }
+    if (interview.status === "cancelled") {
+      throw new RecruitingError(
+        "REFUSED",
+        "this interview was cancelled — bookings closed with it; ask the recruiter for a fresh interview instead of reusing this link",
+      );
+    }
+    if (interview.status !== "scheduled") {
+      throw new RecruitingError(
+        "REFUSED",
+        `a ${interview.status} interview takes no bookings — ask the recruiter for a fresh interview instead of reusing this link`,
+      );
+    }
     const slotId = requireId(query.slotId, "slotId");
     // The requested slot names its own fate before link liveness is
     // considered: a racer arriving after the winner must hear taken (their

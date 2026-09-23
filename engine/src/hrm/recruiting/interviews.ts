@@ -355,6 +355,15 @@ export async function cancelInterview(query: CancelInterviewQuery): Promise<Inte
     if (!updated) {
       throw new RecruitingError("STALE_REVISION", "the interview changed while cancelling — reload it and try again");
     }
+    // Cancelling kills the self-booking link in the same transaction:
+    // outstanding proposed slots go declined and their token hashes are
+    // cleared, so the candidate's link dies with the interview instead of
+    // booking a cancelled sitting. Booked slots stand as history.
+    await db.execute(sql`
+      update hrm_interview_slots
+         set kind = 'declined', candidate_token_hash = null, updated_at = now()
+       where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'proposed'
+    `);
     return toDTO(updated, await panelFor(db, orgId, interviewId));
   });
 }
