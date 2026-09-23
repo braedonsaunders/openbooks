@@ -69,6 +69,38 @@ test("ERPNext invoices retain each tax account as its own tax-code carrier", () 
   );
 });
 
+test("ERPNext return-invoice tax keeps the credit's sign", () => {
+  // Returns state positive magnitudes (like the lines) and the adapter signs
+  // both by is_return: detail = −base_net_amount. Tax must follow the lines —
+  // abs()'ing it positive on negative lines violates the engine's same-sign
+  // rule (computeLineTaxes refuses a positive override on a negative base).
+  const invoice: ErpInvoice = {
+    name: "SINV-200",
+    customer: "Customer",
+    posting_date: "2026-08-28",
+    is_return: 1,
+    docstatus: 1,
+    debit_to: "AR",
+    items: [{ income_account: "Sales", base_net_amount: 100 }],
+    taxes: [{ account_head: "GST Account", base_tax_amount: 5 }],
+  };
+
+  const built = buildErpInvoice(context(), invoice);
+  assert.ok(!("skip" in built));
+  assert.equal(built.kind, "customer_credit");
+  assert.deepEqual(
+    built.lines.map((line) => ({
+      lineNumber: line.lineNumber,
+      amount: line.amount,
+      taxAmount: line.taxAmount,
+      taxCodeId: line.taxCodeId,
+    })),
+    [
+      { lineNumber: 1, amount: "-100.0000", taxAmount: "-5.0000", taxCodeId: "gst-code-id" },
+    ],
+  );
+});
+
 test("ERPNext invoices fail closed when a non-zero tax account is unmapped", () => {
   const invoice: ErpInvoice = {
     name: "SINV-101",
