@@ -792,10 +792,19 @@ test.describe("subscription to revenue", () => {
       await expect(drawerA.getByText(fmtUSD(toCents(PLAN_A))).first()).toBeVisible();
       await expect(drawerA.getByText(fmtUSD(0n)).first()).toBeVisible();
 
-      // And through the drawer's own Run button: nothing left to recognise.
+      // And through the drawer's own Run button: the review drawer previews
+      // the locked obligation as of term end and finds nothing due. The
+      // empty state carries its as-of date (review.nothingDue), the review
+      // counts zero lines to post, and Confirm stays blocked — the review
+      // itself posts nothing.
       const runButton = drawerA.getByRole("button", { name: /run recognition/i });
       await runButton.click();
-      await expect(page.getByText("Nothing due to recognize").first()).toBeVisible({ timeout: 20000 });
+      const review = page.locator('[role="dialog"]', { has: page.locator("#recognition-as-of") });
+      await review.locator("#recognition-as-of").fill("2026-12-31");
+      await review.getByRole("button", { name: /^preview$/i }).click();
+      await expect(review.getByText("Nothing due to recognize as of 2026-12-31")).toBeVisible({ timeout: 20000 });
+      await expect(review.getByText("0 lines post")).toBeVisible();
+      await expect(review.getByRole("button", { name: /confirm and post/i })).toBeDisabled();
       saveState({ ...S });
     } finally {
       await context.close();
