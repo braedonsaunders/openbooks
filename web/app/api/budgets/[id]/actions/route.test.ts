@@ -249,7 +249,9 @@ function post(body: Record<string, unknown>, id = SCENARIO_ID): Promise<Response
 }
 
 function sourceCopyQuery(): string {
-  return state.queries.find((query) => query.includes('from journal_lines')) ?? ''
+  // The mapping verification (a select over the same join tree) runs before
+  // the copy: match the INSERT, not the verification.
+  return state.queries.find((query) => query.includes('insert into budget_lines') && query.includes('from journal_lines')) ?? ''
 }
 
 const testCase: (name: string, run: () => Promise<void>) => unknown = process.env.VITEST

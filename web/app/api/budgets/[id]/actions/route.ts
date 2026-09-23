@@ -16,7 +16,16 @@ type Action = 'archive' | 'copy' | 'copy_prior_actuals' | 'apply_source' | 'subm
 const DECISION_ACTIONS: Action[] = ['approve', 'reject']
 
 function dims(body: Record<string, unknown>) {
-  const value = (key: string) => typeof body[key] === 'string' && isUuid(body[key] as string) ? body[key] as string : null
+  // A supplied dimension that is not a valid id refuses by name: the old code
+  // coerced malformed ids to null, and null means "no filter" — so a
+  // copy_prior_actuals with a typo'd departmentId silently broadened a narrow
+  // request into a whole-budget delete-and-replace. Absent/empty stays null.
+  const value = (key: string) => {
+    const raw = body[key]
+    if (raw === undefined || raw === null || raw === '') return null
+    if (typeof raw === 'string' && isUuid(raw)) return raw as string
+    throw new BudgetMutationError(`invalid_${key.replace(/Id$/, '').toLowerCase()}`)
+  }
   return {
     subsidiaryId: value('subsidiaryId'),
     departmentId: value('departmentId'),
@@ -123,6 +132,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         return { revision: nextRevision, status: to }
       }
 
+      // Every source line must land on a destination period: the copy join
+      // maps by (calendar, period_number), so a target year missing any of
+      // the source's periods would silently drop those lines (possibly all
+      // of them) while the new scenario reports success. Verify the FULL
+      // mapping before any write and refuse naming the unmapped periods.
+      const assertFullPeriodMapping = async (
+        sourceYear: number | null,
+        sourceScenarioId: string | null,
+        targetYear: number,
+      ) => {
+        const unmapped = (await tx.execute<{ period_name: string }>(sql`
+          select distinct source_period.name as period_name
+            from budget_lines bl
+            join accounting_periods source_period
+              on source_period.id = bl.period_id and source_period.org_id = bl.org_id
+            left join accounting_periods destination
+              on destination.org_id = ${user.orgId}
+             and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+             and destination.fiscal_year = ${targetYear}
+             and destination.period_number = source_period.period_number
+             and not destination.is_adjustment
+           where bl.org_id = ${user.orgId}
+             and ${sourceScenarioId ? sql`bl.scenario_id = ${sourceScenarioId}` : sql`bl.scenario_id = ${id}`}
+             ${sourceYear === null ? sql`` : sql`and source_period.fiscal_year = ${sourceYear}`}
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+             and destination.id is null
+           order by 1
+        `))
+        if (unmapped.rows.length > 0) {
+          const names = unmapped.rows.map((row) => row.period_name).join(', ')
+          throw new BudgetMutationError(`unmapped_periods: no ${targetYear} period matches source period(s) ${names}`)
+        }
+      }
+
       if (action === 'copy') {
         const targetYearRaw = Number(body.fiscalYear)
         const targetYear = Number.isInteger(targetYearRaw) ? targetYearRaw : Number(scenario.fiscal_year)
@@ -131,6 +174,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
            where org_id = ${user.orgId} and fiscal_year = ${targetYear} and not is_adjustment limit 1
         `))
         if (!periods.rows[0]) throw new BudgetMutationError('target_year_has_no_periods')
+        await assertFullPeriodMapping(null, null, targetYear)
+        // Budgets cover the P&L only: refuse legacy balance-sheet source
+        // lines by name instead of copying lines the worksheet hides (the
+        // line guard would fail them with a raw error at insert time).
+        const nonPnlCopy = (await tx.execute<{ display: string }>(sql`
+          select distinct (case when a.number is null then a.name else a.name || ' (' || a.number || ')' end) as display
+            from budget_lines bl
+            join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+           where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
+             and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        `))
+        if (nonPnlCopy.rows.length > 0) {
+          throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlCopy.rows.map((row) => row.display).join(', ')}`)
+        }
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${user.orgId}:${scenario.book_id}:${targetYear}:${scenario.kind}`}, 0))`)
         const baseName = `${scenario.name} Copy`
         const existing = (await tx.execute<{ name: string }>(sql`
@@ -163,6 +221,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
               on destination.org_id = ${user.orgId}
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
              and destination.fiscal_year = ${targetYear}
+             and not destination.is_adjustment
              and destination.period_number = source_period.period_number
            where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
              ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
@@ -201,6 +260,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           selected.locationId === null ? null : sql`location_id is not distinct from ${selected.locationId}`,
           selected.classId === null ? null : sql`class_id is not distinct from ${selected.classId}`,
         ].filter((predicate) => predicate !== null)
+        // Verify before the delete below: it clears the target first, so a
+        // prior-year period with real actuals but no current-year counterpart
+        // would destroy lines it can never replace. The group/having mirrors
+        // the copy query exactly — a period netting to zero copies nothing,
+        // so only nonzero periods can block.
+        const priorYear = Number(scenario.fiscal_year) - 1
+        const unmappedActuals = (await tx.execute<{ period_name: string }>(sql`
+          select source_period.name as period_name
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
+            join accounts a on a.id = l.account_id and a.org_id = ${user.orgId}
+            join accounting_periods source_period on source_period.id = e.period_id and source_period.org_id = e.org_id and source_period.fiscal_year = ${priorYear}
+            left join accounting_periods destination
+              on destination.org_id = ${user.orgId}
+             and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
+             and destination.fiscal_year = ${scenario.fiscal_year}
+             and destination.period_number = source_period.period_number
+             and not destination.is_adjustment
+           where e.book_id = ${scenario.book_id}
+             and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+             ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}
+             and destination.id is null
+           group by source_period.name
+          having sum(l.amount) <> 0
+        `))
+        if (unmappedActuals.rows.length > 0) {
+          const names = unmappedActuals.rows.map((row) => row.period_name).join(', ')
+          throw new BudgetMutationError(`unmapped_periods: no ${scenario.fiscal_year} period matches prior-year actuals period(s) ${names}`)
+        }
         await tx.execute(sql`
           delete from budget_lines
            where org_id = ${user.orgId} and scenario_id = ${id}
@@ -223,6 +312,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
              and destination.fiscal_year = ${scenario.fiscal_year}
              and destination.period_number = source_period.period_number
+             and not destination.is_adjustment
            where e.book_id = ${scenario.book_id}
              and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
              ${sourceDimFilters.length > 0 ? sql`and ${sql.join(sourceDimFilters, sql` and `)}` : sql``}
@@ -254,6 +344,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           select id from budget_scenarios where id = ${sourceScenarioId} and org_id = ${user.orgId}
         `))
         if (!source.rows[0]) throw new BudgetMutationError('invalid_source_scenario')
+        // Verify before the delete below: it clears the target first, so an
+        // unmapped source period would destroy lines it can never replace.
+        await assertFullPeriodMapping(null, sourceScenarioId, Number(scenario.fiscal_year))
+        const nonPnlApply = (await tx.execute<{ display: string }>(sql`
+          select distinct (case when a.number is null then a.name else a.name || ' (' || a.number || ')' end) as display
+            from budget_lines bl
+            join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+           where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
+             and a.type not in ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred')
+             ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        `))
+        if (nonPnlApply.rows.length > 0) {
+          throw new BudgetMutationError(`non_pnl_account: budgets cover profit-and-loss accounts only: ${nonPnlApply.rows.map((row) => row.display).join(', ')}`)
+        }
         await tx.execute(sql`
           delete from budget_lines
            where scenario_id = ${id} and org_id = ${user.orgId}
@@ -273,6 +377,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
              and destination.fiscal_calendar_id = source_period.fiscal_calendar_id
              and destination.fiscal_year = ${scenario.fiscal_year}
              and destination.period_number = source_period.period_number
+             and not destination.is_adjustment
            where bl.org_id = ${user.orgId} and bl.scenario_id = ${sourceScenarioId}
              ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
         `)
