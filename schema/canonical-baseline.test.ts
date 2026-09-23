@@ -593,6 +593,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // the expected external identifier per schedule, and mismatches (or
     // identified files with no binding) refuse instead of misattributing.
     "0291_sftp_import_schedule_expected_account.sql",
+    // The printable executed waiver regenerated from live rows on every
+    // print, so later renames rewrote an executed release (0292 freezes the
+    // print image at signing and serves it for executed waivers).
+    "0292_lien_waiver_executed_snapshot.sql",
     // Duplicate (item, stock location, lot) lines in one cycle count each
     // posted the full variance, double-applying one physical observation.
     // Storage now refuses a second line per subject (NULLS NOT DISTINCT so
