@@ -519,6 +519,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // snapshot schema version (documents ship-to halves land with D1 in the
     // same file — the shard's schema ships in one ordinal).
     "0265_filing_currency_and_ship_to_snapshot.sql",
+    // Script journal writes had no idempotency key: a write outliving its
+    // run deadline could commit after the timeout was reported, and a retry
+    // posted a second numbered journal. documents gains a nullable
+    // idempotency_key with a partial unique index (org_id, key).
+    "0268_script_journal_idempotency_key.sql",
   ]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),

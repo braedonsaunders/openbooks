@@ -191,9 +191,11 @@ test("post:true writes the draft inside one withOrgTransaction and never refuses
   // callers — an orphan draft behind every scheduled post:true failure.
   assert.doesNotMatch(body, /requires an attributable actor/);
   // The draft insert and the submission both live inside the single atomic
-  // unit, after the draft-only early return.
-  assert.match(body, /if \(!opts\.post\)[\s\S]*?return insertScriptDraft/);
-  assert.match(body, /withOrgTransaction\(orgId, async \(\) => \{[\s\S]*?insertScriptDraft\([\s\S]*?submitAndReleaseIfUngated/);
+  // unit, after the draft-only early return. (The draft-only return is a
+  // destructured await since 0268, and the post unit carries an explicit
+  // outcome type — the atomicity property asserted here is unchanged.)
+  assert.match(body, /if \(!opts\.post\)[\s\S]*?await insertScriptDraft\(/);
+  assert.match(body, /withOrgTransaction\(orgId, async \(\)[^{]*=> \{[\s\S]*?insertScriptDraft\([\s\S]*?submitAndReleaseIfUngated/);
   // Actor-less callers stamp explicit system provenance instead of inventing
   // identity (engine-wide convention: null created_by always means "system").
   assert.match(source, /actorKind: "system"/);

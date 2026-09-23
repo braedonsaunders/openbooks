@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { newAsyncContext } from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
 import type { ContributedLine } from "../allocations/types.ts";
@@ -11,7 +12,7 @@ import { abs, cmp, isZero, normalizeMoney, sum } from "../money/money.ts";
 // under both CJS and ESM interop.
 import { CronExpressionParser } from "cron-parser";
 import { runUserSql } from "../platform/sqlapi.ts";
-import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { createScriptJournal, type ScriptJournalResult } from "../ledger/journal-writes.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 
@@ -227,6 +228,14 @@ export interface RunScriptOptions {
   forbidJournalCreate?: boolean;
   /** Block ambient clock, randomness, and live SQL reads before source executes. */
   deterministic?: boolean;
+  /**
+   * Stable namespace for this run's journal.create idempotency keys: call N
+   * of ob.journal.create writes under `${namespace}#${N}`. A retry of the
+   * same logical run must pass the same namespace so the retry observes the
+   * first execution's document instead of double-posting. Omitted = each
+   * write stands alone (callers with no stable retry identity).
+   */
+  idempotencyNamespace?: string;
 }
 
 /**
@@ -305,6 +314,29 @@ export function scriptHostAllowsJournal(
   return SCRIPT_JOURNAL_TRIGGERS.has(trigger);
 }
 
+/**
+ * Retry-stability stamp for a trigger run's journal idempotency namespace,
+ * read off the target document's storage revision counter (migration 0167
+ * bumps it on every UPDATE). A timed-out run's retry sees the same stamp
+ * because the failed outer operation left the target untouched; any later
+ * state change mints a fresh namespace. Unusable input falls back to a
+ * per-run random value — fail closed on dedupe (no cross-run sharing) while
+ * the deadline fence still guarantees the timed-out write commits nothing.
+ */
+export function triggerTargetStamp(document?: Record<string, unknown>): string {
+  const raw = document?.["revision_seq"];
+  const digits =
+    typeof raw === "bigint"
+      ? raw.toString()
+      : typeof raw === "number" && Number.isFinite(raw)
+        ? String(Math.trunc(raw))
+        : typeof raw === "string" && /^-?\d+$/.test(raw.trim())
+          ? raw.trim()
+          : null;
+  if (digits !== null) return `rev${digits}`;
+  return `nostamp-${randomUUID()}`;
+}
+
 export const MAX_SCRIPT_LOG_ENTRIES = 200;
 export const MAX_SCRIPT_LOG_BYTES = 64 * 1024;
 export const MAX_SCRIPT_QUERY_RESULT_BYTES = 4 * 1024 * 1024;
@@ -334,6 +366,54 @@ export async function withScriptHostDeadline<T>(
   } finally {
     if (timer) clearTimeout(timer);
   }
+}
+
+/**
+ * Grace for awaiting a timed-out journal write's terminal outcome. Under
+ * deadline fencing the write's transaction carries SET LOCAL
+ * statement_timeout = remaining budget, so PostgreSQL aborts it within
+ * milliseconds of the deadline and this await returns almost immediately.
+ * Only a write nested in an outer (unfenced) transaction can outlive the
+ * grace — that residual case keeps the timeout report and is documented on
+ * the journal host function.
+ */
+export const SCRIPT_JOURNAL_SETTLE_GRACE_MS = 5_000;
+
+/** Terminal outcome of one journal.create host write (authorization refusal
+ * or the ledger result), shared by the raced write and its settlement read. */
+export type JournalWriteOutcome =
+  | { kind: "created"; created: ScriptJournalResult }
+  | { kind: "refused"; refusal: string };
+
+type SettledJournalWrite =
+  | { status: "committed"; outcome: JournalWriteOutcome }
+  | { status: "rolled back" }
+  | { status: "still running" };
+
+/** Await a timed-out write just long enough to report it truthfully: a write
+ * that committed in the same instant as the deadline reports its journal,
+ * never a timeout for a journal that exists. Handlers attach synchronously
+ * so a late rejection is always observed, never unhandled. */
+export async function settleTimedOutJournalWrite(
+  pending: Promise<JournalWriteOutcome> | undefined,
+  graceMs: number = SCRIPT_JOURNAL_SETTLE_GRACE_MS,
+): Promise<SettledJournalWrite> {
+  if (!pending) return { status: "rolled back" };
+  let settled: SettledJournalWrite = { status: "still running" };
+  pending.then(
+    (outcome) => {
+      settled = { status: "committed", outcome };
+    },
+    () => {
+      settled = { status: "rolled back" };
+    },
+  );
+  // Flush already-queued microtasks: a write that settled before the race
+  // fired reports without waiting out the grace.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (settled.status !== "still running") return settled;
+  await new Promise((resolve) => setTimeout(resolve, graceMs));
+  return settled;
 }
 
 export type ScriptQueryJson =
@@ -574,6 +654,10 @@ export async function runScript(
     // hold gl.post like they would at any HTTP journal boundary; the roles
     // array on ctx is display data, so the live tenant authorization is
     // re-resolved here rather than trusted from the context.
+    // The journal.create call ordinal within this run: with an idempotency
+    // namespace, call N writes under `${namespace}#${N}` so a retry of the
+    // same logical run observes the first execution's document.
+    let journalCallOrdinal = 0;
     const journalFn = vm.newAsyncifiedFunction(
       "__journal_create",
       async (inputH, postH) => {
@@ -602,24 +686,53 @@ export async function runScript(
         try {
           // gl.post and the live subsidiary allowlist are host I/O: they
           // must share the run deadline with the ledger write. A late
-          // authorization read cannot outlive the script timeout.
-          const outcome = await withScriptHostDeadline(deadline, async () => {
-            if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
-              return { kind: "refused" as const, refusal: "journal.create: missing permission: gl.post" };
-            }
-            const input = JSON.parse(String(vm.dump(inputH)));
-            const allowedSubsidiaryIds = ctx.user?.id
-              ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
-              : null;
-            const created = await createScriptJournal(
-              ctx.org.id,
-              ctx.user?.id ?? null,
-              input,
-              { post, allowedSubsidiaryIds },
-            );
-            return { kind: "created" as const, created };
+          // authorization read cannot outlive the script timeout. The write
+          // itself runs fenced to the same deadline inside the ledger
+          // boundary (SET LOCAL statement_timeout on the transaction it
+          // owns), so a statement still blocked past the deadline is
+          // aborted by PostgreSQL instead of committing after the host
+          // already reported a timeout.
+          const idempotencyKey = opts.idempotencyNamespace === undefined
+            ? undefined
+            : `${opts.idempotencyNamespace}#${(journalCallOrdinal += 1)}`;
+          let pendingWrite: Promise<JournalWriteOutcome> | undefined;
+          const outcome = await withScriptHostDeadline(deadline, () => {
+            pendingWrite = (async (): Promise<JournalWriteOutcome> => {
+              if (ctx.user?.id && !(await actorHasPermission(db, ctx.org.id, ctx.user.id, "gl.post"))) {
+                return { kind: "refused" as const, refusal: "journal.create: missing permission: gl.post" };
+              }
+              const input = JSON.parse(String(vm.dump(inputH)));
+              const allowedSubsidiaryIds = ctx.user?.id
+                ? await actorAllowedSubsidiaryIds(db, ctx.org.id, ctx.user.id)
+                : null;
+              const created = await createScriptJournal(
+                ctx.org.id,
+                ctx.user?.id ?? null,
+                input,
+                { post, allowedSubsidiaryIds, idempotencyKey, deadlineMs: deadline },
+              );
+              return { kind: "created" as const, created };
+            })();
+            return pendingWrite;
           });
-          if (outcome === SCRIPT_HOST_TIMEOUT) return hostTimeoutError("journal.create");
+          if (outcome === SCRIPT_HOST_TIMEOUT) {
+            // The race fired while the write was still in flight: await its
+            // terminal outcome and report THAT. A write that committed in
+            // the same instant as the deadline reports its journal — never
+            // a timeout for a journal that exists, and never a silent
+            // commit behind a timeout report. Under fencing this settles
+            // almost immediately; only a write nested in an outer
+            // (unfenced) transaction can outlive the grace, and that case
+            // keeps the timeout report.
+            const settled = await settleTimedOutJournalWrite(pendingWrite);
+            if (settled.status === "committed") {
+              if (settled.outcome.kind === "refused") {
+                return { error: vm.newError(settled.outcome.refusal) };
+              }
+              return vm.newString(JSON.stringify(settled.outcome.created));
+            }
+            return hostTimeoutError("journal.create");
+          }
           if (outcome.kind === "refused") return { error: vm.newError(outcome.refusal) };
           return vm.newString(JSON.stringify(outcome.created));
         } catch (e) {
@@ -813,7 +926,16 @@ export async function runTriggerScripts(
 
   const outcomes: ScriptOutcome[] = [];
   for (const s of scripts) {
-    const res = await runScript(s.source, { ...ctx, trigger }, s.timeoutMs);
+    // The retry identity for this run's journal writes: the trigger, the
+    // target document at its current revision, and the script. A retry of a
+    // timed-out run sees the same target revision (the failed outer operation
+    // left it untouched) and dedupes; any later state change advances
+    // revision_seq and starts a fresh identity. No usable stamp (ad-hoc
+    // callers) = a per-run random namespace: no cross-run dedupe, while
+    // deadline fencing still guarantees a timed-out write commits nothing.
+    const res = await runScript(s.source, { ...ctx, trigger }, s.timeoutMs, {
+      idempotencyNamespace: `trigger/${trigger}/${targetId}/${triggerTargetStamp(ctx.document)}/${s.id}`,
+    });
     const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
     outcomes.push(outcome);
     await db.insert(schema.scriptRuns).values({
@@ -885,7 +1007,14 @@ export async function runScheduledScript(
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
     ...(user ? { user } : {}),
   };
-  const res = await runScript(s.source, ctx, s.timeoutMs);
+  // Retry identity: the scheduler's occurrence key when this tick carries
+  // one, else the run's minute bucket. Distinct ticks mint distinct
+  // namespaces (cron cannot fire twice in one minute); a retry of the same
+  // tick reuses its namespace and dedupes.
+  const scope = opts.idempotencyScope ?? `minute-${new Date().toISOString().slice(0, 16)}`;
+  const res = await runScript(s.source, ctx, s.timeoutMs, {
+    idempotencyNamespace: `scheduled/${s.id}/${scope}`,
+  });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
   await db.insert(schema.scriptRuns).values({
@@ -943,7 +1072,12 @@ export async function runEndpointScript(
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
     user,
   };
-  const res = await runScript(s.source, ctx, s.timeoutMs);
+  // Every HTTP invocation is a distinct run: a per-request namespace, so two
+  // calls never share keys. Cross-request HTTP retry dedupe belongs at the
+  // HTTP idempotency-key layer, not here; timeout retries rely on fencing.
+  const res = await runScript(s.source, ctx, s.timeoutMs, {
+    idempotencyNamespace: `endpoint/${s.id}/req-${randomUUID()}`,
+  });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
   await db.insert(schema.scriptRuns).values({
@@ -1009,7 +1143,12 @@ export async function runBulkScript(
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
     ...(user ? { user } : {}),
   };
-  const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS);
+  // Every bulk launch is a distinct run (operator-pressed "Run now" or one
+  // queue delivery): a per-run namespace, so two launches never share keys.
+  // Timeout retries rely on deadline fencing (a fenced write commits nothing).
+  const res = await runScript(s.source, ctx, BULK_TIMEOUT_MS, {
+    idempotencyNamespace: `bulk/${s.id}/run-${randomUUID()}`,
+  });
   const outcome: ScriptOutcome = { scriptId: s.id, name: s.name, ...res };
 
   await db.insert(schema.scriptRuns).values({
@@ -1057,6 +1196,13 @@ export class ScriptActorError extends Error {
  */
 export interface ScriptRunOptions {
   actorId?: string | null;
+  /**
+   * Stable identity of this scheduled occurrence (the scheduler's occurrence
+   * key), so a retried tick reuses the run's journal idempotency namespace.
+   * Omitted (queue path, ad-hoc runs) = the run's minute bucket: retries
+   * within the same minute dedupe, older ones rely on deadline fencing.
+   */
+  idempotencyScope?: string;
 }
 
 /**

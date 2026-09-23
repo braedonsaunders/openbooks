@@ -150,6 +150,13 @@ export const documents = pgTable(
     expectedPayDate: date("expected_pay_date"),
 
     memo: text("memo"),
+    /**
+     * Script-journal idempotency key (migration 0268): the script run's
+     * stable write identity (run namespace + journal.create call ordinal).
+     * NULL for every non-script write; unique per org where present so a
+     * retried script write observes the first execution's document.
+     */
+    idempotencyKey: text("idempotency_key"),
     custom: jsonb("custom").notNull().default({}),
     /**
      * Strictly increasing optimistic-concurrency counter (migration 0167).
@@ -163,6 +170,11 @@ export const documents = pgTable(
   (t): PgTableExtraConfigValue[] => [
     uniqueIndex("documents_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
+    // Script-journal idempotency (migration 0268): partial, so the NULL key
+    // on every non-script row is unconstrained.
+    uniqueIndex("documents_org_idempotency_key")
+      .on(t.orgId, t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
     index("documents_party").on(t.partyId),
     /**
