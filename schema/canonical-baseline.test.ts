@@ -679,6 +679,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // inherited retention actions, posted duplicate/negative count lines),
     // which readers refuse or label by membership.
     "0326_upgrade_legacy_provenance.sql",
+    // Selling-price resolution read current activation flags, so ending a
+    // level assignment or level repriced already-booked past dates (0327
+    // versions level activation as history and end-dates membership, and
+    // the resolver reads both as of the transaction date).
+    "0327_item_price_level_activation_history.sql",
     // Legacy-pinned obligations refuse destructive rebuilds until an
     // operator reconciles them one by one (0328 carries the attestation:
     // actor, timestamp and reason — clearing the rule would re-open
