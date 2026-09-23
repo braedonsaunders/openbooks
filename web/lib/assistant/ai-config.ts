@@ -29,6 +29,10 @@ import {
 } from "@openbooks/engine/src/payables/ap-capture-config.ts";
 import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/payables/ap-capture.ts";
 import { type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import {
+  acquireOrgFeatureGateLock,
+  lockAndCheckOrgFeature,
+} from '@openbooks/engine/src/organization/org-feature-lock.ts'
 
 /**
  * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config
@@ -248,6 +252,30 @@ export async function getOrgAiConfig(orgId: string): Promise<AiConfig | null> {
 }
 
 /**
+ * The ONE enable-gate every agent-pack save shares — the bulk provider form,
+ * the per-agent drawer, and the Setup adapters all funnel through the two
+ * commands below, so the check lives here and nowhere per route. Enabling a
+ * pack while the authoritative continuousClose switch is off throws
+ * `feature_disabled` (the Setup surface's own refusal) before anything is
+ * written; disabling packs, or saving provider settings with no pack
+ * enabled, stays allowed so operators can clean up while the module is off.
+ * Runs inside the caller's write transaction under the feature-gate fence,
+ * so a concurrent Company Settings disable cannot slip between this check
+ * and the policy writes.
+ */
+async function refusePackEnableWhileFeatureOff(
+  tx: SqlExecutor,
+  orgId: string,
+  agents: Pick<AgentSettingsInput, "agentKey" | "enabled">[],
+): Promise<void> {
+  if (!agents.some((agent) => agent.enabled)) return;
+  await acquireOrgFeatureGateLock(tx, orgId);
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "continuousClose"))) {
+    throw new Error("feature_disabled");
+  }
+}
+
+/**
  * Merge form input over the previously-stored config, re-sealing the key only
  * when a new one was typed. Throws on an invalid base URL — including one
  * whose DNS answers private/loopback/link-local, which is resolved live
@@ -260,6 +288,7 @@ export async function saveOrgAiSettings(
 ): Promise<void> {
   const baseUrl = (await validateAiBaseUrlLive(input.provider, input.baseUrl)) ?? "";
   await db.transaction(async (tx) => {
+    await refusePackEnableWhileFeatureOff(tx, orgId, input.agents);
     const r = (await tx.execute<{ ai: unknown }>(sql`
       select settings->'ai' as ai from orgs where id = ${orgId} for update
     `));
@@ -390,6 +419,7 @@ export async function saveOrgAiAgentSettings(
   if (!CONTINUOUS_CLOSE_AGENT_KEYS.includes(agentKey as ContinuousCloseAgentKey)) throw new Error("invalid agent");
   const agent = normalizeAgentSettingInput(agentKey as ContinuousCloseAgentKey, raw);
   await db.transaction(async (tx) => {
+    await refusePackEnableWhileFeatureOff(tx, orgId, [agent]);
     const org = (await tx.execute<{ enabled: boolean }>(sql`
       select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled
         from orgs where id = ${orgId} for update

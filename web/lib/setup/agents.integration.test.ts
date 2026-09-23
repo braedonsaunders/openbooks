@@ -18,6 +18,7 @@ const {
   saveSetupAgentPolicy,
 } = await import('./agents.ts')
 const { saveOrgAiSettings } = await import('../assistant/ai-config.ts')
+const { normalizeAgentSettingsInput, saveOrgAiAgentSettings } = await import('../assistant/ai-config.ts')
 
 /**
  * DB proofs for the Agents setup adapters (web/lib/setup/agents.ts): toggling
@@ -228,6 +229,86 @@ test(
       'a pack whose module is off cannot be enabled',
     )
     assert.equal(await policyRow(org.orgId, 'accounting'), undefined)
+  },
+)
+
+function bulkAiInput() {
+  return {
+    enabled: true,
+    provider: 'anthropic' as const,
+    modelFast: '',
+    modelSmart: '',
+    baseUrl: '',
+    agents: normalizeAgentSettingsInput([{ agentKey: 'accounting', ...ENABLE_ACCOUNTING }]),
+    documentCapture: {
+      enabled: false,
+      provider: 'azure_document_intelligence' as const,
+      endpoint: '',
+      model: 'prebuilt-invoice',
+      confidenceThreshold: '0.9000',
+      autoCreatePoMatchedDrafts: false,
+    },
+  }
+}
+
+test(
+  'the legacy pack APIs refuse to enable while the module is off',
+  { skip: !DB },
+  async (t) => {
+    // C3: the two legacy AI admin APIs (per-agent PUT and bulk PUT) used to
+    // persist enabled/automaticRuns through the shared ai-config commands
+    // without checking the switch. The ONE check now lives in those shared
+    // commands, so both refuse by name and persist nothing while off.
+    const org: ScratchOrg = await createScratchOrg()
+    t.after(async () => {
+      await dropScratchOrg(org.orgId)
+    })
+    const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+    const toggled = await applyFeatureChanges(org.orgId, userId, { continuousClose: false })
+    assert.equal(toggled.ok, true, 'the module switch itself must work on a scratch org')
+
+    await assert.rejects(
+      withBypassContext(() =>
+        saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+      ),
+      /feature_disabled/,
+      'the per-agent legacy API refuses to enable the pack by name',
+    )
+    await assert.rejects(
+      withBypassContext(() => saveOrgAiSettings(org.orgId, userId, bulkAiInput())),
+      /feature_disabled/,
+      'the bulk legacy API refuses to enable the pack by name',
+    )
+    assert.equal(await policyRow(org.orgId, 'accounting'), undefined, 'a refused enable persists nothing')
+
+    // Disabling while off stays allowed — operators can still clean up.
+    const disabled = await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING, enabled: false }),
+    )
+    assert.equal(disabled.enabled, false)
+  },
+)
+
+test(
+  'the legacy pack APIs save once the module is back on',
+  { skip: !DB },
+  async (t) => {
+    const org: ScratchOrg = await createScratchOrg()
+    t.after(async () => {
+      await dropScratchOrg(org.orgId)
+    })
+    const userId = await createScratchUser(org.orgId, 'Agent Admin', 'admin')
+    assert.equal((await applyFeatureChanges(org.orgId, userId, { continuousClose: false })).ok, true)
+    assert.equal((await applyFeatureChanges(org.orgId, userId, { continuousClose: true })).ok, true)
+
+    const single = await withBypassContext(() =>
+      saveOrgAiAgentSettings(org.orgId, userId, { agentKey: 'accounting', ...ENABLE_ACCOUNTING }),
+    )
+    assert.equal(single.enabled, true, 'the per-agent legacy API saves while on')
+    await withBypassContext(() => saveOrgAiSettings(org.orgId, userId, bulkAiInput()))
+    const row = await policyRow(org.orgId, 'accounting')
+    assert.ok(row, 'the bulk legacy API saves while on')
+    assert.equal(row.enabled, true)
   },
 )
 
