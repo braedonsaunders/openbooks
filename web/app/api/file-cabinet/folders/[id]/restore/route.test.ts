@@ -57,6 +57,14 @@ const mockSources = new Map<string, string>([
       const execute = (target, kind, query) => {
         const text = sqlText(query)
         state.executed.push({ kind, text })
+        // Subsidiary-fence reads the verb re-evaluates inside its transaction:
+        // the anchor existence/visibility row and the tier aggregate.
+        if (text.includes('as "recordVisible"')) {
+          return Promise.resolve({ rows: [{ recordVisible: true }] })
+        }
+        if (text.includes('bool_or')) {
+          return Promise.resolve({ rows: [{ n: 1, ownsPrivate: false, foreignPrivate: false, grantRank: 0 }] })
+        }
         if (text.includes('select f.id, f.is_inactive')) {
           return Promise.resolve({ rows: Object.entries(target.folders)
             .map(([id, isInactive]) => ({ id, isInactive })) })
@@ -120,6 +128,9 @@ const mockSources = new Map<string, string>([
         return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } }
       }
       export async function requireFolderAccess() { return null }
+      export function fileViewer(gate) {
+        return { userId: gate.user.id, isAdmin: false, baseline: 'manager', allowedSubsidiaryIds: null }
+      }
     `,
   ],
 ])

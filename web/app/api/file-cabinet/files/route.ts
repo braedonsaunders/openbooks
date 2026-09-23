@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     contentType: file.type.split(';')[0]!.trim().toLowerCase(),
     bytes,
     createdBy: gate.user.id,
-    audit: { actorId: gate.user.id },
+    audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
   })
   return NextResponse.json({ file: meta }, { status: 201 })
 }

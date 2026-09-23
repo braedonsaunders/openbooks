@@ -59,7 +59,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (name === null && folderId === null) return NextResponse.json({ ok: true })
   try {
     await inDbTransaction(async (tx) => {
-      const audit = { actorId: gate.user.id, executor: tx }
+      const audit = { actorId: gate.user.id, executor: tx, viewer: fileViewer(gate) }
       if (name !== null) {
         // The verb commits the rename and its attributable audit atomically.
         const ok = await renameFile(gate.user.orgId, id, name, gate.user.id, audit)
@@ -91,7 +91,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const purge = new URL(req.url).searchParams.get('purge') === '1'
   // The verb commits the mutation and its attributable audit atomically (for
   // purge, before any post-commit S3 deletion).
-  const audit = { actorId: gate.user.id }
+  const audit = { actorId: gate.user.id, viewer: fileViewer(gate) }
   const ok = purge
     ? await purgeFile(gate.user.orgId, id, audit)
     : await deleteFile(gate.user.orgId, id, audit)

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { restoreFolder } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
-import { requireFolderAccess, requireSession } from '../../../lib'
+import { fileViewer, requireFolderAccess, requireSession } from '../../../lib'
 
 export const runtime = 'nodejs'
 
@@ -13,7 +13,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
-  const ok = await restoreFolder(gate.user.orgId, id, { actorId: gate.user.id })
+  const ok = await restoreFolder(gate.user.orgId, id, { actorId: gate.user.id, viewer: fileViewer(gate) })
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

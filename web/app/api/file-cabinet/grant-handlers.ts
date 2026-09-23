@@ -11,7 +11,7 @@ import {
 } from '../../../lib/file-cabinet'
 import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
-import { requireFileAccess, requireFolderAccess } from './lib'
+import { fileViewer, requireFileAccess, requireFolderAccess } from './lib'
 
 /** Manager on the resource is required to view or edit its sharing. */
 async function requireManager(
@@ -102,7 +102,7 @@ export async function postGrant(
     principalId,
     access,
     actorId: authz.user.id,
-    audit: { actorId: authz.user.id },
+    audit: { actorId: authz.user.id, viewer: fileViewer(authz) },
   })
   return NextResponse.json({ ok: true }, { status: 201 })
 }
@@ -126,7 +126,7 @@ export async function deleteGrant(
     grantId,
     resourceType,
     resourceId,
-    { actorId: authz.user.id },
+    { actorId: authz.user.id, viewer: fileViewer(authz) },
   )
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })

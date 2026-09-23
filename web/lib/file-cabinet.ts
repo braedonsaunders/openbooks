@@ -373,9 +373,21 @@ export async function folderAccessLevel(
   orgId: string,
   viewer: FileViewer,
   folderId: string,
+  executor?: SqlExecutor,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
+  const exec = executor ?? db
+  // The anchor row decides existence AND the subsidiary fence in one read: a
+  // folder evidencing an out-of-fence record is invisible to a restricted
+  // caller unless an explicit folder grant re-opens it (the same re-open the
+  // folder read path applies).
+  const fence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`record_table`, sql`record_id`)
+  const anchor = (await exec.execute<{ recordVisible: boolean }>(sql`
+    select ${fence ?? sql`true`} as "recordVisible"
+      from folders where id = ${folderId} and org_id = ${orgId}
+  `)).rows[0]
+  if (!anchor) return 'none' // folder not found / not in org
+  const r = (await exec.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id
         from folders where id = ${folderId} and org_id = ${orgId}
@@ -398,31 +410,45 @@ export async function folderAccessLevel(
   if (!row || row.n === 0) return 'none' // folder not found / not in org
   const behindForeignBoundary = !!row.foreignPrivate
   const grantLevel = ACCESS_BY_RANK[row.grantRank] ?? 'none'
+  if (viewer.allowedSubsidiaryIds !== null && viewer.allowedSubsidiaryIds !== undefined
+      && !anchor.recordVisible && grantLevel === 'none') return 'none'
   const ownerLevel: AccessLevel = row.ownsPrivate && !behindForeignBoundary ? 'manager' : 'none'
   const baselineLevel: AccessLevel = behindForeignBoundary ? 'none' : viewer.baseline ?? 'viewer'
   return maxAccess(grantLevel, ownerLevel, baselineLevel)
 }
 
 /** The caller's effective access tier on a file: the max of its folder's tier
- *  and any grant on the file itself. */
+ *  and any grant on the file itself. A subsidiary-restricted caller with no
+ *  direct file grant reads 'none' when the folder's record target or any
+ *  attachment target is outside their fence — the same rule getFile applies,
+ *  so a tier that permits a mutation always implies the bytes are readable. */
 export async function fileAccessLevel(
   orgId: string,
   viewer: FileViewer,
   fileId: string,
+  executor?: SqlExecutor,
 ): Promise<AccessLevel> {
   if (viewer.isAdmin) return 'manager'
-  const r = (await db.execute<{ folderId: string; grantRank: number }>(sql`
+  const exec = executor ?? db
+  const folderFence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fo.record_table`, sql`fo.record_id`)
+  const attachFence = attachmentTargetsVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`)
+  const r = (await exec.execute<{ folderId: string; grantRank: number; folderRecordVisible: boolean; attachVisible: boolean }>(sql`
     select fi.folder_id as "folderId",
       (select coalesce(max(case g.access when 'manager' then 3 when 'editor' then 2 when 'viewer' then 1 else 0 end), 0)
          from resource_grants g
         where g.org_id = ${orgId} and g.resource_type = 'file' and g.resource_id = fi.id
-          and ${grantAppliesTo(orgId, viewer)}) as "grantRank"
-      from files fi where fi.id = ${fileId} and fi.org_id = ${orgId}
+          and ${grantAppliesTo(orgId, viewer)}) as "grantRank",
+      ${folderFence ?? sql`true`} as "folderRecordVisible",
+      ${attachFence ?? sql`true`} as "attachVisible"
+      from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
+     where fi.id = ${fileId} and fi.org_id = ${orgId}
   `))
   const row = r.rows[0]
   if (!row) return 'none'
   const fileGrant = ACCESS_BY_RANK[row.grantRank] ?? 'none'
-  const folderLevel = await folderAccessLevel(orgId, viewer, row.folderId)
+  const folderLevel = await folderAccessLevel(orgId, viewer, row.folderId, exec)
+  if (viewer.allowedSubsidiaryIds !== null && viewer.allowedSubsidiaryIds !== undefined
+      && fileGrant === 'none' && (!row.folderRecordVisible || !row.attachVisible)) return 'none'
   return maxAccess(fileGrant, folderLevel)
 }
 
@@ -495,6 +521,11 @@ export async function setGrant(input: {
   audit?: FileMutationAudit
 }): Promise<void> {
   await inDbTransaction(async (tx) => {
+    const gate =
+      input.resourceType === 'folder'
+        ? await viewerFolderGate(tx, input.orgId, input.audit, input.resourceId, 'manager')
+        : await viewerFileGate(tx, input.orgId, input.audit, input.resourceId, 'manager')
+    if (!gate) throw new Error('setGrant refused: caller lacks manager access to the resource')
     const previous = (await tx.execute<{ id: string; access: AccessLevel }>(sql`
       select id, access
         from resource_grants
@@ -551,6 +582,11 @@ export async function removeGrant(
        for update
     `)).rows[0]
     if (!existing || existing.resourceType !== resourceType || existing.resourceId !== resourceId) return false
+    const gate =
+      resourceType === 'folder'
+        ? await viewerFolderGate(tx, orgId, audit, resourceId, 'manager')
+        : await viewerFileGate(tx, orgId, audit, resourceId, 'manager')
+    if (!gate) return false
     const deleted = (await tx.execute<{ id: string }>(sql`
       delete from resource_grants
        where id = ${grantId} and org_id = ${orgId}
@@ -852,6 +888,9 @@ export async function createFolder(input: {
   audit?: FileMutationAudit
 }): Promise<string> {
   const work = async (tx: SqlExecutor): Promise<string> => {
+    if (input.parentId && !(await viewerFolderGate(tx, input.orgId, input.audit, input.parentId, 'editor'))) {
+      throw new Error('createFolder refused: caller lacks editor access to the parent folder')
+    }
     const ins = (await tx.execute<{ id: string }>(sql`
       insert into folders (org_id, parent_folder_id, name, is_private, owner_id,
                            created_by, updated_by, created_at, updated_at)
@@ -913,11 +952,13 @@ export async function moveFolder(
         from folders where id = ${id} and org_id = ${orgId} for update
     `)).rows[0]
     if (!before || before.isSystem || parentId === id) return false
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) return false
     if (parentId) {
       const parent = (await tx.execute(sql`
         select 1 from folders where id = ${parentId} and org_id = ${orgId}
       `))
       if (parent.rows.length === 0) return false
+      if (!(await viewerFolderGate(tx, orgId, audit, parentId, 'editor'))) return false
       const cycle = (await tx.execute(sql`
         with recursive ancestors as (
           select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
@@ -983,7 +1024,7 @@ export type FolderPatch = {
   isInactive?: boolean
 }
 
-export type FolderPatchResult = { ok: true } | { ok: false; reason: 'not found' | 'cannot move folder' | 'cannot rename system folder' | 'cannot update system folder' }
+export type FolderPatchResult = { ok: true } | { ok: false; reason: 'not found' | 'forbidden' | 'cannot move folder' | 'cannot rename system folder' | 'cannot update system folder' }
 
 /**
  * Apply every requested folder edit and its activity evidence in one
@@ -1017,6 +1058,9 @@ export async function patchFolder(
        for update
     `)).rows[0]
     if (!before) return { ok: false as const, reason: 'not found' as const }
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
+      return { ok: false as const, reason: 'forbidden' as const }
+    }
 
     if (before.isSystem && hasName) {
       return { ok: false as const, reason: 'cannot rename system folder' as const }
@@ -1036,6 +1080,9 @@ export async function patchFolder(
           select id from folders where id = ${parentId} and org_id = ${orgId} for share
         `)).rows[0]
         if (!parent) return { ok: false as const, reason: 'cannot move folder' as const }
+        if (!(await viewerFolderGate(tx, orgId, audit, parentId, 'editor'))) {
+          return { ok: false as const, reason: 'forbidden' as const }
+        }
         const cycle = await tx.execute(sql`
           with recursive ancestors as (
             select parent_folder_id from folders where id = ${parentId} and org_id = ${orgId}
@@ -1133,6 +1180,9 @@ export async function deleteFolder(
     `)).rows[0]
     if (!folder) return { ok: false, reason: 'not found' as const }
     if (folder.isSystem) return { ok: false, reason: 'system' as const }
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
+      return { ok: false, reason: 'forbidden' as const }
+    }
     const beforeFolders = await tx.execute<{ id: string; isInactive: boolean }>(sql`
       select f.id, f.is_inactive as "isInactive"
         from folders f
@@ -1200,6 +1250,7 @@ export async function restoreFolder(
        for update
     `)
     if (beforeFolders.rows.length === 0) return false
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) return false
 
     const beforeFiles = await tx.execute<{ id: string; isInactive: boolean }>(sql`
       select fi.id, fi.is_inactive as "isInactive"
@@ -1313,6 +1364,9 @@ export async function purgeFolder(
     `)).rows[0]
     if (!folder) return { ok: false as const, reason: 'not found' as const }
     if (folder.isSystem) return { ok: false as const, reason: 'system' as const }
+    if (!(await viewerFolderGate(tx, orgId, audit, id, 'manager'))) {
+      return { ok: false as const, reason: 'forbidden' as const }
+    }
 
     // Lock every file in the subtree before evaluating attachments.  The FK
     // on file_attachments.file_id serializes inserts against these locks.
@@ -1678,6 +1732,9 @@ export async function createFile(input: {
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
   const kind = activeStorageKind()
   return runMutation(input.audit?.executor, async (tx) => {
+    if (!(await viewerFolderGate(tx, input.orgId, input.audit, input.folderId, 'editor'))) {
+      throw new Error('createFile refused: caller lacks editor access to the destination folder')
+    }
     const fileIns = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
                          size_bytes, storage_kind, content_hash, created_by, updated_by,
@@ -1777,6 +1834,7 @@ export async function replaceFile(input: {
         for update
     `))
     if (current.rows.length === 0) return false
+    if (!(await viewerFileGate(tx, input.orgId, input.audit, input.fileId, 'editor'))) return false
     const nextVer = (current.rows[0]!.max_ver ?? 0) + 1
     const kind = activeStorageKind()
 
@@ -1846,6 +1904,44 @@ export interface FileMutationAudit {
   actorId: string | null
   /** Participate in a caller-owned transaction (bulk units and replacements). */
   executor?: SqlExecutor
+  /**
+   * The caller as a FileViewer, for subsidiary-fence enforcement inside the
+   * mutation's own transaction. When present the verb re-evaluates the
+   * caller's tier on the transaction's snapshot and refuses (the same
+   * not-found/false shape as a missing row) unless the verb's required tier
+   * still holds — so a route-level gate cannot go stale between check and
+   * write, and direct service callers cannot bypass the fence. Absent for
+   * trusted internal callers (AP capture, tax PDFs) whose flows scope the
+   * write themselves.
+   */
+  viewer?: FileViewer
+}
+
+/**
+ * In-transaction tier gates: re-evaluate the caller's access on `exec` (the
+ * mutation's own snapshot) and report whether `min` still holds. No viewer —
+ * no fence (trusted internal path).
+ */
+async function viewerFileGate(
+  exec: SqlExecutor,
+  orgId: string,
+  audit: FileMutationAudit | undefined,
+  fileId: string,
+  min: AccessLevel,
+): Promise<boolean> {
+  if (!audit?.viewer) return true
+  return accessAtLeast(await fileAccessLevel(orgId, audit.viewer, fileId, exec), min)
+}
+
+async function viewerFolderGate(
+  exec: SqlExecutor,
+  orgId: string,
+  audit: FileMutationAudit | undefined,
+  folderId: string,
+  min: AccessLevel,
+): Promise<boolean> {
+  if (!audit?.viewer) return true
+  return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec), min)
 }
 
 async function runMutation<T>(
@@ -1880,6 +1976,7 @@ export async function renameFile(
       for update
     `))
     if (prev.rows.length === 0) return false
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'editor'))) return false
     await tx.execute(sql`
       update files set name = ${name}, extension = ${deriveExtension(name)},
                        updated_by = ${updatedBy}, updated_at = now()
@@ -1924,6 +2021,8 @@ export async function moveFile(
       for update
     `))
     if (prev.rows.length === 0) return false
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'editor'))) return false
+    if (!(await viewerFolderGate(tx, orgId, audit, folderId, 'editor'))) return false
     await tx.execute(sql`
       update files set folder_id = ${folderId}, updated_by = ${updatedBy}, updated_at = now()
        where id = ${id} and org_id = ${orgId}
@@ -1973,7 +2072,9 @@ export async function deleteFile(
          and not exists (select 1 from ap_capture_items ci where ci.file_id = files.id and ci.org_id = ${orgId})
        for update
     `)).rows[0]
-    if (!before || !(await trash(tx))) return false
+    if (!before) return false
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return false
+    if (!(await trash(tx))) return false
     await recordFileEvent({
       orgId,
       actorId: audit.actorId,
@@ -2005,6 +2106,7 @@ export async function restoreFile(
        for update
     `)).rows[0]
     if (!before) return false
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return false
     await tx.execute(sql`
       update files set is_inactive = false, updated_at = now()
        where id = ${id} and org_id = ${orgId}
@@ -2116,6 +2218,7 @@ export async function purgeFile(
       for update
     `))
     if (owned.rows.length === 0) return null
+    if (!(await viewerFileGate(tx, orgId, audit, id, 'manager'))) return null
     const material = (await tx.execute(sql`
       select fa.id
         from file_attachments fa
