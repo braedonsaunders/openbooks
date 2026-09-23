@@ -4,7 +4,45 @@
  * Split from the resolver so the arithmetic deciding what a customer is charged
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
-import { add, cmp, fromUnits, isZero, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, fromUnits, isZero, roundDiv, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+
+/** A percentage the pricing cannot read exactly — stored values are capped at
+ * 10 decimals, so anything else is a caller bug, refused by name. */
+export class RateAdjustmentPricingError extends Error {}
+
+/** 10 decimals: the stored scale of an adjustment percent value. */
+const PERCENT_SCALE = 10_000_000_000n
+
+/**
+ * Multiply money by a percentage stored at up to 10 decimal places. The save
+ * accepts percents to numeric(19,10), but the house mulPercent reads its
+ * percent at 4 decimals and throws past that — so a 3.123456% surcharge
+ * made invoice generation throw. This parses the full 10dp exactly as
+ * BigInt and rounds the RESULT once, halves away from zero.
+ */
+export function mulPercentExact(amount: string, percent: string, decimalPlaces: 2 | 4 = 2): string {
+  const raw = String(percent).trim()
+  const parsed = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))$/.exec(raw)
+  if (!parsed) throw new RateAdjustmentPricingError(`not a percentage value: "${percent}"`)
+  const [, sign, whole = '0', fraction = '', leadingFraction = ''] = parsed
+  const digits = fraction || leadingFraction
+  if (digits.length > 10) {
+    throw new RateAdjustmentPricingError(`percentage loses precision beyond 10 decimal places: "${percent}"`)
+  }
+  const magnitude = BigInt(whole || '0') * PERCENT_SCALE + BigInt((digits + '0'.repeat(10)).slice(0, 10))
+  const percentUnits = sign === '-' ? -magnitude : magnitude
+  const quantum = 10n ** BigInt(4 - decimalPlaces)
+  const roundedQuanta = roundDiv(
+    toUnits(amount) * percentUnits,
+    100n * PERCENT_SCALE * quantum,
+  )
+  return fromUnits(roundedQuanta * quantum)
+}
+
+/** Exact zero for a stored adjustment value at any supported scale. */
+function isZeroValue(value: string): boolean {
+  return /^-?0*(\.0*)?$/.test(String(value).trim().replace(/^\+/, ''))
+}
 
 /** How a percentage charge lands on the cent. */
 export type AdjustmentRounding = 'half_up' | 'down'
@@ -124,7 +162,9 @@ export function priceAdjustments(
   for (const adjustment of adjustments) {
     if (adjustment.presentation !== 'separate') continue
     if (adjustment.calculation !== 'percent' && adjustment.calculation !== 'fixed') continue
-    if (!adjustment.value || isZero(adjustment.value)) continue
+    // The zero check reads the stored scale (up to 10dp for percents): the
+    // house isZero caps at 4dp and would throw on a legal 10dp percent.
+    if (!adjustment.value || isZeroValue(adjustment.value)) continue
 
     const matched = lines.filter((l) => lineMatchesAdjustment(l, adjustment))
     if (!matched.length) continue
@@ -138,8 +178,8 @@ export function priceAdjustments(
     const amount = adjustment.calculation === 'fixed'
       ? adjustment.value
       : rounding === 'down'
-        ? floorToCents(mulPercent(basis, adjustment.value, 4))
-        : mulPercent(basis, adjustment.value, 2)
+        ? floorToCents(mulPercentExact(basis, adjustment.value, 4))
+        : mulPercentExact(basis, adjustment.value, 2)
     if (isZero(amount)) continue
     charges.push({ adjustment, basis, amount })
   }
@@ -167,8 +207,8 @@ export function mergeCharges(
     // be billed once per department rather than once.
     if (c.adjustment.calculation === 'percent' && c.adjustment.value) {
       c.amount = rounding === 'down'
-        ? floorToCents(mulPercent(c.basis, c.adjustment.value, 4))
-        : mulPercent(c.basis, c.adjustment.value, 2)
+        ? floorToCents(mulPercentExact(c.basis, c.adjustment.value, 4))
+        : mulPercentExact(c.basis, c.adjustment.value, 2)
     }
   }
   return [...byAdjustment.values()].sort((a, b) => a.adjustment.sortOrder - b.adjustment.sortOrder)

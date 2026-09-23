@@ -495,3 +495,56 @@ test(
     }
   },
 );
+
+test(
+  "PUT caps fixed adjustment amounts at ledger precision and keeps full percent precision",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // PRC11: percents store to 10dp and price exactly; a fixed 5.12345 the
+    // ledger cannot store is refused at save, not at invoicing.
+    const fixture = await withBypass(seed);
+    try {
+      const fixed = (value: string) => ({
+        ...putBody(fixture),
+        adjustments: [
+          {
+            code: "fixd",
+            name: "Fixed",
+            category: "surcharge",
+            calculation: "fixed",
+            value,
+            presentation: "separate",
+            targets: [],
+          },
+        ],
+      });
+      const wide = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.12345")));
+      const widePayload = (await wide.json()) as { errorCode?: string };
+      assert.equal(wide.status, 422, `expected 422, got ${wide.status}: ${JSON.stringify(widePayload)}`);
+      assert.equal(widePayload.errorCode, "value");
+      const narrow = await withOrgContext(fixture.orgId, () => put(fixture, fixed("5.1234")));
+      assert.equal(narrow.status, 200, `4dp fixed must save: ${JSON.stringify(await narrow.json())}`);
+
+      const percent = await withOrgContext(fixture.orgId, () =>
+        put(fixture, {
+          ...putBody(fixture),
+          adjustments: [
+            {
+              code: "prec",
+              name: "Precise",
+              category: "surcharge",
+              calculation: "percent",
+              value: "3.1234567891",
+              presentation: "separate",
+              targets: [],
+            },
+          ],
+        }));
+      assert.equal(percent.status, 200, `10dp percent must save: ${JSON.stringify(await percent.json())}`);
+      const stored = (await db.execute<{ value: string }>(sql`select value::text as value from labor_rate_adjustments where version_id = ${fixture.versionId}`));
+      assert.deepEqual(stored.rows.map((row) => row.value), ["3.1234567891"]);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);

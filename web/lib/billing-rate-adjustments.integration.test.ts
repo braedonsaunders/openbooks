@@ -10,14 +10,38 @@ import type { SessionUser } from './auth'
 const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingRateAdjustmentSession: session })
+const lrcState: {
+  authz: {
+    user: { orgId: string; id: string }
+    permissions: Set<string>
+    allowedSubsidiaryIds: null
+  } | null
+} = { authz: null }
+Object.assign(globalThis, { __billingRateAdjustmentLrc: lrcState })
+const mockLrcAuthz = `
+  const state = globalThis.__billingRateAdjustmentLrc
+  export async function guardPermission(_permission) {
+    if (!state.authz) return new Response(null, { status: 403 })
+    return state.authz
+  }
+`
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingRateAdjustmentSession.user}' }
     }
+    if (specifier === '../../../../lib/authz' && context.parentURL?.includes('labor-rate-cards')) {
+      return { shortCircuit: true, url: 'mock:billing-adj-lrc-authz' }
+    }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    if (url === 'mock:billing-adj-lrc-authz') {
+      return { format: 'module', source: mockLrcAuthz, shortCircuit: true }
+    }
+    return nextLoad(url, context)
   },
 })
 const { sql } = await import('drizzle-orm')
@@ -26,6 +50,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { randomUUID } = await import('node:crypto')
 const { createBillingRequest } = await import('./billing-requests')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
+const { PUT } = await import(pathToFileURL('web/app/api/labor-rate-cards/[id]/route.ts').href)
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 interface Fixture {
@@ -45,6 +70,9 @@ async function setup(): Promise<Fixture> {
     const otherCustomer = randomUUID()
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom) values (${otherCustomer}, ${org.orgId}, 'customer', 'Other Customer', true, '{}'::jsonb)`)
     await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${otherCustomer}, true)`)
+    // The scratch org may already carry this role; the conflict is expected
+    // and benign — the row existing is exactly the state the test needs.
+    await db.execute(sql`insert into customer_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.customerId}, true) on conflict (party_id) do nothing`)
     return { actor, project, otherCustomer }
   })
   return { org, actor, project, otherCustomer }
@@ -298,6 +326,62 @@ test('per-item grouping keeps opposite subsidiary contexts apart', { skip: !DB }
     assert.equal(surcharge[0]!.amount, '10.0000')
     assert.equal(lines.filter((l) => l.description !== 'Probe surcharge').length, 2)
   } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a 6dp percent saved on a card prices the invoice exactly', { skip: !DB }, async () => {
+  // PRC11: the save keeps percents to 10dp; pricing reads the full scale and
+  // rounds the result once. A 3.123456% surcharge used to throw at invoicing.
+  const fx = await setup()
+  try {
+    const { org, actor, project } = fx
+    const book = randomUUID(), version = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_active) values (${book}, ${org.orgId}, 'PREC', 'Precision rates', 'CAD', true)`)
+      await db.execute(sql`insert into item_rate_versions (id, org_id, rate_book_id, effective_from, status, custom) values (${version}, ${org.orgId}, ${book}, '2026-07-01', 'draft', '{}'::jsonb)`)
+      await db.execute(sql`insert into labor_rate_version_policies (org_id, version_id, derivation_policy) values (${org.orgId}, ${version}, 'explicit')`)
+      await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, 'usage_date', true)`)
+    })
+    lrcState.authz = {
+      user: { orgId: org.orgId, id: actor },
+      permissions: new Set(['*']),
+      allowedSubsidiaryIds: null,
+    }
+    const response = (await withOrgContext(org.orgId, () => PUT(
+      new Request(`http://openbooks.test/api/labor-rate-cards/${version}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Precision rates',
+          code: 'PREC',
+          effective_from: '2026-07-01',
+          status: 'active',
+          derivation_policy: 'explicit',
+          custom: {},
+          scopes: [],
+          lines: [],
+          adjustments: [{
+            code: 'precise',
+            name: 'Precise surcharge',
+            category: 'surcharge',
+            calculation: 'percent',
+            value: '3.123456',
+            presentation: 'separate',
+            targets: [{ targetType: 'customer', targetValueId: org.customerId }],
+          }],
+          terms: [],
+        }),
+      }),
+      { params: Promise.resolve({ id: version }) },
+    )) as Response)
+    assert.equal(response.status, 200, `save failed: ${JSON.stringify(await response.json())}`)
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
+    // 3.123456% of 1000.0000 is 31.23456, rounded once to the cent.
+    assert.equal(lines.filter((l) => l.description === 'Precise surcharge')[0]?.amount, '31.2300')
+  } finally {
+    lrcState.authz = null
     await dropScratchOrg(fx.org.orgId)
   }
 })
