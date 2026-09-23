@@ -93,7 +93,16 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
 test("the background processes are wired to boot and flush telemetry", () => {
   const worker = source("../worker/index.ts");
   assert.match(worker, /startTelemetry\(\)/);
-  assert.match(worker, /stopTelemetry\(\)/);
+  // Shutdown no longer calls stopTelemetry() inline: the entrypoint hands the
+  // telemetry stop hook into the shared shutdown sequence, which owns the
+  // drain → close-connections → stop-telemetry order. Assert the real wiring
+  // on both sides so a dropped hook fails loudly instead of leaking exports.
+  assert.match(
+    worker,
+    /shutdownWorkerProcess\(workers, closeJobConnections, stopTelemetry\)/,
+  );
+  const shutdown = source("../worker/shutdown.ts");
+  assert.match(shutdown, /await stopTelemetry\(\)/);
   const instrumentation = source("../../../web/instrumentation.node.ts");
   assert.match(instrumentation, /startTelemetry\(\)/);
 });
