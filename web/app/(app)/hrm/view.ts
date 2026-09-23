@@ -138,6 +138,9 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                     iconKey: 'list-checks',
                     bodyClassName: 'p-0',
                     className: 'shrink-0',
+                    // UX-14: a quiet module collapses; the grant still owns
+                    // the directory and tab entries, so nothing hides.
+                    when: f('onboardingHasActivity'),
                     blocks: [
                       widgetBlock('hrm-onboarding-panel', {
                         openCount: data.onboarding.openCount,
@@ -161,6 +164,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                     iconKey: 'timer',
                     bodyClassName: 'p-0',
                     className: 'shrink-0',
+                    when: f('leaveHasActivity'),
                     blocks: [
                       widgetBlock('hrm-leave-panel', {
                         items: data.leavePanel.onLeaveToday,
@@ -181,6 +185,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                     iconKey: 'heart-pulse',
                     bodyClassName: 'p-0',
                     className: 'shrink-0',
+                    when: f('benefitsHasActivity'),
                     blocks: [
                       widgetBlock('hrm-benefits-panel', {
                         openWindows: data.benefitsPanel.openWindows,
@@ -204,6 +209,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                     iconKey: 'briefcase',
                     bodyClassName: 'p-0',
                     className: 'shrink-0',
+                    when: f('recruitingHasActivity'),
                     blocks: [
                       widgetBlock('hrm-recruiting-panel', {
                         figures: [

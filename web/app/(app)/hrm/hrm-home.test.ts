@@ -264,6 +264,25 @@ test("cockpit copy resolves from the hrm catalog, never inline English", () => {
   assert.match(view, /f\('title'\)/, "spec titles resolve through view refs, never literals");
 });
 
+test("a sparse cockpit quiets empty feature modules behind the pending hire (UX-14)", () => {
+  // The pending queue leads the hero column: every subordinate feature
+  // panel renders below it, so the request and its owner are the task.
+  const pendingAt = view.indexOf("'hrm-pending-requests'");
+  assert.ok(pendingAt >= 0, "the pending queue renders in the hero column");
+  for (const widget of ['hrm-onboarding-panel', 'hrm-leave-panel', 'hrm-benefits-panel', 'hrm-recruiting-panel']) {
+    assert.ok(view.indexOf(`'${widget}'`) > pendingAt, `${widget} renders below the pending queue, never above it`);
+  }
+  // And each subordinate feature panel renders only while it has something
+  // to show — a quiet module collapses instead of repeating an empty panel.
+  for (const flag of ['onboardingHasActivity', 'leaveHasActivity', 'benefitsHasActivity', 'recruitingHasActivity']) {
+    assert.match(view, new RegExp(`when: f\\('${flag}'\\)`), `the spec gates its panel on ${flag}`);
+    assert.match(loader, new RegExp(flag), `the loader resolves ${flag}`);
+  }
+  assert.match(loader, /openCount/, "onboarding activity follows the open checklist count");
+  assert.match(loader, /onLeaveToday\.length/, "leave activity follows who is on leave today");
+  assert.match(loader, /openWindows\.length/, "benefits activity follows the open windows");
+});
+
 test("the cockpit rail carries the recruiting funnel panel behind its own grant", () => {
   assert.match(view, /data\.recruiting/, "rail renders the recruiting panel when the loader resolves it");
   assert.match(view, /hrm-recruiting-panel/, "rail composes the funnel widget, never a bespoke panel");
