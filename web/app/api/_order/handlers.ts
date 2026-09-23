@@ -7,10 +7,10 @@ import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
-import { computeOrderTotals, exactOrderMoney, exactOrderQuantity, exactOrderUnitPrice, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
-import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
+import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
+import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { compareDecimal } from '../../../lib/exact-decimal'
 import { persistLineTaxComponents } from "../../../lib/bills.ts";
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -377,23 +377,13 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     let totals: { subtotal: string; taxTotal: string; total: string } | null = null
     let preparedLines: (ReturnType<typeof computeOrderTotals>['lines'][number] & { extraDims: Record<string, string> })[] | null = null
     if (body.lines) {
-      const valid: OrderLineInput[] = []
-      for (const line of body.lines) {
-        if (!(line.itemId || line.accountId)) continue
-        const quantity = exactOrderQuantity(line.quantity ?? '0')
-        const unitPrice = exactOrderUnitPrice(line.unitPrice ?? '0')
-        if (quantity === 'invalid' || unitPrice === 'invalid') {
-          return NextResponse.json({ error: 'Order lines contain an invalid quantity or amount' }, { status: 422 })
-        }
-        try {
-          toUnits(quantity)
-        } catch {
-          return NextResponse.json({ error: 'Order lines contain an invalid quantity or amount' }, { status: 422 })
-        }
-        if (compareDecimal(quantity, '0') > 0 && cmp(unitPrice, '0') >= 0) {
-          valid.push({ ...line, quantity, unitPrice })
-        }
+      // Same save shape as create: blank grid rows never persist, while any
+      // populated row that cannot post refuses by line number.
+      const selected = selectPostableOrderLines(body.lines)
+      if ('error' in selected) {
+        return NextResponse.json({ error: selected.error }, { status: 422 })
       }
+      const valid: OrderLineInput[] = selected.valid
       // Line warehouses resolve here, before totals: an explicit choice must
       // name an active warehouse of this org, while a blank stocked line
       // silently takes the org's only active location (F-t07-003 pickers).

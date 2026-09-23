@@ -547,6 +547,40 @@ for (const { kind, createPerm, numberPrefix, path } of KINDS) {
     assert.equal(state.allocations, 0);
   });
 
+  test(`${kind}: populated lines with non-positive quantity or negative price refuse by line`, async () => {
+    reset();
+    const zeroQty = await post(POST, path, KEY_A, {
+      documentDate: "2026-01-15",
+      lines: [{ accountId: ACCOUNT_ID, description: "Widget", quantity: "0", unitPrice: "10" }],
+    });
+    assert.equal(zeroQty.status, 422);
+    assert.match(((await zeroQty.json()) as { error: string }).error, /Order line 1.*quantity/i);
+    const negativePrice = await post(POST, path, KEY_B, {
+      documentDate: "2026-01-15",
+      lines: [
+        { accountId: ACCOUNT_ID, description: "Good", quantity: "2", unitPrice: "10" },
+        { accountId: ACCOUNT_ID, description: "Bad", quantity: "1", unitPrice: "-5" },
+      ],
+    });
+    assert.equal(negativePrice.status, 422);
+    assert.match(((await negativePrice.json()) as { error: string }).error, /Order line 2.*price/i);
+    // Nothing persisted for either refusal: no draft, no lines, no audit, no number.
+    assert.equal(state.docs.length, 0);
+    assert.equal(state.lines.length, 0);
+    assert.equal(state.audits.length, 0);
+    assert.equal(state.allocations, 0);
+  });
+
+  test(`${kind}: truly blank grid rows are omitted while populated rows persist`, async () => {
+    reset();
+    const res = await post(POST, path, KEY_A, {
+      documentDate: "2026-01-15",
+      lines: [{}, { accountId: ACCOUNT_ID, description: "Widget", quantity: "2", unitPrice: "10" }],
+    });
+    assert.equal(res.status, 201);
+    assert.equal(state.lines.length, 1);
+  });
+
   test(`${kind}: unknown custom segment refuses by name`, async () => {
     reset();
     const res = await post(POST, path, KEY_A, { extraDims: { nope: "x" } });
