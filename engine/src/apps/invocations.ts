@@ -17,9 +17,12 @@ import { canonicalJson } from "../platform/canonical-json.ts";
  *
  * Contract enforced here:
  *
- *   (a) An idempotency key (source 'app' in application_idempotency_keys) is
- *       CLAIMED before `run()` executes any statement. The key's request hash
- *       pins it to one input; reuse with different input fails closed.
+ *   (a) The caller key bound to its app and version (see
+ *       deriveClaimNamespaceKey; source 'app' in
+ *       application_idempotency_keys) is CLAIMED before `run()` executes any
+ *       statement. The key's request hash pins it to one input; reuse with
+ *       different input fails closed. Two apps — or two versions of one
+ *       app — sharing a caller key never share a claim.
  *   (b) The attempt runs inside `withOrgTransaction` on a SAVEPOINT: a success
  *       releases the savepoint, marks the claim completed WITH its stored
  *       response, and writes the audit row — all committing atomically.
@@ -122,6 +125,35 @@ export function deriveAppInvocationKey(parts: Record<string, unknown>): string {
   return digest;
 }
 
+/**
+ * The claim namespace binding every app invocation to the app (and version)
+ * that ran it. The caller key alone is NOT the claim identity: two apps —
+ * or two versions of one app — invoking the same operation with the same key
+ * must never share a claim, while retries of the same invocation (same app,
+ * version, and key) replay. The operation column keeps carrying the registry
+ * operation; app/version travel inside the derived key, and the request hash
+ * keeps binding the payload so a key reused with different input still
+ * refuses. No migration was needed: namespacing lives in the key the unique
+ * index already arbiters.
+ */
+export function deriveClaimNamespaceKey(args: {
+  appId: string;
+  versionId: string | null;
+  key: string;
+}): string {
+  return createHash("sha256")
+    .update(
+      canonicalJson({
+        namespace: "app-invocation-claim",
+        app: args.appId,
+        version: args.versionId,
+        key: args.key,
+      }),
+      "utf8",
+    )
+    .digest("hex");
+}
+
 interface ClaimRow {
   id: string;
   requestHash: string;
@@ -207,16 +239,23 @@ export async function executeAppInvocation(args: {
     throw new AppInvocationClaimShapeError("invalid app invocation request hash");
   }
 
+  // The claim identity is the caller key bound to its app and version (see
+  // deriveClaimNamespaceKey): cross-app and cross-version invocations can
+  // never share a claim even with byte-identical keys and payloads, while
+  // the same invocation retried replays. The raw caller key never reaches
+  // storage unqualified.
+  const claimKey = deriveClaimNamespaceKey({ appId: args.appId, versionId: args.versionId, key: args.idempotencyKey });
+
   // One transaction IS the atomic unit; it also serializes concurrent
   // duplicates of the same key via a tenant-scoped advisory try-lock so a
   // loser can neither block a pooled client nor double-run.
   return withOrgTransaction(orgId, async () => {
-    const gateName = `${args.operation}|${args.idempotencyKey}|${actorId}`;
+    const gateName = `${args.operation}|${claimKey}|${actorId}`;
     const gate = await db.execute<{ acquired: boolean }>(sql`
       select pg_try_advisory_xact_lock(hashtextextended(${gateName}, 0)) as acquired`);
     if (!gate.rows[0]?.acquired) throw new AppInvocationInFlightError(args.operation);
 
-    const prior = await readCommittedClaim(orgId, actorId, args.operation, args.idempotencyKey);
+    const prior = await readCommittedClaim(orgId, actorId, args.operation, claimKey);
     if (prior?.completedAt != null) {
       // A COMPLETED claim carries the stored response: retries after a lost
       // HTTP result replay it instead of re-executing the work. Uncompleted
@@ -246,7 +285,7 @@ export async function executeAppInvocation(args: {
     const inserted = await db.execute<{ id: string }>(sql`
       insert into application_idempotency_keys
         (org_id, actor_id, source, operation, idempotency_key, request_hash, expires_at)
-      values (${orgId}, ${actorId}, 'app', ${args.operation}, ${args.idempotencyKey},
+      values (${orgId}, ${actorId}, 'app', ${args.operation}, ${claimKey},
               ${args.requestHash}, now() + interval '30 days')
       on conflict (org_id, actor_id, source, operation, idempotency_key) do nothing
       returning id`);

@@ -11,6 +11,7 @@ import {
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import {
   deriveAppInvocationKey,
+  deriveClaimNamespaceKey,
   executeAppInvocation,
   AppInvocationRequestMismatchError,
   type AppInvocationAttempt,
@@ -376,6 +377,64 @@ test(
 );
 
 test(
+  "claims are namespaced by app and version: a shared key replays only its own invocation",
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture();
+    try {
+      const audits: AppInvocationAuditRow[] = [];
+      let executions = 0;
+      const invoke = (appId: string, versionId: string | null, key: string) =>
+        executeAppInvocation({
+          orgId: fx.orgId,
+          actorId: fx.actorId,
+          appId,
+          versionId,
+          endpoint: "shared",
+          operation: "apps.call_backend_shared",
+          idempotencyKey: key,
+          requestHash: deriveAppInvocationKey({ requestHashOf: "shared-input" }),
+          run: async (): Promise<AppInvocationAttempt> => {
+            executions += 1;
+            return { status: "ok", response: { execution: executions } };
+          },
+          audit: auditingAgainst(fx, audits),
+        });
+      const key = randomUUID();
+      const v1 = randomUUID();
+      const v2 = randomUUID();
+      const first = await invoke(fx.appId, v1, key);
+      assert.equal(first.replayed, false);
+      // Same app, same version, same key: the lost result replays.
+      const replay = await invoke(fx.appId, v1, key);
+      assert.equal(replay.replayed, true);
+      assert.deepEqual(replay.attempt.response, first.attempt.response);
+      assert.equal(executions, 1);
+      // Same key and input in a DIFFERENT app: an independent execution that
+      // never sees the first app's result — and audits its own run.
+      const otherAppId = randomUUID();
+      await withBypass(() =>
+        db.execute(sql`
+          insert into apps (id, org_id, key, name, icon_key, status, granted_permissions, created_by)
+          values (${otherAppId}, ${fx.orgId}, ${"inv-" + otherAppId.slice(0, 8)}, ${"Other Invoked App"}, 'box', 'installed', '[]'::jsonb, ${fx.actorId})`),
+      );
+      const otherApp = await invoke(otherAppId, v1, key);
+      assert.equal(otherApp.replayed, false);
+      assert.equal(executions, 2);
+      assert.notDeepEqual(otherApp.attempt.response, first.attempt.response);
+      // Same key and input after an UPGRADE: the new version runs fresh
+      // instead of replaying the old version's stored response.
+      const upgraded = await invoke(fx.appId, v2, key);
+      assert.equal(upgraded.replayed, false);
+      assert.equal(executions, 3);
+      assert.equal(await claimCount(fx.orgId), 3);
+    } finally {
+      await dropScratchOrg(fx.orgId);
+    }
+  },
+);
+
+test(
   "an expired claim never replays: the retry reaps it and executes fresh",
   { skip: !DB },
   async () => {
@@ -403,15 +462,17 @@ test(
       const key = randomUUID();
       const requestHash = deriveAppInvocationKey({ requestHashOf: "aging-input" });
       // Dead evidence the envelope itself would have written a month ago: a
-      // completed claim past its TTL. (Inserted directly because the storage
-      // guard forbids aging a live row by update — the point under test.)
+      // completed claim past its TTL, stored under the namespaced claim
+      // identity the envelope derives (caller key bound to app and version).
+      // (Inserted directly because the storage guard forbids aging a live
+      // row by update — the point under test.)
       await withBypass(() =>
         db.execute(sql`
           insert into application_idempotency_keys
             (org_id, actor_id, source, operation, idempotency_key, request_hash,
              response, completed_at, expires_at)
           values (${fx.orgId}, ${fx.actorId}, 'app', 'apps.call_backend_aging',
-                  ${key},
+                  ${deriveClaimNamespaceKey({ appId: fx.appId, versionId, key })},
                   ${requestHash}, '{"execution":0}'::jsonb, now() - interval '31 days',
                   now() - interval '1 day')`),
       );
