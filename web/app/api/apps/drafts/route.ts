@@ -13,10 +13,19 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
+
+/**
+ * An extension bundle rides this body as JSON (text files inline, binaries
+ * base64). validateExtensionBundle caps the stringified bundle at 10 MB, so
+ * the body cap is that cap plus envelope headroom — a legal max-size bundle
+ * must pass, while the house 1 MiB default would refuse every real package.
+ */
+export const MAX_DRAFT_BODY_BYTES = 11 * 1024 * 1024
+
 export async function POST(request: Request) {
   const gate = await guardFeaturePermission('apps.manage', 'apps')
   if (gate instanceof NextResponse) return gate
-  const parsed = await parseJsonBody(request, jsonObject)
+  const parsed = await parseJsonBody(request, jsonObject, { maxBodyBytes: MAX_DRAFT_BODY_BYTES })
   if (!parsed.ok) return parsed.response
   const body = parsed.data
   const context = applicationContextFromSession(
