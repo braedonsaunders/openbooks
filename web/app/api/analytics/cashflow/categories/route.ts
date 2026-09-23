@@ -39,7 +39,12 @@ function clean(raw: unknown): ForecastCategory | null {
   const c = raw as Record<string, unknown>;
   const name = typeof c.name === "string" ? c.name.trim().slice(0, 80) : "";
   const method = String(c.method ?? "");
-  const direction = c.direction === "inflow" ? "inflow" : "outflow";
+  // A misspelled direction must refuse, never silently flip the sign: any
+  // value other than exactly 'inflow'/'outflow' (including a missing one)
+  // inverts every forecast week it touches.
+  const direction =
+    c.direction === "inflow" ? "inflow" : c.direction === "outflow" ? "outflow" : null;
+  if (direction === null) return null;
   if (!name || !METHODS.has(method)) return null;
   const out: ForecastCategory = {
     id: typeof c.id === "string" && c.id ? c.id : randomUUID(),

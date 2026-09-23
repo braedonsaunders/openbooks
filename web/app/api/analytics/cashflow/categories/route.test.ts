@@ -256,6 +256,22 @@ test('replacement persists every valid row with exact money and complete audit e
   assert.match(audit, /"amount":"100000000\.0000"/)
 })
 
+test('an unknown direction refuses instead of flipping the sign', async () => {
+  for (const direction of ['outflwo', 'INCOME', '', null, undefined]) {
+    reset()
+    const candidate = { ...validCategory, id: 'category-direction' }
+    if (direction === undefined) delete (candidate as Record<string, unknown>).direction
+    else (candidate as Record<string, unknown>).direction = direction
+    const response = await put([candidate])
+    assert.equal(response.status, 400, `direction ${String(direction)} must refuse`)
+    assert.deepEqual(await response.json(), {
+      error: 'invalid category at index 0',
+      message: 'Each category must include a valid name, method, and method-specific configuration.',
+    })
+    assert.equal(state.transactions, 0, 'a misspelled direction never opens a transaction')
+  }
+})
+
 test('manual schedules keep an explicit anchor and refuse a malformed one', async () => {
   reset()
 
