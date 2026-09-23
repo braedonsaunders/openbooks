@@ -7,7 +7,7 @@ import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
-import { quoteExternalTax, saveTaxRateProviderConfig } from "./rate-providers.ts";
+import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -649,4 +649,236 @@ test("approved sales and purchases use the configured provider atomically and re
     if (provider) await closeTaxServer(provider);
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("provider quotes book per-jurisdiction amounts under mapped tax codes, never the local split", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const stateCode = randomUUID();
+    const cityCode = randomUUID();
+    const cityAccount = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values
+        (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
+        (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
+    const settings = { jurisdictionTaxCodes: { STATE: stateCode, CITY: cityCode } };
+    const quote: TaxQuoteResult = {
+      provider: "custom_http",
+      taxAmount: "8.2500",
+      components: [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ],
+      externalRef: "Q-1",
+      raw: null,
+    };
+    // The provider says state 7.00 + city 1.25: the booked evidence carries
+    // those amounts under the mapped codes even though no local profile does.
+    const components = await resolveProviderTaxComponents(org.orgId, "100.0000", quote, settings);
+    assert.equal(components.length, 2);
+    assert.deepEqual(
+      components.map((c) => ({ code: c.code, taxAmount: c.taxAmount, sequence: c.sequence, overridden: c.overridden })),
+      [
+        { code: "STATE", taxAmount: "7.0000", sequence: 1, overridden: true },
+        { code: "CITY", taxAmount: "1.2500", sequence: 2, overridden: true },
+      ],
+    );
+    assert.equal(components[0]?.taxCodeId, stateCode);
+    assert.equal(components[1]?.taxCodeId, cityCode);
+
+    // A jurisdiction the mapping does not name refuses before approval, with
+    // the remedy — it must never post under a wrong code or as a zero.
+    await assert.rejects(
+      resolveProviderTaxComponents(org.orgId, "100.0000", quote, { jurisdictionTaxCodes: { STATE: stateCode } }),
+      /CITY.*no mapped tax code/,
+    );
+    // Components that do not reconcile to the headline refuse as well.
+    await assert.rejects(
+      resolveProviderTaxComponents(org.orgId, "100.0000", { ...quote, taxAmount: "8.2600" }, settings),
+      /components sum to 8.2500/,
+    );
+    // An empty component list cannot be split across local codes.
+    await assert.rejects(
+      resolveProviderTaxComponents(org.orgId, "100.0000", { ...quote, components: [] }, settings),
+      /with no components/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider settings refuse jurisdiction mappings to unusable tax codes", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const activeCode = randomUUID();
+    const inactiveCode = randomUUID();
+    await db.execute(sql`
+      insert into tax_codes (id, org_id, code, name, is_active)
+      values (${activeCode}, ${org.orgId}, 'OK', 'Active', true),
+             (${inactiveCode}, ${org.orgId}, 'OLD', 'Inactive', false)`);
+    const base = { provider: "custom_http" as const, isEnabled: true, preferProvider: false };
+    await assert.rejects(
+      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: randomUUID() } } }, null),
+      /does not exist in this organization/,
+    );
+    await assert.rejects(
+      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: inactiveCode } } }, null),
+      /inactive tax code "OLD"/,
+    );
+    await assert.rejects(
+      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: { STATE: "not-a-code" } } }, null),
+      /not a tax code id/,
+    );
+    await assert.rejects(
+      saveTaxRateProviderConfig(org.orgId, { ...base, settings: { jurisdictionTaxCodes: "STATE" } }, null),
+      /must be an object/,
+    );
+    // A valid mapping saves and reads back normalized.
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { ...base, settings: { jurisdictionTaxCodes: { " STATE ": activeCode } } },
+      null,
+    );
+    const saved = await readTaxRateProviderConfig(org.orgId);
+    assert.deepEqual(saved?.settings.jurisdictionTaxCodes, { STATE: activeCode });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting books the provider's per-jurisdiction amounts and refuses a locally re-split line", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const stateCode = randomUUID();
+    const cityCode = randomUUID();
+    const cityAccount = randomUUID();
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate, reconcilable, required_dimensions, custom, subsidiary_include_children)
+      values (${cityAccount}, ${org.orgId}, '2265', 'City Tax Payable', 'liability_current_other', false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
+    await db.execute(sql`
+      insert into tax_codes
+        (id, org_id, code, name, recoverable_percent, collected_account_id, paid_account_id, is_active)
+      values
+        (${stateCode}, ${org.orgId}, 'STATE', 'State tax', '100', ${org.accounts.taxOutput}, ${org.accounts.taxInput}, true),
+        (${cityCode}, ${org.orgId}, 'CITY', 'City tax', '100', ${cityAccount}, ${org.accounts.taxInput}, true)`);
+    await saveTaxRateProviderConfig(
+      org.orgId,
+      { provider: "custom_http", isEnabled: true, preferProvider: true, settings: { quoteUrl: "https://tax.example/hook" } },
+      null,
+    );
+    const config = await readTaxRateProviderConfig(org.orgId);
+    const quoteComponents = [
+      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+    ];
+
+    async function seedSale(
+      number: string,
+      evidence: Array<{ taxCodeId: string; sequence: number; rate: string; amount: string; collected: string }>,
+    ): Promise<{ id: string; lineId: string }> {
+      const id = randomUUID();
+      const lineId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date,
+           currency, subtotal, tax_total, total)
+        values (${id}, ${org.orgId}, 'customer_invoice', 'draft', ${number}, ${org.customerId}, ${org.subsidiaryId}, ${org.date},
+                'CAD', '100', '8.2500', '108.2500')`);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
+           tax_amount, tax_code_id, quantity, unit_price)
+        values (${lineId}, ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '100', '100', '8.2500', ${stateCode}, '1', '100')`);
+      for (const component of evidence) {
+        await db.execute(sql`
+          insert into document_line_tax_components
+            (org_id, document_line_id, tax_code_id, sequence, rate_percent, taxable_amount,
+             tax_amount, recoverable_amount, nonrecoverable_amount, calculation_type,
+             price_includes_tax, compound_on_previous, rounding_scale,
+             collected_account_id, paid_account_id, overridden)
+          values (${org.orgId}, ${lineId}, ${component.taxCodeId}, ${component.sequence}, ${component.rate},
+                  '100', ${component.amount}, ${component.amount}, '0', 'standard',
+                  false, false, 2, ${component.collected}, ${org.accounts.taxInput}, true)`);
+      }
+      await db.execute(sql`
+        insert into tax_rate_quotes
+          (org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
+           taxable_amount, tax_amount, components, external_ref, raw_payload, document_line_id)
+        values (${org.orgId}, ${config!.id}, 'custom_http', ${org.date}, 'CAD', '{}'::jsonb, '{}'::jsonb,
+                '100.0000', '8.2500', ${JSON.stringify(quoteComponents)}::jsonb, 'Q-1', null, ${lineId})`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+      return { id, lineId };
+    }
+
+    const deps = { control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+      taxCollected: org.accounts.taxOutput,
+      taxPaid: org.accounts.taxInput,
+    } };
+    // The old shape — one local component carrying the whole headline —
+    // shares the total but misattributes every jurisdiction: posting refuses
+    // with the recalculation remedy instead of booking it.
+    const legacy = await seedSale("PROV-LEGACY", [
+      { taxCodeId: stateCode, sequence: 1, rate: "8.25", amount: "8.2500", collected: org.accounts.taxOutput },
+    ]);
+    await assert.rejects(
+      postDocument(legacy.id, deps, { deferEffects: true, suppressAutomation: true }),
+      /booked 1 tax component\(s\) but the provider quote has 2.*recalculate the draft/,
+    );
+    assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${legacy.id}`)).rows[0]?.count, "0");
+
+    // The mapped shape posts state 7.00 and city 1.25 to their own accounts.
+    const mapped = await seedSale("PROV-MAPPED", [
+      { taxCodeId: stateCode, sequence: 1, rate: "7", amount: "7.0000", collected: org.accounts.taxOutput },
+      { taxCodeId: cityCode, sequence: 2, rate: "1.25", amount: "1.2500", collected: cityAccount },
+    ]);
+    const entryId = await postDocument(mapped.id, deps, { deferEffects: true, suppressAutomation: true });
+    const taxLines = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text as amount from journal_lines
+       where entry_id = ${entryId} and account_id in (${org.accounts.taxOutput}, ${cityAccount})
+       order by account_id`)).rows;
+    assert.equal(taxLines.length, 2);
+    const byAccount = new Map(taxLines.map((row) => [row.account_id, row.amount]));
+    assert.equal(byAccount.get(org.accounts.taxOutput), "-7.0000");
+    assert.equal(byAccount.get(cityAccount), "-1.2500");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider evidence comparison is order-sensitive and amount-exact", () => {
+  assert.equal(
+    providerEvidenceMismatch(
+      [{ sequence: 2, taxAmount: "1.2500" }, { sequence: 1, taxAmount: "7.0000" }],
+      [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ],
+    ),
+    null,
+  );
+  assert.match(
+    providerEvidenceMismatch([{ sequence: 1, taxAmount: "8.2500" }], [
+      { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+      { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+    ]) ?? "",
+    /booked 1 tax component\(s\) but the provider quote has 2/,
+  );
+  assert.match(
+    providerEvidenceMismatch(
+      [{ sequence: 1, taxAmount: "7.0000" }, { sequence: 2, taxAmount: "1.7500" }],
+      [
+        { jurisdiction: "STATE", ratePercent: "7.0000", taxAmount: "7.0000" },
+        { jurisdiction: "CITY", ratePercent: "1.2500", taxAmount: "1.2500" },
+      ],
+    ) ?? "",
+    /component 2 books 1.7500 but the provider quote says 1.2500/,
+  );
 });
