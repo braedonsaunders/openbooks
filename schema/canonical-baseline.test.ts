@@ -2580,12 +2580,18 @@ test("0299 refuses negative counted quantities on stock-count lines", () => {
   assert.match(migration, /SET statement_timeout = 0;/);
   assert.match(migration, /SET idle_in_transaction_session_timeout = 0;/);
   assert.doesNotMatch(migration, /lock_timeout/i);
-  // Preflight refuses existing negatives by name with the re-record remedy;
-  // nothing is auto-zeroed.
+  // The classify block refuses open negatives by name with the re-record
+  // remedy and marks posted/cancelled negatives as pre-guard legacy instead
+  // of demanding an edit the lifecycle forbids; nothing is auto-zeroed.
   assert.match(migration, /WHERE counted_quantity IS NOT NULL AND counted_quantity < 0/);
   assert.match(migration, /re-record the true physical count/);
+  assert.match(migration, /is_pre_guard_legacy/);
   assert.match(migration, /ADD CONSTRAINT stock_count_lines_counted_nonnegative/);
-  assert.match(migration, /CHECK \(counted_quantity IS NULL OR counted_quantity >= 0\)/);
+  assert.match(migration, /CHECK \(counted_quantity IS NULL OR counted_quantity >= 0 OR is_pre_guard_legacy\)/);
+  // Staged, not validated in one lock: NOT VALID first, then a guarded
+  // VALIDATE that treats an already-validated guard as done.
+  assert.match(migration, /NOT VALID/);
+  assert.match(migration, /VALIDATE CONSTRAINT stock_count_lines_counted_nonnegative/);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);
