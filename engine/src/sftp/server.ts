@@ -1,6 +1,6 @@
 import ssh2 from "ssh2";
 import type { Connection } from "ssh2";
-import { backendFor, cleanPath, type SftpBackend } from "./backend.ts";
+import { backendFor, cleanPath, isSftpTempName, type SftpBackend } from "./backend.ts";
 
 const { Server, utils } = ssh2;
 const { STATUS_CODE, OPEN_MODE } = utils.sftp;
@@ -116,6 +116,10 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
 
           const doStat = async (reqid: number, p: string) => {
             try {
+              // In-flight publishes are invisible to bank clients: report the
+              // temp pattern as absent, exactly like a name that was never
+              // written, so no client can stat, size, or time a partial file.
+              if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               const st = await backend.stat(p);
               if (!st) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
               sftp.attrs(reqid, attrsFor(st.isDir, st.size, st.mtimeMs));
@@ -131,7 +135,11 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
 
           sftp.on("OPENDIR", async (reqid, p) => {
             try {
-              const entries = await backend.list(p);
+              // Temp siblings of in-flight publishes never appear in a bank
+              // client's listing: without this, a client enumerating the
+              // outbound folder mid-publish could open the partial bytes by
+              // name (the OPEN guard below is the second half).
+              const entries = (await backend.list(p)).filter((e) => !isSftpTempName(e.name));
               const h = newHandle();
               dirs.set(h.toString(), { entries, sent: false });
               sftp.handle(reqid, h);
@@ -146,6 +154,9 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           });
 
           sftp.on("OPEN", async (reqid, filename, flags) => {
+            // Neither reading a partial publish nor squatting its temp name:
+            // both directions report the temp pattern as absent.
+            if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
             const writing = !!(flags & (OPEN_MODE.WRITE | OPEN_MODE.CREAT | OPEN_MODE.TRUNC));
             const h = newHandle();
             try {
@@ -214,14 +225,23 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             sftp.status(reqid, STATUS_CODE.OK);
           });
 
+          // Deleting or moving an in-flight publish's temp sibling would
+          // break the atomic rename the writer is about to perform, so temp
+          // names refuse here exactly as they do for open and stat.
           const wrap = (op: (p: string) => Promise<void>) => async (reqid: number, p: string) => {
-            try { await op(p); sftp.status(reqid, STATUS_CODE.OK); } catch (e) { fail(reqid, e); }
+            try {
+              if (isSftpTempName(p)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              await op(p); sftp.status(reqid, STATUS_CODE.OK);
+            } catch (e) { fail(reqid, e); }
           };
           sftp.on("REMOVE", wrap((p) => backend.remove(p)));
           sftp.on("MKDIR", wrap((p) => backend.mkdir(p)));
           sftp.on("RMDIR", wrap((p) => backend.rmdir(p)));
           sftp.on("RENAME", async (reqid, from, to) => {
-            try { await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK); } catch (e) { fail(reqid, e); }
+            try {
+              if (isSftpTempName(from) || isSftpTempName(to)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+              await backend.rename(from, to); sftp.status(reqid, STATUS_CODE.OK);
+            } catch (e) { fail(reqid, e); }
           });
           sftp.on("SETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OK));
           sftp.on("FSETSTAT", (reqid) => sftp.status(reqid, STATUS_CODE.OK));
