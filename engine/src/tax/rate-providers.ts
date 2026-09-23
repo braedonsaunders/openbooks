@@ -146,6 +146,132 @@ export function readJurisdictionMapping(settings: Record<string, unknown>): Reco
 
 const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function uuidOrThrow(value: string, what: string): string {
+  if (!UUID_SHAPE.test(value)) {
+    throw new TaxRateProviderError(`${what} is not a valid id — refusing to quote provider tax`);
+  }
+  return value;
+}
+
+/** The legal entity on whose behalf tax is quoted, with its tax address. */
+export interface EntityTaxAddress {
+  address: Address;
+  /** Subsidiary (legal/regular) name or org name, for refusal messages. */
+  entityName: string;
+}
+
+/**
+ * Resolve the selling/receiving legal entity's tax address: the document
+ * subsidiary's country, else the org's country. Subsidiaries and orgs carry
+ * country-level tax identity (no street addresses live on either table), so
+ * the snapshot is country-level unless the document overrides it via
+ * custom.taxProviderAddresses. A subsidiary id that resolves nowhere refuses
+ * instead of silently falling back to the org — the wrong entity's country
+ * would quote the wrong jurisdiction.
+ */
+export async function resolveEntityTaxAddress(
+  orgId: string,
+  subsidiaryId: string | null | undefined,
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<EntityTaxAddress> {
+  if (subsidiaryId) {
+    uuidOrThrow(subsidiaryId, "subsidiary");
+    const row = (
+      await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+        select name, legal_name as "legalName", country from subsidiaries
+         where org_id = ${orgId} and id = ${subsidiaryId}
+      `)
+    ).rows[0];
+    if (!row) {
+      throw new TaxRateProviderError(
+        "the receiving entity has no tax address — set it in Setup → Subsidiaries " +
+          `(subsidiary ${subsidiaryId} was not found in this organization)`,
+      );
+    }
+    if (!row.country?.trim()) {
+      throw new TaxRateProviderError(
+        `the receiving entity "${row.legalName ?? row.name}" has no tax address — set it in Setup → Subsidiaries`,
+      );
+    }
+    return { address: { country: row.country }, entityName: row.legalName ?? row.name };
+  }
+  const org = (
+    await runner.execute<{ name: string; legalName: string | null; country: string | null }>(sql`
+      select name, legal_name as "legalName", country from orgs where id = ${orgId}
+    `)
+  ).rows[0];
+  if (!org || !org.country?.trim()) {
+    throw new TaxRateProviderError("the organization has no tax address — set its country before quoting provider tax");
+  }
+  return { address: { country: org.country }, entityName: org.legalName ?? org.name };
+}
+
+/**
+ * Resolve the counterparty's tax address from its default party address.
+ * A missing party, a missing address, or an address without a country
+ * refuses by name before any provider call — never a fabricated country.
+ */
+export async function resolveCounterpartyTaxAddress(
+  orgId: string,
+  partyId: string | null | undefined,
+  counterpartyLabel: "customer" | "vendor",
+  runner: Pick<typeof db, "execute"> = db,
+): Promise<Address> {
+  if (!partyId) {
+    throw new TaxRateProviderError(
+      `the document has no ${counterpartyLabel} — select one before quoting provider tax`,
+    );
+  }
+  uuidOrThrow(partyId, "party");
+  const row = (
+    await runner.execute<{
+      line1: string | null;
+      city: string | null;
+      region: string | null;
+      postalCode: string | null;
+      country: string | null;
+      partyName: string;
+    }>(sql`
+      select a.line1, a.city, a.region, a.postal_code as "postalCode", a.country,
+             p.display_name as "partyName"
+        from addresses a join parties p on p.id = a.party_id and p.org_id = ${orgId}
+       where a.org_id = ${orgId} and a.party_id = ${partyId}
+       order by a.is_default_shipping desc, a.is_default_billing desc, a.id asc
+       limit 1
+    `)
+  ).rows[0];
+  if (!row) {
+    const party = (
+      await runner.execute<{ displayName: string }>(sql`
+        select display_name as "displayName" from parties where org_id = ${orgId} and id = ${partyId}
+      `)
+    ).rows[0];
+    throw new TaxRateProviderError(
+      `the ${counterpartyLabel} "${party?.displayName ?? partyId}" has no tax address — add an address on the party record before quoting provider tax`,
+    );
+  }
+  if (!row.country?.trim()) {
+    throw new TaxRateProviderError(
+      `the ${counterpartyLabel} "${row.partyName}" has a tax address without a country — set the country on the party address before quoting provider tax`,
+    );
+  }
+  return { line1: row.line1, city: row.city, region: row.region, postalCode: row.postalCode, country: row.country };
+}
+
+/**
+ * A country the adapter must send: blank and missing both refuse, so no
+ * adapter can fabricate a jurisdiction from an empty address.
+ */
+function requiredCountry(value: string | null | undefined, provider: string, side: string): string {
+  const country = value?.trim();
+  if (!country) {
+    throw new TaxRateProviderError(
+      `${provider} quote needs ${side} — set the address on the request before quoting`,
+    );
+  }
+  return country;
+}
+
 /**
  * Validate the jurisdiction mapping against the org's tax codes: every target
  * must exist, belong to this org, and be active. Returns the normalized
@@ -738,6 +864,9 @@ export async function quoteViaAvalara(
   config: AvalaraQuoteConfig,
   options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
+  // The destination country is required: an empty ship-to used to fall back
+  // to 'US', quoting every foreign document under US rules (or a false zero).
+  const destinationCountry = requiredCountry(req.shipTo.country, "Avalara", "a destination country");
   const body = {
     type: "SalesOrder",
     companyCode: String(config.companyCode ?? "DEFAULT"),
@@ -750,7 +879,7 @@ export async function quoteViaAvalara(
         city: req.shipTo.city ?? undefined,
         region: req.shipTo.region ?? undefined,
         postalCode: req.shipTo.postalCode ?? undefined,
-        country: req.shipTo.country ?? "US",
+        country: destinationCountry,
       },
     },
     lines: [
@@ -788,7 +917,7 @@ export async function quoteViaAvalara(
       }))
     : [
         {
-          jurisdiction: req.shipTo.region ?? "US",
+          jurisdiction: req.shipTo.region ?? destinationCountry,
           ratePercent: "0.0000",
           taxAmount: totalTax,
         },
@@ -829,11 +958,21 @@ export async function quoteViaTaxJar(
   config: { apiKey: string; baseUrl?: string },
   options: TaxProviderOutboundOptions = {},
 ): Promise<TaxQuoteResult> {
+  // Origin and destination countries are required: an empty address used to
+  // fall back to 'US' on both ends, quoting every foreign document under US
+  // rules (or a false zero). The origin keeps its ship-from-first fallback —
+  // only the fabricated country is gone.
+  const originCountry = requiredCountry(
+    req.shipFrom.country?.trim() ? req.shipFrom.country : req.shipTo.country,
+    "TaxJar",
+    "an origin country",
+  );
+  const destinationCountry = requiredCountry(req.shipTo.country, "TaxJar", "a destination country");
   const body = {
-    from_country: req.shipFrom.country ?? req.shipTo.country ?? "US",
+    from_country: originCountry,
     from_zip: req.shipFrom.postalCode ?? req.shipTo.postalCode,
     from_state: req.shipFrom.region ?? req.shipTo.region,
-    to_country: req.shipTo.country ?? "US",
+    to_country: destinationCountry,
     to_zip: req.shipTo.postalCode,
     to_state: req.shipTo.region,
     to_city: req.shipTo.city,
@@ -873,7 +1012,7 @@ export async function quoteViaTaxJar(
   }
   if (!components.length) {
     components.push({
-      jurisdiction: req.shipTo.region ?? "US",
+      jurisdiction: req.shipTo.region ?? destinationCountry,
       ratePercent: blendedRate,
       taxAmount: amountToCollect,
     });

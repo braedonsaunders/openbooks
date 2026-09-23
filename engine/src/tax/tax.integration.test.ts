@@ -7,7 +7,7 @@ import { db } from "../platform/db.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { computeLineTaxes, type TaxComponentConfig } from "./tax.ts";
 import { computeTaxReturn } from "../tax-returns/return.ts";
-import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
+import { providerEvidenceMismatch, quoteExternalTax, readTaxRateProviderConfig, resolveCounterpartyTaxAddress, resolveEntityTaxAddress, resolveProviderTaxComponents, saveTaxRateProviderConfig, type TaxQuoteResult } from "./rate-providers.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -1198,6 +1198,45 @@ test("legacy evidence without a jurisdiction binding refuses instead of booking"
       /provider jurisdiction "CA" has no mapped tax code.*re-quote the draft/,
     );
     assert.equal((await db.execute(sql`select count(*) from journal_entries where source_document_id = ${documentId}`)).rows[0]?.count, "0");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("provider tax locations resolve from subsidiary, org, and party records — or refuse by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    // The fixture subsidiary (Main Co, CA) and org (CA) resolve country-level.
+    assert.deepEqual((await resolveEntityTaxAddress(org.orgId, org.subsidiaryId)).address, { country: "CA" });
+    assert.deepEqual((await resolveEntityTaxAddress(org.orgId, null)).address, { country: "CA" });
+    // A subsidiary id that resolves nowhere refuses instead of silently
+    // falling back to the org's country.
+    await assert.rejects(
+      resolveEntityTaxAddress(org.orgId, randomUUID()),
+      /receiving entity.*no tax address.*Setup → Subsidiaries/,
+    );
+    // No party, no address, and country-less address all refuse by name.
+    await assert.rejects(
+      resolveCounterpartyTaxAddress(org.orgId, null, "vendor"),
+      /document has no vendor/,
+    );
+    await assert.rejects(
+      resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"),
+      /vendor "Acme Vendor" has no tax address/,
+    );
+    await db.execute(sql`
+      insert into addresses (id, org_id, party_id, line1, city, region, postal_code, country, is_default_shipping, is_default_billing)
+      values (${randomUUID()}, ${org.orgId}, ${org.vendorId}, '1 Yonge St', 'Toronto', 'ON', 'M5E 1E5', 'CA', true, true)`);
+    assert.deepEqual(await resolveCounterpartyTaxAddress(org.orgId, org.vendorId, "vendor"), {
+      line1: "1 Yonge St", city: "Toronto", region: "ON", postalCode: "M5E 1E5", country: "CA",
+    });
+    await db.execute(sql`
+      insert into addresses (id, org_id, party_id, line1, city, is_default_shipping, is_default_billing)
+      values (${randomUUID()}, ${org.orgId}, ${org.customerId}, '5 King St', 'Toronto', true, true)`);
+    await assert.rejects(
+      resolveCounterpartyTaxAddress(org.orgId, org.customerId, "customer"),
+      /customer "Acme Customer" has a tax address without a country/,
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

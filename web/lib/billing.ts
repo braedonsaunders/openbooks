@@ -1046,7 +1046,17 @@ export async function generateInvoiceFromBillingRequest(
       totals = await computeBillTotalsWithProvider(
         presentedLines.map((line) => ({ accountId: line.accountId!, amount: line.amount, taxCodeId: line.taxCodeId })),
         await taxProfileMap(orgId, invoiceDate),
-        { orgId, kind: 'customer_invoice', currency, documentDate: invoiceDate, partyId: project.customer_id },
+        {
+          orgId,
+          kind: 'customer_invoice',
+          currency,
+          documentDate: invoiceDate,
+          partyId: project.customer_id,
+          // The selling entity is the project's subsidiary, not the org
+          // fallback: without it a foreign subsidiary's invoice would quote
+          // from the org's country.
+          subsidiaryId: project.subsidiary_id ?? undefined,
+        },
       )
     } catch (error) {
       throw new BillingError(error instanceof Error ? error.message : String(error))

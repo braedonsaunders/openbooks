@@ -28,7 +28,10 @@ interface TaxCodeProfileRow extends Record<string, unknown> {
 import {
   quoteExternalTax,
   readTaxRateProviderConfig,
+  resolveCounterpartyTaxAddress,
+  resolveEntityTaxAddress,
   resolveProviderTaxComponents,
+  type Address,
   type TaxQuoteRequest,
   type TaxQuoteResult,
 } from '@openbooks/engine/src/tax/rate-providers.ts'
@@ -157,6 +160,22 @@ export interface ProviderBillTotalsOptions {
   currency: string
   documentDate: string
   partyId?: string | null
+  subsidiaryId?: string | null
+  /**
+   * Document-level tax location override (documents.custom.taxProviderAddresses):
+   * a side set here wins over the resolved snapshot for that side only, so an
+   * explicit document location is quoted exactly as posting will replay it.
+   */
+  taxProviderAddresses?: {
+    shipFrom?: Record<string, string | null>
+    shipTo?: Record<string, string | null>
+  } | null
+  /**
+   * Test-only local-stub switch, threaded to the provider fetch: lets tests
+   * point the provider at a loopback stub. Never set by production callers
+   * (document writers, the settings route).
+   */
+  allowPrivateEndpoints?: boolean
 }
 
 const PROVIDER_DOCUMENT_KINDS = new Set([
@@ -166,16 +185,55 @@ const PROVIDER_DOCUMENT_KINDS = new Set([
   'vendor_credit',
 ])
 
-async function partyTaxAddress(orgId: string, partyId: string | null | undefined): Promise<Record<string, string | null>> {
-  if (!partyId) return {}
-  const result = await db.execute<Record<string, string | null>>(sql`
-    select line1, city, region, postal_code as "postalCode", country
-      from addresses
-     where org_id = ${orgId} and party_id = ${partyId}
-     order by is_default_shipping desc, is_default_billing desc, id asc
-     limit 1
-  `)
-  return result.rows[0] ?? {}
+const ADDRESS_KEYS = ['line1', 'city', 'region', 'postalCode', 'country'] as const
+
+/** Shape-check a document-level address override; anything else refuses. */
+function overrideAddress(
+  value: unknown,
+  side: string,
+): Record<string, string | null> | null {
+  if (value == null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`document tax location override ${side} must be an address object`)
+  }
+  const cleaned: Record<string, string | null> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    if (!(ADDRESS_KEYS as readonly string[]).includes(key)) {
+      throw new Error(`document tax location override ${side} has an unknown field "${key}"`)
+    }
+    if (entry != null && typeof entry !== 'string') {
+      throw new Error(`document tax location override ${side} field "${key}" must be text`)
+    }
+    cleaned[key] = entry ?? null
+  }
+  return Object.keys(cleaned).length ? cleaned : null
+}
+
+/**
+ * Build BOTH sides of a provider request from real snapshots, by document
+ * kind. Customer documents ship from the selling legal entity (the
+ * document subsidiary, else the org) to the customer; vendor purchases ship
+ * from the vendor to the receiving legal entity. Either side refuses by name
+ * before any provider call when it cannot be resolved — an empty side used
+ * to reach the adapters, which defaulted it to the US.
+ */
+async function providerRequestAddresses(
+  options: ProviderBillTotalsOptions,
+): Promise<{ shipFrom: Address; shipTo: Address }> {
+  const isPurchase = options.kind === 'vendor_bill' || options.kind === 'vendor_credit'
+  const counterparty = await resolveCounterpartyTaxAddress(
+    options.orgId,
+    options.partyId,
+    isPurchase ? 'vendor' : 'customer',
+  )
+  const entity = await resolveEntityTaxAddress(options.orgId, options.subsidiaryId)
+  let shipFrom: Address = isPurchase ? counterparty : entity.address
+  let shipTo: Address = isPurchase ? entity.address : counterparty
+  const customFrom = overrideAddress(options.taxProviderAddresses?.shipFrom, 'shipFrom')
+  const customTo = overrideAddress(options.taxProviderAddresses?.shipTo, 'shipTo')
+  if (customFrom) shipFrom = customFrom
+  if (customTo) shipTo = customTo
+  return { shipFrom, shipTo }
 }
 
 /**
@@ -193,7 +251,7 @@ export async function computeBillTotalsWithProvider(
   const provider = await readTaxRateProviderConfig(options.orgId)
   if (!provider?.isEnabled || !provider.preferProvider || provider.provider === 'manual') return local
 
-  const partyAddress = await partyTaxAddress(options.orgId, options.partyId)
+  const { shipFrom, shipTo } = await providerRequestAddresses(options)
   const resolved = [] as typeof local.lines
   for (const line of local.lines) {
     if (!line.taxCodeId && !line.taxGroupId) {
@@ -209,14 +267,18 @@ export async function computeBillTotalsWithProvider(
     const request: TaxQuoteRequest = {
       taxableAmount: line.taxInputAmount,
       currency: options.currency,
-      shipFrom: options.kind === 'vendor_bill' || options.kind === 'vendor_credit' ? partyAddress : {},
-      shipTo: options.kind === 'vendor_bill' || options.kind === 'vendor_credit' ? {} : partyAddress,
+      shipFrom,
+      shipTo,
       itemCode: line.custom?.taxItemCode == null ? null : String(line.custom.taxItemCode),
       quotedOn: options.documentDate,
     }
     let quote: TaxQuoteResult & { quoteId: string | null }
     try {
-      quote = await quoteExternalTax(options.orgId, request, null, { persist: false, config: provider })
+      quote = await quoteExternalTax(options.orgId, request, null, {
+        persist: false,
+        config: provider,
+        ...(options.allowPrivateEndpoints ? { allowPrivateEndpoints: true } : {}),
+      })
     } catch (error) {
       throw new Error(
         `configured tax provider ${provider.provider} failed for line: ${error instanceof Error ? error.message : String(error)}`,

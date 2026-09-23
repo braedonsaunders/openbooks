@@ -174,6 +174,41 @@ test("provider redirect regressions: every credential-bearing tax request fails 
   }
 });
 
+test("Avalara and TaxJar refuse an empty destination instead of defaulting it to the US", async () => {
+  let calls = 0;
+  const server = createServer((_req, res) => {
+    calls += 1;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end("{}");
+  });
+  const origin = await listen(server);
+  try {
+    await assert.rejects(
+      quoteViaAvalara({ ...quoteRequest, shipTo: {} }, {
+        accountId: AVALARA_ACCOUNT_ID,
+        licenseKey: AVALARA_LICENSE_KEY,
+        baseUrl: origin,
+        quotedOn: quoteRequest.quotedOn!,
+      }),
+      /Avalara quote needs a destination country/,
+    );
+    await assert.rejects(
+      quoteViaTaxJar({ ...quoteRequest, shipFrom: {}, shipTo: {} }, { apiKey: TAXJAR_API_KEY, baseUrl: origin }),
+      /TaxJar quote needs an origin country/,
+    );
+    await assert.rejects(
+      quoteViaTaxJar(
+        { ...quoteRequest, shipFrom: { country: "CA" }, shipTo: {} },
+        { apiKey: TAXJAR_API_KEY, baseUrl: origin },
+      ),
+      /TaxJar quote needs a destination country/,
+    );
+    assert.equal(calls, 0, "no provider call may go out with a fabricated destination");
+  } finally {
+    await close(server);
+  }
+});
+
 test("normal provider responses pass with credentials confined to the configured origin", async () => {
   interface SeenCall {
     pathname: string;
