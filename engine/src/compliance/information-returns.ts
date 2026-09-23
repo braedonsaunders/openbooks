@@ -321,6 +321,44 @@ export type ExceptionKind =
   | "backup_withholding_not_withheld"
   | "unmapped_account";
 
+/**
+ * Whether an exception kind blocks finalization while unresolved.
+ *
+ * Blocking means the filing is incomplete or certifies an unmet duty:
+ * a recipient with no TIN cannot be transmitted, a reportable vendor with
+ * no form is in NO filing, and a backup-withholding flag with nothing
+ * withheld certifies a duty nobody performed. Informational means the money
+ * IS in this filing and the risk is review quality, not completeness — an
+ * unflagged vendor may be correctly unflagged (there is no "confirmed not
+ * reportable" vehicle, so blocking would strand the filing), a flagged
+ * corporation is a judgment call about over-inclusion, and an unmapped
+ * account still landed in the default box. The switch is exhaustive: a new
+ * kind fails typecheck here until it is classified.
+ */
+export function informationReturnExceptionSeverity(
+  kind: ExceptionKind,
+): "blocking" | "informational" {
+  switch (kind) {
+    case "missing_tin":
+    case "missing_form_assignment":
+    case "backup_withholding_not_withheld":
+      return "blocking";
+    case "unflagged_over_threshold":
+    case "corporation_flagged":
+    case "unmapped_account":
+      return "informational";
+    default: {
+      const exhaustive: never = kind;
+      throw new InformationReturnError(`unknown information return exception kind "${exhaustive}"`);
+    }
+  }
+}
+
+/** The automatic exclusion reason recompute stamps on below-threshold rows. */
+export function automaticBelowThresholdReason(threshold: string, currency: string): string {
+  return `below the ${threshold} ${currency} reporting threshold`;
+}
+
 export interface ComputationException {
   kind: ExceptionKind;
   partyId: string | null;
@@ -1231,7 +1269,7 @@ export async function recomputeFiling(args: {
         .reduce((total, [, amount]) => add(total, amount), "0");
       // Below the threshold is an exclusion, not an omission: the row stays so
       // a reviewer can see the vendor was considered and why it is not filed.
-      const belowThresholdReason = `below the ${filing.threshold} ${filing.currency} reporting threshold`;
+      const belowThresholdReason = automaticBelowThresholdReason(filing.threshold, filing.currency);
       await runner.execute(sql`
         insert into information_return_recipients
           (org_id, filing_id, party_id, recipient_snapshot, tin_last4, tin_type,
@@ -1329,6 +1367,68 @@ async function lockFilingRow(
 }
 
 /**
+ * Refuse finalization while any blocking exception is unresolved.
+ *
+ * The fresh recompute lists every exception; a recipient a person deliberately
+ * excluded (status excluded with a non-automatic reason — actor, reason and
+ * audit row via updateFilingRecipient) counts as resolved, because the
+ * exclusion IS the documented decision. Anything else blocking — a
+ * material reportable vendor with no form assignment, an unmet backup-
+ * withholding duty — fails closed with the remedy, so a filing with one
+ * valid recipient and one unfiled reportable vendor can never freeze
+ * incomplete. A below-threshold unassigned vendor stays informational: it
+ * would be excluded even if assigned, so blocking on it would be toil with
+ * no filing impact. Zero writes on refusal.
+ */
+export async function assertNoBlockingFilingExceptions(args: {
+  orgId: string;
+  filing: FilingRow;
+  computation: FilingComputation;
+  runner: FilingRunner;
+}): Promise<void> {
+  const autoReason = automaticBelowThresholdReason(args.filing.threshold, args.filing.currency);
+  const documented = new Set(
+    (
+      await args.runner.execute<{ party_id: string }>(sql`
+        select party_id from information_return_recipients
+         where org_id = ${args.orgId} and filing_id = ${args.filing.id}
+           and status = 'excluded'
+           and exclusion_reason is not null
+           and exclusion_reason <> ${autoReason}`)
+    ).rows.map((row) => row.party_id),
+  );
+  for (const exception of args.computation.exceptions) {
+    if (informationReturnExceptionSeverity(exception.kind) !== "blocking") continue;
+    if (exception.partyId && documented.has(exception.partyId)) continue;
+    if (
+      exception.kind === "missing_form_assignment" &&
+      cmp(exception.amount ?? "0", args.filing.threshold) < 0
+    ) {
+      continue;
+    }
+    const name = exception.partyName;
+    if (exception.kind === "missing_tin") {
+      throw new InformationReturnError(
+        `vendor "${name}" has no taxpayer identification number on file — collect a W-9 (or exclude the recipient with a reason) before finalizing`,
+      );
+    }
+    if (exception.kind === "missing_form_assignment") {
+      throw new InformationReturnError(
+        `vendor "${name}" is flagged as reportable but has no information return assigned — assign one on the vendor record (or clear the reportable flag), then recompute before finalizing`,
+      );
+    }
+    if (exception.kind === "backup_withholding_not_withheld") {
+      throw new InformationReturnError(
+        `vendor "${name}" is flagged for backup withholding but no tax was withheld — record the withholding, clear the flag on the vendor record, or exclude the recipient with a reason before finalizing`,
+      );
+    }
+    throw new InformationReturnError(
+      `vendor "${name}" has an unresolved ${exception.kind} exception — resolve it or exclude the recipient with a reason before finalizing`,
+    );
+  }
+}
+
+/**
  * Freeze the filing. The payer identification is snapshotted here because the
  * transmitted forms must remain reproducible after the org record changes, and
  * a filing with unresolved blocking exceptions (a recipient with no TIN) is
@@ -1369,6 +1469,12 @@ export async function finalizeFiling(args: {
       filing,
       computation,
       sourceFingerprint,
+      runner,
+    });
+    await assertNoBlockingFilingExceptions({
+      orgId: args.orgId,
+      filing,
+      computation,
       runner,
     });
 

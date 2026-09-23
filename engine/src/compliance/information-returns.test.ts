@@ -14,9 +14,11 @@ import {
   INFORMATION_RETURN_FORMS,
   InformationReturnError,
   recipientExceptions,
+  informationReturnExceptionSeverity,
   resolveInformationReturnCurrency,
   statutoryFilingThreshold,
   summarizeRecipient,
+  type ExceptionKind,
   type PaymentTrace,
   type RecipientProfile,
 } from "./information-returns.ts";
@@ -693,4 +695,24 @@ test("an org with no active filer falls back to the org base, never a guess", as
     resolveInformationReturnCurrency({ orgId: "org-1", runner: stubRunner([[], []]) }),
     /no base currency/,
   );
+});
+
+// --- finalization severity -------------------------------------------------
+
+test("every exception kind carries a finalization severity", () => {
+  // Blocking = the filing is incomplete or certifies an unmet duty, so the
+  // freeze must refuse. Informational = the money is in this filing; the
+  // risk is review quality, and blocking would strand filings with no
+  // resolution vehicle (notably a correctly-unflagged vendor).
+  const cases: [ExceptionKind, "blocking" | "informational"][] = [
+    ["missing_tin", "blocking"],
+    ["missing_form_assignment", "blocking"],
+    ["backup_withholding_not_withheld", "blocking"],
+    ["unflagged_over_threshold", "informational"],
+    ["corporation_flagged", "informational"],
+    ["unmapped_account", "informational"],
+  ];
+  for (const [kind, expected] of cases) {
+    assert.equal(informationReturnExceptionSeverity(kind), expected, `${kind} severity`);
+  }
 });
