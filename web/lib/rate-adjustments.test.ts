@@ -36,6 +36,13 @@ test('a material target reaches cost lines', () => {
   assert.equal(charges[0]!.basis, '400.0000')
 })
 
+test('a labor target measures labor only', () => {
+  const a = adjustment({ targets: [{ targetType: 'labor', targetValueId: null, targetValueText: 'labor' }] })
+  const charges = priceAdjustments([labor('1000.00'), { amount: '400.00', isLabor: false }], [a])
+  assert.equal(charges.length, 1)
+  assert.equal(charges[0]!.basis, '1000.0000')
+})
+
 test('included and informational adjustments add no line', () => {
   assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ presentation: 'included' })]).length, 0)
   assert.equal(priceAdjustments([labor('1000.00')], [adjustment({ presentation: 'informational' })]).length, 0)

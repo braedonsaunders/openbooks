@@ -101,6 +101,8 @@
     "other": "Sonstige"
   },
   "targetTypes": {
+    "labor": "Arbeit (alle)",
+    "material": "Material (alle)",
     "item": "Artikel",
     "item_kind": "Artikelart",
     "item_category": "Artikelkategorie",

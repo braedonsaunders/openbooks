@@ -1255,7 +1255,12 @@ function TargetEditor({
           onChange({
             targetType: e.target.value,
             targetValueId: null,
-            targetValueText: null,
+            // All-labor / all-materials selectors carry their echo text so
+            // the row stays displayable and saveable; the save re-derives it.
+            targetValueText:
+              e.target.value === "labor" || e.target.value === "material"
+                ? e.target.value
+                : null,
             targetLabel: null,
           })
         }
@@ -1266,7 +1271,11 @@ function TargetEditor({
           </option>
         ))}
       </Select>
-      {isText && target.targetType === "other" ? (
+      {target.targetType === "labor" || target.targetType === "material" ? (
+        <span className="text-sm text-muted-foreground">
+          {t(`targetTypes.${target.targetType}`)}
+        </span>
+      ) : isText && target.targetType === "other" ? (
         <Input
           aria-label={t("targetValue")}
           value={target.targetValueText ?? ""}

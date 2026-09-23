@@ -111,6 +111,8 @@
     "other": "Other"
   },
   "targetTypes": {
+    "labor": "All labor",
+    "material": "All materials",
     "item": "Item",
     "item_kind": "Item type",
     "item_category": "Item category",

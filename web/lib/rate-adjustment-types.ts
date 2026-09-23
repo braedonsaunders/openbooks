@@ -19,6 +19,8 @@
  * `other`) are not listed and the save refuses them by name.
  */
 export const ADJUSTMENT_TARGET_TYPES = [
+  'labor',
+  'material',
   'item',
   'item_kind',
   'item_category',

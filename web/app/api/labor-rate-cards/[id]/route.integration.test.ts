@@ -427,3 +427,71 @@ test(
     }
   },
 );
+
+test(
+  "PUT accepts all-labor and all-materials selectors and refuses them with an id",
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    // PRC10: labor/material are value-less selectors. The stored text echoes
+    // the selector so the one-value CHECK stays satisfied; an id is refused.
+    const fixture = await withBypass(seed);
+    try {
+      const withId = await withOrgContext(fixture.orgId, () =>
+        put(fixture, {
+          ...putBody(fixture),
+          adjustments: [
+            {
+              code: "badd",
+              name: "Bad selector",
+              category: "surcharge",
+              calculation: "percent",
+              value: "5",
+              presentation: "separate",
+              targets: [{ targetType: "labor", targetValueId: fixture.customers[0] }],
+            },
+          ],
+        }));
+      const withIdPayload = (await withId.json()) as { errorCode?: string };
+      assert.equal(withId.status, 422, `selector with id must refuse: ${JSON.stringify(withIdPayload)}`);
+      assert.equal(withIdPayload.errorCode, "target");
+
+      const saved = await withOrgContext(fixture.orgId, () =>
+        put(fixture, {
+          ...putBody(fixture),
+          adjustments: [
+            {
+              code: "alllabor",
+              name: "All labor",
+              category: "surcharge",
+              calculation: "percent",
+              value: "5",
+              presentation: "separate",
+              targets: [{ targetType: "labor" }],
+            },
+            {
+              code: "allmat",
+              name: "All materials",
+              category: "surcharge",
+              calculation: "percent",
+              value: "5",
+              presentation: "separate",
+              targets: [{ targetType: "material", targetValueText: "material" }],
+            },
+          ],
+        }));
+      assert.equal(saved.status, 200, `selectors must save: ${JSON.stringify(await saved.json())}`);
+      const stored = (await db.execute<{ target_type: string; target_value_id: string | null; target_value_text: string | null }>(sql`
+        select t.target_type, t.target_value_id::text, t.target_value_text
+          from labor_rate_adjustment_targets t
+          join labor_rate_adjustments a on a.id = t.adjustment_id and a.org_id = t.org_id
+         where a.version_id = ${fixture.versionId} and a.org_id = ${fixture.orgId}
+         order by a.code`));
+      assert.deepEqual(stored.rows, [
+        { target_type: "labor", target_value_id: null, target_value_text: "labor" },
+        { target_type: "material", target_value_id: null, target_value_text: "material" },
+      ]);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);

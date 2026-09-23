@@ -97,6 +97,8 @@
     "other": "其他"
   },
   "targetTypes": {
+    "labor": "人工（全部）",
+    "material": "物料（全部）",
     "item": "项目",
     "item_kind": "项目类型",
     "item_category": "项目类别",

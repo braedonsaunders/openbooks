@@ -281,6 +281,18 @@ export async function PUT(
     for (const target of adjustment.targets) {
       if (!TARGET_TYPES.includes(target.targetType as never))
         return error("target");
+      if (target.targetType === "labor" || target.targetType === "material") {
+        // All-labor / all-materials selectors address no row: an id is a
+        // caller error, and the stored text echoes the selector so the
+        // one-value CHECK stays satisfied.
+        if (target.targetValueId) return error("target");
+        target.targetValueId = null;
+        target.targetValueText = target.targetType;
+        const selectorKey = `${target.targetType}:${target.targetType}`;
+        if (targetKeys.has(selectorKey)) return error("duplicateTarget");
+        targetKeys.add(selectorKey);
+        continue;
+      }
       const isText = TEXT_TARGETS.has(target.targetType!);
       if (target.targetType === "item" && (target.targetValueId == null || target.targetValueId === "")) {
         continue;

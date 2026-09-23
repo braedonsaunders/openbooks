@@ -51,7 +51,7 @@ async function setup(): Promise<Fixture> {
 }
 
 /** A rate card carrying one separate percent surcharge with one target. */
-async function seedCard(fx: Fixture, target: { targetType: string; targetValueId: string }, value = '10.0000'): Promise<void> {
+async function seedCard(fx: Fixture, target: { targetType: string; targetValueId: string | null; targetValueText?: string | null }, value = '10.0000'): Promise<void> {
   const { org, project } = fx
   const book = randomUUID(), version = randomUUID(), adjustment = randomUUID()
   await withBypassContext(async () => {
@@ -59,7 +59,7 @@ async function seedCard(fx: Fixture, target: { targetType: string; targetValueId
     await db.execute(sql`insert into item_rate_versions (id, org_id, rate_book_id, effective_from, status) values (${version}, ${org.orgId}, ${book}, '2026-07-01', 'draft')`)
     await db.execute(sql`insert into labor_rate_version_policies (org_id, version_id, derivation_policy) values (${org.orgId}, ${version}, 'explicit')`)
     await db.execute(sql`insert into labor_rate_adjustments (id, org_id, version_id, code, name, category, calculation, value, presentation) values (${adjustment}, ${org.orgId}, ${version}, 'SURCH', 'Probe surcharge', 'surcharge', 'percent', ${value}, 'separate')`)
-    await db.execute(sql`insert into labor_rate_adjustment_targets (org_id, adjustment_id, target_type, target_value_id) values (${org.orgId}, ${adjustment}, ${target.targetType}, ${target.targetValueId})`)
+    await db.execute(sql`insert into labor_rate_adjustment_targets (org_id, adjustment_id, target_type, target_value_id, target_value_text) values (${org.orgId}, ${adjustment}, ${target.targetType}, ${target.targetValueId}, ${target.targetValueText ?? null})`)
     await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
     await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, 'usage_date', true)`)
   })
@@ -151,6 +151,31 @@ test('a trade-targeted surcharge ignores other trades', { skip: !DB }, async () 
     await seedRole(fx, wrench.employee, otherTrade, 'Journeyman')
     const lines = await invoiceLines(fx, wrench.entry)
     assert.deepEqual(lines.filter((l) => l.description === 'Probe surcharge'), [])
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a labor selector charges labor-only invoices', { skip: !DB }, async () => {
+  const fx = await setup()
+  try {
+    await seedCard(fx, { targetType: 'labor', targetValueId: null, targetValueText: 'labor' })
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
+    assert.equal(lines.filter((l) => l.description === 'Probe surcharge')[0]?.amount, '100.0000')
+  } finally {
+    await dropScratchOrg(fx.org.orgId)
+  }
+})
+
+test('a material selector charges nothing on a labor-only invoice', { skip: !DB }, async () => {
+  const fx = await setup()
+  try {
+    await seedCard(fx, { targetType: 'material', targetValueId: null, targetValueText: 'material' })
+    const { entry } = await seedTime(fx, '10', '100')
+    const lines = await invoiceLines(fx, entry)
+    assert.deepEqual(lines.filter((l) => l.description === 'Probe surcharge'), [])
+    assert.equal(lines.length, 1)
   } finally {
     await dropScratchOrg(fx.org.orgId)
   }
