@@ -1626,13 +1626,17 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'method', kind: 'text' },
+      { key: 'version', kind: 'number' },
       { key: 'isForecast', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'method', kind: 'select', options: RECOGNITION_METHODS, required: true },
+      // Policy edits on a rule referenced by any obligation create a
+      // successor version (same code, version + 1) instead of rewriting the
+      // row; the version column shows which generation each row is.
+      { key: 'method', kind: 'select', options: RECOGNITION_METHODS, required: true, helpTextKey: 'fieldHelp.recognitionRulePolicy' },
       { key: 'isForecast', kind: 'boolean' },
       { key: 'recognitionPeriods', kind: 'integer', min: MIN_RECOGNITION_TERM_MONTHS, max: MAX_RECOGNITION_TERM_MONTHS },
       { key: 'startDateSource', kind: 'select', options: START_DATE_SOURCES, keepDefault: true },

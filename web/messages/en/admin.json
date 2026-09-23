@@ -2790,6 +2790,7 @@
       "initialAmountPercent": "Initial amount %",
       "deferredAccountId": "Deferred revenue account",
       "recognizedAccountId": "Recognized revenue account",
+      "version": "Version",
       "isForecast": "Forecast rule",
       "itemId": "Item",
       "unitPrice": "Unit price",
@@ -3013,6 +3014,7 @@
       "reviewMonths": "Review cadence (months)"
     },
     "fieldHelp": {
+      "recognitionRulePolicy": "Changing the method, term, dates, offsets, percent, or accounts on a rule already used by revenue creates a new version; existing obligations keep the old version.",
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
       "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",
       "defaultLienWaiverType": "Pre-selected when you create a waiver for one of these counterparties.",

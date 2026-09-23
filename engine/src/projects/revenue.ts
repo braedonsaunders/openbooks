@@ -76,13 +76,18 @@ export function costToCostPercent(budget: string, actual: string): string {
  * the obligation, which carries the org control accounts).
  */
 async function ensureProjectPocRule(orgId: string, actorId: string | null, runner: Pick<typeof db, "execute"> = db): Promise<string> {
+  // Rule versions form a successor chain per code (0297): the unique index
+  // covers current rows only, so the upsert targets it with its predicate
+  // and always resolves the CURRENT version, never a superseded row.
   const existing = (await runner.execute<{ id: string }>(sql`
-    select id from recognition_rules where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} limit 1`));
+    select id from recognition_rules
+     where org_id = ${orgId} and code = ${PROJECT_POC_RULE_CODE} and superseded_by is null
+     limit 1`));
   if (existing.rows[0]) return existing.rows[0].id;
   const ins = (await runner.execute<{ id: string }>(sql`
     insert into recognition_rules (org_id, code, name, method, is_active, created_by, updated_by)
     values (${orgId}, ${PROJECT_POC_RULE_CODE}, 'Project percent complete', 'percent_complete', true, ${actorId}, ${actorId})
-    on conflict (org_id, code) do update set updated_at = now()
+    on conflict (org_id, code) where superseded_by is null do update set updated_at = now()
     where recognition_rules.org_id = ${orgId}
     returning id`));
   return ins.rows[0]!.id;

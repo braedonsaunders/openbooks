@@ -626,6 +626,11 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // only on an exact-total match, otherwise they keep the fail-closed
     // window refusal until voided and recreated.
     "0296_payroll_remittance_destination_snapshot.sql",
+    // Recognition-rule edits rewrote the live policy row, so rebuilding an
+    // existing obligation's unposted schedule repriced and retimed it under
+    // the new policy (0297 versions the policy: a used rule's edit creates a
+    // successor row, and each obligation pins its version by rule id).
+    "0297_recognition_rule_versions.sql",
     // Item-rate pricing read the live profile before choosing the historical
     // version, so a later policy switch repriced late entries dated in the
     // old month (0298 pins policy, base unit and presentation per
@@ -2486,6 +2491,34 @@ test("0295 keeps one in-flight Web Connector request per ticket", () => {
     migration,
     /CREATE UNIQUE INDEX IF NOT EXISTS qbd_requests_one_sent_per_session\s+ON public\.qbd_requests \(session_id\)\s+WHERE status = 'sent';/,
   );
+  assert.doesNotMatch(migration, /on conflict do nothing/i);
+  assert.doesNotMatch(migration, /0001_baseline/);
+  assert.match(migration, /[^\n]\n$/);
+  assert.doesNotMatch(migration, /\n\n$/);
+});
+
+test("0297 versions recognition-rule policy instead of rewriting it", () => {
+  // Rule edits rewrote the live policy row, so rebuilding an existing
+  // obligation's unposted schedule repriced and retimed it under the new
+  // policy. The rule gains the successor chain (version + superseded_by);
+  // the writer creates version + 1 rows, and obligations pin their version
+  // through recognition_rule_id, so no obligation backfill is needed.
+  const migration = readFileSync("schema/migrations/generated/0297_recognition_rule_versions.sql", "utf8");
+  assert.match(migration, /^-- OpenBooks forward migration 0297_recognition_rule_versions\./m);
+  assert.match(migration, /SET statement_timeout = 0;/);
+  assert.match(migration, /SET idle_in_transaction_session_timeout = 0;/);
+  assert.match(migration, /SET client_encoding = 'UTF8';/);
+  assert.match(migration, /SET standard_conforming_strings = on;/);
+  assert.match(migration, /SET client_min_messages = warning;/);
+  assert.doesNotMatch(migration, /lock_timeout/i);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS superseded_by uuid/);
+  assert.match(migration, /FOREIGN KEY \(superseded_by\) REFERENCES public\.recognition_rules\(id\) DEFERRABLE/);
+  assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS recognition_rules_org_code/);
+  assert.match(migration, /WHERE superseded_by IS NULL/);
+  assert.match(migration, /DROP VIEW openbooks_query\.recognition_rules;/);
+  assert.match(migration, /GRANT SELECT ON TABLE openbooks_query\.recognition_rules TO openbooks_read;/);
+  assert.doesNotMatch(migration, /CREATE OR REPLACE VIEW/i);
   assert.doesNotMatch(migration, /on conflict do nothing/i);
   assert.doesNotMatch(migration, /0001_baseline/);
   assert.match(migration, /[^\n]\n$/);

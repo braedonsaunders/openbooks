@@ -2073,6 +2073,170 @@ export async function updateSetupRecord(
     }
   }
 
+  if (entity.key === 'recognition-rules') {
+    // A rule is priced history once any obligation references it: rebuilding
+    // that obligation's unposted schedule (or snapshotting it for amendment)
+    // reads the pinned rule row, so changing the policy in place would
+    // silently reprice and retime earned revenue. A policy edit on a used
+    // rule therefore creates a successor version (same code, version + 1)
+    // that new obligations use; items repoint at the successor while
+    // existing obligations keep their pinned row. Name and active-flag edits
+    // — and any edit to an unused rule — stay in place.
+    const policyColumns = [
+      'method', 'is_forecast', 'recognition_periods', 'start_date_source',
+      'end_date_source', 'period_offset', 'start_offset_days',
+      'initial_amount_percent', 'deferred_account_id', 'recognized_account_id',
+    ]
+    const builtByColumn = new Map(built.cols.map((column) => [column.column, column.value]))
+    try {
+      const versionId = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
+        const currentRes = ((await tx.execute(sql`
+          select * from recognition_rules
+           where id = ${id} and org_id = ${orgId}
+           for update`)))
+        const current = currentRes.rows[0] as Record<string, unknown> | undefined
+        if (!current) throw new Error('not found')
+
+        // Omission is not a change: buildRow materializes unsubmitted
+        // nullable fields as explicit nulls, so only a submitted field can
+        // move the policy. A submitted blank that buildRow omits likewise
+        // leaves the stored value alone.
+        const valueFor = (column: string) => {
+          const key = entity.fields.find((f) => toSnake(f.key) === column)?.key
+          if (key === undefined || body[key] === undefined) return current[column]
+          if (!builtByColumn.has(column)) return current[column]
+          return builtByColumn.get(column)
+        }
+        const changedPolicy = policyColumns.some((column) =>
+          comparableSetupValue(valueFor(column)) !== comparableSetupValue(current[column]))
+        const used = ((await tx.execute(sql`
+          select 1 from performance_obligations
+           where org_id = ${orgId} and recognition_rule_id = ${id}
+           limit 1`))).rows.length > 0
+
+        if (!changedPolicy || !used) {
+          const slotted = applyRuleSlotColumns(entity.key, body, built.cols)
+          if ('error' in slotted) throw new SetupWriteRefusal(slotted.error, 400)
+          // Write exactly the submitted fields: an omitted nullable field
+          // must not be nulled out as a side effect of an unrelated edit.
+          // (The drawer always submits full bodies, so it sees no change.)
+          const submittedCols = slotted.cols.filter((c) => {
+            const key = entity.fields.find((f) => toSnake(f.key) === c.column)?.key
+            return key !== undefined && body[key] !== undefined
+          })
+          const setParts = submittedCols.map((c) => sql`${sql.raw(c.column)} = ${c.value}`)
+          if (entity.actorCols) {
+            setParts.push(sql`updated_by = ${actorId}`)
+            setParts.push(sql`updated_at = now()`)
+          }
+          if (setParts.length === 0) throw new SetupWriteRefusal('nothing to update', 400)
+          const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
+          if (!before) throw new Error('not found')
+          const updated = ((await tx.execute(sql`
+            update ${sql.raw(entity.table)} set ${sql.join(setParts, sql`, `)}
+             where ${sql.raw(idColumn(entity))} = ${id} and org_id = ${orgId}
+            returning ${sql.raw(idColumn(entity))} as id`)))
+          if (updated.rows.length === 0) throw new Error('not found')
+          const members = multirefField(entity)
+          if (members && Array.isArray(body[members.key])) {
+            await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
+          }
+          const after = await loadSetupAuditRow(entity, orgId, id, tx)
+          await audit({
+            orgId,
+            table: entity.table,
+            rowId: id,
+            action: 'update',
+            changes: { before, after },
+            actorId,
+          }, tx)
+          return id
+        }
+
+        // The successor id is client-generated so the old row can be closed
+        // first: at most one unsurpassed row may carry the code (the partial
+        // unique index), while the old row's forward link needs its target.
+        // The self-reference is deferrable, so both constraints are checked
+        // at commit, when the chain is whole again.
+        const successorId = randomUUID()
+        await tx.execute(sql`SET CONSTRAINTS recognition_rules_superseded_by_fkey DEFERRED`)
+        await tx.execute(sql`
+          update recognition_rules
+             set superseded_by = ${successorId},
+                 is_active = false,
+                 updated_at = now(), updated_by = ${actorId}
+           where id = ${id} and org_id = ${orgId}`)
+        const successorColumns = [
+          'id', 'org_id', 'code', 'version', 'name', 'method', 'is_forecast',
+          'recognition_periods', 'start_date_source', 'end_date_source',
+          'period_offset', 'start_offset_days', 'initial_amount_percent',
+          'deferred_account_id', 'recognized_account_id', 'is_active',
+          'created_by', 'updated_by',
+        ]
+        const version = Number(current.version ?? 1) + 1
+        const successorValues = successorColumns.map((column) => {
+          if (column === 'id') return sql`${successorId}`
+          if (column === 'org_id') return sql`${orgId}`
+          if (column === 'code') return sql`${String(current.code)}`
+          if (column === 'version') return sql`${version}`
+          if (column === 'created_by' || column === 'updated_by') return sql`${actorId}`
+          return sql`${valueFor(column) ?? null}`
+        })
+        const inserted = ((await tx.execute(sql`
+          insert into recognition_rules (${sql.raw(successorColumns.join(', '))})
+          values (${sql.join(successorValues, sql`, `)})
+          returning id`)))
+        if (inserted.rows.length !== 1) throw new Error('a successor rule version could not be created')
+        await tx.execute(sql`
+          update items
+             set recognition_rule_id = ${successorId},
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and recognition_rule_id = ${id}`)
+
+        // Request match image for the successor insert audit, mirroring the
+        // POST path: the exact coerced columns the insert stores (actor
+        // context included), so the evidence names the request it came from.
+        const successorMatch: Record<string, unknown> = {}
+        for (const column of successorColumns) {
+          if (column === 'id') continue
+          if (column === 'org_id') successorMatch[column] = orgId
+          else if (column === 'code') successorMatch[column] = String(current.code)
+          else if (column === 'version') successorMatch[column] = version
+          else if (column === 'created_by' || column === 'updated_by') successorMatch[column] = actorId
+          else successorMatch[column] = valueFor(column) ?? null
+        }
+
+        await audit({
+          orgId,
+          table: entity.table,
+          rowId: id,
+          action: 'update',
+          changes: { before: current, after: await loadSetupAuditRow(entity, orgId, id, tx) },
+          actorId,
+        }, tx)
+        await audit({
+          orgId,
+          table: entity.table,
+          rowId: successorId,
+          action: 'insert',
+          changes: { after: await loadSetupAuditRow(entity, orgId, successorId, tx), match: successorMatch },
+          actorId,
+        }, tx)
+        return successorId
+      })
+      return { status: 200, body: { id: versionId } }
+    } catch (e) {
+      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      const code = pgErrorCode(e)
+      if (code === '23505' || code === '23P01') {
+        return duplicateConflict(entity.key)
+      }
+      const message = (e as Error).message
+      if (message === 'not found') return { status: 404, body: { error: message } }
+      return { status: 400, body: { error: describeDbError(e) } }
+    }
+  }
+
   const slottedUpdate = applyRuleSlotColumns(entity.key, body, built.cols)
   if ('error' in slottedUpdate) return { status: 400, body: { error: slottedUpdate.error } }
   let updateCols = entity.key === 'fx-rates'
