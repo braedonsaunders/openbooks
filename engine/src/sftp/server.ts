@@ -53,6 +53,56 @@ export interface SftpResolver {
 interface OpenFile { path: string; backend: SftpBackend; write: boolean; append: boolean; buf: Buffer<ArrayBufferLike> }
 interface OpenDir { entries: { name: string; isDir: boolean; size: number; mtimeMs: number }[]; sent: boolean }
 
+/**
+ * Per-session resource caps for one SFTP connection. Every OPEN reads the
+ * whole remote object into the session's memory and every open file stays
+ * buffered until CLOSE, so without caps one valid credential can force
+ * multi-GB allocations in the shared web process (a 1-byte WRITE at a ~4
+ * GiB offset gap-fills a 4 GiB buffer; many large OPENs stack). All three
+ * are enforced BEFORE allocation or read, and again on the storage write,
+ * refusing with FAILURE and a named reason.
+ */
+export interface SftpSessionLimits {
+  /** Refuse any file whose total size would exceed this many bytes. */
+  maxFileBytes: number;
+  /** Refuse OPEN/OPENDIR once a session holds this many handles. */
+  maxOpenHandles: number;
+  /** Refuse buffered growth once a session's in-memory file bytes exceed this. */
+  maxSessionBufferBytes: number;
+}
+
+/** Built-in caps: generous for statements and payment files, bounded for the host. */
+export const DEFAULT_SFTP_LIMITS: SftpSessionLimits = {
+  maxFileBytes: 25 * 1024 * 1024,
+  maxOpenHandles: 64,
+  maxSessionBufferBytes: 128 * 1024 * 1024,
+};
+
+function envBytes(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/**
+ * Effective caps: explicit `SFTP_MAX_FILE_BYTES` / `SFTP_MAX_OPEN_HANDLES` /
+ * `SFTP_MAX_SESSION_BUFFER_BYTES` env overrides, otherwise the built-ins.
+ * Unparseable values fall back (a cap stays a cap — garbage never disables
+ * one). The session buffer is floored at the file cap so a configured file
+ * size is always usable for at least one open file. Read live (like the
+ * storage backend's env reads) so tests and operators need no restart hook.
+ */
+export function sftpSessionLimits(): SftpSessionLimits {
+  const maxFileBytes = envBytes("SFTP_MAX_FILE_BYTES", DEFAULT_SFTP_LIMITS.maxFileBytes);
+  const maxOpenHandles = envBytes("SFTP_MAX_OPEN_HANDLES", DEFAULT_SFTP_LIMITS.maxOpenHandles);
+  const maxSessionBufferBytes = Math.max(
+    envBytes("SFTP_MAX_SESSION_BUFFER_BYTES", DEFAULT_SFTP_LIMITS.maxSessionBufferBytes),
+    maxFileBytes,
+  );
+  return { maxFileBytes, maxOpenHandles, maxSessionBufferBytes };
+}
+
 const S_IFDIR = 0o40000, S_IFREG = 0o100000;
 
 function attrsFor(isDir: boolean, size: number, mtimeMs: number) {
@@ -81,7 +131,10 @@ export interface SftpServerHandle {
   port: number;
 }
 
-export function startSftpServer(opts: { port: number; hostKey: string; resolve: SftpResolver }): Promise<SftpServerHandle> {
+export function startSftpServer(opts: { port: number; hostKey: string; resolve: SftpResolver; limits?: Partial<SftpSessionLimits> }): Promise<SftpServerHandle> {
+  const limits: SftpSessionLimits = { ...sftpSessionLimits(), ...opts.limits };
+  // Same floor as the env resolution: one open file must always fit.
+  limits.maxSessionBufferBytes = Math.max(limits.maxSessionBufferBytes, limits.maxFileBytes);
   const server = new Server({ hostKeys: [opts.hostKey] }, (client: Connection) => {
     let config: SftpServerConfig | null = null;
     client.on("authentication", async (ctx) => {
@@ -140,6 +193,12 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             sftp.status(reqid, msg === "path escapes root" ? STATUS_CODE.PERMISSION_DENIED : STATUS_CODE.NO_SUCH_FILE);
           };
 
+          // In-memory bytes held by this session's open files. Every refusal
+          // below fires BEFORE the allocation or read it guards.
+          let sessionBufferedBytes = 0;
+          const overHandleCap = () => files.size + dirs.size >= limits.maxOpenHandles;
+          const handleCapRefusal = `too many open files (limit ${limits.maxOpenHandles} per session); close a handle and retry`;
+
           sftp.on("REALPATH", (reqid, p) => {
             const cp = cleanPath(p === "." || p === "" ? "/" : p);
             sftp.name(reqid, [{ filename: cp, longname: longname(cp, true, 0), attrs: attrsFor(true, 0, Date.now()) }]);
@@ -165,6 +224,7 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
           });
 
           sftp.on("OPENDIR", async (reqid, p) => {
+            if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
             try {
               // Temp siblings of in-flight publishes never appear in a bank
               // client's listing: without this, a client enumerating the
@@ -188,8 +248,23 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             // Neither reading a partial publish nor squatting its temp name:
             // both directions report the temp pattern as absent.
             if (isSftpTempName(filename)) return sftp.status(reqid, STATUS_CODE.NO_SUCH_FILE);
+            if (overHandleCap()) return sftp.status(reqid, STATUS_CODE.FAILURE, handleCapRefusal);
             const writing = !!(flags & (OPEN_MODE.WRITE | OPEN_MODE.CREAT | OPEN_MODE.TRUNC));
             const h = newHandle();
+            // A file that already exceeds the per-file cap is refused BEFORE
+            // it is read into the session: stat first, read only when it fits.
+            const refuseOverCap = (size: number) => {
+              if (size <= limits.maxFileBytes) return false;
+              sftp.status(reqid, STATUS_CODE.FAILURE, `file is ${size} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`);
+              return true;
+            };
+            // A buffer that would push the session past its total is refused
+            // BEFORE it is read: stacked large OPENs cannot pool memory.
+            const refuseOverSession = (size: number) => {
+              if (sessionBufferedBytes + size <= limits.maxSessionBufferBytes) return false;
+              sftp.status(reqid, STATUS_CODE.FAILURE, `opening ${size} more bytes would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`);
+              return true;
+            };
             try {
               if (writing) {
                 const path = cleanPath(filename);
@@ -198,11 +273,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
                   const st = await backend.stat(path);
                   if (st) {
                     if (st.isDir) throw new Error("cannot open directory for writing");
+                    if (!st.isDir && refuseOverCap(st.size)) return;
                     buf = await backend.read(path);
                   } else if (!(flags & OPEN_MODE.CREAT)) {
                     throw new Error("no such file");
                   }
                 }
+                if (refuseOverSession(buf.length)) return;
+                sessionBufferedBytes += buf.length;
                 files.set(h.toString(), {
                   path,
                   backend,
@@ -211,7 +289,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
                   buf,
                 });
               } else {
+                const st = await backend.stat(filename);
+                if (st && !st.isDir && refuseOverCap(st.size)) return;
+                // Missing names and directories fall through to the read so
+                // the failure shape stays exactly what it was before the cap.
                 const buf = await backend.read(filename);
+                if (refuseOverCap(buf.length)) return;
+                if (refuseOverSession(buf.length)) return;
+                sessionBufferedBytes += buf.length;
                 files.set(h.toString(), { path: cleanPath(filename), backend, write: false, append: false, buf });
               }
               sftp.handle(reqid, h);
@@ -230,12 +315,23 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             if (!Number.isSafeInteger(position) || position < 0 || position + data.length > 0xFFFFFFFF) {
               return sftp.status(reqid, STATUS_CODE.FAILURE);
             }
+            // Sparse offsets and growth past the per-file cap refuse BEFORE
+            // Buffer.alloc: a 1-byte write at a ~4 GiB offset must never
+            // gap-fill a 4 GiB buffer in the shared web process.
+            const end = position + data.length;
+            if (end > limits.maxFileBytes) {
+              return sftp.status(reqid, STATUS_CODE.FAILURE, `write would grow the file to ${end} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit`);
+            }
+            const growth = Math.max(0, end - f.buf.length);
+            if (sessionBufferedBytes + growth > limits.maxSessionBufferBytes) {
+              return sftp.status(reqid, STATUS_CODE.FAILURE, `write would exceed the ${limits.maxSessionBufferBytes}-byte per-session SFTP buffer limit; close a file and retry`);
+            }
             try {
-              const end = position + data.length;
               if (end > f.buf.length) {
                 const next = Buffer.alloc(end);
                 f.buf.copy(next);
                 f.buf = next;
+                sessionBufferedBytes += growth;
               }
               Buffer.from(data).copy(f.buf, position);
               sftp.status(reqid, STATUS_CODE.OK);
@@ -248,7 +344,14 @@ export function startSftpServer(opts: { port: number; hostKey: string; resolve: 
             const f = files.get(key);
             if (f) {
               files.delete(key);
+              sessionBufferedBytes = Math.max(0, sessionBufferedBytes - f.buf.length);
               if (f.write) {
+                // Fail-closed on the storage write: the OPEN/WRITE guards
+                // above make this unreachable, but an over-cap buffer must
+                // never be persisted even if a guard is ever bypassed.
+                if (f.buf.length > limits.maxFileBytes) {
+                  return sftp.status(reqid, STATUS_CODE.FAILURE, `file is ${f.buf.length} bytes, exceeding the ${limits.maxFileBytes}-byte per-file SFTP limit and cannot be saved`);
+                }
                 try { await backend.write(f.path, f.buf); }
                 catch (e) { return fail(reqid, e); }
               }
