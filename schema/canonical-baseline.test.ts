@@ -547,6 +547,10 @@ test("fresh installations have exactly one canonical prerelease baseline", () =>
     // accounts on the default calendar and the scenario guard to book/year
     // stability once lines exist.
     "0272_budget_pnl_calendar_scope.sql",
+    // A DSAR export with unretrievable document bytes read as a complete
+    // success. Exports now mark incomplete (never ready) with per-document
+    // omission evidence in the scope manifest and export.json.
+    "0273_dsar_export_incomplete_status.sql",
     // The shared posting-period resolver reads the org's active default
     // fiscal calendar; backfill one for every org whose calendars carry
     // none, refusing ambiguous orgs by id instead of guessing.
