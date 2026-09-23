@@ -464,6 +464,76 @@ test("a wildcard requestID matches no completed request", { skip: !DB }, async (
   }
 });
 
+test("a malformed iterator count fails the capture with a named error and stores nothing", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  const connection = await createQbdTestConnection(orgId);
+  try {
+    const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+    await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+    const sentA = (await db.execute<{ id: string }>(sql`
+      select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+    const idA = sentA.rows[0]?.id;
+    assert.ok(idA);
+    // A statusCode=0 page whose remaining count is unreadable must not read
+    // as the last page: the capture fails instead of importing pages missing.
+    const bad = companyResponse(idA).replace(
+      'statusCode="0"',
+      'statusCode="0" iteratorRemainingCount="oops" iteratorID="it-1"',
+    );
+    assert.equal(await acceptWebConnectorResponse(ticket, bad, "", ""), -101);
+    const request = (await db.execute<{ status: string; xml: string | null }>(sql`
+      select status, response_xml as xml from qbd_requests where id = ${idA}`));
+    assert.equal(request.rows[0]?.status, "failed");
+    assert.equal(request.rows[0]?.xml, null);
+    const capture = (await db.execute<{ status: string; error: string | null }>(sql`
+      select status, error_message as error from qbd_captures where id = ${captureId}`));
+    assert.equal(capture.rows[0]?.status, "failed");
+    assert.match(capture.rows[0]?.error ?? "", /invalid iteratorRemainingCount "oops" for CompanyQuery/);
+    const completed = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from qbd_captures where connection_id = ${connection.id} and status = 'complete'`));
+    assert.equal(completed.rows[0]?.n, 0);
+    assert.match(await webConnectorLastError(ticket), /invalid iteratorRemainingCount "oops" for CompanyQuery/);
+  } finally {
+    await db.execute(sql`delete from connections where id = ${connection.id}`);
+  }
+});
+
+test("a blank or whitespace statusCode fails the capture with a named error", { skip: !DB }, async () => {
+  const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
+  const orgId = orgs.rows[0]?.id;
+  if (!orgId) return;
+  for (const badStatus of ["", " "]) {
+    const connection = await createQbdTestConnection(orgId);
+    try {
+      const { ticket, captureId } = await openQbdTestTicket(orgId, connection.id, connection.password);
+      await nextWebConnectorRequest(ticket, { country: "CA", qbxmlMajor: 17, qbxmlMinor: 0 });
+      const sentA = (await db.execute<{ id: string }>(sql`
+        select id from qbd_requests where capture_id = ${captureId} and session_id = ${ticket} and status = 'sent'`));
+      const idA = sentA.rows[0]?.id;
+      assert.ok(idA);
+      // A blank status previously coerced to 0 (SUCCESS) and could store a
+      // response for a capture that never succeeded.
+      const bad = companyResponse(idA).replace('statusCode="0"', `statusCode="${badStatus}"`);
+      assert.equal(await acceptWebConnectorResponse(ticket, bad, "", ""), -101);
+      const request = (await db.execute<{ status: string; xml: string | null }>(sql`
+        select status, response_xml as xml from qbd_requests where id = ${idA}`));
+      assert.equal(request.rows[0]?.status, "failed");
+      assert.equal(request.rows[0]?.xml, null);
+      const capture = (await db.execute<{ status: string; error: string | null }>(sql`
+        select status, error_message as error from qbd_captures where id = ${captureId}`));
+      assert.equal(capture.rows[0]?.status, "failed");
+      assert.match(capture.rows[0]?.error ?? "", new RegExp(`invalid statusCode ${JSON.stringify(badStatus)} for CompanyQuery`));
+      const completed = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from qbd_captures where connection_id = ${connection.id} and status = 'complete'`));
+      assert.equal(completed.rows[0]?.n, 0);
+    } finally {
+      await db.execute(sql`delete from connections where id = ${connection.id}`);
+    }
+  }
+});
+
 test("storage refuses a second in-flight request on one ticket", { skip: !DB }, async () => {
   const orgs = (await db.execute<{ id: string }>(sql`select id from orgs order by created_at limit 1`));
   const orgId = orgs.rows[0]?.id;

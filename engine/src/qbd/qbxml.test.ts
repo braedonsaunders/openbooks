@@ -86,3 +86,35 @@ test("requestID correlation stamps the request element, never the envelope", () 
   assert.deepEqual(responseStatus(echoed).requestId, "11111111-2222-4333-8555-666666666666");
   assert.equal(responseStatus(echoed).kind, "CompanyQueryRs");
 });
+
+test("responseStatus accepts strict integer tokens and refuses the rest", () => {
+  const rs = (attrs: string): string =>
+    `<?xml version="1.0"?><QBXML><QBXMLMsgsRs><CompanyQueryRs requestID="11111111-2222-4333-8555-666666666666" ${attrs}><CompanyRet><CompanyName>Acme</CompanyName></CompanyRet></CompanyQueryRs></QBXMLMsgsRs></QBXML>`;
+  // Accepted: present codes (including negative error codes), and an absent
+  // iterator count meaning the last page.
+  assert.equal(responseStatus(rs('statusCode="0"')).code, 0);
+  assert.equal(responseStatus(rs('statusCode="0"')).iteratorRemaining, 0);
+  assert.equal(responseStatus(rs('statusCode="0" iteratorRemainingCount="0"')).iteratorRemaining, 0);
+  assert.equal(responseStatus(rs('statusCode="0" iteratorRemainingCount="2" iteratorID="it-1"')).iteratorRemaining, 2);
+  assert.equal(responseStatus(rs('statusCode="500"')).code, 500);
+  assert.equal(responseStatus(rs('statusCode="-1"')).code, -1);
+  // Refused iterator counts: unreadable, negative, fractional, infinite, and
+  // anything outside the safe-integer range.
+  for (const bad of ["oops", "-1", "1.5", "Infinity", "NaN", "", " ", " 2", "2 ", "0x10", "99999999999999999999999"]) {
+    assert.throws(
+      () => responseStatus(rs(`statusCode="0" iteratorRemainingCount="${bad}" iteratorID="it-1"`)),
+      /invalid iteratorRemainingCount/,
+      `iteratorRemainingCount ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+  // Refused status codes: a blank or whitespace status previously coerced to
+  // 0 (SUCCESS); a missing attribute is malformed, not absent.
+  for (const bad of ["", " ", "oops", "0.0", "Infinity", "NaN", "99999999999999999999999"]) {
+    assert.throws(
+      () => responseStatus(rs(`statusCode="${bad}"`)),
+      /invalid statusCode/,
+      `statusCode ${JSON.stringify(bad)} must be refused`,
+    );
+  }
+  assert.throws(() => responseStatus(rs("")), /invalid statusCode/);
+});

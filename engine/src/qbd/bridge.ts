@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
-import { buildCapturePlan, continueRequestXml, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
+import { buildCapturePlan, continueRequestXml, MalformedQbxmlResponseError, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
 
 const CAPTURE_TTL_MS = 12 * 60 * 60 * 1_000;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1_000;
@@ -484,6 +484,17 @@ export async function acceptWebConnectorResponse(ticket: string, responseXml: st
     try {
       status = responseStatus(responseXml);
     } catch (error) {
+      // A malformed status or iterator count is refused before the request
+      // completes: the capture fails with a named error instead of importing
+      // with pages missing or success never confirmed.
+      if (error instanceof MalformedQbxmlResponseError) {
+        const failure = `${error.message} for ${request.requestKind}; the response was not stored`;
+        await tx.execute(sql`update qbd_requests set status = 'failed', error_message = ${failure}, completed_at = now(), updated_at = now() where id = ${request.id} and org_id = ${request.orgId}`);
+        await tx.execute(sql`update qbd_captures set status = 'failed', error_message = ${failure}, finished_at = now(), updated_at = now() where id = ${request.captureId} and org_id = ${request.orgId}`);
+        await tx.execute(sql`update qbd_requests set status = 'cancelled', updated_at = now() where capture_id = ${request.captureId} and org_id = ${request.orgId} and status in ('queued', 'sent') and id <> ${request.id}`);
+        await tx.execute(sql`update qbd_sessions set last_error = ${failure}, last_seen_at = now() where id = ${ticket} and org_id = ${locked.orgId}`);
+        return -101;
+      }
       status = { code: -1, severity: "Error", message: (error as Error).message, iteratorId: null, iteratorRemaining: 0, kind: "UnknownRs", requestId: null };
     }
     // Correlate BEFORE interpreting: a response for another request must
