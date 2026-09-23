@@ -39,7 +39,8 @@
     "quote": "cotización",
     "field_ticket": "parte de trabajo",
     "close_run": "cierre de período",
-    "budget_scenario": "presupuesto"
+    "budget_scenario": "presupuesto",
+    "hrm_employment_change_request": "cambio de empleo"
   },
   "decide": {
     "rejectionReason": "Motivo del rechazo:",

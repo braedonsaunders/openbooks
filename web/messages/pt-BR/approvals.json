@@ -39,7 +39,8 @@
     "quote": "orçamento",
     "field_ticket": "boletim de campo",
     "close_run": "fechamento de período",
-    "budget_scenario": "orçamento"
+    "budget_scenario": "orçamento",
+    "hrm_employment_change_request": "alteração de emprego"
   },
   "decide": {
     "rejectionReason": "Motivo da rejeição:",
