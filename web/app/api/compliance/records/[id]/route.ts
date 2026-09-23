@@ -71,25 +71,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!can(authz, needed)) {
     return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
   }
-
-  const before = (await db.execute<Record<string, unknown>>(sql`
-    select id, status, party_id, requirement_id, supersedes_id, created_by, effective_from, expires_on,
-           coverage_amount, aggregate_amount, coverage_currency, additional_insured,
-           waiver_of_subrogation, primary_noncontributory, issuer_name, policy_number
-      from compliance_records where org_id = ${orgId} and id = ${id}
-  `))
-  const record = before.rows[0]
-  if (!record) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (record.status === 'superseded') {
-    return NextResponse.json({ error: 'a superseded certificate is history and cannot be changed' }, { status: 422 })
-  }
-
-  if (action === 'verify' && record.created_by === actorId) {
-    // Whoever produced the record cannot also attest to it. Administrators are
-    // no exception: a single-person control is not a control.
+  // Mandatory optimistic-concurrency token, mirroring the equipment-unit
+  // fence: the caller echoes the revision it read, compared under the row
+  // lock inside the write transaction. A save without it never reaches the
+  // row, so a stale writer is refused instead of overwriting the winner.
+  const expectedRevision = (body as { revision?: unknown }).revision
+  if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
     return NextResponse.json(
-      { error: 'a certificate must be verified by someone other than the person who recorded it' },
-      { status: 422 },
+      { error: 'a current certificate revision is required; reload the certificate and try again' },
+      { status: 400 },
     )
   }
 
@@ -126,12 +116,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'expiry date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
     }
 
-    // Keep the certificate mutation and its immutable audit evidence in one
-    // transaction. If recording the evidence fails, PostgreSQL rolls back the
-    // action as well, so callers never observe a committed change without a
-    // corresponding legal audit event.
+    // The row is locked BEFORE it is read: the revision comparison, the
+    // lifecycle checks, the mutation and the audit are one serializable
+    // unit, so a racing request sees the winner's committed revision and is
+    // refused instead of overwriting it — and the audit's before-image is
+    // the row as it stood, not a pre-transaction snapshot.
     let supersession: { supersededId: string | null; stale: boolean } = { supersededId: null, stale: false }
-    await db.transaction(async (tx) => {
+    let savedRevision = expectedRevision
+    const outcome = await db.transaction(async (tx) => {
+      const locked = (await tx.execute<Record<string, unknown>>(sql`
+        select id, status, party_id, requirement_id, supersedes_id, revision, verified_revision,
+               created_by, effective_from, expires_on,
+               coverage_amount, aggregate_amount, coverage_currency, additional_insured,
+               waiver_of_subrogation, primary_noncontributory, issuer_name, policy_number
+          from compliance_records where org_id = ${orgId} and id = ${id}
+         for update
+      `))
+      const record = locked.rows[0]
+      if (!record) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (record.status === 'superseded') {
+        return NextResponse.json({ error: 'a superseded certificate is history and cannot be changed' }, { status: 422 })
+      }
+      if (Number(record.revision) !== expectedRevision) {
+        return NextResponse.json(
+          { error: 'this certificate changed since you loaded it — reload and try again' },
+          { status: 409 },
+        )
+      }
+      if (action === 'verify' && record.created_by === actorId) {
+        // Whoever produced the record cannot also attest to it. Administrators are
+        // no exception: a single-person control is not a control.
+        return NextResponse.json(
+          { error: 'a certificate must be verified by someone other than the person who recorded it' },
+          { status: 422 },
+        )
+      }
+      // Every applied change bumps the counter under the lock, and the
+      // revision predicate makes the bump atomic: zero rows means a racer
+      // committed first, and the loser is refused instead of merged.
+      const fenced = async (query: ReturnType<typeof sql>) => {
+        const applied = (await tx.execute<{ id: string }>(query))
+        if (applied.rows.length === 0) {
+          return NextResponse.json(
+            { error: 'this certificate changed since you loaded it — reload and try again' },
+            { status: 409 },
+          )
+        }
+        return null
+      }
       if (action === 'verify') {
         // Verification retires the predecessor the renewal pointed at: the
         // supersession happens here, not at upload, so the prior certificate
@@ -140,7 +172,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // (0071) only honours a pending same-scope successor. A link gone
         // stale since upload (concurrently superseded) does not block the
         // attestation — it is recorded and the verification stands.
-        const link = before.rows[0]!['supersedes_id'] as string | null
+        const link = record['supersedes_id'] as string | null
         if (link) {
           const retired = (await tx.execute<{ id: string }>(sql`
             update compliance_records
@@ -153,29 +185,42 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           if (retired.rows.length === 0) supersession = { supersededId: null, stale: true }
           else supersession = { supersededId: link, stale: false }
         }
-        await tx.execute(sql`
+        // The verification names the revision it attested: a later edit
+        // voids it (verified_revision cleared with the stamp), so no reader
+        // can mistake an attestation of old numbers for current ones.
+        const refused = await fenced(sql`
           update compliance_records
              set status = 'active', verified_at = now(), verified_by = ${actorId},
-                 rejected_reason = null, updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${id}`)
+                 verified_revision = ${expectedRevision},
+                 rejected_reason = null, revision = revision + 1,
+                 updated_at = now(), updated_by = ${actorId}
+           where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
+          returning id`)
+        if (refused) return refused
       } else if (action === 'reject') {
-        await tx.execute(sql`
+        const refused = await fenced(sql`
           update compliance_records
              set status = 'rejected', rejected_reason = ${rejectionReason},
-                 verified_at = null, verified_by = null,
+                 verified_at = null, verified_by = null, verified_revision = null,
+                 revision = revision + 1,
                  updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${id}`)
+           where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
+          returning id`)
+        if (refused) return refused
       } else if (action === 'reopen') {
-        await tx.execute(sql`
+        const refused = await fenced(sql`
           update compliance_records
              set status = 'pending_review', rejected_reason = null,
-                 verified_at = null, verified_by = null,
+                 verified_at = null, verified_by = null, verified_revision = null,
+                 revision = revision + 1,
                  updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${id}`)
+           where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
+          returning id`)
+        if (refused) return refused
       } else {
         // Editing the substance of a VERIFIED certificate voids its verification:
         // the attestation was about the old numbers.
-        await tx.execute(sql`
+        const refused = await fenced(sql`
           update compliance_records
              set issuer_name = coalesce(${body.issuerName ?? null}, issuer_name),
                  policy_number = coalesce(${body.policyNumber ?? null}, policy_number),
@@ -189,16 +234,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                  primary_noncontributory = coalesce(${body.primaryNoncontributory ?? null}, primary_noncontributory),
                  notes = coalesce(${body.notes ?? null}, notes),
                  status = case when status = 'active' then 'pending_review' else status end,
-                 verified_at = null, verified_by = null,
+                 verified_at = null, verified_by = null, verified_revision = null,
+                 revision = revision + 1,
                  updated_at = now(), updated_by = ${actorId}
-           where org_id = ${orgId} and id = ${id}`)
+           where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
+          returning id`)
+        if (refused) return refused
       }
       await tx.execute(sql`
         insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'compliance_records', ${id}, ${action === 'update' ? 'update' : action},
                 ${JSON.stringify({ before: record, after: body, supersession })}::jsonb, ${actorId})`)
+      savedRevision = Number(record.revision) + 1
+      return null
     })
-    return NextResponse.json({ id })
+    if (outcome) return outcome
+    return NextResponse.json({ id, revision: savedRevision })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
   }

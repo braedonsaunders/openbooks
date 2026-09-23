@@ -91,7 +91,7 @@ async function coverageOf(orgId: string, recordId: string): Promise<string | nul
 test("certificate update refuses a non-calendar effective date without writing", { skip: !DB }, async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", effectiveFrom: "2026-09-31" });
+    const response = await patch(recordId, { action: "update", revision: 1, effectiveFrom: "2026-09-31" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     assert.equal(response.status, 400, `expected 400, got ${response.status}: ${JSON.stringify(json)}`);
     assert.doesNotMatch(json?.error ?? "", /invalid input syntax|Failed query/i);
@@ -104,7 +104,7 @@ test("certificate update refuses a non-calendar effective date without writing",
 test("certificate update refuses a coverage amount wider than numeric(19,4) without writing", { skip: !DB }, async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", coverageAmount: "99999999999999999999.99" });
+    const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "99999999999999999999.99" });
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
     assert.doesNotMatch(json?.error ?? "", /numeric field overflow|Failed query/i);
@@ -117,7 +117,7 @@ test("certificate update refuses a coverage amount wider than numeric(19,4) with
 test("certificate update still saves an ordinary amount", { skip: !DB }, async () => {
   const { orgId, recordId } = await fixture();
   try {
-    const response = await patch(recordId, { action: "update", coverageAmount: "2000000.00" });
+    const response = await patch(recordId, { action: "update", revision: 1, coverageAmount: "2000000.00" });
     assert.equal(response.status, 200, JSON.stringify(await response.json().catch(() => null)));
     assert.equal(Number(await coverageOf(orgId, recordId)), 2000000);
   } finally {
