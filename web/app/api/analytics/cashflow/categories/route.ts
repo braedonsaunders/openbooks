@@ -6,6 +6,11 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
+import {
+  BANK_ACCOUNT_TYPE,
+  CARD_ACCOUNT_TYPE,
+  validateReferences,
+} from "../../../../../lib/cash/category-references";
 
 export const runtime = "nodejs";
 
@@ -39,10 +44,36 @@ const GENERIC_CATEGORY_ERROR =
   "Each category must include a valid name, method, and method-specific configuration.";
 const MANUAL_AMOUNT_MAX = "100000000.0000";
 
-function clean(raw: unknown): CleanResult {
+async function clean(
+  raw: unknown,
+  orgId: string,
+  allowedSubsidiaryIds: Set<string> | null,
+): Promise<CleanResult> {
   const bad = (error: string): CleanResult => ({ ok: false, error });
   if (!raw || typeof raw !== "object") return bad(GENERIC_CATEGORY_ERROR);
   const c = raw as Record<string, unknown>;
+  // Every reference list below validates type, existence, and scope in one
+  // pass (see ./category-references): the caller's subsidiary scope rides
+  // along so a restricted writer cannot point a category at hidden books.
+  const check = (
+    field: string,
+    table: "accounts" | "parties",
+    kind: string,
+    ids: string[],
+    expect?: { accountType?: typeof BANK_ACCOUNT_TYPE | typeof CARD_ACCOUNT_TYPE; postable?: boolean; vendorRole?: boolean },
+  ): Promise<string | null> =>
+    validateReferences(orgId, [
+      {
+        field,
+        table,
+        kind,
+        ids,
+        allowedSubsidiaryIds,
+        expectAccountType: expect?.accountType,
+        expectPostable: expect?.postable,
+        expectVendorRole: expect?.vendorRole,
+      },
+    ]);
   const name = typeof c.name === "string" ? c.name.trim().slice(0, 80) : "";
   const method = String(c.method ?? "");
   // A misspelled direction must refuse, never silently flip the sign: any
@@ -74,6 +105,8 @@ function clean(raw: unknown): CleanResult {
   if (method === "gl_history_average") {
     const ids = strList(c.accountIds, 50);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("accountIds", "accounts", "an account", ids, { postable: true });
+    if (refError) return bad(refError);
     out.accountIds = ids;
     out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
     if (c.useNetAmt === true) out.useNetAmt = true;
@@ -81,6 +114,8 @@ function clean(raw: unknown): CleanResult {
     const ids = strList(c.partyIds, 50);
     if (!ids.length && typeof c.partyId === "string" && c.partyId) ids.push(c.partyId);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("partyIds", "parties", "a party", ids, { vendorRole: true });
+    if (refError) return bad(refError);
     out.partyIds = ids;
     out.partyId = ids[0];
     out.partyName = typeof c.partyName === "string" ? c.partyName.slice(0, 120) : undefined;
@@ -88,6 +123,8 @@ function clean(raw: unknown): CleanResult {
   } else if (method === "credit_card_cycle") {
     const ids = strList(c.cardAccountIds, 20).length ? strList(c.cardAccountIds, 20) : strList(c.accountIds, 20);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("cardAccountIds", "accounts", "an account", ids, { accountType: CARD_ACCOUNT_TYPE });
+    if (refError) return bad(refError);
     out.cardAccountIds = ids;
     out.historyMonths = clampNum(c.historyMonths, 1, 24, 6);
     const threshold = Number(c.significantPaymentThreshold);
@@ -99,6 +136,8 @@ function clean(raw: unknown): CleanResult {
   } else if (method === "bank_register_history") {
     const ids = strList(c.bankAccountIds, 20);
     if (!ids.length) return bad(GENERIC_CATEGORY_ERROR);
+    const refError = await check("bankAccountIds", "accounts", "an account", ids, { accountType: BANK_ACCOUNT_TYPE });
+    if (refError) return bad(refError);
     out.bankAccountIds = ids;
     out.historyWeeks = clampNum(c.historyWeeks, 1, 52, 12);
     const keywords = strList(c.memoKeywords, 10).map((k) => k.trim().slice(0, 40)).filter(Boolean);
@@ -180,7 +219,11 @@ export async function PUT(req: Request) {
   }
   const expectedRevision = body.expectedRevision as number;
 
-  const cleaned = body.categories.map(clean);
+  // Sequential: the first invalid index wins, and reference checks stay ordered.
+  const cleaned: CleanResult[] = [];
+  for (const raw of body.categories) {
+    cleaned.push(await clean(raw, gate.user.orgId, gate.allowedSubsidiaryIds));
+  }
   const invalidIndex = cleaned.findIndex((result) => !result.ok);
   if (invalidIndex !== -1) {
     const failure = cleaned[invalidIndex] as { ok: false; error: string };
