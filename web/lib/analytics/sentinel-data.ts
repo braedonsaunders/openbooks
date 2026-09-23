@@ -4,7 +4,8 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
-import { can, ForbiddenError, type Authz } from "../authz";
+import { ForbiddenError, type Authz } from "../authz";
+import { sentinelAccessDenied } from "./sentinel-access";
 import { auditEventArgs, englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
 
 /**
@@ -249,9 +250,12 @@ export async function sentinelData(
   // Whole-company forensics includes cross-entity baselines, identity matches
   // and retained administrative audit snapshots. Partial access cannot be
   // represented by silently dropping evidence or returning zero-risk counts.
-  if (!authz || authz.user.orgId !== orgId || authz.allowedSubsidiaryIds !== null
-    || !can(authz, "reports.read") || !can(authz, "admin.audit.read")) {
+  if (!authz || authz.user.orgId !== orgId) {
     throw new ForbiddenError("unrestricted reports and audit access");
+  }
+  const denied = sentinelAccessDenied(authz);
+  if (denied !== null) {
+    throw new ForbiddenError(denied);
   }
   const { from, to } = period;
   const t0 = Date.now();

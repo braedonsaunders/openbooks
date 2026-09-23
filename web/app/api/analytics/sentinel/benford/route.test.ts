@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 
 interface BenfordRouteState {
   allowedSubsidiaryIds: Set<string> | null;
+  permissions: string[];
   calls: string[];
   filters: Array<{ column: string; allowed: string[] | null }>;
   detailRows: Record<string, unknown>[];
@@ -14,6 +15,7 @@ interface BenfordRouteState {
 const stateKey = Symbol.for("openbooks.benford-route-test");
 const routeState: BenfordRouteState = {
   allowedSubsidiaryIds: null,
+  permissions: ["reports.read", "admin.audit.read"],
   calls: [],
   filters: [],
   detailRows: [],
@@ -68,8 +70,12 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return {
           user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions),
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
+      }
+      export function can(authz, perm) {
+        return authz.permissions instanceof Set && authz.permissions.has(perm)
       }
     `,
   ],
@@ -97,6 +103,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["../../../../../lib/authz", "mock:authz"],
+  // The shared sentinel gate reads can() through its own relative import.
+  ["../authz", "mock:authz"],
   ["../../../../../lib/subsidiaries", "mock:subsidiaries"],
 ]);
 
@@ -138,11 +146,40 @@ function request(): Request {
   );
 }
 
-test("restricted Benford drill applies the subsidiary predicate to detail and totals", async () => {
+test("reports-only Benford drill is refused without querying", async () => {
   reset();
+  routeState.permissions = ["reports.read"];
+  routeState.allowedSubsidiaryIds = null;
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 403);
+  const body = (await response.json()) as { error: string; message: string };
+  assert.equal(body.error, "forbidden");
+  assert.ok(body.message.includes("admin.audit.read"), `refusal must name the missing grant, got: ${body.message}`);
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("subsidiary-restricted Benford drill is refused without querying", async () => {
+  reset();
+  routeState.permissions = ["reports.read", "admin.audit.read"];
   routeState.allowedSubsidiaryIds = new Set([
     "00000000-0000-4000-8000-000000000001",
   ]);
+
+  const response = await GET(request());
+
+  assert.equal(response.status, 403);
+  const body = (await response.json()) as { error: string; message: string };
+  assert.equal(body.error, "forbidden");
+  assert.ok(body.message.includes("unrestricted"), `refusal must name the missing requirement, got: ${body.message}`);
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("unrestricted Benford drill keeps the shared filter empty", async () => {
+  reset();
+  routeState.permissions = ["reports.read", "admin.audit.read"];
+  routeState.allowedSubsidiaryIds = null;
   routeState.detailRows = [
     {
       doc_id: "doc-1",
@@ -180,27 +217,6 @@ test("restricted Benford drill applies the subsidiary predicate to detail and to
     ],
   });
   assert.deepEqual(routeState.filters, [
-    {
-      column: "d.subsidiary_id",
-      allowed: ["00000000-0000-4000-8000-000000000001"],
-    },
-  ]);
-  assert.equal(routeState.calls.length, 2);
-  assert.ok(
-    routeState.calls.every(
-      (text) => text.includes("d.subsidiary_id") && text.includes("::uuid[]"),
-    ),
-  );
-});
-
-test("unrestricted Benford drill keeps the shared filter empty", async () => {
-  reset();
-  routeState.allowedSubsidiaryIds = null;
-
-  const response = await GET(request());
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(routeState.filters, [
     { column: "d.subsidiary_id", allowed: null },
   ]);
   assert.equal(routeState.calls.length, 2);
@@ -211,6 +227,7 @@ test("unrestricted Benford drill keeps the shared filter empty", async () => {
 
 test("Benford drill preserves unsafe-size monetary decimals", async () => {
   reset();
+  routeState.permissions = ["reports.read", "admin.audit.read"];
   routeState.allowedSubsidiaryIds = null;
   routeState.detailRows = [
     {
@@ -235,6 +252,7 @@ test("Benford drill preserves unsafe-size monetary decimals", async () => {
 
 test("Benford drill scopes detail and totals to one document currency", async () => {
   reset();
+  routeState.permissions = ["reports.read", "admin.audit.read"];
   routeState.allowedSubsidiaryIds = null;
   const response = await GET(new Request(
     "http://openbooks.test/api/analytics/sentinel/benford?digit=4&from=2026-01-01&to=2026-12-31&currency=USD",
@@ -255,6 +273,8 @@ const invalidFilters: Record<string, string>[] = [
 for (const invalid of invalidFilters) {
   test(`Benford drill refuses malformed filters before querying: ${JSON.stringify(invalid)}`, async () => {
     reset();
+    routeState.permissions = ["reports.read", "admin.audit.read"];
+    routeState.allowedSubsidiaryIds = null;
     const query = new URLSearchParams({ digit: "4", from: "2026-01-01", to: "2026-12-31", ...invalid });
     const response = await GET(new Request("http://openbooks.test/api/analytics/sentinel/benford?" + query));
     assert.equal(response.status, 400);

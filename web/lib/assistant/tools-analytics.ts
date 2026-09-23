@@ -11,6 +11,7 @@ import { trueCostData } from "../analytics/true-cost-data";
 import { utilizationData } from "../analytics/utilization-data";
 import { spendVelocityData } from "../analytics/spend-velocity-data";
 import { sentinelData } from "../analytics/sentinel-data";
+import { sentinelAccessDenied } from "../analytics/sentinel-access";
 import { analyticsConfig } from "../analytics/config";
 import { isFeatureEnabled } from "../features";
 import { apPosition } from "../cash/ap-position";
@@ -608,7 +609,7 @@ const sentinelTool: AssistantToolDef = {
   gate: { mode: "allOf", perms: ["reports.read", "admin.audit.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (authz.allowedSubsidiaryIds !== null) return { ok: false, error: "forbidden" };
+    if (sentinelAccessDenied(authz) !== null) return { ok: false, error: "forbidden" };
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period, authz));

@@ -86,12 +86,22 @@ for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
             } else assert.deepEqual(result, { ok: false, error: "forbidden" });
           } else {
             const response = await drilldown(new Request(`http://audit.local/api/analytics/sentinel/benford?digit=9&from=${period.from}&to=${period.to}`));
-            assert.equal(response.status, 200);
-            const data = await response.json();
-            const visible = mode === "all" || mode === "no audit grant";
-            assert.equal(data.count, visible ? 1 : 0);
-            assert.equal(data.documents.length, visible ? 1 : 0);
-            if (visible) assert.equal(data.documents[0].docNumber, "HIDDEN-SPEND");
+            // The drill shares the page's whole-company gate: anything less
+            // than unrestricted reports + audit access is a 403, never
+            // filtered rows — a reports-only role sees nothing at all.
+            if (mode === "all") {
+              assert.equal(response.status, 200);
+              const data = await response.json();
+              assert.equal(data.count, 1);
+              assert.equal(data.documents.length, 1);
+              assert.equal(data.documents[0].docNumber, "HIDDEN-SPEND");
+            } else {
+              assert.equal(response.status, 403, `drilldown must refuse ${mode}`);
+              const data = await response.json() as { error: string; message: string };
+              assert.equal(data.error, "forbidden");
+              assert.ok(data.message.includes("admin.audit.read") || data.message.includes("unrestricted subsidiary access"),
+                `refusal must name the missing requirement, got: ${data.message}`);
+            }
           }
         });
       } finally {

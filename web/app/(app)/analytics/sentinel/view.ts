@@ -3,7 +3,8 @@ import 'server-only'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
-import { can, requirePermission } from '../../../../lib/authz'
+import { requirePermission } from '../../../../lib/authz'
+import { sentinelAccessDenied } from '../../../../lib/analytics/sentinel-access'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { sentinelData } from '../../../../lib/analytics/sentinel-data'
@@ -44,7 +45,7 @@ export interface SentinelData {
 export async function loadSentinel(sp: Record<string, string | undefined>): Promise<SentinelData> {
   const t = await getTranslations('analytics.sentinel')
   const authz = await requirePermission('reports.read')
-  if (authz.allowedSubsidiaryIds !== null || !can(authz, 'admin.audit.read')) redirect('/')
+  if (sentinelAccessDenied(authz) !== null) redirect('/')
 
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
