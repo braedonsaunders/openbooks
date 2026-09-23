@@ -580,9 +580,12 @@ export async function fulfillRequest(args: {
     // Append-only rows cannot be updated (0228 trigger refuses it), so
     // fulfilment links forward: the new feedback row's context carries
     // fulfills_request_id, written in the SAME transaction as the check
-    // that the request is still open. The request row is never touched.
+    // that the request is still open. The request row is never touched —
+    // but it IS locked: the FOR UPDATE serializes concurrent fulfilments
+    // so a retried request resolves to the one fulfilment, never two.
     const req = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -602,15 +605,27 @@ export async function fulfillRequest(args: {
     if (req.requested_from_party_id !== person.partyId && !(await hasPerformanceManage(db, orgId, actorId))) {
       throw new HrmPerformanceError("FORBIDDEN", "only the requested party or HR may fulfil a feedback request");
     }
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, created_by)
-      values (${orgId}, ${req.subject_employment_id}, ${person.partyId}, 'feedback', ${args.visibility},
-              ${args.body.trim()}, ${JSON.stringify({ fulfills_request_id: requestId })}::jsonb, ${actorId})
-      returning id
+    // A retried fulfilment returns the first answer instead of writing a
+    // second: the fulfils_request_id link is the idempotency key, read
+    // under the same request lock so two racers cannot both miss it.
+    const prior = (await db.execute<{ id: string }>(sql`
+      select id from hrm_feedback
+       where org_id = ${orgId} and kind = 'feedback'
+         and context->>'fulfills_request_id' = ${requestId}
+       limit 1
     `)).rows[0];
-    if (!inserted) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row was written; retry the action");
+    const fulfilmentId =
+      prior?.id ??
+      (await db.execute<{ id: string }>(sql`
+        insert into hrm_feedback (org_id, subject_employment_id, author_party_id, kind, visibility, body, context, created_by)
+        values (${orgId}, ${req.subject_employment_id}, ${person.partyId}, 'feedback', ${args.visibility},
+                ${args.body.trim()}, ${JSON.stringify({ fulfills_request_id: requestId })}::jsonb, ${actorId})
+        returning id
+      `)).rows[0]?.id;
+    if (!fulfilmentId) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row was written; retry the action");
     const rows = (await db.execute<StoredFeedback>(sql`
       select f.id, f.subject_employment_id, e.worker_party_id as subject_party_id,
+             e.employer_subsidiary_id as subject_employer_subsidiary_id,
              coalesce(p.display_name, '—') as subject_name,
              f.author_party_id, f.kind, f.visibility, f.body, f.context,
              f.requested_from_party_id,
@@ -618,7 +633,7 @@ export async function fulfillRequest(args: {
         from hrm_feedback f
         join worker_employments e on e.org_id = f.org_id and e.id = f.subject_employment_id
         left join parties p on p.org_id = f.org_id and p.id = e.worker_party_id
-       where f.org_id = ${orgId} and f.id = ${inserted.id}
+       where f.org_id = ${orgId} and f.id = ${fulfilmentId}
     `)).rows;
     const dto = rows[0] ? await toDTO(db, orgId, actorId, rows[0]) : null;
     if (!dto) throw new HrmPerformanceError("REFUSED", "the fulfilment was not stored — no row can be read back; retry the action");
