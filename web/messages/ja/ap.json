@@ -81,6 +81,7 @@
     },
     "emptyTitle": "取込されたドキュメントはありません",
     "emptyDescription": "PDF、JPEG、PNG、または TIFF の仕入先ドキュメントをアップロードして開始してください。",
+    "emptyDescriptionNoGrant": "PDF、JPEG、PNG、または TIFF の仕入先ドキュメントをアップロードして開始してください。アップロードには買掛作成アクセスが必要です。",
     "selected": "{count, plural, =0 {未選択} one {# 件選択} other {# 件選択}}",
     "select": "選択",
     "selectDocument": "{name} を選択",

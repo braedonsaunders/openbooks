@@ -24,7 +24,9 @@
     "hero": {
       "title": "Engagements fournisseurs",
       "hint": "Bons de commande ouverts et factures ouvertes, plus forte exposition d'abord",
-      "empty": "Aucun engagement ni dette ouverte.",
+      "empty": "Aucun engagement ni dette ouverte. Créez un bon de commande ou comptabilisez une facture fournisseur et l’exposition apparaîtra ici.",
+      "createOrder": "Nouveau bon de commande",
+      "createBill": "Nouvelle facture fournisseur",
       "vendor": "Fournisseur",
       "openPos": "BC ouverts",
       "openBills": "Factures",

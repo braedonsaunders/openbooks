@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "Rentabilité des projets",
     "empty": "Aucune activité de projet sur cette période.",
+    "emptyHint": "Rien n’a été comptabilisé sur les projets sur {period}. Saisissez du temps, affectez factures et dépenses à un projet ou choisissez une période plus large.",
     "searchPlaceholder": "Rechercher des clients ou des projets…",
     "noCustomer": "Client non attribué",
     "unassignedProject": "Non attribué",

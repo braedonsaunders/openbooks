@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "Rentabilidade de Projetos",
     "empty": "Nenhuma atividade de projeto neste período.",
+    "emptyHint": "Nada foi lançado em projetos em {period}. Registre horas, vincule faturas e despesas a um projeto ou escolha um período mais amplo.",
     "searchPlaceholder": "Pesquisar clientes ou projetos…",
     "noCustomer": "Cliente não atribuído",
     "unassignedProject": "Não atribuído",

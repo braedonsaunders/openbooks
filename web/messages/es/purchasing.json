@@ -24,7 +24,9 @@
     "hero": {
       "title": "Compromisos con proveedores",
       "hint": "Órdenes de compra abiertas junto a facturas abiertas, mayor exposición primero",
-      "empty": "Sin compromisos ni cuentas por pagar abiertas.",
+      "empty": "Sin compromisos ni cuentas por pagar abiertas. Cree una orden de compra o registre una factura de proveedor y la exposición aparecerá aquí.",
+      "createOrder": "Nueva orden de compra",
+      "createBill": "Nueva factura de proveedor",
       "vendor": "Proveedor",
       "openPos": "OC abiertas",
       "openBills": "Facturas",

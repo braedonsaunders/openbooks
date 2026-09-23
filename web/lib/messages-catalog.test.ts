@@ -2925,8 +2925,8 @@ test('analytics copy ships translated in fr, es and de', () => {
     'analytics.categoryManager.',
   ]
   const icuWanted = wanted.filter((key) => icuOwned.some((prefix) => key.startsWith(prefix)))
-  assert.equal(icuWanted.length, 1272, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
-  assert.equal(wanted.length, 1912, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(icuWanted.length, 1274, 'analytics i4-section inventory changed; translate the new keys everywhere and re-pin')
+  assert.equal(wanted.length, 1914, 'analytics source inventory changed; translate the new keys everywhere and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3228,7 +3228,7 @@ test('analytics copy ships translated in ja, zh and pt-BR', () => {
   ]
   const source = flattenCatalog('en')
   const wanted = [...source.keys()].filter((key) => prefixes.some((prefix) => key.startsWith(prefix)))
-  assert.equal(wanted.length, 1272, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(wanted.length, 1274, 'analytics i5-subtree inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of wanted) {
     const english = source.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -5426,7 +5426,7 @@ const I14_IDENTICAL_BY_FACT = new Set([
 const I14_FILE_COUNTS: Record<string, number> = {
   "items": 263,
   "inventory": 185,
-  "reports": 1767,
+  "reports": 1768,
   "sync": 172,
   "login": 33,
   "accounts": 82,
@@ -5446,7 +5446,7 @@ const I14_FILE_COUNTS: Record<string, number> = {
   "purchaseOrders": 55,
   "records": 185,
   "shell": 145,
-  "tax": 149,
+  "tax": 150,
 }
 
 test('I14 items/inventory/reports/sync/login/small-catalog copy ships translated in every locale', () => {

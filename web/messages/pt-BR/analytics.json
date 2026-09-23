@@ -1388,6 +1388,8 @@
       "allWithinTarget": "Todas as métricas dentro da meta.",
       "noDriftingTitles": "Nenhum cargo em desvio",
       "noImprovements": "Nenhuma oportunidade de melhoria identificada",
+      "noTimeTracked": "Nenhum tempo foi registrado neste período, por isso a utilização é 0%. Registre horas nos timesheets para medi-la.",
+      "noTimeTrackedAction": "Abrir timesheets",
       "noIssues": "Nenhum problema detectado",
       "noPeerTitles": "Sem cargos com 2+ funcionários para comparar",
       "noSuddenDrops": "Nenhuma queda brusca detectada"

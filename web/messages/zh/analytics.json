@@ -1388,6 +1388,8 @@
       "allWithinTarget": "全部指标均达标。",
       "noDriftingTitles": "没有下滑的职位",
       "noImprovements": "未发现改进机会",
+      "noTimeTracked": "本期未记录任何工时，因此利用率为 0%。请在工时表中记录工时以进行度量。",
+      "noTimeTrackedAction": "打开工时表",
       "noIssues": "未发现问题",
       "noPeerTitles": "没有可比较的职位（2人以上）",
       "noSuddenDrops": "未发现骤降"

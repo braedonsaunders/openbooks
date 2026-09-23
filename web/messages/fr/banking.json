@@ -660,7 +660,8 @@
       "ending": "Trésorerie finale"
     },
     "totalCash": "Trésorerie totale",
-    "noAccounts": "Aucun compte bancaire trouvé.",
+    "noAccounts": "Aucun compte bancaire pour l’instant. Connectez-en un dans l’aperçu bancaire pour voir les soldes et l’autonomie ici.",
+    "noAccountsAction": "Aller à la banque",
     "negativeAlert": "Passage en trésorerie négative prévu — creux de {amount} la semaine du {date}. <ap>Ralentir les paiements fournisseurs</ap> ou <ar>accélérer les recouvrements</ar>.",
     "deferralNote": "{amount} de dettes fournisseurs ne peuvent pas être payées dans l’horizon avec les paramètres actuels de capacité FA — l’arriéré déborde au-delà de la dernière semaine.",
     "configure": "Configurer la prévision",

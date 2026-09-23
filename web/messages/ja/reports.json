@@ -2203,6 +2203,7 @@
   "projectProfitability": {
     "title": "プロジェクト収益性",
     "empty": "この期間にプロジェクト活動はありません。",
+    "emptyHint": "{period} にプロジェクトへの計上はありません。時間を記録し、請求書や経費をプロジェクトに紐付けするか、より広い期間を選択してください。",
     "searchPlaceholder": "顧客またはジョブを検索…",
     "noCustomer": "顧客未割り当て",
     "unassignedProject": "未割り当て",

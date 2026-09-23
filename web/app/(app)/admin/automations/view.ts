@@ -63,6 +63,10 @@ export interface AutomationsData {
   statusOptions: { value: string; label: string; count: number }[]
   currentParams: Record<string, string | string[] | undefined>
   isEmpty: boolean
+  /** The table hides with this (rather than a spec negation): when nothing
+   *  exists, the single empty-state card above is the whole story — the
+   *  table's own empty copy would be a second, repeated card. */
+  hasRows: boolean
   emptyTitle: string
   emptyDescription: string
   newLabel: string
@@ -158,6 +162,7 @@ export async function loadAutomations(
     })),
     currentParams: searchParams,
     isEmpty: automations.length === 0,
+    hasRows: automations.length > 0,
     emptyTitle: t('list.emptyTitle'),
     emptyDescription: t('list.emptyDescription'),
     newLabel: t('list.newButton'),
@@ -218,36 +223,39 @@ export function automationsSpec(data: AutomationsData): PageSpec {
         }),
         when: f('isEmpty'),
       },
-      table({
-        variant: 'app',
-        rows: f('rows'),
-        rowKey: item('id'),
-        columns: [
-          column(
-            f('columnAutomation'),
-            widgetCell('automation-name-cell', { name: item('name'), href: item('href') }),
-          ),
-          column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
-          column(f('columnTrigger'), text(item('triggerLabel'))),
-          column(
-            f('columnLastRun'),
-            widgetCell('automation-last-run-cell', { at: item('lastRunAt'), fallback: item('neverRanLabel') }),
-          ),
-          column(f('columnError'), text(item('error'))),
-          column(
-            f('columnActions'),
-            widgetCell('automation-row-actions', {
-              id: item('id'),
-              status: item('status'),
-              runLabel: f('runLabel'),
-              enableLabel: f('enableLabel'),
-              disableLabel: f('disableLabel'),
-              actionFailed: f('actionFailed'),
-            }),
-          ),
-        ],
-        empty: { title: f('emptyTitle'), description: f('emptyDescription') },
-      }),
+      {
+        ...table({
+          variant: 'app',
+          rows: f('rows'),
+          rowKey: item('id'),
+          columns: [
+            column(
+              f('columnAutomation'),
+              widgetCell('automation-name-cell', { name: item('name'), href: item('href') }),
+            ),
+            column(f('columnStatus'), badge(item('statusLabel'), { variant: item('statusVariant') })),
+            column(f('columnTrigger'), text(item('triggerLabel'))),
+            column(
+              f('columnLastRun'),
+              widgetCell('automation-last-run-cell', { at: item('lastRunAt'), fallback: item('neverRanLabel') }),
+            ),
+            column(f('columnError'), text(item('error'))),
+            column(
+              f('columnActions'),
+              widgetCell('automation-row-actions', {
+                id: item('id'),
+                status: item('status'),
+                runLabel: f('runLabel'),
+                enableLabel: f('enableLabel'),
+                disableLabel: f('disableLabel'),
+                actionFailed: f('actionFailed'),
+              }),
+            ),
+          ],
+          empty: { title: f('emptyTitle'), description: f('emptyDescription') },
+        }),
+        when: f('hasRows'),
+      },
       widgetBlock('automation-approval-settings', {
         settings: f('approvalSettings'),
         saveFailed: f('approvalFailed'),

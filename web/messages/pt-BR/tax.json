@@ -108,6 +108,7 @@
     "title": "Provisão de imposto de renda",
     "description": "ASC 740 / IAS 12 — imposto corrente e diferido, provisão de avaliação e reconciliação de alíquotas.",
     "empty": "Nenhuma provisão. Calcule a primeira provisão anual para começar.",
+    "emptyNoGrant": "Ainda não há cálculos de provisão. Somente preparadores com acesso de criação de relatórios em toda a organização podem calcular a primeira provisão.",
     "columns": {
       "fiscalYear": "Exercício",
       "version": "Versão",

@@ -1388,6 +1388,8 @@
       "allWithinTarget": "Todas las métricas dentro del objetivo.",
       "noDriftingTitles": "Sin puestos a la deriva",
       "noImprovements": "Sin oportunidades de mejora identificadas",
+      "noTimeTracked": "No se registró tiempo en este período, por lo que la utilización es 0 %. Registre horas en los partes de horas para medirla.",
+      "noTimeTrackedAction": "Abrir partes de horas",
       "noIssues": "Sin problemas detectados",
       "noPeerTitles": "Sin puestos con 2+ empleados para comparar",
       "noSuddenDrops": "Sin caídas bruscas detectadas"

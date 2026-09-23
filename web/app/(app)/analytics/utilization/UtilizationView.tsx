@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import {
   AlertTriangle, ArrowDown, ArrowRightLeft, Box, Brain, Calculator,
@@ -355,8 +356,21 @@ function OverviewTab({ data }: { data: UtilizationData }) {
   // Top departments by non-billable cost, coloured vs target.
   const topDepts = billableDepts.slice(0, 5)
 
+  // Zero tracked hours is a data prerequisite, not poor performance: the
+  // 0% below would otherwise read as a failing team. Name the remedy and
+  // link the timesheets that change it.
+  const noTimeTracked = c.hours === 0
+
   return (
     <div className="space-y-5">
+      {noTimeTracked ? (
+        <p className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+          {t('empty.noTimeTracked')}{' '}
+          <Link href="/timesheets" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+            {t('empty.noTimeTrackedAction')}
+          </Link>
+        </p>
+      ) : null}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
         <div className="space-y-5 lg:col-span-3">
           <Panel title={t('panels.efficiencySummary')} icon={Scale} bodyClassName="p-0">

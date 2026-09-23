@@ -72,3 +72,29 @@ test('the rates banner pins above live vitals with a derive link (F-t06-027)', (
     'the banner shows exactly when the notice is set',
   )
 })
+
+// UX-20: the empty commitments hero names its prerequisite in copy and
+// offers the create action only where the caller holds ap.create — a reader
+// without it keeps the honest zero with no misleading button.
+test('the empty commitments hero carries its granted create action (UX-20)', () => {
+  assert.match(
+    source,
+    /heroEmptyAction: !can\(authz, 'ap\.create'\)/,
+    'the empty action must be gated on the AP creation grant',
+  )
+  assert.match(
+    source,
+    /\?orderNew=1', label: t\('home\.hero\.createOrder'\)/,
+    'order-enabled tenants link straight into a new purchase order',
+  )
+  assert.match(
+    source,
+    /doc=new&kind=vendor_bill', label: t\('home\.hero\.createBill'\)/,
+    'tenants without orders link into a new vendor bill instead',
+  )
+  assert.match(
+    source,
+    /emptyAction: data\.heroEmptyAction/,
+    'the spec must carry the action to the commitments section',
+  )
+})

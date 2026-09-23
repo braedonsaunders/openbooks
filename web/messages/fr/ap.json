@@ -71,6 +71,7 @@
     "search": "Rechercher fichiers, fournisseurs, numéros de facture…",
     "status": { "queued": "En file", "extracting": "Extraction", "needs_review": "À réviser", "ready": "Prêt", "duplicate": "Doublon possible", "failed": "Échec", "materialized": "Brouillon créé", "rejected": "Rejeté" },
     "emptyTitle": "Aucun document capturé", "emptyDescription": "Téléversez des documents fournisseurs PDF, JPEG, PNG ou TIFF pour commencer.",
+    "emptyDescriptionNoGrant": "Téléversez des documents fournisseurs PDF, JPEG, PNG ou TIFF pour commencer. Vous devez disposer de l’accès de création des dettes fournisseurs pour téléverser.",
     "selected": "{count, plural, =0 {Aucune sélection} one {# sélection} other {# sélections}}", "select": "Sélectionner", "selectDocument": "Sélectionner {name}",
     "reprocess": "Retraiter", "reject": "Rejeter", "createDraft": "Créer le brouillon", "createDrafts": "Créer les brouillons",
     "bulkComplete": "Action groupée terminée : {succeeded} réussies, {failed} échouées.", "actionFailed": "L’action de capture a échoué.",

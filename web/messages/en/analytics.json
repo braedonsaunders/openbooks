@@ -1563,7 +1563,9 @@
       "noIssues": "No issues detected",
       "noDriftingTitles": "No drifting titles",
       "noPeerTitles": "No titles with 2+ employees for comparison",
-      "noImprovements": "No improvement opportunities identified"
+      "noImprovements": "No improvement opportunities identified",
+      "noTimeTracked": "No time was tracked in this period, so utilization reads 0%. Log time on timesheets to measure it.",
+      "noTimeTrackedAction": "Open timesheets"
     },
     "empCount": "{count} emp",
     "ppAvg": "{avg}pp avg",

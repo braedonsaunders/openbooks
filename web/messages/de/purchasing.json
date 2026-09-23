@@ -24,7 +24,9 @@
     "hero": {
       "title": "Lieferantenverpflichtungen",
       "hint": "Offene Bestellungen neben offenen Rechnungen, größte Exponierung zuerst",
-      "empty": "Keine offenen Verpflichtungen oder Verbindlichkeiten.",
+      "empty": "Keine offenen Verpflichtungen oder Verbindlichkeiten. Legen Sie eine Bestellung an oder erfassen Sie eine Lieferantenrechnung — die Position erscheint dann hier.",
+      "createOrder": "Neue Bestellung",
+      "createBill": "Neue Lieferantenrechnung",
       "vendor": "Lieferant",
       "openPos": "Offene Bestellungen",
       "openBills": "Rechnungen",

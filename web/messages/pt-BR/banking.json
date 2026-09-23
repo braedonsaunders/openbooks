@@ -660,7 +660,8 @@
       "ending": "Caixa final"
     },
     "totalCash": "Caixa total",
-    "noAccounts": "Nenhuma conta bancária encontrada.",
+    "noAccounts": "Ainda não há contas bancárias. Conecte uma na visão geral do banco para ver saldos e projeção aqui.",
+    "noAccountsAction": "Ir para o banco",
     "negativeAlert": "Projeção de saldo negativo — mínima de {amount} na semana de {date}. <ap>Atrase pagamentos a fornecedores</ap> ou <ar>acelere recebimentos</ar>.",
     "deferralNote": "{amount} em contas a pagar não podem ser pagos dentro do horizonte com a configuração atual de capacidade de CP — o atraso se estende além da última semana.",
     "configure": "Configurar previsão",

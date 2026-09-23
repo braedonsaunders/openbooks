@@ -660,7 +660,8 @@
       "ending": "期末残高"
     },
     "totalCash": "資金合計",
-    "noAccounts": "銀行口座が見つかりません。",
+    "noAccounts": "銀行口座がまだありません。残高とランウェイをここに表示するには、銀行概要で接続してください。",
+    "noAccountsAction": "銀行へ移動",
     "negativeAlert": "資金ショートの見込み — {date}の週に最低 {amount}。<ap>買掛金の支払いを遅らせる</ap>か<ar>売掛金の回収を早める</ar>。",
     "deferralNote": "現在の支払能力設定では、{amount} の買掛金を期間内に支払えません — 未払い分は最終週を超えて繰り延べられます。",
     "configure": "予測を設定",

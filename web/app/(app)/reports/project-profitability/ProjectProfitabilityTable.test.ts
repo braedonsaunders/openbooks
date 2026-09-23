@@ -13,6 +13,22 @@ test('project profitability display scales decimalRatio margins through the shar
   )
 })
 
+test('the empty report explains its zero with the period and the remedy (UX-20)', () => {
+  const view = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
+  assert.match(
+    source,
+    /\{emptyHint\}/,
+    'the table must render the zero-state explanation under the empty label',
+  )
+  assert.match(
+    view,
+    /emptyHint: t\('projectProfitability\.emptyHint', \{ period: /,
+    'the loader must explain the zero against the selected period',
+  )
+  const catalog = readFileSync(new URL('../../../../messages/en/reports.json', import.meta.url), 'utf8')
+  assert.match(catalog, /"emptyHint": "Nothing was posted to projects in \{period\}/)
+})
+
 test('project profitability display and export share one margin scaling', () => {
   assert.match(
     source,

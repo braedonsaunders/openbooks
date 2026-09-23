@@ -66,6 +66,7 @@
     "search": "Buscar archivos, proveedores, números de factura…",
     "status": { "queued": "En cola", "extracting": "Extrayendo", "needs_review": "Requiere revisión", "ready": "Listo", "duplicate": "Posible duplicado", "failed": "Error", "materialized": "Borrador creado", "rejected": "Rechazado" },
     "emptyTitle": "No hay documentos capturados", "emptyDescription": "Cargue documentos de proveedor PDF, JPEG, PNG o TIFF para comenzar.",
+    "emptyDescriptionNoGrant": "Cargue documentos de proveedor PDF, JPEG, PNG o TIFF para comenzar. Necesita acceso de creación de cuentas por pagar para subir documentos.",
     "selected": "{count, plural, =0 {Ninguno seleccionado} one {# seleccionado} other {# seleccionados}}", "select": "Seleccionar", "selectDocument": "Seleccionar {name}",
     "reprocess": "Reprocesar", "reject": "Rechazar", "createDraft": "Crear borrador", "createDrafts": "Crear borradores",
     "bulkComplete": "Acción masiva terminada: {succeeded} correctas, {failed} fallidas.", "actionFailed": "La acción de captura falló.",
