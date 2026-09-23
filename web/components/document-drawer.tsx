@@ -1484,7 +1484,7 @@ export function DocumentDrawer({
       }
       try {
         const res = await fetch(
-          `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}`,
+          `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}&limit=200`,
         )
         // Inventory off, credit kind off, or no permission: no picker, and no
         // console noise for a refusal the drawer already knows how to absorb.
