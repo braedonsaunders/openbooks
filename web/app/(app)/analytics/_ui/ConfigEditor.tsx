@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Settings2 } from 'lucide-react'
 import { Panel } from './Panel'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /**
  * Editable analytics thresholds — the Configuration-tab save flow.
@@ -35,10 +36,37 @@ export function ConfigEditor({
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(fields.map((f) => [f.key, String(values[f.key] ?? defaults[f.key])])))
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  /** Exact server revision backing the next save (null until the first read). */
+  const [revision, setRevision] = useState<number | null>(null)
+
+  // Learn the current revision so the save carries a live token. A failed
+  // read is not fatal: the save then sends 0 and reconciles through the 409.
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const r = await fetch(`/api/analytics/config/${dashboard}`)
+        if (!r.ok) return
+        const body = (await r.json()) as { revision?: unknown }
+        if (!cancelled && typeof body.revision === 'number') setRevision(body.revision)
+      } catch {
+        // Offline on load: the save reconciles through the 409 path.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [dashboard])
 
   const dirty = fields.some((f) => f.key === 'weeklyApCap'
     ? draft[f.key] !== String(values[f.key] ?? defaults[f.key])
     : Number(draft[f.key]) !== Number(values[f.key] ?? defaults[f.key]))
+
+  const applyServerValues = (serverValues: unknown) => {
+    if (!serverValues || typeof serverValues !== 'object') return
+    const record = serverValues as Record<string, string | number>
+    setDraft(Object.fromEntries(fields.map((f) => [f.key, String(record[f.key] ?? defaults[f.key])])))
+  }
 
   const save = async (payload: Record<string, string | number>) => {
     setBusy(true)
@@ -46,15 +74,42 @@ export function ConfigEditor({
     const r = await fetch(`/api/analytics/config/${dashboard}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ expectedRevision: revision ?? 0, values: payload }),
     })
     if (r.ok) {
+      const body = (await r.json()) as { revision?: unknown }
+      if (typeof body.revision === 'number') setRevision(body.revision)
       setMsg('Saved — recomputing…')
+      router.refresh()
+    } else if (r.status === 409) {
+      // Another admin committed first: adopt the latest values (the
+      // conflicting edit is not saved) and name the remedy.
+      let body: {
+        error?: unknown
+        revision?: unknown
+        values?: unknown
+      } | null = null
+      try {
+        body = (await r.json()) as {
+          error?: unknown
+          revision?: unknown
+          values?: unknown
+        } | null
+      } catch {
+        body = null
+      }
+      if (typeof body?.revision === 'number') setRevision(body.revision)
+      applyServerValues(body?.values)
+      setMsg(
+        typeof body?.error === 'string' && body.error
+          ? body.error
+          : 'This configuration changed after you opened it — the latest values are shown; reapply your change and save again.',
+      )
       router.refresh()
     } else if (r.status === 403) {
       setMsg('Saving requires the Setup permission.')
     } else {
-      setMsg(`Save failed (${r.status}).`)
+      setMsg(await readApiErrorMessage(r, 'Save failed'))
     }
     setBusy(false)
   }
