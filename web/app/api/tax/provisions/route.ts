@@ -66,34 +66,58 @@ export async function POST(req: Request) {
     if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return null;
     return normalizeMoney(exact);
   };
+  // A grid row with no description is an empty line ONLY when it carries no
+  // data — no amount and (for temporary differences) no category. A populated
+  // row without a description refuses by row, naming the required
+  // description, instead of silently shrinking the provision.
+  const isBlank = (v: unknown): boolean =>
+    v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  const described = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() ? v.trim() : null;
+  if (body.permanentDifferences !== undefined && !Array.isArray(body.permanentDifferences)) {
+    return NextResponse.json({ error: "invalid permanent differences" }, { status: 400 });
+  }
+  if (body.additionalDifferences !== undefined && !Array.isArray(body.additionalDifferences)) {
+    return NextResponse.json({ error: "invalid temporary differences" }, { status: 400 });
+  }
   const permanentDifferences: PermanentDifference[] = [];
-  if (Array.isArray(body.permanentDifferences)) {
-    for (const p of body.permanentDifferences as { description?: unknown; amount?: unknown }[]) {
-      if (typeof p?.description !== "string" || !p.description.trim()) continue;
-      const amount = money(p.amount);
-      if (amount === null) return NextResponse.json({ error: "invalid permanent-difference amount" }, { status: 400 });
-      permanentDifferences.push({ description: p.description.trim(), amount });
+  for (const [i, p] of (body.permanentDifferences as { description?: unknown; amount?: unknown }[] | undefined ?? []).entries()) {
+    const description = described(p?.description);
+    if (!description) {
+      if (isBlank(p?.amount)) continue;
+      return NextResponse.json(
+        { error: `permanentDifferences[${i}]: description is required when an amount is provided` },
+        { status: 400 },
+      );
     }
+    const amount = money(p!.amount);
+    if (amount === null) return NextResponse.json({ error: "invalid permanent-difference amount" }, { status: 400 });
+    permanentDifferences.push({ description, amount });
   }
   const additionalDifferences: DifferenceInput[] = [];
-  if (Array.isArray(body.additionalDifferences)) {
-    for (const d of body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[]) {
-      // An undescribed row is an empty grid line, not data — skip it exactly
-      // as permanent differences do. A described row with an unknown category
-      // is a caller error: dropping it would silently understate the run.
-      if (typeof d?.description !== "string" || !d.description.trim()) continue;
-      if (!DIFF_CATEGORIES.has(String(d.category))) {
-        return NextResponse.json({ error: "invalid temporary-difference category" }, { status: 400 });
-      }
-      const difference = money(d.difference);
-      if (difference === null) return NextResponse.json({ error: "invalid temporary-difference amount" }, { status: 400 });
-      additionalDifferences.push({
-        category: String(d.category) as DifferenceInput["category"],
-        description: d.description.trim(),
-        difference,
-        source: "manual",
-      });
+  for (const [i, d] of (body.additionalDifferences as { category?: unknown; description?: unknown; difference?: unknown }[] | undefined ?? []).entries()) {
+    // An undescribed row is an empty grid line, not data — skip it exactly
+    // as permanent differences do. A described row with an unknown category
+    // is a caller error: dropping it would silently understate the run.
+    const description = described(d?.description);
+    if (!description) {
+      if (isBlank(d?.difference) && isBlank(d?.category)) continue;
+      return NextResponse.json(
+        { error: `additionalDifferences[${i}]: description is required when an amount or category is provided` },
+        { status: 400 },
+      );
     }
+    if (!DIFF_CATEGORIES.has(String(d!.category))) {
+      return NextResponse.json({ error: "invalid temporary-difference category" }, { status: 400 });
+    }
+    const difference = money(d!.difference);
+    if (difference === null) return NextResponse.json({ error: "invalid temporary-difference amount" }, { status: 400 });
+    additionalDifferences.push({
+      category: String(d!.category) as DifferenceInput["category"],
+      description,
+      difference,
+      source: "manual",
+    });
   }
   const lossCarryforwardUsed = money(body.lossCarryforwardUsed ?? "0");
   const valuationAllowance = money(body.valuationAllowance ?? "0");
@@ -106,34 +130,48 @@ export async function POST(req: Request) {
   // owns semantic validation (unknown subsidiaries fail the run loudly).
   const parseDifferences = (
     raw: unknown,
-  ): { permanent: PermanentDifference[]; additional: DifferenceInput[] } | null => {
+    path: string,
+  ): { permanent: PermanentDifference[]; additional: DifferenceInput[] } | { error: string } => {
     const permanent: PermanentDifference[] = [];
     const additional: DifferenceInput[] = [];
-    if (Array.isArray((raw as { permanentDifferences?: unknown })?.permanentDifferences)) {
-      for (const p of (raw as { permanentDifferences: { description?: unknown; amount?: unknown }[] }).permanentDifferences) {
-        if (typeof p?.description !== "string" || !p.description.trim()) continue;
-        const amount = money(p.amount);
-        if (amount === null) return null;
-        permanent.push({ description: p.description.trim(), amount });
-      }
-    } else if ((raw as { permanentDifferences?: unknown })?.permanentDifferences !== undefined) {
-      return null;
+    const rejectNonArray = (v: unknown): { error: string } | null =>
+      v === undefined || Array.isArray(v) ? null : { error: "invalid provision entities" };
+    const fail = (message: string): { error: string } => ({ error: message });
+    const permanentRaw = (raw as { permanentDifferences?: unknown })?.permanentDifferences;
+    {
+      const bad = rejectNonArray(permanentRaw);
+      if (bad) return bad;
     }
-    if (Array.isArray((raw as { additionalDifferences?: unknown })?.additionalDifferences)) {
-      for (const d of (raw as { additionalDifferences: { category?: unknown; description?: unknown; difference?: unknown }[] }).additionalDifferences) {
-        if (typeof d?.description !== "string" || !d.description.trim()) continue;
-        if (!DIFF_CATEGORIES.has(String(d.category))) return null;
-        const difference = money(d.difference);
-        if (difference === null) return null;
-        additional.push({
-          category: String(d.category) as DifferenceInput["category"],
-          description: d.description.trim(),
-          difference,
-          source: "manual",
-        });
+    for (const [i, p] of ((permanentRaw ?? []) as { description?: unknown; amount?: unknown }[]).entries()) {
+      const description = described(p?.description);
+      if (!description) {
+        if (isBlank(p?.amount)) continue;
+        return fail(`${path}.permanentDifferences[${i}]: description is required when an amount is provided`);
       }
-    } else if ((raw as { additionalDifferences?: unknown })?.additionalDifferences !== undefined) {
-      return null;
+      const amount = money(p!.amount);
+      if (amount === null) return fail("invalid provision entities");
+      permanent.push({ description, amount });
+    }
+    const additionalRaw = (raw as { additionalDifferences?: unknown })?.additionalDifferences;
+    {
+      const bad = rejectNonArray(additionalRaw);
+      if (bad) return bad;
+    }
+    for (const [i, d] of ((additionalRaw ?? []) as { category?: unknown; description?: unknown; difference?: unknown }[]).entries()) {
+      const description = described(d?.description);
+      if (!description) {
+        if (isBlank(d?.difference) && isBlank(d?.category)) continue;
+        return fail(`${path}.additionalDifferences[${i}]: description is required when an amount or category is provided`);
+      }
+      if (!DIFF_CATEGORIES.has(String(d!.category))) return fail("invalid provision entities");
+      const difference = money(d!.difference);
+      if (difference === null) return fail("invalid provision entities");
+      additional.push({
+        category: String(d!.category) as DifferenceInput["category"],
+        description,
+        difference,
+        source: "manual",
+      });
     }
     return { permanent, additional };
   };
@@ -147,8 +185,8 @@ export async function POST(req: Request) {
       if (!subsidiaryId || !raw || typeof raw !== "object" || Array.isArray(raw)) {
         return NextResponse.json({ error: "invalid provision entities" }, { status: 400 });
       }
-      const parsed = parseDifferences(raw);
-      if (!parsed) return NextResponse.json({ error: "invalid provision entities" }, { status: 400 });
+      const parsed = parseDifferences(raw, `entities[${JSON.stringify(subsidiaryId)}]`);
+      if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
       const entry: EntityProvisionInputs = {};
       if (parsed.permanent.length > 0) entry.permanentDifferences = parsed.permanent;
       if (parsed.additional.length > 0) entry.additionalDifferences = parsed.additional;

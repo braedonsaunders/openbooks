@@ -15,6 +15,8 @@ interface ProvisionCreateCall {
     additionalDifferences: unknown[];
     lossCarryforwardUsed: string;
     valuationAllowance: string;
+    entities?: unknown;
+    presentationCurrency?: unknown;
   };
   actorId: string;
   scope: unknown;
@@ -149,6 +151,98 @@ test("POST keeps a valid categorized difference and skips empty grid rows", asyn
       },
     ],
   );
+});
+
+test("POST refuses a populated row without a description instead of dropping it", async () => {
+  for (const body of [
+    { fiscalYear: 2026, permanentDifferences: [{ description: "", amount: "25000" }] },
+    { fiscalYear: 2026, permanentDifferences: [{ description: "   ", amount: "25000" }] },
+    {
+      fiscalYear: 2026,
+      additionalDifferences: [{ description: "", category: "provisions", difference: "25000" }],
+    },
+    {
+      fiscalYear: 2026,
+      additionalDifferences: [{ category: "provisions", difference: "25000" }],
+    },
+    {
+      fiscalYear: 2026,
+      additionalDifferences: [{ description: "", category: "provisions" }],
+    },
+  ]) {
+    routeState.calls.length = 0;
+    const response = await post(body);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    const payload = (await response.json()) as { error: string };
+    assert.match(payload.error, /description is required/);
+    assert.equal(routeState.calls.length, 0, "a refused row must never reach the provision run");
+  }
+
+  // The row index is named so the preparer can find the offending grid line.
+  routeState.calls.length = 0;
+  const indexed = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [
+      { description: "Meals", amount: "10.00" },
+      { description: "", amount: "25000" },
+    ],
+  });
+  assert.equal(indexed.status, 400);
+  assert.deepEqual(await indexed.json(), {
+    error: "permanentDifferences[1]: description is required when an amount is provided",
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("POST rejects non-array top-level difference lists instead of ignoring them", async () => {
+  for (const body of [
+    { fiscalYear: 2026, permanentDifferences: "bogus" },
+    { fiscalYear: 2026, additionalDifferences: { description: "Lease", category: "other", difference: "1" } },
+  ]) {
+    routeState.calls.length = 0;
+    const response = await post(body);
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.equal(routeState.calls.length, 0);
+  }
+});
+
+test("POST refuses a populated per-entity row without a description, naming the row", async () => {
+  routeState.calls.length = 0;
+  const response = await post({
+    fiscalYear: 2026,
+    entities: {
+      "sub-1": {
+        permanentDifferences: [{ description: "", amount: "50.00" }],
+      },
+    },
+  });
+  assert.equal(response.status, 400);
+  assert.deepEqual(await response.json(), {
+    error: 'entities["sub-1"].permanentDifferences[0]: description is required when an amount is provided',
+  });
+  assert.equal(routeState.calls.length, 0);
+});
+
+test("POST still skips truly empty grid rows at root and per-entity level", async () => {
+  routeState.calls.length = 0;
+  const response = await post({
+    fiscalYear: 2026,
+    permanentDifferences: [{ description: "" }, { description: "Meals", amount: "10.00" }],
+    additionalDifferences: [{ description: "", category: "", difference: "" }],
+    entities: {
+      "sub-1": {
+        permanentDifferences: [{ description: "" }],
+        additionalDifferences: [{ description: "", category: "", difference: "" }],
+      },
+    },
+  });
+  assert.equal(response.status, 201);
+  assert.equal(routeState.calls.length, 1);
+  assert.deepEqual(routeState.calls[0]!.input.permanentDifferences, [
+    { description: "Meals", amount: "10.0000" },
+  ]);
+  assert.deepEqual(routeState.calls[0]!.input.additionalDifferences, []);
+  assert.deepEqual(routeState.calls[0]!.input.entities, { "sub-1": {} });
 });
 
 test("POST passes per-entity inputs and presentation currency to the run", async () => {
