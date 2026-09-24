@@ -245,9 +245,10 @@ test("computeStatutory prices a 2026 OW month end to end (the adapter path)", as
   assert.equal(pushed.find((line) => line.systemKey === "sdl")?.amount, "11.2500");
 });
 
-test("a foreign employee has no CPF lines but still owes the monthly SDL", async () => {
+test("a foreign employee's bonus still enters SDL while CPF stays inapplicable", async () => {
   const { ctx, pushed } = stubContext({
     income: "2000.00",
+    nonPeriodic: "1000.00",
     pensionable: "2000.00",
     insurable: "2000.00",
     certificateFor: () => ({
@@ -258,11 +259,16 @@ test("a foreign employee has no CPF lines but still owes the monthly SDL", async
       missing: [],
     }),
   });
+  // The SDL Act s.2 includes bonuses in wages, and CPF Board states SDL
+  // applies to all employees, including foreigners, at 0.25% of monthly
+  // total wages: SGD 3,000 × 0.25% = SGD 7.50.
+  // https://sso.agc.gov.sg/Act/SDLA1979?ValidDate=20260701
+  // https://www.cpf.gov.sg/employer/employer-obligations/skills-development-levy
   const factors = await SG_PAYROLL_PACK.computeStatutory(ctx);
   assert.equal(factors["CPF_APPLICABLE"], "false");
   assert.equal(factors["CPF_EE"], undefined);
   assert.equal(factors["CPF_ER"], undefined);
-  assert.equal(factors["SDL"], "5.0000");
+  assert.equal(factors["SDL"], "7.5000");
   assert.deepEqual(pushed.map(({ systemKey }) => systemKey), ["sdl"]);
 });
 

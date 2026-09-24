@@ -121,7 +121,7 @@ export interface SgStatutoryInput {
   taxYear: number;
   /** Ordinary Wages for the calendar month (OW). Additional Wages ride `nonPeriodic`. */
   ordinaryWages: string;
-  /** Additional Wages for the month: always refused — the AW ceiling is year-dependent. */
+  /** Additional Wages for the month; CPF-covered statuses require YTD AW headroom. */
   additionalWages?: string | null;
   cpfStatus: SgCpfStatus;
   ageBand: SgAgeBand;
@@ -199,7 +199,8 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   assertSgCovered(input.cpfStatus, input.ageBand, tables);
 
   const aw = parseCents(input.additionalWages ?? "0", "Additional Wages");
-  if (aw > 0n) {
+  const cpfApplicable = input.cpfStatus !== "foreigner";
+  if (cpfApplicable && aw > 0n) {
     // The AW ceiling is "$102,000 - Total Ordinary Wages (OW) subject to CPF
     // for the year" — a YEAR-dependent cap no per-month channel carries, so
     // any AW prices against a guessed ceiling. Refused, not approximated.
@@ -213,7 +214,6 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
     );
   }
 
-  const cpfApplicable = input.cpfStatus !== "foreigner";
   let owSubject = 0n;
   let totalDollars = 0n;
   let employeeDollars = 0n;
@@ -256,13 +256,21 @@ export function calculateSgStatutory(input: SgStatutoryInput): SgStatutoryResult
   // it so; the employer share is the difference, never rounded itself.
   const employerDollars = totalDollars - employeeDollars;
 
-  // SDL on monthly total wages (= OW with no AW): "0.25% of the monthly
+  // SDL on monthly total wages (OW + bonus/AW), independently of CPF's AW
+  // ceiling. The SDL Act's s.2 wage definition includes bonuses; the CPF
+  // Board says SDL applies to all employees including foreigners:
+  // https://sso.agc.gov.sg/Act/SDLA1979?ValidDate=20260701
+  // https://www.cpf.gov.sg/employer/employer-obligations/skills-development-levy
+  // CPF-covered employees with AW were refused above because their YTD
+  // ceiling is unknown; foreigners have no CPF obligation and SDL can still
+  // be computed from both wage channels.
+  // SDL on monthly total wages: "0.25% of the monthly
   // total wages", "$2 for an employee earning less than $800 a month",
   // "$11.25 for an employee earning more than $4,500 a month". The Board
   // publishes no per-employee cent rule (only the employer total "round[s]
   // down to the nearest dollar"), so the line prices 0.25% half up to the
   // cent — stated here, not hidden in arithmetic.
-  const w = parseCents(input.ordinaryWages, "monthly total wages");
+  const w = parseCents(input.ordinaryWages, "monthly ordinary wages") + aw;
   let sdlCents = (w * 25n + 5000n) / 10000n;
   const sdlMin = parseCents(tables.sdl.minLevy, "SDL minimum levy");
   const sdlMax = parseCents(tables.sdl.maxLevy, "SDL maximum levy");
