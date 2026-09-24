@@ -10,6 +10,7 @@ import {
   loadOwnEmploymentIds,
   loadTeamEmploymentIdsForManager,
   requireAggregateCompensationRead,
+  requireCompensationManageForEmployer,
   requireHrmCompensationApprove,
   requireHrmCompensationManage,
 } from "../authorization.ts";
@@ -230,7 +231,16 @@ export async function createCycle(query: CreateCycleQuery): Promise<CompCycleDTO
     throw new CompensationError("INVALID_INPUT", "budgetBasis is top_down, bottom_up or combined");
   }
   return withOrgTransaction(orgId, async () => {
-    await requireHrmCompensationManage(db, orgId, actorId);
+    // The declared employer anchor is the creation's legal-entity claim:
+    // a B-anchored round by an A-scoped actor refuses uniformly
+    // not-visible, and an org-wide (null) round needs unrestricted scope.
+    await requireCompensationManageForEmployer(
+      db,
+      orgId,
+      actorId,
+      query.scope?.employerSubsidiaryId ?? null,
+      "Compensation cycle",
+    );
     const row = (await db.execute<CycleRow>(sql`
       insert into hrm_comp_cycles
         (org_id, name, kind, effective_on, budget_basis, budget_total, currency,
@@ -291,6 +301,66 @@ function assertCycleVisible(row: CycleRow, allowed: Set<string> | null): void {
   const subsidiary = cycleScopeSubsidiary(row);
   if (subsidiary !== null && !allowed.has(subsidiary)) {
     throw new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+  }
+}
+
+function cycleNotVisible(): CompensationError {
+  return new CompensationError("NOT_FOUND", "compensation cycle is not visible in this organization");
+}
+
+/**
+ * Write scope rechecked under the cycle's row lock: the cycle's employer
+ * subsidiary and every line's employer must sit inside the lens. An
+ * unscoped (null) round constrains nothing by header — its lines govern
+ * instead — so a restricted actor moves only rounds with no out-of-scope
+ * line. Refuses uniformly not-visible, exactly like the read gate, so a
+ * B round probes like a missing one. Line employers are read fresh inside
+ * the write transaction (no new row locks: propose locks line-then-cycle
+ * while cycle moves lock cycle-then-lines, and a third lock order would
+ * wedge the two).
+ */
+async function assertCycleWriteScope(
+  orgId: string,
+  actorId: string,
+  cycle: CycleRow,
+  lineEmployerIds: readonly string[],
+): Promise<void> {
+  const allowed = await loadCompensationLens(db, orgId, actorId);
+  if (allowed === null) return;
+  const subsidiary = cycleScopeSubsidiary(cycle);
+  if (subsidiary !== null && !allowed.has(subsidiary)) throw cycleNotVisible();
+  for (const employerId of lineEmployerIds) {
+    if (!allowed.has(employerId)) throw cycleNotVisible();
+  }
+}
+
+/** Line employers for the write-scope check, read fresh in-transaction. */
+async function lineEmployerIds(orgId: string, cycleId: string): Promise<string[]> {
+  const rows = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+    select e.employer_subsidiary_id
+      from hrm_comp_cycle_lines l
+      left join worker_employments e on e.org_id = l.org_id and e.id = l.employment_id
+     where l.org_id = ${orgId} and l.cycle_id = ${cycleId}`)).rows;
+  // A line with no attributable employer fails closed: the empty string
+  // sits in no lens, so restricted actors refuse while unrestricted pass.
+  return rows.map((row) => String(row.employer_subsidiary_id ?? ""));
+}
+
+/**
+ * Single-line employment scope for propose/reopen/decide: the line's
+ * employment must sit inside the lens even when the grant path is
+ * structural (a manager's team) rather than hrm.compensation.* — team
+ * membership never substitutes for entity scope. Refuses uniformly
+ * not-visible, like a missing line.
+ */
+async function assertLineEmploymentScope(orgId: string, actorId: string, employmentId: string): Promise<void> {
+  const allowed = await loadCompensationLens(db, orgId, actorId);
+  if (allowed === null) return;
+  const row = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+    select employer_subsidiary_id from worker_employments
+     where org_id = ${orgId} and id = ${employmentId}`)).rows[0];
+  if (!row?.employer_subsidiary_id || !allowed.has(row.employer_subsidiary_id)) {
+    throw new CompensationError("NOT_FOUND", "cycle line is not visible in this organization");
   }
 }
 
@@ -583,6 +653,15 @@ export async function openCycle(query: {
     }
     const today = await businessToday(orgId);
     const employments = await inServiceEmployments(orgId, toCycleDTO(cycle).scope, String(cycle.effective_on).slice(0, 10));
+    // Opening snapshots a wage line per employment: the cycle's anchor
+    // and every employment about to be snapshotted must sit inside the
+    // lens, or an A-scoped actor opens B's wages into the round.
+    await assertCycleWriteScope(
+      orgId,
+      actorId,
+      cycle,
+      employments.map((e) => e.employerSubsidiaryId),
+    );
     if (employments.length === 0) {
       throw new CompensationError(
         "REFUSED",
@@ -982,6 +1061,10 @@ export async function proposeLine(query: ProposeLineQuery): Promise<CompCycleLin
         "proposals come from the employment's manager or hrm.compensation.manage — ask the direct manager to propose, or an HR administrator",
       );
     }
+    // The grant (or team) above never decides the entity: the line's
+    // employment must sit inside the lens, or a manage holder proposes
+    // B's wages and a B-team manager proposes through structure alone.
+    await assertLineEmploymentScope(orgId, actorId, line.employment_id);
     // Both directions derive exactly at 6dp through shared
     // primitives: a pct raises the stored rate through raiseExact6
     // (mulDecimal, one rounding), a typed rate derives its percent
@@ -1106,6 +1189,9 @@ export async function reopenLine(query: {
         "reopening comes from the employment's manager or hrm.compensation.manage — ask the direct manager, or an HR administrator",
       );
     }
+    // Same entity check as proposing: the grant or team never opens
+    // another entity's decided line.
+    await assertLineEmploymentScope(orgId, actorId, line.employment_id);
     const updated = (await db.execute<LineRow>(sql`
       update hrm_comp_cycle_lines as l
          set status = 'proposed', approver_party_id = null, decided_at = null,
@@ -1179,6 +1265,11 @@ async function decideLine(
     await requireHrmCompensationApprove(db, orgId, actorId);
     const line = await loadLineForUpdate(orgId, lineId);
     const cycle = await loadCycleForUpdate(orgId, line.cycle_id);
+    // Deciding moves another entity's wage: the Flows approve grant never
+    // substitutes for entity scope — the cycle anchor and the line's
+    // employer are rechecked under the locks first.
+    await assertCycleWriteScope(orgId, actorId, cycle, []);
+    await assertLineEmploymentScope(orgId, actorId, line.employment_id);
     if (cycle.status !== "open" && cycle.status !== "in_review" && cycle.status !== "approved") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1255,6 +1346,10 @@ export async function submitCycleForApproval(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
+    // Submitting moves the whole round into approval: the anchor and
+    // every line's employer are rechecked under the cycle lock first, or
+    // an A-scoped actor submits B's wages for decision.
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
     if (cycle.status !== "open") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1362,6 +1457,10 @@ export async function pushCycle(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
+    // Pushing writes wages: the anchor and every line's employer are
+    // rechecked under the cycle lock before the first wage write, or an
+    // A-scoped actor pushes B's wages into payroll.
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
     if (cycle.status !== "approved") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1480,6 +1579,9 @@ export async function closeCycle(query: { orgId: string; actorId: string; cycleI
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
+    // Closing seals the round's wages: same anchor-and-lines recheck
+    // under the lock, or an A-scoped actor closes B's merit round.
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
     if (cycle.status !== "pushed") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1511,6 +1613,9 @@ export async function cancelCycle(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
+    // Cancelling voids the round for every line: same recheck, or an
+    // A-scoped actor cancels B's live round.
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
     if (cycle.status === "pushed" || cycle.status === "closed" || cycle.status === "cancelled") {
       throw new CompensationError(
         "BAD_STATE",
@@ -1542,6 +1647,9 @@ export async function setCycleBudgets(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
+    // Budgets price the round's lines: same anchor-and-lines recheck, or
+    // an A-scoped actor funds B's round.
+    await assertCycleWriteScope(orgId, actorId, cycle, await lineEmployerIds(orgId, cycleId));
     if (cycle.status !== "draft") {
       throw new CompensationError(
         "BAD_STATE",

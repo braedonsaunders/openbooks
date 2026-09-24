@@ -1046,12 +1046,12 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const lineA = lines.find((l) => l.employmentId === empA.employmentId)!;
     const lineB = lines.find((l) => l.employmentId === empB.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: 3, reason: "scope test" });
-    // The restricted proposer takes the whole cycle over budget without a
-    // reason: refused even though their visible 54% slice looks funded —
-    // the lens cannot shrink the envelope.
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: 3, reason: "scope test" });
+    // The restricted proposer takes their in-scope A line over the whole
+    // cycle budget without a reason: refused even though their visible 54%
+    // slice looks funded — the lens cannot shrink the envelope.
     const refusal = await proposeLine({
-      orgId: org.orgId, actorId: proposerA, lineId: lineB.id, proposedPct: 3,
+      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: 3,
     }).then(
       () => { throw new Error("expected the over-budget proposal to refuse"); },
       (e: unknown) => String((e as { message?: unknown }).message ?? e),
@@ -1060,11 +1060,11 @@ test("HR-12 restricted proposers still face the whole-cycle budget control", { s
     assert.ok(!/takes the cycle to \d/.test(refusal), `refusal must not carry the hidden total: ${refusal}`);
     // Nothing was written by the refused proposal.
     const untouched = (await db.execute<{ status: string }>(sql`
-      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${lineB.id}`)).rows[0];
+      select status from hrm_comp_cycle_lines where org_id = ${org.orgId} and id = ${lineA.id}`)).rows[0];
     assert.equal(untouched?.status, "pending");
     // With a reason the same proposal lands.
     const proposed = await proposeLine({
-      orgId: org.orgId, actorId: proposerA, lineId: lineB.id, proposedPct: 3, reason: "market catch-up",
+      orgId: org.orgId, actorId: proposerA, lineId: lineA.id, proposedPct: 3, reason: "market catch-up",
     });
     assert.equal(proposed.status, "proposed");
   });
