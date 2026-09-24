@@ -112,3 +112,13 @@ test("a letter over the upload ceiling gets the named 413", async () => {
   assert.match(body.error, /15 MiB/);
   assert.equal(body.message, body.error);
 });
+
+test("an unknown mode is refused before falling through to document generation", async () => {
+  const res = await POST(new Request("http://openbooks.test/api/hrm/documents?mode=replace", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ templateId: "template-1", partyId: PARTY_ID, title: "Unexpected mode" }),
+  }));
+  assert.equal(res.status, 400);
+  assert.deepEqual(await res.json(), { error: "mode must be preview, upload, or generate" });
+});

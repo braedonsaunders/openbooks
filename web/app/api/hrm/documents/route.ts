@@ -62,6 +62,9 @@ export async function POST(req: Request) {
   if (off) return off;
   const params = new URL(req.url).searchParams;
   const mode = params.get("mode") ?? "generate";
+  if (mode !== "preview" && mode !== "upload" && mode !== "generate") {
+    return NextResponse.json({ error: "mode must be preview, upload, or generate" }, { status: 400 });
+  }
   try {
     // Merge preview: resolve the subject's merge values without writing
     // anything, so the generate dialog shows what the template will say.
