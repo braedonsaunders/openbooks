@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -62,6 +62,8 @@ export function QualificationDrawer({
   const t = useTranslations('hrm')
   const tCommon = useTranslations('common')
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   // The renewal default is the org's business day from the server, never
   // the browser's UTC day (tomorrow after 5pm Pacific).
   const today = useBusinessToday()
@@ -168,10 +170,17 @@ export function QualificationDrawer({
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to renew'))
       const j = (await res.json()) as { qualification?: { id?: string } }
       const nextId = j.qualification?.id
-      router.refresh()
       if (nextId) {
-        const reread = await fetch(`/api/hrm/qualifications/${nextId}`)
-        if (reread.ok && qualificationId) setLoaded({ id: qualificationId, detail: (await reread.json()) as Detail })
+        // F3-39: renewal writes a new row, so the drawer navigates to the
+        // new id (the `qualification` entry-point param, other params
+        // preserved) instead of showing the new row under the old id. The
+        // dialog remounts on the new key and loads the row fresh.
+        const next = new URLSearchParams(searchParams.toString())
+        next.set('qualification', nextId)
+        router.push(`${pathname}?${next.toString()}` as never)
+        router.refresh()
+      } else {
+        router.refresh()
       }
     } catch (e) {
       setStatus((e as Error).message)
