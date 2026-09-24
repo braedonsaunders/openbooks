@@ -173,6 +173,89 @@ test("a disabled overdue control stays silent while promises still fire", async 
   );
 });
 
+test("invoices without a customer surface as one data-quality finding, never a pseudo-customer", async () => {
+  const loaders = stubLoaders({
+    overdueCustomers: async () => [
+      {
+        partyId: null,
+        partyName: "Unspecified",
+        email: "stray@example.invalid",
+        openBalance: "3000.0000",
+        overdueBalance: "3000.0000",
+        overdueCount: 2,
+        openCount: 2,
+        oldestDue: "2026-06-01",
+        latePayments: 0,
+        worstLateDays: 0,
+      },
+      {
+        partyId: "p1",
+        partyName: "Real",
+        email: null,
+        openBalance: "2000.0000",
+        overdueBalance: "2000.0000",
+        overdueCount: 1,
+        openCount: 1,
+        oldestDue: "2026-06-15",
+        latePayments: 0,
+        worstLateDays: 0,
+      },
+    ],
+    overdueInvoices: async () => [
+      { partyId: null, docId: "d-n1", docNumber: "INV-N1", dueDate: "2026-06-01", openBalance: "1000.0000" },
+      { partyId: null, docId: "d-n2", docNumber: "INV-N2", dueDate: "2026-06-02", openBalance: "2000.0000" },
+      { partyId: "p1", docId: "d-r1", docNumber: "INV-R1", dueDate: "2026-06-15", openBalance: "2000.0000" },
+    ],
+    brokenPromises: async () => [
+      // Above the floor on purpose: the skip must come from the missing
+      // customer, not the materiality threshold.
+      {
+        partyId: null,
+        partyName: "Unspecified",
+        docId: "d-n3",
+        docNumber: "INV-N3",
+        expectedPayDate: "2026-06-05",
+        dueDate: null,
+        openBalance: "5000.0000",
+      } satisfies BrokenPromiseRow,
+    ],
+  });
+  const findings = await collectionsFindings(ORG, "1000.0000", policies(), loaders);
+  assert.ok(
+    !findings.some((finding) => finding.fingerprint.includes("unassigned")),
+    `no pseudo-customer fingerprint may survive, got ${findings.map((finding) => finding.fingerprint)}`,
+  );
+  assert.ok(
+    !findings.some((finding) => String(finding.summary.reminderDraft ?? "").includes("Unspecified")),
+    "no reminder draft may be addressed to Unspecified",
+  );
+  assert.ok(
+    !JSON.stringify(findings).includes("stray@example.invalid"),
+    "no email borrowed from unrelated rows may surface",
+  );
+  const real = findings.find((finding) => finding.fingerprint === "collections-overdue:p1")!;
+  assert.ok(real, "the identified customer still surfaces with its draft");
+  assert.match(String(real.summary.reminderDraft), /Real/);
+  const quality = findings.filter((finding) => finding.findingType === "invoices_without_customer");
+  assert.equal(quality.length, 1, "party-less invoices report once, as data quality");
+  const only = quality[0]!;
+  assert.equal(only.fingerprint, "collections-no-customer");
+  assert.equal(only.severity, "warning");
+  assert.equal(only.subjectId, null);
+  assert.equal(only.summary.count, 3);
+  assert.equal(only.materiality, "8000.0000");
+  assert.deepEqual(
+    Object.keys(only.summary).sort(),
+    ["count", "href", "oldestDue", "reason", "review", "total"],
+    "the finding carries no reminder draft and no email",
+  );
+  assert.equal(only.evidence.length, 3, "every party-less invoice rides along individually");
+  assert.ok(
+    only.evidence.every((item) => item.kind === "customerless_invoice" && item.sourceType === "document"),
+    "evidence points at the documents, never a party",
+  );
+});
+
 test("broken promises group by customer and respect the breach tolerance", async () => {
   const loaders = stubLoaders();
   const seed: BrokenPromiseRow[] = [
