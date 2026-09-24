@@ -865,10 +865,10 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
   scope: "region",
   systemKeys: ["eht"],
   regions: ["BC", "MB", "NL", "ON"],
-  // Decided silence: the exemption makes zero legitimate (an Ontario employer
-  // under it owes no EHT), so an unconfigured province accrues nothing and
-  // the run still pays — never a refusal.
-  whenUnconfigured: "zero",
+  // An exemption or genuine zero rate must be recorded explicitly. The pack
+  // cannot infer an employer's associated-employer share or total remuneration,
+  // so absence is unknown liability, not a zero levy.
+  whenUnconfigured: "refuse",
   citation:
     "ON: Employer Health Tax Act, RSO 1990 c E.11 · BC: Employer Health Tax Act, SBC 2018 c 42 · "
     + "MB: Health and Post Secondary Education Tax Levy Act, CCSM c H24 · "
