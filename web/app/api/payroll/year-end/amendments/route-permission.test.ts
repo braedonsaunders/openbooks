@@ -31,15 +31,6 @@ const calls: Array<[string, string]> = []
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission(permission, feature) {
@@ -53,6 +44,11 @@ const mockSources = new Map<string, string>([
   [
     'mock:subsidiary-scope',
     `
+      export class FilingScopeDenied {
+        constructor(response) {
+          this.response = response
+        }
+      }
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
@@ -107,7 +103,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
@@ -120,6 +115,12 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The real @/lib/api/json is used (no hand double of the protected
+    // surface); only its 'server-only' marker is shimmed, the same cut the
+    // mock-surface checker itself makes — it carries no behaviour.
+    if (specifier === 'server-only') {
+      return { url: 'data:text/javascript,export default {}', shortCircuit: true }
+    }
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
