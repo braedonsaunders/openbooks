@@ -135,11 +135,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/crm/CrmNewButton.tsx",
-    "fn": "create",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/data/import/ImportWizard.tsx",
     "fn": "doParse",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
