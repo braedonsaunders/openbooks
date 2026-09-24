@@ -6,7 +6,7 @@ import {
   requireOwnRequisitionForHiringManager,
 } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
-import { requireActorId, requireId, requireOrgId } from "./input.ts";
+import { isIsoInstantWithOffset, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { loadApplication } from "./applications.ts";
 
 /**
@@ -160,8 +160,8 @@ export async function scheduleInterview(query: ScheduleInterviewQuery): Promise<
   if (typeof query.kind !== "string" || !(INTERVIEW_KINDS as readonly string[]).includes(query.kind)) {
     throw new RecruitingError("INVALID_INPUT", `interview kind must be one of ${INTERVIEW_KINDS.join(", ")} — check the kind`);
   }
-  if (typeof query.scheduledAt !== "string" || query.scheduledAt.trim().length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "scheduledAt must be a non-empty instant");
+  if (typeof query.scheduledAt !== "string" || !isIsoInstantWithOffset(query.scheduledAt)) {
+    throw new RecruitingError("INVALID_INPUT", "scheduledAt must be an ISO instant with Z or an explicit UTC offset — include the timezone when scheduling");
   }
   const durationMinutes =
     query.durationMinutes === undefined || query.durationMinutes === null
