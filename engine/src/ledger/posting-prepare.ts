@@ -2,6 +2,8 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { assertExpenseEmployee, assertExpenseSettlement } from "../records/expense-validation.ts";
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
+import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
+import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { isZero, sum } from "../money/money.ts";
 import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
@@ -190,6 +192,18 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     await assertGeneratedBillingPostable(db, doc.orgId, documentId, { document: doc, lines });
   } catch (error) {
     if (error instanceof BillingSourceIntegrityError) throw new PostingError(error.message);
+    throw error;
+  }
+
+  // A remittance bill posts its source entity's books in its stamped
+  // currency: reconcile it against live payroll here (fail fast, before FX
+  // translation or flow evidence) and repeat under lock at commit, exactly
+  // like the generated-billing guard above. Non-remittance documents return
+  // from the check itself.
+  try {
+    await assertPayrollRemittanceBillCurrent(doc.orgId, documentId, db);
+  } catch (error) {
+    if (error instanceof PayrollRemittanceError) throw new PostingError(error.message);
     throw error;
   }
 

@@ -275,6 +275,101 @@ test(
 );
 
 test(
+  "a remittance bill moved to another currency cannot post",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      // The coverage is untouched and the total still ties out: only the
+      // header currency drifted, behind the same lines.
+      const stored = (await db.execute<{ currency: string }>(sql`
+        select currency from documents
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+      await db.execute(sql`
+        update documents set currency = ${stored.currency === "USD" ? "CAD" : "USD"}
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await assert.rejects(
+        postDocument(bill.documentId, {
+          control: {
+            ar: fixture.org.accounts.ar,
+            ap: fixture.org.accounts.ap,
+            bank: fixture.org.accounts.bank,
+          },
+        }),
+        /payroll remittance bill .* its currency .* differs from its entity's/,
+      );
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+        "approved",
+        "a currency-moved remittance bill remains unposted for review/voiding",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
+  "a remittance bill moved to another entity cannot post",
+  { skip: !DB },
+  async () => {
+    const fixture = await createRemittanceFixture();
+    try {
+      await addCommittedRemittanceAccrual(fixture, {
+        payDate: "2026-07-15", amount: "100.00",
+      });
+      const bill = await createRemittanceBill(fixture.org.orgId, fixture.actorId, {
+        partyId: fixture.org.vendorId,
+        from: "2026-07-01",
+        to: "2026-07-31",
+      });
+      // A second entity with the same base currency isolates the subsidiary
+      // drift from the currency drift: only the books move.
+      const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
+        select currency, subsidiary_id::text as subsidiary_id from documents
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+      const second = (await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (org_id, parent_id, name, base_currency, country)
+        select org_id, id, 'Second entity', ${stored.currency}, country
+          from subsidiaries where org_id = ${fixture.org.orgId} limit 1
+        returning id::text as id`)).rows[0]!;
+      await db.execute(sql`
+        update documents set subsidiary_id = ${second.id}
+         where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`);
+      await submitAndReleaseIfUngated("vendor_bill", bill.documentId, fixture.actorId);
+      await assert.rejects(
+        postDocument(bill.documentId, {
+          control: {
+            ar: fixture.org.accounts.ar,
+            ap: fixture.org.accounts.ap,
+            bank: fixture.org.accounts.bank,
+          },
+        }),
+        /payroll remittance bill .* its subsidiary changed/,
+      );
+      assert.equal(
+        (await db.execute<{ status: string }>(sql`
+          select status from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!.status,
+        "approved",
+        "an entity-moved remittance bill remains unposted for review/voiding",
+      );
+    } finally {
+      await dropScratchOrgReporting(fixture.org.orgId);
+    }
+  },
+);
+
+test(
   "remittance bill lines refuse edits while header saves pass",
   { skip: !DB },
   async () => {
@@ -300,6 +395,36 @@ test(
       // A header-only save keeps the stored lines and proceeds.
       assert.equal(
         await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null),
+        true,
+      );
+      // Currency and subsidiary are stamped at creation: a header-only save
+      // that moves either refuses by name, even with the lines untouched.
+      const stored = (await db.execute<{ currency: string; subsidiary_id: string }>(sql`
+        select currency, subsidiary_id::text as subsidiary_id
+          from documents where org_id = ${fixture.org.orgId} and id = ${bill.documentId}`)).rows[0]!;
+      await assert.rejects(
+        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+          currency: stored.currency === "USD" ? "CAD" : "USD",
+        }),
+        (error: unknown) =>
+          error instanceof RemittanceSourceIntegrityError
+          && /its currency cannot be changed/.test(error.message)
+          && /raise a fresh bill/.test(error.message),
+      );
+      await assert.rejects(
+        assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+          subsidiaryId: randomUUID(),
+        }),
+        (error: unknown) =>
+          error instanceof RemittanceSourceIntegrityError
+          && /its subsidiary cannot be changed/.test(error.message)
+          && /raise a fresh bill/.test(error.message),
+      );
+      // Restating the stamped values is not a change and passes.
+      assert.equal(
+        await assertRemittanceBillEdit(db, fixture.org.orgId, bill.documentId, null, {
+          currency: stored.currency, subsidiaryId: stored.subsidiary_id,
+        }),
         true,
       );
       // Ordinary bills are untouched by this guard.
