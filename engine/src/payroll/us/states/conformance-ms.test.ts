@@ -95,23 +95,35 @@ test("MS no 89-350 withholds as Single with zero exemption", () => {
   assert.equal(empty.factors.MS_STANDARD_DEDUCTION, money("2300"));
 });
 
-test("MS extra withholding is added, exempt is zero, and an unpublished period is refused", () => {
+test("MS extra withholding is added, and line 8 requires its eligibility facts and documents", () => {
   assert.equal(MS_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
     basis: "resident",
     certificate: cert({ filing_status: "single", exemption: "0", additional_per_period: "5.00" }),
   }).tax, money("16"));
-  assert.equal(MS_WITHHOLDING.compute({
+  assert.throws(() => MS_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
     basis: "resident", certificate: cert({ exempt: "true" }),
-  }).tax, money("0"));
-  assert.throws(
-    () => MS_WITHHOLDING.compute({
-      payDate: "2026-03-15", periodsPerYear: 13, wages: "500",
-      basis: "resident", certificate: cert({ filing_status: "single" }),
+  }), /Mississippi military-spouse withholding exemption requires proof that .*DD-2058.*Military Spouse ID card/);
+
+  const eligible = MS_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00", basis: "resident",
+    certificate: cert({
+      exempt: "true",
+      servicemember_stationed_under_orders_ms: "true",
+      employee_present_to_accompany: "true",
+      employee_domiciled_outside_ms: "true",
+      servicemember_dd2058_on_file: "true",
+      military_spouse_id_on_file: "true",
     }),
-    /publishes withholding tables/,
-  );
+  });
+  assert.equal(eligible.tax, money("0"));
+  assert.equal(eligible.factors.MS_EXEMPT, money("0.0001"));
+
+  assert.throws(() => MS_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 13, wages: "500",
+    basis: "resident", certificate: cert({ filing_status: "single" }),
+  }), /publishes withholding tables/);
 });
 
 test("MS rounds the formula plus Line 7 to a whole dollar", () => {
