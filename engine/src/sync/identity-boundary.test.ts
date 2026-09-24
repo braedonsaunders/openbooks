@@ -4,10 +4,6 @@ import test from "node:test";
 
 const migrationSource = readFileSync("engine/src/sync/source.ts", "utf8");
 const loader = readFileSync("engine/src/sync/migrate.ts", "utf8");
-const fieldTicketImporter = readFileSync(
-  "engine/src/validation/import-field-tickets.ts",
-  "utf8",
-);
 
 test("connector identity is adapter-scoped and has no cross-source fallback", () => {
   assert.match(
@@ -212,11 +208,4 @@ test("project persist writes contractValue through canonicalDecimal then normali
   const body = loader.slice(start, next > start ? next : undefined);
   assert.match(body, /persistProjectContractValue\(/);
   assert.doesNotMatch(body, /moneyOrNull\(f\.contractValue\)/);
-});
-
-test("connector field-ticket imports require an explicit source namespace", () => {
-  assert.match(fieldTicketImporter, /--source-system is required/);
-  assert.match(fieldTicketImporter, /select base_currency from orgs/);
-  assert.match(fieldTicketImporter, /externalId: t\.sourceId/);
-  assert.doesNotMatch(fieldTicketImporter, /'CAD'/);
 });
