@@ -86,7 +86,15 @@ export async function POST(request: Request) {
       throw error
     }
     try {
-      await enqueueApCapture({ orgId: gate.user.orgId, captureItemId, actorId: gate.user.id })
+      // Capture the uploader's scope in the job: the worker acts as this
+      // actor when it auto-materializes, and must not inherit an
+      // unrestricted default there.
+      await enqueueApCapture({
+        orgId: gate.user.orgId,
+        captureItemId,
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
+      })
     } catch (error) {
       const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
       await db.execute(sql`

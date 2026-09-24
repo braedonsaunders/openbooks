@@ -167,7 +167,7 @@ test("explicit bad code leaves no PO reserve and materialize refuses", { skip: !
              validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, updated_at = now()
        where id = ${captureId} and org_id = ${fx.org.orgId}`);
     await assert.rejects(
-      materializeCapture({ orgId: fx.org.orgId, captureItemId: captureId, actorId: null }),
+      materializeCapture({ orgId: fx.org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
       (error: unknown) => error instanceof CaptureMaterializationError,
     );
     assertBilled(await billedOf(fx), "0", "the refused line reserves nothing on the PO line");

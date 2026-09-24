@@ -116,7 +116,7 @@ test("a null-currency capture matched to a EUR order books the bill in the order
     const euId = await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
     const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-1");
     const captureId = await insertCapture(org, fileId, `PO-EU-INV-${randomUUID().slice(0, 8)}`, null, poId);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null });
+    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
     assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: euId, currency: "EUR" });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -131,7 +131,7 @@ test("a capture currency that conflicts with the order currency refuses by name"
     const poId = await insertApprovedPo(org, euId, "EUR", "PO-EU-2");
     const captureId = await insertCapture(org, fileId, `PO-EU-INV-${randomUUID().slice(0, 8)}`, "CAD", poId);
     await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null }),
+      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
       /does not match purchase order currency EUR/,
     );
   } finally {
@@ -144,7 +144,7 @@ test("an unmatched capture in a single-entity org keeps the root default", { ski
   try {
     const fileId = await seedVendorAndFile(org);
     const captureId = await insertCapture(org, fileId, `PO-ROOT-INV-${randomUUID().slice(0, 8)}`, "CAD", null);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null });
+    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
     assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: org.subsidiaryId, currency: "CAD" });
   } finally {
     await dropScratchOrg(org.orgId);
@@ -158,7 +158,7 @@ test("an unmatched capture in a multi-entity org refuses instead of defaulting t
     await addSubsidiary(org.orgId, org.subsidiaryId, "EU Sales", "EUR");
     const captureId = await insertCapture(org, fileId, `PO-MULTI-INV-${randomUUID().slice(0, 8)}`, "CAD", null);
     await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null }),
+      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
       /Cannot determine the billing entity.*match it to a purchase order/,
     );
   } finally {
@@ -179,7 +179,7 @@ test("a null-subsidiary order in a multi-entity org is refused by name with no b
     const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-1");
     const captureId = await insertCapture(org, fileId, `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`, null, poId);
     await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null }),
+      materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null }),
       /purchase order has no subsidiary.*set it on the purchase order/,
     );
     assert.equal(await billCount(org.orgId), 0, "a refused materialize inserts no bill");
@@ -194,7 +194,7 @@ test("a null-subsidiary order in a single-entity org takes the root default with
     const fileId = await seedVendorAndFile(org);
     const poId = await insertApprovedPo(org, null, "EUR", "PO-NOSUB-2");
     const captureId = await insertCapture(org, fileId, `PO-NOSUB-INV-${randomUUID().slice(0, 8)}`, null, poId);
-    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null });
+    const { documentId } = await materializeCapture({ orgId: org.orgId, captureItemId: captureId, actorId: null, allowedSubsidiaryIds: null });
     assert.deepEqual(await billOf(org.orgId, documentId), { subsidiaryId: org.subsidiaryId, currency: "EUR" });
   } finally {
     await dropScratchOrg(org.orgId);

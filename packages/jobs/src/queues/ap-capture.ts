@@ -7,6 +7,14 @@ export type ApCaptureJobData = {
   orgId: string;
   captureItemId: string;
   actorId?: string;
+  /**
+   * The uploader's subsidiary scope at enqueue time (null = unrestricted).
+   * The worker carries it into the auto-materialize decision so a match on
+   * an out-of-scope purchase order stays in review instead of auto-creating
+   * another entity's vendor bill. Jobs enqueued before this field existed
+   * re-derive the scope from the actor at run time.
+   */
+  allowedSubsidiaryIds?: string[] | null;
 };
 
 let queue: Queue<ApCaptureJobData> | undefined;
