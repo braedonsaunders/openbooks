@@ -169,128 +169,110 @@ function postFile(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("me routes gate on the hrm feature and the self permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    for (const file of [
-      "./profile/route.ts",
-      "./steps/route.ts",
-      "./requests/route.ts",
-      "./team/route.ts",
-    ]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      assert.match(source, /guardPermission\("hrm\.self\.read"\)/);
-      assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-    }
-    const fileSource = readFileSync(new URL("./profile-changes/route.ts", import.meta.url), "utf8");
-    assert.match(fileSource, /guardPermission\("hrm\.self\.request"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before any service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    assert.equal((await profileRoute!.GET()).status, 404);
-    assert.equal((await stepsRoute!.GET()).status, 404);
-    assert.equal((await requestsRoute!.GET()).status, 404);
-    assert.equal((await teamRoute!.GET()).status, 404);
-    assert.equal(
-      (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
-      404,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before any service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await profileRoute!.GET()).status, 404);
+  assert.equal((await stepsRoute!.GET()).status, 404);
+  assert.equal((await requestsRoute!.GET()).status, 404);
+  assert.equal((await teamRoute!.GET()).status, 404);
+  assert.equal(
+    (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("an unauthenticated caller never reaches a service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    assert.equal((await profileRoute!.GET()).status, 401);
-    assert.equal((await teamRoute!.GET()).status, 401);
-    assert.equal(
-      (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
-      401,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches a service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  assert.equal((await profileRoute!.GET()).status, 401);
+  assert.equal((await teamRoute!.GET()).status, 401);
+  assert.equal(
+    (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
+    401,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("reads forward org and actor and return the service payload", async () => {
-    reset();
-    const profile = await profileRoute!.GET();
-    assert.equal(profile.status, 200);
-    assert.deepEqual(await profile.json(), { profile: { fn: "profile", ok: true } });
-    const team = await teamRoute!.GET();
-    assert.equal(team.status, 200);
-    assert.deepEqual((await team.json()).team.asOf, "2026-09-20");
-    assert.deepEqual(routeState.calls, [
-      { fn: "profile", args: { orgId: "org-1", actorId: "user-1" } },
-      { fn: "team", args: { orgId: "org-1", actorId: "user-1" } },
-    ]);
-    assert.deepEqual(routeState.perms, ["hrm.self.read", "hrm.self.read"]);
-  });
+test("reads forward org and actor and return the service payload", async () => {
+  reset();
+  const profile = await profileRoute!.GET();
+  assert.equal(profile.status, 200);
+  assert.deepEqual(await profile.json(), { profile: { fn: "profile", ok: true } });
+  const team = await teamRoute!.GET();
+  assert.equal(team.status, 200);
+  assert.deepEqual((await team.json()).team.asOf, "2026-09-20");
+  assert.deepEqual(routeState.calls, [
+    { fn: "profile", args: { orgId: "org-1", actorId: "user-1" } },
+    { fn: "team", args: { orgId: "org-1", actorId: "user-1" } },
+  ]);
+  assert.deepEqual(routeState.perms, ["hrm.self.read", "hrm.self.read"]);
+});
 
-  test("filing validates the body before the service runs, then 201s", async () => {
-    reset();
-    const good = { employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" };
-    assert.equal((await fileRoute!.POST(postFile({}))).status, 400);
-    assert.equal((await fileRoute!.POST(postFile({ ...good, employmentId: "nope" }))).status, 400);
-    assert.equal((await fileRoute!.POST(postFile({ ...good, reason: "  " }))).status, 400);
-    assert.equal((await fileRoute!.POST(postFile({ ...good, changes: {} }))).status, 400);
-    assert.deepEqual(routeState.calls, []);
-    const response = await fileRoute!.POST(postFile(good));
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { request: { id: "request-1", status: "pending_approval" } });
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "file",
-        args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, changes: good.changes, reason: "moved" },
-      },
-    ]);
-    assert.ok(routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"));
-  });
+test("filing validates the body before the service runs, then 201s", async () => {
+  reset();
+  const good = { employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" };
+  assert.equal((await fileRoute!.POST(postFile({}))).status, 400);
+  assert.equal((await fileRoute!.POST(postFile({ ...good, employmentId: "nope" }))).status, 400);
+  assert.equal((await fileRoute!.POST(postFile({ ...good, reason: "  " }))).status, 400);
+  assert.equal((await fileRoute!.POST(postFile({ ...good, changes: {} }))).status, 400);
+  assert.deepEqual(routeState.calls, []);
+  const response = await fileRoute!.POST(postFile(good));
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { request: { id: "request-1", status: "pending_approval" } });
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "file",
+      args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, changes: good.changes, reason: "moved" },
+    },
+  ]);
+  assert.ok(routeState.perms.length > 0 && routeState.perms.every((perm) => perm === "hrm.self.request"));
+});
 
-  test("a no-link refusal reaches the caller as a 403 with the remedy intact", async () => {
-    reset();
-    const { SelfServiceError } = await import(
-      "@openbooks/engine/src/hrm/self-service/actor.ts"
-    );
-    routeState.serviceThrow = new SelfServiceError(
-      "NO_LINK",
-      "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
-    );
-    const response = await profileRoute!.GET();
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error as string, /Admin → Users → Link person/);
-  });
+test("a no-link refusal reaches the caller as a 403 with the remedy intact", async () => {
+  reset();
+  const { SelfServiceError } = await import(
+    "@openbooks/engine/src/hrm/self-service/actor.ts"
+  );
+  routeState.serviceThrow = new SelfServiceError(
+    "NO_LINK",
+    "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
+  );
+  const response = await profileRoute!.GET();
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error as string, /Admin → Users → Link person/);
+});
 
-  test("a report-less team refusal reaches the caller as a 403", async () => {
-    reset();
-    const { SelfServiceError } = await import(
-      "@openbooks/engine/src/hrm/self-service/actor.ts"
-    );
-    routeState.serviceThrow = new SelfServiceError("NO_TEAM", "no direct reports as of 2026-09-20 — team visibility follows the current line");
-    const response = await teamRoute!.GET();
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error as string, /no direct reports/);
-  });
+test("a report-less team refusal reaches the caller as a 403", async () => {
+  reset();
+  const { SelfServiceError } = await import(
+    "@openbooks/engine/src/hrm/self-service/actor.ts"
+  );
+  routeState.serviceThrow = new SelfServiceError("NO_TEAM", "no direct reports as of 2026-09-20 — team visibility follows the current line");
+  const response = await teamRoute!.GET();
+  assert.equal(response.status, 403);
+  assert.match((await response.json()).error as string, /no direct reports/);
+});
 
-  test("malformed proposals map to 400 and unknown rows to 404", async () => {
-    reset();
-    const { SelfServiceError } = await import(
-      "@openbooks/engine/src/hrm/self-service/actor.ts"
-    );
-    routeState.serviceThrow = new SelfServiceError("REFUSED", "profile change refused: phone must not be blank");
-    assert.equal((await stepsRoute!.GET()).status, 400);
-    routeState.serviceThrow = new SelfServiceError("NOT_FOUND", "the person linked to this login has no party record in this organization");
-    assert.equal((await profileRoute!.GET()).status, 404);
-  });
+test("malformed proposals map to 400 and unknown rows to 404", async () => {
+  reset();
+  const { SelfServiceError } = await import(
+    "@openbooks/engine/src/hrm/self-service/actor.ts"
+  );
+  routeState.serviceThrow = new SelfServiceError("REFUSED", "profile change refused: phone must not be blank");
+  assert.equal((await stepsRoute!.GET()).status, 400);
+  routeState.serviceThrow = new SelfServiceError("NOT_FOUND", "the person linked to this login has no party record in this organization");
+  assert.equal((await profileRoute!.GET()).status, 404);
+});
 
-  test("a nested change-request refusal keeps the shared mapping", async () => {
-    reset();
-    const { HrmChangeRequestError } = await import("@openbooks/engine/src/hrm/change-requests.ts");
-    routeState.serviceThrow = new HrmChangeRequestError("INVALID_PAYLOAD", "change payload invalid: foo");
-    const response = await fileRoute!.POST(
-      postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" }),
-    );
-    assert.equal(response.status, 400);
-    assert.match((await response.json()).error as string, /change payload invalid/);
-  });
-}
+test("a nested change-request refusal keeps the shared mapping", async () => {
+  reset();
+  const { HrmChangeRequestError } = await import("@openbooks/engine/src/hrm/change-requests.ts");
+  routeState.serviceThrow = new HrmChangeRequestError("INVALID_PAYLOAD", "change payload invalid: foo");
+  const response = await fileRoute!.POST(
+    postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" }),
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error as string, /change payload invalid/);
+});
