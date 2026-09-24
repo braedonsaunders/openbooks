@@ -1,13 +1,17 @@
-// Shared jsdom + module-shim harness for dashboard behaviour tests.
+// Shared jsdom + module-shim harness for app behaviour tests (dashboard,
+// orders, …).
 //
-// Real interfaces throughout: the real WidgetCard / DashboardGrid /
-// WidgetPalette components, the real next-intl provider backed by the real
-// locale catalogs, and the real MoneyProvider. Only the process boundary is
-// scripted: next/link renders a real anchor (href preserved), next/dynamic
-// renders its children (react-grid-layout positioning is not under test),
-// next/navigation records pushes, sonner records toasts, and .css imports
-// resolve empty. Browser measurement (ResizeObserver, clientWidth/Height,
-// matchMedia, scrollIntoView) is controllable per test.
+// Real interfaces throughout: the real components, the real next-intl
+// provider backed by the real locale catalogs, and the real MoneyProvider.
+// Only the process boundary is scripted: next/link renders a real anchor
+// (href preserved), next/dynamic renders its children (react-grid-layout
+// positioning is not under test), next/navigation records pushes, sonner
+// records toasts, and .css imports resolve empty. Browser measurement
+// (ResizeObserver, clientWidth/Height, matchMedia, scrollIntoView) is
+// controllable per test. promptDialog/confirmDialog answer from a scripted
+// queue: they stand in for the OPERATOR's dialog choice (like scripted
+// fetch stands in for the network), so tests assert on the wire request and
+// the rendered refusal — never on what the mock was told.
 
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -16,6 +20,8 @@ import { pathToFileURL } from "node:url";
 declare global {
   var __dashRouter: { push(url: string): void; refresh(): void; pushes: string[] };
   var __dashToasts: { kind: string; message: string }[];
+  var __promptAnswers: (string | null)[];
+  var __confirmAnswer: boolean | undefined;
 }
 
 const root = pathToFileURL(process.cwd() + "/").href;
@@ -114,6 +120,8 @@ export function useSearchParams() { return new URLSearchParams() }`;
 const DYNAMIC_MOCK = `export default function dynamic() { return function DynamicStub(p) { return p.children ?? null } }`;
 const SONNER_MOCK = `export const toast = { success(m) { (globalThis.__dashToasts ?? []).push({ kind: 'success', message: String(m) }) }, error(m) { (globalThis.__dashToasts ?? []).push({ kind: 'error', message: String(m) }) } }; export function Toaster() { return null }`;
 const ACTIONS_MOCK = `export async function saveDashboardLayout() { return { ok: true } } export async function resetDashboardLayout() { return { ok: true } }`;
+const PROMPT_MOCK = `export async function promptDialog() { const answers = globalThis.__promptAnswers ?? []; return answers.length > 0 ? answers.shift() : null }`;
+const CONFIRM_MOCK = `export async function confirmDialog() { return globalThis.__confirmAnswer ?? true }`;
 
 registerHooks({
   resolve(specifier, context, next) {
@@ -134,6 +142,12 @@ registerHooks({
     }
     if (specifier.endsWith("dashboard/actions")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(ACTIONS_MOCK) };
+    }
+    if (specifier.endsWith("/lib/prompt")) {
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(PROMPT_MOCK) };
+    }
+    if (specifier.endsWith("/lib/confirm")) {
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(CONFIRM_MOCK) };
     }
     if (specifier.endsWith(".css")) {
       return { shortCircuit: true, url: "data:text/javascript,export default {}" };
@@ -176,6 +190,8 @@ export async function mountDashboard(
   globalThis.__dashToasts = [];
   scrolledIntoView.length = 0;
   observedElements.length = 0;
+  globalThis.__promptAnswers = [];
+  globalThis.__confirmAnswer = true;
   const host = document.createElement("div");
   document.body.appendChild(host);
   const rootInstance = createRoot(host);
@@ -205,6 +221,35 @@ export async function click(element: Element): Promise<void> {
     await tick();
   });
   await tick();
+}
+
+/** Script the network: every other request falls through to an empty object,
+// like the sibling drawer tests. */
+export function scriptFetch(
+  handler: (url: string, init?: RequestInit) => Response | null,
+): () => void {
+  const prior = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(
+      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
+    );
+    return handler(url, init) ?? Response.json({});
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = prior;
+  };
+}
+
+export function buttonsNamed(name: string): HTMLButtonElement[] {
+  return [...document.querySelectorAll("button")].filter(
+    (b) => b.textContent?.trim() === name,
+  ) as HTMLButtonElement[];
+}
+
+export function buttonsContaining(text: string): HTMLButtonElement[] {
+  return [...document.querySelectorAll("button")].filter((b) =>
+    b.textContent?.includes(text),
+  ) as HTMLButtonElement[];
 }
 
 export { act };
