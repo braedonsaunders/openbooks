@@ -19,6 +19,8 @@ interface RouteState {
   auditInserts: string[];
   createdFiles: string[];
   deletedFiles: string[];
+  /** When true the actor is subsidiary-restricted (org-wide writes refused). */
+  restricted: boolean;
 }
 const routeState: RouteState = {
   formRow: null,
@@ -27,6 +29,7 @@ const routeState: RouteState = {
   auditInserts: [],
   createdFiles: [],
   deletedFiles: [],
+  restricted: false,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -35,11 +38,21 @@ const mockSources = new Map<string, string>([
   [
     "mock:authz",
     `
+      const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       export async function guardPermission(permission) {
         if (permission !== 'admin.setup.manage') {
           throw new Error('unexpected permission gate: ' + permission)
         }
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.restricted ? new Set(['sub-a']) : null,
+        }
+      }
+      // Org-wide configuration gate: only an explicit unrestricted scope
+      // passes — the canonical assertUnrestrictedScope rule.
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
   ],
@@ -132,6 +145,7 @@ function reset(state: Partial<RouteState>): void {
   routeState.auditInserts.length = 0;
   routeState.createdFiles.length = 0;
   routeState.deletedFiles.length = 0;
+  routeState.restricted = state.restricted ?? false;
 }
 
 function postPdf(): Promise<Response> {
@@ -208,6 +222,36 @@ test("DELETE answers 404 with no audit and no file removal when nothing is attac
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "no official PDF is attached to this return form" });
+  assert.equal(routeState.auditInserts.length, 0);
+  assert.deepEqual(routeState.deletedFiles, []);
+});
+
+test("a subsidiary-restricted setup manager cannot attach the official PDF", async () => {
+  reset({
+    restricted: true,
+    formRow: { id: "form-1", official_pdf_file_id: null },
+    lockedRow: { id: "form-1", official_pdf_file_id: null },
+  });
+
+  const response = await postPdf();
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(routeState.createdFiles, []);
+  assert.equal(routeState.auditInserts.length, 0);
+});
+
+test("a subsidiary-restricted setup manager cannot detach the official PDF", async () => {
+  reset({
+    restricted: true,
+    formRow: { id: "form-1", official_pdf_file_id: "old-file-1" },
+    lockedRow: { id: "form-1", official_pdf_file_id: "old-file-1" },
+  });
+
+  const response = await del();
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
   assert.equal(routeState.auditInserts.length, 0);
   assert.deepEqual(routeState.deletedFiles, []);
 });
