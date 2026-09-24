@@ -57,6 +57,15 @@ const ladderStage = () => ({
   bodyTemplate: "b",
 });
 
+async function stageCount(orgId: string, id: string): Promise<number> {
+  const r = await withBypassContext(() =>
+    db.execute<{ n: number }>(
+      sql`select count(*)::int as n from dunning_stages where policy_id = ${id} and org_id = ${orgId}`,
+    ),
+  );
+  return r.rows[0]!.n;
+}
+
 test("dunning writes reject an invalid grace period or an empty name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
@@ -94,6 +103,43 @@ test("dunning writes reject an invalid grace period or an empty name", { skip: !
     const renamed = await patch(json("PATCH", { name: "Collections (AR)", gracePeriodDays: 0 }), params(id));
     assert.equal(renamed.status, 200, JSON.stringify(await renamed.clone().json()));
     assert.deepEqual(await policyRow(org.orgId, id), { name: "Collections (AR)", grace: 0 });
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("dunning writes refuse blank stage templates with the fix named", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // A-S20: a blank template renders an empty letter. The boundary refuses
+  // it with a named remedy instead of the generic shape error, and stores
+  // nothing; non-blank templates still store on both paths.
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    state.user = { orgId: org.orgId, id: (await withBypassContext(() => seedFlowActors(org.orgId))).adminId };
+    const blank = (field: string) => ({
+      sequence: 1,
+      name: "Nudge",
+      offsetDays: 7,
+      subjectTemplate: "s",
+      bodyTemplate: "b",
+      [field]: "   ",
+    });
+    for (const field of ["subjectTemplate", "bodyTemplate"]) {
+      const refused = await create(json("POST", { name: "Chase", stages: [blank(field)] }));
+      assert.equal(refused.status, 400, `POST blank ${field}`);
+      assert.deepEqual(await refused.json(), { error: "stage subject and body templates must not be blank" });
+    }
+    const count = await withBypassContext(() =>
+      db.execute<{ n: number }>(sql`select count(*)::int as n from dunning_policies where org_id = ${org.orgId}`),
+    );
+    assert.equal(count.rows[0]!.n, 0, "a refused policy must not be created");
+
+    const created = await create(json("POST", { name: "Collections", stages: [ladderStage()] }));
+    assert.equal(created.status, 201, JSON.stringify(await created.clone().json()));
+    const { id } = (await created.json()) as { id: string };
+    const refusedPatch = await patch(json("PATCH", { stages: [blank("bodyTemplate")] }), params(id));
+    assert.equal(refusedPatch.status, 400);
+    assert.deepEqual(await refusedPatch.json(), { error: "stage subject and body templates must not be blank" });
+    assert.equal(await stageCount(org.orgId, id), 1, "refused restage keeps the ladder");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

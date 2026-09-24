@@ -469,6 +469,22 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
           const body = renderTemplate(stage.bodyTemplate, vars);
           const to = doc.partyEmail;
 
+          // A legacy stage whose templates render blank would mail the
+          // customer an empty letter (the boundary refuses new blanks, but
+          // stored rows predate it — including templates that only
+          // reference unknown variables). Refuse loudly on the tick result
+          // instead of sending nothing: no claim is opened, so the rung
+          // stays eligible and fails visibly every tick until the template
+          // is fixed, and no empty letter ever reaches the outbox.
+          if (!subject.trim() || !body.trim()) {
+            result.failed += 1;
+            result.notices.push({ documentId: doc.id, stageId: stage.id, toEmail: to, status: "failed" });
+            console.warn(
+              `[dunning] ${doc.documentNumber} stage ${stage.id} (${stage.name}) renders a blank subject or body — refusing to send; fix the stage templates`,
+            );
+            continue;
+          }
+
           // Serialize concurrent ticks over THIS ladder rung before claiming
           // it. The claim lives IN the log now: the runner opens one 'staged'
           // row per (document, stage) and the unique index arbitrates rivals
