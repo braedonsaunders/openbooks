@@ -162,97 +162,88 @@ function postRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("collection route gates on the hrm feature and the performance permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.performance\.manage"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    const get = await collectionRoute!.GET();
-    assert.equal(get.status, 404);
-    assert.deepEqual(routeState.calls, []);
-    const post = await collectionRoute!.POST(postRequest({ name: "X" }));
-    assert.equal(post.status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  const get = await collectionRoute!.GET();
+  assert.equal(get.status, 404);
+  assert.deepEqual(routeState.calls, []);
+  const post = await collectionRoute!.POST(postRequest({ name: "X" }));
+  assert.equal(post.status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("an unauthenticated caller never reaches the service", async () => {
-    reset();
-    routeState.authz = null;
-    routeState.gate = { status: 401 };
-    assert.equal((await collectionRoute!.GET()).status, 401);
-    assert.equal((await collectionRoute!.POST(postRequest({ name: "X" }))).status, 401);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.authz = null;
+  routeState.gate = { status: 401 };
+  assert.equal((await collectionRoute!.GET()).status, 401);
+  assert.equal((await collectionRoute!.POST(postRequest({ name: "X" }))).status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("listing fans out to the privacy-scoped loader with the caller's identity", async () => {
-    reset();
-    const response = await collectionRoute!.GET();
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { cycles: [{ id: "cycle-1", scoped: true }] });
-    assert.deepEqual(routeState.calls, [
-      { fn: "progress", args: { orgId: "org-1", actorId: "user-1" } },
-    ]);
-  });
+test("listing fans out to the privacy-scoped loader with the caller's identity", async () => {
+  reset();
+  const response = await collectionRoute!.GET();
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { cycles: [{ id: "cycle-1", scoped: true }] });
+  assert.deepEqual(routeState.calls, [
+    { fn: "progress", args: { orgId: "org-1", actorId: "user-1" } },
+  ]);
+});
 
-  test("create validates the body through the real parser before the service runs", async () => {
-    reset();
-    assert.equal((await collectionRoute!.POST(postRequest({ name: "X" }))).status, 400);
-    assert.equal(
-      (await collectionRoute!.POST(postRequest({ templateId: "nope", name: "X", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }))).status,
-      400,
+test("create validates the body through the real parser before the service runs", async () => {
+  reset();
+  assert.equal((await collectionRoute!.POST(postRequest({ name: "X" }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ templateId: "nope", name: "X", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("create refuses hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await collectionRoute!.POST(
+      new Request("http://openbooks.test/api/hrm/review-cycles", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
     );
-    assert.deepEqual(routeState.calls, []);
-  });
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create refuses hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await collectionRoute!.POST(
-        new Request("http://openbooks.test/api/hrm/review-cycles", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
+test("create forwards org, actor, and body, then 201s", async () => {
+  reset();
+  const response = await collectionRoute!.POST(
+    postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(routeState.calls[0]!.args, {
+    orgId: "org-1",
+    actorId: "user-1",
+    templateId: TEMPLATE_ID,
+    name: "FY26",
+    periodStartOn: "2026-01-01",
+    periodEndOn: "2026-06-30",
+    selfDueOn: null,
+    managerDueOn: null,
+    appliesTo: {},
   });
+});
 
-  test("create forwards org, actor, and body, then 201s", async () => {
-    reset();
-    const response = await collectionRoute!.POST(
-      postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(routeState.calls[0]!.args, {
-      orgId: "org-1",
-      actorId: "user-1",
-      templateId: TEMPLATE_ID,
-      name: "FY26",
-      periodStartOn: "2026-01-01",
-      periodEndOn: "2026-06-30",
-      selfDueOn: null,
-      managerDueOn: null,
-      appliesTo: {},
-    });
-  });
-
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("template carries no required question");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }),
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped.length, 1);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("template carries no required question");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    postRequest({ templateId: TEMPLATE_ID, name: "FY26", periodStartOn: "2026-01-01", periodEndOn: "2026-06-30" }),
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped.length, 1);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
