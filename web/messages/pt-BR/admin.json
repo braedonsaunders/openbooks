@@ -5544,5 +5544,63 @@
       "summary": "Resumo",
       "when": "Quando"
     }
+  },
+  "sandboxes": {
+    "changeSets": {
+      "actions": {
+        "review": "Registrar revisão",
+        "approve": "Aprovar conjunto de alterações",
+        "apply": "Aplicar em produção"
+      },
+      "confirm": "{action} para “{name}”?",
+      "columns": {
+        "type": "Tipo de registro",
+        "record": "Registro",
+        "change": "Alteração"
+      },
+      "capturedFrom": "Capturado de {name}",
+      "retained": "Conjunto de alterações de configuração retido",
+      "listTitle": "Conjuntos de alterações",
+      "listDescription": "Inspecione as alterações de configuração capturadas, registre revisão e aprovação independentes e aplique as alterações aprovadas em produção.",
+      "listBack": "Ambientes",
+      "requestFailed": "A solicitação não foi concluída. Atualize para verificar o status registrado antes de tentar novamente.",
+      "working": "Processando…",
+      "backToChanges": "Voltar às alterações capturadas",
+      "productionAtCapture": "Produção na captura",
+      "snapshotUnavailable": "Instantâneo de produção indisponível. Recapture este conjunto de alterações.",
+      "recordDidNotExist": "O registro não existia.",
+      "proposedConfiguration": "Configuração proposta",
+      "willBeDeleted": "Este registro será excluído.",
+      "capturedCount": "{count, plural, one {# alteração capturada} other {# alterações capturadas}}",
+      "appliedNote": "Configuração aplicada. A evidência capturada continua disponível abaixo.",
+      "reviewNote": "Inspecione cada registro antes de registrar sua revisão ou aprovação. Alterações de produção após a captura impedirão a aplicação.",
+      "stages": {
+        "captured": "Capturado",
+        "reviewed": "Revisado",
+        "approved": "Aprovado",
+        "applied": "Aplicado"
+      },
+      "status": {
+        "draft": "Rascunho",
+        "reviewed": "Revisado",
+        "approved": "Aprovado",
+        "applied": "Aplicado",
+        "discarded": "Descartado"
+      },
+      "op": {
+        "insert": "Inserir",
+        "update": "Atualizar",
+        "delete": "Excluir"
+      },
+      "recordedActor": "Ator registrado",
+      "pending": "Pendente",
+      "empty": "Nenhuma alteração de configuração.",
+      "reasons": {
+        "incomplete": "Esta captura está incompleta. Capture um novo conjunto de alterações do ambiente.",
+        "noSnapshot": "Esta captura antiga não tem instantâneo de produção. Capture e revise um novo conjunto de alterações antes de aplicá-lo.",
+        "empty": "Nenhuma alteração de configuração foi capturada.",
+        "segregation": "O criador, o revisor, o aprovador e o aplicador devem ser quatro usuários diferentes. Outro usuário autorizado deve executar a próxima etapa."
+      }
+    }
   }
 }

@@ -5544,5 +5544,63 @@
       "summary": "Summary",
       "when": "When"
     }
+  },
+  "sandboxes": {
+    "changeSets": {
+      "actions": {
+        "review": "Record review",
+        "approve": "Approve change set",
+        "apply": "Apply to production"
+      },
+      "confirm": "{action} for “{name}”?",
+      "columns": {
+        "type": "Record type",
+        "record": "Record",
+        "change": "Change"
+      },
+      "capturedFrom": "Captured from {name}",
+      "retained": "Retained configuration change set",
+      "listTitle": "Change sets",
+      "listDescription": "Inspect captured configuration changes, record independent review and approval, then apply the approved changes to production.",
+      "listBack": "Environments",
+      "requestFailed": "The request did not complete. Refresh to check the recorded status before trying again.",
+      "working": "Working…",
+      "backToChanges": "Back to captured changes",
+      "productionAtCapture": "Production at capture",
+      "snapshotUnavailable": "Production snapshot unavailable. Recapture this change set.",
+      "recordDidNotExist": "Record did not exist.",
+      "proposedConfiguration": "Proposed configuration",
+      "willBeDeleted": "This record will be deleted.",
+      "capturedCount": "{count, plural, one {# captured change} other {# captured changes}}",
+      "appliedNote": "Configuration applied. The captured evidence remains available below.",
+      "reviewNote": "Inspect each record before recording your review or approval. Production changes made after capture will prevent application.",
+      "stages": {
+        "captured": "Captured",
+        "reviewed": "Reviewed",
+        "approved": "Approved",
+        "applied": "Applied"
+      },
+      "status": {
+        "draft": "Draft",
+        "reviewed": "Reviewed",
+        "approved": "Approved",
+        "applied": "Applied",
+        "discarded": "Discarded"
+      },
+      "op": {
+        "insert": "Insert",
+        "update": "Update",
+        "delete": "Delete"
+      },
+      "recordedActor": "Recorded actor",
+      "pending": "Pending",
+      "empty": "No configuration changes.",
+      "reasons": {
+        "incomplete": "This capture is incomplete. Capture a new change set from the environment.",
+        "noSnapshot": "This older capture has no production snapshot. Capture and review a new change set before applying it.",
+        "empty": "No configuration changes were captured.",
+        "segregation": "The creator, reviewer, approver and applier must be four different users. Another authorized user must perform the next step."
+      }
+    }
   }
 }

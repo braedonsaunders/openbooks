@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
+import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { pickString } from '../../../../../lib/list-params'
@@ -21,9 +22,9 @@ import type { ChangeSetDrawer } from './ChangeSetDrawer'
  * And it is production-only. `envKind !== 'production'` redirects, which runs
  * in the loader so the gate runs in the loader.
  *
- * The copy is hardcoded English on the native page (this route has no catalog
- * entry yet), so the loader carries the same literals rather than inventing
- * keys that do not exist.
+ * The list header resolves through the admin.sandboxes.changeSets catalog in
+ * the request locale; the drawer (ChangeSetDrawer) does the same for every
+ * one of its labels.
  */
 
 type DrawerProps = Parameters<typeof ChangeSetDrawer>[0]
@@ -43,6 +44,7 @@ export async function loadChangeSets(
 ): Promise<ChangeSetsData> {
   const authz = await requirePermission('admin.sandboxes.manage')
   if (authz.user.envKind !== 'production') redirect('/admin/sandboxes')
+  const t = await getTranslations('admin')
 
   const id = pickString(sp.changeSet)
   const selected = id ? await loadChangeSetDetail(authz.user.productionOrgId, id) : null
@@ -53,10 +55,9 @@ export async function loadChangeSets(
 
   return {
     backHref: '/admin/sandboxes',
-    backLabel: 'Environments',
-    title: 'Change sets',
-    description:
-      'Inspect captured configuration changes, record independent review and approval, then apply the approved changes to production.',
+    backLabel: t('sandboxes.changeSets.listBack'),
+    title: t('sandboxes.changeSets.listTitle'),
+    description: t('sandboxes.changeSets.listDescription'),
     sp,
     drawer: selected
       ? { remountKey: selected.id, detail: selected, actorId: authz.user.id }
