@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
 import { BookCheck, Eye, LoaderCircle, Send } from 'lucide-react'
+import { throwApiErrorIfNotOk } from '../../../lib/api-error'
 
 export function ExpenseActions({
   id,
@@ -28,16 +29,20 @@ export function ExpenseActions({
 
   async function act(action: 'submit' | 'post') {
     setBusy(true)
-    const res = await fetch('/api/expenses/actions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, documentId: id }),
-    })
-    const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
-    else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
-    setBusy(false)
-    router.refresh()
+    try {
+      const res = await fetch('/api/expenses/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, documentId: id }),
+      })
+      await throwApiErrorIfNotOk(res, t('toasts.actionFailed'))
+      toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('toasts.actionFailed'))
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (status === 'draft' && canSubmit) {
