@@ -201,6 +201,15 @@ export function isBaseMoneyMeasure(entity: ReportEntity, m: ReportMeasure): bool
   return entityColumn(entity, m.column)?.baseMoney === true
 }
 
+/** True when the measure sums a running-snapshot column (each row already
+ *  carries a cumulative total, e.g. payroll YTD). Summing across rows counts
+ *  every underlying movement many times over, so the compiler refuses it —
+ *  use `latest` for the end value or sum the underlying additive column. */
+export function isSnapshotSum(entity: ReportEntity, m: ReportMeasure): boolean {
+  if (m.fn !== 'sum' || !m.column) return false
+  return entityColumn(entity, m.column)?.snapshot === true
+}
+
 /** The single functional currency the plan's filters pin, or null. */
 export function reportBaseCurrencyPin(entity: ReportEntity, q: ReportCustomQuery): string | null {
   return reportSingleValuePin(q, entity.baseCurrencyColumn)
@@ -489,6 +498,17 @@ function compileSummarize(
   )
   measures = measures.filter((m) => REPORT_AGG_FNS.includes(m.fn))
   if (measures.length === 0) measures = [{ fn: 'count' }]
+
+  // A snapshot never sums: each row already carries the cumulative total, so
+  // SUM would count every movement many times over. Fail closed here — the
+  // SQL-level SUM would otherwise double-count before any total could notice.
+  for (const m of measures) {
+    if (isSnapshotSum(entity, m)) {
+      throw new Error(
+        `cannot sum '${m.column}' on '${entity.key}': it is a running snapshot (each row already carries the cumulative total) — use the 'latest' aggregate for the end value, or sum the underlying additive column`,
+      )
+    }
+  }
 
   // Denomination analysis: which money the plan blends, and what already
   // certifies a single denomination without touching the database —

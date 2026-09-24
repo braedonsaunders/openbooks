@@ -13,6 +13,7 @@ import {
   compileCustomQuery,
   isBaseMoneyMeasure,
   isMoneyBlendingMeasure,
+  isSnapshotSum,
   isTxnCurrencyMeasure,
   labelFor,
   measureLabel,
@@ -398,9 +399,12 @@ function shapeSummarizeResult(
     // Which measure columns can honestly total. Additive aggregates sum, and
     // so do 'latest' running figures: each row carries the END value of a
     // disjoint per-bucket series (one employee's component YTD), so the sum
-    // of endings IS the combined ending. avg/min/max stay blank.
+    // of endings IS the combined ending. A snapshot column never sums — each
+    // row already carries the cumulative total, so the compiler refuses
+    // sum-of-snapshot plans and totals stay blank here. avg/min/max stay
+    // blank.
     const summable = measures.map(
-      (m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'latest',
+      (m) => (m.fn === 'sum' || m.fn === 'count' || m.fn === 'latest') && !isSnapshotSum(entity, m),
     )
     const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
     // Subtotal level: the first breakout that ISN'T the section column.
@@ -594,7 +598,9 @@ function shapeSummarizeResult(
     if (m.fn === 'sum' && isTxnCurrencyMeasure(entity, m) && !singles.txn) return
     if (m.fn === 'sum' && isBaseMoneyMeasure(entity, m) && !singles.base) return
     if (m.fn === 'sum' && isMoneyBlendingMeasure(entity, m) && entity.bookScope && !singles.book) return
-    if (m.fn === 'count' || m.fn === 'sum') {
+    // A snapshot card never sums: the compiler refuses sum-of-snapshot plans,
+    // and a total here would multiply every movement by its stub count.
+    if (m.fn === 'count' || (m.fn === 'sum' && !isSnapshotSum(entity, m))) {
       const total = sumExactDecimals(dataRows.map((row) => row[`m${i}`]))
       summary.push({
         label:
