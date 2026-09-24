@@ -216,13 +216,30 @@ async function loadCycleRow(db: SqlExecutor, orgId: string, cycleId: string): Pr
 }
 
 /** True when the cycle's declared employer is inside a restricted HR scope. */
-function cycleVisibleToHr(cycle: ReadCycleDTO, allowed: Set<string> | null): boolean {
-  return allowed === null || cycle.appliesTo.employerSubsidiaryId === null ||
-    allowed.has(cycle.appliesTo.employerSubsidiaryId);
+async function cycleScopeForHr(
+  db: SqlExecutor,
+  orgId: string,
+  cycle: ReadCycleDTO,
+  allowed: Set<string> | null,
+): Promise<{ visible: boolean; orgWide: boolean }> {
+  if (allowed === null) return { visible: true, orgWide: cycle.appliesTo.employerSubsidiaryId === null };
+  let subsidiaryId = cycle.appliesTo.employerSubsidiaryId;
+  if (cycle.appliesTo.departmentId !== null) {
+    const department = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from departments
+       where org_id = ${orgId} and id = ${cycle.appliesTo.departmentId}
+    `)).rows[0];
+    if (!department) return { visible: false, orgWide: false };
+    if (subsidiaryId !== null && department.subsidiaryId !== null && subsidiaryId !== department.subsidiaryId) {
+      return { visible: false, orgWide: false };
+    }
+    subsidiaryId ??= department.subsidiaryId;
+  }
+  return { visible: subsidiaryId === null || allowed.has(subsidiaryId), orgWide: subsidiaryId === null };
 }
 
-function projectCycleForHrScope(cycle: ReadCycleDTO, allowed: Set<string> | null): ReadCycleDTO {
-  if (allowed === null || cycle.appliesTo.employerSubsidiaryId !== null) return cycle;
+function projectCycleForHrScope(cycle: ReadCycleDTO, orgWide: boolean): ReadCycleDTO {
+  if (!orgWide) return cycle;
   return { ...cycle, templateId: null, templateName: null, managerGapCount: null };
 }
 
@@ -251,11 +268,12 @@ export async function listCycleProgress(args: {
     const out: CycleProgressDTO[] = [];
     for (const { id } of cycles) {
       const cycle = await loadCycleRow(db, orgId, id);
-      if (granted && !cycleVisibleToHr(cycle, allowed)) continue;
+      const cycleScope = await cycleScopeForHr(db, orgId, cycle, granted ? allowed : null);
+      if (granted && !cycleScope.visible) continue;
       const progress = await cycleProgress(db, orgId, id, visible);
       // A structural viewer sees only cycles they participate in; HR sees all.
       if (!granted && progress.totalSelf + progress.totalManager === 0) continue;
-      out.push({ ...projectCycleForHrScope(cycle, granted ? allowed : null), scoped: !granted, ...progress });
+      out.push({ ...projectCycleForHrScope(cycle, cycleScope.orgWide), scoped: !granted, ...progress });
     }
     return out;
   });
@@ -288,7 +306,8 @@ export async function getCycleDetail(args: {
     const allowed = granted ? await actorAllowedSubsidiaryIds(db, orgId, actorId) : null;
     const visible = await readableReviewIds(db, orgId, actorId, granted, allowed);
     const cycle = await loadCycleRow(db, orgId, cycleId);
-    if (granted && !cycleVisibleToHr(cycle, allowed)) {
+    const cycleScope = await cycleScopeForHr(db, orgId, cycle, granted ? allowed : null);
+    if (granted && !cycleScope.visible) {
       throw new HrmPerformanceError(
         "NOT_FOUND",
         `review cycle ${cycleId} is not visible in this organization — check the id or the organization`,
@@ -313,7 +332,7 @@ export async function getCycleDetail(args: {
     for (const id of ids) {
       reviews.push(projectReviewForReader(await readReviewRow(db, orgId, id), { granted, actorPartyId: person.partyId }));
     }
-    return { ...projectCycleForHrScope(cycle, granted ? allowed : null), scoped: !granted, ...progress, reviews };
+    return { ...projectCycleForHrScope(cycle, cycleScope.orgWide), scoped: !granted, ...progress, reviews };
   });
 }
 
