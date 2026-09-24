@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
-import { applyRuleToLine } from '../../../../../lib/banking-rules'
+import { applyRuleToLine, JournalPostingDeniedError } from '../../../../../lib/banking-rules'
 import { bankingErrorResponse } from '../../util'
 
 export const runtime = 'nodejs'
@@ -35,6 +35,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof JournalPostingDeniedError) return NextResponse.json({ error: e.message }, { status: 403 })
     return bankingErrorResponse(e)
   }
 }

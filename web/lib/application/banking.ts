@@ -12,7 +12,7 @@ import {
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
-import { addJournalMatchFromLine } from "../banking-rules";
+import { addJournalMatchFromLine, JournalPostingDeniedError } from "../banking-rules";
 import { normalizeMoneyValue } from "../cash/core";
 import { canonicalDecimal } from "../exact-decimal";
 import { isFeatureEnabled } from "../features";
@@ -20,7 +20,7 @@ import { clamp, isUuid } from "../list-params";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
-import { ApplicationError, invalidInput, notFound } from "./errors";
+import { ApplicationError, forbidden, invalidInput, notFound } from "./errors";
 import { executeIdempotent } from "./idempotency";
 
 /**
@@ -35,6 +35,9 @@ import { executeIdempotent } from "./idempotency";
  */
 
 function bankingFailure(error: unknown): never {
+  // A GL-posting refusal names its remedy and carries the caller's 403,
+  // exactly like the banking routes map it — never a bare tool failure.
+  if (error instanceof JournalPostingDeniedError) throw forbidden("gl.post");
   if (
     error instanceof BankingError
     || error instanceof PostingError
