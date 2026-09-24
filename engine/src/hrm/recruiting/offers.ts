@@ -216,6 +216,12 @@ export async function createOffer(query: CreateOfferQuery): Promise<OfferDTO> {
     if (!requisition) {
       throw new RecruitingError("NOT_FOUND", "requisition is not visible in this organization");
     }
+    if (positionId !== null && requisition.positionId !== null && positionId.toLowerCase() !== requisition.positionId.toLowerCase()) {
+      throw new RecruitingError(
+        "INVALID_INPUT",
+        "positionId must match the requisition's pinned position — omit it to inherit the opening's position or draft against that position",
+      );
+    }
     if (declared !== requisition.employerSubsidiaryId.toLowerCase()) {
       throw new RecruitingError(
         "REFUSED",

@@ -62,6 +62,53 @@ test("H-OFFER-ENTITY: the offer employer must equal the requisition employer", {
   }
 });
 
+test("H-OFFER-ENTITY: a draft cannot name a position different from the requisition", { skip: !DB }, async () => {
+  const h = await setupScopeHarness(["hrmRecruiting"]);
+  try {
+    const orgId = h.org.orgId;
+    await grantPermissions(orgId, h.adminId, ["hrm.position.manage", "hrm.position.read"]);
+    async function seedPosition(code: string) {
+      return createPosition({
+        orgId,
+        actorId: h.adminId,
+        positionCode: code,
+        title: "Engineer",
+        employerSubsidiaryId: h.org.subsidiaryId,
+        plannedFte: "1.0000",
+        status: "open",
+        effectiveFrom: "2026-07-01",
+        reason: "position consistency seed",
+      });
+    }
+    const pinned = await seedPosition("ENG-9101");
+    const other = await seedPosition("ENG-9102");
+    const requisition = await openScopedReq(orgId, h.adminId, h.org.subsidiaryId, "Pinned engineer", pinned.id);
+    const { candidate } = await createCandidate({ orgId, actorId: h.adminId, displayName: "Ann A", email: "ann@example.test" });
+    const application = await createApplication({ orgId, actorId: h.adminId, requisitionId: requisition.id, candidateId: candidate.id });
+
+    const refusal = await createOffer({
+      orgId,
+      actorId: h.adminId,
+      applicationId: application.id,
+      positionId: other.id,
+      ...offerTerms(h.org.subsidiaryId),
+    }).then(() => null, (error: unknown) => recruitingError(error));
+    assert.ok(refusal, "a position mismatch refuses while drafting");
+    assert.equal(refusal.code, "INVALID_INPUT");
+    assert.match(refusal.message, /match the requisition's pinned position/);
+
+    const inherited = await createOffer({
+      orgId,
+      actorId: h.adminId,
+      applicationId: application.id,
+      ...offerTerms(h.org.subsidiaryId),
+    });
+    assert.equal(inherited.positionId, null, "omitting positionId preserves the requisition's pinned position for hire to inherit");
+  } finally {
+    await teardownScopeHarness(h);
+  }
+});
+
 test("H-OFFER-ENTITY: the offer employer must equal the position employer", { skip: !DB }, async () => {
   const h = await setupScopeHarness(["hrmRecruiting"]);
   try {
