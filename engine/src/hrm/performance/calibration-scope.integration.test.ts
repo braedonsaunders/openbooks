@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -16,6 +16,7 @@ import {
   closeCalibrationSession,
   createCalibrationSession,
   openCalibrationSession,
+  revertEntry,
   setCalibratedRating,
 } from "./calibration.ts";
 
@@ -323,6 +324,77 @@ test("deciding and closing across the fence is refused", async () => {
     const closed = await closeCalibrationSession({ orgId: h.org.orgId, actorId: h.hrAll, id: draft.id });
     assert.equal(closed.status, "closed");
   } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("rating changes and reversions wait for a closing calibration session", async () => {
+  const h = await setupHarness();
+  let releaseReviewLock!: () => void;
+  let reviewLocked!: () => void;
+  const release = new Promise<void>((resolve) => { releaseReviewLock = resolve; });
+  const locked = new Promise<void>((resolve) => { reviewLocked = resolve; });
+  let reviewId = "";
+  let blocker: Promise<void> | undefined;
+  try {
+    reviewId = await submittedManagerReview(h, h.managerAUser, h.workerAEmployment);
+    const draft = await createCalibrationSession({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      cycleId: h.cycleId,
+      name: "Close race",
+    });
+    const opened = await openCalibrationSession({ orgId: h.org.orgId, actorId: h.hrAll, id: draft.id });
+    const entry = opened.entries.find((candidate) => candidate.reviewId === reviewId)!;
+    await setCalibratedRating({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      entryId: entry.id,
+      calibratedRating: "4",
+      justification: "initial calibration",
+    });
+
+    // Pause close after it has inspected the open session but before it can
+    // write the reviewed rating. The session lock must fence both edits.
+    blocker = withOrgTransaction(h.org.orgId, async () => {
+      await db.execute(sql`select id from hrm_reviews where org_id = ${h.org.orgId} and id = ${reviewId} for update`);
+      reviewLocked();
+      await release;
+    });
+    await locked;
+    const closing = closeCalibrationSession({ orgId: h.org.orgId, actorId: h.hrAll, id: draft.id });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    let ratingFinished = false;
+    let revertFinished = false;
+    const changing = setCalibratedRating({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      entryId: entry.id,
+      calibratedRating: "3",
+      justification: "late change",
+    }).then(() => { ratingFinished = true; }, (error: unknown) => { ratingFinished = true; return error; });
+    const reverting = revertEntry({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      entryId: entry.id,
+      reason: "late reversion",
+    }).then(() => { revertFinished = true; }, (error: unknown) => { revertFinished = true; return error; });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(ratingFinished, false, "rating changes wait behind the session close");
+    assert.equal(revertFinished, false, "reversions wait behind the session close");
+    releaseReviewLock();
+    await blocker;
+    assert.equal((await closing).status, "closed");
+    for (const result of [await changing, await reverting]) {
+      assert.ok(result instanceof HrmPerformanceError);
+      assert.equal(result.code, "BAD_STATE");
+      assert.match(result.message, /session is closed/);
+    }
+  } finally {
+    releaseReviewLock();
+    await blocker?.catch(() => undefined);
     await dropScratchOrg(h.org.orgId);
   }
 });

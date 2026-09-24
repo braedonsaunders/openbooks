@@ -142,6 +142,18 @@ async function loadSession(db: SqlExecutor, orgId: string, id: string): Promise<
   return rows[0] ?? null;
 }
 
+/** Lock the session before any of its entries or reviews are read for a write. */
+async function lockSessionForUpdate(db: SqlExecutor, orgId: string, id: string): Promise<StoredSession | null> {
+  const rows = (await db.execute<StoredSession & { scope: unknown }>(sql`
+    select id, cycle_id, name, scope, status, facilitator_party_id,
+           opened_at::text as opened_at, closed_at::text as closed_at
+      from hrm_calibration_sessions
+     where org_id = ${orgId} and id = ${id}
+     for update
+  `)).rows;
+  return rows[0] ?? null;
+}
+
 async function loadEntries(
   db: SqlExecutor,
   orgId: string,
@@ -394,6 +406,15 @@ async function requireOpenEntry(
   entryId: string,
   allowed: Set<string> | null,
 ): Promise<{ session: StoredSession; entry: StoredEntry }> {
+  const entrySession = (await db.execute<{ session_id: string }>(sql`
+    select session_id from hrm_calibration_entries where org_id = ${orgId} and id = ${entryId}
+  `)).rows[0];
+  if (!entrySession) throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
+  // This lock is shared with closeCalibrationSession. Always take it before
+  // reading or changing entries, so a close cannot pass the open-state
+  // check while a decision or reversion is still in flight.
+  const session = await lockSessionForUpdate(db, orgId, entrySession.session_id);
+  if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
   const entries = (await db.execute<StoredEntry & { employerSubsidiaryId: string }>(sql`
     select e.id, e.review_id, r.employment_id, coalesce(p.display_name, '—') as subject_name, r.reviewer_party_id,
            e.proposed_rating::text as proposed_rating, e.calibrated_rating::text as calibrated_rating,
@@ -413,12 +434,6 @@ async function requireOpenEntry(
   if (allowed !== null && !allowed.has(entry.employerSubsidiaryId)) {
     throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
   }
-  const entrySession = (await db.execute<{ session_id: string }>(sql`
-    select session_id from hrm_calibration_entries where org_id = ${orgId} and id = ${entryId}
-  `)).rows[0];
-  if (!entrySession) throw new HrmPerformanceError("NOT_FOUND", "calibration entry was not found — it may belong to another session");
-  const session = await loadSession(db, orgId, entrySession.session_id);
-  if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
   if (session.status !== "open") {
     throw new HrmPerformanceError(
       "BAD_STATE",
@@ -644,7 +659,7 @@ export async function closeCalibrationSession(args: {
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    const session = await loadSession(db, orgId, id);
+    const session = await lockSessionForUpdate(db, orgId, id);
     if (!session) throw new HrmPerformanceError("NOT_FOUND", "calibration session was not found — it may belong to another organization");
     const closeCycle = (await db.execute<{ appliesTo: unknown }>(sql`
       select applies_to as "appliesTo" from hrm_review_cycles where org_id = ${orgId} and id = ${session.cycle_id}
