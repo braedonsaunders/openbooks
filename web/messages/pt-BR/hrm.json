@@ -492,15 +492,17 @@
     },
     "segmentsLabel": "Mostrar",
     "templates": {
+
       "title": "Modelos de lista", "description": "Listas de integração, desligamento e transferência reutilizáveis. Abrir uma lista fixa seu modelo, de modo que alterações posteriores nunca reescrevem o histórico.",
       "newTemplate": "Novo modelo", "editTemplate": "Editar modelo", "createTemplate": "Criar um modelo", "createDescription": "Defina quem esta lista abrange e adicione suas etapas em ordem.", "editDescription": "Edite a definição reutilizável. Listas já abertas mantêm seu instantâneo original.",
       "template": "Modelo", "name": "Nome", "kind": "Tipo", "scope": "Aplica-se a", "status": "Status", "active": "Ativo", "retired": "Inativo", "subsidiary": "Subsidiária empregadora", "department": "Departamento", "allSubsidiaries": "Todas as filiais", "allDepartments": "Todos os departamentos", "allEmployees": "Todos os colaboradores", "limitedScope": "Escopo limitado",
       "steps": "Etapas", "stepsDescription": "Trabalho ordenado copiado para cada nova lista.", "addStep": "Adicionar etapa", "newStep": "Nova etapa", "editStep": "Editar etapa", "deleteStep": "Excluir etapa", "stepTitle": "Título da etapa", "stepDescription": "Descrição", "owner": "Responsável", "namedOwner": "Pessoa designada", "dueOffset": "Vence em (dias)", "evidence": "Evidência", "required": "Obrigatório",
-      "saveBeforeSteps": "Salve primeiro os detalhes do modelo e adicione ao menos uma etapa antes de usá-lo para uma lista.", "noSteps": "Este modelo não está pronto. Adicione ao menos uma etapa antes de selecioná-lo para uma lista.", "noneEligible": "Nenhum modelo pronto cobre este colaborador, este tipo e esta data.", "loadFailed": "Não foi possível carregar os modelos.", "saveFailed": "Não foi possível salvar o modelo.", "stepSaveFailed": "Não foi possível salvar a etapa do modelo.", "stepDeleteFailed": "Não foi possível excluir a etapa do modelo.",
+      "saveBeforeSteps": "Salve primeiro os detalhes do modelo e adicione ao menos uma etapa antes de usá-lo para uma lista.", "noSteps": "Este modelo não está pronto. Adicione ao menos uma etapa antes de selecioná-lo para uma lista.", "noneEligible": "Nenhum modelo pronto cobre este colaborador, este tipo e esta data.", "loadFailed": "Não foi possível carregar os modelos.", "saveFailed": "Não foi possível salvar o modelo.", "stepSaveFailed": "Não foi possível salvar a etapa do modelo.", "stepDeleteFailed": "Não foi possível excluir a etapa do modelo.", "stepOffsetInvalid": "O deslocamento de vencimento deve ser um número inteiro de dias entre -3650 e 3650.",
       "created": "Modelo criado. Adicione suas etapas antes de abrir uma lista.", "updated": "Modelo atualizado.", "stepCreated": "Etapa adicionada.", "stepUpdated": "Etapa atualizada.", "stepDeleted": "Etapa excluída.", "confirmDeleteStep": "Excluir a etapa «{title}»? As listas abertas mantêm seu instantâneo.", "stepSummary": "{owner} · vence {days} dias após a data de vigência", "search": "Pesquisar modelos", "empty": "Nenhum modelo corresponde a esta pesquisa.", "backToChecklists": "Voltar às listas",
       "kinds": { "onboarding": "Integração", "offboarding": "Desligamento", "transfer": "Transferência" },
       "owners": { "manager": "Gestor", "hr": "RH", "employee": "Colaborador", "named_party": "Pessoa designada" },
       "evidenceKinds": { "none": "Nenhuma", "acknowledgement": "Ciência", "attachment": "Anexo" }
+
     }
   },
   "leave": {

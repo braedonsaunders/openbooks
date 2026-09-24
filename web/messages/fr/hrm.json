@@ -492,15 +492,17 @@
     },
     "segmentsLabel": "Afficher",
     "templates": {
+
       "title": "Modèles de listes", "description": "Listes d'intégration, de départ et de transfert réutilisables. L'ouverture d'une liste fige son modèle, si bien que les modifications ultérieures ne réécrivent jamais l'historique.",
       "newTemplate": "Nouveau modèle", "editTemplate": "Modifier le modèle", "createTemplate": "Créer un modèle", "createDescription": "Définissez qui cette liste couvre, puis ajoutez ses étapes dans l'ordre.", "editDescription": "Modifiez la définition réutilisable. Les listes déjà ouvertes conservent leur instantané d'origine.",
       "template": "Modèle", "name": "Nom", "kind": "Type", "scope": "S'applique à", "status": "Statut", "active": "Actif", "retired": "Retiré", "subsidiary": "Filiale employeuse", "department": "Service", "allSubsidiaries": "Toutes les filiales", "allDepartments": "Tous les services", "allEmployees": "Tous les employés", "limitedScope": "Portée limitée",
       "steps": "Étapes", "stepsDescription": "Travail ordonné copié dans chaque nouvelle liste.", "addStep": "Ajouter une étape", "newStep": "Nouvelle étape", "editStep": "Modifier l'étape", "deleteStep": "Supprimer l'étape", "stepTitle": "Titre de l'étape", "stepDescription": "Description", "owner": "Responsable", "namedOwner": "Personne désignée", "dueOffset": "Échéance (en jours)", "evidence": "Preuve", "required": "Requis",
-      "saveBeforeSteps": "Enregistrez d'abord les détails du modèle, puis ajoutez au moins une étape avant de l'utiliser pour une liste.", "noSteps": "Ce modèle n'est pas prêt. Ajoutez au moins une étape avant de pouvoir le sélectionner pour une liste.", "noneEligible": "Aucun modèle prêt ne couvre cet employé, ce type et cette date.", "loadFailed": "Impossible de charger les modèles.", "saveFailed": "Impossible d'enregistrer le modèle.", "stepSaveFailed": "Impossible d'enregistrer l'étape du modèle.", "stepDeleteFailed": "Impossible de supprimer l'étape du modèle.",
+      "saveBeforeSteps": "Enregistrez d'abord les détails du modèle, puis ajoutez au moins une étape avant de l'utiliser pour une liste.", "noSteps": "Ce modèle n'est pas prêt. Ajoutez au moins une étape avant de pouvoir le sélectionner pour une liste.", "noneEligible": "Aucun modèle prêt ne couvre cet employé, ce type et cette date.", "loadFailed": "Impossible de charger les modèles.", "saveFailed": "Impossible d'enregistrer le modèle.", "stepSaveFailed": "Impossible d'enregistrer l'étape du modèle.", "stepDeleteFailed": "Impossible de supprimer l'étape du modèle.", "stepOffsetInvalid": "Le décalage d’échéance doit être un nombre entier de jours entre -3650 et 3650.",
       "created": "Modèle créé. Ajoutez ses étapes avant d'ouvrir une liste.", "updated": "Modèle mis à jour.", "stepCreated": "Étape ajoutée.", "stepUpdated": "Étape mise à jour.", "stepDeleted": "Étape supprimée.", "confirmDeleteStep": "Supprimer l'étape « {title} » ? Les listes ouvertes conservent leur instantané.", "stepSummary": "{owner} · échéance {days} jours après la date d'effet", "search": "Rechercher des modèles", "empty": "Aucun modèle ne correspond à cette recherche.", "backToChecklists": "Retour aux listes",
       "kinds": { "onboarding": "Intégration", "offboarding": "Départ", "transfer": "Transfert" },
       "owners": { "manager": "Manager", "hr": "RH", "employee": "Employé", "named_party": "Personne désignée" },
       "evidenceKinds": { "none": "Aucune", "acknowledgement": "Accusé de réception", "attachment": "Pièce jointe" }
+
     }
   },
   "leave": {

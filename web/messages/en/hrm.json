@@ -531,6 +531,7 @@
       "loadFailed": "Templates could not be loaded.",
       "saveFailed": "The template could not be saved.",
       "stepSaveFailed": "The template step could not be saved.",
+      "stepOffsetInvalid": "Due offset must be a whole number of days between -3650 and 3650.",
       "stepDeleteFailed": "The template step could not be deleted.",
       "created": "Template created. Add its steps before opening a checklist.",
       "updated": "Template updated.",
