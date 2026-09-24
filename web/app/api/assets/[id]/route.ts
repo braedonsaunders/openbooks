@@ -7,6 +7,7 @@ import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/assets/deprec
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
 import { loadAsset, loadAssetWithRunner } from '../_lib'
@@ -600,7 +601,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // A delete that matches zero rows is a failure, not success: under RLS an
   // unscoped delete silently matches nothing, so the final delete proves its
   // effect with RETURNING instead of reporting {ok} for a no-op.
+  //
+  // The scope AND the draft status are rechecked under the asset row lock
+  // inside this transaction: the unlocked precheck above may have authorized
+  // an A asset a concurrent A→B rehome (or draft→in-service placement) moves
+  // before these deletes commit.
+  let statusConflict: string | null = null
   const deleted = await db.transaction(async (tx) => {
+    const locked = (await tx.execute<{ status: string }>(sql`
+      select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+        for update
+    `))
+    if (!locked.rows[0]) return null
+    if (locked.rows[0].status !== 'draft') {
+      statusConflict = locked.rows[0].status
+      return null
+    }
     await tx.execute(sql`
       delete from depreciation_schedule_lines
        where org_id = ${user.orgId}
@@ -613,6 +630,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (gone.rows.length !== 1) throw new Error('asset not found')
     return gone.rows[0]!.id
   }).catch(() => null)
+  if (statusConflict) {
+    return NextResponse.json(
+      { error: `Only draft assets can be deleted (status: ${statusConflict}). Dispose of or write off the asset instead.` },
+      { status: 409 },
+    )
+  }
   if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   return NextResponse.json({ ok: true })
