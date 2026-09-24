@@ -255,7 +255,11 @@ export function QualificationDrawer({
             <dt className="text-slate-500">{t('qualifications.columns.type')}</dt>
             <dd className="font-medium">{q.type.code} · {q.type.name}</dd>
             <dt className="text-slate-500">{t('qualifications.columns.status')}</dt>
-            <dd className="font-medium">{q.status}</dd>
+            <dd className="font-medium">
+              {t.has(`qualifications.statusNames.${q.status}`)
+                ? t(`qualifications.statusNames.${q.status}`)
+                : q.status}
+            </dd>
             <dt className="text-slate-500">{t('qualifications.drawer.issued')}</dt>
             <dd className="tabular-nums">{q.issuedOn}</dd>
             <dt className="text-slate-500">{t('qualifications.columns.expiry')}</dt>
@@ -292,7 +296,11 @@ export function QualificationDrawer({
             <ul className="divide-y divide-slate-100 text-sm dark:divide-slate-800">
               {(detail?.events ?? []).map((e) => (
                 <li key={e.id} className="flex flex-wrap items-baseline gap-x-3 py-1.5">
-                  <span className="font-medium">{e.kind}</span>
+                  <span className="font-medium">
+                    {t.has(`qualifications.drawer.eventKinds.${e.kind}`)
+                      ? t(`qualifications.drawer.eventKinds.${e.kind}`)
+                      : e.kind}
+                  </span>
                   {e.reason ? <span className="text-slate-500">{e.reason}</span> : null}
                   <span className="ml-auto tabular-nums text-slate-400">{e.recordedAt}</span>
                 </li>

@@ -1802,7 +1802,13 @@
       "identifier": "N° de licence",
       "notes": "Notes",
       "evidence": "Voir le justificatif",
-      "events": "Historique"
+      "events": "Historique",
+      "eventKinds": {
+        "recorded": "Enregistrée",
+        "verified": "Vérifiée",
+        "renewed": "Renouvelée",
+        "revoked": "Révoquée"
+      }
     },
     "recordForm": {
       "employment": "Emploi",

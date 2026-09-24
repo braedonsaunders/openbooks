@@ -1858,7 +1858,13 @@
       "identifier": "License no.",
       "notes": "Notes",
       "evidence": "View evidence",
-      "events": "History"
+      "events": "History",
+      "eventKinds": {
+        "recorded": "Recorded",
+        "verified": "Verified",
+        "renewed": "Renewed",
+        "revoked": "Revoked"
+      }
     },
     "recordForm": {
       "employment": "Employment",

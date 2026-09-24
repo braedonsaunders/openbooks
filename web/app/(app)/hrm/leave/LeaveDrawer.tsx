@@ -126,7 +126,7 @@ export function LeaveDrawer({
             <dt className="text-slate-500">{t('leave.columns.hours')}</dt>
             <dd className="tabular-nums">{detail.request.hours}</dd>
             <dt className="text-slate-500">{t('leave.columns.status')}</dt>
-            <dd>{detail.request.status}</dd>
+            <dd>{t.has(`leave.statusNames.${detail.request.status}`) ? t(`leave.statusNames.${detail.request.status}`) : detail.request.status}</dd>
           </dl>
           {detail.request.reason ? <p className="text-sm text-slate-600">{detail.request.reason}</p> : null}
           <div className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
