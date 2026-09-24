@@ -355,8 +355,8 @@ describe("IE conformance: named refusals fire", () => {
   });
 
   it("pay dates outside 2026 refuse instead of extrapolating", () => {
-    assert.throws(() => calculateIeStatutory({ ...base, payDate: "2027-01-05" }), /2026/);
-    assert.throws(() => calculateIeStatutory({ ...base, payDate: "2025-12-31" }), /2026/);
+    assert.throws(() => calculateIeStatutory({ ...base, payDate: "2027-01-05" }), /2027/);
+    assert.throws(() => calculateIeStatutory({ ...base, payDate: "2025-12-31" }), /2025/);
   });
 
   it("reduced USC eligibility refuses instead of charging standard bands", () => {

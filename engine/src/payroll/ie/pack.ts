@@ -123,13 +123,13 @@ const IE_RPN: PayrollCertificate = {
   fields: [
     {
       key: "tax_credits_total", label: "Total tax credits (annual)",
-      kind: "amount", decimals: 2, min: "0",
+      kind: "amount", decimals: 2, min: "0", required: true,
       help: "The RPN's total annual tax credits (personal, PAYE, and any others Revenue holds). "
         + "Applied cumulatively from 1 January, or week-1/month-1 when the RPN says so.",
     },
     {
       key: "rate_band_total", label: "Standard rate band (annual)",
-      kind: "amount", decimals: 2, min: "0",
+      kind: "amount", decimals: 2, min: "0", required: true,
       help: "The RPN's standard-rate cutoff: pay within it is taxed at the standard rate, "
         + "pay above it at the higher rate. Unused band carries forward only on the cumulative basis.",
     },
@@ -448,6 +448,24 @@ export const IE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IE_EDITION: "Edition priced (pre/post 1 October)",
 };
 
+/** PAYE must use the explicit figures Revenue supplied on the RPN. A blank
+ * amount is not equivalent to zero: it would route virtually all taxable pay
+ * through the higher-rate band or remove the employee's credits. */
+export function requiredIeRpnAmount(
+  answers: Readonly<Record<string, string>>,
+  key: "tax_credits_total" | "rate_band_total",
+): string {
+  const value = answers[key]?.trim();
+  if (value == null || value === "") {
+    const label = key === "tax_credits_total" ? "tax-credit total" : "standard-rate band";
+    throw new PayrollPackError(
+      `IE payroll cannot calculate PAYE: the Revenue Payroll Notification is missing its ${label}; ` +
+      "obtain and file a complete RPN, entering an explicit 0 only when Revenue states the amount is zero.",
+    );
+  }
+  return value;
+}
+
 /** Phase 9 — IE pack statutory pass (PAYE + Class A PRSI + standard USC). */
 export async function computeIeStatutory(
   ctx: PayrollStatutoryComputeContext,
@@ -476,6 +494,14 @@ export async function computeIeStatutory(
   const pensionDeduction = deduction("pension_f");
   const taxableBase = add(add(income, nonPeriodic), neg(pensionDeduction));
   const elapsed = elapsedPeriodsForPayDate(payDate, P);
+  const rpnAmount = (key: "tax_credits_total" | "rate_band_total"): string => {
+    const value = answer(key);
+    // Let calculateIeStatutory raise the established emergency-basis refusal
+    // before parsing these unused placeholders when there is no RPN. With an
+    // RPN on file, missing/blank PAYE amounts are never treated as zero.
+    if (!hasRpn) return "";
+    return requiredIeRpnAmount(value === null ? {} : { [key]: value }, key);
+  };
   const rpnNum = (key: string): string => answer(key) ?? "0";
 
   const statutory = calculateIeStatutory({
@@ -483,8 +509,8 @@ export async function computeIeStatutory(
     periodsPerYear: P,
     basis: (answer("pay_basis") ?? "cumulative") === "week1" ? "week1" : "cumulative",
     hasRpn,
-    taxCreditsAnnual: rpnNum("tax_credits_total"),
-    rateBandAnnual: rpnNum("rate_band_total"),
+    taxCreditsAnnual: rpnAmount("tax_credits_total"),
+    rateBandAnnual: rpnAmount("rate_band_total"),
     taxablePayPeriod: taxableBase,
     taxablePayYtd: add(ytd.taxbase, rpnNum("prior_cumulative_pay")),
     // grossYtd reuses the prior taxable pay as the prior-gross proxy: exact

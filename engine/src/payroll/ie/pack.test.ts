@@ -5,7 +5,8 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { IE_PAYROLL_PACK } from "./pack.ts";
+import { IE_PAYROLL_PACK, requiredIeRpnAmount } from "./pack.ts";
+import { certificateAnswersProblem } from "../certificates.ts";
 import {
   jurisdictionKey,
   payrollJurisdictionDeclared,
@@ -84,6 +85,34 @@ describe("IE payroll pack", () => {
     ]) {
       assert.ok(fields.has(key), `RPN declares ${key}`);
     }
+  });
+
+  it("requires explicit RPN tax credits and standard-rate band values", () => {
+    const rpn = IE_PAYROLL_PACK.certificates().certificates[0]!;
+    assert.match(
+      certificateAnswersProblem(rpn, { pay_basis: "cumulative", rate_band_total: "44000" }) ?? "",
+      /"tax_credits_total" is required/,
+    );
+    assert.match(
+      certificateAnswersProblem(rpn, { pay_basis: "cumulative", tax_credits_total: "4000" }) ?? "",
+      /"rate_band_total" is required/,
+    );
+    assert.equal(
+      certificateAnswersProblem(rpn, {
+        pay_basis: "cumulative", tax_credits_total: "0", rate_band_total: "0",
+      }),
+      null,
+      "an explicit zero is a valid RPN amount",
+    );
+    assert.throws(
+      () => requiredIeRpnAmount({}, "tax_credits_total"),
+      /missing its tax-credit total; obtain and file a complete RPN/,
+    );
+    assert.throws(
+      () => requiredIeRpnAmount({ rate_band_total: "   " }, "rate_band_total"),
+      /missing its standard-rate band; obtain and file a complete RPN/,
+    );
+    assert.equal(requiredIeRpnAmount({ rate_band_total: "0" }, "rate_band_total"), "0");
   });
 
   it("declares the withholding region as implemented", () => {
@@ -186,6 +215,13 @@ describe("IE payroll pack", () => {
     await assert.rejects(
       IE_PAYROLL_PACK.computeStatutory(stub({ run: { pay_date: "2026-03-15" } })),
       /Emergency Tax/,
+    );
+    await assert.rejects(
+      IE_PAYROLL_PACK.computeStatutory(stub({
+        run: { pay_date: "2026-03-15" },
+        certificateFor: () => ({ onFile: true, answers: { pay_basis: "cumulative" } }),
+      })),
+      /missing its tax-credit total; obtain and file a complete RPN/,
     );
   });
 });
