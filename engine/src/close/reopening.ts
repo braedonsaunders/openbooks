@@ -438,8 +438,13 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
       join orgs organization on organization.id = request.org_id
      where request.status = 'approved' and request.expires_at <= now()
        and organization.env_kind = 'production'`));
+  // A concurrent tick may lock a candidate first: its re-close commits and
+  // this tick's lock finds no approved row. Only committed re-closes count —
+  // returning the candidate count would double-count the same window across
+  // the two ticks.
+  let reclosed = 0;
   for (const row of expired.rows) {
-    await withOrgContext(row.org_id, () =>
+    const didReclose = await withOrgContext(row.org_id, () =>
       db.transaction(async (tx) => {
       const locked = (await tx.execute<CloseReopenRequestRow>(sql`
         select *
@@ -450,7 +455,7 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
            and expires_at <= now()
          for update`));
       const lockedRow = locked.rows[0];
-      if (!lockedRow) return;
+      if (!lockedRow) return false;
       await recloseApprovedReopenRow({
         tx,
         row: lockedRow,
@@ -458,7 +463,9 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
         reason: lockedRow.reason,
         automatic: true,
       });
+      return true;
     }));
+    if (didReclose) reclosed += 1;
   }
-  return expired.rows.length;
+  return reclosed;
 }

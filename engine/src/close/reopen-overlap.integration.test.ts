@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '../testing/fixtures.ts';
 import { assertPeriodModulesOpen, CloseError } from "./period-policy.ts";
-import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "./reopening.ts";
+import { decidePeriodReopen, recloseApprovedReopen, recloseExpiredReopens, requestPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "./period-locks.ts";
 
 for (const order of ['global first','entity first','race','separate entities'] as const) {
@@ -107,5 +107,33 @@ test('subledger reopening respects the inherited global GL close', {skip:!proces
     const requestId=await requestPeriodReopen({...target,subsidiaryId:org.subsidiaryId,modules:['ap'],actorId:actors.adminId,reason:'AP correction without GL'});
     await assert.rejects(decidePeriodReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,approve:true,hours:2}),/GL must be included/);
     assert.equal((await db.execute<{status:string}>(sql`select status from close_reopen_requests where org_id=${org.orgId} and id=${requestId}`)).rows[0]!.status,'requested');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test('concurrent expiry ticks count each re-closed window once', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  // Regression: recloseExpiredReopens returned the candidate count, so two
+  // ticks racing the same windows summed to double the real re-closes. Only
+  // committed re-closes count: the losing tick's lock finds no approved row.
+  const org=await createScratchOrg();
+  try {
+    const actors=await seedFlowActors(org.orgId);
+    const target={orgId:org.orgId,periodId:org.periodId,bookId:org.bookId};
+    const other=randomUUID();
+    await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Second entity','CAD','CA')`);
+    const ids:string[]=[];
+    for (const subsidiaryId of [org.subsidiaryId,other]) {
+      for (const module of ['ar','ap','banking','assets','tax','gl'] as const) {
+        await setPeriodLockState({...target,subsidiaryId,module,state:'closed',actorId:actors.adminId,reason:'Close for review'});
+      }
+      const id=await requestPeriodReopen({...target,subsidiaryId,modules:['gl'],actorId:actors.adminId,reason:'Correction window'});
+      await decidePeriodReopen({orgId:org.orgId,requestId:id,actorId:actors.approver1Id,approve:true,hours:2});
+      ids.push(id);
+    }
+    await db.execute(sql`update close_reopen_requests set expires_at = now() - interval '1 hour' where id = any(${`{${ids.join(",")}}`}::uuid[])`);
+    const [first,second]=await Promise.all([recloseExpiredReopens(),recloseExpiredReopens()]);
+    assert.equal(first+second,2,'two concurrent ticks re-close exactly the two expired windows between them');
+    assert.ok(first<=2&&second<=2,'no tick reports windows it did not re-close');
+    const statuses=(await db.execute<{status:string}>(sql`select status from close_reopen_requests where id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows.map(r=>r.status).sort();
+    assert.deepEqual(statuses,['reclosed','reclosed']);
   } finally { await dropScratchOrg(org.orgId); }
 });
