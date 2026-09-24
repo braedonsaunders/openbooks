@@ -14,7 +14,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
@@ -68,6 +68,7 @@ export interface YearEndData {
     year: WorkspaceProps['year']
     years: WorkspaceProps['years']
     sections: YearEndFilingSection[]
+    canFile: WorkspaceProps['canFile']
   }
 }
 
@@ -105,7 +106,11 @@ export async function loadYearEnd(
     title: `${t('title')} ${year}`,
     description: t('description'),
     viewTabs: moduleTabs,
-    workspace: { year, years, sections },
+    // Filing is a statutory act (payroll.run): a read-only caller reads
+    // every filing but is never offered the download, the record-as-filed
+    // act, or any correction. The routes refuse all three; the workspace
+    // gates them so they are never offered.
+    workspace: { year, years, sections, canFile: can(authz, 'payroll.run') },
   }
 }
 
@@ -134,6 +139,7 @@ export function yearEndSpec(_data: YearEndData): PageSpec {
         year: f('workspace.year'),
         years: f('workspace.years'),
         sections: f('workspace.sections'),
+        canFile: f('workspace.canFile'),
       }),
     ],
   })

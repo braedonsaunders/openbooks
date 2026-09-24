@@ -16,10 +16,13 @@ export function YearEndView({
   year,
   years,
   sections,
+  canFile,
 }: {
   year: number
   years: number[]
   sections: YearEndFilingSection[]
+  /** Whether the operator may file (payroll.run) — gates every filing act. */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.yearEnd')
   return (
@@ -27,6 +30,7 @@ export function YearEndView({
       year={year}
       years={years}
       path="/payroll/year-end"
+      canFile={canFile}
       emptyTitle={t('noFilings')}
       // The original → amended → cancelled lifecycle belongs to year-end
       // returns only. Separation documents live on /payroll/separations and
