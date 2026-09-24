@@ -13,6 +13,11 @@ import { fiscalStartMonth } from '../../../../lib/fiscal'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import {
+  baseCurrencyNotice,
+  hasBaseCurrency,
+  type BaseCurrencyNotice,
+} from '../../../../lib/reports/base-currency'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-format'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
@@ -46,8 +51,13 @@ export interface TrialBalanceData {
   /** Set when underived consolidated rates block the statement (F-t06-025):
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /**
+   * False when rates are blocked or the base currency is missing; the
+   * paper hides with either. Set alongside the notice below.
+   */
   ratesReady: boolean
+  baseCurrencyNotice: BaseCurrencyNotice | null
+  baseCurrencyReady: boolean
   paper: unknown
 }
 
@@ -61,6 +71,35 @@ export async function loadTrialBalance(
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const date = period.to
+  // The base currency gates every money figure below: refuse before the
+  // subsidiary and rates queries run, never after them, and never by
+  // throwing — the boundary swallows thrown messages.
+  const org = await orgInfo()
+  if (!org || !hasBaseCurrency(org.base_currency)) {
+    return {
+      title: t('trialBalance.title'),
+      backHref: '/reports',
+      backLabel: t('hub.title'),
+      dimensions: null,
+      subsidiaries: [],
+      ratesBlocked: null,
+      ratesReady: false,
+      baseCurrencyNotice: baseCurrencyNotice({
+        title: t('baseCurrency.title'),
+        description: t('baseCurrency.description'),
+        actionLabel: t('baseCurrency.action'),
+      }),
+      baseCurrencyReady: false,
+      primaryFilter: null,
+      scheduleDefId,
+      scheduleParams: scheduleParamsFrom(sp),
+      exportParams: sp,
+      company: '',
+      currency: undefined,
+      emptyLabel: t('generalLedger.empty'),
+      paper: null,
+    }
+  }
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let rows: Awaited<ReturnType<typeof trialBalance>> = []
   let ratesBlocked: RatesBlockedNotice | null = null
@@ -81,8 +120,8 @@ export async function loadTrialBalance(
     }
   }
   const dims = { ...q.dims, subsidiaryIds: subView?.subsidiary?.ids }
-  const [opts, org, branding, startMonth] = await Promise.all([
-    dimensionOptions(undefined, undefined, dims.subsidiaryIds), orgInfo(), orgBranding(), fiscalStartMonth(),
+  const [opts, branding, startMonth] = await Promise.all([
+    dimensionOptions(undefined, undefined, dims.subsidiaryIds), orgBranding(), fiscalStartMonth(),
   ])
   const fyStart = fiscalYearStartOn(date, startMonth)
   const priorEnd = priorFiscalYearEndOn(date, startMonth)
@@ -139,12 +178,14 @@ export async function loadTrialBalance(
     subsidiaries: subView?.picker ?? [],
     ratesBlocked,
     ratesReady: ratesBlocked === null,
+    baseCurrencyNotice: null,
+    baseCurrencyReady: true,
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
     company: branding.orgName,
-    currency: org?.base_currency,
+    currency: org.base_currency,
     emptyLabel: t('generalLedger.empty'),
     paper: {
       title: t('trialBalance.title'),
@@ -197,6 +238,26 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
       ),
     ],
     body: [
+      // The named refusal renders instead of numbers when the org has no
+      // base currency: title, description and the Company settings link.
+      // Included only while refused so the rates-blocked banner stays the
+      // first empty-state in healthy specs; still gated on the notice.
+      ...(data.baseCurrencyNotice
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.baseCurrencyNotice?.title ?? '',
+                description: data.baseCurrencyNotice?.description,
+                action: 'link-button',
+                actionProps: {
+                  href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
+                  label: data.baseCurrencyNotice?.actionLabel ?? '',
+                },
+              }),
+              when: f('baseCurrencyNotice'),
+            },
+          ]
+        : []),
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',

@@ -59,6 +59,11 @@
     "searchPlaceholder": "Rechercher des rapports…",
     "noMatches": "Aucun rapport ne correspond à votre recherche."
   },
+  "baseCurrency": {
+    "title": "La devise de référence n'est pas configurée",
+    "description": "Les rapports convertissent chaque ligne dans la devise de référence de l'entreprise. Configurez-la d'abord dans les paramètres de l'entreprise — les données existantes sont conservées.",
+    "action": "Ouvrir les paramètres de l'entreprise"
+  },
   "statement": {
     "sectionTotal": "Total {section}",
     "other": "Autres",

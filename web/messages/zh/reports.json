@@ -59,6 +59,11 @@
     "searchPlaceholder": "搜索报表…",
     "noMatches": "没有与您搜索匹配的报表。"
   },
+  "baseCurrency": {
+    "title": "尚未设置本位币",
+    "description": "金额报表将每一行折算为公司本位币。请先在公司设置中进行设置 — 现有数据将保留。",
+    "action": "打开公司设置"
+  },
   "statement": {
     "sectionTotal": "{section}合计",
     "other": "其他",

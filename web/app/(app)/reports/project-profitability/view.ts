@@ -12,6 +12,11 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { dimensionOptions, projectProfitability, projectProfitabilityCustomerOptions } from '../../../../lib/reports'
 import { isUnassignedProjectGroup } from '../../../../lib/reports/projects'
+import {
+  baseCurrencyNotice,
+  hasBaseCurrency,
+  type BaseCurrencyNotice,
+} from '../../../../lib/reports/base-currency'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../../lib/report-filters'
@@ -70,6 +75,14 @@ export interface ProjectProfitabilityData {
   emptyLabel: string
   emptyHint: string
   currency: string
+  /**
+   * Set exactly when the org has no base currency: the page renders the
+   * named refusal (with the Company settings link) instead of numbers or
+   * a generic 500 — the boundary swallows thrown messages, so the refusal
+   * is data, not an exception. Mirrors the trial-balance ratesBlocked pair.
+   */
+  baseCurrencyNotice: BaseCurrencyNotice | null
+  baseCurrencyReady: boolean
   columns: string[]
   groups: ProjectProfitabilityGroup[]
   totalLabel: string
@@ -88,7 +101,62 @@ export async function loadProjectProfitability(
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
   const dims = { ...q.dims, subsidiaryIds: authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds] }
-  const [result, opts, customers, org, branding] = await Promise.all([
+  // The base currency gates every money figure below: refuse before the
+  // expensive report queries run, never after them, and never by throwing —
+  // the app boundary renders a generic failure for exceptions.
+  const org = await orgInfo(authz.user.orgId)
+  if (!org || !hasBaseCurrency(org.base_currency)) {
+    return {
+      title: t('projectProfitability.title'),
+      backHref: '/reports',
+      backLabel: t('hub.title'),
+      searchPlaceholder: t('projectProfitability.searchPlaceholder'),
+      primaryFilter: {
+        paramKey: REPORT_PARAM_KEYS.projectScope,
+        label: t('projectProfitability.projectScope'),
+        value: q.projectScope,
+        options: [
+          { value: 'active', label: t('projectProfitability.activeProjects') },
+          { value: 'all', label: t('projectProfitability.allProjects') },
+        ],
+      },
+      showSections: false,
+      hideSections: true,
+      dateRange: { from: period.from, to: period.to },
+      customers: [],
+      dimensions: null,
+      scheduleDefId: scheduleDefId ?? null,
+      scheduleParams: scheduleParamsFrom(sp),
+      exportParams: sp,
+      company: '',
+      periodPhrase: '',
+      emptyLabel: '',
+      emptyHint: '',
+      currency: '',
+      baseCurrencyNotice: baseCurrencyNotice({
+        title: t('baseCurrency.title'),
+        description: t('baseCurrency.description'),
+        actionLabel: t('baseCurrency.action'),
+      }),
+      baseCurrencyReady: false,
+      columns: [],
+      groups: [],
+      totalLabel: '',
+      // Dead when refused (the table hides with the notice) but typed:
+      // the refusal is the rendered state, never an exception.
+      totals: { revenue: '0', cogs: '0', grossProfit: '0', expenses: '0', net: '0', margin: null, hours: 0 },
+      totalDrills: {
+        revenue: null,
+        cogs: null,
+        grossProfit: null,
+        expenses: null,
+        net: null,
+        margin: null,
+        hours: null,
+      },
+    }
+  }
+  const [result, opts, customers, branding] = await Promise.all([
     projectProfitability(period.from, period.to, {
       dims,
       customerId: q.customerId,
@@ -98,10 +166,8 @@ export async function loadProjectProfitability(
     }),
     dimensionOptions(authz.user.orgId, undefined, dims.subsidiaryIds),
     projectProfitabilityCustomerOptions(authz.user.orgId),
-    orgInfo(authz.user.orgId),
     orgBranding(authz.user.orgId),
   ])
-  if (!org?.base_currency) throw new Error('Organization base currency is not configured')
 
   // Each project drills into the P&L filtered on that project (period + basis +
   // other dims preserved). Link only the project-name cell.
@@ -225,6 +291,8 @@ export async function loadProjectProfitability(
     emptyLabel: t('projectProfitability.empty'),
     emptyHint: t('projectProfitability.emptyHint', { period: t('pnl.dateRange', { from: period.from, to: period.to }) }),
     currency: org.base_currency,
+    baseCurrencyNotice: null,
+    baseCurrencyReady: true,
     columns: [
       t('projectProfitability.columns.customerJob'),
       t('projectProfitability.columns.revenue'),
@@ -295,21 +363,44 @@ export function projectProfitabilitySpec(data: ProjectProfitabilityData): PageSp
       },
     ],
     body: [
+      // The named refusal renders instead of numbers: title, description
+      // and the Company settings link. Included only while refused so
+      // healthy specs carry no dead empty-state node; still gated on the
+      // notice like every other conditional block.
+      ...(data.baseCurrencyNotice
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.baseCurrencyNotice?.title ?? '',
+                description: data.baseCurrencyNotice?.description,
+                action: 'link-button',
+                actionProps: {
+                  href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
+                  label: data.baseCurrencyNotice?.actionLabel ?? '',
+                },
+              }),
+              when: f('baseCurrencyNotice'),
+            },
+          ]
+        : []),
       // The profitability table stays whole: collapse state, subtotal rows,
       // per-cell drills and the project-name P&L link live in the component.
-      widgetBlock('project-profitability-table', {
-        company: data.company,
-        title: data.title,
-        periodPhrase: data.periodPhrase,
-        columns: data.columns,
-        emptyLabel: data.emptyLabel,
-        emptyHint: data.emptyHint,
-        currency: data.currency,
-        groups: data.groups,
-        totalLabel: data.totalLabel,
-        totals: data.totals,
-        totalDrills: data.totalDrills,
-      }),
+      {
+        ...widgetBlock('project-profitability-table', {
+          company: data.company,
+          title: data.title,
+          periodPhrase: data.periodPhrase,
+          columns: data.columns,
+          emptyLabel: data.emptyLabel,
+          emptyHint: data.emptyHint,
+          currency: data.currency,
+          groups: data.groups,
+          totalLabel: data.totalLabel,
+          totals: data.totals,
+          totalDrills: data.totalDrills,
+        }),
+        when: f('baseCurrencyReady'),
+      },
     ],
   })
 }

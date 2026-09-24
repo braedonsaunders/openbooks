@@ -59,6 +59,11 @@
     "searchPlaceholder": "Berichte durchsuchen…",
     "noMatches": "Keine Berichte entsprechen Ihrer Suche."
   },
+  "baseCurrency": {
+    "title": "Basiswährung ist nicht konfiguriert",
+    "description": "Berichte rechnen jede Zeile in die Basiswährung des Unternehmens um. Hinterlegen Sie sie zuerst in den Unternehmenseinstellungen – bestehende Daten bleiben erhalten.",
+    "action": "Unternehmenseinstellungen öffnen"
+  },
   "statement": {
     "sectionTotal": "Summe {section}",
     "other": "Sonstige",
