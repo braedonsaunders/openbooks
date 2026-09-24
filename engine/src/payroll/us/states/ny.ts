@@ -887,8 +887,16 @@ function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResul
         + "passed in. Nothing here recomputes New York's schedules.",
       );
     }
-    const surcharge = mulRateCents(U(input.regionTax), rates.yonkers.residentSurcharge);
-    factors.YONKERS_BASE = input.regionTax;
+    // NYS-50-T-Y Method VII recomputes the surcharge base from the state
+    // tables (Steps 2–5); the IT-2104 Line 4 state additional sits OUTSIDE
+    // it — 20 NYCRR 251.1 applies 16.75% to the rate-derived state amount.
+    // The passed-in state tax bundles that additional (computeNys adds it),
+    // so it is subtracted back out: surcharging it would withhold 16.75% of
+    // money already fully withheld.
+    const stateAdditional = U(certificateAmount(input.certificate, "nys_additional") ?? "0");
+    const base = max0(U(input.regionTax) - stateAdditional);
+    const surcharge = mulRateCents(base, rates.yonkers.residentSurcharge);
+    factors.YONKERS_BASE = D(base);
     factors.YONKERS_TAX = D(surcharge);
     return {
       state: "NY-YONKERS", year: rates.year,

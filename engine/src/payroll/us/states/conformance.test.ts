@@ -446,6 +446,22 @@ test("Yonkers resident is 16.75% OF THE NEW YORK STATE TAX", () => {
   assert.equal(yonkersResident(260, "44.58").tax, money("7.47")); // Married Example 4
 });
 
+test("Yonkers resident surcharge excludes the IT-2104 state additional", () => {
+  // NYS-50-T-Y Method VII recomputes the surcharge base from the state
+  // tables (Steps 2–5); the IT-2104 Line 4 state additional sits OUTSIDE it
+  // (20 NYCRR 251.1: 16.75% of the rate-derived state amount). Single
+  // Example 4's $44.10 table tax plus a $20.00 additional arrives bundled as
+  // $64.10 of state tax: the surcharge is 16.75% of $44.10 = $7.39, not of
+  // $64.10 ($10.74 — $3.35 over-withheld).
+  const bundled = YONKERS_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 260, wages: "0", basis: "resident",
+    regionTax: "64.10", certificate: it2104({ nys_additional: "20.00" }),
+  });
+  assert.equal(bundled.factors.YONKERS_BASE, money("44.10"));
+  assert.equal(bundled.tax, money("7.39"));
+  assert.equal(bundled.tax, yonkersResident(260, "44.10").tax);
+});
+
 test("Yonkers Single Example 3 — the publication truncated where it usually rounds", () => {
   // $3,576.63 × 0.1675 = 599.085525. The pub prints $599.08; half-up gives
   // $599.09, and seven of the eight Yonkers examples match half-up exactly.
