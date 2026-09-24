@@ -15,6 +15,8 @@ const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { openItems } = await import('./open-items.ts')
+const { listApplicationOpenItems } = await import('../application/open-items.ts')
+type ApplicationContext = import('../application/context.ts').ApplicationContext
 
 const D = '2026-07-14'
 
@@ -57,6 +59,19 @@ async function seedHostileMix() {
   return org
 }
 
+function applicationContext(orgId: string): ApplicationContext {
+  return {
+    authz: {
+      user: { orgId } as ApplicationContext['authz']['user'],
+      permissions: new Set(['ar.read', 'ap.read']),
+      allowedSubsidiaryIds: null,
+    },
+    source: 'api',
+    requestId: randomUUID(),
+    apiKeyId: null,
+  }
+}
+
 /**
  * Open AR/AP items are collectible/payable balances stated in the org's
  * presentation currency: a USD 200 invoice at a 1.35 closing spot is 270 CAD
@@ -72,6 +87,13 @@ test('open items translate foreign-functional lines at the as-of spot', { skip: 
         assert.deepEqual(ar, ['100.0000', '270.0000'])
         const ap = (await openItems(org.orgId, 'ap', '2026-07-15')).map((i) => i.remaining).sort()
         assert.deepEqual(ap, ['100.0000', '135.0000'])
+        const app = applicationContext(org.orgId)
+        const applicationAr = await listApplicationOpenItems(app, { side: 'ar', asOf: '2026-07-15' })
+        assert.equal(applicationAr.total, 2)
+        assert.deepEqual(applicationAr.items.map((item) => item.remaining).sort(), ['100.0000', '270.0000'])
+        const applicationAp = await listApplicationOpenItems(app, { side: 'ap', asOf: '2026-07-15' })
+        assert.equal(applicationAp.total, 2)
+        assert.deepEqual(applicationAp.items.map((item) => item.remaining).sort(), ['100.0000', '135.0000'])
       })
     })
   } finally {

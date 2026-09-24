@@ -1,12 +1,37 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
+import type { ApplicationContext } from "./context.ts";
+import { ApplicationError } from "./errors.ts";
 
-const SOURCE = readFileSync(new URL("./open-items.ts", import.meta.url), "utf8");
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
+});
 
-test("open-item list reuses the cash reader and keeps remaining as an exact decimal", () => {
-  assert.match(SOURCE, /from "\.\.\/cash\/open-items"/);
-  assert.match(SOURCE, /normalizeMoneyValue\(String\(item\.remaining\)\)/);
-  assert.doesNotMatch(SOURCE, /\bnum\(/);
-  assert.match(SOURCE, /side is required; use ar or ap/);
+const { listApplicationOpenItems } = await import("./open-items.ts");
+
+const context = {
+  authz: {
+    user: { orgId: "open-items-unit-test" },
+    permissions: new Set(["ar.read"]),
+    allowedSubsidiaryIds: null,
+  },
+  source: "api",
+  requestId: "open-items-unit-request",
+  apiKeyId: null,
+} as unknown as ApplicationContext;
+
+test("open items reject unsupported sides before querying", async () => {
+  await assert.rejects(
+    listApplicationOpenItems(context, { side: "cash" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "invalid_input"
+      && error.status === 422
+      && error.message === "side is required; use ar or ap",
+  );
 });
