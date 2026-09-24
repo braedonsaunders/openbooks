@@ -51,7 +51,9 @@
     "sourceColumn": "Source",
     "chartColumn": "Graphique",
     "newButton": "Nouvelle carte",
-    "createDraftFailed": "Impossible de créer une carte brouillon"
+    "createDraftFailed": "Impossible de créer une carte brouillon",
+    "filterEmptyTitle": "Aucune carte ne correspond à ces filtres",
+    "filterEmptyDescription": "Essayez une autre recherche ou un autre filtre de statut."
   },
   "dashboards": {
     "description": "Disposez les cartes publiées sur des tableaux de bord partagés.",

@@ -51,7 +51,9 @@
     "sourceColumn": "ソース",
     "chartColumn": "グラフ",
     "newButton": "新規カード",
-    "createDraftFailed": "下書きカードを作成できませんでした"
+    "createDraftFailed": "下書きカードを作成できませんでした",
+    "filterEmptyTitle": "条件に一致するカードがありません",
+    "filterEmptyDescription": "検索条件やステータスフィルターを変えてお試しください。"
   },
   "dashboards": {
     "description": "公開済みのカードを共有ダッシュボードに配置します。",

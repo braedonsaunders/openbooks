@@ -66,7 +66,10 @@ export interface InsightsData {
   currentParams: Record<string, string | string[] | undefined>
   emptyTitle: string
   emptyDescription: string
+  filteredEmptyTitle: string
+  filteredEmptyDescription: string
   isEmpty: boolean
+  isFilteredEmpty: boolean
   hasRows: boolean
   columnName: string
   columnSource: string
@@ -155,8 +158,14 @@ export async function loadInsights(
     currentParams: sp,
     emptyTitle: t('cards.emptyTitle'),
     emptyDescription: t('cards.emptyDescription'),
+    filteredEmptyTitle: t('cards.filterEmptyTitle'),
+    filteredEmptyDescription: t('cards.filterEmptyDescription'),
     isEmpty: total === 0,
-    hasRows: total > 0,
+    // A filter that matches nothing is not an empty library: the table and
+    // pagination hide and a filtered-empty state names the filters, so the
+    // operator never reads a blank grid as "no cards exist".
+    isFilteredEmpty: total > 0 && filteredTotal === 0,
+    hasRows: filteredTotal > 0,
     columnName: tCommon('labels.name'),
     columnSource: t('cards.sourceColumn'),
     columnChart: t('cards.chartColumn'),
@@ -270,6 +279,14 @@ export function insightsSpec(data: InsightsData): PageSpec {
           action: data.canCreate ? 'new-card' : null,
         }),
         when: f('isEmpty'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.filteredEmptyTitle,
+          description: data.filteredEmptyDescription,
+          action: null,
+        }),
+        when: f('isFilteredEmpty'),
       },
       {
         ...table({

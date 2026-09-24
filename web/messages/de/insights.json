@@ -51,7 +51,9 @@
     "sourceColumn": "Quelle",
     "chartColumn": "Diagramm",
     "newButton": "Neue Karte",
-    "createDraftFailed": "Es konnte kein Kartenentwurf erstellt werden"
+    "createDraftFailed": "Es konnte kein Kartenentwurf erstellt werden",
+    "filterEmptyTitle": "Keine Karten für diese Filter",
+    "filterEmptyDescription": "Versuchen Sie eine andere Suche oder einen anderen Statusfilter."
   },
   "dashboards": {
     "description": "Ordnen Sie veröffentlichte Karten auf gemeinsamen Dashboards an.",

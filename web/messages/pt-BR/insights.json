@@ -51,7 +51,9 @@
     "sourceColumn": "Origem",
     "chartColumn": "Gráfico",
     "newButton": "Novo cartão",
-    "createDraftFailed": "Não foi possível criar um cartão rascunho"
+    "createDraftFailed": "Não foi possível criar um cartão rascunho",
+    "filterEmptyTitle": "Nenhum cartão corresponde a estes filtros",
+    "filterEmptyDescription": "Tente outra pesquisa ou outro filtro de status."
   },
   "dashboards": {
     "description": "Organize cartões publicados em painéis compartilhados.",
