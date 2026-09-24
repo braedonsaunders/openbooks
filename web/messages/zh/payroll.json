@@ -561,7 +561,8 @@
       "saving": "保存中…",
       "effectiveFrom": "生效日期",
       "title": "税务证明",
-      "loading": "正在加载证明…"
+      "loading": "正在加载证明…",
+      "loadFailed": "无法加载税务证明。"
     }
   },
   "setupWizard": {

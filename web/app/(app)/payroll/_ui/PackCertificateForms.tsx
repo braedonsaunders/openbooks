@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
+import { Button } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 
@@ -281,6 +282,7 @@ export function CertificateForm(props: {
 
 export function PackCertificateForms(props: { partyId: string; country: string; readOnly?: boolean }) {
   const tp = useTranslations('payroll.profiles.certificates')
+  const commonActions = useTranslations('common.actions')
   const { partyId, country, readOnly } = props
   const [state, setState] = useState<{
     status: 'loading' | 'ready' | 'error'
@@ -311,7 +313,7 @@ export function PackCertificateForms(props: { partyId: string; country: string; 
       } catch (error) {
         if (!cancelled) {
           toast.error((error as Error).message)
-          setState({ status: 'ready', certificates: [], stored: [] })
+          setState({ status: 'error', certificates: [], stored: [] })
         }
       }
     })()
@@ -323,6 +325,16 @@ export function PackCertificateForms(props: { partyId: string; country: string; 
   if (!country) return null
   if (state.status === 'loading') {
     return <p className="py-4 text-center text-sm text-slate-400">{tp('loading')}</p>
+  }
+  if (state.status === 'error') {
+    return (
+      <div role="alert" className="mt-6 flex flex-wrap items-center gap-2 text-sm text-red-700 dark:text-red-300">
+        <span>{tp('loadFailed')}</span>
+        <Button size="sm" variant="outline" onClick={() => { setState({ status: 'loading', certificates: [], stored: [] }); setVersion((current) => current + 1) }}>
+          {commonActions('retry')}
+        </Button>
+      </div>
+    )
   }
   if (state.certificates.length === 0) return null
   return (
