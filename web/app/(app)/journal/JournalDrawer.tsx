@@ -292,6 +292,7 @@ export function JournalDrawer({
   lineDefs,
   layout,
   createMode = false,
+  canPost,
   closeHref,
 }: {
   journal: JournalPayload
@@ -310,6 +311,13 @@ export function JournalDrawer({
   /** Unsaved-create: no persisted row exists. Cancel/close navigate away
    *  with zero writes; Save is the first write (one idempotent POST). */
   createMode?: boolean
+  /**
+   * Holds gl.post — the single permission every drawer mutation (save,
+   * post, delete, void) requires server-side. Without it the drawer is
+   * read-only: no Edit, Save, Post, Delete or Void is offered, because
+   * each would only meet the server's refusal.
+   */
+  canPost: boolean
   /** List return URL — Cancel/close land here, and a successful Save opens
    *  the created journal over it. */
   closeHref?: string
@@ -328,7 +336,12 @@ export function JournalDrawer({
   // is EXPLICIT — no autosave.
   const canEditStatus = doc.status === 'draft'
   const [mode, setMode] = useState<DrawerMode>(
-    createMode ? 'edit' : initialDrawerMode(initialMode, canEditStatus),
+    // Without gl.post there is no edit mode to enter: every mutation the
+    // mode would offer (save, post, delete, void) meets the server's
+    // refusal, so the drawer opens read-only instead of stranding the
+    // reader in an unsavable editor (createMode always carries gl.post —
+    // the loader opens it only with the permission).
+    createMode ? 'edit' : initialDrawerMode(initialMode, canEditStatus && canPost),
   )
   const editable = mode === 'edit' && canEditStatus
   const returnHref = closeHref ?? '/journal'
@@ -918,7 +931,7 @@ export function JournalDrawer({
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
-        canEditStatus ? (
+        canEditStatus && canPost ? (
           <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
             {mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}
           </Button>
@@ -928,16 +941,18 @@ export function JournalDrawer({
         <>
           {mode === 'edit' ? (
             <>
-              <Button disabled={busy || hasInvalidAmounts} onClick={save}>
-                {busy ? tc('actions.saving') : tc('actions.save')}
-              </Button>
+              {canPost ? (
+                <Button disabled={busy || hasInvalidAmounts} onClick={save}>
+                  {busy ? tc('actions.saving') : tc('actions.save')}
+                </Button>
+              ) : null}
             </>
           ) : (
             <>
               <PdfButton recordType="journal" recordId={String(doc.id)} />
               <FlowManualButtons subjectKind="journal" subjectId={String(doc.id)} />
               <ApprovalActions subjectKind="journal" subjectId={String(doc.id)} />
-              {isDraft || doc.status === 'approved' ? (
+              {canPost && (isDraft || doc.status === 'approved') ? (
                 <Button disabled={busy || !balanced || dirty} onClick={post}>
                   {tc('actions.post')}
                 </Button>
@@ -947,12 +962,12 @@ export function JournalDrawer({
                   <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
-              {doc.status === 'approved' || doc.status === 'posted' ? (
+              {canPost && (doc.status === 'approved' || doc.status === 'posted') ? (
                 <Button variant="ghost" disabled={busy} onClick={voidJournal} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tc('actions.void')}
                 </Button>
               ) : null}
-              {doc.status === 'draft' ? (
+              {canPost && doc.status === 'draft' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tc('actions.delete')}
                 </Button>
