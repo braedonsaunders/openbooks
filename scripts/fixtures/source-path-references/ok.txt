@@ -1,0 +1,3 @@
+const a = readFileSync(join(here, "..", "..", "engine", "src", "crm", "crm.ts"), "utf8");
+const b = readFileSync(new URL("../../engine/src/coins/coins.ts", import.meta.url), "utf8");
+assert.match(a, /engine\/src\/crm\/crm\.ts/);

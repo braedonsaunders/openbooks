@@ -75,7 +75,6 @@
     "schema/ledger-dimension-fk-indexes.test.mjs": 1,
     "schema/migrations/generated/0293_stock_count_line_subject_unique.integration.test.ts": 1,
     "scripts/bootstrap-migration-pool.integration.test.ts": 2,
-    "scripts/check-source-path-references.test.mjs": 2,
     "scripts/ci-pipeline-integrity.test.mjs": 9,
     "scripts/deploy-edge-workflow.test.mjs": 1,
     "scripts/e2e-production-server.test.mjs": 1,
