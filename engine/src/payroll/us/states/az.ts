@@ -196,7 +196,8 @@ export const AZ_CERTIFICATE: PayrollCertificate = {
   purpose: "withholding",
   // Form A-4 zero-percent elections must be renewed for each taxable year.
   validity: {
-    kind: "calendar_year_end",
+    kind: "following_year_date",
+    monthDay: "02-15",
     appliesWhen: { field: "zero_percent", values: ["true"] },
   },
   citation:

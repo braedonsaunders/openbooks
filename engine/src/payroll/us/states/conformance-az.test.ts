@@ -94,6 +94,31 @@ test("AZ Form A-4 line 2 zero election withholds nothing", () => {
   assert.equal(result.factors.AZ_ZERO, "1");
 });
 
+test("AZ zero-percent A-4 remains valid through Feb 15, then returns to the 2.0% default", () => {
+  const stored = [{
+    certificateKey: AZ_CERTIFICATE.key,
+    answers: { withholding_percent: "2.0", zero_percent: "true" },
+    effectiveFrom: "2025-03-01",
+  }];
+  const onDeadline = resolveCertificate({
+    certificate: AZ_CERTIFICATE, stored, asOf: "2026-02-15",
+  });
+  const afterDeadline = resolveCertificate({
+    certificate: AZ_CERTIFICATE, stored, asOf: "2026-02-16",
+  });
+
+  assert.equal(AZ_WITHHOLDING.compute({
+    payDate: "2026-02-15", periodsPerYear: 26, wages: "1000.00", basis: "resident",
+    certificate: onDeadline,
+  }).tax, money("0"));
+  const renewedByDefault = AZ_WITHHOLDING.compute({
+    payDate: "2026-02-16", periodsPerYear: 26, wages: "1000.00", basis: "resident",
+    certificate: afterDeadline,
+  });
+  assert.equal(renewedByDefault.factors.AZ_PRINTED_PERCENT, "2.0");
+  assert.equal(renewedByDefault.tax, money("20"));
+});
+
 test("AZ is a percent of wages at any pay frequency", () => {
   const weekly = AZ_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "1000.00", basis: "resident",
