@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { CalendarClock } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { ScheduleEditor, type ScheduleRow } from './ScheduleEditor'
 
 /**
@@ -28,22 +29,35 @@ export function ScheduleReportButton({
 }) {
   const t = useTranslations('reports.schedule')
   const tk = useTranslations('reports.custom.runner')
+  const tc = useTranslations('common')
   const [open, setOpen] = useState(false)
   const [schedules, setSchedules] = useState<ScheduleRow[] | null>(null)
   const [canSchedule, setCanSchedule] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
-  // response), never synchronously in the effect body.
+  // response), never synchronously in the effect body — the previous refusal
+  // clears once the reload answers, so opening the drawer never cascades.
   const refetch = useCallback(() => {
     return fetch(`/api/reports/schedules?definitionId=${definitionId}`, { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) return
-        return res.json().then((data) => {
-          setSchedules(data.schedules ?? [])
-          setCanSchedule(Boolean(data.canSchedule))
-        })
+      .then(async (res) => {
+        setLoadError(null)
+        // The status is checked before the body is parsed. A refusal leaves
+        // the drawer in a named error state with a retry — never stuck on
+        // Loading with the failure swallowed.
+        if (!res.ok) throw new Error(await readApiErrorMessage(res, tc('feedback.loadFailed')))
+        const data = (await res.json().catch(() => null)) as {
+          schedules?: unknown
+          canSchedule?: unknown
+        } | null
+        if (!data || !Array.isArray(data.schedules)) throw new Error(tc('feedback.loadFailed'))
+        setSchedules(data.schedules as ScheduleRow[])
+        setCanSchedule(Boolean(data.canSchedule))
       })
-  }, [definitionId])
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error && error.message ? error.message : tc('feedback.loadFailed'))
+      })
+  }, [definitionId, tc])
 
   useEffect(() => {
     if (open && schedules === null) void refetch()
@@ -69,7 +83,14 @@ export function ScheduleReportButton({
           </Link>
         ) : undefined}
       >
-        {schedules === null ? (
+        {loadError ? (
+          <div className="py-8 text-center">
+            <p className="text-sm text-red-600 dark:text-red-400">{loadError}</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void refetch()}>
+              {tc('actions.retry')}
+            </Button>
+          </div>
+        ) : schedules === null ? (
           <p className="py-8 text-center text-sm text-slate-400">{t('loading')}</p>
         ) : (
           <ScheduleEditor
