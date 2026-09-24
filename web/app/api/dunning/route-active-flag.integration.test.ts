@@ -23,7 +23,7 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            "export async function guardPermission(){return {user:globalThis.__dunningActiveFlagUser.user,permissions:new Set(['documents.manage']),allowedSubsidiaryIds:null}}",
+            "export async function guardPermission(){return {user:globalThis.__dunningActiveFlagUser.user,permissions:new Set(['documents.manage']),allowedSubsidiaryIds:null}}export function guardUnrestrictedScope(authz){if(authz.allowedSubsidiaryIds!==null&&authz.allowedSubsidiaryIds!==undefined)return Response.json({error:'requires unrestricted subsidiary access'},{status:403});return null}",
           ),
       };
     }

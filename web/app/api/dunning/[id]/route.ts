@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isDunnableDocumentKind } from "@openbooks/engine/src/receivables/dunning.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
@@ -88,6 +88,11 @@ async function owned(orgId: string, id: string): Promise<boolean> {
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
+  // Org-wide policy write: a scoped actor changes the ladder for every
+  // entity, so this needs unrestricted scope before existence is even
+  // considered — restricted callers share one named 403 for any id.
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   const { id } = await params;
   // A malformed id names nothing: same answer as a policy in another org.
   if (!isUuid(id) || !(await owned(authz.user.orgId, id))) {
@@ -221,6 +226,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
+  // Deleting the policy deletes every entity's chase ladder: unrestricted
+  // scope first, like the PATCH above.
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
   await db.transaction(async (tx) => {
