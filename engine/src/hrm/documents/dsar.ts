@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
-import { requireHrmDocumentsRead } from "../authorization.ts";
+import {
+  requireAggregateDocumentsRead,
+  requireHrmDocumentsRead,
+  requirePartyInScope,
+} from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { subsidiaryVisibleFilter, withScopeSnapshot } from "../../organization/subsidiary-scope.ts";
 import { HrmDocumentsError } from "./errors.ts";
 import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
@@ -13,7 +18,11 @@ import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
  *
  * requestExport refuses when the requester lacks hrm.documents.manage
  * AND is not the subject (the party behind their login) — fail closed by
- * name, never an empty zip. The worker duty hrm-dsar-exports drains the
+ * name, never an empty zip. Manage holders and readers are additionally
+ * fenced to subjects inside their legal-entity scope: request, list and
+ * download all refuse out-of-scope subjects with the uniform not-visible
+ * refusal, so no full data ZIP is queued, enumerated or delivered across
+ * entities. The worker duty hrm-dsar-exports drains the
  * queue through buildExport: one transaction gathers the person's party
  * record, employments and versions, change requests, leave, time entries,
  * the reviews they may see, benefits, HR documents with file bytes, and
@@ -110,6 +119,9 @@ export async function requestExport(input: {
         );
       }
     }
+    // The manage grant never carries a subject: the export's subject must be
+    // inside the actor's legal-entity scope, or no full data ZIP is queued.
+    await requirePartyInScope(db, input.orgId, input.actorId, input.partyId);
     const party = (await db.execute<{ id: string }>(sql`
       select id from parties where org_id = ${input.orgId} and id = ${input.partyId}
     `)).rows[0];
@@ -138,15 +150,40 @@ export async function listExports(query: {
   actorId: string;
   partyId?: string;
 }): Promise<DsarExportDTO[]> {
-  await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = (await db.execute<ExportRow>(sql`
-    ${EXPORT_COLS}
-     where org_id = ${query.orgId}
-       ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
-     order by requested_at desc
-     limit 100
-  `)).rows;
-  return rows.map(toDTO);
+  // One REPEATABLE READ snapshot for the scope resolution and the list, so
+  // a concurrent rehome cannot move a row between the two reads.
+  return withScopeSnapshot(query.orgId, async () => {
+    const allowed = await requireAggregateDocumentsRead(db, query.orgId, query.actorId);
+    if (query.partyId) {
+      await requirePartyInScope(db, query.orgId, query.actorId, query.partyId);
+    }
+    const rows = (await db.execute<ExportRow>(sql`
+      ${EXPORT_COLS}
+       where org_id = ${query.orgId}
+         ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
+         ${exportScopePredicate(query.orgId, allowed)}
+       order by requested_at desc
+       limit 100
+    `)).rows;
+    return rows.map(toDTO);
+  });
+}
+
+/**
+ * Employer-subsidiary predicate for export lists: an export lists only
+ * when its subject party holds at least one in-scope employment. The
+ * subsidiary test itself is the canonical subsidiaryVisibleFilter.
+ * Unrestricted callers read everything.
+ */
+function exportScopePredicate(orgId: string, allowed: Set<string> | null): SQL {
+  if (allowed === null) return sql``;
+  const employmentInScope: SQL = subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
+  return sql`and exists (
+    select 1 from worker_employments e
+     where e.org_id = ${orgId}
+       and e.worker_party_id = hrm_data_subject_exports.party_id
+       ${employmentInScope}
+  )`;
 }
 
 /**
@@ -698,6 +735,9 @@ export async function downloadExport(query: {
         );
       }
     }
+    // A ready ZIP for an out-of-scope subject is indistinguishable from a
+    // missing one — and it is never marked delivered on a refused read.
+    await requirePartyInScope(db, query.orgId, query.actorId, row.party_id);
     if (!row.file_id) throw new HrmDocumentsError("NOT_FOUND", "this export has no file yet");
     const blob = (await db.execute<{ storage_kind: string; bytes: Buffer | null }>(sql`
       select v.storage_kind, b.bytes
