@@ -116,7 +116,6 @@
     "web/components/global-create-menu.test.ts": 1,
     "web/components/route-state.test.ts": 2,
     "web/components/views-menu.test.ts": 1,
-    "web/lib/application/banking-read.test.ts": 3,
     "web/lib/application/budget-read.test.ts": 1,
     "web/lib/application/close-list-scope.test.ts": 3,
     "web/lib/application/crm-read.test.ts": 3,
