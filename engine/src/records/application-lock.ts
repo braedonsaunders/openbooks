@@ -21,6 +21,7 @@ export async function lockApplicationEvidence(
   lineIds: readonly string[],
   additionalDocumentIds: readonly string[] = [],
   additionalEntryIds: readonly string[] = [],
+  options: { nowait?: boolean } = {},
 ): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
   return lockApplicationEvidenceWithQuery(
     async (statement: SQL) => {
@@ -31,6 +32,7 @@ export async function lockApplicationEvidence(
     lineIds,
     additionalDocumentIds,
     additionalEntryIds,
+    options,
   );
 }
 
@@ -40,7 +42,9 @@ export async function lockApplicationEvidenceWithQuery(
   lineIds: readonly string[],
   additionalDocumentIds: readonly string[] = [],
   additionalEntryIds: readonly string[] = [],
+  options: { nowait?: boolean } = {},
 ): Promise<{ documentIds: readonly string[]; entryIds: readonly string[]; lineIds: readonly string[] }> {
+  const lockClause = options.nowait ? sql`for update nowait` : sql`for update`;
   const requestedLines = [...new Set(lineIds)].sort();
   const requestedDocuments = new Set(additionalDocumentIds);
   const requestedEntries = new Set(additionalEntryIds);
@@ -69,7 +73,7 @@ export async function lockApplicationEvidenceWithQuery(
         from documents
        where org_id = ${orgId} and id in ${documentIds}
        order by id
-       for update
+       ${lockClause}
     `)).rows;
     if (lockedDocuments.length !== documentIds.length) {
       throw new Error("an application source document changed or disappeared; retry the operation");
@@ -83,7 +87,7 @@ export async function lockApplicationEvidenceWithQuery(
         from journal_entries
        where org_id = ${orgId} and id in ${entryIds}
        order by id
-       for update
+       ${lockClause}
     `)).rows;
     if (lockedEntries.length !== entryIds.length) {
       throw new Error("an application journal entry changed or disappeared; retry the operation");
@@ -96,7 +100,7 @@ export async function lockApplicationEvidenceWithQuery(
         from journal_lines
        where org_id = ${orgId} and id in ${requestedLines}
        order by id
-       for update
+       ${lockClause}
     `)).rows as { id: string; entryId: string }[];
     if (lockedLines.length !== requestedLines.length || lockedLines.some((line) => endpointEntryIds.get(line.id) !== line.entryId)) {
       throw new Error("application endpoints changed or disappeared; retry the operation");

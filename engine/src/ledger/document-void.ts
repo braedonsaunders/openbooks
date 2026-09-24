@@ -19,6 +19,8 @@ import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { lockApplicationEvidence } from "../records/application-lock.ts";
 
 /**
  * Machine-readable void refusal reasons (F-t06-021). The human message
@@ -38,16 +40,6 @@ export class DocumentVoidError extends Error {
     readonly status = 422,
     readonly code: DocumentVoidCode = "invalid",
   ) { super(message); }
-}
-
-/** NOWAIT pre-lock contention anywhere in the cause chain (55P03 lock_not_available). */
-function isLockNotAvailable(error: unknown): boolean {
-  let current: unknown = error;
-  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
-    if ((current as { code?: string }).code === "55P03") return true;
-    current = (current as { cause?: unknown }).cause;
-  }
-  return false;
 }
 
 /** Provenance ids travel as text; validate the shape before any uuid[] cast. */
@@ -80,6 +72,8 @@ export type DocumentVoidInput = {
   reversalPeriodId?: string | null;
   source?: FlowEventSource;
   expectedUpdatedAt?: string | null;
+  /** Restricted callers pass their resolved entity scope for the locked claim. */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 };
 
 function validateReason(reason: string): string {
@@ -95,6 +89,16 @@ function validateDate(value: string): string {
     throw new DocumentVoidError("reversalDate must be a valid YYYY-MM-DD date");
   }
   return value;
+}
+
+/** Lock contention in the shared application-evidence protocol (55P03). */
+function isLockNotAvailable(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
+    if ((current as { code?: string }).code === "55P03") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
 }
 
 /**
@@ -214,6 +218,12 @@ export async function requestDocumentVoid(
     : null;
   return withOrgTransaction(input.orgId, async () => {
     const current = await loadDocument(input.documentId, input.orgId);
+    // Keep the scope decision on the locked source row and hold that lock
+    // through reservation, gate creation, and any immediate reversal.
+    if (input.allowedSubsidiaryIds !== undefined &&
+        !subsidiaryScopeAllows(input.allowedSubsidiaryIds, current.subsidiaryId)) {
+      throw new ScopeNotFoundError();
+    }
     // The aggregate lock precedes the read and comparison. A waiter observes
     // the committed revision, including edits that differ by one microsecond.
     if (input.expectedUpdatedAt != null &&
@@ -274,7 +284,11 @@ export async function requestDocumentVoid(
       { kind: "before_void", source: input.source ?? "ui" },
       doc.kind,
       doc.id,
-      { orgId: input.orgId, userId: input.actorId },
+      {
+        orgId: input.orgId,
+        userId: input.actorId,
+        allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+      },
     );
     if (flows.failed) {
       throw new DocumentVoidError("void approval routing failed; the document was not voided");
@@ -287,7 +301,11 @@ export async function requestDocumentVoid(
         runId: gatedRun?.runId ?? flows.runs[0]?.runId ?? null,
       };
     }
-    const reversalEntryId = await completeRequestedDocumentVoid(doc.id, input.orgId);
+    const reversalEntryId = await completeRequestedDocumentVoid(
+      doc.id,
+      input.orgId,
+      input.allowedSubsidiaryIds,
+    );
     return { status: "voided", reversalEntryId, runId: null };
   });
 }
@@ -601,6 +619,7 @@ async function assertRetainageDrawVoidable(
 export async function completeRequestedDocumentVoid(
   documentId: string,
   orgId: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
   return withOrgTransaction(orgId, async () => {
     const result: {
@@ -608,6 +627,56 @@ export async function completeRequestedDocumentVoid(
       kind: string;
       previousStatus: string;
     } = await db.transaction(async (tx) => {
+      // Discover the source entry and all currently live application endpoints
+      // before taking locks. lockApplicationEvidence then acquires the shared
+      // document → entry → line protocol used by application writers. The
+      // transaction remains open through all refusal checks and the reversal.
+      const discovered = (await tx.execute<{ posted_entry_id: string | null }>(sql`
+        select posted_entry_id
+          from documents
+         where id = ${documentId} and org_id = ${orgId}
+      `)).rows[0];
+      const discoveredEntryId = discovered?.posted_entry_id ?? null;
+      const endpointIds = discoveredEntryId
+        ? (await tx.execute<{ id: string }>(sql`
+            with source_lines as (
+              select id from journal_lines
+               where org_id = ${orgId} and entry_id = ${discoveredEntryId}
+            ), related_lines as (
+              select a.from_line_id as id
+                from applications a
+               where a.org_id = ${orgId} and a.unapplied_at is null
+                 and a.to_line_id in (select id from source_lines)
+              union
+              select a.to_line_id as id
+                from applications a
+               where a.org_id = ${orgId} and a.unapplied_at is null
+                 and a.from_line_id in (select id from source_lines)
+            )
+            select id from source_lines
+            union
+            select id from related_lines
+          `)).rows.map((row) => row.id)
+        : [];
+      let lockedEvidence: Awaited<ReturnType<typeof lockApplicationEvidence>>;
+      try {
+        lockedEvidence = await lockApplicationEvidence(
+          tx,
+          orgId,
+          endpointIds,
+          [documentId],
+          discoveredEntryId ? [discoveredEntryId] : [],
+          { nowait: true },
+        );
+      } catch (error) {
+        if (isLockNotAvailable(error)) {
+          throw new DocumentVoidError(
+            "another application or posting is in flight — retry the void once it completes",
+            409,
+          );
+        }
+        throw error;
+      }
       const locked = (await tx.execute<Record<string, unknown>>(sql`
         select *
           from documents
@@ -616,6 +685,42 @@ export async function completeRequestedDocumentVoid(
       `));
       const doc = locked.rows[0];
       if (!doc) throw new DocumentVoidError("document not found");
+      if (allowedSubsidiaryIds !== undefined &&
+          !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id as string | null)) {
+        throw new ScopeNotFoundError();
+      }
+      const currentEntryId = doc.posted_entry_id ? String(doc.posted_entry_id) : null;
+      if (currentEntryId !== discoveredEntryId) {
+        throw new DocumentVoidError("the document posting changed while its void was being completed — retry", 409);
+      }
+      if (currentEntryId) {
+        const liveEndpoints = (await tx.execute<{ id: string }>(sql`
+          with source_lines as (
+            select id from journal_lines
+             where org_id = ${orgId} and entry_id = ${currentEntryId}
+          ), related_lines as (
+            select a.from_line_id as id
+              from applications a
+             where a.org_id = ${orgId} and a.unapplied_at is null
+               and a.to_line_id in (select id from source_lines)
+            union
+            select a.to_line_id as id
+              from applications a
+             where a.org_id = ${orgId} and a.unapplied_at is null
+               and a.from_line_id in (select id from source_lines)
+          )
+          select id from source_lines
+          union
+          select id from related_lines
+        `)).rows.map((row) => row.id);
+        const lockedLineIds = new Set(lockedEvidence.lineIds);
+        if (liveEndpoints.some((id) => !lockedLineIds.has(id))) {
+          throw new DocumentVoidError(
+            "an application was created while the void was being prepared — retry after it completes",
+            409,
+          );
+        }
+      }
       if (doc.status === "voided") {
         return {
           reversalEntryId: String(doc.reversal_entry_id ?? "") || null,
@@ -678,39 +783,11 @@ export async function completeRequestedDocumentVoid(
       let reversalEntryId: string | null = null;
 
       if (entryId) {
-        // Serialize against application writers on this entry's lines before
-        // any guard below reads. Manual posts, the settlement mirror, and the
-        // applications trigger itself all take these same single-table
-        // id-ordered endpoint row locks before reading open state — without
-        // this lock a writer could commit between the reconciliation /
-        // live-application checks and the reversal writes, settling money
-        // onto freshly reversed lines (or failing a whole mirror batch on
-        // the commit-time guard).
-        //
-        // NOWAIT, deliberately: a blocking lock here deadlocks against those
-        // same writers, because every application insert's open-balance
-        // trigger locks the target document row while this void already holds
-        // it (endpoints one way, the document the other — a true cycle no
-        // acquisition order can fix). Failing fast with a retryable refusal
-        // keeps the void deadlock-free: the in-flight writer always finishes
-        // first and the retry then sees its committed state.
-        try {
-          await tx.execute(sql`
-            select id
-              from journal_lines
-             where entry_id = ${entryId} and org_id = ${orgId}
-             order by id
-             for update nowait
-          `);
-        } catch (error) {
-          if (isLockNotAvailable(error)) {
-            throw new DocumentVoidError(
-              "another posting to this transaction is in flight — retry the void once it completes",
-              409,
-            );
-          }
-          throw error;
-        }
+        // lockApplicationEvidence already holds the source, all related
+        // application documents and entries, and every active endpoint line
+        // in the canonical order. Keep those locks through the checks below
+        // and reversal writes so no new application can settle reversed
+        // evidence.
         const reconciled = (await tx.execute(sql`
           select 1
             from reconciliation_matches rm

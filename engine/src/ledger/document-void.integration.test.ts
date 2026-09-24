@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { setPeriodLockState } from "../close/period-locks.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { deleteDocument } from "./document-delete.ts";
-import { DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
+import { completeRequestedDocumentVoid, DocumentVoidError, requestDocumentVoid } from "./document-void.ts";
 import { submitForApproval } from "../flows/submit.ts";
 import { postDocument } from "./posting-document.ts";
 import {
@@ -606,6 +606,52 @@ test("delete and submit serialize on the document row before approval gates comm
   } finally {
     releaseHolder();
     await holder?.catch(() => {});
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("approval release rechecks the locked document against the deciding actor's scope", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "quote",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+      trigger: "before_void",
+    });
+    const documentId = await seedApprovedQuote(org, actors.submitterId, "QUOTE-VOID-SCOPE-1");
+    const requested = await requestDocumentVoid({
+      documentId,
+      orgId: org.orgId,
+      actorId: actors.submitterId,
+      reason: "Scope checked again at release",
+      reversalDate: org.date,
+      allowedSubsidiaryIds: null,
+    });
+    assert.equal(requested.status, "pending_approval");
+
+    await assert.rejects(
+      completeRequestedDocumentVoid(documentId, org.orgId, new Set([randomUUID()])),
+      (error: unknown) => {
+        assert.equal((error as { status?: number }).status, 404);
+        assert.equal((error as Error).message, "not found");
+        return true;
+      },
+    );
+    const persisted = await db.execute<{
+      status: string;
+      void_requested_at: Date | null;
+      reversal_entry_id: string | null;
+    }>(sql`
+      select status, void_requested_at, reversal_entry_id
+        from documents
+       where org_id = ${org.orgId} and id = ${documentId}
+    `);
+    assert.equal(persisted.rows[0]?.status, "approved");
+    assert.ok(persisted.rows[0]?.void_requested_at, "the pending request remains stored");
+    assert.equal(persisted.rows[0]?.reversal_entry_id, null, "no reversal is accepted out of scope");
+  } finally {
     await dropScratchOrg(org.orgId);
   }
 });
