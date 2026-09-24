@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { buildPrepareBody, obligationPeriodForForm } from './TaxFilingsView.tsx'
+import { buildPrepareBody, exportScopeQuery, obligationPeriodForForm } from './TaxFilingsView.tsx'
 
 const viewSource = readFileSync(
   new URL('./TaxFilingsView.tsx', import.meta.url),
@@ -95,6 +95,25 @@ test('prepare of an org-wide preview keeps the historical body shape', () => {
       to: '2026-07-31',
       adjustments: { '101': '12.50' },
     },
+  )
+})
+
+test('export carries the preview scope and translation the export route parses', () => {
+  assert.equal(
+    exportScopeQuery({
+      subsidiaryIds: ['sub-a', 'sub-b'],
+      registrationId: 'reg-1',
+      translation: { presentationCurrency: 'CAD', rateType: 'spot', rateDate: '2026-07-31' },
+    }),
+    '&subsidiary=sub-a&subsidiary=sub-b&registration=reg-1' +
+      '&presentationCurrency=CAD&rateType=spot&rateDate=2026-07-31',
+  )
+})
+
+test('export of an org-wide preview contributes no scope params', () => {
+  assert.equal(
+    exportScopeQuery({ subsidiaryIds: [], registrationId: null, translation: null }),
+    '',
   )
 })
 
