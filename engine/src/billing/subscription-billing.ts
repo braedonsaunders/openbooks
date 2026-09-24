@@ -60,6 +60,28 @@ export class SubscriptionError extends Error {
 }
 
 /** Lock and scope-check the customer whose entity determines subscription billing. */
+export async function lockCustomerForScope(
+  tx: SqlExecutor,
+  orgId: string,
+  customerId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const allowed = scope === null
+    ? sql``
+    : scope.size
+      ? sql`and (c.subsidiary_id is null or c.subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`
+      : sql`and c.subsidiary_id is null`;
+  const customer = await tx.execute(sql`
+    select c.id
+      from parties c
+     where c.org_id = ${orgId} and c.id = ${customerId}
+       ${allowed}
+     for share of c
+  `);
+  if (!customer.rows[0]) throw new ScopeNotFoundError();
+}
+
+/** Lock and scope-check the customer whose entity determines subscription billing. */
 export async function lockSubscriptionCustomerForScope(
   tx: SqlExecutor,
   orgId: string,

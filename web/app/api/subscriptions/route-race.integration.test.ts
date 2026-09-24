@@ -147,6 +147,55 @@ test("an edit after the bill validates against fresh billed state, or refuses it
   }
 });
 
+test("add subscription rechecks customer scope after a concurrent rehome", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Add race tester", "admin"));
+  state.orgId = org.orgId;
+  state.actorId = actorId;
+  state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
+  const customerId = org.customerId;
+  const planId = randomUUID();
+  const outsideSubsidiaryId = randomUUID();
+  const holder = await pool.connect();
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active, custom)
+      values (${outsideSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other Co', 'CAD', 'CA', false, true, '{}'::jsonb)`));
+    await withBypassContext(() => db.execute(sql`
+      update parties set subsidiary_id = ${org.subsidiaryId} where id = ${customerId} and org_id = ${org.orgId}`));
+    await withBypassContext(() => db.execute(sql`
+      insert into subscription_plans
+        (id, org_id, name, amount, interval, interval_count, income_account_id, is_active, created_by)
+      values (${planId}, ${org.orgId}, 'Scope Race Plan', '100.00', 'monthly', 1,
+              ${org.accounts.revenue}, true, ${actorId})`));
+
+    // The preflight scope read sees subsidiary A. Hold the customer row while
+    // the request reaches its in-transaction FOR SHARE, then rehome it to B.
+    await holder.query("begin");
+    await holder.query("select set_config('app.bypass_rls', 'on', true)");
+    await holder.query("select id from parties where id = $1 for update", [customerId]);
+    const adding = post({
+      action: "addSubscription", customerId, planId,
+      startOn: "2026-09-01", firstBillOn: "2026-09-01",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    await holder.query("update parties set subsidiary_id = $2 where id = $1", [customerId, outsideSubsidiaryId]);
+    await holder.query("commit");
+
+    const response = await adding;
+    assert.equal(response.status, 404);
+    assert.match(String((await response.json() as { error: string }).error), /not found/);
+    const count = (await withBypassContext(() => db.execute<{ count: number }>(sql`
+      select count(*)::int as count from subscriptions
+       where org_id = ${org.orgId} and customer_id = ${customerId}`))).rows[0]!.count;
+    assert.equal(count, 0, "the scoped request must not commit a subscription after the customer leaves its scope");
+  } finally {
+    try { await holder.query("rollback"); } catch { /* already released */ }
+    holder.release();
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("an edit racing a concurrent bill validates under the row lock", { skip: !DB }, async () => {
   const { orgId, subscriptionId } = await fixture();
   const holder = await pool.connect();

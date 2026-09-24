@@ -6,6 +6,7 @@ import {
   SubscriptionError,
   billSubscriptionNow,
   changeSubscription,
+  lockCustomerForScope,
   lockSubscriptionCustomerForScope,
   monthlyRecurringRevenue,
   normalizeSubscriptionCadence,
@@ -397,6 +398,10 @@ export async function POST(req: Request) {
             ? normalizeSubscriptionMoney(body.priceOverride, "price override", "nonnegative")
             : null;
         const created = await db.transaction(async (tx) => {
+          // Recheck and hold the customer boundary through the INSERT. An
+          // unrestricted party rehome must serialize before or after this
+          // subscription is created, never between the scope check and write.
+          await lockCustomerForScope(tx, orgId, String(body.customerId), authz.allowedSubsidiaryIds);
           // The anchor day pins month-end starts to the start date's day, so a
           // subscription starting Jan 31 bills Mar 31 after Feb 28, not Mar 28.
           // startOn is a validated YYYY-MM-DD string (checked above).
