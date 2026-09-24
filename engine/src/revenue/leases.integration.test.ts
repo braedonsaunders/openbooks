@@ -490,3 +490,36 @@ for (const phase of ["commencement", "payment"] as const) {
     });
   }
 }
+
+test("createLeaseAgreement refuses unreadable discount rates before storing anything", { skip: !DB }, async () => {
+  // The annual rate persists at FX scale (10 places): a decimal comma, an
+  // ambiguous separator, or an 11th decimal place must refuse with the
+  // field-naming error, never coerce, and leave no lease row behind.
+  const org = await createScratchOrg();
+  try {
+    const accounts = await seedLeaseAccounts(org);
+    const base = {
+      subsidiaryId: org.subsidiaryId,
+      leaseNumber: "L-REFUSE-1",
+      commencementOn: "2026-07-01",
+      termPeriods: 3,
+      paymentFrequency: "monthly" as const,
+      paymentAmount: "1000",
+      annualDiscountRatePercent: "6",
+      classificationInputs: { transfersOwnership: true },
+      accounts,
+    };
+    for (const bad of ["12,34", "1,234", "1.23456789012", "$6", "abc", "", "   ", null, undefined]) {
+      await assert.rejects(
+        createLeaseAgreement(org.orgId, null, { ...base, annualDiscountRatePercent: bad as string }),
+        (error: unknown) => error instanceof LeaseError && /annual discount rate must be an exact decimal/.test(error.message),
+        `rate ${String(bad)}`,
+      );
+    }
+    const rows = await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from lease_agreements where org_id = ${org.orgId}`);
+    assert.equal(rows.rows[0]!.n, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

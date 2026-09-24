@@ -187,23 +187,6 @@ test("4dp rounding keeps a float-noise journal balanced", () => {
   assert.equal(v.totalDebits, "0.3000");
 });
 
-test("journal-line persist writes amount through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./journal-writes.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistJournalLineAmount");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistJournalLineAmount helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /JournalWriteError/);
-
-  const start = source.indexOf("export function validateJournalInput");
-  const next = source.indexOf("export async function createScriptJournal");
-  const body = source.slice(start, next);
-  assert.match(body, /persistJournalLineAmount\(l\.amount, i \+ 1\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(l\.amount\)/);
-});
-
 test("posting-rule control accounts load employeePayable via shared helper", () => {
   const helper = readFileSync(new URL("../records/control-accounts.ts", import.meta.url), "utf8");
   assert.match(helper, /export async function loadControlAccounts/);
@@ -462,4 +445,24 @@ test("memo, reference, and description caps truncate at their documented widths"
   assert.equal(v.memo, `m${"e".repeat(1999)}`);
   assert.equal(v.referenceNumber, `r${"e".repeat(99)}`);
   assert.equal(v.lines[0]!.description, `d${"e".repeat(499)}`);
+});
+
+test("unreadable line amounts fail closed naming the line", () => {
+  // The persist gate runs inside validation, before any balance or account
+  // check: no malformed amount can reach posting as a zero or a guess.
+  for (const bad of ["12,34", "1,234", "1.23456", "$100", "1e3", "abc", "", "   ", null, undefined]) {
+    assert.throws(
+      () => validateJournalInput({
+        documentDate: "2026-07-16",
+        lines: [
+          { accountId: A, amount: bad as never },
+          { accountId: B, amount: "-100" },
+        ],
+      }),
+      (error: unknown) =>
+        error instanceof JournalWriteError
+        && /line 1: amount must be a nonzero number with at most 4 decimal places/.test(error.message),
+      `amount ${String(bad)}`,
+    );
+  }
 });
