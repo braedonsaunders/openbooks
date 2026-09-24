@@ -6,7 +6,7 @@ import {
   IncomeTaxProvisionError,
   spotRateToPresentation,
 } from "./income-tax-provision.ts";
-import { taxReturnPackBox } from "../country-tax-packs/index.ts";
+import { countryTaxPackForReturn, packTaxCodesForReturn, taxReturnPackBox } from "../country-tax-packs/index.ts";
 import { taxRegistrationFormProblem, taxReturnPack } from "../tax/seed-tax-forms.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { buildFilingCalendar, type FilingFrequency } from "../tax/nexus.ts";
@@ -1003,6 +1003,65 @@ async function resolveReturnRegistration(
   };
 }
 
+/**
+ * Fail closed when an in-scope code with period activity maps to no box.
+ * Only codes that belong on THIS return count: codes scoped to the form's
+ * jurisdiction, plus the codes the return-pack catalog declares for the
+ * form (a hand-made code carrying the expected code string but no
+ * jurisdiction). Any other active code with activity is another return's
+ * business — a multi-jurisdiction org files each return separately.
+ */
+async function assertNoUnmappedActivity(
+  runner: TaxReturnRunner,
+  opts: {
+    orgId: string;
+    formCode: string;
+    from: string;
+    to: string;
+    primaryBookId: string;
+    scopeIds: string[] | null;
+    formJurisdictionId: string | null;
+    mappedCodeIds: string[];
+  },
+): Promise<void> {
+  const { orgId, formCode, from, to, primaryBookId, scopeIds, formJurisdictionId, mappedCodeIds } = opts;
+  const pack = countryTaxPackForReturn(formCode);
+  const expectedCodes = pack ? packTaxCodesForReturn(pack, formCode).map((d) => d.code) : [];
+  if (!formJurisdictionId && expectedCodes.length === 0) return;
+  const jlScope = scopeIds ? sql`and l.subsidiary_id = any(${uuidArray(scopeIds)}::uuid[])` : sql``;
+  const codeMatch = expectedCodes.length > 0
+    ? sql`or tc.code in (${sql.join(expectedCodes.map((code) => sql`${code}`), sql`, `)})`
+    : sql``;
+  const rows = (await runner.execute<{ code: string }>(sql`
+    select tc.code
+      from tax_codes tc
+     where tc.org_id = ${orgId} and tc.is_active
+       and (
+         ${formJurisdictionId ? sql`tc.jurisdiction_id = ${formJurisdictionId}` : sql`false`}
+         ${codeMatch}
+       )
+       and not (tc.id = any(${uuidArray(mappedCodeIds)}::uuid[]))
+       and exists (
+         select 1
+           from journal_lines l
+           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+          where l.org_id = ${orgId} and l.tax_code_id = tc.id
+            and e.status in ('posted', 'reversed')
+            and e.posting_date between ${from} and ${to}
+            and e.book_id = ${primaryBookId}
+            ${jlScope}
+       )
+     order by tc.code`));
+  if (rows.rows.length === 0) return;
+  const codes = rows.rows.map((r) => `"${r.code}"`).join(", ");
+  throw new TaxReturnError(
+    `tax return "${formCode}" understates: active tax code${rows.rows.length === 1 ? "" : "s"} ${codes} ` +
+    `has activity in ${from} to ${to} but maps to no box — map each code to a box ` +
+    `(reinstall the "${formCode}" library form after assigning its jurisdiction), ` +
+    `otherwise the filed return omits that activity`,
+  );
+}
+
 async function computeTaxReturnInSnapshot(
   runner: TaxReturnRunner,
   orgId: string,
@@ -1012,8 +1071,8 @@ async function computeTaxReturnInSnapshot(
   adjustments: Record<string, string> = {},
   opts: ComputeTaxReturnOptions = {},
 ): Promise<TaxReturnResult> {
-  const formRes = (await runner.execute<{ name: string; submission_channel: string; watermark: string | null }>(sql`
-    select name, submission_channel, watermark
+  const formRes = (await runner.execute<{ name: string; submission_channel: string; watermark: string | null; jurisdiction_id: string | null }>(sql`
+    select name, submission_channel, watermark, jurisdiction_id
       from tax_return_forms
      where org_id = ${orgId} and code = ${formCode} and is_active limit 1`));
   const form = formRes.rows[0];
@@ -1105,6 +1164,22 @@ async function computeTaxReturnInSnapshot(
       pdfField: r.pdf_field,
     })),
   );
+
+  // A code the install left out of every box contributes nothing to the
+  // figures — a hand-made code with no jurisdiction never lands in a state
+  // return, and the filed figures silently understate. When such a code
+  // holds this form's jurisdiction (or the catalog expects it on this form)
+  // AND has activity in the period, refuse by name instead of filing short.
+  await assertNoUnmappedActivity(runner, {
+    orgId,
+    formCode,
+    from,
+    to,
+    primaryBookId,
+    scopeIds: scope.legacy ? null : scope.ids,
+    formJurisdictionId: form.jurisdiction_id,
+    mappedCodeIds: [...new Set(glSources.map((s) => s.taxCodeId))],
+  });
 
   // Posture: which functional currencies hold return-relevant activity in the
   // scope. Precise to the return's own predicates, so an idle foreign
