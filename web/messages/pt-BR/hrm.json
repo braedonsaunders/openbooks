@@ -617,6 +617,9 @@
     },
     "drawer": {
       "title": "Requisição {number}",
+      "offerTitle": "Oferta · {employer}",
+      "candidateTitle": "Candidato {name}",
+      "employer": "Empregador",
       "pipeline": "Funil",
       "applications": "Candidaturas",
       "noApplications": "Nenhum candidato vinculado ainda.",
