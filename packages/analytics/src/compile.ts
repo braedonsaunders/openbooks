@@ -35,6 +35,7 @@ export type InsightCompileErrorCode =
   | 'not_a_dimension'
   | 'not_a_measure'
   | 'unknown_operator'
+  | 'unknown_sort_ref'
   | 'unknown_bin'
   | 'contains_needs_text'
   | 'last_n_days_needs_number'
@@ -481,10 +482,16 @@ function compileOrderBy(
   const parts: string[] = []
   for (const s of query.sort ?? []) {
     // Output aliases first (existing plans keep meaning), then catalog field
-    // keys. Refs naming neither stay ignored: a stale ref on a stored plan
-    // must not break rendering — the default below still orders the rows.
+    // keys. A stale explicit ref must refuse: falling back to a default can
+    // change the ordering contract without telling the report's owner.
     const ord = byKey.get(s.ref) ?? fieldOrd.get(s.ref)
-    if (!ord) continue
+    if (!ord) {
+      throw new InsightCompileError(
+        'unknown_sort_ref',
+        `sort reference '${s.ref}' no longer resolves — choose a current output column or catalog field`,
+        s.ref,
+      )
+    }
     parts.push(`${ord} ${s.dir === 'asc' ? 'asc' : 'desc'} nulls last`)
   }
   if (parts.length > 0) return `\norder by ${parts.join(', ')}`
