@@ -2,13 +2,15 @@ import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
 } from '@openbooks/engine/src/ledger/document-void.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { createPermission, postPermission } from "../../../../../lib/document-kinds.ts";
+import { documentRouteReadPermission } from "../../../../../lib/flow-subject-authz.ts";
+import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -57,6 +59,14 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
       { error: 'this transaction type uses its dedicated void workflow' },
       { status: 422 },
     )
+  }
+  // Read before void: without the kind's read grant (gl.read for journals,
+  // ap.pay/ar.pay for payments, expenses.read, …) the record answers as
+  // missing — shared by the periods GET and the void POST below, so neither
+  // confirms the record exists or names its family.
+  const readPerm = documentRouteReadPermission(doc.kind)
+  if (readPerm && !can(authz, readPerm)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   if (!can(authz, permission)) {
     return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
@@ -111,16 +121,31 @@ export async function POST(
     )
   }
   try {
-    const result = await requestDocumentVoid({
-      documentId: id,
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      reason: body.reason ?? '',
-      reversalDate: body.reversalDate,
-      reversalPeriodId: body.reversalPeriodId,
-      source: 'ui',
-      expectedUpdatedAt: body.expectedUpdatedAt,
+    // The void and the locked scope recheck commit as one unit: a rehome
+    // that landed after the guard above meets the uniform 404 and voids
+    // nothing, instead of voiding another subsidiary's document.
+    // requestDocumentVoid joins the ambient transaction, so the lock and
+    // the void share one snapshot.
+    type VoidOutcome =
+      | { denied: NextResponse; result?: undefined }
+      | { denied: null; result: Awaited<ReturnType<typeof requestDocumentVoid>> }
+    const outcome: VoidOutcome = await withOrgTransaction(authz.user.orgId, async (): Promise<VoidOutcome> => {
+      const relocked = await lockedDocumentScopeDenied(authz, id)
+      if (relocked) return { denied: relocked }
+      const result = await requestDocumentVoid({
+        documentId: id,
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        reason: body.reason ?? '',
+        reversalDate: body.reversalDate,
+        reversalPeriodId: body.reversalPeriodId,
+        source: 'ui',
+        expectedUpdatedAt: body.expectedUpdatedAt,
+      })
+      return { denied: null, result }
     })
+    if (outcome.denied) return outcome.denied
+    const result = outcome.result
     return NextResponse.json(
       { ok: true, ...result },
       { status: result.status === 'pending_approval' ? 202 : 200 },

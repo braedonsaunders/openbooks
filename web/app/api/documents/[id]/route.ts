@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
@@ -13,7 +13,9 @@ import { applyDocumentEdit, isDocKindEnabled } from "../../../../lib/documents.t
 import { DOCUMENT_EDIT_VERSION_REQUIRED, DocumentEditError } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
-import { DOC_KINDS, createPermission, readPermission } from "../../../../lib/document-kinds.ts";
+import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
+import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
+import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
 import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
 
 export const runtime = 'nodejs'
@@ -47,13 +49,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   // Per-kind read permission (ap.read for bills/banking, ar.read for
   // invoices/credits, gl.read for transfers) — mirrors the old per-module routes.
-  const readPerm = row.kind === 'project_charge' ? 'projects.read' : readPermission(row.kind)
-  if (!can(authz, readPerm)) {
-    return NextResponse.json({ error: `missing permission: ${readPerm}` }, { status: 403 })
+  // A caller without it meets the SAME answer as for a nonexistent id: the
+  // old 403 named the missing grant (e.g. ap.read), confirming the record
+  // exists and which family it belongs to. A caller who CAN read keeps the
+  // actionable 403 for a missing edit permission on writes below.
+  if (!canReadDocumentKind(authz, row.kind)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
 
   const doc = await loadDocument(id, authz.user.orgId)
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Recheck on the loaded row: a rehome that landed between the precheck
+  // and this read must not disclose another subsidiary's document.
+  const redisclosed = guardSubsidiaryScope(authz, doc.doc.subsidiary_id as string | null)
+  if (redisclosed) return redisclosed
   return NextResponse.json(doc)
 }
 
@@ -89,6 +98,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
+  // Read before edit: without the kind's read grant the record answers as
+  // missing (same shape as GET above); the 403 below stays for callers who
+  // can read but may not edit.
+  if (!canReadDocumentKind(authz, row.kind)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
   if (!can(authz, editPerm)) {
     return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
@@ -159,7 +174,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
   try {
-    await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: 'ui' })
+    // The edit and the locked scope recheck commit as one unit: a rehome
+    // that landed after the precheck meets the uniform 404 and writes
+    // nothing, instead of editing another subsidiary's document.
+    await withOrgTransaction(user.orgId, async () => {
+      const relocked = await lockedDocumentScopeDenied(authz, id)
+      if (relocked) throw new DocumentEditError(404, 'not found')
+      await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: 'ui' })
+    })
   } catch (e) {
     if (e instanceof DocumentEditError) {
       return NextResponse.json(
@@ -192,6 +214,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
+  // Same read-before-edit shape as PATCH: no read grant, no record.
+  if (!canReadDocumentKind(authz, row.kind)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
   if (!can(authz, editPerm)) {
     return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
@@ -218,12 +244,21 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
       return NextResponse.json({ error: DOCUMENT_EDIT_VERSION_REQUIRED }, { status: 409 })
     }
-    await deleteDocument(id, authz.user.id, authz.user.orgId, {
-      source: 'ui',
-      reason: body.reason,
-      expectedUpdatedAt: body.expectedUpdatedAt,
-      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    // The delete and the locked scope recheck commit as one unit: a rehome
+    // that landed after the precheck meets the uniform 404 and deletes
+    // nothing, instead of deleting another subsidiary's document.
+    const denied = await withOrgTransaction(authz.user.orgId, async () => {
+      const relocked = await lockedDocumentScopeDenied(authz, id)
+      if (relocked) return relocked
+      await deleteDocument(id, authz.user.id, authz.user.orgId, {
+        source: 'ui',
+        reason: body.reason,
+        expectedUpdatedAt: body.expectedUpdatedAt,
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      })
+      return null
     })
+    if (denied) return denied
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
