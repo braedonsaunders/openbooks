@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmBenefitsManage } from "../authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import {
+  requireHrmBenefitsManage,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
 import { windowsOverlap, type WindowShape } from "./benefits-math.ts";
 import {
@@ -74,16 +78,67 @@ async function loadWindow(
   orgId: string,
   windowId: string,
 ): Promise<EnrollmentWindowDTO> {
-  const row = requireOneRow(
-    (
-      await exec.execute<Record<string, unknown>>(sql`
-        select ${WINDOW_COLUMNS} from hrm_enrollment_windows
-         where org_id = ${orgId} and id = ${windowId}
-      `)
-    ).rows,
-    "enrollment window",
-  );
+  // Zero rows is a failure with the same uniform message the scope check
+  // below uses: a missing window is indistinguishable from a hidden one.
+  const row = (
+    await exec.execute<Record<string, unknown>>(sql`
+      select ${WINDOW_COLUMNS} from hrm_enrollment_windows
+       where org_id = ${orgId} and id = ${windowId}
+    `)
+  ).rows[0];
+  if (!row) {
+    throw new BenefitsError(
+      "NOT_FOUND",
+      "enrollment window is not visible in this organization and legal-entity scope — reload and retry",
+    );
+  }
   return toWindowDTO(row);
+}
+
+/**
+ * Window visibility inside its transaction: a window targeted at a
+ * subsidiary outside the actor's lens reads as not-found (the same
+ * message as a missing window, never an existence oracle); org-wide
+ * windows carry no entity lineage, so headers stay readable and their
+ * counts fence downstream. Runs after the row is loaded, inside the
+ * caller's transaction.
+ */
+async function assertWindowVisible(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  window: EnrollmentWindowDTO,
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null) return;
+  const employer = window.appliesTo.employer_subsidiary_id;
+  if (employer !== null && !allowed.has(employer)) {
+    throw new BenefitsError(
+      "NOT_FOUND",
+      "enrollment window is not visible in this organization and legal-entity scope — reload and retry",
+    );
+  }
+}
+
+/**
+ * Write scope for a loaded window: B-targeted windows refuse uniformly
+ * not-visible, while org-wide (no employer) windows change every entity
+ * at once and need unrestricted scope (named 403). The anchor is
+ * insert-only, so no rehome can move it mid-transaction. Runs inside the
+ * caller's write transaction.
+ */
+async function assertWindowWriteScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  window: EnrollmentWindowDTO,
+): Promise<void> {
+  const employer = window.appliesTo.employer_subsidiary_id;
+  if (employer === null) {
+    await requireUnrestrictedHrmScope(exec, orgId, actorId);
+    return;
+  }
+  await assertWindowVisible(exec, orgId, actorId, window);
 }
 
 /** Windows are Setup-shaped configuration: create rides the generic Setup CRUD. */
@@ -98,7 +153,9 @@ export async function getEnrollmentWindow(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    return loadWindow(db, orgId, windowId);
+    const window = await loadWindow(db, orgId, windowId);
+    await assertWindowVisible(db, orgId, actorId, window);
+    return window;
   });
 }
 
@@ -129,6 +186,10 @@ export async function openEnrollmentWindow(query: {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const window = await loadWindow(db, orgId, windowId);
+    // Scope is rechecked inside the write transaction, on the loaded row:
+    // a B-targeted window refuses as not-visible, an org-wide one needs
+    // unrestricted scope to open.
+    await assertWindowWriteScope(db, orgId, actorId, window);
     if (window.status !== "draft") {
       throw new BenefitsError(
         "BAD_STATE",
@@ -194,6 +255,9 @@ export async function closeEnrollmentWindow(query: {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
     const window = await loadWindow(db, orgId, windowId);
+    // Same write scope as open: B-targeted refuses as not-visible,
+    // org-wide needs unrestricted scope to close.
+    await assertWindowWriteScope(db, orgId, actorId, window);
     if (window.status !== "open") {
       throw new BenefitsError(
         "BAD_STATE",
@@ -274,14 +338,25 @@ export async function createEnrollmentWindow(query: CreateEnrollmentWindowQuery)
   return withOrgTransaction(orgId, async () => {
     await requireHrmBenefitsManage(db, orgId, actorId);
     await assertHrmEnabled(db, orgId);
-    if (employerSubsidiaryId !== null) {
+    if (employerSubsidiaryId === null) {
+      // An org-wide window enrolls every entity's people at once: creating
+      // one needs unrestricted scope (named 403).
+      await requireUnrestrictedHrmScope(db, orgId, actorId);
+    } else {
+      // One scoped-existence check covers unknown, cross-org, and
+      // out-of-scope subsidiaries identically: a B subsidiary reads to an
+      // A-scoped actor exactly like a fabricated id.
+      const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
       const sub = (
-        await db.execute(sql`select id from subsidiaries where org_id = ${orgId} and id = ${employerSubsidiaryId}`)
+        await db.execute(sql`
+          select id from subsidiaries
+           where org_id = ${orgId} and id = ${employerSubsidiaryId}
+             ${allowed === null ? sql`` : sql`and id = any (${`{${[...allowed].join(",")}}`}::uuid[])`}`)
       ).rows;
       if (sub.length !== 1) {
         throw new BenefitsError(
-          "REFUSED",
-          "the window names an employer subsidiary outside this organization — scope it to a subsidiary of this org, or leave it org-wide",
+          "NOT_FOUND",
+          "the window names an employer subsidiary outside this organization and legal-entity scope — scope it to a visible subsidiary of this org, or leave it org-wide",
         );
       }
     }

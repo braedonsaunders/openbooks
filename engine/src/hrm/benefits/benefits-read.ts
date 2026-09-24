@@ -68,7 +68,13 @@ export async function listEnrollmentWindows(
   actorId: string,
   filter?: { readonly status?: string },
 ): Promise<EnrollmentWindowSummary[]> {
-  await requireAggregateBenefitsRead(exec, orgId, actorId);
+  // The scope this gate resolves is load-bearing: windows targeted at a
+  // hidden subsidiary stay hidden, and the election/pending counts fence
+  // to in-scope employments — an org-wide count would carry B's elections
+  // to an A-scoped reader. Org-wide (null-employer) windows stay
+  // discoverable like unscoped plan headers: headers carry no pay, and
+  // their counts are already fenced below.
+  const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
   const status = filter?.status;
   if (status !== undefined && status !== "draft" && status !== "open" && status !== "closed") {
     throw new BenefitsError(
@@ -76,30 +82,44 @@ export async function listEnrollmentWindows(
       "window status filter is one of draft, open, closed — segments never invent a state",
     );
   }
+  const inScope =
+    scope === null
+      ? sql`true`
+      : sql`emp.employer_subsidiary_id = any (${`{${[...scope].join(",")}}`}::uuid[])`;
   const rows = (
     await exec.execute<Record<string, unknown>>(sql`
       select w.id, w.name, w.kind,
              w.opens_on::text as "opensOn", w.closes_on::text as "closesOn", w.status,
-             count(distinct e.id)::int as elections,
-             count(distinct case when e.status = 'pending_approval' then e.id end)::int as "pendingApprovals"
+             w.applies_to as "appliesTo",
+             count(distinct case when ${inScope} then e.id end)::int as elections,
+             count(distinct case when e.status = 'pending_approval' and ${inScope} then e.id end)::int as "pendingApprovals"
         from hrm_enrollment_windows w
         left join hrm_benefit_enrollments e
           on e.org_id = w.org_id and e.window_id = w.id
+        left join worker_employments emp
+          on emp.org_id = e.org_id and emp.id = e.employment_id
        where w.org_id = ${orgId} ${status !== undefined ? sql`and w.status = ${status}` : sql``}
        group by w.id
        order by w.opens_on desc
     `)
   ).rows;
-  return rows.map((row) => ({
-    id: String(row.id),
-    name: String(row.name),
-    kind: String(row.kind),
-    opensOn: String(row.opensOn).slice(0, 10),
-    closesOn: String(row.closesOn).slice(0, 10),
-    status: String(row.status),
-    pendingApprovals: Number(row.pendingApprovals ?? 0),
-    elections: Number(row.elections ?? 0),
-  }));
+  return rows
+    .filter((row) => {
+      if (scope === null) return true;
+      const applies = (row.appliesTo ?? {}) as { employer_subsidiary_id?: unknown };
+      const employer = applies.employer_subsidiary_id;
+      return employer == null || (typeof employer === "string" && scope.has(employer));
+    })
+    .map((row) => ({
+      id: String(row.id),
+      name: String(row.name),
+      kind: String(row.kind),
+      opensOn: String(row.opensOn).slice(0, 10),
+      closesOn: String(row.closesOn).slice(0, 10),
+      status: String(row.status),
+      pendingApprovals: Number(row.pendingApprovals ?? 0),
+      elections: Number(row.elections ?? 0),
+    }));
 }
 
 export interface EnrollmentSummary {
