@@ -54,6 +54,7 @@ export interface FilingFieldChange {
   previous: string | null
   current: string | null
   redacted: boolean
+  money?: boolean
 }
 
 export interface FilingRowReview {
@@ -548,8 +549,8 @@ function FilingCorrectionSectionBody({
   const previewRequest = useRef(0)
 
   const amendment = lifecycle.amendment
-  const show = (value: string | null) =>
-    value == null ? '—' : NUMERIC.test(value) ? money(value) : value
+  const show = (value: string | null, isMoney: boolean) =>
+    value == null ? '—' : isMoney && NUMERIC.test(value) ? money(value) : value
 
   const correctionHref = (revision: 'amended' | 'cancelled', format: 'json' | 'pdf') =>
     `/api/payroll/year-end/amendments/slip?country=${encodeURIComponent(section.country)}`
@@ -762,10 +763,10 @@ function FilingCorrectionSectionBody({
                       ) : (
                         <>
                           <td className="py-1 pr-3 text-right tabular-nums text-slate-500 line-through dark:text-slate-400">
-                            {show(change.previous)}
+                            {show(change.previous, change.money === true)}
                           </td>
                           <td className="py-1 text-right font-semibold tabular-nums">
-                            {show(change.current)}
+                            {show(change.current, change.money === true)}
                           </td>
                         </>
                       )}

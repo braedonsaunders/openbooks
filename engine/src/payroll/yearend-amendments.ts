@@ -275,6 +275,7 @@ export function diffReported(
       previous: old ? old.value : null,
       current: field.value,
       redacted: false,
+      ...(field.money || old?.money ? { money: field.money ?? old?.money } : {}),
     });
   }
   for (const field of previous.fields) {
@@ -285,6 +286,7 @@ export function diffReported(
       previous: field.value,
       current: null,
       redacted: false,
+      ...(field.money ? { money: true } : {}),
     });
   }
 
@@ -504,8 +506,12 @@ async function currentReported(
   if (filing.slip) {
     const slip = await filing.slip.build(orgId, taxYear, rowId);
     const fields: PayrollFilingReportedField[] = [
-      ...slip.headerFields.map((field) => ({ code: null, label: field.label, value: field.value })),
-      ...slip.boxes.map((box) => ({ code: box.code, label: box.label, value: box.value })),
+      ...slip.headerFields.map((field) => ({
+        code: null, label: field.label, value: field.value, ...(field.money ? { money: true } : {}),
+      })),
+      ...slip.boxes.map((box) => ({
+        code: box.code, label: box.label, value: box.value, ...(box.money ? { money: true } : {}),
+      })),
     ];
     return { slip, reported: { fields, confidential } };
   }
@@ -516,6 +522,7 @@ async function currentReported(
         code: null,
         label: column.label,
         value: String(row[column.key] ?? ""),
+        ...(column.money ? { money: true } : {}),
       })),
       confidential,
     },
