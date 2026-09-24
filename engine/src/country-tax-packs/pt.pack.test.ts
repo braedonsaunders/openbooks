@@ -54,25 +54,25 @@ test("PT_IVA_DP carries the real declaração periódica box line codes", () => 
 test("PT_IVA_DP declares nine region-banded codes with roles and contiguous histories", () => {
   const codes = packTaxCodesForReturn(pack, "PT_IVA_DP");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["PT-VAT-STD", "standard", 23],
-    ["PT-VAT-INT", "reduced", 13],
-    ["PT-VAT-RED", "reduced", 6],
-    ["PT-MAD-VAT-STD", "standard", 22],
-    ["PT-MAD-VAT-INT", "reduced", 12],
-    ["PT-MAD-VAT-RED", "reduced", 4],
-    ["PT-AZO-VAT-STD", "standard", 16],
-    ["PT-AZO-VAT-INT", "reduced", 9],
-    ["PT-AZO-VAT-RED", "reduced", 4],
+    ["PT-VAT-STD", "standard", "23"],
+    ["PT-VAT-INT", "reduced", "13"],
+    ["PT-VAT-RED", "reduced", "6"],
+    ["PT-MAD-VAT-STD", "standard", "22"],
+    ["PT-MAD-VAT-INT", "reduced", "12"],
+    ["PT-MAD-VAT-RED", "reduced", "4"],
+    ["PT-AZO-VAT-STD", "standard", "16"],
+    ["PT-AZO-VAT-INT", "reduced", "9"],
+    ["PT-AZO-VAT-RED", "reduced", "4"],
   ]);
   assert.deepEqual(packTaxCodesForReturn(pack, "PT_IVA_DP").find((code) => code.code === "PT-VAT-STD")!.rates, [
-    { ratePercent: 21, effectiveFrom: "2010-07-01", effectiveTo: "2010-12-31", sourceId: "dsiva_oc30118_2010_aplicabilidade" },
-    { ratePercent: 23, effectiveFrom: "2011-01-01", sourceId: "dsiva_oc30121_2010_taxa_normal" },
+    { ratePercent: "21", effectiveFrom: "2010-07-01", effectiveTo: "2010-12-31", sourceId: "dsiva_oc30118_2010_aplicabilidade" },
+    { ratePercent: "23", effectiveFrom: "2011-01-01", sourceId: "dsiva_oc30121_2010_taxa_normal" },
   ]);
   assert.deepEqual(packTaxCodesForReturn(pack, "PT_IVA_DP").find((code) => code.code === "PT-AZO-VAT-STD")!.rates, [
-    { ratePercent: 16, effectiveFrom: "2021-07-01", sourceId: "at_oc30237_2021_acores" },
+    { ratePercent: "16", effectiveFrom: "2021-07-01", sourceId: "at_oc30237_2021_acores" },
   ]);
   assert.deepEqual(packTaxCodesForReturn(pack, "PT_IVA_DP").find((code) => code.code === "PT-MAD-VAT-RED")!.rates, [
-    { ratePercent: 4, effectiveFrom: "2024-10-01", sourceId: "at_oc25045_2024_madeira" },
+    { ratePercent: "4", effectiveFrom: "2024-10-01", sourceId: "at_oc25045_2024_madeira" },
   ]);
   for (const code of codes) {
     assert.ok(code.rates && code.rates.length > 0, `${code.code} must declare a rate schedule`);

@@ -83,10 +83,10 @@ test("Vietnam declares four rate bands with contiguous source-backed histories",
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent]),
     [
-      ["VN-VAT-STD", "standard", 10],
-      ["VN-VAT-RED8", "reduced", 8],
-      ["VN-VAT-RED5", "reduced", 5],
-      ["VN-VAT-ZERO", "zero", 0],
+      ["VN-VAT-STD", "standard", "10"],
+      ["VN-VAT-RED8", "reduced", "8"],
+      ["VN-VAT-RED5", "reduced", "5"],
+      ["VN-VAT-ZERO", "zero", "0"],
     ],
   );
   for (const code of codes) {
@@ -124,7 +124,7 @@ test("the 8% band routes to the Phu luc III Mau 01 reduction schedule, not only 
 
 test("Vietnam 10/5/0 bands run back to 2009 as single open rows, 8% window untouched", () => {
   const codes = codesFor("VN_GTGT_01");
-  for (const [code, rate] of [["VN-VAT-STD", 10], ["VN-VAT-RED5", 5], ["VN-VAT-ZERO", 0]] as const) {
+  for (const [code, rate] of [["VN-VAT-STD", "10"], ["VN-VAT-RED5", "5"], ["VN-VAT-ZERO", "0"]] as const) {
     assert.deepEqual(
       codes.find((entry) => entry.code === code)!.rates,
       [{ ratePercent: rate, effectiveFrom: "2009-01-01", sourceId: "tradeportal_law13_2008_rates" }],
@@ -132,6 +132,6 @@ test("Vietnam 10/5/0 bands run back to 2009 as single open rows, 8% window untou
   }
   const reduced8 = codes.find((entry) => entry.code === "VN-VAT-RED8")!;
   assert.deepEqual(reduced8.rates, [
-    { ratePercent: 8, effectiveFrom: "2025-07-01", effectiveTo: "2026-12-31", sourceId: "congbao_nd174_window" },
+    { ratePercent: "8", effectiveFrom: "2025-07-01", effectiveTo: "2026-12-31", sourceId: "congbao_nd174_window" },
   ]);
 });

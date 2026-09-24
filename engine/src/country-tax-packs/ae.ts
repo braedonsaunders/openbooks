@@ -77,9 +77,9 @@ export const UNITED_ARAB_EMIRATES_TAX_PACK: CountryTaxPackDefinition = {
     AE_VAT201: {
       code: "AE-VAT-STD",
       name: "United Arab Emirates standard VAT",
-      ratePercent: 5,
+      ratePercent: "5",
       rates: [
-        { ratePercent: 5, effectiveFrom: "2018-01-01", sourceId: "fta_vat_introduction" },
+        { ratePercent: "5", effectiveFrom: "2018-01-01", sourceId: "fta_vat_introduction" },
       ],
     },
   },

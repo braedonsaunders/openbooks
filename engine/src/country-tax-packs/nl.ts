@@ -89,12 +89,12 @@ export const NETHERLANDS_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "NL-VAT-STD",
         name: "Netherlands standard VAT",
-        ratePercent: 21,
+        ratePercent: "21",
         role: "standard",
         rates: [
-          { ratePercent: 17.5, effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
-          { ratePercent: 19, effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
-          { ratePercent: 21, effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
+          { ratePercent: "17.5", effectiveFrom: "1992-10-01", effectiveTo: "2000-12-31", sourceId: "netherlands_standard_rate_history" },
+          { ratePercent: "19", effectiveFrom: "2001-01-01", effectiveTo: "2012-09-30", sourceId: "netherlands_standard_rate_history" },
+          { ratePercent: "21", effectiveFrom: "2012-10-01", sourceId: "netherlands_vat_21_2012" },
         ],
         // Rubriek 1a names the "hoog tarief" in words, not numbers.
         returnBoxes: ["1a"],
@@ -102,12 +102,12 @@ export const NETHERLANDS_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "NL-VAT-RED",
         name: "Netherlands reduced VAT",
-        ratePercent: 9,
+        ratePercent: "9",
         role: "reduced",
         rates: [
           // Earliest Wettenbank version verified in force; pre-2005 reduced-rate origin not transcribed.
-          { ratePercent: 6, effectiveFrom: "2005-01-01", effectiveTo: "2018-12-31", sourceId: "wet_ob_1968_article_9_reduced_6" },
-          { ratePercent: 9, effectiveFrom: "2019-01-01", sourceId: "netherlands_vat_reduced_9_2019" },
+          { ratePercent: "6", effectiveFrom: "2005-01-01", effectiveTo: "2018-12-31", sourceId: "wet_ob_1968_article_9_reduced_6" },
+          { ratePercent: "9", effectiveFrom: "2019-01-01", sourceId: "netherlands_vat_reduced_9_2019" },
         ],
         // Rubriek 1b names the "laag tarief" in words, not numbers.
         returnBoxes: ["1b"],

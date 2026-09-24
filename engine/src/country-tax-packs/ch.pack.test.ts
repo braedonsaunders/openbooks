@@ -77,18 +77,18 @@ test("all three MWST bands have contiguous histories ending in the 2024 rates", 
   const red = byCode.get("CH-VAT-RED")!;
   const lodging = byCode.get("CH-VAT-LODGING")!;
   assert.equal(std.role, "standard");
-  assert.equal(std.ratePercent, 8.1);
+  assert.equal(std.ratePercent, "8.1");
   assert.equal(red.role, "reduced");
-  assert.equal(red.ratePercent, 2.6);
+  assert.equal(red.ratePercent, "2.6");
   assert.equal(lodging.role, "reduced");
-  assert.equal(lodging.ratePercent, 3.8);
+  assert.equal(lodging.ratePercent, "3.8");
   for (const code of [std, red, lodging]) {
     assertContiguous(code.rates ?? [], code.code);
     const last = code.rates![code.rates!.length - 1]!;
     assert.equal(last.effectiveFrom, "2024-01-01");
     assert.equal(last.ratePercent, code.ratePercent);
   }
-  assert.equal(std.rates![0]!.ratePercent, 7.6);
+  assert.equal(std.rates![0]!.ratePercent, "7.6");
   assert.equal(std.rates![0]!.effectiveFrom, "2001-01-01");
 });
 

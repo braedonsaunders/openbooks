@@ -110,35 +110,35 @@ export const AUSTRIA_TAX_PACK: CountryTaxPackDefinition = {
       {
         code: "AT-VAT-STD",
         name: "Austria USt standard rate",
-        ratePercent: 20,
+        ratePercent: "20",
         role: "standard",
-        rates: [{ ratePercent: 20, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        rates: [{ ratePercent: "20", effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
         truncatedScheduleReason:
           "20% opens at USP applicability (2026-08-01), not at origin: no day-one date is verifiable in reachable primary text, so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-RED10",
         name: "Austria USt reduced rate 10% (food, rent, books)",
-        ratePercent: 10,
+        ratePercent: "10",
         role: "reduced",
-        rates: [{ ratePercent: 10, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        rates: [{ ratePercent: "10", effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
         truncatedScheduleReason:
           "10% opens at USP applicability (2026-08-01), not at origin: no day-one date is verifiable in reachable primary text, so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-RED13",
         name: "Austria USt reduced rate 13% (2016 Steuerreform band)",
-        ratePercent: 13,
+        ratePercent: "13",
         role: "reduced",
-        rates: [{ ratePercent: 13, effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
+        rates: [{ ratePercent: "13", effectiveFrom: "2026-08-01", sourceId: "usp_ust_rates" }],
         truncatedScheduleReason:
           "13% opens at USP applicability (2026-08-01), not at the 2016 reform: no day-one date is verifiable in reachable primary text (RIS serves no BGBl here), so the band is applicability-dated by review.",
       },
       {
         code: "AT-VAT-ENCLAVE",
         name: "Jungholz and Mittelberg 19% (German customs union territory)",
-        ratePercent: 19,
-        rates: [{ ratePercent: 19, effectiveFrom: "2023-01-01", sourceId: "bmf_u30_2023" }],
+        ratePercent: "19",
+        rates: [{ ratePercent: "19", effectiveFrom: "2023-01-01", sourceId: "bmf_u30_2023" }],
       },
     ],
   },

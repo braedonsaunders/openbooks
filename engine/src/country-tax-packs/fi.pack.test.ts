@@ -78,12 +78,12 @@ test("the primary code is the standard band and the post-2026 bands are current"
   assert.equal(primary?.code, "FI-VAT-STD");
   assert.equal(primary?.role, "standard");
   const byCode = new Map(packTaxCodesForReturn(pack, "FI_ALV").map((definition) => [definition.code, definition] as const));
-  assert.equal(byCode.get("FI-VAT-STD")?.ratePercent, 25.5);
-  assert.equal(byCode.get("FI-VAT-RED135")?.ratePercent, 13.5);
+  assert.equal(byCode.get("FI-VAT-STD")?.ratePercent, "25.5");
+  assert.equal(byCode.get("FI-VAT-RED135")?.ratePercent, "13.5");
   assert.equal(byCode.get("FI-VAT-RED135")?.role, "reduced");
-  assert.equal(byCode.get("FI-VAT-RED10")?.ratePercent, 10);
+  assert.equal(byCode.get("FI-VAT-RED10")?.ratePercent, "10");
   assert.equal(byCode.get("FI-VAT-RED10")?.role, "reduced");
-  assert.equal(byCode.get("FI-VAT-ZERO")?.ratePercent, 0);
+  assert.equal(byCode.get("FI-VAT-ZERO")?.ratePercent, "0");
   assert.equal(byCode.get("FI-VAT-ZERO")?.role, "zero");
 });
 
@@ -95,8 +95,8 @@ test("the 10% band predates the 2025 narrowing instead of opening at it", () => 
   assert.deepEqual(
     byCode.get("FI-VAT-RED10")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
     [
-      [10, "2013-01-01", "2024-12-31"],
-      [10, "2025-01-01", null],
+      ["10", "2013-01-01", "2024-12-31"],
+      ["10", "2025-01-01", null],
     ],
   );
 });

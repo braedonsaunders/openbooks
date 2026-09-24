@@ -65,9 +65,9 @@ test("Argentina filing is monthly portal entry through the ARCA responsables ins
 test("Argentina declares the 21/10.5/27 bands with the surcharge band carrying no role", () => {
   const codes = packTaxCodesForReturn(ARGENTINA_TAX_PACK, "AR_F2002");
   assert.deepEqual(codes.map((code) => [code.code, code.role ?? null, code.ratePercent]), [
-    ["AR-VAT-STD", "standard", 21],
-    ["AR-VAT-RED105", "reduced", 10.5],
-    ["AR-VAT-INC27", null, 27],
+    ["AR-VAT-STD", "standard", "21"],
+    ["AR-VAT-RED105", "reduced", "10.5"],
+    ["AR-VAT-INC27", null, "27"],
   ]);
   assert.ok(!codes.some((code) => code.role === "zero"), "exentas carry no tax, so no zero code");
 });
@@ -100,7 +100,7 @@ test("Argentina 27% band opens at the sourced 1992 differential, not at the fetc
   // refuses every real pre-2026 document priced at 27%.
   assert.deepEqual(
     increased.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [[27, "1992-03-01", null]],
+    [["27", "1992-03-01", null]],
   );
 });
 
@@ -109,18 +109,18 @@ test("Argentina standard band runs back to 1992 with the one-year grant, restora
   assert.deepEqual(
     codes.find((entry) => entry.code === "AR-VAT-STD")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
     [
-      [18, "1992-03-01", "1995-03-31"],
-      [21, "1995-04-01", "1996-03-31"],
-      [21, "1996-04-01", "2002-11-17"],
-      [19, "2002-11-18", "2003-01-17"],
-      [21, "2003-01-18", null],
+      ["18", "1992-03-01", "1995-03-31"],
+      ["21", "1995-04-01", "1996-03-31"],
+      ["21", "1996-04-01", "2002-11-17"],
+      ["19", "2002-11-18", "2003-01-17"],
+      ["21", "2003-01-18", null],
     ],
   );
   assert.deepEqual(
     codes.find((entry) => entry.code === "AR-VAT-RED105")!.rates!.map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
     [
-      [9.5, "2002-11-18", "2003-01-17"],
-      [10.5, "2003-01-18", null],
+      ["9.5", "2002-11-18", "2003-01-17"],
+      ["10.5", "2003-01-18", null],
     ],
   );
 });

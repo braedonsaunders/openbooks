@@ -21,7 +21,7 @@ test("IT_LIPE declares standard plus 10% ridotta and 4% minima codes", () => {
   );
   assert.deepEqual(
     codes.map((code) => code.ratePercent),
-    [22, 10, 4],
+    ["22", "10", "4"],
   );
 });
 
@@ -43,5 +43,5 @@ test("new IT reduced rates link to the AdE applicability source", () => {
 test("IT default code stays the 22% standard", () => {
   const primary = primaryPackTaxCode(ITALY_TAX_PACK, "IT_LIPE");
   assert.equal(primary?.code, "IT-VAT-STD");
-  assert.equal(primary?.ratePercent, 22);
+  assert.equal(primary?.ratePercent, "22");
 });

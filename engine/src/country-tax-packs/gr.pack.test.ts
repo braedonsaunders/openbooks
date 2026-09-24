@@ -47,14 +47,14 @@ test("Greece filing defaults to quarterly portal entry through myAADE", () => {
 test("Greece declares mainland 24/13/6/4 bands plus the island 17/9/4/3 bands with honest roles", () => {
   const codes = packTaxCodesForReturn(GREECE_TAX_PACK, "GR_FPA_F2");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["GR-VAT-STD", "standard", 24],
-    ["GR-VAT-RED13", "reduced", 13],
-    ["GR-VAT-RED6", "reduced", 6],
-    ["GR-VAT-RED4", "reduced", 4],
-    ["GR-VAT-ISL17", "reduced", 17],
-    ["GR-VAT-ISL9", "reduced", 9],
-    ["GR-VAT-ISL4", "reduced", 4],
-    ["GR-VAT-ISL3", "reduced", 3],
+    ["GR-VAT-STD", "standard", "24"],
+    ["GR-VAT-RED13", "reduced", "13"],
+    ["GR-VAT-RED6", "reduced", "6"],
+    ["GR-VAT-RED4", "reduced", "4"],
+    ["GR-VAT-ISL17", "reduced", "17"],
+    ["GR-VAT-ISL9", "reduced", "9"],
+    ["GR-VAT-ISL4", "reduced", "4"],
+    ["GR-VAT-ISL3", "reduced", "3"],
   ]);
   assert.ok(!codes.some((code) => code.role === "zero"), "no zero-rated band on the Φ2, so no zero code");
 });

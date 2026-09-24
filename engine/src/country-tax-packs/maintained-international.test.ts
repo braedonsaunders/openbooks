@@ -40,7 +40,7 @@ test("maintained international country packs are directly provisionable", () => 
 
 test("Australia GST has a source-backed schedule from commencement and official BAS labels", () => {
   assert.deepEqual(PACK_DEFAULT_CODES.AU_BAS_GST?.rates, [
-    { ratePercent: 10, effectiveFrom: "2000-07-01", sourceId: "ato_gst_commencement" },
+    { ratePercent: "10", effectiveFrom: "2000-07-01", sourceId: "ato_gst_commencement" },
   ]);
   assert.deepEqual(pack("AU").returnPacks[0]!.boxes.map((box) => box.lineCode), ["G1", "G2", "G3", "G10", "G11", "1A", "1B"]);
 });
@@ -48,9 +48,9 @@ test("Australia GST has a source-backed schedule from commencement and official 
 test("New Zealand GST preserves all three statutory rate eras and the GST101A calculation order", () => {
   const rates = PACK_DEFAULT_CODES.NZ_GST101A?.rates ?? [];
   assert.deepEqual(rates, [
-    { ratePercent: 10, effectiveFrom: "1986-10-01", effectiveTo: "1989-06-30", sourceId: "nz_gst_rate_history" },
-    { ratePercent: 12.5, effectiveFrom: "1989-07-01", effectiveTo: "2010-09-30", sourceId: "nz_gst_rate_history" },
-    { ratePercent: 15, effectiveFrom: "2010-10-01", sourceId: "nz_gst_2010_increase" },
+    { ratePercent: "10", effectiveFrom: "1986-10-01", effectiveTo: "1989-06-30", sourceId: "nz_gst_rate_history" },
+    { ratePercent: "12.5", effectiveFrom: "1989-07-01", effectiveTo: "2010-09-30", sourceId: "nz_gst_rate_history" },
+    { ratePercent: "15", effectiveFrom: "2010-10-01", sourceId: "nz_gst_2010_increase" },
   ]);
   assertContiguous(rates);
   const boxes = pack("NZ").returnPacks[0]!.boxes;
@@ -61,13 +61,13 @@ test("New Zealand GST preserves all three statutory rate eras and the GST101A ca
 test("United Kingdom VAT carries HMRC's complete standard-rate history and current Northern Ireland box wording", () => {
   const rates = PACK_DEFAULT_CODES.GB_VAT100?.rates ?? [];
   assert.deepEqual(rates.map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]), [
-    ["1973-04-01", "1974-07-28", 10],
-    ["1974-07-29", "1979-06-17", 8],
-    ["1979-06-18", "1991-03-31", 15],
-    ["1991-04-01", "2008-11-30", 17.5],
-    ["2008-12-01", "2009-12-31", 15],
-    ["2010-01-01", "2011-01-03", 17.5],
-    ["2011-01-04", null, 20],
+    ["1973-04-01", "1974-07-28", "10"],
+    ["1974-07-29", "1979-06-17", "8"],
+    ["1979-06-18", "1991-03-31", "15"],
+    ["1991-04-01", "2008-11-30", "17.5"],
+    ["2008-12-01", "2009-12-31", "15"],
+    ["2010-01-01", "2011-01-03", "17.5"],
+    ["2011-01-04", null, "20"],
   ]);
   assertContiguous(rates);
   const boxes = pack("GB").returnPacks[0]!.boxes;
@@ -79,19 +79,19 @@ test("United Kingdom VAT carries HMRC's complete standard-rate history and curre
 test("United Kingdom VAT100 carries standard, reduced, and zero-rate codes from HMRC Notice 700", () => {
   const codes = packTaxCodesForReturn(pack("GB"), "GB_VAT100");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["GB-VAT-STD", "standard", 20],
-    ["GB-VAT-RED", "reduced", 5],
-    ["GB-VAT-ZERO", "zero", 0],
+    ["GB-VAT-STD", "standard", "20"],
+    ["GB-VAT-RED", "reduced", "5"],
+    ["GB-VAT-ZERO", "zero", "0"],
   ]);
   const reduced = codes.find((code) => code.code === "GB-VAT-RED")!;
   assert.deepEqual(reduced.rates, [
-    { ratePercent: 8, effectiveFrom: "1994-04-01", effectiveTo: "1997-08-31", sourceId: "hmrc_vat_rate_history" },
-    { ratePercent: 5, effectiveFrom: "1997-09-01", sourceId: "hmrc_vat_rate_history" },
+    { ratePercent: "8", effectiveFrom: "1994-04-01", effectiveTo: "1997-08-31", sourceId: "hmrc_vat_rate_history" },
+    { ratePercent: "5", effectiveFrom: "1997-09-01", sourceId: "hmrc_vat_rate_history" },
   ]);
   assertContiguous(reduced.rates ?? []);
   const zero = codes.find((code) => code.code === "GB-VAT-ZERO")!;
   assert.deepEqual(zero.rates, [
-    { ratePercent: 0, effectiveFrom: "1973-04-01", sourceId: "hmrc_vat_rate_history" },
+    { ratePercent: "0", effectiveFrom: "1973-04-01", sourceId: "hmrc_vat_rate_history" },
   ]);
   assert.equal(PACK_DEFAULT_CODES.GB_VAT100?.code, "GB-VAT-STD");
 });
@@ -99,8 +99,8 @@ test("United Kingdom VAT100 carries standard, reduced, and zero-rate codes from 
 test("Germany uses the official 2026 UStVA identifiers and preserves the temporary 2020 rate reduction", () => {
   const definition = pack("DE");
   const rates = PACK_DEFAULT_CODES.DE_USTVA?.rates ?? [];
-  assert.equal(rates.find((rate) => rate.effectiveFrom === "2020-07-01")?.ratePercent, 16);
-  assert.equal(rates.find((rate) => rate.effectiveFrom === "2021-01-01")?.ratePercent, 19);
+  assert.equal(rates.find((rate) => rate.effectiveFrom === "2020-07-01")?.ratePercent, "16");
+  assert.equal(rates.find((rate) => rate.effectiveFrom === "2021-01-01")?.ratePercent, "19");
   assertContiguous(rates);
   const codes = new Set(definition.returnPacks[0]!.boxes.map((box) => box.lineCode));
   for (const code of ["81", "86", "87", "41", "66", "61", "62", "67", "83"]) assert.ok(codes.has(code));
@@ -112,23 +112,23 @@ test("Germany uses the official 2026 UStVA identifiers and preserves the tempora
   ]);
   const redRates = deSet[1]!.rates ?? [];
   assert.deepEqual(redRates.map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]), [
-    ["1968-01-01", "1968-06-30", 5],
-    ["1968-07-01", "1977-12-31", 5.5],
-    ["1978-01-01", "1979-06-30", 6],
-    ["1979-07-01", "1983-06-30", 6.5],
-    ["1983-07-01", "2020-06-30", 7],
-    ["2020-07-01", "2020-12-31", 5],
-    ["2021-01-01", null, 7],
+    ["1968-01-01", "1968-06-30", "5"],
+    ["1968-07-01", "1977-12-31", "5.5"],
+    ["1978-01-01", "1979-06-30", "6"],
+    ["1979-07-01", "1983-06-30", "6.5"],
+    ["1983-07-01", "2020-06-30", "7"],
+    ["2020-07-01", "2020-12-31", "5"],
+    ["2021-01-01", null, "7"],
   ]);
   assertContiguous(redRates);
 });
 
 test("France is provisionable without overstating territorial completeness", () => {
   const definition = pack("FR");
-  assert.equal(PACK_DEFAULT_CODES.FR_CA3?.ratePercent, 20);
+  assert.equal(PACK_DEFAULT_CODES.FR_CA3?.ratePercent, "20");
   assert.equal(PACK_DEFAULT_CODES.FR_CA3?.name, "France metropolitan standard VAT");
   assert.deepEqual(PACK_DEFAULT_CODES.FR_CA3?.rates, [
-    { ratePercent: 20, effectiveFrom: "2014-01-01", sourceId: "dgfip_standard_vat_2014" },
+    { ratePercent: "20", effectiveFrom: "2014-01-01", sourceId: "dgfip_standard_vat_2014" },
   ]);
   assert.equal(definition.completeness.jurisdictions, "partial");
   assert.equal(definition.completeness.standardRates, "partial");
@@ -143,11 +143,11 @@ test("France is provisionable without overstating territorial completeness", () 
     ["FR-VAT-RED55", "reduced"],
   ]);
   assert.deepEqual(frSet[1]!.rates, [
-    { ratePercent: 10, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
+    { ratePercent: "10", effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
   ]);
   // 5.5% predates the 2014 reform: left-truncated applicability, no origin claim.
   assert.deepEqual(frSet[2]!.rates, [
-    { ratePercent: 5.5, effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
+    { ratePercent: "5.5", effectiveFrom: "2014-01-01", sourceId: "dgfip_reduced_vat_2014" },
   ]);
 });
 

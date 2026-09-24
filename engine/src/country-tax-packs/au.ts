@@ -58,8 +58,8 @@ export const AUSTRALIA_TAX_PACK: CountryTaxPackDefinition = {
     AU_BAS_GST: {
       code: "AU-GST",
       name: "Australia GST",
-      ratePercent: 10,
-      rates: [{ ratePercent: 10, effectiveFrom: "2000-07-01", sourceId: "ato_gst_commencement" }],
+      ratePercent: "10",
+      rates: [{ ratePercent: "10", effectiveFrom: "2000-07-01", sourceId: "ato_gst_commencement" }],
     },
   },
 };

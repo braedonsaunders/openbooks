@@ -74,10 +74,10 @@ test("Hungary declares every band through the reader with resolving sources and 
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent, code.rates?.[0]?.effectiveFrom]),
     [
-      ["HU-VAT-STD", "standard", 27, "2012-01-01"],
-      ["HU-VAT-RED18", "reduced", 18, "2012-01-01"],
-      ["HU-VAT-RED5", "reduced", 5, "2012-01-01"],
-      ["HU-VAT-ZERO", "zero", 0, "2012-01-01"],
+      ["HU-VAT-STD", "standard", "27", "2012-01-01"],
+      ["HU-VAT-RED18", "reduced", "18", "2012-01-01"],
+      ["HU-VAT-RED5", "reduced", "5", "2012-01-01"],
+      ["HU-VAT-ZERO", "zero", "0", "2012-01-01"],
     ],
   );
 });
@@ -86,6 +86,6 @@ test("Hungary primary code is the 27% standard band and ÁFA stays national", ()
   const primary = primaryPackTaxCode(pack, "HU_AFA_65");
   assert.ok(primary);
   assert.equal(primary.code, "HU-VAT-STD");
-  assert.equal(primary.ratePercent, 27);
+  assert.equal(primary.ratePercent, "27");
   assert.deepEqual(pack.jurisdictions, []);
 });

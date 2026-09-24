@@ -17,7 +17,7 @@ import {
 import type { CountryPackCoverage, CountryTaxCodeDefinition, CountryTaxPackDefinition } from "../country-tax-packs/index.ts";
 
 /** Persist a pack JSON rate through exact decimal then ledger money — never as an IEEE-754 number. */
-function persistPackRatePercent(ratePercent: string | number): string {
+function persistPackRatePercent(ratePercent: string): string {
   const exact = canonicalDecimal(ratePercent, 4);
   if (exact === null) throw new Error("rate percent must be an exact decimal");
   try {
@@ -28,7 +28,7 @@ function persistPackRatePercent(ratePercent: string | number): string {
 }
 
 function packRateSchedule(
-  rates: ReadonlyArray<{ ratePercent: string | number; effectiveFrom: string; effectiveTo?: string | null }>,
+  rates: ReadonlyArray<{ ratePercent: string; effectiveFrom: string; effectiveTo?: string | null }>,
 ): Array<{ ratePercent: string; effectiveFrom: string; effectiveTo: string | null }> {
   return rates.map((rate) => ({
     ratePercent: persistPackRatePercent(rate.ratePercent),

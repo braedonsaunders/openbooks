@@ -45,9 +45,9 @@ test("Belgium declares three rate bands with resolving sources and contiguous hi
   assert.deepEqual(
     codes.map((code) => [code.code, code.role, code.ratePercent]),
     [
-      ["BE-VAT-STD", "standard", 21],
-      ["BE-VAT-RED12", "reduced", 12],
-      ["BE-VAT-RED6", "reduced", 6],
+      ["BE-VAT-STD", "standard", "21"],
+      ["BE-VAT-RED12", "reduced", "12"],
+      ["BE-VAT-RED6", "reduced", "6"],
     ],
   );
   const sourceIds = new Set(BELGIUM_TAX_PACK.sources.map((source) => source.id));
@@ -60,7 +60,7 @@ test("Belgium declares three rate bands with resolving sources and contiguous hi
   }
   assert.deepEqual(
     codes.find((code) => code.code === "BE-VAT-STD")!.rates,
-    [{ ratePercent: 21, effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
+    [{ ratePercent: "21", effectiveFrom: "2026-09-18", sourceId: "fps_vat_rates" }],
   );
 });
 

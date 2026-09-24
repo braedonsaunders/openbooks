@@ -41,7 +41,7 @@ test("third-wave maintained country packs are directly provisionable", () => {
 test("India exposes only the sourced combined 18% schedule and makes classification limits explicit", () => {
   const definition = pack("IN");
   assert.deepEqual(PACK_DEFAULT_CODES.IN_GSTR3B?.rates, [
-    { ratePercent: 18, effectiveFrom: "2017-07-01", sourceId: "cbic_gst_rate_schedule" },
+    { ratePercent: "18", effectiveFrom: "2017-07-01", sourceId: "cbic_gst_rate_schedule" },
   ]);
   assert.match(PACK_DEFAULT_CODES.IN_GSTR3B!.name, /classification required/i);
   assert.equal(definition.completeness.jurisdictions, "partial");
@@ -58,9 +58,9 @@ test("South Africa preserves the complete SARS standard-rate history and VAT201 
   const definition = pack("ZA");
   const rates = PACK_DEFAULT_CODES.ZA_VAT201?.rates ?? [];
   assert.deepEqual(rates, [
-    { ratePercent: 10, effectiveFrom: "1991-09-30", effectiveTo: "1993-04-06", sourceId: "sars_vat_rate_history" },
-    { ratePercent: 14, effectiveFrom: "1993-04-07", effectiveTo: "2018-03-31", sourceId: "sars_vat_rate_history" },
-    { ratePercent: 15, effectiveFrom: "2018-04-01", sourceId: "sars_vat_current" },
+    { ratePercent: "10", effectiveFrom: "1991-09-30", effectiveTo: "1993-04-06", sourceId: "sars_vat_rate_history" },
+    { ratePercent: "14", effectiveFrom: "1993-04-07", effectiveTo: "2018-03-31", sourceId: "sars_vat_rate_history" },
+    { ratePercent: "15", effectiveFrom: "2018-04-01", sourceId: "sars_vat_current" },
   ]);
   assertContiguous(rates);
   assert.equal(definition.completeness.standardRates, "complete");
@@ -74,7 +74,7 @@ test("South Africa preserves the complete SARS standard-rate history and VAT201 
 test("United Arab Emirates installs only the federal 5% rate and preserves all fourteen VAT201 boxes", () => {
   const definition = pack("AE");
   assert.deepEqual(PACK_DEFAULT_CODES.AE_VAT201?.rates, [
-    { ratePercent: 5, effectiveFrom: "2018-01-01", sourceId: "fta_vat_introduction" },
+    { ratePercent: "5", effectiveFrom: "2018-01-01", sourceId: "fta_vat_introduction" },
   ]);
   assert.equal(definition.completeness.standardRates, "complete");
   assert.equal(definition.completeness.localRates, "not_applicable");
@@ -88,10 +88,10 @@ test("Japan preserves all combined standard-rate eras while leaving reduced-rate
   const definition = pack("JP");
   const rates = PACK_DEFAULT_CODES.JP_CONSUMPTION?.rates ?? [];
   assert.deepEqual(rates.map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]), [
-    ["1989-04-01", "1997-03-31", 3],
-    ["1997-04-01", "2014-03-31", 5],
-    ["2014-04-01", "2019-09-30", 8],
-    ["2019-10-01", null, 10],
+    ["1989-04-01", "1997-03-31", "3"],
+    ["1997-04-01", "2014-03-31", "5"],
+    ["2014-04-01", "2019-09-30", "8"],
+    ["2019-10-01", null, "10"],
   ]);
   assertContiguous(rates);
   assert.equal(definition.completeness.standardRates, "complete");

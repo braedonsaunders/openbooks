@@ -80,9 +80,9 @@ export const INDIA_TAX_PACK: CountryTaxPackDefinition = {
     IN_GSTR3B: {
       code: "IN-GST-18",
       name: "India combined GST 18% schedule — classification required",
-      ratePercent: 18,
+      ratePercent: "18",
       rates: [
-        { ratePercent: 18, effectiveFrom: "2017-07-01", sourceId: "cbic_gst_rate_schedule" },
+        { ratePercent: "18", effectiveFrom: "2017-07-01", sourceId: "cbic_gst_rate_schedule" },
       ],
     },
   },

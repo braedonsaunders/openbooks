@@ -68,11 +68,11 @@ export const NEW_ZEALAND_TAX_PACK: CountryTaxPackDefinition = {
     NZ_GST101A: {
       code: "NZ-GST",
       name: "New Zealand GST",
-      ratePercent: 15,
+      ratePercent: "15",
       rates: [
-        { ratePercent: 10, effectiveFrom: "1986-10-01", effectiveTo: "1989-06-30", sourceId: "nz_gst_rate_history" },
-        { ratePercent: 12.5, effectiveFrom: "1989-07-01", effectiveTo: "2010-09-30", sourceId: "nz_gst_rate_history" },
-        { ratePercent: 15, effectiveFrom: "2010-10-01", sourceId: "nz_gst_2010_increase" },
+        { ratePercent: "10", effectiveFrom: "1986-10-01", effectiveTo: "1989-06-30", sourceId: "nz_gst_rate_history" },
+        { ratePercent: "12.5", effectiveFrom: "1989-07-01", effectiveTo: "2010-09-30", sourceId: "nz_gst_rate_history" },
+        { ratePercent: "15", effectiveFrom: "2010-10-01", sourceId: "nz_gst_2010_increase" },
       ],
     },
   },

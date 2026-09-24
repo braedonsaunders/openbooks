@@ -43,10 +43,10 @@ test("Mexico IVA codes carry sourced, contiguous rate histories with the standar
   const sourceIds = new Set(MEXICO_TAX_PACK.sources.map((source) => source.id));
   const codes = packTaxCodesForReturn(MEXICO_TAX_PACK, "MX_IVA_MENSUAL");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["MX-VAT-STD", "standard", 16],
-    ["MX-VAT-NORTH-8", "reduced", 8],
-    ["MX-VAT-SOUTH-8", "reduced", 8],
-    ["MX-VAT-ZERO", "zero", 0],
+    ["MX-VAT-STD", "standard", "16"],
+    ["MX-VAT-NORTH-8", "reduced", "8"],
+    ["MX-VAT-SOUTH-8", "reduced", "8"],
+    ["MX-VAT-ZERO", "zero", "0"],
   ]);
   for (const code of codes) {
     assert.ok(code.rates && code.rates.length > 0, `${code.code} must carry a rate history`);

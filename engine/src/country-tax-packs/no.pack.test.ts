@@ -42,10 +42,10 @@ test("Norway files bimonthly through the efile API from the Skatteetaten VAT-ret
 test("Norway declares the 25/15/12 bands with honest roles and an unroled 11.11 band", () => {
   const codes = packTaxCodesForReturn(NORWAY_TAX_PACK, "NO_MVA_MELDING");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["NO-VAT-STD", "standard", 25],
-    ["NO-VAT-FOOD", "reduced", 15],
-    ["NO-VAT-PASSENGER", "reduced", 12],
-    ["NO-VAT-FISH-1111", undefined, 11.11],
+    ["NO-VAT-STD", "standard", "25"],
+    ["NO-VAT-FOOD", "reduced", "15"],
+    ["NO-VAT-PASSENGER", "reduced", "12"],
+    ["NO-VAT-FISH-1111", undefined, "11.11"],
   ]);
 });
 
@@ -73,25 +73,25 @@ test("Norway histories run back to 2012, one row per rate change", () => {
     codes.find((entry) => entry.code === code)!.rates!;
   assert.deepEqual(
     rows("NO-VAT-STD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [[25, "2012-01-01", null]],
+    [["25", "2012-01-01", null]],
   );
   assert.deepEqual(
     rows("NO-VAT-FOOD").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [[15, "2012-01-01", null]],
+    [["15", "2012-01-01", null]],
   );
   assert.deepEqual(
     rows("NO-VAT-PASSENGER").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
     [
-      [8, "2012-01-01", "2015-12-31"],
-      [10, "2016-01-01", "2017-12-31"],
-      [12, "2018-01-01", "2020-03-31"],
-      [6, "2020-04-01", "2021-09-30"],
-      [12, "2021-10-01", null],
+      ["8", "2012-01-01", "2015-12-31"],
+      ["10", "2016-01-01", "2017-12-31"],
+      ["12", "2018-01-01", "2020-03-31"],
+      ["6", "2020-04-01", "2021-09-30"],
+      ["12", "2021-10-01", null],
     ],
   );
   assert.deepEqual(
     rows("NO-VAT-FISH-1111").map((rate) => [rate.ratePercent, rate.effectiveFrom, rate.effectiveTo ?? null]),
-    [[11.11, "2025-01-01", null]],
+    [["11.11", "2025-01-01", null]],
   );
   for (const code of codes) {
     const last = code.rates![code.rates!.length - 1]!;

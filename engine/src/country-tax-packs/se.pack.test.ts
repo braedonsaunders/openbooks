@@ -42,15 +42,15 @@ test("Sweden filing is quarterly portal entry through the Skatteverket momsdekla
 test("Sweden declares the 25/12/6 bands plus the temporary food 6% band with honest roles and no zero-rated code", () => {
   const codes = packTaxCodesForReturn(SWEDEN_TAX_PACK, "SE_MOMSDEKLARATION");
   assert.deepEqual(codes.map((code) => [code.code, code.role, code.ratePercent]), [
-    ["SE-VAT-STD", "standard", 25],
-    ["SE-VAT-RED12", "reduced", 12],
-    ["SE-VAT-FOOD6", "reduced", 6],
-    ["SE-VAT-RED6", "reduced", 6],
+    ["SE-VAT-STD", "standard", "25"],
+    ["SE-VAT-RED12", "reduced", "12"],
+    ["SE-VAT-FOOD6", "reduced", "6"],
+    ["SE-VAT-RED6", "reduced", "6"],
   ]);
   assert.ok(!codes.some((code) => code.role === "zero"), "no zero-rated band on the return, so no zero code");
   const food = codes.find((code) => code.code === "SE-VAT-FOOD6")!;
   assert.deepEqual(food.rates, [
-    { ratePercent: 6, effectiveFrom: "2026-04-01", effectiveTo: "2027-12-31", sourceId: "sfs_2026_118_food_6_temp" },
+    { ratePercent: "6", effectiveFrom: "2026-04-01", effectiveTo: "2027-12-31", sourceId: "sfs_2026_118_food_6_temp" },
   ]);
   const sourceIds = new Set(SWEDEN_TAX_PACK.sources.map((source) => source.id));
   assert.ok(sourceIds.has("sfs_2026_119_food_12_revert"), "the reverting act attesting the 2027-12-31 window end is cited");
@@ -89,7 +89,7 @@ test("Sweden standard and reduced bands run back to 2019 as single open rows", (
   for (const code of ["SE-VAT-STD", "SE-VAT-RED12", "SE-VAT-RED6"]) {
     assert.deepEqual(
       codes.find((entry) => entry.code === code)!.rates,
-      [{ ratePercent: code === "SE-VAT-STD" ? 25 : code === "SE-VAT-RED12" ? 12 : 6, effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
+      [{ ratePercent: code === "SE-VAT-STD" ? "25" : code === "SE-VAT-RED12" ? "12" : "6", effectiveFrom: "2019-07-01", sourceId: "sfs_2019_261_rates_origin" }],
     );
   }
 });

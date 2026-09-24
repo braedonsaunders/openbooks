@@ -67,12 +67,12 @@ describe("Saudi Arabia VAT pack", () => {
     const standard = codes.find((code) => code.code === "SA-VAT-STD");
     assert.ok(standard);
     assert.equal(standard.role, "standard");
-    assert.equal(standard.ratePercent, 15);
+    assert.equal(standard.ratePercent, "15");
     assert.deepEqual(
       (standard.rates ?? []).map((rate) => [rate.effectiveFrom, rate.effectiveTo ?? null, rate.ratePercent]),
       [
-        ["2018-01-01", "2020-06-30", 5],
-        ["2020-07-01", null, 15],
+        ["2018-01-01", "2020-06-30", "5"],
+        ["2020-07-01", null, "15"],
       ],
     );
     assertContiguous(standard.rates ?? []);
@@ -83,7 +83,7 @@ describe("Saudi Arabia VAT pack", () => {
     const zero = codes.find((code) => code.code === "SA-VAT-ZERO");
     assert.ok(zero);
     assert.equal(zero.role, "zero");
-    assert.equal(zero.ratePercent, 0);
+    assert.equal(zero.ratePercent, "0");
     assertContiguous(zero.rates ?? []);
     assert.ok(!codes.some((code) => code.role === "reduced"), "Saudi VAT has no reduced rate");
     assert.ok(!codes.some((code) => code.role === "exempt"), "exempt supplies are not a 0% code");
