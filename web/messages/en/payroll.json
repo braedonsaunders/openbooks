@@ -558,7 +558,9 @@
       "saved": "Certificate saved",
       "save": "Save certificate",
       "saving": "Saving…",
-      "effectiveFrom": "Effective from"
+      "effectiveFrom": "Effective from",
+      "title": "Tax certificates",
+      "loading": "Loading certificates…"
     }
   },
   "setupWizard": {

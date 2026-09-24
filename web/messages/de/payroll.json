@@ -558,7 +558,9 @@
       "saved": "Zertifikat gespeichert",
       "save": "Zertifikat speichern",
       "saving": "Speichern…",
-      "effectiveFrom": "Gültig ab"
+      "effectiveFrom": "Gültig ab",
+      "title": "Steuerbescheinigungen",
+      "loading": "Zertifikate werden geladen…"
     }
   },
   "setupWizard": {

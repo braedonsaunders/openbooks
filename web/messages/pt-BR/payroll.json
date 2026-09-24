@@ -558,7 +558,9 @@
       "saved": "Certificado salvo",
       "save": "Salvar certificado",
       "saving": "Salvando…",
-      "effectiveFrom": "Vigente a partir de"
+      "effectiveFrom": "Vigente a partir de",
+      "title": "Certificados fiscais",
+      "loading": "Carregando certificados…"
     }
   },
   "setupWizard": {
