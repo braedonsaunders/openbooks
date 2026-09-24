@@ -896,7 +896,7 @@
       "enabled": "Encrypt emailed pay stubs",
       "unavailable": "PDF encryption is unavailable on this server — the qpdf tool is not installed.",
       "expression": "Password rule",
-      "expressionHelp": "Tokens: {surname}, {givenName}, {employeeNumber} (add :3 for the first three characters) and {dob} with a format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Add |upper or |lower to change case. Example: {surname:3|upper}{dob:MMDDYYYY}."
+      "expressionHelp": "Tokens: '{surname}', '{givenName}', '{employeeNumber}' (add :3 for the first three characters) and '{dob}' with a format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Add |upper or |lower to change case. Example: '{surname:3|upper}{dob:MMDDYYYY}'."
     },
     "derivedPreview": {
       "title": "Preview a derived earnings rule",

@@ -896,7 +896,7 @@
       "enabled": "Cifrar recibos enviados por correo",
       "unavailable": "El cifrado PDF no está disponible en este servidor — la herramienta qpdf no está instalada.",
       "expression": "Regla de contraseña",
-      "expressionHelp": "Elementos: {surname}, {givenName}, {employeeNumber} (añada :3 para los tres primeros caracteres) y {dob} con un formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Añada |upper o |lower para cambiar mayúsculas. Ejemplo: {surname:3|upper}{dob:MMDDYYYY}."
+      "expressionHelp": "Elementos: '{surname}', '{givenName}', '{employeeNumber}' (añada :3 para los tres primeros caracteres) y '{dob}' con un formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Añada |upper o |lower para cambiar mayúsculas. Ejemplo: '{surname:3|upper}{dob:MMDDYYYY}'."
     },
     "derivedPreview": {
       "title": "Previsualizar una regla de percepciones derivadas",

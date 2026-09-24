@@ -896,7 +896,7 @@
       "enabled": "加密邮件发送的工资条",
       "unavailable": "本服务器不支持 PDF 加密——未安装 qpdf 工具。",
       "expression": "密码规则",
-      "expressionHelp": "标记:{surname}、{givenName}、{employeeNumber}(加 :3 取前三个字符)和 {dob} 加格式(MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY)。加 |upper 或 |lower 变换大小写。示例:{surname:3|upper}{dob:MMDDYYYY}。"
+      "expressionHelp": "标记:'{surname}'、'{givenName}'、'{employeeNumber}'(加 :3 取前三个字符)和 '{dob}' 加格式(MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY)。加 |upper 或 |lower 变换大小写。示例:'{surname:3|upper}{dob:MMDDYYYY}'。"
     },
     "derivedPreview": {
       "title": "预览衍生应发规则",

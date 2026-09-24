@@ -896,7 +896,7 @@
       "enabled": "メール送信明細を暗号化",
       "unavailable": "このサーバーではPDF暗号化を利用できません — qpdfツールがインストールされていません。",
       "expression": "パスワードルール",
-      "expressionHelp": "トークン：{surname}、{givenName}、{employeeNumber}（:3で最初の3文字）と{dob}（書式MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY）。大文字小文字の変換は|upperまたは|lower。例：{surname:3|upper}{dob:MMDDYYYY}。"
+      "expressionHelp": "トークン：'{surname}'、'{givenName}'、'{employeeNumber}'（:3で最初の3文字）と'{dob}'（書式MMDDYYYY、DDMMYYYY、YYYYMMDD、MMDDYY、DDMMYY、YYMMDD、MMDD、YYYY）。大文字小文字の変換は|upperまたは|lower。例：'{surname:3|upper}{dob:MMDDYYYY}'。"
     },
     "derivedPreview": {
       "title": "派生支給ルールをプレビュー",
