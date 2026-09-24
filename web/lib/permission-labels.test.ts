@@ -11,6 +11,7 @@ import { PERMISSION_GROUPS } from '../../engine/src/organization/permissions.ts'
 // (hrm.documents.read/manage and hrm.surveys.manage shipped that way).
 // Derived from PERMISSION_GROUPS, never hand-listed: every group and
 // permission label exists, non-empty, in every locale's admin catalogue.
+// source-pin-contract: permission-label invariant — every permission in the engine catalogue renders through a translated admin label in every locale; subjects derived from the imported catalogue crossed with every locale directory, never hand-listed.
 const messagesRoot = join(dirname(fileURLToPath(import.meta.url)), '..', 'messages')
 
 function lookup(catalog: unknown, dotted: string): unknown {

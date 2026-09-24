@@ -20,6 +20,7 @@ import test from 'node:test'
  * catches is a whole namespace missing, not one branch of one template.
  */
 
+// source-pin-contract: payroll message-key invariant — every literal t() key a payroll screen asks for must exist in the locale catalogs (next-intl echoes the key instead of throwing); subjects derived by walking the payroll screen trees, never hand-listed.
 const WEB = join(import.meta.dirname, '..')
 
 /** Payroll's own screens — the surface this guard is responsible for. */

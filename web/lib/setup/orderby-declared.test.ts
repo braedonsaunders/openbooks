@@ -23,6 +23,7 @@ import { SETUP_ENTITIES, toSnake } from "./registry";
  * correct SQL the test must not flag.
  */
 
+// source-pin-contract: setup-ordering invariant — every SetupEntity.orderBy term must resolve to a real column (registry declaration or published DDL); subjects derived from the setup registry crossed with every published migration, never hand-listed.
 const MIGRATIONS = "schema/migrations/generated";
 
 /** Real column names per table, from the published DDL. */
