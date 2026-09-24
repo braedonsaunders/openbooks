@@ -52,9 +52,8 @@ export interface FicaRates {
 export interface FutaRates {
   wageBase: string; // first $7,000 (statutory, unchanged since 1983)
   grossRate: string; // 6.0%
-  /** Default effective rate after the full 5.4% credit; credit-reduction
-   * states are handled by the org-level configurable rate. */
-  defaultEffectiveRate: string;
+  /** Effective rate after the full 5.4% credit, before Schedule A reductions. */
+  fullCreditEffectiveRate: string;
 }
 
 export interface SupplementalRates {
@@ -167,7 +166,7 @@ export const RATES_2026: YearRates = {
   futa: {
     wageBase: "7000",
     grossRate: "0.06",
-    defaultEffectiveRate: "0.006",
+    fullCreditEffectiveRate: "0.006",
   },
   supplemental: {
     flatRate: "0.22",
@@ -297,7 +296,7 @@ export const RATES_{year}: YearRates = {
   futa: {
     wageBase: UNFILLED,
     grossRate: UNFILLED,
-    defaultEffectiveRate: UNFILLED,
+    fullCreditEffectiveRate: UNFILLED,
   },
   supplemental: {
     flatRate: UNFILLED,
@@ -493,8 +492,8 @@ const US_FUTA_SLOT: PayrollStatutoryRateSlot = {
   label: "Effective FUTA rate",
   scope: "region",
   systemKeys: ["futa"],
-  // Decided silence: the pack carries the standard 0.6% effective rate, so an
-  // unconfigured state still accrues the published default — never a refusal.
+  // This is an optional account-scoped override. Otherwise calculation resolves
+  // the IRS Schedule A rate for the jurisdiction and year, or refuses if absent.
   whenUnconfigured: "zero",
   citation: "IRC 3301/3302; USDOL annual credit-reduction determination (Form 940 Schedule A)",
   variesBecause:

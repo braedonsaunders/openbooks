@@ -150,6 +150,7 @@ export async function computeUsStatutory(
     ficaExempt: bool(empFact("US", emp, "fica_exempt")),
     futaExempt: bool(empFact("US", emp, "futa_exempt")),
     futaEffectiveRate: config.futaRate(region) ?? undefined,
+    futaRegion: region,
     sui,
     ytd: {
       ssWages: ytd.fica, medicareWages: ytd.fica,
