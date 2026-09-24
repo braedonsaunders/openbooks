@@ -8,6 +8,7 @@ import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
+import { accessDeniedHref } from '../../../../lib/gate-targets'
 import type { AuditListRow } from './AuditRows'
 import type { AuditEvent } from './AuditEventDrawer'
 
@@ -15,11 +16,11 @@ import type { AuditEvent } from './AuditEventDrawer'
  * The company audit log, split into a loader and a spec.
  *
  * Two gates precede everything, and both are load-bearing. `admin.audit.read`
- * is the permission gate; the unrestricted-subsidiary check (`redirect('/')`)
- * is the scope gate — the log spans deleted records whose scope cannot be
- * inferred from a current row, so a subsidiary-restricted reader is bounced
- * to the home page rather than shown a filtered log. The loader reproduces
- * both verbatim, including the redirect.
+ * is the permission gate; the unrestricted-subsidiary check is the scope
+ * gate — the log spans deleted records whose scope cannot be
+ * inferred from a current row, so a subsidiary-restricted reader is refused
+ * by name rather than shown a filtered log. The loader reproduces
+ * both verbatim, including the named refusal.
  *
  * The rows table is a widget, not a `table` block: like the org-users table,
  * the native page hand-rolls its own table through a client component
@@ -98,7 +99,12 @@ export async function loadAudit(
   // deleted records whose scope cannot be inferred from a current row. Like
   // the raw query console, this whole-company surface requires an explicit
   // unrestricted grant. Record-specific audit routes retain their own scope.
-  if (authz.allowedSubsidiaryIds !== null) redirect('/')
+  // The scope refusal is named, not silent (F1T-10): a restricted reader
+  // sees /access-denied rather than a bounce home. The key is the sentinel
+  // gate's own vocabulary for the same requirement, echoed as text.
+  if (authz.allowedSubsidiaryIds !== null) {
+    redirect(accessDeniedHref({ permission: 'unrestricted subsidiary access' }))
+  }
   const t = await getTranslations('admin.audit')
   const tHub = await getTranslations('admin.hub')
   const params = parseListParams(sp, { sort: 'at', allowedSorts: ['at'] as const, perPage: 50 })

@@ -95,11 +95,11 @@ test("the nav loader redirects an unauthenticated visitor to login", { skip: !pr
   });
 });
 
-test("the nav loader refuses a signed-in user with neither admin key", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test("the nav loader names the refusal for a user with neither admin key", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { orgId, userId } = await freshOrgWithUser();
   try {
     asUser(orgId, userId, ["reports.read"]);
-    await assert.rejects(() => loadNavigationAdmin(), /NEXT_REDIRECT:\/$/);
+    await assert.rejects(() => loadNavigationAdmin(), /NEXT_REDIRECT:\/access-denied\?permission=admin\.nav\.manage/);
   } finally {
     await dropScratchOrgReporting(orgId);
   }

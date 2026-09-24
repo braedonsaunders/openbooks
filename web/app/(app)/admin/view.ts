@@ -3,6 +3,7 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { getAuthz, can } from '../../../lib/authz'
+import { accessDeniedHref } from '../../../lib/gate-targets'
 import { featureEnabled, resolvedFeatureState } from '../../../lib/features'
 import { grid, heading, page, pageHeader, ref, repeat, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
@@ -155,8 +156,14 @@ export async function loadAdminHub(): Promise<AdminHubData> {
     ),
   })).filter((g) => g.cards.length > 0)
 
-  // No admin-ish permission at all → this landing has nothing to show.
-  if (groups.length === 0) redirect('/')
+  // No admin-ish permission at all → the house refusal, not a silent bounce
+  // home (F1T-10). An OR-denial: the hub names itself and the full key set
+  // any one of which admits, DERIVED from the same GROUPS source the hub
+  // uses to decide visibility — never a hand list.
+  if (groups.length === 0) {
+    const required = [...new Set(GROUPS.flatMap((g) => g.cards.map((c) => c.permission)))]
+    redirect(accessDeniedHref({ permission: `${t('hub.title')} (any of: ${required.join(', ')})` }))
+  }
 
   return {
     title: t('hub.title'),

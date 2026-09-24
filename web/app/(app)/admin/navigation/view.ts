@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { frame, grid, page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
 import { can, getAuthz } from '../../../../lib/authz'
+import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { listApps } from '../../../../lib/apps/store'
 import { defaultNavConfig, type NavAppOption, type OrgNavConfig } from '../../../../lib/nav/registry'
 
@@ -39,7 +40,12 @@ export async function loadNavigationAdmin(): Promise<NavigationAdminData | null>
   // administrators lose nothing.
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  if (!can(authz, 'admin.nav.manage') && !can(authz, 'admin.customization.manage')) redirect('/')
+  // The house refusal names the primary grant (F1T-10): an editor without
+  // either nav grant sees /access-denied, never a silent bounce home.
+  // admin.customization.manage is the historical alternative — either admits.
+  if (!can(authz, 'admin.nav.manage') && !can(authz, 'admin.customization.manage')) {
+    redirect(accessDeniedHref({ permission: 'admin.nav.manage' }))
+  }
   const user = authz.user
   const t = await getTranslations('admin.navigation')
   const tHub = await getTranslations('admin.hub')

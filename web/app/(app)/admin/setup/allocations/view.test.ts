@@ -160,8 +160,11 @@ test('shell without a session redirects to login', async () => {
   await assert.rejects(loadWith(null), /REDIRECT:\/login/)
 })
 
-test('shell without either setup permission redirects home', async () => {
-  await assert.rejects(loadWith({ user: { orgId: 'o1' }, perms: ['ap.create'] }), /REDIRECT:\/$/)
+test('shell without either setup permission names the refusal (F1T-10)', async () => {
+  await assert.rejects(
+    loadWith({ user: { orgId: 'o1' }, perms: ['ap.create'] }),
+    /REDIRECT:\/access-denied\?permission=admin\.setup\.manage/,
+  )
 })
 
 test('shell admits the layout CRM-setup alternative (parity with SetupLayout)', async () => {

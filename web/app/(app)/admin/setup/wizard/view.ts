@@ -3,8 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { getAuthz, can } from '../../../../../lib/authz'
-import { redirect } from 'next/navigation'
+import { requirePermission } from '../../../../../lib/authz'
 import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
 import { FEATURES, featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
 import {
@@ -37,8 +36,8 @@ import type { SetupWizard } from './SetupWizard'
  * they act on (the features / bank-feeds / labor-costing lesson) — so the
  * island arrives whole through one widget.
  *
- * Loader work copied VERBATIM from page.tsx: the `getAuthz` + login /
- * `admin.setup.manage` redirects, the org row query, the
+ * Loader work copied VERBATIM from page.tsx: the `admin.setup.manage`
+ * house refusal, the org row query, the
  * `canSwitchIndustry` probe, the `resolvedFeatureState` load, and the
  * `initial` assembly (fiscal-year default, `?? null` industry, guarded
  * workspace-profile fields, the 12-key feature toggles, the full-registry
@@ -63,9 +62,9 @@ export interface WizardData {
 }
 
 export async function loadWizard(): Promise<WizardData> {
-  const authz = await getAuthz()
-  if (!authz) redirect('/login')
-  if (!can(authz, 'admin.setup.manage')) redirect('/')
+  // The house refusal names admin.setup.manage (F1T-10), never a silent
+  // bounce home.
+  const authz = await requirePermission('admin.setup.manage')
 
   const orgId = authz.user.orgId
   const [org, switchable, features] = await Promise.all([
