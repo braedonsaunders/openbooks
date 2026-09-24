@@ -246,6 +246,71 @@ test("the row cap truncates with a disclosed footer instead of materialising eve
   } finally { await release(fx); }
 });
 
+test("a row cap that cuts whole trailing sections still attributes the header and footer", enabled, async () => {
+  const fx = await fixture(1200);
+  try {
+    // Grouped by kind (receipts sort first), the buffered export holds two
+    // sections. Ten rows cannot reach the second one: without a trailing
+    // declaration the stream would drop it — the header would lose its
+    // section column and the footer would ride on the surviving prefix
+    // instead of the report's last section.
+    // (The suite stubs translations to identity, so both section titles read
+    // `run.section`: sections are told apart by their kind values, and every
+    // expectation below is read off the buffered export, never a literal.)
+    const old = await oldOutputs(fx, "kind");
+    const oldLines = old.csv.split("\r\n").filter((l) => l !== "");
+    const width = oldLines[0]!.split(",").length;
+    // Data lines are full-width; the trailing footer rows are single-cell.
+    const oldData = oldLines.slice(1).filter((l) => l.split(",").length === width);
+    assert.equal(oldData.length, 1200);
+    const oldKinds = [...new Set(oldData.map((l) => l.split(",")[5]))].sort();
+    assert.deepEqual(oldKinds, ["issue", "receipt"]);
+    const sectionTitle = oldLines[1]!.split(",")[0]!;
+    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
+      streamPagedReportCsv(fx.org.orgId, plan("kind"), { title: "Recall", sectionHeader: "Section", generatedAt: GENERATED_AT, rowCap: 10 })));
+    assert.equal(streamed.truncated, true);
+    assert.equal(streamed.rowCount, 10);
+    const lines = streamed.csv.split("\r\n").filter((line) => line !== "");
+    // The section column survives (a dropped trailing group would collapse
+    // the file to a single section and lose it), and the emitted prefix is
+    // the buffered file's own first ten data lines.
+    assert.ok(lines[0]!.startsWith("Section,"), lines[0]);
+    assert.deepEqual(lines.slice(1, 11), oldLines.slice(1, 11));
+    // The footer rides on the report's last section with the truncation
+    // notice disclosed — never on the surviving prefix, never silent.
+    const last = lines[lines.length - 1]!;
+    assert.ok(last.startsWith(`${sectionTitle},`), last);
+    assert.ok(last.includes("run.exportTruncated"), last);
+  } finally { await release(fx); }
+});
+
+test("a row cap that cuts whole trailing sections still emits every sheet", enabled, async () => {
+  const fx = await fixture(1200);
+  try {
+    const old = await oldOutputs(fx, "kind");
+    const streamed = await withOrgTransaction(fx.org.orgId, () => withReportAuthz(fx.authz, () =>
+      streamPagedReportXlsx(fx.org.orgId, plan("kind"), { title: "Recall", dateRangeLabel: "", generatedAt: GENERATED_AT, rowCap: 10 })));
+    assert.equal(streamed.truncated, true);
+    assert.equal(streamed.rowCount, 10);
+    const load = async (buf: Buffer) => {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buf as unknown as ArrayBuffer);
+      return wb;
+    };
+    const [newWb, oldWb] = [await load(streamed.xlsx), await load(old.xlsx)];
+    // Both sheets exist with the buffered names (a dropped trailing group
+    // would leave one), the first carries the ten-row prefix, and the
+    // truncation notice lands on the report's last sheet.
+    assert.deepEqual(newWb.worksheets.map((w) => w.name), oldWb.worksheets.map((w) => w.name));
+    assert.equal(newWb.worksheets.length, 2);
+    const first = newWb.worksheets[0]!;
+    assert.equal(first.rowCount, 4 + 10);
+    const lastSheet = newWb.worksheets[1]!;
+    const lastText = JSON.stringify(lastSheet.getCell(lastSheet.rowCount, 1).value);
+    assert.ok(lastText.includes("run.exportTruncated"), lastText);
+  } finally { await release(fx); }
+});
+
 test("the definitions export route streams paged CSV/XLSX and keeps PDF buffered", enabled, async () => {
   const fx = await fixture(1200);
   try {
