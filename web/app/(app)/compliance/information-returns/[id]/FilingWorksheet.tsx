@@ -29,6 +29,16 @@ import { formatBoxAmount } from '../../../../../lib/information-return-format'
 
 const FILING_CHANNELS = ['iris', 'fire', 'provider', 'paper', 'other'] as const
 
+/**
+ * The status badge tone. A void filing is terminal but not a success — it
+ * reads in the muted tone so it never passes for filed at a glance.
+ */
+function filingTone(status: FilingDetail['status']): 'success' | 'secondary' | 'warning' {
+  if (status === 'void') return 'secondary'
+  if (status === 'filed' || status === 'finalized') return 'success'
+  return 'warning'
+}
+
 function amount(value: string | undefined): string {
   return formatBoxAmount(value)
 }
@@ -166,7 +176,7 @@ export function FilingWorksheet({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant={filing.status === 'filed' ? 'success' : frozen ? 'success' : 'warning'}>
+        <Badge variant={filingTone(filing.status)}>
           {t(`filingStatus.${filing.status}`)}
         </Badge>
         {canManage && !frozen ? (
