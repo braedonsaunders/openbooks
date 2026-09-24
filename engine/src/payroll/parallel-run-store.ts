@@ -212,8 +212,8 @@ export interface PriorRegisterUpsert {
   payDate: string;
   currencyCode?: string | null;
   sourceFileName?: string | null;
-  /** Caller role scope; null/undefined is unrestricted. */
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  /** Caller role scope; null is an explicit unrestricted system scope. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
 
 function assertDate(value: unknown, field: string): string {
