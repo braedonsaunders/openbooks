@@ -60,6 +60,22 @@
     "open": "Abrir",
     "failed": "Não foi possível aplicar o rascunho."
   },
+  "applicationCommand": {
+    "reviewRequired": "Revisão necessária",
+    "proposed": "O assistente propôs este comando. Nada muda até você aplicá-lo.",
+    "apply": "Aplicar comando",
+    "applying": "Aplicando…",
+    "discard": "Descartar",
+    "discarded": "Comando descartado. Nenhuma alteração foi feita.",
+    "applied": "Comando aplicado.",
+    "failed": "Não foi possível aplicar o comando.",
+    "commandFailed": "Falha no comando",
+    "confirmDestructive": "Aplicar o comando destrutivo “{title}”? Esta ação continua sujeita aos controles do OpenBooks."
+  },
+  "entities": {
+    "dueOn": "Vence {date}",
+    "reference": "Ref. {ref}"
+  },
   "launcher": {
     "open": "Pergunte ao assistente",
     "label": "Pergunte ao assistente",

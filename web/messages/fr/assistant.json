@@ -66,6 +66,22 @@
     "open": "Ouvrir",
     "failed": "Le brouillon n'a pas pu être appliqué."
   },
+  "applicationCommand": {
+    "reviewRequired": "Vérification requise",
+    "proposed": "L'assistant a proposé cette commande. Rien ne change tant que vous ne l'appliquez pas.",
+    "apply": "Appliquer la commande",
+    "applying": "Application…",
+    "discard": "Rejeter",
+    "discarded": "Commande rejetée. Aucune modification effectuée.",
+    "applied": "Commande appliquée.",
+    "failed": "La commande n'a pas pu être appliquée.",
+    "commandFailed": "Échec de la commande",
+    "confirmDestructive": "Appliquer la commande destructive « {title} » ? Cette action reste soumise aux contrôles OpenBooks."
+  },
+  "entities": {
+    "dueOn": "Échéance {date}",
+    "reference": "Réf. {ref}"
+  },
   "launcher": {
     "open": "Demander à l'assistant",
     "label": "Demander à l'assistant",

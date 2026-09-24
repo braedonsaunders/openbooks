@@ -60,6 +60,22 @@
     "open": "打开",
     "failed": "无法应用该草稿。"
   },
+  "applicationCommand": {
+    "reviewRequired": "需要审核",
+    "proposed": "助手提出了此命令。在您应用之前，不会有任何更改。",
+    "apply": "应用命令",
+    "applying": "正在应用……",
+    "discard": "放弃",
+    "discarded": "已放弃命令。未进行任何更改。",
+    "applied": "已应用命令。",
+    "failed": "无法应用该命令。",
+    "commandFailed": "命令失败",
+    "confirmDestructive": "要应用破坏性命令“{title}”吗？此操作仍受 OpenBooks 控制约束。"
+  },
+  "entities": {
+    "dueOn": "到期 {date}",
+    "reference": "参考 {ref}"
+  },
   "launcher": {
     "open": "询问助手",
     "label": "询问助手",
