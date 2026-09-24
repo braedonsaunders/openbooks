@@ -1196,7 +1196,11 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'deduction'
-                  and pc.system_key = 'state_income_tax')) as state_tax
+                  and pc.system_key = 'state_income_tax')) as state_tax,
+           -- Stub identities for the unattributed-state refusal below: a
+           -- blank-province group that withheld state tax must name its
+           -- stubs, never silently drop them.
+           array_agg(s.id order by s.pay_date, s.id) as stub_ids
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
@@ -1264,7 +1268,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     : null;
   type StateGroup = {
     province: string; wages: string; fit: string; ssWages: string; ssTax: string;
-    medicareWages: string; medicareTax: string; stateTax: string;
+    medicareWages: string; medicareTax: string; stateTax: string; stubIds: string[];
   };
   const groupsBySlip = new Map<string, {
     employeePartyId: string; employeeName: string; filingAccountId: string | null;
@@ -1287,8 +1291,33 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       medicareWages: num(row.medicare_wages),
       medicareTax: num(row.medicare_tax),
       stateTax: num(row.state_tax),
+      stubIds: (row.stub_ids as readonly unknown[] | null ?? []).map(String),
     });
     groupsBySlip.set(key, slip);
+  }
+  // A stub that withheld state income tax with a blank work state names no
+  // revenue department: its tax would vanish from every state entry (the
+  // state-line builder drops blank-province groups first) while box 17
+  // understates against GL withholdings. Refuse the W-2 by name — employees
+  // and stubs — rather than filing federal-only. A blank-province group with
+  // no state or local withholding is genuinely unattributable wages and keeps
+  // the documented federal-only behavior.
+  const unattributed = [...groupsBySlip.values()].flatMap((slip) =>
+    slip.groups
+      .filter((group) => group.province === ""
+        && (cmp(group.stateTax, "0") !== 0
+          || (localByGroup.get(`${slip.employeePartyId}:${slip.filingAccountId ?? ""}:`) ?? []).length > 0))
+      .map((group) => ({ slip, group })),
+  );
+  if (unattributed.length > 0) {
+    const names = [...new Set(unattributed.map(({ slip }) => slip.employeeName))].sort().join(", ");
+    const stubs = [...new Set(unattributed.flatMap(({ group }) => group.stubIds))].sort().join(", ");
+    throw new PayrollError(
+      `W-2 state wages cannot be built for ${names}: state income tax was withheld on `
+      + `stubs with no work state (${stubs}), and box 17 must name a state. Review the original `
+      + "payroll evidence and correct the run — void and reissue it with the work state — "
+      + "before generating year-end reports.",
+    );
   }
   const total = (groups: StateGroup[], pick: (group: StateGroup) => string) =>
     groups.reduce((acc, group) => add(acc, pick(group)), "0");
