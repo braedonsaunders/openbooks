@@ -559,6 +559,18 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
             kind: "warning",
           });
         }
+        // Named, non-blocking statutory advisories (a reciprocity form to
+        // collect): the stub is correct, the operator decides, and the commit
+        // gate binds to refusals only — the same channel as the bank-limit
+        // warnings above, not a new system.
+        for (const advisory of result.advisories) {
+          errors.push({
+            employeePartyId: emp.party_id!,
+            employee: name,
+            message: advisory,
+            kind: "warning",
+          });
+        }
       } catch (error) {
         errors.push({
           employeePartyId: emp.party_id!,

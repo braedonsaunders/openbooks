@@ -20,7 +20,7 @@ import {
   registerPayrollWithholding,
   unregisterPayrollWithholding,
 } from "./withholding-jurisdictions.ts";
-import { compareRates, resolveWithholding } from "./withholding-resolution.ts";
+import { advisoryGaps, blockingGaps, compareRates, resolveWithholding } from "./withholding-resolution.ts";
 
 const COUNTRY = "ZZTEST";
 
@@ -190,6 +190,20 @@ test("reciprocity WITH the certificate moves the tax to the residence region", (
   // work region and "the code said so" is not an answer.
   assert.equal(regions[0]!.agreement?.citation, "the agreement");
   assert.equal(resolved.gaps.length, 0);
+});
+
+test("advisory gaps are separable from blocking ones on a proceeding resolution", () => {
+  // The C-17 regression at the resolver level: WORK/HOME with no certificate
+  // withholds the work region correctly and NOTHING blocks — so the run
+  // proceeds, and the advisory (collect home_nonres) is what the surfacing
+  // layer must carry to the operator. blockingGaps was the sole consumer of
+  // resolution.gaps; advisoryGaps is the other half.
+  const resolved = resolve({ workRegion: "WORK", residenceRegion: "HOME" });
+  assert.deepEqual(blockingGaps(resolved), []);
+  const advisory = advisoryGaps(resolved);
+  assert.equal(advisory.length, 1);
+  assert.match(advisory[0]!.message, /home_nonres/);
+  assert.match(advisory[0]!.message, /Collect the form/);
 });
 
 test("reciprocity WITHOUT the certificate withholds the WORK region, loudly", () => {
