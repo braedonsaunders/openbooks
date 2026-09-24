@@ -27,7 +27,7 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission, can } from '../../../../lib/authz'
+import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { reconcilableBankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
@@ -252,7 +252,11 @@ export async function loadBankingAccount(
   // reconcilable/active/bank-type predicate the overview roster and the
   // Match picker filter through — so a non-bank page never renders for an
   // account its siblings refuse to list.
-  if (!(await reconcilableBankAccount(orgId, accountId))) notFound()
+  // Membership plus ownership: a session, balance, and unmatched queue for
+  // another entity's account (or a shared account, for a restricted reader)
+  // do not exist as far as this page is concerned.
+  const membership = await reconcilableBankAccount(orgId, accountId)
+  if (!membership || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, membership.subsidiaryId)) notFound()
   const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
            coalesce((select sum(jl.amount) from journal_lines jl

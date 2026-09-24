@@ -34,7 +34,7 @@ for (const scenario of [
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "Bank controller", "admin");
-    const ctx = { orgId: org.orgId, userId: actorId };
+    const ctx = { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
       where id=${org.accounts.bank} and org_id=${org.orgId}`);
     const mistaken = await deposit(org, actorId, "100", "2026-07-01");

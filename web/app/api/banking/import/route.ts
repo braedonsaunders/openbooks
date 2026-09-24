@@ -180,7 +180,11 @@ export async function POST(req: Request) {
         },
         dryRun: mode === 'preview',
       },
-      { orgId: user.orgId, userId: user.id },
+      {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      },
     )
 
     if (mode === 'import' && result.statementId === null) {

@@ -34,7 +34,7 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const totals = await createMatch(
       { reconciliationId: id, statementLineId: body.statementLineId, journalLineIds: body.journalLineIds },
-      { orgId: user.orgId, userId: user.id },
+      { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     return NextResponse.json({ ok: true, totals })
   } catch (e) {
@@ -55,7 +55,7 @@ export async function DELETE(req: Request, { params }: Params) {
   try {
     const totals = await unmatchStatementLine(
       { reconciliationId: id, statementLineId },
-      { orgId: user.orgId, userId: user.id },
+      { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     return NextResponse.json({ ok: true, totals })
   } catch (e) {

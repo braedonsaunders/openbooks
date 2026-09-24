@@ -8,6 +8,7 @@ import { validateAuthorizedKeys } from '@openbooks/engine/src/sftp/authorized-ke
 import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/engine/src/sftp/backend.ts'
 import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
 export const runtime = 'nodejs'
@@ -16,6 +17,10 @@ export const runtime = 'nodejs'
 export async function GET() {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
+  // Servers are org-wide pipes with no account binding to filter by, so a
+  // restricted caller sees none — the same empty-list shape the PSP provider
+  // config uses for org-wide configuration outside the caller's boundary.
+  if (gate.allowedSubsidiaryIds !== null) return NextResponse.json({ servers: [] })
   const r = (await db.execute(sql`
     select id, name, username, backend, bucket, root_prefix, is_active, last_connected_at, created_at
       from sftp_servers where org_id = ${gate.user.orgId} order by created_at desc
@@ -39,6 +44,10 @@ const USERNAME_MINT_ATTEMPTS = 8
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
+  // Creating a server login is org-wide configuration with no account to
+  // scope by (canonical org-wide-policy 403).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { user } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

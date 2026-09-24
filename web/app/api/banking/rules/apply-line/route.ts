@@ -27,11 +27,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'ruleId is required' }, { status: 400 })
   }
   try {
-    await applyRuleToLine(user.orgId, user.id, {
-      statementLineId: body.statementLineId,
-      ruleId: body.ruleId,
-      reconciliationId: body.reconciliationId && isUuid(body.reconciliationId) ? body.reconciliationId : undefined,
-    })
+    await applyRuleToLine(
+      user.orgId,
+      user.id,
+      {
+        statementLineId: body.statementLineId,
+        ruleId: body.ruleId,
+        reconciliationId: body.reconciliationId && isUuid(body.reconciliationId) ? body.reconciliationId : undefined,
+      },
+      gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })

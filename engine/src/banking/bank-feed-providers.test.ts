@@ -1080,7 +1080,7 @@ test(
           withOrg(f.orgId, () =>
             importStatement(
               { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
-              { orgId: f.orgId, userId: forbidden },
+              { orgId: f.orgId, userId: forbidden, allowedSubsidiaryIds: null },
             )),
           BankingError,
         );
@@ -1097,7 +1097,7 @@ test(
       const result = await withOrg(f.orgId, () =>
         importStatement(
           { accountId: f.accountId, source: "feed_api", lines, currency: "CAD" },
-          { orgId: f.orgId, userId: f.userId },
+          { orgId: f.orgId, userId: f.userId, allowedSubsidiaryIds: null },
         ));
       assert.equal(result.imported, 1);
       assert.equal(await countZeroUuidActorRows(f.orgId), 0);

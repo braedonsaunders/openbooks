@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "../platform/db.ts";
 import {
   importStatement,
+  requireBankAccountInScope,
   SYSTEM_ACTOR_ID,
   type ParsedStatementLine,
   type StatementSourceEvidence,
@@ -547,7 +548,7 @@ async function syncOne(
           currency: currency ?? undefined,
           sourceEvidence,
         },
-        { orgId: row.orgId, userId: actorId },
+        { orgId: row.orgId, userId: actorId, allowedSubsidiaryIds: null },
       ),
     );
     imported = result.imported;
@@ -665,7 +666,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
  */
 export async function syncBankFeedNow(
   connectionId: string,
-  ctx: { orgId: string; userId: string },
+  ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<FeedSyncOutcome> {
   const row = await withBypass(async () =>
     (await db.execute<{
@@ -693,6 +694,12 @@ export async function syncBankFeedNow(
   // Defense-in-depth: withBypass skips RLS, so re-prove tenancy on the loaded
   // row before escalating into it via withOrg in syncOne.
   if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
+  // The route gates the connection's account before calling, and the engine
+  // re-proves it here on the freshly loaded row: a sync filing another
+  // entity's statements refuses before any network or statement write, and
+  // outside the outcome-catching try below so the refusal throws instead of
+  // reading as a sync error.
+  await requireBankAccountInScope(db, ctx.orgId, conn.accountId, ctx.allowedSubsidiaryIds);
   let outcome: FeedSyncOutcome;
   try {
     outcome = await syncOne(conn, ctx.userId);

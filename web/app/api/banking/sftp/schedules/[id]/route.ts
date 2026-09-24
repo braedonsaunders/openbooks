@@ -7,6 +7,7 @@ import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
+import { guardSubsidiaryScope, type Authz } from '../../../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -83,6 +84,21 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
   )
 }
 
+/**
+ * Scope-gate a schedule by its bound bank account's owning subsidiary.
+ * Callers check existence first (their own 404); a deleted account fails
+ * closed the same way as an out-of-scope one.
+ */
+async function requireScheduleScope(authz: Authz, scheduleId: string): Promise<NextResponse | null> {
+  const row = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select a.subsidiary_id
+      from sftp_import_schedules sc
+      join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
+     where sc.id = ${scheduleId} and sc.org_id = ${authz.user.orgId}
+  `)).rows[0]
+  return guardSubsidiaryScope(authz, row?.subsidiary_id ?? null)
+}
+
 /** Toggle active, or run the schedule now: { action: 'run' } / { isActive }. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
@@ -97,6 +113,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // schedule accepts. Stored canonical; an explicit null clears the
   // binding (identified files then refuse until it is set again).
   if (body.action !== 'run' && 'expectedExternalAccountId' in body) {
+    // Rebinding changes which physical account's files the schedule
+    // accepts: out-of-scope schedules refuse before any write.
+    const bindingScoped = await requireScheduleScope(gate, id)
+    if (bindingScoped) return bindingScoped
     if (typeof body.expectedExternalAccountId !== 'string' && body.expectedExternalAccountId !== null) {
       return NextResponse.json({ error: 'expectedExternalAccountId must be a string or null' }, { status: 400 })
     }
@@ -125,6 +145,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Scoped run: activate-scan just this org's schedules and report this one.
     const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`))
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // A manual run imports that account's statements: an A-restricted actor
+    // must never trigger (or observe) a run filing B's lines.
+    const runScoped = await requireScheduleScope(gate, id)
+    if (runScoped) return runScoped
     // The scan itself is engine-initiated (system-actor provenance); triggering
     // it does not turn this operator into the statements' importer.
     const runs = await runDueSftpImports(user.orgId, id)
@@ -140,6 +164,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // nothing here enables a schedule or server.
     return await refuseUnexecutedRun(id, user.orgId)
   }
+  // Toggling (de)activates imports for the bound account, so it gates like
+  // the run branch. The zero-row check below still owns the missing case for
+  // unrestricted callers.
+  const toggleScoped = await requireScheduleScope(gate, id)
+  if (toggleScoped) return toggleScoped
   // A zero-row toggle is a failure, not a success: without the affected-row
   // check a missing or foreign-tenant id would report {ok:true} while no read
   // can observe any effect. Refuse exactly like the run branch above.
@@ -158,6 +187,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const deleteScoped = await requireScheduleScope(gate, id)
+  if (deleteScoped) return deleteScoped
   // Same zero-row rule as the toggle above: a delete that matches nothing
   // (missing or foreign-tenant id) refuses with 'not found' rather than
   // reporting {ok:true}. The org-scoped predicate keeps foreign ids

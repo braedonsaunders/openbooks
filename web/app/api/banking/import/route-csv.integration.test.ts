@@ -19,7 +19,7 @@ const routeState: { orgId: string; actorId: string } = { orgId: "", actorId: "" 
 const mockFeatureGates = `
   const state = globalThis[Symbol.for('openbooks.bank-import-csv-route-test')]
   export async function guardFeaturePermission() {
-    return { user: { orgId: state.orgId, id: state.actorId } }
+    return { user: { orgId: state.orgId, id: state.actorId }, allowedSubsidiaryIds: null }
   }
 `;
 

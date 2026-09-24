@@ -5,6 +5,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
 
 export const runtime = 'nodejs'
@@ -21,7 +23,9 @@ export async function GET() {
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.org_id = sc.org_id
       join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
-     where sc.org_id = ${gate.user.orgId} order by sc.created_at desc
+     where sc.org_id = ${gate.user.orgId}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}
+     order by sc.created_at desc
   `))
   return NextResponse.json({ schedules: r.rows })
 }
@@ -52,14 +56,19 @@ export async function POST(req: Request) {
   // separate check — accounts_reconcilable_currency_required guarantees an
   // explicit currency on every reconcilable row. The message intentionally
   // matches the engine's so missing, foreign, and ineligible read alike.
-  const account = (await db.execute<{ currency: string | null }>(sql`
-    select currency_restriction as currency from accounts
+  const account = (await db.execute<{ currency: string | null; subsidiary_id: string | null }>(sql`
+    select currency_restriction as currency, subsidiary_id from accounts
      where id = ${body.accountId} and org_id = ${user.orgId}
        and reconcilable and is_active and not is_summary
   `))
   if (!account.rows[0]) {
     return NextResponse.json({ error: 'Account not found or not reconcilable' }, { status: 422 })
   }
+  // A schedule files statements into its account: binding one to another
+  // entity's account (or a shared one, for a restricted caller) is uniform
+  // not-found, keeping the eligibility refusal for genuinely unusable rows.
+  const scoped = guardSubsidiaryScope(gate, account.rows[0]!.subsidiary_id)
+  if (scoped) return scoped
   if (!account.rows[0].currency) {
     return NextResponse.json({ error: 'Reconcilable accounts require an explicit currency before statement import or reconciliation' }, { status: 422 })
   }

@@ -68,6 +68,7 @@
       "description": "Bank accounts, statement parsing (BAI2, CAMT, MT940), reconciliation, source evidence policy, bank feed providers.",
       "dependsOn": [
         "money",
+        "organization",
         "platform"
       ]
     },

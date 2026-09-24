@@ -6,8 +6,9 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../lib/authz'
+import { requirePermission, subsidiaryScopeAllows } from '../../../../../lib/authz'
 import { featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
+import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { listReconcilableBankAccounts } from '../../../../../lib/banking-accounts'
 import type { BankFeedsClient } from './BankFeedsClient'
 
@@ -113,7 +114,9 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
              a.number as "accountNumber", a.name as "accountName"
         from bank_feed_connections c
         join accounts a on a.id = c.account_id and a.org_id = c.org_id
-       where c.org_id = ${authz.user.orgId} order by c.created_at desc
+       where c.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
+       order by c.created_at desc
     `),
     listReconcilableBankAccounts(authz.user.orgId),
     db.execute<SftpServerRow>(sql`
@@ -128,7 +131,9 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
              a.number as "accountNumber", a.name as "accountName"
         from sftp_import_schedules sc
         join accounts a on a.id = sc.account_id and a.org_id = sc.org_id
-       where sc.org_id = ${authz.user.orgId} order by sc.created_at desc
+       where sc.org_id = ${authz.user.orgId}
+         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
+       order by sc.created_at desc
     `),
     loadDaemonConfig(),
     headers(),
@@ -141,10 +146,14 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
     host,
     fingerprint: hostKeyFingerprint(cfg.hostKey),
   }
-  const accounts = eligible.map((a) => ({
-    id: a.id,
-    label: [a.number, a.name].filter(Boolean).join(' · '),
-  }))
+  // The connection/schedule account pickers name only the caller's own
+  // subsidiaries' accounts, mirroring the setup APIs' scoping.
+  const accounts = eligible
+    .filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
+    .map((a) => ({
+      id: a.id,
+      label: [a.number, a.name].filter(Boolean).join(' · '),
+    }))
 
   return {
     // Client-side dates stay raw: the island renders them with
@@ -154,7 +163,9 @@ export async function loadBankFeeds(): Promise<BankFeedsData> {
       lastSyncAt: iso(c.lastSyncAt),
       lastAttemptAt: iso(c.lastAttemptAt),
     })),
-    sftpServers: servers.rows.map((s) => ({
+    // Servers are org-wide configuration with no account to scope by: a
+    // restricted caller sees none, mirroring the servers API.
+    sftpServers: (authz.allowedSubsidiaryIds !== null ? [] : servers.rows).map((s) => ({
       ...s,
       lastConnectedAt: iso(s.lastConnectedAt),
     })),

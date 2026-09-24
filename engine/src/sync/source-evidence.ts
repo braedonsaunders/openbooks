@@ -179,7 +179,8 @@ export async function applySourceReconciliationEvidence(opts: {
     if (!state.reconciledThrough) continue;
     const signed = await signOffFromSourceEvidence(
       { accountId: state.accountId },
-      { orgId, userId: actorId },
+      // Sync-lane system sign-off: explicit unrestricted scope.
+      { orgId, userId: actorId, allowedSubsidiaryIds: null },
     );
     if (signed.signed) {
       outcome.signedOff.push({

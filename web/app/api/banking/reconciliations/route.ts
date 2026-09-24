@@ -7,6 +7,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { bankingErrorResponse } from '../util'
 
@@ -28,6 +29,7 @@ export async function GET(req: Request) {
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
      where r.org_id = ${user.orgId}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}
        ${accountId ? sql` and r.account_id = ${accountId}` : sql``}
      order by r.created_at desc
      limit 200
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
         throughDate: body.throughDate,
         statementBalance,
       },
-      { orgId: user.orgId, userId: user.id },
+      { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     return NextResponse.json({ id })
   } catch (e) {

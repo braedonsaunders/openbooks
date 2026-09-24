@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking/banking.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../../../lib/authz'
+import { can, requirePermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { openingCarryStartDate } from '../../../../../../lib/banking-accounts'
 import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
 
@@ -74,6 +74,7 @@ interface ReconciliationRow extends Record<string, unknown> {
   account_name: string
   evidence_kind: string
   evidence_connector: string | null
+  account_subsidiary_id: string | null
 }
 
 export interface ReconcileStmtRow extends Record<string, unknown> {
@@ -171,7 +172,8 @@ export async function loadReconciliation(
     select r.id, r.account_id, r.through_date, r.statement_balance, r.currency, r.status,
            r.signed_off_at, u.name as signed_off_by_name,
            a.number as account_number, a.name as account_name,
-           r.evidence_kind, r.evidence_connector
+           r.evidence_kind, r.evidence_connector,
+           a.subsidiary_id as account_subsidiary_id
       from reconciliations r
       join accounts a on a.id = r.account_id and a.org_id = r.org_id
       left join users u on u.id = r.signed_off_by
@@ -179,10 +181,12 @@ export async function loadReconciliation(
        and r.org_id = ${authz.user.orgId}
   `))
   const recon = reconRes.rows[0]
-  if (!recon) notFound()
+  // Sessions on another entity's account (or a shared account, for a
+  // restricted reader) do not exist as far as this page is concerned.
+  if (!recon || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, recon.account_subsidiary_id)) notFound()
   const { money } = await getMoneyFormatter(authz.user.orgId, recon.currency)
 
-  const ctx = { orgId: authz.user.orgId, userId: authz.user.id }
+  const ctx = { orgId: authz.user.orgId, userId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }
   const totals = await reconciliationTotals(reconciliationId, ctx)
   const bookId = await reconciliationBookId(db, ctx.orgId)
   const signedOff = recon.status === 'signed_off'

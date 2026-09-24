@@ -5,6 +5,7 @@ import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/d
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatchWithJournal, excludeStatementLine } from '@openbooks/engine/src/banking/banking.ts'
+import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { controlDeps } from "../../engine/src/ledger/document-service.ts";
 import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
@@ -41,11 +42,40 @@ export * from './banking-rules-core'
 // ---------------------------------------------------------------------------
 
 /**
+ * The subsidiary owning a bank account, for scope gating. Missing accounts
+ * resolve null here so each caller keeps its own not-found contract; scope
+ * denials always refuse the uniform not-found.
+ */
+async function bankAccountSubsidiary(orgId: string, accountId: string): Promise<string | null | undefined> {
+  const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId" from accounts
+     where id = ${accountId} and org_id = ${orgId}
+  `)).rows[0]
+  return row?.subsidiaryId
+}
+
+/** Scope-gate a bank account through the canonical module: out-of-scope is uniform not-found. */
+function requireBankAccountInScope(
+  subsidiaryId: string | null | undefined,
+  scope: ReadonlySet<string> | null,
+): void {
+  if (!subsidiaryScopeAllows(scope, subsidiaryId ?? null)) {
+    throw new ScopeNotFoundError()
+  }
+}
+
+/**
  * Find the account's open reconciliation, or start one at the latest statement
  * date/closing balance (today/0 if no statements). The single matching
  * container shared by Match Bank Data, rules, and reconciliation sign-off.
  */
-export async function ensureOpenReconciliation(orgId: string, userId: string, accountId: string): Promise<string> {
+export async function ensureOpenReconciliation(
+  orgId: string,
+  userId: string,
+  accountId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<string> {
+  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
   const open = (await db.execute<{ id: string }>(sql`
     select id from reconciliations
      where org_id = ${orgId} and account_id = ${accountId} and status <> 'signed_off'
@@ -61,7 +91,10 @@ export async function ensureOpenReconciliation(orgId: string, userId: string, ac
   `))
   const throughDate = latest.rows[0]?.through_date ?? await businessToday(orgId)
   const statementBalance = latest.rows[0]?.closing ?? '0'
-  const rec = await startReconciliation({ accountId, throughDate, statementBalance }, { orgId, userId })
+  const rec = await startReconciliation(
+    { accountId, throughDate, statementBalance },
+    { orgId, userId, allowedSubsidiaryIds: scope },
+  )
   return rec.id
 }
 
@@ -110,8 +143,14 @@ async function loadLines(orgId: string, accountId: string, status: 'unmatched' |
  * are counted but left for the user to confirm in Match Bank Data. Rules are
  * evaluated by ascending priority; the first match wins.
  */
-export async function applyRulesToAccount(orgId: string, userId: string, accountId: string): Promise<ApplyResult> {
-  const ctx = { orgId, userId }
+export async function applyRulesToAccount(
+  orgId: string,
+  userId: string,
+  accountId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<ApplyResult> {
+  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), scope)
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
   const rules = await loadActiveRules(orgId)
   const result: ApplyResult = { matched: 0, excluded: 0, categorized: 0, suggested: 0, scanned: 0 }
   if (rules.length === 0) return result
@@ -122,7 +161,7 @@ export async function applyRulesToAccount(orgId: string, userId: string, account
 
   let reconciliationId: string | null = null
   const ensureReconciliation = async (): Promise<string> => {
-    if (!reconciliationId) reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId)
+    if (!reconciliationId) reconciliationId = await ensureOpenReconciliation(orgId, userId, accountId, scope)
     return reconciliationId
   }
 
@@ -162,8 +201,9 @@ export async function applyRuleToLine(
   orgId: string,
   userId: string,
   opts: { statementLineId: string; ruleId: string; reconciliationId?: string },
+  scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ctx = { orgId, userId }
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
   const ruleRes = (await db.execute<RuleRow>(sql`
     select id, name, criteria, outcome, priority, is_active
       from bank_match_rules where id = ${opts.ruleId} and org_id = ${orgId}
@@ -173,14 +213,17 @@ export async function applyRuleToLine(
   // A disabled rule must never post: without this, deactivation is enforced
   // only by the UI hiding the rule while the API still fires it.
   if (!rule.is_active) throw new Error('Rule is not active')
-  const lineRes = (await db.execute<(BankLine & { account_id: string })>(sql`
-    select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id
+  const lineRes = (await db.execute<(BankLine & { account_id: string; subsidiaryId: string | null })>(sql`
+    select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref, l.currency, s.source, s.account_id,
+           a.subsidiary_id as "subsidiaryId"
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
+  requireBankAccountInScope(line.subsidiaryId, scope)
   if (rule.outcome.action === 'exclude') {
     await excludeStatementLine(
       line.id,
@@ -189,7 +232,7 @@ export async function applyRuleToLine(
     )
     return
   }
-  const recId = opts.reconciliationId ?? (await ensureOpenReconciliation(orgId, userId, line.account_id))
+  const recId = opts.reconciliationId ?? (await ensureOpenReconciliation(orgId, userId, line.account_id, scope))
   await postCategorizeForLine(orgId, userId, ctx, recId, line.account_id, line, rule)
 }
 
@@ -197,7 +240,7 @@ export async function applyRuleToLine(
 async function postCategorizeForLine(
   orgId: string,
   userId: string,
-  ctx: { orgId: string; userId: string },
+  ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
   reconciliationId: string,
   bankAccountId: string,
   line: BankLine,
@@ -270,8 +313,14 @@ export async function previewRules(
     windowDays?: number
     onlyUnmatched?: boolean
     limit?: number
-  } = {},
+    /**
+     * Canonical scope, required from every caller: restricted callers
+     * preview only their own subsidiaries' accounts.
+     */
+    allowedSubsidiaryIds: ReadonlySet<string> | null
+  } = { allowedSubsidiaryIds: null },
 ): Promise<PreviewResult> {
+  requireBankAccountInScope(await bankAccountSubsidiary(orgId, accountId), opts.allowedSubsidiaryIds ?? null)
   const windowDays = opts.windowDays ?? 90
   const lines = await loadLines(orgId, accountId, opts.onlyUnmatched ? 'unmatched' : 'any', windowDays)
   const saved = await loadActiveRules(orgId)
@@ -458,16 +507,24 @@ export async function addJournalMatchFromLine(
   orgId: string,
   userId: string,
   opts: { statementLineId: string; offsetAccountId: string; reconciliationId: string },
+  scope: ReadonlySet<string> | null,
 ): Promise<void> {
-  const ctx = { orgId, userId }
-  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string }>(sql`
-    select l.posted_on, l.amount, l.description, l.currency, s.account_id
+  const ctx = { orgId, userId, allowedSubsidiaryIds: scope }
+  const lineRes = (await db.execute<{ posted_on: string; amount: string; description: string | null; currency: string; account_id: string; subsidiaryId: string | null }>(sql`
+    select l.posted_on, l.amount, l.description, l.currency, s.account_id,
+           a.subsidiary_id as "subsidiaryId"
       from bank_statement_lines l
       join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.id = ${opts.statementLineId} and l.org_id = ${orgId} and l.match_status = 'unmatched'
   `))
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
+  // Both legs stay inside the caller's boundary: the bank leg's account and
+  // the chosen offset account. The session itself is gated again inside
+  // createMatchWithJournal.
+  requireBankAccountInScope(line.subsidiaryId, scope)
+  requireBankAccountInScope(await bankAccountSubsidiary(orgId, opts.offsetAccountId), scope)
   await createMatchWithJournal(
     {
       reconciliationId: opts.reconciliationId,

@@ -9,6 +9,7 @@ import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -42,6 +43,10 @@ async function currentRow(tx: SqlExecutor, id: string, orgId: string) {
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
+  // Rotating credentials or toggling a shared login is org-wide
+  // configuration (canonical org-wide-policy 403).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -132,6 +137,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
+  // Deleting a shared login is org-wide configuration (canonical
+  // org-wide-policy 403).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

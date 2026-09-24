@@ -10,6 +10,7 @@ import {
   unmatchStatementLine,
 } from "@openbooks/engine/src/banking/banking.ts";
 import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { PostingError } from "@openbooks/engine/src/ledger/posting-contracts.ts";
 import { addJournalMatchFromLine, JournalPostingDeniedError } from "../banking-rules";
@@ -38,6 +39,11 @@ function bankingFailure(error: unknown): never {
   // A GL-posting refusal names its remedy and carries the caller's 403,
   // exactly like the banking routes map it — never a bare tool failure.
   if (error instanceof JournalPostingDeniedError) throw forbidden("gl.post");
+  // A canonical scope denial stays a 404 here exactly like at the routes:
+  // the session or line is outside the caller's boundary, not invalid input.
+  if (error instanceof ScopeNotFoundError) {
+    throw new ApplicationError("invalid_input", error.message, error.status);
+  }
   if (
     error instanceof BankingError
     || error instanceof PostingError
@@ -76,8 +82,19 @@ async function reconciliationSubsidiary(orgId: string, reconciliationId: string)
   return row.subsidiaryId;
 }
 
-function bankingContext(context: ApplicationContext): { orgId: string; userId: string } {
-  return { orgId: context.authz.user.orgId, userId: context.authz.user.id };
+function bankingContext(context: ApplicationContext): {
+  orgId: string;
+  userId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+} {
+  // Mutations pre-gate through assertSubsidiaryAccess above; threading the
+  // canonical scope into the engine keeps the same boundary inside every
+  // service the adapters share with the routes.
+  return {
+    orgId: context.authz.user.orgId,
+    userId: context.authz.user.id,
+    allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
+  };
 }
 
 /** Reconciliation sessions — same query shape as `list_bank_reconciliations`. */
@@ -225,6 +242,7 @@ export async function listApplicationBankFeeds(context: ApplicationContext) {
       from bank_feed_connections c
       join accounts a on a.id = c.account_id and a.org_id = c.org_id
      where c.org_id = ${context.authz.user.orgId}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, context.authz.allowedSubsidiaryIds)}
      order by c.created_at desc
      limit 200
   `)).rows;
@@ -351,7 +369,7 @@ export async function matchStatementLineWithJournal(context: ApplicationContext,
           statementLineId: input.statementLineId,
           offsetAccountId: input.offsetAccountId,
           reconciliationId: input.reconciliationId,
-        });
+        }, context.authz.allowedSubsidiaryIds);
         return { matched: true };
       } catch (error) {
         bankingFailure(error);

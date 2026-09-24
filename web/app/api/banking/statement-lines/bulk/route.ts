@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     const result = await excludePossibleDuplicates(
       String(body.accountId),
       String(body.reason ?? ''),
-      { orgId: user.orgId, userId: user.id },
+      { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
     )
     return NextResponse.json({ ok: true, excluded: result.excluded })
   } catch (e) {

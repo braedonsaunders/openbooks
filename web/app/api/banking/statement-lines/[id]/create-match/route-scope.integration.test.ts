@@ -79,7 +79,7 @@ async function fixture(): Promise<Fixture> {
       (id, org_id, statement_id, line_number, posted_on, amount, currency, description, match_status, account_id)
     values (${lineId}, ${org.orgId}, ${statementId}, 1, ${org.date}, '1000.0000', 'CAD', 'Scope deposit', 'unmatched', ${bankId})
   `));
-  const reconId = await withBypassContext(() => ensureOpenReconciliation(org.orgId, actorId, bankId));
+  const reconId = await withBypassContext(() => ensureOpenReconciliation(org.orgId, actorId, bankId, null));
   state.orgId = org.orgId;
   state.actorId = actorId;
   state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

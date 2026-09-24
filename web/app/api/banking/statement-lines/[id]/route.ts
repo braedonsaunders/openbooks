@@ -19,10 +19,24 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const body = (parsedBody.data) as { action?: string; reason?: string }
   try {
     if (body.action === 'exclude') {
-      await excludeStatementLine(id, String(body.reason ?? ''), { orgId: user.orgId, userId: user.id })
+      await excludeStatementLine(id, String(body.reason ?? ''), {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
     }
-    else if (body.action === 'restore') await restoreStatementLine(id, { orgId: user.orgId, userId: user.id })
-    else if (body.action === 'clear-duplicate') await clearPossibleDuplicateFlag(id, { orgId: user.orgId, userId: user.id })
+    else if (body.action === 'restore')
+      await restoreStatementLine(id, {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+    else if (body.action === 'clear-duplicate')
+      await clearPossibleDuplicateFlag(id, {
+        orgId: user.orgId,
+        userId: user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
     else return NextResponse.json({ error: 'action must be "exclude", "restore" or "clear-duplicate"' }, { status: 400 })
     return NextResponse.json({ ok: true })
   } catch (e) {

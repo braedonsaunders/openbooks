@@ -19,7 +19,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
   }
   try {
-    const id = await ensureOpenReconciliation(user.orgId, user.id, body.accountId)
+    const id = await ensureOpenReconciliation(
+      user.orgId,
+      user.id,
+      body.accountId,
+      gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json({ id })
   } catch (e) {
     return bankingErrorResponse(e)

@@ -12,6 +12,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -27,13 +28,24 @@ export async function GET(_req: Request, { params }: Params) {
     const rec = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
              r.signed_off_by, r.signed_off_at, r.created_at,
-             a.number as account_number, a.name as account_name
+             a.number as account_number, a.name as account_name,
+             a.subsidiary_id as account_subsidiary_id
         from reconciliations r
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${id} and r.org_id = ${user.orgId}
     `))
     if (!rec.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const totals = await reconciliationTotals(id, { orgId: user.orgId, userId: user.id })
+    // A session on another entity's account (or a shared account, for a
+    // restricted caller) reads exactly like a missing session.
+    const scoped = guardSubsidiaryScope(gate, rec.rows[0].account_subsidiary_id as string | null)
+    if (scoped) return scoped
+    const totals = await reconciliationTotals(id, {
+      orgId: user.orgId,
+      userId: user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
+    // The ownership column gated the read; it is not part of the response shape.
+    delete rec.rows[0].account_subsidiary_id
     return NextResponse.json({ reconciliation: rec.rows[0], totals })
   } catch (e) {
     return bankingErrorResponse(e)
@@ -63,7 +75,7 @@ export async function PATCH(req: Request, { params }: Params) {
     const totals = await adjustReconciliation(id, {
       throughDate: body.throughDate,
       statementBalance: statementBalance ?? undefined,
-    }, { orgId: user.orgId, userId: user.id })
+    }, { orgId: user.orgId, userId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     if (totals === null) {
       return NextResponse.json({ error: 'not found or already signed off' }, { status: 404 })
     }
@@ -81,7 +93,11 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    await discardReconciliation(id, { orgId: user.orgId, userId: user.id })
+    await discardReconciliation(id, {
+      orgId: user.orgId,
+      userId: user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return bankingErrorResponse(e)

@@ -351,7 +351,7 @@ test(
           lines,
           currency: "CAD",
         },
-        { orgId: f.org.orgId, userId: f.authorId },
+        { orgId: f.org.orgId, userId: f.authorId, allowedSubsidiaryIds: null },
       );
       assert.equal(result.imported, 1);
 

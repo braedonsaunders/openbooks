@@ -23,11 +23,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'reconciliationId and offsetAccountId are required' }, { status: 400 })
   }
   try {
-    await addJournalMatchFromLine(user.orgId, user.id, {
-      statementLineId: id,
-      offsetAccountId: body.offsetAccountId,
-      reconciliationId: body.reconciliationId,
-    })
+    await addJournalMatchFromLine(
+      user.orgId,
+      user.id,
+      {
+        statementLineId: id,
+        offsetAccountId: body.offsetAccountId,
+        reconciliationId: body.reconciliationId,
+      },
+      gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })

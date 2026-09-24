@@ -77,7 +77,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
-      const ctx = { orgId: org.orgId, userId: actor };
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
@@ -203,7 +203,7 @@ test(
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
-      const ctx = { orgId: org.orgId, userId: actor };
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`
         update accounts
            set reconcilable = true, currency_restriction = 'CAD'
