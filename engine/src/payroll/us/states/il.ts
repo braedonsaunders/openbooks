@@ -132,9 +132,12 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // called when Illinois withholding applies, so there is no second, divergent
   // copy of the rule here.
   //
-  // The exempt box on the IL-W-4 itself is different: it is an assertion by the
-  // employee about their own liability, so it belongs to the certificate.
-  if (certificateFlag(input.certificate, "exempt")) {
+  // Pub 130 (R-02/26), pp. 7–8: an IL-W-4 total-exemption claim is honored only
+  // when the employee also claims total exemption on federal Form W-4. Without
+  // that federal claim, disregard the IL-W-4 and withhold with no allowances.
+  const disregardCertificate = certificateFlag(input.certificate, "exempt")
+    && input.federalWithholdingExempt !== true;
+  if (certificateFlag(input.certificate, "exempt") && !disregardCertificate) {
     trace("IL_EXEMPT", 1n);
     return { state: "IL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
@@ -147,8 +150,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // restates it as "withhold … with no allowances". So the DEFAULT is zero, not
   // one — and it is the certificate's declared default, not an assumption made
   // here.
-  const line1 = certificateCount(input.certificate, "line1_allowances") ?? 0;
-  const line2 = certificateCount(input.certificate, "line2_allowances") ?? 0;
+  const line1 = disregardCertificate ? 0 : certificateCount(input.certificate, "line1_allowances") ?? 0;
+  const line2 = disregardCertificate ? 0 : certificateCount(input.certificate, "line2_allowances") ?? 0;
 
   const annualExemption = U(rates.line1Allowance) * BigInt(line1)
     + U(rates.line2Allowance) * BigInt(line2);
@@ -171,7 +174,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("IL_TAX", tax);
 
   // Step 5 — the Line 3 additional amount, added AFTER the rate.
-  const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  const extra = disregardCertificate
+    ? 0n
+    : U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   const total = tax + extra;
   trace("IL_WITHHELD", total);
 

@@ -315,6 +315,7 @@ export async function computeUsStatutory(
         )
         : undefined,
       federalIncomeTax: statutory.fit,
+      federalWithholdingExempt: bool(empFact("US", emp, "tax_exempt")),
       taxQualifiedDeductions,
       certificateFor,
       regionTax,
