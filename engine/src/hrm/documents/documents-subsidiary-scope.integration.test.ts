@@ -17,6 +17,7 @@ import {
   getDocumentDetail,
   listDocuments,
   readDocumentFile,
+  acknowledgeDocument,
   sendDocument,
   setLegalHold,
   uploadDocument,
@@ -286,6 +287,41 @@ test("an A-restricted manager cannot read, download, send, hold or void B's docu
       documentId: h.docAId,
     });
     assert.equal(detail.id, h.docAId);
+  });
+});
+
+test("in-session acknowledgment refuses signature templates and terminal documents before recording an event", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    await db.execute(sql`
+      update hrm_documents set status = 'signed'
+       where org_id = ${h.org.orgId} and id = ${h.docAId}
+    `);
+    const eventsBefore = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_document_events
+       where org_id = ${h.org.orgId} and document_id = ${h.docAId}
+    `)).rows[0]!.count;
+    await assert.rejects(
+      acknowledgeDocument({ orgId: h.org.orgId, actorId: h.adminId, documentId: h.docAId }),
+      (error: unknown) => error instanceof HrmDocumentsError && /only an open acknowledgment document/.test(error.message),
+    );
+    await db.execute(sql`
+      update hrm_documents set status = 'sent'
+       where org_id = ${h.org.orgId} and id = ${h.docAId}
+    `);
+    await db.execute(sql`
+      update hrm_document_templates set acknowledgment_only = false
+       where org_id = ${h.org.orgId} and id = ${h.templateId}
+    `);
+    await assert.rejects(
+      acknowledgeDocument({ orgId: h.org.orgId, actorId: h.adminId, documentId: h.docAId }),
+      (error: unknown) => error instanceof HrmDocumentsError && /requires a signature/.test(error.message),
+    );
+    const eventsAfter = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_document_events
+       where org_id = ${h.org.orgId} and document_id = ${h.docAId}
+    `)).rows[0]!.count;
+    assert.equal(eventsAfter, eventsBefore, "refused acknowledgments leave no audit event");
+    assert.equal(await docStatus(h.org.orgId, h.docAId), "sent");
   });
 });
 
