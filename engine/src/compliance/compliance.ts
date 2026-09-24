@@ -252,20 +252,28 @@ export function addDays(from: string, days: number): string {
 function evidenceShortfalls(policy: RequirementPolicy, record: EvidenceRecord): ComplianceReason[] {
   const reasons: ComplianceReason[] = [];
   const needsAmount = policy.minCoverageAmount !== null || policy.minAggregateAmount !== null;
-  if (needsAmount) {
-    // A limit is a money amount: comparing across currencies without an FX
-    // policy would silently approve or reject coverage. Refuse instead.
-    if (policy.coverageCurrency && record.coverageCurrency !== policy.coverageCurrency) {
-      reasons.push("coverage_currency_mismatch");
-    }
-  }
+  // A limit is a money amount: comparing across currencies without an FX
+  // policy would silently approve or reject coverage. Refuse instead. A
+  // minimum with no denomination is the same hole — judging a foreign
+  // amount against a unitless number — so it fails closed too. Once the
+  // currencies are incomparable the numeric comparisons below are skipped
+  // as well: a below-minimum verdict across currencies is a guess, and only
+  // the mismatch names the remedy. (A missing amount is currency-independent
+  // and is still reported.)
+  const currencyMismatch =
+    needsAmount && (!policy.coverageCurrency || record.coverageCurrency !== policy.coverageCurrency);
+  if (currencyMismatch) reasons.push("coverage_currency_mismatch");
   if (policy.minCoverageAmount !== null) {
     if (record.coverageAmount === null) reasons.push("coverage_amount_missing");
-    else if (cmp(record.coverageAmount, policy.minCoverageAmount) < 0) reasons.push("coverage_below_minimum");
+    else if (!currencyMismatch && cmp(record.coverageAmount, policy.minCoverageAmount) < 0) {
+      reasons.push("coverage_below_minimum");
+    }
   }
   if (policy.minAggregateAmount !== null) {
     if (record.aggregateAmount === null) reasons.push("coverage_amount_missing");
-    else if (cmp(record.aggregateAmount, policy.minAggregateAmount) < 0) reasons.push("aggregate_below_minimum");
+    else if (!currencyMismatch && cmp(record.aggregateAmount, policy.minAggregateAmount) < 0) {
+      reasons.push("aggregate_below_minimum");
+    }
   }
   if (policy.requiresAdditionalInsured && !record.additionalInsured) reasons.push("missing_additional_insured");
   if (policy.requiresWaiverOfSubrogation && !record.waiverOfSubrogation) {
@@ -597,12 +605,19 @@ export async function loadRequirementPolicies(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
 ): Promise<RequirementPolicy[]> {
+  // A minimum with no denomination is judged in the org's base currency.
+  // (The table CHECK requires a currency alongside any minimum, so this
+  // coalesce only ever fires for rows that predate it; anything still
+  // undenominated after it fails closed in evidenceShortfalls instead of
+  // comparing across currencies.)
   const r = (await runner.execute<RequirementPolicy>(sql`
     select id, code, name, category, class_id as "classId",
            requires_expiry as "requiresExpiry",
            min_coverage_amount as "minCoverageAmount",
            min_aggregate_amount as "minAggregateAmount",
-           coverage_currency as "coverageCurrency",
+           case when min_coverage_amount is not null or min_aggregate_amount is not null
+                then coalesce(coverage_currency, (select base_currency from orgs where id = ${orgId}))
+                else coverage_currency end as "coverageCurrency",
            requires_additional_insured as "requiresAdditionalInsured",
            requires_waiver_of_subrogation as "requiresWaiverOfSubrogation",
            requires_primary_noncontributory as "requiresPrimaryNoncontributory",
