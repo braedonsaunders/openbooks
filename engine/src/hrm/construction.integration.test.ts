@@ -19,7 +19,6 @@ import {
 import { prevailingWageForTimeEntry } from "./construction/labor-hook.ts";
 import {
   acknowledgeFinding,
-  amendRun,
   approveEntry,
   assignClassification,
   checkDay,
@@ -34,17 +33,13 @@ import {
   createSchedule,
   addScheduleLine,
   dailySplit,
-  downloadRun,
   generate,
   listFindings,
   listFormats,
-  listRuns,
   markSeamConsumed,
-  projectComplianceSummary,
   recordFinding,
   resolveFinding,
   resolveWage,
-  submitRun,
   voidEntry,
 } from "./construction/index.ts";
 
@@ -162,31 +157,6 @@ async function seedComponent(orgId: string, kind: string): Promise<string> {
     values (${id}, ${orgId}, ${`PD_${id.slice(0, 6)}`}, 'Per diem', ${kind}, true)
   `);
   return id;
-}
-
-async function seedPayWeek(orgId: string, subsidiaryId: string, actorId: string, partyId: string, weekStart: string, weekEnd: string): Promise<string> {
-  const scheduleId = randomUUID();
-  await db.execute(sql`
-    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end)
-    values (${scheduleId}, ${orgId}, 'Weekly', 'weekly', 52, '2026-01-01'::date)
-  `);
-  const runId = randomUUID();
-  await db.execute(sql`
-    insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                           currency, status, created_by, updated_by)
-    values (${orgId}, ${runId}, 'pay_run', ${`PAY-${runId.slice(0, 8)}`},
-            ${subsidiaryId}, ${weekEnd}::date, 'USD', 'approved', ${actorId}, ${actorId})
-  `);
-  await db.execute(sql`
-    insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date, tax_year, run_status)
-    values (${runId}, ${orgId}, ${scheduleId}, ${weekStart}::date, ${weekEnd}::date, ${weekEnd}::date, 2026, 'committed')
-  `);
-  await db.execute(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province, periods_per_year,
-                           pay_date, tax_year, currency_code, gross, net_pay)
-    values (${orgId}, ${runId}, ${partyId}, 'TX', 52, ${weekEnd}::date, 2026, 'USD', '900.0000', '700.0000')
-  `);
-  return runId;
 }
 
 async function assertConstructionRefusal(fn: () => Promise<unknown>, pattern: RegExp): Promise<void> {
@@ -516,70 +486,23 @@ test("comp classes resolve by priority and refuse when nothing matches", { skip:
   });
 });
 
-test("certified payroll: formats listed, empty week refused, payload frozen, amend linked", { skip: !DB }, async () => {
+test("certified payroll does not offer generic US drafts as submission artifacts", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { org, adminId } = h;
-    const { employmentId, partyId } = await seedWorker(org.orgId, org.subsidiaryId, "Certified Worker");
     const projectId = await seedProject(org.orgId, "Certified Job");
-    // The US pack declares two files; a pack with none refuses by name.
     const listed = await listFormats(db, org.orgId, adminId);
     assert.equal(listed.packName, "United States");
-    assert.deepEqual(listed.formats.map((format) => format.key), ["federal-weekly", "state-xml"]);
-    const journey = await createClassification(db, {
-      orgId: org.orgId, actorId: adminId, code: "LAB-J", name: "Laborer journey", trade: "Labor",
-    });
-    const schedule = await createSchedule(db, {
-      orgId: org.orgId, actorId: adminId, kind: "prevailing_wage", name: "Certified schedule",
-      reciprocity: "jobsite_local", effectiveFrom: "2026-01-01",
-    });
-    await addScheduleLine(db, {
-      orgId: org.orgId, actorId: adminId, scheduleId: schedule.id, classificationId: journey.id,
-      baseRate: "45.0000", fringeRate: "5.0000", currency: "USD", effectiveFrom: "2026-01-01",
-    });
-    await assignClassification(db, {
-      orgId: org.orgId, actorId: adminId, employmentId, classificationId: journey.id, effectiveFrom: "2026-01-01",
-    });
-    await seedTime(org.orgId, partyId, projectId, "2026-09-08", "8.0000");
-    await seedTime(org.orgId, partyId, projectId, "2026-09-09", "8.0000");
-    // Week with no posted run refuses by name.
+    assert.deepEqual(listed.formats, []);
     await assertConstructionRefusal(
       () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
-      /No posted pay run covers/,
+      /The United States payroll pack declares no labor-compliance files/,
     );
-    // Unknown format refuses by name with the offered keys.
-    await seedPayWeek(org.orgId, org.subsidiaryId, adminId, partyId, "2026-09-07", "2026-09-13");
-    await assertConstructionRefusal(
-      () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "nope" }),
-      /not declared by the United States payroll pack/,
-    );
-    const run = await generate(db, {
-      orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly",
-    });
-    assert.equal(run.status, "generated");
-    const stored = (await db.execute<{ payload: { rows: unknown[]; rendered: { filename: string; body: string } } }>(sql`
-      select payload from hrm_certified_payroll_runs where id = ${run.id}::uuid
-    `)).rows[0]!.payload;
-    assert.equal(stored.rows.length, 2);
-    assert.ok(stored.rendered.body.includes("Certified Worker"));
-    assert.ok(stored.rendered.filename.endsWith("2026-09-13.txt"));
-    const file = await downloadRun(db, org.orgId, adminId, run.id);
-    assert.equal(file.body, stored.rendered.body);
-    const submitted = await submitRun(db, { orgId: org.orgId, actorId: adminId, runId: run.id });
-    assert.equal(submitted.status, "submitted");
-    const amended = await amendRun(db, { orgId: org.orgId, actorId: adminId, runId: run.id });
-    assert.equal(amended.status, "generated");
-    const reloaded = await listRuns(db, org.orgId, adminId, projectId);
-    assert.ok(reloaded.some((entry) => entry.id === amended.id && entry.status === "generated"));
-    // Cockpit data contract: schedules in scope, open count, last run.
-    const summary = await projectComplianceSummary(db, org.orgId, adminId, projectId);
-    assert.ok(summary.schedules.some((entry) => entry.id === schedule.id));
-    assert.equal(summary.lastRun?.id, amended.id);
-    assert.equal(summary.ratioBreachThisWeek, false);
-    // A GB org's pack declares no files: generation refuses by pack name.
     await db.execute(sql`update orgs set country = 'GB' where id = ${org.orgId}`);
+    const gb = await listFormats(db, org.orgId, adminId);
+    assert.deepEqual(gb.formats, []);
     await assertConstructionRefusal(
       () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
-      /refuses by name rather than borrowing another pack's form/,
+      /pack declares no labor-compliance files/,
     );
     await db.execute(sql`update orgs set country = 'US' where id = ${org.orgId}`);
   });
