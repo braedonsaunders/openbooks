@@ -1,44 +1,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
 
-test("registers scope every journal read to one accounting book", () => {
-  const source = readFileSync(new URL("./reports/registers.ts", import.meta.url), "utf8");
-  assert.match(source, /statementBookExpr/);
-  // accountRegister: trailing bookId with a primary-book default, applied to
-  // both the page query and the count query.
-  assert.match(source, /bookId\?: string \| null,\n(?:  \/\/.*\n)*  canSeePayroll\?: boolean,\n\) \{/);
-  // partyRegister: explicit opt threaded into the opening and lines queries.
-  assert.match(source, /maxLines\?: number; bookId\?: string \| null/);
-  // partnerStatement: forwards its caller's book into partyRegister.
-  assert.match(source, /bookId: opts\.bookId,/);
-  const direct = source.match(/e\.book_id = \$\{statementBookExpr\(/g) ?? [];
-  const shared = source.match(/\$\{bookFilter\}/g) ?? [];
-  assert.ok(
-    direct.length + shared.length >= 4,
-    `registers carry a book predicate on every journal read (direct ${direct.length}, shared ${shared.length})`,
-  );
-});
-
-test("resolveReport honors an explicit book for book-capable detail reports", () => {
-  const source = readFileSync(new URL("./report-run.ts", import.meta.url), "utf8");
-  assert.match(source, /detailBookId/);
-  for (const needle of [
-    "bookId: detailBookId",
-    "trialBalance(asOf, dims, orgId, detailBookId)",
-    "partnerBalances(s, orgId, asOf, detailBookId, dims)",
-    "cashFlow(from, to, dims, orgId, detailBookId)",
-    "cashFlowIndirect(from, to, dims, orgId, detailBookId)",
-  ]) {
-    assert.ok(source.includes(needle), `resolveReport threads the book into ${needle}`);
-  }
-});
+// Database partition: the register book-scoping contract needs PostgreSQL
+// (scratch org, parallel tax book, posted lines), so it lives under the
+// .integration suffix with no skip guard.
 
 test(
   "registers answer for the primary book when a parallel book posts the same activity",
-  { skip: !env.OPENBOOKS_DB_URL },
   () => {
     const source = `
       import assert from "node:assert/strict";
