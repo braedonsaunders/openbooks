@@ -1,11 +1,10 @@
 import { fromUnits, toUnits } from "../money/money.ts";
-import { parseQbdReportDate, type QbdReportRow } from "../qbd/qbxml.ts";
+import { assertUniformReportLocale, parseQbdReportAmount, parseQbdReportDate, type QbdReportAmount, type QbdReportRow } from "../qbd/qbxml.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 
-function cleanAmount(value: string | undefined): string {
-  const normalized = String(value ?? "").replaceAll(",", "").trim();
-  return normalized === "" ? "0" : normalized;
-}
+type ParsedAmounts =
+  | { ok: true; debit: QbdReportAmount; credit: QbdReportAmount }
+  | { ok: false; error: string };
 
 export type QbdPartyFamily = "customer" | "vendor" | "employee";
 
@@ -71,6 +70,29 @@ export function buildQbdLedgerDocuments(input: {
   ctx: NativeContext;
   baseCurrency: string;
 }): { documents: NativeDocument[]; unbuildable: { ref: string; reason: string }[] } {
+  // Amounts parse through the locale-aware parser exactly once, up front: a
+  // German `12,34` is twelve-thirty-four, never 1234. A cell that refuses
+  // (ambiguous or misplaced separators) marks its transaction unbuildable
+  // below with the parser's named remedy instead of corrupting the journal.
+  const parsed = new Map<QbdReportRow, ParsedAmounts>();
+  for (const row of input.rows) {
+    const scope = row.columns.TxnID ? `ledger transaction ${row.columns.TxnID}` : "ledger rows";
+    try {
+      const debit = parseQbdReportAmount(row.columns.Debit, scope);
+      const credit = parseQbdReportAmount(row.columns.Credit, scope);
+      parsed.set(row, { ok: true, debit, credit });
+    } catch (error) {
+      parsed.set(row, { ok: false, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  // A batch mixing US and European number formats refuses as a whole: the
+  // TB-vs-GL verification parses both sides the same way, so without this
+  // check a uniform scale error would stay green on both sides.
+  assertUniformReportLocale(
+    [...parsed.values()].flatMap((p) => (p.ok ? [p.debit, p.credit] : [])),
+    "ledger rows",
+  );
+
   const grouped = new Map<string, QbdReportRow[]>();
   for (const row of input.rows) {
     const txnId = row.columns.TxnID;
@@ -101,8 +123,14 @@ export function buildQbdLedgerDocuments(input: {
     let sum = 0n;
     const unmappedAccounts: string[] = [];
     let partyFailure: string | null = null;
+    let amountFailure: string | null = null;
     for (const row of transaction) {
-      const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+      const amounts = parsed.get(row)!;
+      if (!amounts.ok) {
+        if (!amountFailure) amountFailure = amounts.error;
+        continue;
+      }
+      const amount = toUnits(amounts.debit.text) - toUnits(amounts.credit.text);
       const sourceAccount = row.columns.Account ?? "";
       const accountRef = input.accountRefByName.get(sourceAccount);
       const account = accountRef ? input.ctx.accountByRef.get(accountRef) : undefined;
@@ -147,6 +175,10 @@ export function buildQbdLedgerDocuments(input: {
         ref: txnId,
         reason: `ledger transaction ${txnId} has ${unmappedAccounts.length} line(s) on unmapped account(s): ${names.join(", ")} — map them before import`,
       });
+      continue;
+    }
+    if (amountFailure) {
+      unbuildable.push({ ref: txnId, reason: amountFailure });
       continue;
     }
     if (partyFailure) {

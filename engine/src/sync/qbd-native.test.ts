@@ -38,6 +38,63 @@ test("QuickBooks ledger rows build an exactly balanced journal with subledger pa
   assert.deepEqual(doc.lines.map((line) => line.amount), ["1234.5678", "-1234.5678"]);
 });
 
+test("a German-locale ledger imports twelve-thirty-four as 12.34, never 1234", () => {
+  // Red-proof for the comma-stripping scale error: `12,34` stripped to 1234
+  // is a silent 100x overstatement, and `1.234,56` must read 1234.56.
+  const built = buildQbdLedgerDocuments({
+    rows: [
+      { rowType: "DataRow", columns: { TxnID: "txn-de", Date: "2024-01-31", TxnType: "Invoice", RefNumber: "1001", Name: "Acme", Account: "Accounts Receivable", Debit: "1.234,56" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-de", Date: "2024-01-31", Account: "Sales", Credit: "1.234,56" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-de2", Date: "2024-01-31", Name: "Acme", Account: "Accounts Receivable", Debit: "12,34" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-de2", Date: "2024-01-31", Account: "Sales", Credit: "12,34" } },
+    ],
+    accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+    partyRefByFamily: { customer: new Map([["Acme", "C:c1"]]), vendor: new Map(), employee: new Map() },
+    ctx: context(),
+    baseCurrency: "CAD",
+  });
+  assert.equal(built.unbuildable.length, 0);
+  assert.equal(built.documents.length, 2);
+  const byRef = new Map(built.documents.map((doc) => [doc.sourceRef, doc]));
+  assert.deepEqual(byRef.get("txn-de")!.lines.map((line) => line.amount), ["1234.5600", "-1234.5600"]);
+  assert.deepEqual(byRef.get("txn-de2")!.lines.map((line) => line.amount), ["12.3400", "-12.3400"]);
+});
+
+test("an ambiguous ledger amount is unbuildable with both readings named", () => {
+  const built = buildQbdLedgerDocuments({
+    rows: [
+      { rowType: "DataRow", columns: { TxnID: "txn-amb", Date: "2024-01-31", Name: "Acme", Account: "Accounts Receivable", Debit: "12,345" } },
+      { rowType: "DataRow", columns: { TxnID: "txn-amb", Date: "2024-01-31", Account: "Sales", Credit: "12,345" } },
+    ],
+    accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+    partyRefByFamily: { customer: new Map([["Acme", "C:c1"]]), vendor: new Map(), employee: new Map() },
+    ctx: context(),
+    baseCurrency: "CAD",
+  });
+  assert.equal(built.documents.length, 0);
+  assert.equal(built.unbuildable.length, 1);
+  assert.match(built.unbuildable[0]!.reason, /QuickBooks amount "12,345" in ledger transaction txn-amb is ambiguous/);
+  assert.match(built.unbuildable[0]!.reason, /reads as 12345 with US thousands separators and as 12\.345 with a European decimal comma/);
+});
+
+test("a ledger batch mixing US and European formats refuses as a whole", () => {
+  assert.throws(
+    () => buildQbdLedgerDocuments({
+      rows: [
+        { rowType: "DataRow", columns: { TxnID: "txn-us", Date: "2024-01-31", Name: "Acme", Account: "Accounts Receivable", Debit: "1,234.56" } },
+        { rowType: "DataRow", columns: { TxnID: "txn-us", Date: "2024-01-31", Account: "Sales", Credit: "1,234.56" } },
+        { rowType: "DataRow", columns: { TxnID: "txn-de", Date: "2024-01-31", Name: "Acme", Account: "Accounts Receivable", Debit: "1.234,56" } },
+        { rowType: "DataRow", columns: { TxnID: "txn-de", Date: "2024-01-31", Account: "Sales", Credit: "1.234,56" } },
+      ],
+      accountRefByName: new Map([["Accounts Receivable", "ar"], ["Sales", "sales"]]),
+      partyRefByFamily: { customer: new Map([["Acme", "C:c1"]]), vendor: new Map(), employee: new Map() },
+      ctx: context(),
+      baseCurrency: "CAD",
+    }),
+    /mixes US-style \(1,234\.56\) and European-style \(1\.234,56\) number formats/,
+  );
+});
+
 test("QuickBooks display dates normalize to the ISO document date", () => {
   // General-ledger report cells are locale display strings (amounts arrive
   // with thousands separators, dates as M/D/YYYY), while NativeDocument
