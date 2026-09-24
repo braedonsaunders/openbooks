@@ -28,8 +28,6 @@ registerHooks({
   },
 })
 
-const React = await import('react')
-Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
@@ -50,9 +48,11 @@ test('a non-JSON API refusal is translated and releases the row action', async (
   t.after(() => { act(() => root.unmount()); host.remove() })
 
   await act(async () => {
-    root.render(React.createElement(NextIntlClientProvider, { locale: 'en', messages },
-      React.createElement(ExpenseActions, { id: 'expense-1', status: 'draft', canSubmit: true, canPost: false, openHref: '/expenses/expense-1' }),
-    ))
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <ExpenseActions id="expense-1" status="draft" canSubmit canPost={false} openHref="/expenses/expense-1" />
+      </NextIntlClientProvider>,
+    )
   })
   const button = host.querySelector('button')!
   await act(async () => { button.click(); await new Promise((resolve) => setTimeout(resolve, 20)) })
