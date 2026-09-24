@@ -441,7 +441,14 @@ export async function readScorecardsForInterview(query: ScorecardReadQuery): Pro
   });
 }
 
-/** Hiring-manager summary: aggregates over submitted verdicts, missing seats by name. */
+/**
+ * Scorecard summary: aggregates over submitted verdicts. Privileged viewers
+ * (manage holders, the hiring manager on their own requisition) see missing
+ * seats by name; holders of the read grant on the interview's requisition
+ * get the same aggregates as a read-safe projection with names withheld —
+ * panel membership is not every reader's business. Private notes never
+ * appear on either path (only the author reads them, via the cards shape).
+ */
 export async function scorecardSummary(query: ScorecardReadQuery): Promise<ScorecardSummary> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -449,10 +456,20 @@ export async function scorecardSummary(query: ScorecardReadQuery): Promise<Score
   return withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     const chain = await interviewRequisition(db, orgId, interviewId);
+    let privileged = false;
     try {
       await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
+      privileged = true;
     } catch {
-      await requireOwnRequisitionForHiringManager(db, orgId, actorId, chain.requisitionId);
+      try {
+        await requireOwnRequisitionForHiringManager(db, orgId, actorId, chain.requisitionId);
+        privileged = true;
+      } catch {
+        privileged = false;
+      }
+    }
+    if (!privileged) {
+      await requireHrmRecruitingRead(db, orgId, actorId, chain.requisitionId);
     }
     const cards = (await db.execute<ScorecardRow>(sql`
       select id, interview_id as "interviewId", interviewer_party_id as "interviewerPartyId",
@@ -506,7 +523,8 @@ export async function scorecardSummary(query: ScorecardReadQuery): Promise<Score
       complete: cards.length > 0 && missing.length === 0,
       submittedCount: submitted.length,
       totalCount: cards.length,
-      missing,
+      // Read-safe projection: counts stay, names are privileged-only.
+      missing: privileged ? missing : [],
       overallCounts,
       perAttribute,
     };

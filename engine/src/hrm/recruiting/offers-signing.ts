@@ -3,7 +3,15 @@ import { sql } from "drizzle-orm";
 import { renderTemplate } from "@openbooks/pdf";
 import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
-import { requireHrmRecruitingManage } from "../authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  requireAggregateRecruitingRead,
+  requireHrmRecruitingManage,
+  requireHrmRecruitingManageOrg,
+  requireHrmRecruitingRead,
+  requireHrmRecruitingReadOrg,
+} from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId } from "./input.ts";
 import { loadOffer } from "./offers.ts";
@@ -144,8 +152,11 @@ export async function listOfferTemplates(query: {
   includeInactive?: boolean;
 }): Promise<readonly OfferTemplateDTO[]> {
   const orgId = requireOrgId(query.orgId);
-  void requireActorId(query.actorId);
+  const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
+    // Shared configuration: any recruiting reader lists; writing needs
+    // unrestricted scope (see createOfferTemplate).
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const rows = (await db.execute<TemplateRow>(sql`
       select id, name, body_template as "bodyTemplate", clauses,
@@ -176,6 +187,11 @@ export async function createOfferTemplate(query: {
   }
   const clauses = query.clauses === undefined ? [] : parseClauses(query.clauses, query.name.trim());
   return withOrgTransaction(orgId, async () => {
+    // Org-wide shared configuration: the manage grant, then the canonical
+    // unrestricted-scope assertion. (This surface previously enforced no
+    // grant at all.)
+    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmOfferSigning");
     try {
       const row = (await db.execute<TemplateRow>(sql`
@@ -385,7 +401,13 @@ export async function listOfferVersions(query: {
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
     if (!application) throw new RecruitingError("NOT_FOUND", "application is not visible in this organization");
-    await requireHrmRecruitingManage(db, orgId, actorId, application.requisitionId);
+    // Version history is a read: the read grant on the offer's requisition
+    // opens it (scope rides the requisition, never the org).
+    try {
+      await requireHrmRecruitingManage(db, orgId, actorId, application.requisitionId);
+    } catch {
+      await requireHrmRecruitingRead(db, orgId, actorId, application.requisitionId);
+    }
     const rows = (await db.execute<OfferVersionDTO>(sql`
       select id, offer_id as "offerId", version, rendered_file_id as "renderedFileId",
              created_at as "createdAt"
@@ -468,9 +490,12 @@ export async function listOffersWithSignature(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId, "hrmOfferSigning");
-    const { requireAggregateRecruitingRead } = await import("../authorization.ts");
+    // The read grant plus the actor's employer scope over each offer's
+    // requisition. (This filter previously compared the application
+    // requisition id against the SUBSIDIARY allow-list — every comparison
+    // failed, so scoped readers silently saw nothing while unrestricted
+    // readers saw everything.)
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
-    const { pgUuidArray } = await import("./depth.ts");
     const rows = (await db.execute<{
       id: string;
       jobTitle: string;
@@ -486,9 +511,10 @@ export async function listOffersWithSignature(query: {
                where v.org_id = o.org_id and v.offer_id = o.id) as "versionCount"
         from hrm_offers o
         join hrm_applications a on a.org_id = o.org_id and a.id = o.application_id
+        join hrm_requisitions r on r.org_id = o.org_id and r.id = a.requisition_id
         join hrm_candidates c on c.org_id = o.org_id and c.id = a.candidate_id
        where o.org_id = ${orgId}
-         and (${allowed === null} or a.requisition_id = any(${allowed === null ? "{}" : pgUuidArray([...allowed])}::uuid[]))
+         ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)}
        order by o.created_at desc
        limit 200
     `)).rows;
