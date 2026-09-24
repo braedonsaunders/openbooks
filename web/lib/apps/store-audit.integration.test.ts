@@ -279,4 +279,32 @@ if (DB) {
     }
   })
 
+  test('install refuses a package traversal before creating an app row', async () => {
+    const fx = await seedApp()
+    const unsafeKey = `${fx.key}-unsafe`
+    try {
+      const installed = (await withBypass(() => getAppByKey(fx.org.orgId, fx.key)))!
+      await assert.rejects(
+        withBypass(() => installApp(fx.org.orgId, fx.actorId, {
+          manifest: { ...installed.manifest!, key: unsafeKey, version: '1.0.0' },
+          files: [
+            { path: 'frontend/index.html', content: '<html></html>' },
+            { path: 'backend/hello.js', content: 'function handler() { return {} }' },
+            { path: '../outside.txt', content: 'must not persist' },
+          ],
+        })),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.status === 400 &&
+          error.message === 'Use relative file paths without traversal.',
+      )
+      const rows = await withBypass(() => db.execute<{ n: string }>(sql`
+        select count(*)::text as n from apps where org_id=${fx.org.orgId} and key=${unsafeKey}
+      `))
+      assert.equal(rows.rows[0]!.n, '0')
+    } finally {
+      await withBypass(() => dropScratchOrg(fx.org.orgId))
+    }
+  })
+
 }

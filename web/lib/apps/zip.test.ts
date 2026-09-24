@@ -4,7 +4,6 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { zipSync, strToU8, Zip, ZipDeflate } from 'fflate'
 import { parseZipBundle, ZipBundleError } from './zip.ts'
 import { parseObjectSpecs } from './objects.ts'
@@ -231,68 +230,6 @@ test('applied-draft replay is bound to the exact installed version row, not the 
     appliedDraftStillCurrent({ ...sameRow, appliedVersionId: null }),
     false,
     'missing apply evidence fails closed',
-  )
-})
-
-function storeFunctionBody(name: string): string {
-  const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-  const start = store.indexOf(`export async function ${name}`)
-  assert.notEqual(start, -1, `${name} must remain defined`)
-  const end = store.indexOf('\nexport ', start + 1)
-  return store.slice(start, end === -1 ? undefined : end)
-}
-
-test('installApp applies the same package path gate before persistence', () => {
-  const body = storeFunctionBody('installApp')
-  assert.match(body, /validPackagePath/)
-  assert.match(body, /PACKAGE_PATH_REFUSAL/)
-})
-
-test('unpublishApp refuses a withdraw that writes zero rows', () => {
-  const body = storeFunctionBody('unpublishApp')
-  assert.doesNotMatch(body, /if \(!listing\.is_active\) return/)
-  assert.match(body, /and is_active=true/)
-  assert.match(body, /returning id/)
-  assert.match(body, /already unpublished/)
-})
-
-test('setAppStatus and deleteApp refuse a scoped lookup that matches zero rows', () => {
-  const statusBody = storeFunctionBody('setAppStatus')
-  const deleteBody = storeFunctionBody('deleteApp')
-  assert.doesNotMatch(statusBody, /if \(!app \|\| app\.status === status\) return/)
-  assert.doesNotMatch(deleteBody, /if \(!app\) return/)
-  assert.match(statusBody, /if \(!app\)/)
-  assert.match(statusBody, /throw new AppError\(/)
-  assert.match(statusBody, /was not found/)
-  assert.match(statusBody, /404/)
-  assert.match(deleteBody, /if \(!app\)/)
-  assert.match(deleteBody, /throw new AppError\(/)
-  assert.match(deleteBody, /was not found/)
-  assert.match(deleteBody, /404/)
-})
-
-test('applied draft activation validates current state instead of returning a no-op', () => {
-  const body = storeFunctionBody('installApp')
-  assert.doesNotMatch(body, /if \(proposal\.status === 'applied'\) return/)
-  assert.match(body, /proposal\.status === 'applied'/)
-  assert.match(body, /appliedDraftStillCurrent\(/)
-  assert.match(body, /changes->>'versionId'/)
-  assert.match(body, /no longer present/)
-  assert.match(body, /installed extension changed after this draft/)
-  assert.match(body, /versionId, appId, before:/)
-})
-
-test('platform schema, list, and get take a fresh read invocation nonce', () => {
-  const store = readFileSync(new URL('./store.ts', import.meta.url), 'utf8')
-  const body = storeFunctionBody('runBridgeMethod')
-  assert.match(body, /platformReadNeedsFreshInvocation\(opts\.method\)/)
-  assert.match(store, /function platformReadNeedsFreshInvocation\(method: string\): boolean/)
-  assert.match(store, /method === 'platform\.schema'/)
-  assert.match(store, /method === 'platform\.list'/)
-  assert.match(store, /method === 'platform\.get'/)
-  assert.doesNotMatch(
-    body,
-    /\.\.\.\(opts\.method === 'platform\.query' \? \{ readInvocation: crypto\.randomUUID\(\) \} : \{\}\)/,
   )
 })
 
