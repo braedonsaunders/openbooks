@@ -119,6 +119,21 @@ test("money precision, impossible calendar dates and invalid references are reje
     assert.ok(body.error);
   }
 });
+
+test("lease classification thresholds reject values outside the percentage range at the API boundary", async () => {
+  for (const classificationInputs of [
+    { termThresholdPercent: "-0.01" },
+    { termThresholdPercent: "100.01" },
+    { pvThresholdPercent: "-1" },
+    { pvThresholdPercent: "101" },
+  ]) {
+    reset();
+    const response = await create.POST(request({ ...agreement, classificationInputs }));
+    assert.equal(response.status, 400);
+    assert.equal(state.calls.length, 0);
+    assert.match((await response.json()).error, /between 0 and 100 percent/);
+  }
+});
 test("null, array and malformed JSON bodies cannot reach the lease writer", async () => {
   for (const body of [null, []]) {
     reset();

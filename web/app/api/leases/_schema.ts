@@ -1,19 +1,24 @@
 import { z } from "zod";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { exactMoney } from "@/lib/api/json";
+import { compareDecimal } from "@/lib/exact-decimal";
 const date = z
   .string()
   .refine(isIsoCalendarDate, "enter a calendar date (YYYY-MM-DD)");
 const rate = z.string().max(25);
+const classificationPercent = exactMoney().refine(
+  (value) => compareDecimal(value, "0") >= 0 && compareDecimal(value, "100") <= 0,
+  "must be between 0 and 100 percent",
+);
 export const leaseClassificationSchema = z.object({
   transfersOwnership: z.boolean().optional(),
   purchaseOptionReasonablyCertain: z.boolean().optional(),
   leaseTermMonths: z.number().int().nonnegative().optional(),
   economicLifeMonths: z.number().int().nonnegative().optional(),
-  termThresholdPercent: exactMoney().optional(),
+  termThresholdPercent: classificationPercent.optional(),
   pvOfPayments: exactMoney().optional(),
   fairValue: exactMoney().optional(),
-  pvThresholdPercent: exactMoney().optional(),
+  pvThresholdPercent: classificationPercent.optional(),
   specializedAsset: z.boolean().optional(),
 });
 export const leaseSchema = z.object({

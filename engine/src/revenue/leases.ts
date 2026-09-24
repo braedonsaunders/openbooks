@@ -157,16 +157,25 @@ function assertClassificationDecimal(value: unknown, label: string): void {
   }
 }
 
+function assertClassificationPercent(value: unknown, label: string): void {
+  assertClassificationDecimal(value, label);
+  if (value == null) return;
+  const exact = canonicalDecimal(value, 4)!;
+  if (cmp(exact, "0") < 0 || cmp(exact, "100") > 0) {
+    throw new LeaseError(`${label} must be between 0 and 100 percent`);
+  }
+}
+
 function assertClassificationInputs(inputs: LeaseClassificationInputs): void {
   assertClassificationMonths(inputs.leaseTermMonths, "lease term months");
   assertClassificationMonths(inputs.economicLifeMonths, "economic life months");
-  assertClassificationDecimal(
+  assertClassificationPercent(
     inputs.termThresholdPercent,
     "term threshold percent",
   );
   assertClassificationDecimal(inputs.pvOfPayments, "present value of payments");
   assertClassificationDecimal(inputs.fairValue, "fair value");
-  assertClassificationDecimal(
+  assertClassificationPercent(
     inputs.pvThresholdPercent,
     "present-value threshold percent",
   );
