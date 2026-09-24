@@ -31,7 +31,7 @@
 import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../canada/decimal.ts";
 import {
-  certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount, certificateChoice, certificateCount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import { roundDiv } from "../../../money/money.ts";
@@ -327,7 +327,26 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
+  const reciprocalExemptionClaimed = certificateFlag(input.certificate, "exempt");
+  let reciprocalResidence: string | null | undefined;
+  let invalidReciprocalResidence = false;
+  try {
+    reciprocalResidence = certificateChoice(input.certificate, "resident_state");
+  } catch {
+    // An invalid residence cannot qualify for the exemption; ordinary WV
+    // withholding remains computable and is safer than accepting a stale or
+    // corrupted reciprocal claim as zero withholding.
+    invalidReciprocalResidence = true;
+  }
+  const wagesOnly = certificateFlag(input.certificate, "only_wv_source_income_is_wages");
+  const reciprocalStates = ["KY", "MD", "OH", "PA", "VA"];
+  if (
+    reciprocalExemptionClaimed
+    && input.basis === "nonresident"
+    && !invalidReciprocalResidence
+    && reciprocalStates.includes(reciprocalResidence ?? "")
+    && wagesOnly
+  ) {
     return {
       state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
       factors: { WV_EXEMPT: "1" },
@@ -353,6 +372,13 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   // IT-104 line 6 — additional withholding, added AFTER the rounded tax.
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  if (reciprocalExemptionClaimed) {
+    factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED =
+      input.basis !== "nonresident" ? "not_nonresident"
+        : invalidReciprocalResidence || !reciprocalStates.includes(reciprocalResidence ?? "")
+          ? "ineligible_resident_state"
+          : "wv_income_not_certified_as_wages_only";
+  }
   return {
     state: "WV",
     year: rates.year,
@@ -375,6 +401,7 @@ export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_TAXABLE: "West Virginia taxable income",
   WV_BAND_OVER: "West Virginia band excess",
   WV_TAX: "West Virginia tax",
+  WV_RECIPROCAL_EXEMPTION_NOT_APPLIED: "West Virginia reciprocal exemption not applied",
 };
 
 export const WV_WITHHOLDING: UsStateWithholdingEngine = {
@@ -442,12 +469,30 @@ export const WV_CERTIFICATE: PayrollCertificate = {
     },
     {
       key: "exempt",
-      label: "IT-104NR — Resident of a reciprocal state",
+      label: "IT-104NR — Claim exemption from West Virginia withholding",
       kind: "flag",
       help:
-        "The employee is a legal resident of Kentucky, Maryland, Ohio, Pennsylvania or "
-        + "Virginia and the only West Virginia-source income is wages. Upon a completed "
-        + "IT-104NR the employer stops West Virginia withholding.",
+        "Claim only when the employee resides outside West Virginia and meets all IT-104NR "
+        + "eligibility conditions below. An ineligible claim does not stop ordinary withholding.",
+    },
+    {
+      key: "resident_state",
+      label: "IT-104NR — State of residence",
+      kind: "choice",
+      choices: [
+        { value: "KY", label: "Kentucky" },
+        { value: "MD", label: "Maryland" },
+        { value: "OH", label: "Ohio" },
+        { value: "PA", label: "Pennsylvania" },
+        { value: "VA", label: "Virginia" },
+      ],
+      help: "The IT-104NR reciprocal exemption is limited to residents of these five states.",
+    },
+    {
+      key: "only_wv_source_income_is_wages",
+      label: "IT-104NR — Only West Virginia source income is wages or salaries",
+      kind: "flag",
+      help: "Required eligibility condition on Form IT-104NR; the exemption cannot be used for other West Virginia source income.",
     },
   ],
 };

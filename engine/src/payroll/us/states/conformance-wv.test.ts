@@ -144,11 +144,46 @@ test("WV refuses a pay frequency it does not print a table for", () => {
   );
 });
 
-test("WV reciprocal nonresidence claim on IT-104 stops withholding", () => {
-  assert.equal(WV_WITHHOLDING.compute({
+test("WV IT-104NR reciprocal exemption requires an eligible residence and wage-only WV income", () => {
+  // Form IT-104NR limits the withholding exemption to KY/MD/OH/PA/VA
+  // residents whose only WV-source income is wages or salaries.
+  // https://tax.wv.gov/Documents/Withholding/it104.pdf
+  const reciprocal = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+    certificate: cert({
+      exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true",
+    }),
+  });
+  assert.equal(reciprocal.tax, money("0"));
+
+  const invalidClaims: Record<string, string>[] = [
+    { exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "false" },
+  ];
+  for (const answers of invalidClaims) {
+    const ordinaryWithholding = WV_WITHHOLDING.compute({
+      payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+      certificate: cert(answers),
+    });
+    assert.equal(ordinaryWithholding.tax, money("25"));
+    assert.ok(ordinaryWithholding.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED);
+  }
+
+  const outOfSetResidence = WV_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "nonresident",
+    certificate: cert({
+      exempt: "true", resident_state: "NY", only_wv_source_income_is_wages: "true",
+    }),
+  });
+  assert.equal(outOfSetResidence.tax, money("25"));
+  assert.equal(outOfSetResidence.factors.WV_RECIPROCAL_EXEMPTION_NOT_APPLIED, "ineligible_resident_state");
+
+  const residentClaim = WV_WITHHOLDING.compute({
     payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00", basis: "resident",
-    certificate: cert({ exempt: "true" }),
-  }).tax, money("0"));
+    certificate: cert({
+      exempt: "true", resident_state: "KY", only_wv_source_income_is_wages: "true",
+    }),
+  });
+  assert.equal(residentClaim.tax, money("25"));
 });
 
 test("WV IT-104NR military-spouse claim requires every attestation and military ID", () => {
