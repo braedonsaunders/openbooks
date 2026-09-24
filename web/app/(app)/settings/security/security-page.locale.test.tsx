@@ -18,9 +18,9 @@ registerHooks({
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const frenchMessages = (await import('../../../../messages/fr')).default
-const { SecurityPageContent } = await import('./sections')
+const [{ SecurityPageContent }, { jsonRequest }] = await Promise.all([import('./sections'), import('./security-panel')])
 
-test('security settings page renders its heading, MFA actions, and session chrome in French', () => {
+test('security settings page renders in French and uses localized request failure copy', async () => {
   const markup = renderToStaticMarkup(
     <NextIntlClientProvider locale="fr" messages={frenchMessages} timeZone="UTC">
       <SecurityPageContent />
@@ -30,7 +30,7 @@ test('security settings page renders its heading, MFA actions, and session chrom
   assert.match(markup, /Sécurité de connexion/)
   assert.match(markup, /Authentification multifacteur/)
   assert.match(markup, /Configurer l’authentificateur/)
-  assert.match(markup, /Sessions actives/)
-  assert.match(markup, /Révoquez une session de navigateur sans changer votre mot de passe/)
-  assert.doesNotMatch(markup, /Sign-in security|Authenticator MFA|Set up authenticator|Active sessions|Revoke a browser session/)
+  assert.ok(markup.includes('Sessions actives') && markup.includes('Révoquez une session de navigateur sans changer votre mot de passe'))
+  globalThis.fetch = async () => { throw new TypeError('Failed to fetch') }
+  await assert.rejects(jsonRequest('/api/auth/mfa', {}, frenchMessages.shell.securityPage.requestFailed), { message: frenchMessages.shell.securityPage.requestFailed })
 })

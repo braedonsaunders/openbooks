@@ -232,6 +232,7 @@
   "browserSession": "ブラウザーセッション",
   "lastUsed": "最終使用: {date}",
   "revoke": "取り消す",
-  "revokeOtherSessions": "他のすべてのセッションを取り消す"
+  "revokeOtherSessions": "他のすべてのセッションを取り消す",
+  "requestFailed": "セキュリティのリクエストを完了できませんでした。もう一度お試しください。"
 }
 }

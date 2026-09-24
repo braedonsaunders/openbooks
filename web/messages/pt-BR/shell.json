@@ -232,6 +232,7 @@
   "browserSession": "Sessão do navegador",
   "lastUsed": "Último uso: {date}",
   "revoke": "Revogar",
-  "revokeOtherSessions": "Revogar todas as outras sessões"
+  "revokeOtherSessions": "Revogar todas as outras sessões",
+  "requestFailed": "Não foi possível concluir a solicitação de segurança. Tente novamente."
 }
 }

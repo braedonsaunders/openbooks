@@ -232,6 +232,7 @@
   "browserSession": "Browsersitzung",
   "lastUsed": "Zuletzt verwendet: {date}",
   "revoke": "Beenden",
-  "revokeOtherSessions": "Alle anderen Sitzungen beenden"
+  "revokeOtherSessions": "Alle anderen Sitzungen beenden",
+  "requestFailed": "Die Sicherheitsanfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut."
 }
 }

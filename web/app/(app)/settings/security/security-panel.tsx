@@ -16,19 +16,24 @@ type Session = {
   current: boolean;
 };
 
-async function jsonRequest(url: string, init?: RequestInit) {
-  const response = await fetch(url, {
-    ...init,
-    headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
-    cache: "no-store",
-  });
-  const value = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(value.error || "The security change could not be completed");
-  return value;
+export async function jsonRequest(url: string, init: RequestInit | undefined, requestFailed: string) {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      headers: init?.body ? { "Content-Type": "application/json", ...init.headers } : init?.headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(requestFailed);
+  }
+  if (!response.ok) throw new Error(requestFailed);
+  return response.json().catch(() => ({}));
 }
 
 export function SecurityPanel() {
   const t = useTranslations("shell.securityPage");
+  const requestFailed = t("requestFailed");
   const { dateTime } = useViewerFormat();
   const router = useRouter();
   const [status, setStatus] = useState<MfaStatus | null>(null);
@@ -44,23 +49,23 @@ export function SecurityPanel() {
   // response), never synchronously in the effect body.
   const reload = useCallback(() => {
     return Promise.all([
-      jsonRequest("/api/auth/mfa"),
-      jsonRequest("/api/auth/sessions"),
+      jsonRequest("/api/auth/mfa", undefined, requestFailed),
+      jsonRequest("/api/auth/sessions", undefined, requestFailed),
     ]).then(([mfa, sessionResult]) => {
       setStatus(mfa);
       setSessions(sessionResult.sessions);
     });
-  }, []);
+  }, [requestFailed]);
 
-  useEffect(() => { void reload().catch((error) => setMessage(error.message)); }, [reload]);
+  useEffect(() => { void reload().catch(() => setMessage(requestFailed)); }, [reload, requestFailed]);
 
   async function act(action: () => Promise<void>) {
     setBusy(true);
     setMessage(null);
     try {
       await action();
-    } catch (error) {
-      setMessage((error as Error).message);
+    } catch {
+      setMessage(requestFailed);
     } finally {
       setBusy(false);
     }
@@ -95,7 +100,7 @@ export function SecurityPanel() {
                 setSetup(await jsonRequest("/api/auth/mfa", {
                   method: "POST",
                   body: JSON.stringify({ password }),
-                }));
+                }, requestFailed));
                 setPassword("");
               })}>
                 {t("setupAuthenticator")}
@@ -116,7 +121,7 @@ export function SecurityPanel() {
                 <Input id="confirm-mfa" autoComplete="one-time-code" value={code} onChange={(event) => setCode(event.target.value)} />
               </div>
               <Button disabled={busy || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa", { method: "PUT", body: JSON.stringify({ code }) });
+                const result = await jsonRequest("/api/auth/mfa", { method: "PUT", body: JSON.stringify({ code }) }, requestFailed);
                 setRecoveryCodes(result.recoveryCodes);
                 setSetup(null);
                 setCode("");
@@ -138,7 +143,7 @@ export function SecurityPanel() {
                 <Input id="disable-password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} />
               </div>
               <Button variant="outline" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                const result = await jsonRequest("/api/auth/mfa/recovery", { method: "POST", body: JSON.stringify({ password, code }) });
+                const result = await jsonRequest("/api/auth/mfa/recovery", { method: "POST", body: JSON.stringify({ password, code }) }, requestFailed);
                 setRecoveryCodes(result.recoveryCodes);
                 setPassword("");
                 setCode("");
@@ -147,7 +152,7 @@ export function SecurityPanel() {
                 {t("replaceRecoveryCodes")}
               </Button>
               <Button variant="destructive" disabled={busy || !password || !code} onClick={() => void act(async () => {
-                await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) });
+                await jsonRequest("/api/auth/mfa", { method: "DELETE", body: JSON.stringify({ password, code }) }, requestFailed);
                 setPassword("");
                 setCode("");
                 setRecoveryCodes(null);
@@ -188,7 +193,7 @@ export function SecurityPanel() {
                   <p className="text-xs text-slate-500">{t("lastUsed", { date: dateTime(new Date(session.lastSeenAt)) })}</p>
                 </div>
                 <Button size="sm" variant="outline" disabled={busy} onClick={() => void act(async () => {
-                  await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" });
+                  await jsonRequest(`/api/auth/sessions/${session.id}`, { method: "DELETE" }, requestFailed);
                   if (session.current) router.push("/login");
                   else await reload();
                 })}>
@@ -199,7 +204,7 @@ export function SecurityPanel() {
           </div>
           {sessions.length > 1 ? (
             <Button variant="outline" disabled={busy} onClick={() => void act(async () => {
-              await jsonRequest("/api/auth/sessions", { method: "DELETE" });
+              await jsonRequest("/api/auth/sessions", { method: "DELETE" }, requestFailed);
               await reload();
             })}>
               {t("revokeOtherSessions")}
