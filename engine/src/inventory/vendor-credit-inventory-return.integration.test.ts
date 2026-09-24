@@ -32,6 +32,40 @@ const depsFor = (org: ScratchOrg) => ({
   },
 });
 
+/**
+ * Draft vendor-bill shell giving a direct receipt purchase provenance
+ * (never posted, so no GL). A return names the vendor that supplied the
+ * goods only through such a document — a doc-less opening-balance receipt
+ * is refused by name (see the provenance test below), so mechanics tests
+ * receive against this shell instead of thin air.
+ */
+async function vendorBillReceiptLine(org: ScratchOrg, itemId: string): Promise<string> {
+  const documentId = randomUUID();
+  const lineId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, party_id, subsidiary_id,
+       document_date, posting_date, currency, fx_rate, status,
+       subtotal, tax_total, total, custom)
+    values
+      (${documentId}, ${org.orgId}, 'vendor_bill',
+       ${`BILL-PROV-${documentId.slice(0, 8)}`}, ${org.vendorId}, ${org.subsidiaryId},
+       ${org.date}, ${org.date}, 'CAD', 1, 'draft', '0', '0', '0', '{}'::jsonb)
+  `);
+  await db.execute(sql`
+    insert into document_lines
+      (id, org_id, document_id, line_number, item_id, account_id,
+       quantity, unit_price, amount, tax_amount, is_billable,
+       quantity_fulfilled, quantity_billed, stock_location_id, custom,
+       tax_overridden)
+    values
+      (${lineId}, ${org.orgId}, ${documentId}, 1, ${itemId},
+       ${org.accounts.clearing}, '0', '0', '0', '0', false, '0', '0',
+       ${org.stockLocationId}, '{}'::jsonb, false)
+  `);
+  return lineId;
+}
+
 async function glBalance(orgId: string, accountId: string): Promise<string> {
   return (await db.execute<{ balance: string }>(sql`
     select coalesce(sum(amount), 0)::text as balance
@@ -199,6 +233,7 @@ test(
         subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing,
         date: org.date,
+        documentLineId: await vendorBillReceiptLine(org, org.items.fifo),
         lotId,
       });
 
@@ -325,6 +360,7 @@ test(
         subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing,
         date: org.date,
+        documentLineId: await vendorBillReceiptLine(org, org.items.component),
         serialId,
       });
       const credit = await createApprovedVendorReturn(org, {
@@ -372,6 +408,7 @@ test(
         subsidiaryId: org.subsidiaryId,
         offsetAccountId: org.accounts.clearing,
         date: org.date,
+        documentLineId: await vendorBillReceiptLine(org, org.items.fifo),
       });
       const credit = await createApprovedVendorReturn(org, {
         itemId: org.items.fifo,
@@ -433,6 +470,51 @@ test(
             residue.returns === 0 &&
             residue.effects === 0),
       );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a vendor return against a document-less receipt is refused by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // Opening-balance stock: a posted receipt with no source document, so
+      // no vendor can be verified against the credit's party.
+      const receipt = await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "2",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const credit = await createApprovedVendorReturn(org, {
+        itemId: org.items.fifo,
+        quantity: "4",
+        unitPrice: "2",
+        amount: "8",
+        sourceReceiptMovementId: receipt.movementId,
+      });
+      // The old code skipped the vendor match for null-provenance receipts
+      // and credited a vendor that never supplied the goods.
+      await assert.rejects(
+        () => postDocument(credit.documentId, depsFor(org)),
+        (error: unknown) =>
+          error instanceof PostingError &&
+          /has no purchase document behind it/.test(error.message) &&
+          /without inventory-return evidence/.test(error.message),
+      );
+      assert.deepEqual(await creditResidue(org.orgId, credit.documentId), {
+        status: "approved",
+        sourceEntries: 0,
+        returns: 0,
+        effects: 0,
+      });
     } finally {
       await dropScratchOrg(org.orgId);
     }
