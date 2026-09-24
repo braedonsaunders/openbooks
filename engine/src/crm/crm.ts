@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type TerritoryRule, type TerritorySubject } from "./crm-math.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { DEFAULT_ACCOUNT_STATUSES, DEFAULT_OPPORTUNITY_STATUSES } from "./crm-default-statuses.ts";
 
 /**
  * The stage gate lives in crm-math.ts because it is pure and this module is
@@ -24,18 +25,6 @@ async function crmFeatureEnabled(executor: SqlExecutor, orgId: string): Promise<
   return orgFeatureEnabled(orgId, "crm", executor);
 }
 
-const DEFAULT_ACCOUNT_STATUSES = [
-  ["lead", "new", "New", false, false, true],
-  ["lead", "working", "Working", false, false, false],
-  ["lead", "qualified", "Qualified", true, false, false],
-  ["lead", "disqualified", "Disqualified", false, true, false],
-  ["prospect", "open", "Open", true, false, true],
-  ["prospect", "nurturing", "Nurturing", true, false, false],
-  ["prospect", "closed_lost", "Closed lost", false, true, false],
-  ["customer", "active", "Active", true, false, true],
-  ["customer", "inactive", "Inactive", false, true, false],
-] as const;
-
 /**
  * Suggested starting stages, not the model: every one of these is an ordinary
  * per-organization row an administrator can rename, reorder, retire or replace
@@ -48,15 +37,6 @@ const DEFAULT_ACCOUNT_STATUSES = [
  * what Proposal requires would impose on new tenants a policy that existing
  * tenants never agreed to.
  */
-const DEFAULT_OPPORTUNITY_STATUSES = [
-  ["qualification", "Qualification", 10, "upside", false, false, true, false],
-  ["discovery", "Discovery", 25, "upside", false, false, false, false],
-  ["proposal", "Proposal", 50, "most_likely", false, false, false, false],
-  ["negotiation", "Negotiation", 75, "most_likely", false, false, false, false],
-  ["closed_won", "Closed won", 100, "worst_case", true, true, false, false],
-  ["closed_lost", "Closed lost", 0, "omitted", true, false, false, true],
-] as const;
-
 /** Idempotent tenant bootstrap; safe to call before every CRM draft. */
 export async function ensureCrmDefaults(
   orgId: string,

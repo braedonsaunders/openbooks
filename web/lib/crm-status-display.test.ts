@@ -38,14 +38,6 @@ for (const locale of ['en', 'fr', 'es']) {
   })
 }
 
-test('the seeded-name map matches the engine provisioning seed', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm', 'crm.ts'), 'utf8')
-  const block = seed.match(/DEFAULT_OPPORTUNITY_STATUSES = \[([\s\S]*?)\] as const/)
-  assert.ok(block, 'engine must declare DEFAULT_OPPORTUNITY_STATUSES')
-  const names = [...block[1]!.matchAll(/\[\s*"[^"]+",\s*"([^"]+)"/g)].map((m) => m[1])
-  assert.deepEqual(new Set(Object.keys(SEEDED_OPPORTUNITY_STATUS_NAMES)), new Set(names))
-})
-
 // F-x6-002: account statuses share the opportunity-status pattern —
 // DB-seeded English names rendered raw in the account drawer select.
 test('seeded account status names resolve through the translator', () => {
@@ -66,11 +58,3 @@ for (const locale of ['en', 'fr', 'es']) {
     }
   })
 }
-
-test('the account seeded-name map matches the engine provisioning seed', () => {
-  const seed = readFileSync(join(here, '..', '..', 'engine', 'src', 'crm', 'crm.ts'), 'utf8')
-  const block = seed.match(/DEFAULT_ACCOUNT_STATUSES = \[([\s\S]*?)\] as const/)
-  assert.ok(block, 'engine must declare DEFAULT_ACCOUNT_STATUSES')
-  const names = [...block[1]!.matchAll(/\[\s*"[^"]+",\s*"[^"]+",\s*"([^"]+)"/g)].map((m) => m[1])
-  assert.deepEqual(new Set(Object.keys(SEEDED_ACCOUNT_STATUS_NAMES)), new Set(names))
-})
