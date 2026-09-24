@@ -248,6 +248,61 @@ async function mountFeed(fetchImpl: typeof fetch) {
   return { host, root }
 }
 
+// F-t11-005: the empty picker gave no path to the Chart of Accounts.
+test('an empty GL picker explains the precondition and links the Chart of Accounts', async (t) => {
+  const catalog = (await import('../../../../../messages/en/banking.json', { with: { type: 'json' } })).default
+  const note = catalog.bankFeeds.client.configure.noEligibleAccounts as string
+  const linkLabel = catalog.bankFeeds.client.configure.noEligibleAccountsLink as string
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <BankFeedsClient
+          connections={[]}
+          sftpServers={[]}
+          sftpSchedules={[]}
+          accounts={[]}
+          daemon={{ enabled: false, port: 0, host: '', fingerprint: '' }}
+        />
+      </NextIntlClientProvider>,
+    )
+    await tick()
+  })
+  const connect = [...document.querySelectorAll('button')].find(
+    (b) => (b.textContent ?? '').trim() === 'Connect your first bank',
+  ) as HTMLButtonElement | undefined
+  assert.ok(connect, 'the empty state must offer to connect')
+  await act(async () => {
+    connect.click()
+    await tick()
+  })
+  const manual = [...document.querySelectorAll('button')].find((b) =>
+    (b.textContent ?? '').includes('Manual upload'),
+  ) as HTMLButtonElement | undefined
+  assert.ok(manual, 'the directory must offer a manual upload path')
+  await act(async () => {
+    manual.click()
+    await tick()
+  })
+  assert.ok(
+    (document.body.textContent ?? '').includes(note),
+    'the empty picker must explain the missing reconcilable account',
+  )
+  const link = [...document.querySelectorAll('a')].find(
+    (a) => (a.textContent ?? '').trim() === linkLabel,
+  ) as HTMLAnchorElement | undefined
+  assert.ok(link, 'the explanation must link somewhere')
+  assert.equal(link?.getAttribute('href'), '/accounts', 'the link lands on the Chart of Accounts')
+})
+
 function actionButton(host: Element, label: string): HTMLButtonElement {
   const btn = [...host.querySelectorAll('button')].find(
     (b) => (b.textContent ?? '').trim() === label,

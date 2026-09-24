@@ -62,7 +62,6 @@
     "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
     "web/app/(app)/accounts/AccountDrawer.test.ts": 6,
     "web/app/(app)/admin/setup/alias-redirects.test.ts": 3,
-    "web/app/(app)/admin/setup/bank-feeds/bank-feeds-accounts.test.ts": 2,
     "web/app/(app)/admin/setup/payroll/setup-vendors.test.ts": 2,
     "web/app/(app)/admin/setup/payroll/statutory-rates-region.test.ts": 4,
     "web/app/(app)/admin/setup/setup-layout-responsive.test.ts": 2,
