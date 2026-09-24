@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -119,6 +119,23 @@ export function AutomationBuilder({
   const router = useRouter()
   const [name, setName] = useState(automation.name)
   const [trigger, setTrigger] = useState<Record<string, unknown>>({ ...automation.trigger })
+  // Per-kind trigger config: replacing the whole trigger on a kind switch
+  // discarded everything typed for the previous kind (a schedule cron did
+  // not survive a round-trip through manual). The cache stashes each kind's
+  // fields as it is left and restores them on return; a kind never visited
+  // starts clean. Only the current kind's fields ever save.
+  const triggerCache = useRef<Record<string, Record<string, unknown>>>({
+    [String(automation.trigger.kind ?? 'manual')]: { ...automation.trigger },
+  })
+
+  function setTriggerKind(nextKind: string) {
+    setTrigger((prev) => {
+      const prevKind = String(prev.kind ?? 'manual')
+      triggerCache.current[prevKind] = { ...prev }
+      const cached = triggerCache.current[nextKind]
+      return cached ? { ...cached, kind: nextKind } : { kind: nextKind }
+    })
+  }
   const [rules, setRules] = useState<Record<string, unknown>>({ ...(automation.rules ?? {}) })
   const cond = toLeaves((automation.conditions ?? {}) as Record<string, unknown>)
   const [condMode, setCondMode] = useState<'all' | 'any'>(cond.mode)
@@ -246,7 +263,7 @@ export function AutomationBuilder({
             <h2 className="text-sm font-semibold">{t('builder.triggerTitle')}</h2>
             <div className="mt-2 grid gap-2">
               <Label htmlFor="ab-trigger-kind">{t('list.triggerLabel')}</Label>
-              <Select id="ab-trigger-kind" value={kind} onChange={(e) => setTrigger({ kind: e.target.value })} disabled={ro}>
+              <Select id="ab-trigger-kind" value={kind} onChange={(e) => setTriggerKind(e.target.value)} disabled={ro}>
                 {TRIGGER_KINDS.map((k) => {
                   const unavailable = (UNAVAILABLE_TRIGGER_KINDS as readonly string[]).includes(k)
                   return (

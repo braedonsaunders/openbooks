@@ -89,19 +89,17 @@ async function mount(canManage: boolean): Promise<HTMLElement> {
   const root = createRoot(host)
   await act(async () => {
     root.render(
-      React.createElement(NextIntlClientProvider, {
-        locale: 'en',
-        messages,
-        children: React.createElement(AutomationBuilder, {
-          automation: AUTOMATION,
-          runs: [],
-          canSimulate: true,
-          canManage,
-          saveFailed: 'Save failed',
-          backHref: '/admin/automations',
-          backLabel: 'Back',
-        }),
-      }),
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AutomationBuilder
+          automation={AUTOMATION}
+          runs={[]}
+          canSimulate={true}
+          canManage={canManage}
+          saveFailed="Save failed"
+          backHref="/admin/automations"
+          backLabel="Back"
+        />
+      </NextIntlClientProvider>,
     )
   })
   return host
