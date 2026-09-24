@@ -331,7 +331,7 @@ export async function DerivedPreviewTabSlot({
 }) {
   const authz = await getAuthz()
   if (!authz) return null
-  return <DerivedRulePreviewSection orgId={authz.user.orgId} searchParams={sp} />
+  return <DerivedRulePreviewSection authz={authz} orgId={authz.user.orgId} searchParams={sp} />
 }
 
 /** Holidays tab: stat-pay election plus the registry entity list. */
