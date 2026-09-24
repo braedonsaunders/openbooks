@@ -20,6 +20,7 @@ import {
 } from "./performance-math.ts";
 import { loadAnswers, loadReview, type ReviewAnswerDTO, type ReviewDTO } from "./reviews.ts";
 import { requireGoalReadAuthority } from "./goals.ts";
+import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import type { CycleDTO } from "./review-cycles.ts";
 
 /**
@@ -94,14 +95,11 @@ async function readableReviewIds(
 ): Promise<Set<string> | null> {
   if (granted && allowed === null) return null;
   if (granted) {
-    // One parameter per id: bare JS arrays must never be interpolated into
-    // ANY() (they bind as row constructors, not PostgreSQL arrays).
-    const ids = [...allowed!].map((id) => sql`${id}::uuid`);
     const rows = (await db.execute<{ id: string }>(sql`
       select r.id from hrm_reviews r
       join worker_employments e
         on e.org_id = r.org_id and e.id = r.employment_id
-     where r.org_id = ${orgId} and e.employer_subsidiary_id in (${sql.join(ids, sql`, `)})
+     where r.org_id = ${orgId} and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}
     `)).rows;
     return new Set(rows.map((row) => row.id));
   }
@@ -471,13 +469,9 @@ export async function listGoals(args: {
       const managed = await loadManagedEmploymentIds(db, orgId, actorId, await businessToday(orgId));
       if (granted) {
         const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
-        const scopeFilter =
-          allowed === null
-            ? sql``
-            : sql`and employer_subsidiary_id in (${sql.join(
-                [...allowed].map((id) => sql`${id}::uuid`),
-                sql`, `,
-              )})`;
+        const scopeFilter = allowed === null
+          ? sql``
+          : sql`and ${employerSubsidiaryScope(allowed, "employer_subsidiary_id")}`;
         const rows = (await db.execute<{ id: string }>(sql`
           select id from worker_employments where org_id = ${orgId}
           ${scopeFilter}
@@ -662,13 +656,9 @@ type LeaverRow = {
  * instead of everything.
  */
 function retentionScopeCondition(allowed: Set<string> | null) {
-  if (allowed === null) return sql``;
-  // One parameter per id: bare JS arrays must never be interpolated into
-  // ANY() (they bind as row constructors, not PostgreSQL arrays).
-  return sql`and e.employer_subsidiary_id in (${sql.join(
-    [...allowed].map((id) => sql`${id}::uuid`),
-    sql`, `,
-  )})`;
+  return allowed === null
+    ? sql``
+    : sql`and ${employerSubsidiaryScope(allowed, "e.employer_subsidiary_id")}`;
 }
 
 async function loadLeavers(

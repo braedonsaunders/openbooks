@@ -42,6 +42,7 @@ type Harness = {
   subB: string;
   hrAll: string;
   hrA: string;
+  hrEmpty: string;
   empA: string;
   empB: string;
 };
@@ -116,9 +117,12 @@ async function setupHarness(): Promise<Harness> {
   const hrA = await createScratchUser(org.orgId, "Talent HR A", "talent_hr_a");
   await grant(org.orgId, hrA, ["hrm.performance.manage"]);
   await restrictRole(org.orgId, "talent_hr_a", { mode: "list", subsidiaryIds: [org.subsidiaryId] });
+  const hrEmpty = await createScratchUser(org.orgId, "Talent HR Empty", "talent_hr_empty");
+  await grant(org.orgId, hrEmpty, ["hrm.performance.manage"]);
+  await restrictRole(org.orgId, "talent_hr_empty", { mode: "list", subsidiaryIds: [] });
   const empA = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee A"), org.subsidiaryId);
   const empB = await mkEmployment(org.orgId, await mkParty(org.orgId, "Employee B"), subB);
-  return { org, subB, hrAll, hrA, empA, empB };
+  return { org, subB, hrAll, hrA, hrEmpty, empA, empB };
 }
 
 async function withHarness(fn: (h: Harness) => Promise<void>): Promise<void> {
@@ -177,6 +181,11 @@ test("talent review lists and the directory filter to allowed subsidiaries", asy
     const directory = await listTalentDirectory({ orgId: h.org.orgId, actorId: h.hrA });
     assert.ok(directory.employments.some((e) => e.id === h.empA));
     assert.ok(!directory.employments.some((e) => e.id === h.empB), "the other subsidiary's people stay hidden");
+    assert.deepEqual(await listTalentReviews({ orgId: h.org.orgId, actorId: h.hrEmpty }), []);
+    assert.deepEqual(await listTalentDirectory({ orgId: h.org.orgId, actorId: h.hrEmpty }), {
+      employments: [],
+      positions: [],
+    });
   });
 });
 
@@ -300,6 +309,7 @@ test("succession plans and candidates stay inside the fence", async () => {
       [planA.id],
       "scoped HR lists only their subsidiary's plans",
     );
+    assert.deepEqual(await listSuccessionPlans({ orgId: h.org.orgId, actorId: h.hrEmpty }), []);
     // Inside the fence everything works, including removal from a draft plan.
     await setSuccessionPlanStatus({ orgId: h.org.orgId, actorId: h.hrA, id: planA.id, status: "active" });
     const candidate = await addSuccessionCandidate({
