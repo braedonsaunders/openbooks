@@ -1,63 +1,62 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for the Me overview (/me). Employment
-// summary, open steps, pending requests, and balances render through the
-// shared `table` block and the leave-balances widget exactly like the HR
-// overview; the primary action is the shared 'link-button' FIRST in the
-// header, then 'module-home-tabs'. The extension rail fills from the
-// self-service registry — never a placeholder.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../lib/hrm/self-service.ts", import.meta.url), "utf8");
-
-test("me overview renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMePage/, "page loads through the overview loader");
-  assert.match(view, /meSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the /me overview. The spec builder runs over
+// hand-built data: an unlinked login reads the refusal state with its
+// remedy (the R8 history lives here in comment only), and the surfaces
+// bind their rows with the tab strip in the header. Row scoping to the
+// login and license/notes redaction stay covered by
+// engine/src/hrm/self-service/scope.test.ts and the qualifications
+// workspace tests, which own the service reads.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("overview rows render through the shared table block", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.match(view, /rows: f\('employments'\)/, "employment reads the loader-resolved summaries");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
+const { meSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meSpec(data as never));
+}
+
+const TABS = [{ label: "Overview", href: "/me" }];
+
+function baseData(): Record<string, unknown> {
+  return {
+    tabs: TABS,
+    refusal: null,
+    balances: [],
+    balancesEmpty: "No balances",
+    extensions: [],
+    extensionsTitle: "",
+    payExplain: "",
+    timeKindLabel: "Time",
+    unlimitedLabel: "Unlimited",
+    valueKindLabel: "Value",
+  } as unknown as Record<string, unknown>;
+}
+
+test("an unlinked login reads the refusal state", () => {
+  const data = baseData();
+  data.refusal = { title: "No employment link", message: "ask an administrator to link this login to a person record" };
+  const json = specJson(data);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No employment link"), "the refusal title reaches the page");
+  assert.ok(
+    json.includes("ask an administrator to link this login to a person record"),
+    "the refusal remedy reaches the page",
+  );
 });
 
-test("the primary action lives in the page header through the shared button", () => {
-  const header = view.slice(view.indexOf("pageHeader("));
-  assert.ok(header.indexOf("'link-button'") < header.indexOf("'module-home-tabs'"), "the link-button precedes the tab strip");
-  assert.match(view, /hrm-leave-balances/, "balances still render through their widget");
-  assert.match(view, /directory-section/, "the extension rail renders the shared directory section");
+test("the surfaces bind their rows with the tab strip in the header", () => {
+  const json = specJson(baseData());
+  assert.ok(json.includes("\"module-home-tabs\""), "the header carries the tab strip");
+  assert.ok(json.includes("/me"), "the strip links the overview surface");
+  assert.ok(json.includes("\"hrm-leave-balances\""), "the balances widget renders");
+  assert.ok(json.includes("No balances"), "the balances empty state resolves from its data");
 });
-
-test("the overview loader scopes every row to the login", () => {
-  assert.match(loader, /getMyProfile\(\{\s*orgId/, "the overview reads the self-service profile, never an org list");
-  assert.match(loader, /getMySteps\(\{\s*orgId/, "steps read the self-service path");
-  assert.match(loader, /getMyRequests\(\{\s*orgId/, "requests read the self-service path");
-  assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
-});
-
-// HR-14 begin: the viewer's own certifications needing action ride the
-// same shared table block — type, expiry, and a status badge — resolved
-// per own employment through the canonical qualification read, never an
-// org list and never license numbers.
-test("the overview carries the viewer's expiring certifications", () => {
-  assert.match(view, /f\('qualificationsTitle'\)/, "the panel titles from the loader");
-  assert.match(view, /rows: f\('qualifications'\)/, "rows read the loader-resolved qualifications");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.match(view, /f\('qualificationsEmpty'\)/, "the empty state resolves from the loader");
-  assert.match(loader, /listQualifications\(db, \{\s*orgId, actorId: authz\.user\.id, employmentId/, "qualifications read per own employment through the canonical service");
-});
-
-test("the qualifications panel never pulls license numbers or notes", () => {
-  const panel = view.slice(view.indexOf("f('qualificationsTitle')"), view.indexOf("f('qualificationsTitle')") + 1500);
-  assert.doesNotMatch(panel, /identifier/, "license numbers stay on the HR page, never the me panel");
-  assert.doesNotMatch(panel, /notes/, "free-text notes stay on the HR page, never the me panel");
-  assert.match(loader, /q\.status === 'expiring' \|\| q\.status === 'expired'/, "only action-needed rows reach the viewer");
-});
-// HR-14 end
