@@ -581,21 +581,19 @@ async function setupManualFxScratchOrg(): Promise<{ orgId: string; configId: str
 // leaves zero partial rows while the claim records its failure — and replay
 // from scratch applies everything exactly once.
 test(
-  "a mid-upsert crash persists no partial rates and recovery replays atomically",
+  "a mid-upsert storage fault persists no partial rates and recovery replays atomically",
   { skip: !DB },
   async () => {
-    // CAD-per-USD collapses to 1e-10, so CAD→USD normalizes to
-    // 10000000000.0000000000 — beyond numeric(19,10). The (CAD,EUR) insert
-    // before it succeeds, then PostgreSQL rejects (CAD,USD) inside the same
-    // transaction: a genuine storage fault fired after real writes began.
-    let poisonUsd = true;
+    // A temporary constraint rejects the second ordered pair after the first
+    // has been inserted. This keeps the regression focused on transaction
+    // atomicity as the domain validator rejects malformed quotes earlier.
     const provider = createServer((req, res) => {
       const today = new Date().toISOString().slice(0, 10);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({
         observations: [{
           d: today,
-          FXUSDCAD: { v: poisonUsd ? "0.0000000001" : "1.2500" },
+          FXUSDCAD: { v: "1.2500" },
           FXEURCAD: { v: "1.0900" },
         }],
       }));
@@ -615,21 +613,27 @@ test(
     const org = await setupManualFxScratchOrg();
     try {
       // Drizzle wraps storage faults in a DrizzleQueryError; walk the cause
-      // chain like isFxRunInProgressConflict does for constraint conflicts.
-      const overflowFault = (error: unknown): boolean => {
+      // chain to prove the refusal came from the injected storage fault.
+      const injectedConstraint = (error: unknown): boolean => {
         let current: unknown = error;
         for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
-          const message = (current as { message?: string }).message ?? "";
-          if (/numeric field overflow|out of range/i.test(message)) return true;
-          current = (current as { cause?: unknown }).cause;
+          const candidate = current as { constraint?: string; message?: string; cause?: unknown };
+          if (candidate.constraint === "fx_apply_crash_proof") return true;
+          if ((candidate.message ?? "").includes("fx_apply_crash_proof")) return true;
+          current = candidate.cause;
         }
         return false;
       };
-      await assert.rejects(
-        runFxProvider(org.orgId, "manual"),
-        overflowFault,
-        "the poisoned observation must fail inside the upsert transaction",
-      );
+      await db.execute(sql`alter table fx_rates add constraint fx_apply_crash_proof check (from_currency <> 'CAD' or to_currency <> 'USD')`);
+      try {
+        await assert.rejects(
+          runFxProvider(org.orgId, "manual"),
+          injectedConstraint,
+          "the injected storage fault must fire after the first pair has been written",
+        );
+      } finally {
+        await db.execute(sql`alter table fx_rates drop constraint fx_apply_crash_proof`);
+      }
       const rateCount = await db.execute<{ count: string }>(sql`
         select count(*)::text as count from fx_rates where org_id = ${org.orgId}`);
       assert.equal(rateCount.rows[0]!.count, "0", "no partial application may survive the crash stage");
@@ -641,14 +645,13 @@ test(
       const configState = await db.execute<{ last_error: string | null; last_success_at: Date | null }>(sql`
         select last_error, last_success_at from fx_provider_configs where id = ${org.configId}`);
       assert.ok(
-        /numeric field overflow|out of range/i.test(configState.rows[0]!.last_error ?? ""),
+        (configState.rows[0]!.last_error ?? "").includes("fx_apply_crash_proof"),
         "the config must carry the failure",
       );
       assert.equal(configState.rows[0]!.last_success_at, null, "a crashed attempt owns no success");
 
       // Replay from scratch: the recovery run re-claims cleanly and applies
       // every pair exactly once, with run state and rates committing together.
-      poisonUsd = false;
       const replay = await runFxProvider(org.orgId, "manual");
       assert.equal(replay.ratesInserted, 6, "the replay materializes every directed pair exactly once");
       const pairs = await db.execute<{ from_currency: string; to_currency: string; rate: string }>(sql`
@@ -914,6 +917,91 @@ test(
           from fx_provider_configs where id = ${org.configId}`)).rows[0]!;
       assert.equal(afterFailure.next_sync_at, before.next_sync_at, "a failed test probe must not move the schedule cursor");
     } finally {
+      globalThis.fetch = originalFetch;
+      await close(provider);
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a running FX sync cannot restore the schedule from its stale config snapshot",
+  { skip: !DB },
+  async () => {
+    let gated = true;
+    let releaseFetch!: () => void;
+    const fetchGate = new Promise<void>((resolve) => { releaseFetch = resolve; });
+    const provider = createServer((req, res) => {
+      const end = new URL(req.url ?? "", "http://localhost").searchParams.get("end_date")
+        ?? new Date().toISOString().slice(0, 10);
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        observations: [{ d: end, FXUSDCAD: { v: "1.2500" }, FXEURCAD: { v: "1.0900" } }],
+      }));
+    });
+    const providerOrigin = await listen(provider);
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const requested = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+      if (requested.host === "www.bankofcanada.ca") {
+        requested.protocol = "http:";
+        requested.host = new URL(providerOrigin).host;
+        if (gated) return fetchGate.then(() => originalFetch(requested, init));
+      }
+      return originalFetch(requested, init);
+    }) as typeof fetch;
+
+    const org = await setupManualFxScratchOrg();
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX schedule editor", "admin"));
+      const current = await readFxProviderConfig(org.orgId);
+      assert.ok(current);
+      const input = {
+        provider: current.provider,
+        displayName: current.displayName,
+        baseCurrency: current.baseCurrency,
+        currencies: current.currencies,
+        schedule: "daily" as const,
+        syncHourUtc: 22,
+        lookbackDays: current.lookbackDays,
+        isEnabled: true,
+        apiKey: null,
+      };
+      await saveFxProviderConfig(org.orgId, actorId, input);
+      const running = runFxProvider(org.orgId, "manual");
+      let claimed = false;
+      for (let waited = 0; waited < 10_000 && !claimed; waited += 50) {
+        const row = await db.execute(sql`
+          select id from fx_provider_runs where org_id = ${org.orgId} and status = 'running' limit 1`);
+        claimed = row.rows.length > 0;
+        if (!claimed) await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      assert.equal(claimed, true, "the old-config sync must be paused after claiming its run");
+
+      await saveFxProviderConfig(org.orgId, actorId, { ...input, schedule: "weekly", syncHourUtc: 8 });
+      const saved = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`);
+      releaseFetch();
+      gated = false;
+      await running;
+
+      const after = await db.execute<{ schedule: string; sync_hour_utc: number; next_sync_at: Date }>(sql`
+        select schedule, sync_hour_utc, next_sync_at from fx_provider_configs where id = ${org.configId}`);
+      assert.equal(after.rows[0]!.schedule, "weekly");
+      assert.equal(after.rows[0]!.sync_hour_utc, 8);
+      assert.equal(new Date(after.rows[0]!.next_sync_at).getTime(), new Date(saved.rows[0]!.next_sync_at).getTime(),
+        "completion from the old snapshot must preserve the newer saved schedule cursor");
+
+      const audit = await db.execute<{ changes: unknown }>(sql`
+        select changes from audit_log where org_id = ${org.orgId} and table_name = 'fx_provider_configs'
+           and changes->'after'->>'schedule' = 'daily'
+         order by at asc, id asc limit 1`);
+      const changes = audit.rows[0]!.changes as { before: { schedule: string } | null; after: { schedule: string } };
+      assert.equal(changes.before?.schedule, "manual");
+      assert.equal(changes.after.schedule, "daily");
+    } finally {
+      releaseFetch();
+      gated = false;
       globalThis.fetch = originalFetch;
       await close(provider);
       await withBypass(() => dropScratchOrg(org.orgId));
