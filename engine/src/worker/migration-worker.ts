@@ -315,6 +315,57 @@ export async function reapStaleSyncRuns(): Promise<number> {
   return res.rowCount ?? 0;
 }
 
+export type MirrorCandidate = {
+  id: string;
+  orgId: string;
+  schedule: string;
+  lastSuccessfulAt: Date | null;
+  lastScheduledAttemptAt: Date | null;
+  scheduledFailuresSinceSuccess: number;
+};
+
+export type MirrorEnqueueOrgError = {
+  orgId: string;
+  connectionId: string;
+  error: string;
+};
+
+/**
+ * Enqueue one mirror per due connection. Per-org isolation (the m79
+ * pattern from the dunning, subscription and property ticks): one tenant's
+ * enqueue failure is recorded by name and the loop continues — orgs later
+ * in the scan still get their mirrors this tick instead of inheriting the
+ * failure. The tick reports per-org outcomes; it does not throw.
+ */
+export async function enqueueDueMirrors(
+  candidates: MirrorCandidate[],
+  enqueue: typeof enqueueMigration = enqueueMigration,
+  now: Date = new Date(),
+): Promise<{ attempted: number; orgErrors: MirrorEnqueueOrgError[] }> {
+  const outcome: { attempted: number; orgErrors: MirrorEnqueueOrgError[] } = { attempted: 0, orgErrors: [] };
+  for (const c of candidates) {
+    if (!mirrorIsDue({ ...c, now })) continue;
+    const bucket = Math.floor(now.getTime() / MIRROR_TICK_MS);
+    outcome.attempted++;
+    try {
+      await enqueue(
+        {
+          orgId: c.orgId,
+          connectionId: c.id,
+          mode: "mirror",
+          triggeredBy: "scheduler",
+        },
+        { jobId: `mirror|${c.id}|${bucket}` },
+      );
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      outcome.orgErrors.push({ orgId: c.orgId, connectionId: c.id, error: message });
+      console.error(`[mirror-scheduler] org ${c.orgId} mirror enqueue failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  return outcome;
+}
+
 /**
  * Mirror scheduler: cadence is based only on the last successful incremental
  * proof. Failed mirrors retry with bounded exponential backoff; attachment and
@@ -357,28 +408,11 @@ export function startMirrorScheduler(): void {
              select 1 from sync_runs running
               where running.connection_id = c.id and running.org_id = c.org_id
                 and running.kind = 'incremental' and running.status = 'running'
-           )`))) as unknown as {
-        rows: {
-          id: string;
-          orgId: string;
-          schedule: string;
-          lastSuccessfulAt: Date | null;
-          lastScheduledAttemptAt: Date | null;
-          scheduledFailuresSinceSuccess: number;
-        }[];
-      };
-      const now = new Date();
-      for (const c of candidates.rows) {
-        if (!mirrorIsDue({ ...c, now })) continue;
-        const bucket = Math.floor(now.getTime() / MIRROR_TICK_MS);
-        await enqueueMigration(
-          {
-            orgId: c.orgId,
-            connectionId: c.id,
-            mode: "mirror",
-            triggeredBy: "scheduler",
-          },
-          { jobId: `mirror|${c.id}|${bucket}` },
+           )`))) as unknown as { rows: MirrorCandidate[] };
+      const outcome = await enqueueDueMirrors(candidates.rows);
+      if (outcome.orgErrors.length > 0) {
+        console.error(
+          `[mirror-scheduler] ${outcome.orgErrors.length} org(s) failed to enqueue this tick; they retry next tick`,
         );
       }
     } catch (e) {
