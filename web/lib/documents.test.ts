@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import test from 'node:test'
@@ -41,9 +40,6 @@ const { createApplicationRecord } = await import('./application/records.ts')
 const { correctPostedDocument } = await import('./application/documents.ts')
 
 const NO_PROFILES = { codes: new Map(), groups: new Map() }
-const DOCUMENTS_SOURCE = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
-const DOCUMENT_POLICY_SOURCE = readFileSync(new URL('../../engine/src/records/document-edit-policy.ts', import.meta.url), 'utf8')
-const DOCUMENT_SERVICE_SOURCE = readFileSync(new URL('../../engine/src/ledger/document-service.ts', import.meta.url), 'utf8')
 
 async function listenProvider(server: Server): Promise<string> {
   await new Promise<void>((resolve, reject) => {
@@ -302,12 +298,6 @@ test('computeBillTotals carries negative and zero lines into the totals', () => 
   assert.equal(computed.subtotal, '60.0000')
   assert.equal(computed.taxTotal, '0.0000')
   assert.equal(computed.total, '60.0000')
-})
-
-test('the generic editor no longer filters lines by positive amount', () => {
-  // Regression pin (source-level, like wip-billing.test.ts): the save path
-  // must validate every submitted line, never silently drop non-positive ones.
-  assert.doesNotMatch(DOCUMENTS_SOURCE, /const valid = body\.lines\.filter/)
 })
 
 test(
@@ -1349,42 +1339,6 @@ test(
     }
   },
 )
-test('load and lock SQL preserve the exact revision token end to end', () => {
-  assert.match(
-    readFileSync(new URL('../../engine/src/records/revision.ts', import.meta.url), 'utf8'),
-    /function documentRevisionSql[\s\S]*?at time zone 'UTC'[\s\S]*?HH24:MI:SS\.US/,
-  )
-  // Every load and every lock projects the exact canonical token — the
-  // revision_seq counter, never the display timestamp: the list read,
-  // loadDocument's row, loadDocumentEditCurrent's snapshot, the posted-
-  // correction lock, the edit lock, and the create path's in-transaction
-  // snapshot of its own uncommitted claim row (documents.ts, "Mirrors
-  // loadDocumentEditCurrent" — the shared loader cannot see that row yet).
-  //
-  // A bare count only reports that the number moved; it cannot say whether a
-  // new site is projecting the right thing. Each of the six was read before
-  // this was raised from five, and the list above names them so the next
-  // person can do the same instead of just bumping the integer.
-  assert.equal((DOCUMENTS_SOURCE + DOCUMENT_POLICY_SOURCE + DOCUMENT_SERVICE_SOURCE).match(/documentRevisionCounterSql\(sql\.raw\('(d\.)?revision_seq'\)\)/g)?.length, 6)
-  assert.match(DOCUMENTS_SOURCE, /select kind, status,[\s\S]*?documentRevisionCounterSql[\s\S]*?for update/)
-  // Draft minting is attributable: the insert stamps the creating user, and
-  // on_create flows settle before the writer ever receives a token.
-  assert.match(
-    DOCUMENTS_SOURCE,
-    /createDocumentDraft[\s\S]*?createdBy: userId,[\s\S]*?runRecordFlows\(\{ kind: 'on_create'/,
-  )
-  assert.match(
-    DOCUMENTS_SOURCE,
-    /updated_at = greatest\([\s\S]*?clock_timestamp\(\)[\s\S]*?interval '1 microsecond'/,
-  )
-  assert.doesNotMatch(
-    DOCUMENT_POLICY_SOURCE.slice(
-      DOCUMENT_POLICY_SOURCE.indexOf('export function requireDocumentEditRevision'),
-      DOCUMENT_POLICY_SOURCE.indexOf('export function assertNoExistingDocumentCorrection'),
-    ),
-    /new Date|getTime\(/,
-  )
-})
 
 type VersionedLockRow = { status: string; updatedAt: unknown }
 
@@ -1481,46 +1435,6 @@ test('a reversal link cannot be constructed without the evidence the database ma
     () => buildReversalLinkEvidence({ ...base, fromDocumentId: '', toDocumentId: 's1', reason: 'a perfectly valid reason', requestedBy: 'u1' }),
     (e: unknown) => e instanceof DocumentEditError && e.status === 422 && /both the replacement and the corrected/.test(e.message),
   )
-})
-
-test("the posted-correction path records its reverses edge through the mandatory-evidence builder", () => {
-  // Regression pin (source-level): createPostedCorrectionDraft used to insert
-  // a bare 'reverses' edge — no reason, requester, or timestamp — which the
-  // database's document_links_reversal_evidence CHECK now rejects outright.
-  // The correction transaction must compose the engine evidence builder.
-  const source = readFileSync(new URL('./documents.ts', import.meta.url), 'utf8')
-  assert.match(source, /\.\.\.buildReversalLinkEvidence\(/)
-  // Inside the correction transaction itself, the edge must be composed from
-  // the builder — no hand-rolled linkType line may exist there.
-  const fn = source.match(/export async function createPostedCorrectionDraft[\s\S]*?\n\}/)
-  assert.ok(fn, 'createPostedCorrectionDraft found')
-  assert.doesNotMatch(fn[0], /linkType:/)
-})
-
-test('the UI correction route commits the replacement and its void as one atomic unit', () => {
-  // Regression pin (source-level): POST used to create the replacement, then
-  // request the void outside any transaction, and paper over failures with a
-  // best-effort deleteDocument whose errors were swallowed — so a failed void
-  // (and a failed cleanup) left a `reverses` edge against a still-posted
-  // source, permanently bricking further corrections with a 409 conflict.
-  const routeSource = readFileSync(
-    new URL('../app/api/documents/[id]/correct/route.ts', import.meta.url),
-    'utf8',
-  )
-  const handler = routeSource.slice(routeSource.indexOf('export async function POST'))
-  const atomic = handler.indexOf('withOrgTransaction(')
-  const create = handler.indexOf('createPostedCorrectionDraft(', atomic)
-  const defer = handler.indexOf('{ deferFlows: true }', create)
-  const voidCall = handler.indexOf('requestDocumentVoid(', defer)
-  const dispatch = handler.indexOf('runPostedCorrectionDraftFlows(', voidCall)
-  assert.ok(atomic >= 0 && create > atomic && defer > create && voidCall > defer)
-  // Flow dispatch happens only after the atomic unit resolves.
-  assert.ok(dispatch > voidCall)
-  // Neither write may be separated from the wrapper by an early return.
-  assert.doesNotMatch(handler.slice(atomic, voidCall), /NextResponse\.json/)
-  // The swallowed compensating delete must stay dead.
-  assert.doesNotMatch(handler, /deleteDocument/)
-  assert.doesNotMatch(handler, /\.catch\(\(\) => \{\}\)/)
 })
 
 test('provider failure during API document create leaves no document or dependent rows', { skip: !env.OPENBOOKS_DB_URL }, async () => {

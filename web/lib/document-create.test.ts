@@ -1,13 +1,36 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
 import {
-  DOCUMENT_CREATE_KINDS,
   documentCreateHref,
   isDocumentCreateKind,
 } from './document-kinds'
+
+const dom = new (await import('jsdom')).JSDOM('<!doctype html><html><body></body></html>', {
+  url: 'http://localhost/ar/invoices',
+})
+const domWindow = dom.window as unknown as Record<string, unknown>
+const globals = globalThis as Record<string, unknown>
+for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event']) {
+  if (globals[key] === undefined) globals[key] = domWindow[key]
+}
+;(globalThis as typeof globalThis & { __documentCreateNavigations?: string[] }).__documentCreateNavigations = []
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'next/navigation') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export function useRouter(){return {push(href){globalThis.__documentCreateNavigations.push(href)}}}',
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+})
+const React = await import('react')
+Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true })
+const { act } = await import('react')
+const { createRoot } = await import('react-dom/client')
+const { NewDocumentButton } = await import('../components/new-document-button.tsx')
 
 /**
  * URL-only uniform create contract: clicking New navigates to `?doc=new&kind=`
@@ -26,21 +49,6 @@ const DIRECT_HREFS: [basePath: string, kind: string, href: string][] = [
   ['/banking/transactions', 'transfer', '/banking/transactions?doc=new&kind=transfer&mode=edit'],
 ]
 
-test('uniform create covers exactly the nine shared document kinds', () => {
-  assert.deepEqual([...DOCUMENT_CREATE_KINDS], [
-    'customer_invoice',
-    'customer_credit',
-    'vendor_bill',
-    'vendor_credit',
-    'card_charge',
-    'card_refund',
-    'check',
-    'deposit',
-    'transfer',
-  ])
-  for (const kind of DOCUMENT_CREATE_KINDS) assert.equal(isDocumentCreateKind(kind), true)
-})
-
 test('one exact direct href per creatable kind', () => {
   for (const [basePath, kind, href] of DIRECT_HREFS) {
     assert.equal(documentCreateHref(basePath, kind), href, kind)
@@ -54,13 +62,36 @@ test('create href refuses non-document kinds by name instead of routing them', (
   }
 })
 
-test('NewDocumentButton performs zero writes: no fetch, no draft endpoint', () => {
-  // Structural guard, labeled as such: the component must stay URL-only. If
-  // this fires, someone reintroduced the instant-draft POST and every
-  // open/cancel allocates a ghost row again.
-  const here = dirname(fileURLToPath(import.meta.url))
-  const source = readFileSync(join(here, '..', 'components', 'new-document-button.tsx'), 'utf8')
-  assert.ok(!source.includes('fetch('), 'NewDocumentButton must not call fetch')
-  assert.ok(!source.includes('/api/documents/draft'), 'NewDocumentButton must not invoke the draft factory')
-  assert.ok(source.includes('documentCreateHref'), 'New navigates through the pinned href helper')
+test('choosing New navigates to an in-memory draft without sending a write request', async (t) => {
+  const calls: string[] = []
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    calls.push(String(input))
+    return Response.json({ ok: true })
+  }) as typeof fetch
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+    globalThis.fetch = originalFetch
+  })
+
+  await act(async () => {
+    root.render(React.createElement(NewDocumentButton, {
+      items: [{ kind: 'customer_invoice', label: 'Invoice' }],
+      basePath: '/ar/invoices',
+      triggerLabel: 'New',
+    }))
+  })
+  const create = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Invoice'))
+  assert.ok(create, 'the invoice create action is visible')
+  await act(async () => create.click())
+
+  assert.deepEqual(
+    (globalThis as typeof globalThis & { __documentCreateNavigations: string[] }).__documentCreateNavigations,
+    ['/ar/invoices?doc=new&kind=customer_invoice&mode=edit'],
+  )
+  assert.deepEqual(calls, [], 'opening a draft must not create a server row')
 })

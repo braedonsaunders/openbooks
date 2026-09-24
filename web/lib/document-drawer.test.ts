@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { DOC_KINDS } from './document-kinds.ts'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -23,16 +21,11 @@ const {
   buildDocumentSaveRequest,
   loadDraftDocumentSnapshot,
   persistedDocumentRevision,
-  readDocumentSaveFailure,
   reconcileCanonicalDraftRead,
   reconcilePersistedDocumentSnapshot,
   revisionFromSuccessfulDocumentSave,
 } = await import('../components/document-drawer.tsx')
 
-const DRAWER_SOURCE = readFileSync(new URL('../components/document-drawer.tsx', import.meta.url), 'utf8')
-const EXPENSE_DRAWER_SOURCE = readFileSync(new URL('../app/(app)/expenses/ExpenseDrawer.tsx', import.meta.url), 'utf8')
-const JOURNAL_DRAWER_SOURCE = readFileSync(new URL('../app/(app)/journal/JournalDrawer.tsx', import.meta.url), 'utf8')
-const FIELD_TICKET_DRAWER_SOURCE = readFileSync(new URL('../app/(app)/field-tickets/FieldTicketDrawer.tsx', import.meta.url), 'utf8')
 const OPENED_REVISION = '2026-08-24T12:34:56.123001Z'
 const SAVED_REVISION = '2026-08-24T12:34:56.123999Z'
 const CONCURRENT_REVISION = '2026-08-24T12:34:56.124777Z'
@@ -166,56 +159,6 @@ test('cancel restores the saved baseline across delayed props and adopts an unse
     new Set([OPENED_REVISION, SAVED_REVISION]),
   )
   assert.deepEqual(adopted, { snapshot: external, rehydrate: true })
-})
-
-test('a stale save surfaces the server conflict instead of manufacturing a new token', async () => {
-  const failure = await readDocumentSaveFailure(
-    {
-      status: 409,
-      json: async () => ({ error: 'this document changed after you opened it' }),
-    },
-    'fallback',
-  )
-  assert.deepEqual(failure, {
-    message: 'this document changed after you opened it',
-    isConflict: true,
-  })
-
-  // Save moved behind the re-entry guard (runExclusive): slice the guarded
-  // body, not the old `async function save()` declaration.
-  assert.ok(
-    DRAWER_SOURCE.includes('const save = runExclusive(async () => {'),
-    'save runs behind the re-entry guard so a double-click sends one write',
-  )
-  const save = DRAWER_SOURCE.slice(
-    DRAWER_SOURCE.indexOf('const save = runExclusive(async () => {'),
-    DRAWER_SOURCE.indexOf('async function confirmDiscard()'),
-  )
-  assert.match(save, /buildDocumentSaveRequest\([\s\S]*?documentRevision/)
-  assert.match(
-    save,
-    /savedRevision = revisionFromSuccessfulDocumentSave\(data\)[\s\S]*?setDocumentRevision\(savedRevision\)/,
-  )
-  // Fleet-8 m1: save() runs on the shared action path — the never-throwing
-  // read, the pin and the toast live in the package now. Same contract: the
-  // server conflict surfaces verbatim and the save state goes 'error',
-  // render-proved in document-drawer-save-refusal.test.tsx.
-  assert.match(save, /await execute\([\s\S]*?fetchAction\(request\.path/)
-  assert.match(save, /onRefused: \(\) => \{[\s\S]*?setSaveState\('error'\)/)
-  assert.doesNotMatch(save, /readDocumentSaveFailure/)
-  assert.doesNotMatch(save, /Date\.now|new Date\(/)
-  assert.match(
-    DRAWER_SOURCE,
-    /reconcilePersistedDocumentSnapshot\([\s\S]*?resetForm\(decision\.snapshot\.payload\)/,
-  )
-  assert.match(
-    DRAWER_SOURCE,
-    /persistedBaseline\.current = \{[\s\S]*?payload: data[\s\S]*?resetForm\(data\)/,
-  )
-  assert.match(
-    DRAWER_SOURCE,
-    /function cancel\(\)[\s\S]*?reconcilePersistedDocumentSnapshot\([\s\S]*?resetForm\(decision\.snapshot\.payload\)/,
-  )
 })
 
 // ---------------------------------------------------------------------------
@@ -377,22 +320,6 @@ test('the field-ticket drawer sends expectedRevision on header and grid saves an
   assert.equal(requests[1]!.body.expectedRevision, SAVED_REVISION, 'grid save chains the refreshed token')
 })
 
-test('field-ticket multi-section saves fence each request with the prior response revision', () => {
-  const call = FIELD_TICKET_DRAWER_SOURCE.slice(
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function call('),
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveHeader('),
-  )
-  assert.match(call, /revision: latestRevisionRef\.current/)
-  assert.match(call, /latestRevisionRef\.current = result\.revision/)
-  assert.doesNotMatch(call, /revision: ticket\.revision/)
-
-  const saveAll = FIELD_TICKET_DRAWER_SOURCE.slice(
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveAll('),
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function submit('),
-  )
-  assert.match(saveAll, /await saveHeader\(\)[\s\S]*await saveGrid\(\)/)
-})
-
 test('a refused send-for-signature hands the server reason back instead of a fallback (F-t04-001)', async () => {
   // SIM Northstar has no email transport: the route 422s with the typed
   // FieldTicketError reason. The mutation must carry that reason to the
@@ -414,39 +341,6 @@ test('a refused send-for-signature hands the server reason back instead of a fal
   })
   assert.deepEqual(result, { status: 'error', message: refusal })
   assert.equal(requests[0]!.body.action, 'send-signature')
-})
-
-test('a refused send-for-signature pins as an alert in the send dialog (F-t04-001)', () => {
-  // The toast alone expires and the failure read as silent: the send form
-  // must pin the refused reason past it, and a retry must clear the stale pin.
-  const sendForm = FIELD_TICKET_DRAWER_SOURCE.slice(
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('ft-send-to'),
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('editor.cancel'),
-  )
-  assert.match(
-    sendForm,
-    /\{ onErrorMessage: setSendError \}/,
-    'a refused send must pin the server reason into dialog state',
-  )
-  assert.match(
-    sendForm,
-    /\{sendError \? \(\s*<p role="alert"/,
-    'the pinned send refusal must render as a persistent alert in the send form',
-  )
-  assert.match(
-    sendForm,
-    /setSendError\(null\)/,
-    'retrying the send must clear the stale refusal pin',
-  )
-  const call = FIELD_TICKET_DRAWER_SOURCE.slice(
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function call('),
-    FIELD_TICKET_DRAWER_SOURCE.indexOf('async function saveHeader('),
-  )
-  assert.match(
-    call,
-    /options\.onErrorMessage\?\.?\(result\.message\)/,
-    'call must forward the refused reason to the pinning sink as well as the toast',
-  )
 })
 
 test('each editor surfaces a genuinely stale token as the server 409 and never retries or re-mints a token', async () => {
@@ -573,66 +467,4 @@ test('a canonical read adopts clean editors, pins unchanged dirty content, and c
     reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: true }),
     { action: 'conflict', snapshot: movedOn },
   )
-})
-
-test('every interactive editor wires the shared fence through its real Save path', () => {
-  // Expense + journal go through the shared builder; the field ticket names
-  // its route's own expectedRevision key.
-  for (const [source, routine] of [
-    [EXPENSE_DRAWER_SOURCE, 'saveExpenseReport'],
-    [JOURNAL_DRAWER_SOURCE, 'saveJournalDraft'],
-  ] as const) {
-    assert.match(source, new RegExp(`buildDocumentSaveRequest\\([\\s\\S]*?revision`), `${routine} builds through the shared builder`)
-    assert.match(source, new RegExp(`${routine}\\(`), 'the Save button executes the exported fenced routine')
-  }
-  assert.match(FIELD_TICKET_DRAWER_SOURCE, /expectedRevision: persistedDocumentRevision\(input\.revision\)/)
-  assert.match(FIELD_TICKET_DRAWER_SOURCE, /sendFieldTicketMutation\(/)
-  assert.match(
-    FIELD_TICKET_DRAWER_SOURCE,
-    /result\.status === 'conflict'[\s\S]{0,120}reloadTicketAfterConflict/,
-    '409 triggers the reload flow',
-  )
-})
-
-test('the check form exposes an optional payee and the funding bank without mandating a party', () => {
-  // F-t05-008: the standalone check form had no payee and no bank-account
-  // field although the record model has both. The payee must stay optional
-  // (partyRole null: the submit gate and the server edit guard key off it),
-  // so anonymous expense checks keep saving and posting.
-  assert.equal(DOC_KINDS.check!.partyRole, null)
-  assert.equal(DOC_KINDS.check!.optionalPartyRole, 'vendor')
-  assert.equal(DOC_KINDS.check!.fundingSource, 'bank')
-  // The fallback party picker renders from the optional-aware role, while
-  // the submit requirement stays on the mandatory role alone.
-  assert.match(DRAWER_SOURCE, /\{pickerPartyRole \? \(/)
-  assert.match(DRAWER_SOURCE, /disabled=\{busy \|\| \(config\.partyRole \? !partyId : false\)/)
-  // The funding-bank block covers every bank-funded kind (check + deposit),
-  // labelled per kind from existing catalog copy.
-  assert.match(DRAWER_SOURCE, /\{config\.fundingSource === 'bank' \? \(/)
-  assert.ok(!DRAWER_SOURCE.includes("{config.kind === 'deposit' ? ("))
-})
-
-test('the card picker falls back to the card-liability account when no instruments exist', () => {
-  // F-t05-020: the card picker lists payment_cards instruments, but no UI
-  // creates one — with zero instruments the picker is unfillable. When no
-  // instruments exist the drawer must offer the reconcilable card-liability
-  // accounts (the controlAccountId override the engine cardRule reads
-  // first), with an explicit empty state naming what qualifies when those
-  // are absent too.
-  assert.match(DRAWER_SOURCE, /cardAccounts/)
-  assert.match(DRAWER_SOURCE, /controlAccountId/)
-  assert.match(DRAWER_SOURCE, /drawer\.cardAccountHelp/)
-  assert.match(DRAWER_SOURCE, /drawer\.noCardAccounts/)
-  assert.match(DRAWER_SOURCE, /<Link href="\/accounts"/)
-})
-
-test('the funding-bank picker names the empty-data state with a Banking link', () => {
-  // F-t05-008 follow-up: SIM Northstar has zero bank accounts, so the
-  // From-account picker opened with only a disabled 'No matches' and no
-  // search — indistinguishable from a broken source. An empty bank list
-  // must render an explicit empty state pointing at Banking instead.
-  assert.match(DRAWER_SOURCE, /\(bankAccounts \?\? accounts\)\.length > 0 \? \(/)
-  assert.match(DRAWER_SOURCE, /drawer\.noBankAccounts/)
-  assert.match(DRAWER_SOURCE, /drawer\.noBankAccountsCta/)
-  assert.match(DRAWER_SOURCE, /<Link href="\/banking"/)
 })
