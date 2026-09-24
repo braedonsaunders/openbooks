@@ -290,6 +290,22 @@ test("forcing an inconsistent layer state refuses by name, never a bare failure"
   );
 });
 
+test("exactCostFragments refuses unlayerable shapes by name, never a bare failure", () => {
+  // A zero quantity or a negative value cannot become a cost layer. The old
+  // code threw a bare Error (500 through the route catch-alls); the refusal
+  // is an InventoryError (422) naming the offending inputs and the remedy.
+  for (const [quantity, value] of [["0", "10.0000"], ["3", "-0.0001"]] as const) {
+    assert.throws(
+      () => exactCostFragments(quantity, value),
+      (error: unknown) => {
+        assert.ok(error instanceof InventoryError);
+        assert.match(error.message, new RegExp(`quantity ${quantity.replace(".", "\\.")}`));
+        assert.match(error.message, /instead/);
+        return true;
+      },
+    );
+  }
+});
 
 test("unitCostPerQuantity is half-up so 6 @ 10.0000 is 1.6667, not truncated 1.6666", () => {
   assert.equal(unitCostPerQuantity("10.0000", "6"), "1.6667");
