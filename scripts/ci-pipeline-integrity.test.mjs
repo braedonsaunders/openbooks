@@ -366,7 +366,7 @@ const SCHEMA_BOOTSTRAP = /scripts\/bootstrap\.ts/
 function topLevelBlock(source, key) {
   const start = source.indexOf(`\n  ${key}:`)
   if (start === -1) return ''
-  // Exactly two spaces of indent: `\n  ` alone also matches every deeper key.
+  // Exactly two spaces of indent: `\n ` alone also matches every deeper key.
   const next = source.slice(start + 1).search(/\n {2}(?=\S)/)
   return next === -1 ? source : source.slice(start, start + 1 + next)
 }

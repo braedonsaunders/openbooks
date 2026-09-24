@@ -33,7 +33,7 @@ const ANCHORS = Object.freeze([
   "tax_groups",
 ]);
 
-// tax_group_members is intentionally org-less.  Its two tenant-owned parents
+// tax_group_members is intentionally org-less. Its two tenant-owned parents
 // are pinned together by the migration's deferrable constraint trigger.
 const ORGLESS_EXCEPTIONS = Object.freeze({
   tax_group_members: new Set([
