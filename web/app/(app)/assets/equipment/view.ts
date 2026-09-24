@@ -113,7 +113,7 @@ export async function loadEquipmentPage(
                where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted'))),0) billable
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
     `),
-    equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId) : null,
+    equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId, authz.allowedSubsidiaryIds) : null,
     equipmentId || creating ? Promise.all([
       db.execute<EquipmentItemRow>(sql`select id,code,name from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`),
       db.execute<EquipmentAssetRow>(sql`select id,asset_number as number,name from fixed_assets where org_id=${authz.user.orgId} ${authz.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``} order by asset_number`),

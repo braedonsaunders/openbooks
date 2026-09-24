@@ -1,9 +1,15 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
-export async function loadEquipment(id: string, orgId: string) {
-  const unit = ((await db.execute(sql`
+async function loadEquipmentRows(
+  executor: SqlExecutor,
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
+  const unit = ((await executor.execute(sql`
     select e.*, i.name as charge_item_name, b.name as rate_book_name,
            f.asset_number as fixed_asset_number, f.acquisition_cost as fixed_asset_cost
       from equipment_units e
@@ -11,9 +17,11 @@ export async function loadEquipment(id: string, orgId: string) {
       left join item_rate_books b on b.id = e.rate_book_id and b.org_id = e.org_id
       left join fixed_assets f on f.id = e.fixed_asset_id and f.org_id = e.org_id
      where e.id = ${id} and e.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`e.subsidiary_id`, allowedSubsidiaryIds)}
+     for share of e
   `)))
   if (!unit.rows[0]) return null
-  const metrics = ((await db.execute(sql`
+  const metrics = ((await executor.execute(sql`
     select
       coalesce((select sum(dl.base_quantity) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
         where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted')), 0) as usage,
@@ -34,4 +42,35 @@ export async function loadEquipment(id: string, orgId: string) {
         where eu.id = ${id} and eu.org_id = ${orgId} and dsl.posted_amount is not null), 0) as depreciation
   `)))
   return { unit: unit.rows[0], metrics: metrics.rows[0] }
+}
+
+export async function loadEquipment(
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+) {
+  // Scope check first, then one transaction for the unit and its
+  // usage/revenue/cost aggregates, locking the unit row first (READ
+  // COMMITTED, like loadAsset): a concurrent unit rehome blocks on the lock
+  // instead of moving rows between the unit read and the metric reads of one
+  // response. (A REPEATABLE READ snapshot cannot take the lock: a locking
+  // read that meets a concurrent update errors with 40001 instead of
+  // waiting.)
+  return withOrgTransaction(orgId, () => loadEquipmentRows(db, id, orgId, allowedSubsidiaryIds))
+}
+
+/**
+ * Reload inside the caller's own write transaction (the equipment PATCH
+ * holds the unit FOR UPDATE there): opening a snapshot here would either
+ * throw (isolation change inside an ambient unit) or self-deadlock (a
+ * second connection locking the row the outer unit holds). The outer unit's
+ * locks already pin the state, so the same scoped queries run on it.
+ */
+export async function loadEquipmentInWrite(
+  tx: SqlExecutor,
+  id: string,
+  orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+) {
+  return loadEquipmentRows(tx, id, orgId, allowedSubsidiaryIds)
 }

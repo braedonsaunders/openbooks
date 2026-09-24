@@ -122,9 +122,10 @@ const getEquipment: AssistantToolDef = {
       return { ok: false, error: "equipment_feature_disabled" };
     }
     const a = raw as { id: string };
-    const data = await loadEquipment(a.id, authz.user.orgId);
-    // The route answers 404 for a unit outside the caller's scope; so do we.
-    if (!data || (authz.allowedSubsidiaryIds && !authz.allowedSubsidiaryIds.has(String((data.unit as Record<string, unknown>).subsidiary_id)))) {
+    // The loader enforces the caller scope on the locked unit row, so an
+    // out-of-scope unit answers exactly like a missing one.
+    const data = await loadEquipment(a.id, authz.user.orgId, authz.allowedSubsidiaryIds);
+    if (!data) {
       return { ok: false, error: "not found" };
     }
     const unit = data.unit as Record<string, unknown>;
