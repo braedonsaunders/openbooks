@@ -5084,6 +5084,8 @@
     }
   },
   "backupsManager": {
+    "pageTitle": "Sauvegardes",
+    "pageDescription": "Téléchargez une copie complète des données de votre organisation, planifiez des sauvegardes automatiques dans le stockage objet et définissez leur nombre de conservation.",
     "alerts": {
       "noObjectStorageBody": "Ce déploiement n’a pas de stockage objet S3 (S3_ENDPOINT / S3_BUCKET / identifiants) : les sauvegardes stockées et planifiées sont donc indisponibles. Le streaming limité au navigateur est volontairement désactivé car il ne peut pas fournir la preuve de hachage exigée pour une restauration. Utilisez le flux de travail opérateur <cli>backup-local-cli.ts</cli>.",
       "noObjectStorageTitle": "Le stockage objet n’est pas configuré",

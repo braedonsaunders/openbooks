@@ -5084,6 +5084,8 @@
     }
   },
   "backupsManager": {
+    "pageTitle": "Cópias de segurança",
+    "pageDescription": "Baixe uma cópia completa dos dados da sua organização, agende backups automáticos no armazenamento de objetos e defina quantos serão mantidos.",
     "errors": {
       "couldNotSave": "não foi possível salvar a política de backup",
       "couldNotStart": "não foi possível iniciar o backup",

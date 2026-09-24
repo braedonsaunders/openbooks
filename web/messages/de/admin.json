@@ -5187,6 +5187,8 @@
     "title": "Apps"
   },
   "backupsManager": {
+    "pageTitle": "Sicherungen",
+    "pageDescription": "Laden Sie eine vollständige Kopie der Organisationsdaten herunter, planen Sie automatische Sicherungen im Objektspeicher und legen Sie die Anzahl der aufzubewahrenden Sicherungen fest.",
     "alerts": {
       "noObjectStorageBody": "Diese Bereitstellung hat keinen S3-Objektspeicher (S3_ENDPOINT / S3_BUCKET / Zugangsdaten), daher sind gespeicherte und geplante Sicherungen nicht verfügbar. Reines Browser-Streaming ist absichtlich deaktiviert, weil es keine wiederherstellungsfähigen Hash-Nachweise liefern kann. Verwenden Sie den Operator-Workflow <cli>backup-local-cli.ts</cli>.",
       "noObjectStorageTitle": "Objektspeicher ist nicht konfiguriert",

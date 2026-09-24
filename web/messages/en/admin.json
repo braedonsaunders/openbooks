@@ -5084,6 +5084,8 @@
     }
   },
   "backupsManager": {
+    "pageTitle": "Backups",
+    "pageDescription": "Download a complete copy of your organization's data, schedule automatic backups to object storage, and control how many are retained.",
     "errors": {
       "couldNotSave": "could not save the backup policy",
       "couldNotStart": "could not start the backup",

@@ -36,7 +36,7 @@ registerHooks({
       return {
         format: "module",
         shortCircuit: true,
-        source: `export async function getTranslations() { return (key) => key }`,
+      source: `export async function getTranslations(namespace) { return (key) => namespace + '.' + key }`,
       };
     }
     if (url === "mock:backups-jobs") {
@@ -80,7 +80,7 @@ test("the backups page serializes run timestamps as ISO strings", async () => {
     const data = await loadAdminBackups();
     assert.equal(data.manager.runs.length, 1);
     const run = data.manager.runs[0]!;
-    assert.equal(typeof run.createdAt, "string", "createdAt must already be text, not a Date");
+    assert.deepEqual([data.title, data.description, typeof run.createdAt], ["admin.backupsManager.pageTitle", "admin.backupsManager.pageDescription", "string"]);
     assert.match(run.createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
     assert.ok(Number.isFinite(Date.parse(run.createdAt)), "createdAt parses back to a time");
     assert.equal(typeof run.completedAt, "string");
