@@ -599,3 +599,160 @@ test("project merge refuses pay-application collisions and moves revenue contrac
     await dropScratchOrg(org.orgId);
   }
 });
+
+async function seedFieldTime(orgId: string, projectId: string, tag: string, day: string) {
+  const foreman = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${foreman}, ${orgId}, 'person', ${`Foreman ${tag}`}, true, '{}'::jsonb)`);
+  await db.execute(sql`
+    insert into crew_time_batches (org_id, foreman_party_id, project_id, worked_on)
+    values (${orgId}, ${foreman}, ${projectId}, ${day})`);
+  await db.execute(sql`
+    insert into project_geofences (org_id, project_id, kind, center, radius_m)
+    values (${orgId}, ${projectId}, 'circle', '{"lat": 43.65, "lng": -79.38}'::jsonb, 250)`);
+  await db.execute(sql`
+    insert into time_kiosks (org_id, name, device_token_hash, project_id)
+    values (${orgId}, ${`Kiosk ${tag}`}, ${`hash-${tag}`}, ${projectId})`);
+  await db.execute(sql`
+    insert into time_clock_events (org_id, client_event_id, employee_party_id, kind, occurred_at, project_id)
+    values (${orgId}, ${randomUUID()}, ${foreman}, 'clock_in', ${`${day}T08:00:00Z`}, ${projectId})`);
+  return foreman;
+}
+
+async function seedWorkerDay(
+  orgId: string,
+  subsidiaryId: string,
+  projectId: string,
+  name: string,
+  day: string,
+): Promise<string> {
+  const partyId = randomUUID();
+  await db.execute(sql`
+    insert into parties (id, org_id, kind, display_name, is_active, custom)
+    values (${partyId}, ${orgId}, 'person', ${name}, true, '{}'::jsonb)`);
+  const employmentId = randomUUID();
+  await db.execute(sql`
+    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+    values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId}, 1)`);
+  const policyId = randomUUID();
+  await db.execute(sql`
+    insert into hrm_per_diem_policies (id, org_id, name, basis, rules, currency, effective_from)
+    values (${policyId}, ${orgId}, 'Merge per-diem', 'flat_daily', '{}'::jsonb, 'CAD', '2026-01-01')`);
+  await db.execute(sql`
+    insert into hrm_per_diem_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
+    values (${orgId}, ${employmentId}, ${policyId}, ${projectId}, ${day}, '18.5000', 'CAD')`);
+  await db.execute(sql`
+    insert into hrm_travel_pay_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
+    values (${orgId}, ${employmentId}, ${policyId}, ${projectId}, ${day}, '41.2500', 'CAD')`);
+  return name;
+}
+
+test("project merge moves field-time and HRM rows but leaves filed certified runs", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const a = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-FT-A", "Fieldtime Alpha");
+    const b = await seedProject(org.orgId, org.subsidiaryId, org.customerId, "JOB-FT-B", "Fieldtime Beta");
+    await seedFieldTime(org.orgId, b, "B", "2026-08-04");
+    await seedWorkerDay(org.orgId, org.subsidiaryId, b, "Perdiem Worker", "2026-08-04");
+    await db.execute(sql`
+      insert into hrm_compliance_findings (org_id, project_id, kind)
+      values (${org.orgId}, ${b}, 'missing_rate')`);
+    // Filed compliance evidence stays on its original project (B-PRJ-03
+    // exclusion): a draft and a submitted run for the same week.
+    for (const [week, status] of [["2026-08-08", "draft"], ["2026-08-01", "submitted"]] as const) {
+      await db.execute(sql`
+        insert into hrm_certified_payroll_runs
+          (org_id, project_id, week_ending, status, payroll_run_document_ids, payload, format_key,
+           generated_at, submitted_at)
+        values (${org.orgId}, ${b}, ${week}, ${status}, '{}', '{"rows": []}'::jsonb, 'WH-347',
+                now(), case when ${status} = 'submitted' then now() else null end)`);
+    }
+    const result = await mergeProjects(org.orgId, { survivorId: a, duplicateId: b, actorId: actor });
+    assert.equal(result.alreadyMerged, false);
+    for (const table of [
+      "crew_time_batches",
+      "project_geofences",
+      "time_kiosks",
+      "time_clock_events",
+      "hrm_per_diem_entries",
+      "hrm_travel_pay_entries",
+      "hrm_compliance_findings",
+    ]) {
+      const left = await db.execute<{ n: string }>(sql`
+        select count(*)::text as n from ${sql.identifier(table)}
+         where org_id = ${org.orgId} and project_id = ${b}`);
+      assert.equal(left.rows[0]?.n, "0", table);
+    }
+    const stayed = await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_certified_payroll_runs
+       where org_id = ${org.orgId} and project_id = ${b}`);
+    assert.equal(stayed.rows[0]?.n, "2");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("project merge refuses field-time and HRM day/kind collisions by name", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const pair = async (code: string, name: string) => ({
+      survivor: await seedProject(org.orgId, org.subsidiaryId, org.customerId, `${code}-S`, `${name} survivor`),
+      duplicate: await seedProject(org.orgId, org.subsidiaryId, org.customerId, `${code}-D`, `${name} duplicate`),
+    });
+    // Same foreman and day on both sides: both batches point at one
+    // foreman row so the foreman-day identity truly collides.
+    const g1 = await pair("JOB-G1", "Foreman");
+    const foremanS = await seedFieldTime(org.orgId, g1.survivor, "S1", "2026-08-04");
+    await seedFieldTime(org.orgId, g1.duplicate, "D1", "2026-08-04");
+    await db.execute(sql`update crew_time_batches set foreman_party_id = ${foremanS} where org_id = ${org.orgId} and project_id = ${g1.duplicate}`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: g1.survivor, duplicateId: g1.duplicate, actorId: actor }),
+      /crew time for the same foreman day exists on both projects \(Foreman S1 on 2026-08-04\)/,
+    );
+    // Same geofence kind on both sides.
+    const g2 = await pair("JOB-G2", "Geofence");
+    for (const projectId of [g2.survivor, g2.duplicate]) {
+      await db.execute(sql`
+        insert into project_geofences (org_id, project_id, kind, center, radius_m)
+        values (${org.orgId}, ${projectId}, 'circle', '{"lat": 43.65, "lng": -79.38}'::jsonb, 250)`);
+    }
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: g2.survivor, duplicateId: g2.duplicate, actorId: actor }),
+      /a circle geofence exists on both projects/,
+    );
+    // Same worker day for per-diem and travel pay on both sides.
+    const g3 = await pair("JOB-G3", "Perdiem");
+    await seedWorkerDay(org.orgId, org.subsidiaryId, g3.survivor, "Day Worker", "2026-08-05");
+    const employmentId = (
+      await db.execute<{ id: string }>(sql`
+        select e.id from worker_employments e join parties p on p.id = e.worker_party_id
+         where e.org_id = ${org.orgId} and p.display_name = 'Day Worker'`)
+    ).rows[0]!.id;
+    const policyId = (
+      await db.execute<{ id: string }>(sql`
+        select id from hrm_per_diem_policies where org_id = ${org.orgId} limit 1`)
+    ).rows[0]!.id;
+    await db.execute(sql`
+      insert into hrm_per_diem_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
+      values (${org.orgId}, ${employmentId}, ${policyId}, ${g3.duplicate}, '2026-08-05', '18.5000', 'CAD')`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: g3.survivor, duplicateId: g3.duplicate, actorId: actor }),
+      /per-diem for the same worker day exists on both projects \(Day Worker on 2026-08-05\)/,
+    );
+    await db.execute(sql`
+      insert into hrm_travel_pay_entries (org_id, employment_id, policy_id, project_id, worked_on, amount, currency)
+      values (${org.orgId}, ${employmentId}, ${policyId}, ${g3.survivor}, '2026-08-06', '41.2500', 'CAD'),
+             (${org.orgId}, ${employmentId}, ${policyId}, ${g3.duplicate}, '2026-08-06', '41.2500', 'CAD')`);
+    await db.execute(sql`
+      delete from hrm_per_diem_entries where org_id = ${org.orgId} and project_id = ${g3.duplicate}`);
+    await assert.rejects(
+      mergeProjects(org.orgId, { survivorId: g3.survivor, duplicateId: g3.duplicate, actorId: actor }),
+      /travel pay for the same worker day exists on both projects \(Day Worker on 2026-08-06\)/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

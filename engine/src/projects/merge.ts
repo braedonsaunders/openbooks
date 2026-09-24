@@ -7,10 +7,12 @@ import { uuidArray } from "../organization/subsidiaries.ts";
  * Admin merge for duplicate projects (the same job under two ids — e.g. a
  * connector mirror that landed outside the source-envelope fence). One
  * project survives; every reference moves to it inside a single transaction:
- * all typed `project_id` columns, project-task children, the parent link,
- * polymorphic activity links, and `reference`-type custom values pointing at
- * projects. The merged-away row is deactivated with a `merged_into` pointer
- * in `custom`, never deleted, and the merge writes one audit row with the
+ * all typed `project_id` columns except the reviewed exclusions in
+ * PROJECT_MERGE_EXCLUSIONS (certified-payroll runs stay put as filed
+ * compliance evidence), project-task children, the parent link, polymorphic
+ * activity links, and `reference`-type custom values pointing at projects.
+ * The merged-away row is deactivated with a `merged_into` pointer in
+ * `custom`, never deleted, and the merge writes one audit row with the
  * per-table moved counts. Re-running the same pair is a no-op.
  *
  * Posted-structure conflicts fail closed before anything moves: lines on
@@ -43,8 +45,15 @@ export interface DuplicateGroup {
   projects: DuplicateProject[];
 }
 
-/** Every typed `project_id` column that follows a project merge. */
-const PROJECT_REFS: readonly (readonly [table: string, column: string])[] = [
+/**
+ * Every typed `project_id` column that follows a project merge.
+ *
+ * Exported for the catalog-completeness test (merge-refs): any typed
+ * `project_id` column in the catalog must appear here or in
+ * PROJECT_MERGE_EXCLUSIONS, so a new project-linked table cannot silently
+ * stay behind on the merged-away project.
+ */
+export const PROJECT_REFS: readonly (readonly [table: string, column: string])[] = [
   ["journal_lines", "project_id"],
   ["document_lines", "project_id"],
   ["documents", "project_id"],
@@ -78,6 +87,26 @@ const PROJECT_REFS: readonly (readonly [table: string, column: string])[] = [
   ["schedule_dependencies", "project_id"],
   ["schedule_resources", "project_id"],
   ["sov_lines", "project_id"],
+  ["crew_time_batches", "project_id"],
+  ["project_geofences", "project_id"],
+  ["time_kiosks", "project_id"],
+  ["time_clock_events", "project_id"],
+  ["hrm_per_diem_entries", "project_id"],
+  ["hrm_travel_pay_entries", "project_id"],
+  ["hrm_compliance_findings", "project_id"],
+];
+
+/**
+ * Typed `project_id` columns that deliberately do NOT follow a merge, each
+ * with the reviewed reason. The completeness test requires every catalog
+ * column to sit here or in PROJECT_REFS — an exclusion is a decision with
+ * a remedy, never a quiet omission.
+ */
+export const PROJECT_MERGE_EXCLUSIONS: readonly (readonly [table: string, reason: string])[] = [
+  [
+    "hrm_certified_payroll_runs",
+    "filed compliance evidence stays on its original project: generated and submitted runs snapshot the week's project data into a payload whose rendered report file is housed in that project's file folder, amendment chains link runs across weeks, and draft members of a chain stay with the filed runs they amend. Re-pointing any of them would rewrite filed history — amend or regenerate under the survivor instead.",
+  ],
 ];
 
 /** List duplicate groups: same source ref, same name+customer, same job number. */
@@ -477,6 +506,66 @@ async function planMerge(
                       and s.status in ('draft', 'submitted', 'approved'))`)).rows[0]?.n;
   if (openPayAppCollision !== "0") {
     throw new ProjectMergeError("both projects hold an open pay application; reconcile pay applications first");
+  }
+  // Field-time identity is per foreman-day in storage: the same foreman's
+  // batch for the same day on both sides would violate the unique index on
+  // the move. Name the collisions like the change-order guard.
+  const batchCollision = (await runner.execute<{ detail: string }>(sql`
+    select p.display_name || ' on ' || d.worked_on::text as detail
+      from crew_time_batches d
+      join parties p on p.id = d.foreman_party_id and p.org_id = d.org_id
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from crew_time_batches s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.foreman_party_id = d.foreman_party_id and s.worked_on = d.worked_on)
+     limit 5`)).rows;
+  if (batchCollision.length > 0) {
+    throw new ProjectMergeError(
+      `crew time for the same foreman day exists on both projects (${batchCollision.map((row) => row.detail).join("; ")}); reconcile crew time first`,
+    );
+  }
+  // One geofence of each kind per project in storage.
+  const geofenceCollision = (await runner.execute<{ kind: string }>(sql`
+    select d.kind from project_geofences d
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from project_geofences s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId} and s.kind = d.kind)
+     limit 5`)).rows;
+  if (geofenceCollision.length > 0) {
+    throw new ProjectMergeError(
+      `a ${geofenceCollision.map((row) => row.kind).join(", ")} geofence exists on both projects; reconcile geofences first`,
+    );
+  }
+  // Per-diem and travel pay uniqueness is per worker-day in storage.
+  const perDiemCollision = (await runner.execute<{ detail: string }>(sql`
+    select p.display_name || ' on ' || d.worked_on::text as detail
+      from hrm_per_diem_entries d
+      join worker_employments e on e.org_id = d.org_id and e.id = d.employment_id
+      join parties p on p.id = e.worker_party_id and p.org_id = d.org_id
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from hrm_per_diem_entries s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.employment_id = d.employment_id and s.worked_on = d.worked_on)
+     limit 5`)).rows;
+  if (perDiemCollision.length > 0) {
+    throw new ProjectMergeError(
+      `per-diem for the same worker day exists on both projects (${perDiemCollision.map((row) => row.detail).join("; ")}); reconcile per-diem entries first`,
+    );
+  }
+  const travelCollision = (await runner.execute<{ detail: string }>(sql`
+    select p.display_name || ' on ' || d.worked_on::text as detail
+      from hrm_travel_pay_entries d
+      join worker_employments e on e.org_id = d.org_id and e.id = d.employment_id
+      join parties p on p.id = e.worker_party_id and p.org_id = d.org_id
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from hrm_travel_pay_entries s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.employment_id = d.employment_id and s.worked_on = d.worked_on)
+     limit 5`)).rows;
+  if (travelCollision.length > 0) {
+    throw new ProjectMergeError(
+      `travel pay for the same worker day exists on both projects (${travelCollision.map((row) => row.detail).join("; ")}); reconcile travel pay entries first`,
+    );
   }
   const moved: MergePreview["moved"] = [];
   for (const [table, column] of PROJECT_REFS) {
