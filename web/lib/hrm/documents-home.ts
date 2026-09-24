@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getDocumentDetail, listDocuments } from '@openbooks/engine/src/hrm/documents/documents.ts'
+import { HrmDocumentsError } from '@openbooks/engine/src/hrm/documents/errors.ts'
 import { listCategories } from '@openbooks/engine/src/hrm/documents/categories.ts'
 import { listTemplates } from '@openbooks/engine/src/hrm/documents/templates.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -197,69 +198,70 @@ export async function loadDocumentsHome(
     document: Awaited<ReturnType<typeof getDocumentDetail>> | null
     signerNames: Record<string, string>
     missingDetail: string | null
+    loadError: boolean
     labels: Record<string, string>
     // F3-38: Send, Remind, Void and Legal-hold render only with the
     // manage grant, never on document status alone.
     canManage: boolean
   } | null = null
   if (documentId) {
+    let document: Awaited<ReturnType<typeof getDocumentDetail>> | null = null
+    let signerNames = new Map<string, string>()
+    let loadError = false
     try {
-      const document = await getDocumentDetail({ orgId: authz.orgId, actorId: authz.userId, documentId })
-      const signerNames = await partyNames(authz.orgId, document.signers.map((s) => s.signerPartyId))
-      drawer = {
-        closeHref: hrefFor(status, null, false),
-        title: document.title,
-        canManage: authz.canManage,
-        document,
-        signerNames: Object.fromEntries(signerNames),
-        missingDetail: null,
-        labels: {
-          signers: t('documents.drawer.signers'),
-          events: t('documents.drawer.events'),
-          versions: t('documents.drawer.versions'),
-          send: t('documents.drawer.send'),
-          remind: t('documents.drawer.remind'),
-          void: t('documents.drawer.void'),
-          hold: t('documents.drawer.hold'),
-          releaseHold: t('documents.drawer.releaseHold'),
-          download: t('documents.drawer.download'),
-          voidReason: t('documents.drawer.voidReason'),
-          voidConfirm: t('documents.drawer.voidConfirm'),
-          cancel: t('documents.drawer.cancel'),
-          actionFailed: t('documents.drawer.actionFailed'),
-          noSigners: t('documents.drawer.noSigners'),
-          noEvents: t('documents.drawer.noEvents'),
-          declined: t('documents.drawer.declined'),
-          signed: t('documents.drawer.signed'),
-          pending: t('documents.drawer.pending'),
-          viewed: t('documents.drawer.viewed'),
-          retention: t('documents.drawer.retention'),
-          retentionActionDelete: retentionAction('delete'),
-          retentionActionAnonymize: retentionAction('anonymize'),
-          retentionUnverified: t('documents.drawer.retentionUnverified'),
-          eventCreated: t('documents.drawer.eventCreated'),
-          eventSent: t('documents.drawer.eventSent'),
-          eventViewed: t('documents.drawer.eventViewed'),
-          eventSigned: t('documents.drawer.eventSigned'),
-          eventDeclined: t('documents.drawer.eventDeclined'),
-          eventAcknowledged: t('documents.drawer.eventAcknowledged'),
-          eventVoided: t('documents.drawer.eventVoided'),
-          eventReminded: t('documents.drawer.eventReminded'),
-          eventExpired: t('documents.drawer.eventExpired'),
-          eventRetentionFlagged: t('documents.drawer.eventRetentionFlagged'),
-          eventDeleted: t('documents.drawer.eventDeleted'),
-        },
+      document = await getDocumentDetail({ orgId: authz.orgId, actorId: authz.userId, documentId })
+      signerNames = await partyNames(authz.orgId, document.signers.map((s) => s.signerPartyId))
+    } catch (error) {
+      if (error instanceof HrmDocumentsError && (error.code === 'NOT_FOUND' || error.code === 'FORBIDDEN')) {
+        document = null
+      } else {
+        loadError = true
       }
-    } catch {
-      drawer = {
-        closeHref: hrefFor(status, null, false),
-        title: t('documents.drawer.title'),
-        canManage: authz.canManage,
-        document: null,
-        signerNames: {},
-        missingDetail: t('documents.drawer.missing'),
-        labels: {},
-      }
+    }
+    drawer = {
+      closeHref: hrefFor(status, null, false),
+      title: document?.title ?? t('documents.drawer.title'),
+      canManage: authz.canManage,
+      document: loadError ? null : document,
+      signerNames: Object.fromEntries(signerNames),
+      missingDetail: loadError ? t('documents.drawer.loadFailed') : document ? null : t('documents.drawer.missing'),
+      loadError,
+      labels: {
+        signers: t('documents.drawer.signers'),
+        events: t('documents.drawer.events'),
+        versions: t('documents.drawer.versions'),
+        send: t('documents.drawer.send'),
+        remind: t('documents.drawer.remind'),
+        void: t('documents.drawer.void'),
+        hold: t('documents.drawer.hold'),
+        releaseHold: t('documents.drawer.releaseHold'),
+        download: t('documents.drawer.download'),
+        voidReason: t('documents.drawer.voidReason'),
+        voidConfirm: t('documents.drawer.voidConfirm'),
+        cancel: t('documents.drawer.cancel'),
+        actionFailed: t('documents.drawer.actionFailed'),
+        noSigners: t('documents.drawer.noSigners'),
+        noEvents: t('documents.drawer.noEvents'),
+        declined: t('documents.drawer.declined'),
+        signed: t('documents.drawer.signed'),
+        pending: t('documents.drawer.pending'),
+        viewed: t('documents.drawer.viewed'),
+        retention: t('documents.drawer.retention'),
+        retentionActionDelete: retentionAction('delete'),
+        retentionActionAnonymize: retentionAction('anonymize'),
+        retentionUnverified: t('documents.drawer.retentionUnverified'),
+        eventCreated: t('documents.drawer.eventCreated'),
+        eventSent: t('documents.drawer.eventSent'),
+        eventViewed: t('documents.drawer.eventViewed'),
+        eventSigned: t('documents.drawer.eventSigned'),
+        eventDeclined: t('documents.drawer.eventDeclined'),
+        eventAcknowledged: t('documents.drawer.eventAcknowledged'),
+        eventVoided: t('documents.drawer.eventVoided'),
+        eventReminded: t('documents.drawer.eventReminded'),
+        eventExpired: t('documents.drawer.eventExpired'),
+        eventRetentionFlagged: t('documents.drawer.eventRetentionFlagged'),
+        eventDeleted: t('documents.drawer.eventDeleted'),
+      },
     }
   }
 
@@ -340,4 +342,3 @@ export async function loadDocumentsHome(
     generate,
   }
 }
-

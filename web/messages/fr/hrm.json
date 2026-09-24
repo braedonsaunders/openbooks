@@ -1913,6 +1913,7 @@
       "pending": "En attente",
       "viewed": "Lu",
       "missing": "Ce document n’est plus disponible.",
+      "loadFailed": "Impossible de charger ce document. Réessayez.",
       "retention": "Conservation",
       "eventCreated": "Créé",
       "eventSent": "Envoyé",

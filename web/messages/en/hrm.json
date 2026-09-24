@@ -1969,6 +1969,7 @@
       "pending": "Pending",
       "viewed": "Viewed",
       "missing": "This document is no longer available.",
+      "loadFailed": "This document could not be loaded. Retry to try again.",
       "retention": "Retention",
       "eventCreated": "Created",
       "eventSent": "Sent",
