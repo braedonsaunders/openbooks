@@ -2,18 +2,20 @@
  * Alias-redirect destinations with the reason attached (UX-17).
  *
  * Several setup entry points are permanent aliases — /admin/settings,
- * /admin/setup, and the payment-providers gate when Online payments is off.
- * A bare redirect lands the reader somewhere unexpected with no explanation,
- * so every alias forwards through `movedUrl`: the reader's own query params
- * travel along (task context stays shareable) and `?movedFrom=<source>`
- * tells the destination's notice which sentence to show. The destination
- * renders it via the SetupRedirectNotice component in the setup layout.
+ * /admin/setup, and the payment-providers gate when Online payments is off —
+ * and every rehomed setup entity redirects from its bookmarked
+ * /admin/setup/<key> to the home the registry records. A bare redirect
+ * lands the reader somewhere unexpected with no explanation, so every alias
+ * forwards through `movedUrl`: the reader's own query params travel along
+ * (task context stays shareable) and `?movedFrom=<source>` tells the
+ * destination's notice which sentence to show. The destination renders it
+ * via the SetupRedirectNotice component in the setup layout.
  */
 
 /** The query param naming the alias a reader arrived through. */
 export const MOVED_FROM_PARAM = 'movedFrom'
 
-export type MovedFromSource = 'settings' | 'setup-index' | 'payment-providers'
+export type MovedFromSource = 'settings' | 'setup-index' | 'payment-providers' | 'setup-entity'
 
 /**
  * Build an alias-redirect target: the destination plus the reader's own

@@ -4358,7 +4358,8 @@
       "title": "已将您重定向",
       "settingsBody": "/admin/settings 已移至此处“公司设置”下——请更新您的书签。",
       "indexBody": "设置现在从上线清单开始——请从这里着手。",
-      "providersBody": "支付服务商需要“在线支付”功能——请在此处启用以继续。"
+      "providersBody": "支付服务商需要“在线支付”功能——请在此处启用以继续。",
+      "entityBody": "此设置页面已移至其模块 — 请更新您的书签。"
     },
     "guide": {
       "hero": {

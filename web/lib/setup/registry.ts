@@ -298,6 +298,11 @@ export interface SetupEntity {
    *  embeddable via <SetupEntitySection>, but hidden from the setup rail and
    *  404s as a standalone /admin/setup page — it has one home elsewhere. */
   rehomed?: boolean
+  /** The home a bookmarked /admin/setup/<key> redirects to, with the
+   *  ?movedFrom notice. Required on every rehomed entry: a rehomed entity
+   *  without a recorded home is a 404 with no way back. May carry the
+   *  section address (e.g. '/admin/setup/payroll?tab=schedules'). */
+  rehomedTo?: string
   /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
    *  this entity is hidden from the setup rail and 404s as a standalone page. */
   featureKey?: string
@@ -1556,6 +1561,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'item-rate-books',
     table: 'item_rate_books',
     rehomed: true, // lives as a tab on the Items catalog module
+    rehomedTo: '/items',
     actorCols: true,
     groupKey: 'billing',
     featureKey: 'projects',
@@ -1583,6 +1589,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'item-rate-book-assignments',
     table: 'item_rate_book_assignments',
     rehomed: true, // lives on the customer & project records as an override section
+    rehomedTo: '/parties',
     actorCols: true,
     groupKey: 'billing',
     featureKey: 'projects',
@@ -1661,6 +1668,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'fair-value-prices',
     table: 'fair_value_prices',
     rehomed: true, // lives as a section on the item record (dated SSPs)
+    rehomedTo: '/items',
     actorCols: true,
     groupKey: 'revenue',
     featureKey: 'revenueRecognition',
@@ -1696,6 +1704,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     table: 'stock_locations',
     singularTitleKey: 'entities.stock-locations.singular',
     rehomed: true, // lives as a tab on the Inventory module
+    rehomedTo: '/inventory?inventoryView=locations',
     actorCols: true,
     groupKey: 'inventory',
     featureKey: 'inventory',
@@ -1724,6 +1733,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'item-inventory-profiles',
     table: 'item_inventory_profiles',
     rehomed: true, // lives as a Costing section on the item record
+    rehomedTo: '/items',
     // One profile per item (item_inventory_profiles_item_id_unique), so the
     // item is the import identity: re-imports dedupe instead of stacking a
     // second profile no UI can display.
@@ -1766,6 +1776,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     key: 'bom-components',
     table: 'bom_components',
     rehomed: true, // lives as a tab on the Inventory module
+    rehomedTo: '/inventory?inventoryView=bom',
     actorCols: true,
     groupKey: 'inventory',
     featureKey: 'inventory',
@@ -1851,6 +1862,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=filing',
     iconKey: 'landmark',
     orgScoped: true,
     actorCols: true,
@@ -1953,6 +1965,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=schedules',
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,
@@ -1985,6 +1998,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=components',
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -2086,6 +2100,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=union',
     iconKey: 'users',
     orgScoped: true,
     actorCols: true,
@@ -2116,6 +2131,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=entitlements',
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -2176,6 +2192,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=limits',
     iconKey: 'gauge',
     orgScoped: true,
     actorCols: true,
@@ -2219,6 +2236,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'payroll',
     rehomed: true, // subtab of the Payroll setup workspace
+    rehomedTo: '/admin/setup/payroll?tab=service',
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,
@@ -2315,6 +2333,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'clipboard-check',
     rehomed: true, // unified template + step drawer on /hrm/processes/templates
+    rehomedTo: '/hrm/processes/templates',
     orgScoped: true,
     orderBy: 'kind, name',
     hasActive: true,
@@ -2354,6 +2373,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     featureKey: 'hrm',
     iconKey: 'list-checks',
     rehomed: true, // nested inside the process-template drawer
+    rehomedTo: '/hrm/processes/templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -2635,6 +2655,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // nz_pool). Add a jurisdiction the engine doesn't ship, or shadow a built-in.
     key: 'tax-regimes',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=regimes',
     table: 'tax_regimes',
     singularTitleKey: 'entities.tax-regimes.singularTitle',
     actorCols: true,
@@ -2667,6 +2688,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // recapture/terminal behavior). Org rows override the built-in class table.
     key: 'tax-pool-classes',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=classes',
     table: 'tax_pool_classes',
     singularTitleKey: 'entities.tax-pool-classes.singularTitle',
     actorCols: true,
@@ -2707,6 +2729,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // expensing) — legislatively volatile, so config not code.
     key: 'tax-first-year-rules',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/tax-depreciation?tab=first-year',
     table: 'tax_first_year_rules',
     singularTitleKey: 'entities.tax-first-year-rules.singularTitle',
     actorCols: true,
@@ -2738,6 +2761,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // an asset category's Default method.
     key: 'depreciation-methods',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/depreciation?tab=methods',
     table: 'depreciation_methods',
     actorCols: true,
     groupKey: 'assets',
@@ -2766,6 +2790,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // runs a different method than the primary posting book).
     key: 'depreciation-book-policies',
     rehomed: true, // subtab of Fixed Assets & Depreciation setup
+    rehomedTo: '/admin/setup/depreciation?tab=books',
     table: 'depreciation_book_policies',
     actorCols: true,
     groupKey: 'assets',

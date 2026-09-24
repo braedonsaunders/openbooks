@@ -4033,7 +4033,8 @@
       "title": "Sie wurden weitergeleitet",
       "settingsBody": "/admin/settings befindet sich jetzt hier, unter Firmeneinrichtung — aktualisieren Sie Ihr Lesezeichen.",
       "indexBody": "Setup beginnt jetzt mit der Go-live-Checkliste — starten Sie hier.",
-      "providersBody": "Zahlungsanbieter benötigen die Funktion Online-Zahlungen — aktivieren Sie sie hier, um fortzufahren."
+      "providersBody": "Zahlungsanbieter benötigen die Funktion Online-Zahlungen — aktivieren Sie sie hier, um fortzufahren.",
+      "entityBody": "Diese Einrichtungsseite ist in ihr Modul umgezogen — aktualisieren Sie Ihr Lesezeichen."
     },
     "guide": {
       "activity": {

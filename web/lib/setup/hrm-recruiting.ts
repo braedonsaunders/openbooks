@@ -37,6 +37,7 @@ export const RECRUITING_KITS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmStructuredInterviews',
   rehomed: true, // section on the HRM Recruiting page (Interviews tab)
+  rehomedTo: '/hrm/recruiting?tab=interviews',
   iconKey: 'clipboard-check',
   orgScoped: true,
   actorCols: true,
@@ -120,6 +121,7 @@ export const RECRUITING_INTERVIEWER_POOLS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmInterviewScheduling',
   rehomed: true, // section on the HRM Recruiting page (Interviews tab)
+  rehomedTo: '/hrm/recruiting?tab=interviews',
   iconKey: 'users',
   orgScoped: true,
   actorCols: true,
@@ -149,6 +151,7 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmOfferSigning',
   rehomed: true, // section on the HRM Recruiting page (Offers tab)
+  rehomedTo: '/hrm/recruiting?tab=offers',
   iconKey: 'file',
   orgScoped: true,
   actorCols: true,
@@ -179,6 +182,7 @@ export const RECRUITING_RETENTION_RULES_ENTITY: SetupEntity = {
   featureKey: 'hrmCandidateRetention',
   rehomed: true, // section on the HRM Recruiting page (Pools tab: pools keep
   // candidates, retention rules bound how long — one stewardship surface)
+  rehomedTo: '/hrm/recruiting?tab=pools',
   iconKey: 'timer',
   orgScoped: true,
   actorCols: true,

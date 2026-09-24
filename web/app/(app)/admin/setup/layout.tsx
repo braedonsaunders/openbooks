@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
@@ -6,7 +6,6 @@ import { can, getAuthz } from '../../../../lib/authz'
 import { resolvedFeatureState, featureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITIES } from '../../../../lib/setup/registry'
 import { SetupNav } from './SetupNav'
-import { SetupRedirectNotice } from './RedirectNotice'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,9 +59,6 @@ export default async function SetupLayout({ children }: { children: ReactNode })
         </aside>
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">
           <div className="mx-auto w-full max-w-5xl p-4 sm:p-6">
-            <Suspense fallback={null}>
-              <SetupRedirectNotice />
-            </Suspense>
             {children}
           </div>
         </div>

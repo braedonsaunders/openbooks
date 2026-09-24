@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import type { MovedFromSource } from '../../../../lib/moved-redirect'
 
 function isSource(value: string | null): value is MovedFromSource {
-  return value === 'settings' || value === 'setup-index' || value === 'payment-providers'
+  return value === 'settings' || value === 'setup-index' || value === 'payment-providers' || value === 'setup-entity'
 }
 
 /**
@@ -27,7 +27,9 @@ export function SetupRedirectNotice() {
       ? t('settingsBody')
       : movedFrom === 'setup-index'
         ? t('indexBody')
-        : t('providersBody')
+        : movedFrom === 'setup-entity'
+          ? t('entityBody')
+          : t('providersBody')
   return (
     <div
       role="status"
