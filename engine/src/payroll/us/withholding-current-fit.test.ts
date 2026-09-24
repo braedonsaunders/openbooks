@@ -10,6 +10,7 @@ import { computeUsWithholding, US_SEPARATE_SUPPLEMENTAL_METHODS } from './withho
 import { US_STATES } from './rates.ts'
 import { AL_WITHHOLDING } from './states/al.ts'
 import { OR_WITHHOLDING } from './states/or.ts'
+import { requireUsResidentWithholdingFacts, requireUsWageAllocation } from './states/types.ts'
 import type { ResolvedWithholdingLevy } from '../withholding-resolution.ts'
 
 const PAY_DATE = '2026-07-21'
@@ -274,6 +275,59 @@ test('Minnesota separately paid supplemental wages use Method 2 at 6.25%', () =>
   assert.equal(result?.tax, '250.0000')
   assert.equal(result?.factors.US_SUPPLEMENTAL_METHOD, 'flat')
   assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0625')
+})
+
+test('US regional and subregional methods receive exact, sourced allocation facts', () => {
+  const allocation = {
+    region: 'MI', subRegion: 'DETROIT', workShare: '0.250000', source: 'approved work-location record',
+  }
+  assert.deepEqual(
+    requireUsWageAllocation([allocation], 'MI', 'DETROIT'),
+    allocation,
+  )
+  assert.throws(
+    () => requireUsWageAllocation([], 'MI', 'DETROIT'),
+    /MI\/DETROIT needs exactly one current-period work allocation; found 0.*refused by name/,
+  )
+  assert.throws(
+    () => requireUsWageAllocation([allocation, allocation], 'MI', 'DETROIT'),
+    /MI\/DETROIT needs exactly one current-period work allocation; found 2.*refused by name/,
+  )
+  assert.throws(
+    () => requireUsWageAllocation([{ ...allocation, workShare: '1.000001' }], 'MI', 'DETROIT'),
+    /work allocation is outside 0–1.*refused by name/,
+  )
+})
+
+test('US resident withholding requires its out-of-region wages and actual work-state tax', () => {
+  const residentLevy = {
+    ...levy('NY', 'us_ny_it2104'),
+    basis: 'resident_out_of_region' as const,
+    creditAgainstRegion: 'NJ',
+  }
+  assert.throws(
+    () => computeUsWithholding({
+      levy: residentLevy,
+      payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
+      wages: '1000.00', supplemental: '0.00', federalIncomeTax: '0.00',
+      certificateFor: () => null, tenantRates: () => undefined,
+    }),
+    /NY resident withholding needs verified out-of-region wages and same-period work-region taxes.*refused by name/,
+  )
+  assert.throws(
+    () => requireUsResidentWithholdingFacts(undefined, 'NJ', 'NY'),
+    /NY resident withholding needs verified out-of-region wages and same-period work-region taxes.*refused by name/,
+  )
+  assert.throws(
+    () => requireUsResidentWithholdingFacts({ outOfRegionWages: '1000.00', workRegionTaxes: [] }, 'NJ', 'NY'),
+    /needs exactly one computed NJ tax amount for this period; found 0.*refused by name/,
+  )
+  assert.deepEqual(
+    requireUsResidentWithholdingFacts({
+      outOfRegionWages: '1000.00', workRegionTaxes: [{ region: 'NJ', amount: '21.34' }],
+    }, 'NJ', 'NY'),
+    { outOfRegionWages: '1000.00', workRegionTaxes: [{ region: 'NJ', amount: '21.34' }] },
+  )
 })
 
 test('every US state and DC declares a separate-supplemental method', () => {

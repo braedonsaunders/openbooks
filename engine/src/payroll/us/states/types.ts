@@ -33,7 +33,9 @@
  * generic layer above knows only the interface.
  */
 import { PayrollError } from "../../error.ts";
+import { rate6, U } from "../../canada/decimal.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
+import type { PayrollWorkAllocation } from "../../statutory-context.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 
 /**
@@ -47,6 +49,97 @@ export type UsStatePayPeriod =
 
 /** Whether the supplemental amount shares the regular wage payment. */
 export type UsSupplementalPaymentTiming = "combined" | "separate";
+
+/** The US use of the shared payroll work-allocation contract. */
+export type UsWageAllocation = PayrollWorkAllocation;
+
+/** The actual withholding facts a resident-credit state needs this period. */
+export interface UsResidentWithholdingFacts {
+  /** Wages this period sourced outside the employee's residence region. */
+  outOfRegionWages: string;
+  /** Tax actually computed on those wages by work-region withholding. */
+  workRegionTaxes: readonly { region: string; amount: string }[];
+}
+
+/** Resolve one declared work allocation and refuse missing or ambiguous facts. */
+export function requireUsWageAllocation(
+  allocations: readonly UsWageAllocation[] | undefined,
+  region: string,
+  subRegion: string,
+): UsWageAllocation {
+  const matches = (allocations ?? []).filter((item) =>
+    item.region === region && item.subRegion === subRegion,
+  );
+  if (matches.length !== 1) {
+    throw new PayrollError(
+      `${region}/${subRegion} needs exactly one current-period work allocation; found ${matches.length}. `
+      + "Record the work share from the employee's certified work-location facts or verified work records before calculating; refused by name",
+    );
+  }
+  const allocation = matches[0]!;
+  let share: bigint;
+  try {
+    share = rate6(allocation.workShare);
+  } catch {
+    throw new PayrollError(
+      `${region}/${subRegion} work allocation must be an exact decimal share from 0 through 1; `
+      + "correct the verified work-share input before calculating; refused by name",
+    );
+  }
+  if (share < 0n || share > 1_000_000n || !allocation.source.trim()) {
+    throw new PayrollError(
+      `${region}/${subRegion} work allocation is outside 0–1 or has no recorded source; `
+      + "correct the verified work-share input before calculating; refused by name",
+    );
+  }
+  return allocation;
+}
+
+/** Require the work-region assessment used by a resident withholding credit. */
+export function requireUsResidentWithholdingFacts(
+  facts: UsResidentWithholdingFacts | undefined,
+  creditAgainstRegion: string | undefined,
+  residenceRegion: string,
+): UsResidentWithholdingFacts {
+  const source = `${residenceRegion} resident withholding`;
+  if (!facts) {
+    throw new PayrollError(
+      `${source} needs verified out-of-region wages and same-period work-region taxes; `
+      + "supply the allocation and computed work-region taxes before calculating; refused by name",
+    );
+  }
+  try {
+    U(facts.outOfRegionWages);
+  } catch {
+    throw new PayrollError(
+      `${source} has no valid out-of-region wage amount; supply the verified current-period allocation before calculating; refused by name`,
+    );
+  }
+  for (const item of facts.workRegionTaxes) {
+    try {
+      U(item.amount);
+    } catch {
+      throw new PayrollError(
+        `${source} received an invalid ${item.region} tax amount; use computed work-region taxes from this period; refused by name`,
+      );
+    }
+  }
+  if (new Set(facts.workRegionTaxes.map((item) => item.region)).size !== facts.workRegionTaxes.length) {
+    throw new PayrollError(
+      `${source} received duplicate work-region tax facts; provide one computed amount per region for this period; refused by name`,
+    );
+  }
+  if (creditAgainstRegion) {
+    const matches = facts.workRegionTaxes.filter((item) => item.region === creditAgainstRegion);
+    if (matches.length !== 1) {
+      throw new PayrollError(
+        `${source} needs exactly one computed ${creditAgainstRegion} tax amount for this period; `
+        + `found ${matches.length}. Compute that work-region withholding or correct its jurisdiction before calculating; refused by name`,
+      );
+    }
+  }
+  return facts;
+}
 
 /** Pay periods per year → the printed period name, or null when there is none. */
 export function payPeriodFor(periodsPerYear: number): UsStatePayPeriod | null {
@@ -136,6 +229,10 @@ export interface UsStateWithholdingInput {
    * publication assumes one of the two without saying which.
    */
   basis: "resident" | "nonresident";
+  /** Shared verified work-location shares for local and state variants. */
+  wageAllocations?: readonly UsWageAllocation[];
+  /** Inputs required when this levy is a residence-region claim on out-of-region pay. */
+  residentWithholdingFacts?: UsResidentWithholdingFacts;
   /**
    * The REGION's withholding for this period, when a sub-region levy is
    * computed FROM it rather than from wages.

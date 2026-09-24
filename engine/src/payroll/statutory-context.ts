@@ -92,6 +92,16 @@ export interface PayrollEmployerLevyContext {
   payDate?: string;
 }
 
+/** Verified share of current-period wages sourced to one subregion. */
+export interface PayrollWorkAllocation {
+  region: string;
+  subRegion: string;
+  /** Exact decimal share from 0 through 1; no floating-point percentage. */
+  workShare: string;
+  /** Certificate or work-record provenance retained for the statutory trace. */
+  source: string;
+}
+
 /** Phase 9 — one re-runnable statutory pass over the current line set. */
 export interface PayrollStatutoryComputeContext {
   tx: Pick<typeof db, "execute">;
@@ -108,6 +118,8 @@ export interface PayrollStatutoryComputeContext {
   periodsPerYear: number;
   /** Employee headcount of the paying employer, isolated to its legal entity. */
   employerEmployeeCount?: number;
+  /** Work-location allocations shared by regional and subregional payroll rules. */
+  workAllocations?: readonly PayrollWorkAllocation[];
   /**
    * THE MONEY CONTRACT. Every amount below is the ledger's canonical
    * numeric(19,4) decimal string (engine/src/money/money.ts `toUnits`/`fromUnits`):

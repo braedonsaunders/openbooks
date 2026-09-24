@@ -60,6 +60,11 @@ import {
 import { act32LocalEit } from "./states/pa.ts";
 import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
+import {
+  requireUsResidentWithholdingFacts,
+  type UsResidentWithholdingFacts,
+  type UsWageAllocation,
+} from "./states/types.ts";
 
 export class UsWithholdingError extends PayrollError {}
 
@@ -184,6 +189,10 @@ export interface UsWithholdingInput {
   supplemental?: string;
   /** Whether supplemental wages were paid with regular wages or separately. */
   supplementalPaymentTiming?: "combined" | "separate";
+  /** Resolved exact work shares used by state and local allocation rules. */
+  wageAllocations?: readonly UsWageAllocation[];
+  /** Verified out-of-region wage source and current work-region tax amounts. */
+  residentWithholdingFacts?: UsResidentWithholdingFacts;
   /** Current paycheck's computed federal income-tax withholding. */
   federalIncomeTax: string;
   /** Tax-qualified deductions from this period, used by Nebraska's floor. */
@@ -221,6 +230,13 @@ export interface UsWithholdingResult {
  */
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
+  const residentWithholdingFacts = levy.basis === "resident_out_of_region"
+    ? requireUsResidentWithholdingFacts(
+      input.residentWithholdingFacts,
+      levy.creditAgainstRegion,
+      levy.region,
+    )
+    : input.residentWithholdingFacts;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
   let separateFlatRate: string | undefined;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
@@ -281,6 +297,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         taxQualifiedDeductions: input.taxQualifiedDeductions,
         certificate,
         basis: levy.reach,
+        wageAllocations: input.wageAllocations,
+        residentWithholdingFacts,
         regionTax: input.regionTax,
         socialInsuranceDeducted: input.socialInsuranceDeducted,
         ytd: input.ytd,
@@ -311,6 +329,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
+      wageAllocations: input.wageAllocations,
+      residentWithholdingFacts,
       regionTax: input.regionTax,
       socialInsuranceDeducted: input.socialInsuranceDeducted,
       ytd: input.ytd,
@@ -350,6 +370,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
       basis: levy.reach,
+      wageAllocations: input.wageAllocations,
+      residentWithholdingFacts,
       regionTax: input.regionTax,
       ytd: input.ytd,
     });
