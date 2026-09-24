@@ -196,6 +196,7 @@ export const BANKING_WIDGETS = {
 
   'psp-settlements': (props) => (
     <PspSettlementsWorkspace
+      canReconcile={props.canReconcile === true}
       strings={props.strings as ComponentProps<typeof PspSettlementsWorkspace>['strings']}
       initialRows={
         (props.initialRows as ComponentProps<typeof PspSettlementsWorkspace>['initialRows']) ?? null
