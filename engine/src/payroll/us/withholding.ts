@@ -119,6 +119,14 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
       source: "https://www.michigan.gov/taxes/-/media/Project/Websites/taxes/Forms/SUW/TY2026/446_Withholding-Guide_2026.pdf",
     }],
   } as const,
+  MN: {
+    kind: "flat",
+    // Minnesota 2026 Withholding Tax Instructions, p. 7, Method 2.
+    rates: [{
+      effectiveFrom: "2026-01-01", rate: "0.0625",
+      source: "https://www.revenue.state.mn.us/sites/default/files/2025-12/wh-inst-26.pdf",
+    }],
+  } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
 /**

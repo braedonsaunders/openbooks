@@ -158,9 +158,9 @@ export function mnAnnualTax(taxable: bigint, schedule: MnSchedule, rates: MnYear
 }
 
 /**
- * Booklet p. 7 Method 2 — flat 6.25% on a supplemental payment paid separately
- * from regular wages. Exported rather than applied: Method 1 (add to regular
- * wages and run the formula) is always permitted, and `compute` does that.
+ * Booklet p. 7 Method 2 — flat 6.25% on supplemental pay issued separately
+ * from regular wages. The US pack dispatcher applies this method before the
+ * regular-wage engine; Method 1 is used only when the payment is combined.
  */
 export function mnSupplementalFlat(payDate: string, supplemental: string): string {
   const rates = mnRatesForPayDate(payDate);
