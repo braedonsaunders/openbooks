@@ -6,6 +6,7 @@ import { compileTemplateHtml } from '@openbooks/pdf'
 import { isUuid } from '../list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { starterTemplate } from './starters'
+import { disabledDocKinds, isDocKindEnabled } from '../documents'
 
 /** A pdf_templates row shaped for the editor + renderer. */
 export type PdfTemplateRow = {
@@ -53,6 +54,20 @@ export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemp
     select ${COLS} from pdf_templates where org_id = ${orgId} and id = ${id}
   `))
   return r.rows[0] ?? null
+}
+
+/** Templates available through read surfaces, with the canonical document-kind feature fence applied. */
+export async function listVisiblePdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
+  if (recordType && !(await isDocKindEnabled(orgId, recordType))) return []
+  const hidden = new Set(await disabledDocKinds(orgId))
+  return (await listPdfTemplates(orgId, recordType)).filter((row) => !hidden.has(row.recordType))
+}
+
+/** A saved design is not readable when its document kind is disabled. */
+export async function getVisiblePdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
+  const row = await getPdfTemplate(orgId, id)
+  if (!row || !(await isDocKindEnabled(orgId, row.recordType))) return null
+  return row
 }
 
 /** What the render route prints with: a saved template or the built-in starter. */
