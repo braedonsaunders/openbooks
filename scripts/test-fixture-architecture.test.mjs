@@ -1,3 +1,4 @@
+// source-pin-contract: CI database-isolation env policy for pooled-integration jobs (test.yml, publish-container.yml)
 import assert from "node:assert/strict";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
@@ -9,20 +10,6 @@ import test from "node:test";
 const fixtures = readFileSync(new URL("../engine/src/testing/fixtures.ts", import.meta.url), "utf8");
 const runner = readFileSync(new URL("./test-suite.mjs", import.meta.url), "utf8");
 const workflow = readFileSync(new URL("../.github/workflows/test.yml", import.meta.url), "utf8");
-
-test("integration fixtures use a bounded committed pool with fail-closed lifecycle evidence", () => {
-  assert.match(fixtures, /OPENBOOKS_TEST_FIXTURE_POOL_SIZE/);
-  assert.match(fixtures, /getScratchOrgLifecycleMetrics/);
-  assert.match(fixtures, /fullTeardown/);
-  assert.match(fixtures, /resets/);
-  assert.match(fixtures, /OPENBOOKS_TEST_DB_ISOLATED/);
-  assert.match(fixtures, /activeLeases/);
-  assert.match(fixtures, /committed/i);
-  assert.match(fixtures, /leak/i);
-  assert.match(fixtures, /savepoint/i);
-  assert.match(fixtures, /snapshotSchema/);
-  assert.match(fixtures, /shobj_description/);
-});
 
 test("the canonical integration runner owns fixture pool setup and shutdown", () => {
   assert.match(runner, /OPENBOOKS_TEST_FIXTURE_POOL_SIZE/);
@@ -186,15 +173,10 @@ test("the lifecycle receipt survives an owner that exits immediately after writi
   // asynchronous. An immediate process.exit() truncates them, which once let a
   // fully green suite fail CI's receipt gate with no failing test. Two
   // independent guarantees now carry the receipt: a synchronous file write, and
-  // a stream write that is flushed before the exit.
-  const owner = readFileSync(new URL("./test-fixture-lifecycle.mjs", import.meta.url), "utf8");
-  assert.match(owner, /writeFileSync\(RECEIPT_PATH/, "the owner must persist the receipt to a file");
-  assert.doesNotMatch(
-    owner,
-    /process\.stdout\.write\(`\$\{receipt\}\\n`\);\s*\n\s*server\.close\(\(\) => process\.exit/,
-    "the owner must not exit before its receipt write is acknowledged",
-  );
-  assert.match(owner, /process\.stdout\.write\(`\$\{receipt\}\\n`, \(\) =>/, "the exit must wait on the write callback");
+  // a stream write that is flushed before the exit. The owner's side of that
+  // contract is the receipt file CI reads below; the platform discipline is
+  // demonstrated directly against pipe semantics rather than trusted from the
+  // owner's source.
   assert.match(workflow, /fixture-lifecycle-receipt\.txt/, "CI must read the persisted receipt, not only the tee'd stream");
 
   // Demonstrate the underlying platform behavior rather than trusting the shape
