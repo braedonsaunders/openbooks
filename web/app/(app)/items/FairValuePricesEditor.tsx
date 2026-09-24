@@ -61,7 +61,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
       })
   }
   useEffect(() => {
-    void load()
+    void Promise.resolve().then(load)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId])
 
