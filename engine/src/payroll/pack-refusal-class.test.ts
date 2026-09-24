@@ -185,8 +185,9 @@ test(
                 '2026-07-21', 2026, 'committed', now(), 1)`);
       await db.execute(sql`
         insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
-                               periods_per_year, pay_date, tax_year, gross, net_pay)
-        values (${org.orgId}, ${documentId}, ${employeeId}, 'UNKNOWN', 26, '2026-07-21', 2026, '1000', '800')`);
+                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay)
+        values (${org.orgId}, ${documentId}, ${employeeId}, 'UNKNOWN', 26, '2026-07-21', 2026,
+                'CAD', '1000', '800')`);
       // The legacy trigger stamps a country from the province; an UNKNOWN
       // province is precisely the unattributable row. Make it explicit.
       await db.execute(sql`
@@ -197,8 +198,16 @@ test(
       assert.ok(sections.length > 0, "the page must still enumerate its filings");
       const refused = sections.filter((section) => section.populationRefusal != null);
       assert.ok(refused.length > 0, "at least one filing must carry the named refusal");
+      // The stub's unknown country fires the shared guard in every population
+      // that reads it; other packs may carry their own legitimate refusals
+      // (an unsupported year, an unconfigured account) — both are converted
+      // PayrollErrors, and reaching this line proves no bare Error escaped
+      // the page enumeration.
+      const t4 = sections.find((section) => section.country === "CA" && section.key === "t4");
+      assert.ok(t4?.populationRefusal, "the CA T4 must carry the named refusal");
+      assert.match(t4.populationRefusal, /unknown historical country/);
       for (const section of refused) {
-        assert.match(section.populationRefusal!, /unknown historical country/);
+        assert.ok(section.populationRefusal!.length > 0);
       }
 
       const lifecycle = await filingLifecycle(org.orgId, "CA", "t4", 2026);
