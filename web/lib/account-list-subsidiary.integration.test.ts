@@ -77,7 +77,7 @@ test('account list balances exclude journal lines outside the caller subsidiary 
   }
 })
 
-test('an explicitly empty subsidiary scope reads no balance instead of widening to org scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('an explicitly empty subsidiary scope reads no balance instead of widening to org scope', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     const accountId = randomUUID()
