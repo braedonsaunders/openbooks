@@ -349,6 +349,64 @@ test('creates mint one idempotency key per mounted session and reuse it across r
   }
 })
 
+test('decimal inputs post canonicalized, unparseable text posts raw for the server to refuse', async () => {
+  // F3-39: the drawer sends canonical decimals (same grammar the server
+  // coerces with) instead of raw operator text. Anything the grammar cannot
+  // parse posts untouched, so the refusal — and its remedy — stays
+  // server-side in one place.
+  const initial = {
+    parentSubsidiaryId: 'sub-parent',
+    subsidiaryId: 'sub-child',
+    effectiveFrom: '2026-01-01',
+    ownershipPercent: '80',
+    acquisitionDate: '2026-01-02',
+    investmentAccountId: 'acc-invest',
+    equityIncomeAccountId: 'acc-equity',
+  }
+  const { seen, unmount } = await mountDrawer(
+    null,
+    () => Response.json({ ok: true, id: 'own-1' }),
+    'subsidiary-ownership-interests',
+    initial,
+  )
+  try {
+    await act(async () => {
+      setTextInput(FIELD_LABEL.ownershipPercent!, '.5')
+    })
+    await tick()
+    await clickSave(true)
+    assert.equal(seen.length, 1, 'the canonicalized save must POST once')
+    assert.equal(
+      (seen[0]!.body as Record<string, unknown>).ownershipPercent,
+      '0.5',
+      'a typed ".5" posts as canonical "0.5"',
+    )
+  } finally {
+    await unmount()
+  }
+  const second = await mountDrawer(
+    null,
+    () => Response.json({ ok: true, id: 'own-2' }),
+    'subsidiary-ownership-interests',
+    initial,
+  )
+  try {
+    await act(async () => {
+      setTextInput(FIELD_LABEL.ownershipPercent!, '12,34')
+    })
+    await tick()
+    await clickSave(true)
+    assert.equal(second.seen.length, 1, 'an unparseable save still reaches the server refusal')
+    assert.equal(
+      (second.seen[0]!.body as Record<string, unknown>).ownershipPercent,
+      '12,34',
+      'unparseable text posts raw, never client-coerced',
+    )
+  } finally {
+    await second.unmount()
+  }
+})
+
 test('the idempotency key travels only on create POSTs, never on PATCH', async () => {
   const row = {
     id: 'ag-1',

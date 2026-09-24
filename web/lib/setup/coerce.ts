@@ -15,7 +15,7 @@ import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal } from '../exact-decimal'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
-const SETUP_DECIMAL_SCALE = 10
+export const SETUP_DECIMAL_SCALE = 10
 
 /** The tax-rate domain, stated once and shared with the calculation engine
  * (engine/src/tax/tax.ts): a rate is a nonnegative exact decimal with at most 4

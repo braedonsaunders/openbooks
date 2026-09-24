@@ -12,7 +12,7 @@ import {
   requireHrmCompensationReadOnEmployment,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
-import { compareDecimal } from "../../money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal, isPositiveDecimal } from "../../money/exact-decimal.ts";
 import { mul } from "../../money/money.ts";
 import { bandPlacement } from "./compensation-math.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
@@ -89,13 +89,18 @@ function toBandDTO(row: BandRow): PayBandDTO {
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function requireMoney(value: unknown, what: string): string {
-  if (typeof value !== "string" || !/^\d+(\.\d{1,4})?$/.test(value) || !(Number(value) > 0)) {
+  // Accept what a typed client serializes — a JSON number or a numeric
+  // string — through the exact-decimal grammar, and persist the canonical
+  // spelling (F3-39: the naive regex rejected numbers and canonical ".5"
+  // before any money check ran, and measured positivity through a float).
+  const exact = canonicalDecimal(value, 4);
+  if (exact === null || !isPositiveDecimal(exact)) {
     throw new CompensationError(
       "INVALID_INPUT",
       `${what} must be a positive amount with at most 4 decimals — refuse the figure, never coerce it`,
     );
   }
-  return value;
+  return exact;
 }
 
 export interface CreatePayBandQuery {
