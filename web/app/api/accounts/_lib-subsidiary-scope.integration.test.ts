@@ -84,3 +84,45 @@ test('shared account drawer child counts omit subsidiary-owned children outside 
     await withBypass(() => dropScratchOrg(scratch.orgId))
   }
 })
+
+test('shared account drawer transaction flag only reflects journal lines in caller scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const scratch = await withBypass(() => createScratchOrg())
+  try {
+    const hiddenSubsidiary = randomUUID()
+    const sharedAccount = randomUUID()
+    const entryId = randomUUID()
+    const lineId = randomUUID()
+    const offsetLineId = randomUUID()
+    await withBypass(async () => {
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${hiddenSubsidiary}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Hidden activity entity', 'CAD', 'CA')
+      `)
+      await db.execute(sql`
+        insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
+        values (${sharedAccount}, ${scratch.orgId}, '1098', 'Shared activity account', 'expense', null, false, true)
+      `)
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, entry_number, posting_date, period_id, status, subsidiary_id)
+        values
+          (${entryId}, ${scratch.orgId}, ${scratch.bookId}, ${`SCOPE-${entryId.slice(0, 8)}`},
+           ${scratch.date}, ${scratch.periodId}, 'draft', ${hiddenSubsidiary})
+      `)
+      await db.execute(sql`
+        insert into journal_lines
+          (id, org_id, entry_id, line_number, account_id, amount, currency, txn_amount, fx_rate, subsidiary_id)
+        values
+          (${lineId}, ${scratch.orgId}, ${entryId}, 1, ${sharedAccount}, 10, 'CAD', 10, 1, ${hiddenSubsidiary}),
+          (${offsetLineId}, ${scratch.orgId}, ${entryId}, 2, ${scratch.accounts.revenue}, -10, 'CAD', -10, 1, ${hiddenSubsidiary})
+      `)
+    })
+
+    const restricted = await loadAccount(sharedAccount, scratch.orgId, new Set([scratch.subsidiaryId]))
+    const unrestricted = await loadAccount(sharedAccount, scratch.orgId, null)
+    assert.equal(restricted?.hasTransactions, false)
+    assert.equal(unrestricted?.hasTransactions, true)
+  } finally {
+    await withBypass(() => dropScratchOrg(scratch.orgId))
+  }
+})
