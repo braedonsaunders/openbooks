@@ -12,6 +12,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
+import { canPostInventoryMovement } from './movement-permissions'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { pickString } from '../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
@@ -62,7 +63,7 @@ export async function loadInventory(
   const t = await getTranslations('inventory')
   const authz = await requirePermission('items.read')
   await requireFeatureEnabled(authz.user.orgId, 'inventory')
-  const canManage = can(authz, 'items.manage')
+  const canPostMovement = canPostInventoryMovement(authz)
   // Stock Locations & Bill of Materials are configuration re-homed here from the
   // Setup workspace — managing them keeps the same admin.setup.manage gate.
   const canSetup = can(authz, 'admin.setup.manage')
@@ -85,7 +86,7 @@ export async function loadInventory(
 
   // -- drawer pickers -------------------------------------------------------
   const pickers =
-    showDrawer && canManage
+    showDrawer && canPostMovement
       ? await Promise.all([
           db.execute<{ id: string; code: string | null; name: string | null }>(sql`
           select it.id, it.code, it.name from items it
@@ -130,8 +131,8 @@ export async function loadInventory(
         : []),
     ],
     // The native page renders the button whenever the body is a ledger list
-    // (`!setupEntity`) and the reader may manage items.
-    showNewMovement: !setupEntity && canManage,
+    // (`!setupEntity`) and the reader may post movements.
+    showNewMovement: !setupEntity && canPostMovement,
     // Without the setup permission a config tab falls through to the
     // movements list — `view === 'onhand'` is the only on-hand case.
     onOnhand: !setupEntity && view === 'onhand',

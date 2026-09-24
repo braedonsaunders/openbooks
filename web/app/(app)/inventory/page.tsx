@@ -18,6 +18,7 @@ import { BomWorkspace, NewBomButton, type BomAssembly } from './BomWorkspace'
 import { CountsList, NewCountButton } from './counts/CountsList'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
 import { NewMovementButton } from './NewMovementButton'
+import { canPostInventoryMovement } from './movement-permissions'
 import { ReverseLandedVoucherAction } from './ReverseLandedVoucherAction'
 
 export const dynamic = 'force-dynamic'
@@ -47,13 +48,14 @@ export default async function Inventory({
   const orgId = authz.user.orgId
   const requestedView = selectedView(sp)
   const canManage = can(authz, 'items.manage')
+  const canPostMovement = canPostInventoryMovement(authz)
   const canPost = can(authz, 'items.post')
   const canReverse = can(authz, 'items.reverse')
   const canSetup = can(authz, 'admin.setup.manage')
   const view = !canSetup && (requestedView === 'locations' || requestedView === 'bom')
     ? 'onhand'
     : requestedView
-  const showMovementDrawer = pickString(sp.movement) === 'new' && canManage
+  const showMovementDrawer = pickString(sp.movement) === 'new' && canPostMovement
 
   const tabs = [
     { href: '/inventory?inventoryView=onhand', label: t('view.onhand'), active: view === 'onhand' },
@@ -153,7 +155,7 @@ export default async function Inventory({
   const movementHref = `/inventory?inventoryView=${view}&movement=new`
   const closeMovementHref = `/inventory?inventoryView=${view}`
   const headerAction = view === 'onhand' || view === 'movements' ? (
-    <>{canManage ? <NewMovementButton href={movementHref} /> : null}{canReverse ? <ReverseLandedVoucherAction /> : null}</>
+    <>{canPostMovement ? <NewMovementButton href={movementHref} /> : null}{canReverse ? <ReverseLandedVoucherAction /> : null}</>
   ) : view === 'counts' ? (
     canPost ? (
       <NewCountButton label={t('counts.newButton')} />
