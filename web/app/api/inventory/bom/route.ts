@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
+import { guardUnrestrictedScope } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { isUuid } from '@/lib/list-params'
@@ -35,6 +36,9 @@ function refusal(error: string, status = 422) {
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'inventory')
   if (gate instanceof NextResponse) return gate
+  // Bills of material are shared org-wide manufacturing policy.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const parsed = await parseJsonBody(req, jsonObject)
   if (!parsed.ok) return parsed.response
   const body = parsed.data as Record<string, unknown>

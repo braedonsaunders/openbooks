@@ -15,6 +15,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
+    allowedSubsidiaryIds?: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -26,6 +27,13 @@ const mockFeatureGates = `
   export async function guardFeaturePermission(_permission, _featureKey) {
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
+  }
+`;
+
+const mockAuthz = `
+  export function guardUnrestrictedScope(authz) {
+    if (authz.allowedSubsidiaryIds == null) return null
+    return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
   }
 `;
 
@@ -51,11 +59,20 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
+    if (
+      specifier === "../../../../../lib/authz" &&
+      context.parentURL?.includes("/api/items/")
+    ) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
     if (url === "mock:feature-gates") {
       return { format: "module", source: mockFeatureGates, shortCircuit: true };
+    }
+    if (url === "mock:authz") {
+      return { format: "module", source: mockAuthz, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -344,3 +361,30 @@ test(
     }
   },
 );
+
+test("PATCH and DELETE by a scoped catalog manager are refused before any write", async () => {
+  const itemId = "00000000-0000-4000-8000-00000000f101";
+  const priceId = "00000000-0000-4000-8000-00000000f102";
+  // No database is touched: the org-wide-policy gate fires before the item
+  // lookup, so dummy ids prove the refusal precedes every read and write.
+  routeState.authz = {
+    user: { orgId: "00000000-0000-4000-8000-00000000f103", id: "00000000-0000-4000-8000-00000000f104" },
+    permissions: new Set(["items.manage"]),
+    allowedSubsidiaryIds: new Set(["00000000-0000-4000-8000-00000000f105"]),
+  };
+  try {
+    const patched = await PATCH(patchRequest({ itemId, priceId } as never, "110.0000"), {
+      params: Promise.resolve({ id: itemId }),
+    });
+    assert.equal(patched.status, 403);
+    assert.deepEqual(await patched.json(), { error: "requires unrestricted subsidiary access" });
+
+    const deleted = await DELETE(deleteRequest({ itemId, priceId } as never), {
+      params: Promise.resolve({ id: itemId }),
+    });
+    assert.equal(deleted.status, 403);
+    assert.deepEqual(await deleted.json(), { error: "requires unrestricted subsidiary access" });
+  } finally {
+    routeState.authz = null;
+  }
+});

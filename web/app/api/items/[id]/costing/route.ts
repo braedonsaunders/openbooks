@@ -9,6 +9,7 @@ import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engi
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
@@ -86,6 +87,11 @@ function moneyOrNull(value: unknown): string | null | 'invalid' {
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.manage', 'inventory')
   if (gate instanceof NextResponse) return gate
+  // The costing profile is shared inventory policy (and can revalue layers
+  // org-wide); only the in-transaction layer revaluation below stays
+  // scoped to gate.allowedSubsidiaryIds.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id) || !(await loadItem(id, orgId))) {

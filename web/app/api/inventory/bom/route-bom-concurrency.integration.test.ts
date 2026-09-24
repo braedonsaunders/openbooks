@@ -14,7 +14,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -28,6 +28,13 @@ const mockFeatureGates = `
   }
 `;
 
+const mockAuthz = `
+  export function guardUnrestrictedScope(authz) {
+    if (authz.allowedSubsidiaryIds == null) return null
+    return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+  }
+`;
+
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
@@ -35,6 +42,9 @@ const hooks = registerHooks({
     }
     if (specifier === "@/lib/feature-gates") {
       return { url: "mock:feature-gates", shortCircuit: true };
+    }
+    if (specifier === "@/lib/authz") {
+      return { url: "mock:authz", shortCircuit: true };
     }
     if (specifier.startsWith("@/") && context.parentURL) {
       return nextResolve(new URL(`../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
@@ -44,6 +54,9 @@ const hooks = registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:feature-gates") {
       return { format: "module", source: mockFeatureGates, shortCircuit: true };
+    }
+    if (url === "mock:authz") {
+      return { format: "module", source: mockAuthz, shortCircuit: true };
     }
     return nextLoad(url, context);
   },
@@ -194,5 +207,29 @@ test("a BOM save waits for an in-flight Inventory disable, then refuses it", { s
     writer.release();
     await pending?.catch(() => {});
     await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a subsidiary-scoped setup manager cannot replace the shared recipe", async () => {
+  // The org-wide-policy gate fires before the body parses, so no database
+  // is needed to prove the refusal precedes every read and write.
+  routeState.authz = {
+    user: { orgId: "00000000-0000-4000-8000-00000000b001", id: "00000000-0000-4000-8000-00000000b002" },
+    permissions: new Set(["admin.setup.manage"]),
+    allowedSubsidiaryIds: new Set(["00000000-0000-4000-8000-00000000b003"]),
+  };
+  try {
+    const response = await PUT(
+      putRequest(
+        recipe(
+          "00000000-0000-4000-8000-00000000b004",
+          "00000000-0000-4000-8000-00000000b005",
+        ),
+      ),
+    );
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  } finally {
+    routeState.authz = null;
   }
 });
