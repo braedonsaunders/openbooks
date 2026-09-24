@@ -20,6 +20,21 @@ export interface SeedTaxFormsResult {
   boxRows: number;
   mappedSalesCodes: number;
   mappedPurchaseCodes: number;
+  /**
+   * Every active sales/purchases code the install did NOT map into a box,
+   * each with the reason and the remedy. A hand-made code with no
+   * jurisdiction used to vanish from a state return silently (counts only);
+   * the operator now sees exactly which codes are out and how to bring
+   * them in (usually: assign the jurisdiction).
+   */
+  excludedCodes: ExcludedTaxCode[];
+}
+
+/** An active tax code left out of an installed return, with cause and fix. */
+export interface ExcludedTaxCode {
+  code: string;
+  reason: string;
+  remedy: string;
 }
 
 export interface InstalledTaxReturnPack extends SeedTaxFormsResult {
@@ -123,9 +138,9 @@ async function installTaxReturnPackWith(
 
   await tx.execute(sql`delete from tax_report_lines where org_id = ${orgId} and report_code = ${pack.code}`);
 
-  const candidates = (await tx.execute<{ id: string; country: string | null; jurisdiction_id: string | null; jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null; applies_to: "sales" | "purchases" | "both" }>(sql`
-    select c.id, c.country, c.jurisdiction_id, c.applies_to,
-           j.tax_type as jurisdiction_tax_type
+  const candidates = (await tx.execute<{ id: string; code: string; country: string | null; jurisdiction_id: string | null; jurisdiction_code: string | null; jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null; applies_to: "sales" | "purchases" | "both" }>(sql`
+    select c.id, c.code, c.country, c.jurisdiction_id, c.applies_to,
+           j.code as jurisdiction_code, j.tax_type as jurisdiction_tax_type
       from tax_codes c
       left join tax_jurisdictions j on j.id = c.jurisdiction_id and j.org_id = c.org_id
      where c.org_id = ${orgId} and c.is_active
@@ -147,6 +162,21 @@ async function installTaxReturnPackWith(
         : candidates.rows.filter((row) => row.country === null);
   const sales = eligible.filter((row) => row.applies_to === "sales" || row.applies_to === "both");
   const purchases = eligible.filter((row) => row.applies_to === "purchases" || row.applies_to === "both");
+
+  // Every candidate left out of the return, named with the reason and the
+  // remedy — counts alone let a hand-made code with no jurisdiction vanish
+  // from a state return while the filed figures silently understate.
+  const subdivisionReturn = j.level === "state" || j.level === "county" || j.level === "city";
+  const eligibleIds = new Set(eligible.map((row) => row.id));
+  const excludedCodes: ExcludedTaxCode[] = candidates.rows
+    .filter((row) => !eligibleIds.has(row.id))
+    .map((row) => describeExcludedCode(row, {
+      packCountry: pack.country,
+      packJurisdiction: j.code,
+      subdivisionReturn,
+      taxTypeFiltered: Boolean(includedTaxTypes?.length),
+    }))
+    .sort((a, b) => a.code.localeCompare(b.code));
 
   let boxRows = 0;
   const insertRow = async (box: TaxReturnPackBox, taxCodeId: string | null) => {
@@ -174,14 +204,80 @@ async function installTaxReturnPackWith(
     boxRows,
     mappedSalesCodes: sales.length,
     mappedPurchaseCodes: purchases.length,
+    excludedCodes,
   };
   if (actorId && formRes.rows[0]) {
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'tax_return_forms', ${formRes.rows[0].id},
               ${result.formCreated ? "insert" : "update"},
-              ${JSON.stringify({ pack: pack.code, resetToLibraryDefaults: !result.formCreated, boxRows, mappedSalesCodes: sales.length, mappedPurchaseCodes: purchases.length })}::jsonb,
+              ${JSON.stringify({ pack: pack.code, resetToLibraryDefaults: !result.formCreated, boxRows, mappedSalesCodes: sales.length, mappedPurchaseCodes: purchases.length, excludedCodes })}::jsonb,
               ${actorId})`);
   }
   return result;
+}
+
+interface ExcludedCandidate {
+  code: string;
+  country: string | null;
+  jurisdiction_id: string | null;
+  jurisdiction_code: string | null;
+  jurisdiction_tax_type: TaxReturnPackJurisdiction["taxType"] | null;
+}
+
+/**
+ * Why one active code maps into no box of this return, and how to bring it
+ * in. A subdivision return only sums its own jurisdiction's codes, so a
+ * same-country code with no jurisdiction is the defect's case (assign the
+ * jurisdiction); a code scoped elsewhere belongs to that jurisdiction's
+ * return. A country return aggregates its country's codes (within the
+ * return's tax types when declared); foreign codes belong elsewhere.
+ */
+function describeExcludedCode(
+  row: ExcludedCandidate,
+  opts: { packCountry: string; packJurisdiction: string; subdivisionReturn: boolean; taxTypeFiltered: boolean },
+): ExcludedTaxCode {
+  const { packCountry, packJurisdiction, subdivisionReturn, taxTypeFiltered } = opts;
+  if (subdivisionReturn) {
+    if (row.jurisdiction_code) {
+      return {
+        code: row.code,
+        reason: `scoped to jurisdiction "${row.jurisdiction_code}"`,
+        remedy: `file under that jurisdiction's return — no action for this return`,
+      };
+    }
+    if (row.country === packCountry) {
+      return {
+        code: row.code,
+        reason: `no jurisdiction assigned`,
+        remedy: `assign jurisdiction "${packJurisdiction}" to include it in this return`,
+      };
+    }
+    return {
+      code: row.code,
+      reason: row.country ? `belongs to country "${row.country}" with no jurisdiction` : `no country or jurisdiction assigned`,
+      remedy: row.country
+        ? `assign its jurisdiction to file under the owning return`
+        : `assign country "${packCountry}" and jurisdiction "${packJurisdiction}" to include it in this return`,
+    };
+  }
+  if (row.country !== null && row.country !== packCountry) {
+    return {
+      code: row.code,
+      reason: `belongs to country "${row.country}"`,
+      remedy: `file under that country's return — no action for this return`,
+    };
+  }
+  if (taxTypeFiltered && row.jurisdiction_tax_type !== null) {
+    return {
+      code: row.code,
+      reason: `tax type "${row.jurisdiction_tax_type}" is not aggregated by this return`,
+      remedy: `map the code to a box manually if it is reportable on this return`,
+    };
+  }
+  return {
+    code: row.code,
+    reason: `no country assigned`,
+    remedy: `assign country "${packCountry}" to include it in this return`,
+  };
 }
