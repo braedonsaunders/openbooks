@@ -9,6 +9,7 @@ import {
   AllocationRuleError,
   createDraftVersion,
   createRule,
+  createRuleWithInitialDraft,
   getRuleDetail,
   getRuleVersion,
   listRuleHeads,
@@ -363,6 +364,32 @@ test("concurrent rule edits using the same revision allow exactly one writer", {
     assert.ok(refused && refused.status === "rejected");
     assert.ok(refused.reason instanceof AllocationRuleError);
     assert.equal(refused.reason.code, "STALE");
+  } finally {
+    await dropScratchOrg(orgId);
+  }
+});
+
+test("rule head creation rolls back when its initial draft cannot be created", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId } = await org();
+  const key = "atomic-head-draft";
+  try {
+    await assert.rejects(
+      createRuleWithInitialDraft({
+        orgId,
+        key,
+        name: "Atomic rule",
+        mode: "period",
+        effectiveFrom: "",
+        allowedSubsidiaryIds: null,
+      }, AUDIT),
+      (error: unknown) => error instanceof AllocationRuleError && error.code === "INVALID",
+    );
+    const rows = await db.execute<{ heads: string; versions: string }>(sql`
+      select
+        (select count(*)::text from allocation_rules where org_id = ${orgId} and key = ${key}) as heads,
+        (select count(*)::text from allocation_rule_versions v join allocation_rules r on r.org_id = v.org_id and r.id = v.rule_id
+          where r.org_id = ${orgId} and r.key = ${key}) as versions`);
+    assert.deepEqual(rows.rows[0], { heads: "0", versions: "0" });
   } finally {
     await dropScratchOrg(orgId);
   }

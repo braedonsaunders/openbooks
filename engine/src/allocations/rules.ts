@@ -605,6 +605,30 @@ export async function createRule(input: CreateRuleInput, audit: AllocationAudit)
   });
 }
 
+/** Create a rule head and its initial draft as one audited database unit. */
+export async function createRuleWithInitialDraft(
+  input: CreateRuleInput & { effectiveFrom: string; allowedSubsidiaryIds: SubsidiaryScope },
+  audit: AllocationAudit,
+): Promise<{ created: RuleMutationResult; draft: RuleVersionWithTargets }> {
+  return withOrgTransaction(input.orgId, async () => {
+    const created = await createRule({
+      orgId: input.orgId,
+      key: input.key,
+      name: input.name,
+      description: input.description,
+      mode: input.mode,
+      sortOrder: input.sortOrder,
+      isActive: input.isActive,
+    }, audit);
+    const draft = await createDraftVersion(created.rule.id, {
+      orgId: input.orgId,
+      effectiveFrom: input.effectiveFrom,
+      allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+    }, audit);
+    return { created, draft };
+  });
+}
+
 /**
  * Engine-owned rules (is_system, e.g. the overhead net-zero pair) are managed
  * through their owning policy — overhead settings, rate publishes — never
