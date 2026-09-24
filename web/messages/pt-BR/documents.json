@@ -194,6 +194,7 @@
   "activity": {
     "title": "Atividade",
     "empty": "Nenhuma atividade registrada ainda.",
+    "loadFailed": "Não foi possível carregar a atividade.",
     "events": {
       "create": "criado",
       "upload": "enviado",

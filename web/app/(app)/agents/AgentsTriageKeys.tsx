@@ -41,6 +41,7 @@ export function AgentsTriageKeys({
   locale: string
 }) {
   const t = useTranslations('agents')
+  const commonActions = useTranslations('common.actions')
   const tc = useTranslations('continuousClose')
   const router = useRouter()
   const [cursor, setCursor] = useState(0)
@@ -61,6 +62,8 @@ export function AgentsTriageKeys({
     return stored
   })
   const [newCount, setNewCount] = useState<number | null>(null)
+  const [countLoadFailed, setCountLoadFailed] = useState(false)
+  const [countAttempt, setCountAttempt] = useState(0)
   // Refused rows the next bulk must keep selected. A refresh rebuilds `rows`
   // (firing the render-adjust reset below), so the keep-list rides in state
   // past the refresh instead of being wiped with the stale selection.
@@ -82,15 +85,24 @@ export function AgentsTriageKeys({
     if (!lastSeen) return
     let cancelled = false
     fetch(`/api/agents/inbox?since=${encodeURIComponent(lastSeen)}&limit=1`, { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        if (!cancelled && body && typeof body.total === 'number') setNewCount(body.total)
+      .then((res) => {
+        if (!res.ok) throw new Error('inbox request failed')
+        return res.json()
       })
-      .catch(() => {})
+      .then((body) => {
+        if (!body || typeof body.total !== 'number') throw new Error('inbox response was invalid')
+        if (!cancelled) {
+          setNewCount(body.total)
+          setCountLoadFailed(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCountLoadFailed(true)
+      })
     return () => {
       cancelled = true
     }
-  }, [lastSeen])
+  }, [lastSeen, countAttempt])
 
   const highlighted = useRef<HTMLElement | null>(null)
 
@@ -233,7 +245,14 @@ export function AgentsTriageKeys({
 
   return (
     <div className="space-y-2">
-      {lastSeen && (newCount ?? 0) > 0 ? (
+      {lastSeen && countLoadFailed ? (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <span>{t('lastVisitLoadFailed')}</span>
+          <Button variant="outline" size="sm" onClick={() => { setNewCount(null); setCountLoadFailed(false); setCountAttempt((value) => value + 1) }}>
+            {commonActions('retry')}
+          </Button>
+        </div>
+      ) : lastSeen && (newCount ?? 0) > 0 ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
           <span>{t('lastVisit', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSeen)) })} · {newCount}</span>
           <Button

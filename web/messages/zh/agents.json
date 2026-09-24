@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "子公司根据关联科目的发现确定；其余发现归入未解决。",
   "lastVisit": "{date} 之后的新动态",
+  "lastVisitLoadFailed": "无法加载新的发现。",
   "markSeen": "标记为已读",
   "triage": {
     "hint": "j/k 移动 · 回车打开 · x 选择 · a 应用（抽屉） · d 驳回（抽屉） · s 暂存待复核",

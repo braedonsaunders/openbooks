@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "Die Tochtergesellschaft ergibt sich aus Befunden mit Kontobezug; alle übrigen Befunde gelten als nicht zugeordnet.",
   "lastVisit": "Neu seit {date}",
+  "lastVisitLoadFailed": "Neue Feststellungen konnten nicht geladen werden.",
   "markSeen": "Als gesehen markieren",
   "triage": {
     "hint": "j/k bewegen · Enter öffnet · x wählt aus · a übernimmt (Seitenbereich) · d verwirft (Seitenbereich) · s parkt zur Prüfung",

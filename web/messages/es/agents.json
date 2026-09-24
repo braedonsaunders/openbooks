@@ -26,6 +26,7 @@
   },
   "subsidiaryHelp": "La subsidiaria se resuelve en hallazgos vinculados a cuentas; el resto queda sin asignar.",
   "lastVisit": "Novedades desde el {date}",
+  "lastVisitLoadFailed": "No se pudieron cargar los nuevos hallazgos.",
   "markSeen": "Marcar como visto",
   "triage": {
     "hint": "j/k moverse · Intro abrir · x seleccionar · a aplicar (panel) · d descartar (panel) · s aparcar en revisión",
