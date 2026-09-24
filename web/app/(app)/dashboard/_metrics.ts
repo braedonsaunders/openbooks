@@ -21,6 +21,7 @@ import { groupByVendor, type VendorPayable } from '@/lib/cash/ap-position'
 import { cashPosition } from '@/lib/cash/cash-position'
 import { analyticsConfig } from '@/lib/analytics/config'
 import { MissingRatesError } from '@/lib/consolidation'
+import { WORK_ITEM_SUBJECT_JOIN, workItemSubjectScopeFilter } from '@/lib/agents/work-item-subsidiary-scope'
 import {
   addDays,
   bankBalances,
@@ -492,11 +493,13 @@ export async function loadDashboardMetrics(
     // workbench inbox, never a parallel count.
     agentPacks.length > 0 && need('agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun')
       ? db.execute(sql`
-          select (count(*) filter (where status in ('open', 'in_review')))::int as open,
-                 (count(*) filter (where status in ('open', 'in_review') and summary ? 'proposedCommand'))::int as proposals,
-                 max(last_detected_at) as last_run
-            from ai_work_items
-           where org_id = ${orgId} and agent_key in (${agentPackList})
+          select (count(*) filter (where w.status in ('open', 'in_review')))::int as open,
+                 (count(*) filter (where w.status in ('open', 'in_review') and w.summary ? 'proposedCommand'))::int as proposals,
+                 max(w.last_detected_at) as last_run
+            from ai_work_items w
+            ${WORK_ITEM_SUBJECT_JOIN}
+           where w.org_id = ${orgId} and w.agent_key in (${agentPackList})
+             ${workItemSubjectScopeFilter(authz.allowedSubsidiaryIds)}
         `)
       : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
   ])
