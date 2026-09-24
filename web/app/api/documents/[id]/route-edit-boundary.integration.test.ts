@@ -19,14 +19,25 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return virtual('export {}')
     if (specifier === '../../../../lib/authz') return virtual(`
+      import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
       export async function getAuthz() {
         const s = globalThis.__documentEditBoundaryState;
-        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: [], allowedSubsidiaryIds: null };
+        return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ap.read', 'ap.create', 'ap.post']), allowedSubsidiaryIds: null };
       }
-      export function can() { return true }
+      // Faithful permission checks over the same allow-list: the generic
+      // document endpoints resolve the kind's read/edit grants through the
+      // real permission semantics, so an unconditional true (or a
+      // non-Set permissions bag) would make every boundary assertion here
+      // hollow or crash it.
+      export function can(authz, permission) { return permissionSetCovers(authz.permissions, permission) }
       export function guardSubsidiaryScope() { return null }
       export function subsidiariesInScope() { return true }
     `)
+    // The authz double above imports the engine's pure permission
+    // catalogue: re-anchor it to this file so it resolves.
+    if (context.parentURL?.startsWith('data:') && specifier.startsWith('@openbooks/')) {
+      return next(specifier, { ...context, parentURL: import.meta.url })
+    }
     if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },

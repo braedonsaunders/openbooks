@@ -9,6 +9,7 @@ import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib
 import { isUuid } from '../../../../lib/list-params'
 import { controlDeps } from "../../../../../engine/src/ledger/document-service.ts";
 import { DOC_KINDS, createPermission, postPermission } from "../../../../lib/document-kinds.ts";
+import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
@@ -64,8 +65,17 @@ export async function POST(req: Request) {
   // A malformed id can name nothing: same answer as a missing document.
   if (!isUuid(body.documentId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
+  // Gate on the narrowest row first — kind, status and subsidiary only.
+  // The full document is never loaded before the scope and permission
+  // gates below have passed; the branches re-read what they need under
+  // lock, with a locked scope recheck each time.
   const [doc] = await db
-    .select()
+    .select({
+      id: schema.documents.id,
+      kind: schema.documents.kind,
+      status: schema.documents.status,
+      subsidiaryId: schema.documents.subsidiaryId,
+    })
     .from(schema.documents)
     .where(and(eq(schema.documents.id, body.documentId), eq(schema.documents.orgId, user.orgId)))
   if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -77,6 +87,12 @@ export async function POST(req: Request) {
   const cfg = DOC_KINDS[doc.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
 
+  // Read before action: without the kind's read grant the record answers as
+  // missing, like GET /api/documents/[id] — the 403 below stays for
+  // callers who can read but may not submit/post.
+  if (!canReadDocumentKind(authz, doc.kind)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const perm = action === 'post' ? postPermission(doc.kind) : createPermission(doc.kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
@@ -93,11 +109,16 @@ export async function POST(req: Request) {
       // unlocked pre-read above; without this lock the loser races the engine
       // into a raw failure instead of meeting a lifecycle refusal.
       const submission = await withOrgTransaction(user.orgId, async () => {
-        const locked = (await db.execute<{ status: string }>(sql`
-          select status from documents
+        const locked = (await db.execute<{ status: string; subsidiaryId: string | null }>(sql`
+          select status, subsidiary_id as "subsidiaryId" from documents
            where id = ${doc.id} and org_id = ${user.orgId}
            for update
         `))
+        // Locked scope recheck: a rehome that landed after the precheck
+        // must not let this transaction submit another subsidiary's record.
+        if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+          return { kind: 'scope_revoked' as const }
+        }
         const current = locked.rows[0]?.status
         if (current !== 'draft') {
           return { kind: 'invalid_status' as const, status: current ?? 'missing' }
@@ -144,6 +165,9 @@ export async function POST(req: Request) {
       if (submission.kind === 'invalid_status') {
         return NextResponse.json({ error: `document is ${submission.status}, not draft` }, { status: 422 })
       }
+      if (submission.kind === 'scope_revoked') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
       // A policy-refused release is answered by name: the bill stays
       // submitted (the refusal audit above stands), never released.
       if (submission.approvalRequired) {
@@ -165,11 +189,16 @@ export async function POST(req: Request) {
     // Submit/release/post is one financial command. A posting rejection must
     // not strand a draft in approved status or persist partial financial work.
     const outcome = await withOrgTransaction(user.orgId, async () => {
-      const locked = (await db.execute<{ kind: string; status: string }>(sql`
-        select kind, status from documents
+      const locked = (await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(sql`
+        select kind, status, subsidiary_id as "subsidiaryId" from documents
          where id = ${doc.id} and org_id = ${user.orgId}
          for update
       `))
+      // Locked scope recheck: a rehome that landed after the precheck
+      // must not let this transaction post another subsidiary's record.
+      if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+        return { kind: 'scope_revoked' as const }
+      }
       const current = locked.rows[0]
       if (!current) return { kind: 'not_found' as const }
       const previousStatus = current.status
@@ -217,6 +246,9 @@ export async function POST(req: Request) {
       return { kind: 'posted' as const, entryId, previousStatus }
     })
     if (outcome.kind === 'not_found') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    if (outcome.kind === 'scope_revoked') {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     if (outcome.kind === 'pending') {
