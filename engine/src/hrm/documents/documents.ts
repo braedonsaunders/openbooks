@@ -219,6 +219,27 @@ async function loadSigners(exec: SqlExecutor, orgId: string, documentId: string)
   `)).rows;
 }
 
+async function requireAcknowledgmentOnlyAndOpen(exec: SqlExecutor, orgId: string, doc: DocumentRow): Promise<void> {
+  const template = doc.template_id
+    ? (await exec.execute<{ acknowledgment_only: boolean }>(sql`
+        select acknowledgment_only from hrm_document_templates
+         where org_id = ${orgId} and id = ${doc.template_id}
+      `)).rows[0]
+    : null;
+  if (!template?.acknowledgment_only) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      "this document requires a signature or has no acknowledgment template — acknowledge only an acknowledgment-only document",
+    );
+  }
+  if (!["sent", "viewed", "partially_signed"].includes(doc.status)) {
+    throw new HrmDocumentsError(
+      "REFUSED",
+      `only an open acknowledgment document can be acknowledged — this one is ${doc.status}`,
+    );
+  }
+}
+
 /** Resolve one party to its display name + email (person read service shape). */
 async function loadPerson(
   exec: SqlExecutor,
@@ -1148,18 +1169,7 @@ export async function acknowledgeDocument(input: {
     }
     return withOrgTransaction(claims.orgId, async () => {
       const { orgId, doc, signer } = await assertTokenSigner(db, input.token!);
-      const tpl = doc.template_id
-        ? (await db.execute<{ acknowledgment_only: boolean }>(sql`
-            select acknowledgment_only from hrm_document_templates
-             where org_id = ${orgId} and id = ${doc.template_id}
-          `)).rows[0]
-        : null;
-      if (tpl && !tpl.acknowledgment_only) {
-        throw new HrmDocumentsError(
-          "REFUSED",
-          "this document takes signatures, not acknowledgments — sign it through your link instead",
-        );
-      }
+      await requireAcknowledgmentOnlyAndOpen(db, orgId, doc);
       if (signer.status === "signed") {
         throw new HrmDocumentsError("REFUSED", "this link already acknowledged — acknowledgment is recorded once");
       }
@@ -1189,6 +1199,7 @@ export async function acknowledgeDocument(input: {
   const documentId: string = input.documentId;
   return withOrgTransaction(orgId, async () => {
     const doc = await loadDocument(db, orgId, documentId);
+    await requireAcknowledgmentOnlyAndOpen(db, orgId, doc);
     const ownParty = await loadActorPartyId(db, orgId, actorId);
     const isOwner = ownParty !== null && ownParty === doc.party_id;
     if (!isOwner) {
