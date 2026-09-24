@@ -56,7 +56,9 @@ test("NM printed percents are the tables' own figures", () => {
   assert.equal(pctToRate("4.3"), "0.043");
   assert.equal(pctToRate("5.9"), "0.059");
   assert.notEqual(pctToRate("5.9"), pctToRate("4.9"));
-  // The flat supplemental rate FYI-104 p. 4 prints.
+  // The flat supplemental rate FYI-104 p. 4 prints, carried in the
+  // edition data like its siblings — never hard-coded at the call site.
+  assert.equal(NM_RATES_2026.supplementalRate, pctToRate("5.9"));
   assert.equal(nmSupplementalFlat("200.00"), money("11.80"));
   assert.equal(nmSupplementalFlat("1000.00"), money("59"));
 });
