@@ -142,54 +142,46 @@ function reset(): void {
   routeState.mapped = [];
 }
 
-if (isVitest) {
-  test("retention route gates on the retention read grant", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.retention\.read"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("an unauthenticated caller never reaches the service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 401);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("overview and twelve monthly periods fan out with the caller's identity", async () => {
-    reset();
-    const response = await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"));
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { overview: { regrettableLeavers: 0 }, turnover: [] });
-    const turnover = routeState.calls.find((c) => c.fn === "turnover")!.args as {
-      periods: { start: string; end: string }[];
-    };
-    assert.equal(turnover.periods.length, 12);
-    assert.deepEqual(turnover.periods[11], { start: "2026-09-01", end: "2026-09-30" });
-    assert.deepEqual(turnover.periods[0], { start: "2025-10-01", end: "2025-10-31" });
-  });
+test("overview and twelve monthly periods fan out with the caller's identity", async () => {
+  reset();
+  const response = await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { overview: { regrettableLeavers: 0 }, turnover: [] });
+  const turnover = routeState.calls.find((c) => c.fn === "turnover")!.args as {
+    periods: { start: string; end: string }[];
+  };
+  assert.equal(turnover.periods.length, 12);
+  assert.deepEqual(turnover.periods[11], { start: "2026-09-01", end: "2026-09-30" });
+  assert.deepEqual(turnover.periods[0], { start: "2025-10-01", end: "2025-10-31" });
+});
 
-  test("a bad department id never reaches the service", async () => {
-    reset();
-    assert.equal(
-      (await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention?departmentId=nope"))).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a bad department id never reaches the service", async () => {
+  reset();
+  assert.equal(
+    (await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention?departmentId=nope"))).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("retention needs hrm.retention.read");
-    routeState.serviceThrow = refusal;
-    assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("retention needs hrm.retention.read");
+  routeState.serviceThrow = refusal;
+  assert.equal((await retentionRoute!.GET(new Request("http://openbooks.test/api/hrm/retention"))).status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
