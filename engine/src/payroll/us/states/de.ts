@@ -116,6 +116,16 @@ export function deAnnualTax(taxable: bigint): bigint {
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = deRatesForPayDate(input.payDate);
+  // Delaware's Employer's Guide describes the Form W-4NR proration as
+  // Delaware-source AGI divided by federal AGI. We do not yet collect that
+  // allocation, so a nonresident result cannot be computed safely.
+  // Official source: https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+  if (input.basis === "nonresident") {
+    throw new PayrollError(
+      "Delaware nonresident withholding requires Form W-4NR source-allocation facts to compute DE-source AGI as a share of federal AGI; capture the Form W-4NR inputs before calculating — refused by name",
+    );
+  }
+
   const P = input.periodsPerYear;
   if (!Number.isInteger(P) || P < 1 || P > 2000) {
     throw new PayrollError(`invalid pay periods per year for Delaware withholding: ${P}`);
