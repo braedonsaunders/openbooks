@@ -142,12 +142,16 @@ test(
       const invoiceId = await seedDirectInvoice(org, actorId, "INV-POST-OVER-1", "12000");
 
       // Nothing else is owed: the refusal must name the invoice, the limit,
-      // and the resulting exposure, not just "over limit".
+      // and the resulting exposure, not just "over limit" — plus the remedy
+      // (where to raise the limit) and the fact that a direct invoice has
+      // no override path at posting.
       await expectPostingRefusal(
         post(org, invoiceId),
         /INV-POST-OVER-1/,
         /12000/,
         /10000/,
+        /customer section of the party record/,
+        /no override path at posting/,
       );
 
       // The refused post commits nothing: still approved, no journal entries.
@@ -375,6 +379,81 @@ test(
       );
       await expectPostingRefusal(post(org, currencylessId), /has no currency/);
       assert.deepEqual(await invoiceState(org, currencylessId), {
+        status: "approved",
+        balance: null,
+        entries: 0,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a converted invoice that still breaches refuses and names the order override path",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Posting breach clerk", "posting_breach_clerk"),
+      );
+      await seedCustomerRole(org, actorId, org.customerId, { creditLimit: "8000" });
+      const orderId = await seedOpenOrder(org, actorId, "SO-POST-BREACH-1", "10000");
+      const invoiceId = await seedConvertedInvoice(org, actorId, orderId, "INV-POST-BREACH-1", "10000");
+
+      // Relief swaps the 10000 order remainder for the 10000 invoice, still
+      // above the 8000 limit: refuse by name, and since this invoice IS
+      // converted, name the order-side override instead of disclaiming it.
+      await expectPostingRefusal(
+        post(org, invoiceId),
+        /INV-POST-BREACH-1/,
+        /10000/,
+        /8000/,
+        /sales_order_credit_override/,
+      );
+      assert.deepEqual(await invoiceState(org, invoiceId), {
+        status: "approved",
+        balance: null,
+        entries: 0,
+      });
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
+test(
+  "a direct invoice for a customer on hold is refused with the release remedy",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() =>
+        createScratchUser(org.orgId, "Posting hold clerk", "posting_hold_clerk"),
+      );
+      const heldParty = randomUUID();
+      await withBypass(async () => {
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${heldParty}, ${org.orgId}, 'customer', 'Delinquent Holdings Ltd', true, '{}'::jsonb)`);
+      });
+      await seedCustomerRole(org, actorId, heldParty, { creditLimit: "50000" });
+      await withBypass(async () => {
+        await db.execute(sql`
+          update customer_roles set is_on_hold = true, hold_reason = 'two invoices 60+ days past due',
+               held_at = now(), held_by = ${actorId}
+           where org_id = ${org.orgId} and party_id = ${heldParty}`);
+      });
+      const invoiceId = await seedDirectInvoice(org, actorId, "INV-POST-HOLD-1", "100", "CAD", heldParty);
+
+      await expectPostingRefusal(
+        post(org, invoiceId),
+        /on credit hold/,
+        /two invoices 60\+ days past due/,
+        /release the hold on the customer section of the party record/,
+      );
+      assert.deepEqual(await invoiceState(org, invoiceId), {
         status: "approved",
         balance: null,
         entries: 0,

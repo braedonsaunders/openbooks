@@ -62,13 +62,13 @@ export async function assertCustomerInvoiceCredit(
   if (role.credit_limit === null) return;
   if (!role.currency) {
     throw new PostingError(
-      `customer credit limit has no currency; configure the customer role before posting invoice ${invoice.documentNumber}`,
+      `customer credit limit has no currency; set a currency on the customer section of the party record before posting invoice ${invoice.documentNumber}`,
     );
   }
   const limit = normalizeMoney(role.credit_limit);
   if (cmp(limit, "0") < 0) {
     throw new PostingError(
-      `customer credit limit cannot be negative; correct the customer role before posting invoice ${invoice.documentNumber}`,
+      `customer credit limit cannot be negative; correct the credit limit on the customer section of the party record before posting invoice ${invoice.documentNumber}`,
     );
   }
   if (invoice.currency !== role.currency) return;
@@ -76,7 +76,7 @@ export async function assertCustomerInvoiceCredit(
   const mixedCurrency = await findMixedCurrencyExposure(tx, invoice.orgId, invoice.partyId, role.currency);
   if (mixedCurrency) {
     throw new PostingError(
-      `customer has open ${mixedCurrency.kind.replaceAll("_", " ")} exposure in ${mixedCurrency.currency}; credit limit is enforced only in ${role.currency} — resolve that exposure before posting invoice ${invoice.documentNumber}`,
+      `customer has open ${mixedCurrency.kind.replaceAll("_", " ")} exposure in ${mixedCurrency.currency}; credit limit is enforced only in ${role.currency} — settle that ${mixedCurrency.currency} balance before posting invoice ${invoice.documentNumber}`,
     );
   }
 
@@ -98,8 +98,16 @@ export async function assertCustomerInvoiceCredit(
     relief,
   );
   if (cmp(resultingExposure, limit) > 0) {
+    // Converted invoices relieve the linked order, so the order-side credit
+    // override stays a live path: bill through a sales order that carries an
+    // approved sales_order_credit_override. A direct invoice has no override
+    // path at posting — the refusal must say so, not imply one exists.
+    const overridePath =
+      cmp(normalizeMoney(relief), "0") > 0
+        ? ", or bill through a sales order that carries an approved sales_order_credit_override"
+        : " — a direct invoice has no override path at posting";
     throw new PostingError(
-      `posting invoice ${invoice.documentNumber} would raise customer credit exposure to ${resultingExposure} ${role.currency}, above the ${limit} ${role.currency} limit (open orders ${openOrderExposure}, unpaid invoices ${unpaidInvoiceExposure}, this invoice ${invoiceTotal}): reduce the invoice, collect payment against the open balance, or raise the customer credit limit before posting`,
+      `posting invoice ${invoice.documentNumber} would raise customer credit exposure to ${resultingExposure} ${role.currency}, above the ${limit} ${role.currency} limit (open orders ${openOrderExposure}, unpaid invoices ${unpaidInvoiceExposure}, this invoice ${invoiceTotal}): reduce the invoice, collect payment against the open balance, or raise the customer credit limit on the customer section of the party record before posting${overridePath}`,
     );
   }
 }

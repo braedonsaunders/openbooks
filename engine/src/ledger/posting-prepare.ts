@@ -511,7 +511,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     `));
     if (hold.rows[0]) {
       throw new PostingError(
-        `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
+        `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}; release the hold on the customer section of the party record before posting`,
       );
     }
   }
