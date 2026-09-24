@@ -117,7 +117,6 @@
     "web/app/(app)/banking/view.banner.test.ts": 2,
     "web/app/(app)/collections/collections-worklist.test.ts": 3,
     "web/app/(app)/compliance/information-returns/FilingDetail.scope.test.ts": 1,
-    "web/app/(app)/compliance/information-returns/[id]/filing-empty-state.test.ts": 1,
     "web/app/(app)/compliance/vendors/Vendors.scope.test.ts": 1,
     "web/app/(app)/crm/OpportunityDrawer.test.ts": 3,
     "web/app/(app)/crm/forecasts/sections.test.tsx": 3,
