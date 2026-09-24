@@ -101,7 +101,7 @@ test('close-package run renders under the sender close.run grant', { skip: !DB }
   try {
     const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Close sender', 'close_sender'))
     await db.execute(sql`
-      update app_roles set permissions = '["close.run","reports.read"]'::jsonb,
+      update app_roles set permissions = '["close.run","reports.read","reports.schedule"]'::jsonb,
                            subsidiary_restriction = '{"mode":"all"}'::jsonb
        where org_id = ${org.orgId} and key = 'close_sender'`)
     const definitionId = await seedDefinition(org.orgId)
@@ -125,6 +125,50 @@ test('close-package run renders under the sender close.run grant', { skip: !DB }
     assert.equal(refused.status, 422)
     const body = (await refused.json()) as { error: string }
     assert.match(body.error, /no longer holds close\.run — re-send the package/)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('a scheduled run lacking requiredPermissions renders and records them once', { skip: !DB }, async () => {
+  // RENDER-STAMP: the 0340 write-once transition. The schedule snapshot
+  // predates recording; the render completes and the content-derived key
+  // lands exactly once.
+  process.env.OPENBOOKS_INTERNAL_TOKEN = TOKEN
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const sender = await withBypassContext(() => createScratchUser(org.orgId, 'Scheduler', 'scheduler'))
+    await db.execute(sql`
+      update app_roles set permissions = '["reports.read","reports.schedule"]'::jsonb,
+                           subsidiary_restriction = '{"mode":"all"}'::jsonb
+       where org_id = ${org.orgId} and key = 'scheduler'`)
+    const definitionId = await seedDefinition(org.orgId)
+    const runId = randomUUID()
+    await db.execute(sql`
+      insert into report_runs (id, org_id, definition_id, trigger, status, recipient_emails, filters,
+                               authorization_snapshot, created_by)
+      values (${runId}, ${org.orgId}, ${definitionId}, 'scheduled', 'running', '[]'::jsonb,
+              '{"statementParams":{"period":"custom","from":"2026-07-01","to":"2026-07-31"}}'::jsonb,
+              ${JSON.stringify({
+                version: 1,
+                userId: sender,
+                allowedSubsidiaryIds: null,
+                definition: {
+                  report_type: 'statement',
+                  query: null,
+                  statement: { kind: 'trial-balance' },
+                  name: 'Trial Balance',
+                  slug: 'trial-balance',
+                  kind: 'built_in',
+                },
+              })}::jsonb, ${sender})`)
+    const res = await GET(renderRequest(org.orgId, definitionId, runId))
+    assert.equal(res.status, 200, 'a scheduled render predating recording must succeed')
+    const snapshot = (
+      await db.execute(sql`
+        select authorization_snapshot as snapshot from report_runs where id = ${runId}`)
+    ).rows[0]?.snapshot as { requiredPermissions?: unknown } | undefined
+    assert.deepEqual(snapshot?.requiredPermissions, [], 'the render records the content key exactly once')
   } finally {
     await dropScratchOrg(org.orgId)
   }
