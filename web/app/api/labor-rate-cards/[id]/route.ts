@@ -436,6 +436,97 @@ export async function PUT(
         if (found.rows.length !== customerIds.length) throw new Error("target");
       }
 
+      // Pricing-policy boundary: every entity-bearing reference must sit
+      // inside the caller's subsidiary scope. Unknown, cross-org, and
+      // out-of-scope ids share the same "target" refusal as the existence
+      // checks above, so no oracle distinguishes them. Unrestricted callers
+      // (null scope) skip every check below.
+      if (gate.allowedSubsidiaryIds !== null) {
+        const allowed = gate.allowedSubsidiaryIds;
+        const newSubsidiaryIds = [
+          ...new Set(
+            [
+              ...scopes
+                .filter((x) => x.scopeType === "subsidiary")
+                .map((x) => x.scopeValueId!),
+              ...adjustments.flatMap((a) =>
+                (a.targets ?? [])
+                  .filter((x) => x.targetType === "subsidiary")
+                  .map((x) => x.targetValueId!),
+              ),
+            ].filter(Boolean),
+          ),
+        ];
+        if (newSubsidiaryIds.length) {
+          const found = (await tx.execute<{ id: string }>(
+            sql`select id from subsidiaries where org_id=${orgId} and id=any(${uuidArray(newSubsidiaryIds)}::uuid[]) and id=any(${uuidArray([...allowed])}::uuid[])`,
+          ));
+          if (found.rows.length !== newSubsidiaryIds.length) throw new Error("target");
+        }
+        const newProjectIds = [
+          ...new Set(
+            adjustments
+              .flatMap((a) =>
+                (a.targets ?? [])
+                  .filter((x) => x.targetType === "project")
+                  .map((x) => x.targetValueId!),
+              )
+              .filter(Boolean),
+          ),
+        ];
+        if (newProjectIds.length) {
+          const rows = (await tx.execute<{ id: string; subsidiary_id: string | null }>(
+            sql`select id, subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(newProjectIds)}::uuid[])`,
+          ));
+          if (rows.rows.length !== newProjectIds.length) throw new Error("target");
+          for (const row of rows.rows) {
+            // A null-subsidiary project fails closed, like unattributed
+            // documents elsewhere: restricted callers never price it.
+            if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
+          }
+        }
+        if (customerIds.length) {
+          const rows = (await tx.execute<{ id: string; subsidiary_id: string | null }>(
+            sql`select p.id, p.subsidiary_id from parties p join customer_roles c on c.party_id=p.id and c.org_id=${orgId} and c.is_active where p.org_id=${orgId} and p.is_active and p.id=any(${uuidArray(customerIds)}::uuid[])`,
+          ));
+          if (rows.rows.length !== customerIds.length) throw new Error("target");
+          for (const row of rows.rows) {
+            if (!row.subsidiary_id || !allowed.has(row.subsidiary_id)) throw new Error("target");
+          }
+        }
+        // Existing entity touch: replacing the scopes and targets of a
+        // version already in use by another entity still rewrites that
+        // entity's labour pricing, so the whole save is not-found to this
+        // caller — uniform with an unknown version id. Dangling stored ids
+        // (their row is gone) price nothing and are ignored; only live
+        // out-of-scope references refuse.
+        const storedSubsidiaryIds = (await tx.execute<{ scope_value_id: string }>(sql`
+          select scope_value_id from labor_rate_version_scopes where version_id=${id} and org_id=${orgId} and scope_type='subsidiary' and scope_value_id is not null
+           union
+          select at.target_value_id as scope_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='subsidiary' and at.target_value_id is not null`));
+        if (storedSubsidiaryIds.rows.length) {
+          const live = (await tx.execute<{ id: string }>(sql`
+            select id from subsidiaries where org_id=${orgId}
+             and id=any(${uuidArray(storedSubsidiaryIds.rows.map((row) => row.scope_value_id))}::uuid[])
+             and not (id=any(${uuidArray([...allowed])}::uuid[])) limit 1`));
+          if (live.rows.length) throw new Error("notFound");
+        }
+        const storedProjectIds = (await tx.execute<{ target_value_id: string }>(sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='project' and at.target_value_id is not null`));
+        if (storedProjectIds.rows.length) {
+          const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+            select subsidiary_id from projects where org_id=${orgId} and id=any(${uuidArray(storedProjectIds.rows.map((row) => row.target_value_id))}::uuid[])`));
+          if (rows.rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
+        }
+        const storedCustomerIds = (await tx.execute<{ target_value_id: string }>(sql`
+          select at.target_value_id from labor_rate_adjustment_targets at join labor_rate_adjustments a on a.id=at.adjustment_id and a.org_id=at.org_id where a.version_id=${id} and a.org_id=${orgId} and at.target_type='customer' and at.target_value_id is not null`));
+        if (storedCustomerIds.rows.length) {
+          const rows = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+            select subsidiary_id from parties where org_id=${orgId} and id=any(${uuidArray(storedCustomerIds.rows.map((row) => row.target_value_id))}::uuid[])`));
+          if (rows.rows.some((row) => !row.subsidiary_id || !allowed.has(row.subsidiary_id))) throw new Error("notFound");
+        }
+      }
+
       // An undefined currency splices as empty text inside a sql template,
       // so the keep-vs-overwrite branch must select whole statements.
       await tx.execute(
