@@ -55,7 +55,7 @@ registerHooks({
     if (specifier === 'sonner') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(){},error(){},info(){}};export function Toaster(){return null}',
+        url: 'data:text/javascript,export const toast={success(m){globalThis.__opportunityDrawerToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__opportunityDrawerToasts.push({kind:"error",message:String(m)})},info(){}};export function Toaster(){return null}',
       }
     }
     return next(specifier, context)
@@ -70,6 +70,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { OpportunityDrawer } = await import('./OpportunityDrawer')
+Object.assign(globalThis, { __opportunityDrawerToasts: [] as { kind: string; message: string }[] })
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 
@@ -94,7 +95,7 @@ const baseOpportunity = {
   updated_at: '2026-09-23T00:00:00Z',
 }
 
-function mountDrawer(t: TestContext) {
+function mountDrawer(t: TestContext, options: { partyId?: string | null; accounts?: { id: string; name: string }[] } = {}) {
   const rootHandle = createRoot(document.body)
   t.after(async () => {
     await act(async () => {
@@ -106,9 +107,9 @@ function mountDrawer(t: TestContext) {
     rootHandle.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <OpportunityDrawer
-          data={{ opportunity: { ...baseOpportunity }, lines: [] }}
+          data={{ opportunity: { ...baseOpportunity, party_id: options.partyId === undefined ? baseOpportunity.party_id : options.partyId }, lines: [] }}
           statuses={[{ id: 'st-1', name: 'qualification' }]}
-          accounts={[{ id: 'acct-1', name: 'Atlas' }]}
+          accounts={options.accounts ?? [{ id: 'acct-1', name: 'Atlas' }]}
           contacts={[]}
           owners={[]}
           teams={[]}
@@ -171,4 +172,55 @@ test('dirty drawer shows a visible save-first hint described by the disabled but
     'the hint must name the save-first remedy',
   )
   assert.ok((hint.textContent ?? '').length > 0, 'the hint must carry visible text')
+})
+
+test('account-less drawer names the account remedy and links to Parties', async (t) => {
+  await mountDrawer(t, { partyId: null, accounts: [] })
+  const button = estimateButton()
+  assert.equal(button.disabled, true, 'an account is required before conversion')
+  assert.match(document.getElementById('opportunity-estimate-hint')?.textContent ?? '', /Set an account/)
+  const partiesLink = [...document.querySelectorAll('a')].find((anchor) => anchor.getAttribute('href') === '/parties')
+  assert.ok(partiesLink, 'the empty picker offers the existing Parties remedy')
+  assert.match(partiesLink.textContent ?? '', /Open Parties/)
+  assert.match(document.body.textContent ?? '', /Only tracked customers can be chosen/)
+})
+
+test('estimate refusal preserves the server reason for the operator', async (t) => {
+  const priorFetch = globalThis.fetch
+  const priorToasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts
+  ;(globalThis as Record<string, unknown>).__opportunityDrawerToasts = []
+  globalThis.fetch = (async () => Response.json({ error: 'The customer account is inactive.' }, { status: 422 })) as typeof fetch
+  t.after(() => {
+    globalThis.fetch = priorFetch
+    ;(globalThis as Record<string, unknown>).__opportunityDrawerToasts = priorToasts
+  })
+  await mountDrawer(t)
+  await act(async () => {
+    estimateButton().click()
+    await tick()
+  })
+  const toasts = (globalThis as Record<string, unknown>).__opportunityDrawerToasts as { kind: string; message: string }[]
+  assert.deepEqual(toasts, [{ kind: 'error', message: 'The customer account is inactive.' }])
+})
+
+test('a successful save re-enables estimate conversion from the visible revision', async (t) => {
+  const priorFetch = globalThis.fetch
+  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+    assert.equal(init?.method, 'PATCH')
+    return Response.json({ opportunity: { updated_at: '2026-09-24T00:00:00Z' } })
+  }) as typeof fetch
+  t.after(() => {
+    globalThis.fetch = priorFetch
+  })
+  await mountDrawer(t)
+  await editTitle()
+  assert.equal(estimateButton().disabled, true)
+  const saveButton = [...document.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Save')
+  assert.ok(saveButton, 'the edited opportunity can be saved')
+  await act(async () => {
+    saveButton.click()
+    await tick()
+    await tick()
+  })
+  assert.equal(estimateButton().disabled, false, 'the successful save becomes the new conversion baseline')
 })
