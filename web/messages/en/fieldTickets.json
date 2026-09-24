@@ -114,7 +114,7 @@
       "add": "Add line",
       "remove": "Remove line",
       "empty": "No lines yet.",
-      "itemRequired": "Pick an item"
+      "itemRequired": "Pick an item", "rateFailed": "Could not resolve the item rate", "projectLoadFailed": "Could not load the project", "reloadFailed": "Could not reload the ticket"
     },
     "tasks": { "title": "Project tasks", "hint": "WBS tasks available for coding crew hours on this project.", "code": "Code", "task": "Task", "estimatedHours": "Estimated hours" },
     "totals": {

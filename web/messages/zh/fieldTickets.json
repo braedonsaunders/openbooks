@@ -114,7 +114,7 @@
       "add": "添加行",
       "remove": "删除行",
       "empty": "暂无行。",
-      "itemRequired": "请选择项目"
+      "itemRequired": "请选择项目", "rateFailed": "无法解析项目费率", "projectLoadFailed": "无法加载项目", "reloadFailed": "无法重新加载工单"
     },
     "tasks": { "title": "项目任务", "hint": "可用于班组工时归集的 WBS 任务。", "code": "编码", "task": "任务", "estimatedHours": "预计工时" },
     "totals": {

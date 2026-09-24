@@ -114,7 +114,7 @@
       "add": "明細を追加",
       "remove": "明細を削除",
       "empty": "明細はまだありません。",
-      "itemRequired": "品目を選択してください"
+      "itemRequired": "品目を選択してください", "rateFailed": "品目の単価を解決できませんでした", "projectLoadFailed": "プロジェクトを読み込めませんでした", "reloadFailed": "チケットを再読み込みできませんでした"
     },
     "tasks": { "title": "プロジェクトタスク", "hint": "このプロジェクトで作業員の時間にコーディング可能なWBSタスクです。", "code": "コード", "task": "タスク", "estimatedHours": "見積時間" },
     "totals": {

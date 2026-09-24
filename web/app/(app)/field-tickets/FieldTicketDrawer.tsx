@@ -352,6 +352,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [lineRateSource, setLineRateSource] = useState<'rate_book' | 'item_default' | ''>('')
   const [linePolicyProvenance, setLinePolicyProvenance] = useState<'pinned' | 'inferred' | 'live' | ''>('')
   const [lineComponents, setLineComponents] = useState<{ unitName: string; quantity: string; rate: string; amount: string }[]>([])
+  // The last rate lookup's named refusal, pinned beside the (stale but kept)
+  // values instead of a toast: toasts expire and the blanked fields read as
+  // "no rate" rather than "rate refused".
+  const [lineRateError, setLineRateError] = useState<string | null>(null)
 
   const effectiveLayout = props.layout ?? defaultFormLayout('field_ticket')
   const actionLayout = effectiveLayout.actions
@@ -419,6 +423,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRateUnit('')
       setLineRateUnits([])
       setLineRateLoading(false)
+      setLineRateError(null)
     } else if (!Number.isInteger(Number(lineQty)) || Number(lineQty) <= 0) {
       setLineRate('')
       setLineAmount('')
@@ -426,8 +431,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLinePolicyProvenance('')
       setLineComponents([])
       setLineRateLoading(false)
+      setLineRateError(null)
     } else {
       setLineRateLoading(true)
+      setLineRateError(null)
     }
   }
 
@@ -441,8 +448,17 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     if (lineRateUnit) query.set('rateUnitCode', lineRateUnit)
     void fetch(`/api/field-tickets/item-rate?${query}`, { signal: controller.signal })
       .then(async (response) => {
-        const body = await response.json()
-        if (!response.ok) throw new Error(body.error ?? 'Could not resolve item rate')
+        // The status is checked before the body parses: a 422 (no rate for
+        // this item/date) must name its reason, never throw a SyntaxError.
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.lines.rateFailed')))
+        const body = (await response.json()) as {
+          rateUnits?: RateUnitOpt[]
+          rate?: string | number | null
+          amount?: string | number | null
+          source?: string
+          policyProvenance?: string
+          components?: { unitName: string; quantity: string; rate: string; amount: string }[]
+        }
         if (!active) return
         const rateUnits = Array.isArray(body.rateUnits) ? body.rateUnits as RateUnitOpt[] : []
         setLineRateUnits(rateUnits)
@@ -457,15 +473,14 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
             : '',
         )
         setLineComponents(Array.isArray(body.components) ? body.components : [])
+        setLineRateError(null)
       })
-      .catch((error) => {
-        if (active && error.name !== 'AbortError') {
-          setLineRate('')
-          setLineAmount('')
-          setLineRateSource('')
-          setLinePolicyProvenance('')
-          setLineComponents([])
-          if (lineRateUnit) setLineRateUnit('')
+      .catch((error: unknown) => {
+        if (active && (!(error instanceof Error) || error.name !== 'AbortError')) {
+          // Keep the last good rate on screen: a refused lookup pins its
+          // named reason beside the stale values instead of blanking them
+          // into a silent "no rate".
+          setLineRateError(error instanceof Error ? error.message : t('editor.lines.rateFailed'))
         }
       })
       .finally(() => { if (active) setLineRateLoading(false) })
@@ -473,7 +488,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       active = false
       controller.abort()
     }
-  }, [editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, visibleWindow.end])
+  }, [editable, lineEquipment, lineItem, lineQty, lineRateUnit, projectId, t, visibleWindow.end])
 
   function applyPayload(j: TicketPayload) {
     // Fail closed before adopting any server state: a revision-less payload
@@ -509,13 +524,15 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     }
     try {
       const response = await fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(nextProjectId)}`)
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error ?? 'Could not load project')
+      // The status is checked before the body parses: a non-JSON 502 page
+      // must toast the translated fallback, never a SyntaxError.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.projectLoadFailed')))
+      const body = (await response.json()) as { customerName?: string; tasks?: unknown; period?: string }
       setCustomerName(body.customerName ?? '')
       setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
       if (!gridHasHours && body.period) setPeriod(body.period)
     } catch (error) {
-      toast.error((error as Error).message)
+      toast.error(error instanceof Error ? error.message : t('editor.projectLoadFailed'))
     }
   }
 
@@ -527,10 +544,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   async function reloadTicketAfterConflict(): Promise<void> {
     try {
       const response = await fetch(`/api/field-tickets/${ticket.id}`)
-      if (!response.ok) throw new Error('failed')
+      // The status is checked before the body parses, and the named refusal
+      // is toasted — never the literal 'failed' the operator cannot act on.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('editor.reloadFailed')))
       applyPayload((await response.json()) as TicketPayload)
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error(e instanceof Error ? e.message : t('editor.reloadFailed'))
     }
   }
 
@@ -705,8 +724,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     } else {
       void fetch(`/api/field-tickets/project-context?projectId=${encodeURIComponent(savedProjectId)}`)
         .then(async (response) => {
-          const body = await response.json()
-          if (response.ok) setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
+          // Status first: a non-JSON error page must not throw out of this
+          // best-effort picker refresh.
+          if (!response.ok) return
+          const body = (await response.json()) as { tasks?: unknown }
+          setProjectTasks(Array.isArray(body.tasks) ? body.tasks : [])
         })
         .catch(() => setProjectTasks([]))
     }
@@ -1280,6 +1302,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 <Label>{t('editor.lines.amount')}</Label>
                 <Input className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineAmount ? money(lineAmount) : '—'} readOnly />
               </div>
+              {lineRateError && !lineRateLoading ? (
+                <p role="alert" className="text-xs text-red-600 md:col-span-full dark:text-red-400">{lineRateError}</p>
+              ) : null}
               {props.equipmentEnabled && selectedItem?.kind === 'equipment_charge' && equipmentOptions.length > 0 ? (
                 <div className="min-w-0 md:col-span-2">
                   <Label>{t('editor.lines.equipment')}</Label>

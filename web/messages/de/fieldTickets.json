@@ -114,7 +114,7 @@
       "add": "Zeile hinzufügen",
       "remove": "Zeile entfernen",
       "empty": "Noch keine Zeilen.",
-      "itemRequired": "Wählen Sie eine Position"
+      "itemRequired": "Wählen Sie eine Position", "rateFailed": "Positionssatz konnte nicht ermittelt werden", "projectLoadFailed": "Projekt konnte nicht geladen werden", "reloadFailed": "Ticket konnte nicht neu geladen werden"
     },
     "tasks": { "title": "Projektaufgaben", "hint": "PSP-Aufgaben, auf die Mannschaftsstunden dieses Projekts kontiert werden können.", "code": "Code", "task": "Aufgabe", "estimatedHours": "Geplante Stunden" },
     "totals": {

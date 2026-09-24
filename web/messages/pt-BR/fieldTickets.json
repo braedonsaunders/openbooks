@@ -114,7 +114,7 @@
       "add": "Adicionar linha",
       "remove": "Remover linha",
       "empty": "Nenhuma linha ainda.",
-      "itemRequired": "Escolha um item"
+      "itemRequired": "Escolha um item", "rateFailed": "Não foi possível resolver a tarifa do item", "projectLoadFailed": "Não foi possível carregar o projeto", "reloadFailed": "Não foi possível recarregar o ticket"
     },
     "tasks": { "title": "Tarefas do projeto", "hint": "Tarefas WBS disponíveis para apropriar as horas da equipe neste projeto.", "code": "Código", "task": "Tarefa", "estimatedHours": "Horas estimadas" },
     "totals": {
