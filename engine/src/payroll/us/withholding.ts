@@ -734,6 +734,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         payDate: input.payDate,
         periodsPerYear: input.periodsPerYear,
         wages: input.wages,
+        supplemental: input.supplemental,
         exemptions: {
           personal: exemptionCount(certificate, "personal_exemptions"),
           additionalDependent: exemptionCount(certificate, "additional_dependent_exemptions"),

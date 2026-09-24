@@ -340,6 +340,8 @@ export function inCountyWithholding(input: {
   payDate: string;
   periodsPerYear: number;
   wages: string;
+  /** Non-periodic wages are county-taxable without the WH-4 exemption. */
+  supplemental?: string;
   exemptions: InExemptionCounts;
   county: InCounty;
   additionalPerPeriod?: string;
@@ -347,7 +349,10 @@ export function inCountyWithholding(input: {
   const { taxable, factors } = inPeriodTaxable(input);
   factors.IN_COUNTY_CODE = input.county.code;
   factors.IN_COUNTY_RATE = input.county.rate;
-  const tax = mulRateCents(taxable, input.county.rate);
+  const supplemental = U(input.supplemental ?? "0");
+  const taxableSupplemental = taxable + supplemental;
+  factors.IN_COUNTY_SUPPLEMENTAL_TAXABLE = D(supplemental);
+  const tax = mulRateCents(taxableSupplemental, input.county.rate);
   const extra = U(input.additionalPerPeriod ?? "0");
   const total = tax + extra;
   factors.IN_COUNTY_TAX = D(total);
@@ -409,6 +414,7 @@ export const IN_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IN_SUPPLEMENTAL_TAX: "Indiana tax on supplemental wages",
   IN_COUNTY_CODE: "Indiana county code",
   IN_COUNTY_RATE: "Indiana county tax rate",
+  IN_COUNTY_SUPPLEMENTAL_TAXABLE: "Indiana county supplemental taxable wages",
   IN_COUNTY_TAX: "Indiana county tax",
   IN_WITHHELD: "Indiana tax withheld this period",
 };

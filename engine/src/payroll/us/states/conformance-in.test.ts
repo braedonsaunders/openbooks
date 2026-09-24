@@ -203,3 +203,30 @@ test("IN county tax dispatches through computeUsWithholding — DN#1 p. 3 county
   assert.equal(result!.tax, money("4.73"));
   assert.equal(result!.factors.IN_COUNTY_RATE, "0.01");
 });
+
+test("IN county withholding taxes supplemental pay without reapplying WH-4 exemptions", () => {
+  // Indiana Departmental Notice #1 (R46 01-26), p. 3: county tax uses the
+  // same taxable wages as state withholding, and supplemental wages receive
+  // no exemption. https://www.in.gov/dor/files/dn01.pdf
+  const result = computeUsWithholding({
+    levy: {
+      level: "sub_region", region: "IN", subRegion: "31",
+      label: "Harrison County income tax",
+      basis: "resident", side: "residence", reach: "resident",
+      certificateKey: "us_in_wh4",
+    },
+    payDate: "2026-03-06", periodEnd: "2026-03-06", periodsPerYear: 52,
+    wages: "800.00", supplemental: "200.00", supplementalPaymentTiming: "combined",
+    federalIncomeTax: "13.96",
+    certificateFor: () => cert({
+      personal_exemptions: "5",
+      additional_dependent_exemptions: "3",
+      first_time_dependent_exemptions: "1",
+      adopted_dependent_exemptions: "2",
+    }),
+    tenantRates: () => undefined,
+  });
+
+  assert.equal(result?.factors.IN_COUNTY_SUPPLEMENTAL_TAXABLE, money("200.00"));
+  assert.equal(result?.tax, money("6.73"));
+});
