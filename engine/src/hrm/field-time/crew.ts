@@ -534,7 +534,8 @@ export async function rejectBatch(input: {
     refuse("reject_reason_required", "Rejecting needs a reason — tell the foreman what to fix");
   }
   const batch = await loadBatch(input.orgId, input.batchId);
-  if (batch.status !== "submitted" && batch.status !== "approved_stage_1" && batch.status !== "approved_stage_2") {
+  const chain = await loadChain(input.orgId, CREW_BATCH_CHAIN);
+  if (!nextStage(batch.status, chain)) {
     refuse("batch_not_rejectable", `Only a batch in approval can be rejected — this batch is ${batch.status}`);
   }
   await withOrgTransaction(input.orgId, async () => {
