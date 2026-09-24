@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { addCloseEvidence } from "./tasks.ts";
@@ -53,22 +52,11 @@ test("requireLockWriteRow refuses a zero-row lock upsert", () => {
   assert.deepEqual(requireLockWriteRow({ id: "lock-1" }), { id: "lock-1" });
 });
 
-test("soft-close posting fence is the storage twin of periodLockBlocksPosting", () => {
-  const environments = readFileSync(new URL("../../../schema/migrations/environments.sql", import.meta.url), "utf8");
-  const migration = readFileSync(
-    new URL("../../../schema/migrations/generated/0246_soft_close_posting_fence.sql", import.meta.url),
-    "utf8",
-  );
-  for (const source of [environments, migration]) {
-    const hits = source.match(/when state = 'soft_closed' then true/g);
-    assert.equal(
-      hits?.length,
-      2,
-      "period_module_blocks_write must fence soft_closed on the exact row and the org-wide fallback",
-    );
-    assert.match(source, /Blocks soft-closed and closed-period writes/);
-  }
-});
+/* Soft-close fencing in both twins is proven through the live lock in
+ * posting-module-fence.integration.test.ts ("soft-close fences posting in
+ * the engine and storage twins alike"); the engine half's pure rule stays
+ * covered above by "periodLockBlocksPosting fences soft-closed the same as
+ * closed". */
 
 test("historical replay bypasses only source-imported period locks", () => {
   assert.equal(periodLockBlocksPosting({
@@ -952,56 +940,12 @@ test(
   },
 );
 
-test("close automation claims carry lease fencing, stale takeover, and stage checkpoints", () => {
-  const engine = ["./automations.ts", "./run-automation.ts"].map((file) =>
-    readFileSync(new URL(file, import.meta.url), "utf8")).join("\n");
-
-  // The claim books a random fencing token with its lock timestamp and the
-  // conflict contract that keeps concurrent schedulers single-fire.
-  assert.match(
-    engine,
-    /insert into close_automation_executions[\s\S]*?gen_random_uuid\(\), now\(\)[\s\S]*?on conflict \(rule_id, event_key\) do nothing returning id/,
-  );
-
-  // A crashed running claim is reclaimed by compare-and-set over its stored
-  // token: concurrent recoverers race cleanly and only one ever wins.
-  assert.match(engine, /CLOSE_AUTOMATION_STALE_CLAIM_MS/);
-  assert.match(
-    engine,
-    /attempt_count = attempt_count \+ 1,[\s\S]*?lease_token = gen_random_uuid\(\),[\s\S]*?locked_at = now\(\)/,
-  );
-  assert.match(
-    engine,
-    /and lease_token is not distinct from \$\{existing\.lease_token\}/,
-  );
-
-  // Every effect checkpoint and terminal transition must match the active
-  // token, so an attempt fenced by a takeover cannot corrupt the outcome.
-  assert.match(
-    engine,
-    /status = 'running'\s+and lease_token = \$\{args\.leaseToken\}/,
-  );
-  assert.match(engine, /CloseAutomationLeaseFencedError/);
-
-  // Non-idempotent unit effects commit with their stage checkpoint in one
-  // transaction; a resumed attempt skips what already committed.
-  assert.match(engine, /stageKey: `notify:\$\{user\.id\}`/);
-  assert.match(engine, /stages = stages \|\| \$\{JSON\.stringify\(/);
-
-  // The terminal status write and its audit event commit together so a crash
-  // between them cannot orphan a half-recorded outcome.
-  assert.match(engine, /["']automation\.completed["']/);
-  assert.match(engine, /["']automation\.failed["']/);
-});
-
-test("close automation execution schema carries the claim-lease columns", () => {
-  const schema = readFileSync(
-    new URL("../../../schema/src/close.ts", import.meta.url),
-    "utf8",
-  );
-  const executions = schema.slice(schema.indexOf("closeAutomationExecutions"));
-  assert.match(executions, /leaseToken: uuid\("lease_token"\)/);
-  assert.match(executions, /lockedAt: timestamp\("locked_at", \{ withTimezone: true \}\)/);
-  assert.match(executions, /attemptCount: integer\("attempt_count"\)\.notNull\(\)\.default\(0\)/);
-  assert.match(executions, /stages: jsonb\("stages"\)\.notNull\(\)\.default\(\{\}\)/);
-});
+/* Claim lease fencing, stale takeover, stage checkpoints, and terminal
+ * atomicity are proven through the live engine in
+ * automations-recovery.integration.test.ts ("a crash right after the claim
+ * is recovered by stale takeover", "concurrent schedulers still single-fire
+ * through the leased claim", "a live lease held by another scheduler is
+ * respected, not stolen", "a crash mid multi-recipient notify resumes
+ * exactly once with no missing or duplicate send", and "a post-effect
+ * pre-terminal crash finishes without duplicating the committed effect").
+ * The execution row shape those tests run against is the lease contract. */
