@@ -20,6 +20,7 @@ import { hrmPeopleViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
 import { can, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
+import { selectCoverageProject } from './qualification-coverage-selection'
 
 /**
  * Qualifications page loader (HR-14): the worker qualification ledger by
@@ -287,9 +288,7 @@ export async function loadQualificationsPage(
   const projectOptions = [...new Map(requirements.filter((r) => r.subjectKind === 'project').map((r) => [r.subjectId, r.subjectName])).entries()].map(
     ([value, label]) => ({ value, label }),
   )
-  const coverageProjectId = sp.projectId && projectOptions.some((p) => p.value === sp.projectId)
-    ? sp.projectId
-    : (projectOptions[0]?.value ?? null)
+  const coverageProjectId = selectCoverageProject(sp.projectId, projectOptions)
   const allCoverageTypes = requirements
     .filter((r) => r.subjectKind === 'project' && r.subjectId === coverageProjectId)
     .map((r) => ({ code: r.typeCode, name: r.typeName, id: r.typeId }))
@@ -423,7 +422,7 @@ export async function loadQualificationsPage(
     coverageTitle: t('qualifications.coverageTitle'),
     coverageProjectLabel: t('qualifications.coverageProjectLabel'),
     coverageProjectAll: t('qualifications.coverageProjectAll'),
-    coverageEmpty: t('qualifications.coverageEmpty'),
+    coverageEmpty: coverageProjectId ? t('qualifications.coverageEmpty') : t('qualifications.coverageProjectAll'),
     projectOptions,
     coverageProjectId,
     coverageTypes: columns,
