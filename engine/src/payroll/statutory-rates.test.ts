@@ -8,6 +8,7 @@ import { CA_PACK_RATES } from "./canada/rates.ts";
 import {
   buildResolution,
   canonicalStatutoryRateValues,
+  assertConfiguredStatutoryRates,
   deleteStatutoryRate,
   listStatutoryRates,
   rateScopePointProblem,
@@ -102,6 +103,36 @@ test("the QC health services fund is declared per region, rate-only, QC-only", (
       rateKey: "ca_hsf", region: "QC", taxYear: 2026, filingAccountId: null,
     }),
     null,
+  );
+});
+
+test("Canadian EHT must be explicitly configured in each province before payroll calculates", () => {
+  const missing = buildResolution({ country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [] });
+  for (const region of ["BC", "MB", "NL", "ON"]) {
+    assert.throws(
+      () => assertConfiguredStatutoryRates(missing, { region, filingAccountId: null }, "Alex Employee"),
+      /Alex Employee: no Employer health tax is configured for .* in 2026 — nothing is being accrued for it/,
+      `an unconfigured ${region} levy refuses by name`,
+    );
+  }
+  assert.doesNotThrow(
+    () => assertConfiguredStatutoryRates(missing, { region: "AB", filingAccountId: null }, "Alex Employee"),
+    "a province outside the EHT statute list is not required to configure EHT",
+  );
+  assert.throws(
+    () => assertConfiguredStatutoryRates(missing, { region: "QC", filingAccountId: null }, "Alex Employee"),
+    /Alex Employee: no Health services fund is configured for QC in 2026/,
+    "the existing Québec HSF refusal remains part of the levy class",
+  );
+
+  const explicitlyNil = buildResolution({
+    country: "CA", taxYear: 2026, pack: CA_PACK_RATES,
+    legacy: [],
+    rows: [row({ rateKey: "ca_eht", region: "ON", values: { rate: "0", annualExemption: "0" } })],
+  });
+  assert.doesNotThrow(
+    () => assertConfiguredStatutoryRates(explicitlyNil, { region: "ON", filingAccountId: null }, "Alex Employee"),
+    "a declared zero rate is an explicit configuration, not an absent answer",
   );
 });
 
