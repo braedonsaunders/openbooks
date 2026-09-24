@@ -1077,6 +1077,7 @@
     "empty": "Keine verbuchten Lohnläufe mit abführbaren Beträgen in diesem Zeitraum.",
     "unassigned": "Kein Abführungslieferant zugeordnet",
     "assignVendor": "Ordnen Sie auf den Bestandteilen einen Lieferanten zu",
+    "attributeEntity": "Ordnen Sie die Lohnläufe vor der Abführung einer Tochtergesellschaft zu",
     "context": "Bruttolohnsumme {gross} · {employees, plural, one {# Mitarbeiter} other {# Mitarbeiter}} im Zeitraum",
     "withheld": "Einbehalten",
     "employer": "Arbeitgeber",

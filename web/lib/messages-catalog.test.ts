@@ -1905,6 +1905,7 @@ const PAYROLL_CHROME_SOURCE_HASHES: Record<string, string> = {
   'payroll.remittances.apNote': '7ce8092119c69f85dd15cd27187459b83d574b6adbe6c396e8f540470cc19dbe',
   'payroll.remittances.apply': '31e392d1c0378beca611de66c0f4c71cba29159905cc54242d9bddee5b23d851',
   'payroll.remittances.assignVendor': '91a3c9e42074aa1c0cd479c8c4a838c8c42cbae2f9998fa6ef73c1877ba1733a',
+  'payroll.remittances.attributeEntity': 'c71ce133712eb2a0429f6ee570088f531fd018c35743d92e49201eaf2ffa4f51',
   'payroll.remittances.back': '53fe8dfb6d9e1b03219adddcc3ffb741557dd579dc653d026097c463def4a8fe',
   'payroll.remittances.billCreated': 'a24f44ba16e4dad72ce8de5896b08b3081ebf4944e9e35624a94625ec025b308',
   'payroll.remittances.context': '53d078a30ff0f9dc84813cb8b71f4ff5e946db2202e33da13acfd84cd6b9e624',
@@ -3734,7 +3735,7 @@ test('payroll copy ships translated in ja, zh and pt-BR', () => {
   // which landed together. Four shards each re-pinned this number against
   // their own base, so the merge saw four competing values — re-pin to the
   // measured count rather than to any one shard's arithmetic.
-  assert.equal(I7_WANTED.length, 1220, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
+  assert.equal(I7_WANTED.length, 1221, 'payroll source inventory changed; translate the new keys in ja/zh/pt-BR and re-pin')
   for (const key of I7_WANTED) {
     const english = I7_SOURCE.get(key)
     assert.ok(english && english.trim(), `English source is missing ${key}`)
@@ -3850,7 +3851,7 @@ test('I6 payroll copy ships translated in fr, es and de', () => {
   // for reviewed cognates, pinned to the exact term.
   const I6_source = flattenCatalog('en')
   const I6_wanted = [...I6_source.keys()].filter((I6_key) => I6_key.startsWith('payroll.'))
-  assert.equal(I6_wanted.length, 1220, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
+  assert.equal(I6_wanted.length, 1221, 'payroll source inventory changed; translate the new keys in fr/es/de and re-pin')
   const I6_tokens = (I6_value: string): Set<string> =>
     new Set(I6_value.match(/\{[a-zA-Z_][a-zA-Z0-9_]*(?=[,}])/g) ?? [])
   const I6_arms = (I6_value: string): string[] => I6_value.match(/, +(plural|select)/g) ?? []

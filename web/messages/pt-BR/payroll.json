@@ -1077,6 +1077,7 @@
     "empty": "Sem folhas lançadas com valores recolhíveis neste período.",
     "unassigned": "Sem fornecedor de recolhimento atribuído",
     "assignVendor": "Atribua um fornecedor nos componentes",
+    "attributeEntity": "Atribua as folhas a uma subsidiária antes de recolher",
     "context": "Folha bruta {gross} · {employees, plural, one {# funcionário} other {# funcionários}} no período",
     "withheld": "Retido",
     "employer": "Empregador",

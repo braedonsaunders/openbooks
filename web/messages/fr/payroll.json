@@ -1077,6 +1077,7 @@
     "empty": "Aucune paie comptabilisée avec des montants à verser sur cette période.",
     "unassigned": "Aucun fournisseur de versement attribué",
     "assignVendor": "Attribuez un fournisseur sur les composantes",
+    "attributeEntity": "Attribuez les paies à une filiale avant le versement",
     "context": "Masse salariale brute {gross} · {employees, plural, one {# employé} other {# employés}} sur la période",
     "withheld": "Retenues",
     "employer": "Employeur",
