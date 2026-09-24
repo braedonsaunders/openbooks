@@ -24,7 +24,7 @@
   "emptyResultSet": "查询未返回任何列",
   "noFilterMatch": "没有行匹配您的筛选条件",
   "rail": {
-    "schema": "Schema",
+    "schema": "架构",
     "snippets": "代码片段",
     "history": "历史记录"
   },
