@@ -299,7 +299,11 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
         const { completeRequestedDocumentVoid, rejectRequestedDocumentVoid } =
           await import("../ledger/document-void.ts");
         if (outcome === "approved") {
-          await completeRequestedDocumentVoid(subjectId, ctx.orgId);
+          await completeRequestedDocumentVoid(
+            subjectId,
+            ctx.orgId,
+            ctx.allowedSubsidiaryIds,
+          );
         } else {
           await rejectRequestedDocumentVoid(
             subjectId,
