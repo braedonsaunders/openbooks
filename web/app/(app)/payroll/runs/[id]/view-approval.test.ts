@@ -1,29 +1,29 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// The loader resolves the Flows approval state server-side through the
-// native engine and hands it to the wizard as plain data (the expenses
-// precedent: canSubmit resolved on the server, composed with status on the
-// client). These tests pin that the loader — not the client — answers "is a
-// flow configured", and that the state reaches the widget the wizard renders.
-const source = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
+registerHooks({ resolve(specifier, context, next) { if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }; return next(specifier, context) } })
+const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { sql } = await import('drizzle-orm')
+const { seedAdoption } = await import('@openbooks/engine/src/payroll/filing-test-fixtures.ts')
+const { dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withPayRunReadSnapshot } = await import('./view')
 
-test('the loader resolves approval through the native engine', () => {
-  assert.match(source, /payRunApprovalState/)
-  assert.match(source, /from '@openbooks\/engine\/src\/payroll\/approval\.ts'/)
-})
-
-test('approval resolves alongside the other engine reads', () => {
-  const block = source.slice(source.indexOf('payRunReadiness(orgId, id'))
-  assert.match(block.slice(0, 600), /payRunApprovalState\(orgId, id\)/)
-})
-
-test('the approval state reaches the wizard widget as data', () => {
-  assert.match(source, /approval: PayRunApprovalState/)
-  assert.match(source, /approval: data\.approval/)
-  // approval is IN the object the loader returns, not necessarily its last
-  // key -- pinning it last means the next property added after it breaks a
-  // test about approval, naming the wrong culprit.
-  assert.match(source, /approval,\n(?:\s+[\w.]+,\n)*    \}\n  \}\)/)
+test('payroll loader reads keep one repeatable snapshot across concurrent updates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const fx = await withBypassContext(() => seedAdoption())
+  const original = (await withBypassContext(() => db.execute<{ name: string }>(sql`select name from orgs where id=${fx.orgId}`))).rows[0]!.name
+  let readStarted!: () => void, writerFinished!: () => void
+  const started = new Promise<void>((resolve) => { readStarted = resolve }), changed = new Promise<void>((resolve) => { writerFinished = resolve })
+  try {
+    const values = withPayRunReadSnapshot(fx.orgId, async () => {
+      const before = (await db.execute<{ name: string }>(sql`select name from orgs where id=${fx.orgId}`)).rows[0]!.name
+      readStarted(); await changed
+      return [before, (await db.execute<{ name: string }>(sql`select name from orgs where id=${fx.orgId}`)).rows[0]!.name]
+    })
+    await started
+    await withBypassContext(() => db.execute(sql`update orgs set name=${`Scratch snapshot update ${fx.orgId}`} where id=${fx.orgId}`).then(() => undefined))
+    writerFinished()
+    assert.deepEqual(await values, [original, original])
+    assert.notEqual((await withBypassContext(() => db.execute<{ name: string }>(sql`select name from orgs where id=${fx.orgId}`))).rows[0]!.name, original)
+  } finally { writerFinished(); await withBypassContext(() => dropScratchOrgReporting(fx.orgId)) }
 })

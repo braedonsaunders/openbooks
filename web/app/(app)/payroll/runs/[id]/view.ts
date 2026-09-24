@@ -9,7 +9,7 @@ import {
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import {
   payRunChanges,
@@ -158,7 +158,7 @@ export async function loadPayRunWizard(
   if (!isUuid(id)) notFound()
   const t = await getTranslations('payroll')
 
-  return db.transaction(async () => {
+  return withPayRunReadSnapshot(orgId, async () => {
     const runs = (await db.execute<RunHeader & { calculation_errors: unknown; refusal_acknowledgement: unknown }>(sql`
       select r.document_id, d.document_number, d.status as document_status, d.currency,
              d.subsidiary_id, d.posted_entry_id, s.name as schedule_name,
@@ -496,6 +496,10 @@ export async function loadPayRunWizard(
       canAttributeEntity: authz.allowedSubsidiaryIds == null,
     }
   })
+}
+
+export function withPayRunReadSnapshot<T>(orgId: string, read: () => Promise<T>): Promise<T> {
+  return withOrgTransaction(orgId, read, { isolationLevel: 'REPEATABLE READ' })
 }
 
 const f = ref<PayRunWizardData>()
