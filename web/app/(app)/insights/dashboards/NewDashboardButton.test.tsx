@@ -32,7 +32,7 @@ if (typeof window.matchMedia !== 'function') {
 }
 
 declare global {
-  var __dashToasts: { kind: string; message: string }[] | undefined
+  var __dashToasts: { kind: string; message: string }[]
   var __dashPosted: Record<string, unknown>[] | undefined
 }
 

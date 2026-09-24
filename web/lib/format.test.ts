@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { countLabel, currencyLabel, dateLabel, dateTime, decimalLabel, formatCivilDate, formatCount, formatPercent01, monthLabel, monthYearLabel, shortDateLabel, trendWeekLabel } from './format';
 
+// Intl uses narrow/no-break spaces in some locales; compare on plain spaces.
+const nbsp = (s: string): string => s.replace(/[\u00a0\u202f]/g, " ");
+
 // Timestamps must render in the viewer's locale (F-t01-014): the Users
 // list passes its request locale through, so the formatter has to honor
 // the argument rather than always falling back to the default.
