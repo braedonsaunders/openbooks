@@ -9,6 +9,7 @@ interface RouteState {
   projectsEnabled: boolean
   syncCalls: { scope: Scope; syncedProjectIds: string[] }[]
   runCalls: { scope: Scope; postedProjectIds: string[] }[]
+  runError: { kind: 'domain' | 'stale' | 'unexpected'; message: string } | null
 }
 
 const stateKey = Symbol.for('openbooks.recognition-route-test')
@@ -17,6 +18,7 @@ const state: RouteState = {
   projectsEnabled: true,
   syncCalls: [],
   runCalls: [],
+  runError: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -85,15 +87,21 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
       const projects = ${JSON.stringify(projects)}
+      export class RevenueRecognitionError extends Error {}
       export async function runRevenueRecognition(_orgId, _asOfDate, _actorId, _obligationId, allowedSubsidiaryIds) {
+        if (state.runError) {
+          if (state.runError.kind === 'domain') throw new RevenueRecognitionError(state.runError.message)
+          if (state.runError.kind === 'stale') throw new StaleRecognitionPreviewError(state.runError.message)
+          throw new Error(state.runError.message)
+        }
         const visible = allowedSubsidiaryIds == null
           ? projects
           : projects.filter((project) => allowedSubsidiaryIds.includes(project.subsidiaryId))
         state.runCalls.push({ scope: allowedSubsidiaryIds == null ? undefined : [...allowedSubsidiaryIds], postedProjectIds: visible.map((project) => project.id) })
         return { posted: visible.length, skipped: 0, totalAmount: '0', entries: [], problems: [] }
       }
-      // The route imports the stale-confirmation class to map it to 409; the
-      // double stands in for the whole module, so it must offer it too.
+      // The route maps the stale-confirmation class to 409; the double
+      // stands in for the whole module, so it must offer it too.
       export class StaleRecognitionPreviewError extends Error {}
     `,
   ],
@@ -107,6 +115,9 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
   ['@openbooks/engine/src/projects/revenue.ts', mockUrl('project-revenue')],
   ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
+  // The shared error mapper reaches the same engine module through a
+  // relative specifier; it must see the same double or instanceof splits.
+  ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
   ['@/lib/api/json', mockUrl('json')],
 ])
 
@@ -136,6 +147,7 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   state.projectsEnabled = true
   state.syncCalls.length = 0
   state.runCalls.length = 0
+  state.runError = null
 }
 
 function post(): Promise<Response> {
@@ -189,6 +201,36 @@ test('an empty restricted scope fails closed before synchronization or posting',
   })
   assert.deepEqual(state.syncCalls, [])
   assert.deepEqual(state.runCalls, [])
+})
+
+test('a domain refusal from the run reaches the operator as a named 422, not a 500', async () => {
+  reset(null)
+  state.runError = { kind: 'domain', message: 'January 2026: GL period closed' }
+
+  const response = await post()
+
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), { error: 'January 2026: GL period closed' })
+})
+
+test('a stale confirmation stays a 409 naming the remedy', async () => {
+  reset(null)
+  state.runError = { kind: 'stale', message: 'the reviewed set changed' }
+
+  const response = await post()
+
+  assert.equal(response.status, 409)
+  assert.deepEqual(await response.json(), { error: 'stale_preview' })
+})
+
+test('an unexpected run defect stays a generic 500', async () => {
+  reset(null)
+  state.runError = { kind: 'unexpected', message: 'connection terminated' }
+
+  const response = await post()
+
+  assert.equal(response.status, 500)
+  assert.deepEqual(await response.json(), { error: 'Unable to run revenue recognition.' })
 })
 
 test('unrestricted access preserves organization-wide synchronization and posting', async () => {
