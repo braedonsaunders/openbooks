@@ -162,74 +162,77 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("applications routes gate on the hrm feature and the recruiting permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    assert.match(readFileSync(new URL("./route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.manage"\)/);
-    assert.match(readFileSync(new URL("./[id]/route.ts", import.meta.url), "utf8"), /guardPermission\("hrm\.recruiting\.read"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 404);
-    assert.equal(
-      (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", {}), { params: Promise.resolve({ id: APPLICATION_ID }) })).status,
-      404,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 404);
+  assert.equal(
+    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", {}), { params: Promise.resolve({ id: APPLICATION_ID }) })).status,
+    404,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("attach validates the body through the real parser before the service runs", async () => {
-    reset();
-    const url = "http://openbooks.test/api/hrm/recruiting/applications";
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
-    assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { requisitionId: "nope", candidateId: CANDIDATE_ID }))).status, 400);
-    assert.deepEqual(routeState.calls, []);
-    const response = await collectionRoute!.POST(
-      jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, candidateId: CANDIDATE_ID }),
-    );
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { application: { id: "application-1" } });
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  assert.equal((await collectionRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", {}))).status, 401);
+  assert.equal(
+    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", {}), { params: Promise.resolve({ id: APPLICATION_ID }) })).status,
+    401,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("item PATCH validates the action union through the real parser", async () => {
-    reset();
-    const params = { params: Promise.resolve({ id: APPLICATION_ID }) };
-    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "move" }), params)).status, 400);
-    assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "reject" }), params)).status, 400);
-    assert.equal(
-      (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "move", toStageId: "nope" }), params)).status,
-      400,
-    );
-    assert.deepEqual(routeState.calls, []);
-  });
+test("attach validates the body through the real parser before the service runs", async () => {
+  reset();
+  const url = "http://openbooks.test/api/hrm/recruiting/applications";
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
+  assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { requisitionId: "nope", candidateId: CANDIDATE_ID }))).status, 400);
+  assert.deepEqual(routeState.calls, []);
+  const response = await collectionRoute!.POST(
+    jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, candidateId: CANDIDATE_ID }),
+  );
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { application: { id: "application-1" } });
+});
 
-  test("item PATCH dispatches every action with org, actor, and id", async () => {
-    reset();
-    const params = { params: Promise.resolve({ id: APPLICATION_ID }) };
-    for (const [body, fn] of [
-      [{ action: "move", toStageId: STAGE_ID }, "move"],
-      [{ action: "reject", reason: "not a fit" }, "reject"],
-      [{ action: "withdraw" }, "withdraw"],
-    ] as const) {
-      routeState.calls = [] as RouteState["calls"];
-      const response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
-      assert.equal(response.status, 200);
-      assert.equal(routeState.calls[0]!.fn, fn);
-      assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).applicationId, APPLICATION_ID);
-    }
-  });
+test("item PATCH validates the action union through the real parser", async () => {
+  reset();
+  const params = { params: Promise.resolve({ id: APPLICATION_ID }) };
+  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "move" }), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "reject" }), params)).status, 400);
+  assert.equal(
+    (await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", { action: "move", toStageId: "nope" }), params)).status,
+    400,
+  );
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("the hired stage is reached only through hire");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(
-      jsonRequest("http://openbooks.test/x", "PATCH", { action: "move", toStageId: STAGE_ID }),
-      { params: Promise.resolve({ id: APPLICATION_ID }) },
-    );
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("item PATCH dispatches every action with org, actor, and id", async () => {
+  reset();
+  const params = { params: Promise.resolve({ id: APPLICATION_ID }) };
+  for (const [body, fn] of [
+    [{ action: "move", toStageId: STAGE_ID }, "move"],
+    [{ action: "reject", reason: "not a fit" }, "reject"],
+    [{ action: "withdraw" }, "withdraw"],
+  ] as const) {
+    routeState.calls = [] as RouteState["calls"];
+    const response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
+    assert.equal(response.status, 200);
+    assert.equal(routeState.calls[0]!.fn, fn);
+    assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).applicationId, APPLICATION_ID);
+  }
+});
+
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("the hired stage is reached only through hire");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(
+    jsonRequest("http://openbooks.test/x", "PATCH", { action: "move", toStageId: STAGE_ID }),
+    { params: Promise.resolve({ id: APPLICATION_ID }) },
+  );
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
