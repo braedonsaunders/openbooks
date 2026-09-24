@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -102,6 +103,9 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
+  // Fair-value pricing is org-wide valuation policy.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id) || !(await itemExists(id, orgId))) {
@@ -137,6 +141,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -182,6 +188,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
   if (gate instanceof NextResponse) return gate
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

@@ -31,6 +31,8 @@ interface RouteState {
   committedAudits: { action: string; changes: unknown }[]
   failOn: 'none' | 'upsert' | 'audit'
   nextProfileAfterUpsert: ProfileRow | null
+  /** Caller lens (null = unrestricted). */
+  scope: Set<string> | null
 }
 const routeState: RouteState = {
   calls: [],
@@ -40,6 +42,7 @@ const routeState: RouteState = {
   committedAudits: [],
   failOn: 'none',
   nextProfileAfterUpsert: null,
+  scope: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
@@ -194,11 +197,23 @@ const mockSources = new Map<string, string>([
   [
     'mock:feature-gates',
     `
+      const state = globalThis[Symbol.for('openbooks.item-costing-route-test')]
       export async function guardFeaturePermission(permission) {
         if (permission === 'items.read' || permission === 'items.manage') {
-          return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+          return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.scope ?? null }
         }
         return new Response(null, { status: 403 })
+      }
+    `,
+  ],
+  [
+    'mock:authz',
+    `
+      // Org-wide costing-policy gate: only an explicit unrestricted scope
+      // passes — the canonical assertUnrestrictedScope rule.
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
   ],
@@ -207,6 +222,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['../../../../../lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -220,7 +236,9 @@ const hooks = registerHooks({
       return nextResolve(new URL('./' + specifier.slice('@/lib/'.length) + '.ts', import.meta.url).href, context)
     }
     // Swap the persistence and authorization seams for scripted doubles.
-    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier.endsWith('/lib/feature-gates')) {
+    if (specifier === '@openbooks/engine/src/platform/db.ts'
+      || specifier.endsWith('/lib/feature-gates')
+      || specifier === '../../../../../lib/authz') {
       return { url: mockUrls.get(specifier)!, shortCircuit: true }
     }
     const mocked = mockSources.get(specifier)
@@ -288,6 +306,7 @@ const NEXT_PROFILE = profileRow({
 
 function reset(): void {
   routeState.calls.length = 0
+  routeState.scope = null
   routeState.itemExists = true
   routeState.historyExists = false
   routeState.committedProfiles = new Map([[ITEM_ID, { ...BASE_PROFILE }]])
@@ -483,4 +502,15 @@ test('time bill snapshots rank matching dimensions and use the organization curr
   assert.match(itemRatesSource, /order by c\.priority, c\.dimension_specificity desc/)
   assert.match(itemRatesSource, /o\.base_currency as default_rate_currency/)
   assert.match(itemRatesSource, /sourceCurrency = te\.default_rate_currency/)
+})
+
+test('PUT by a subsidiary-scoped inventory manager is refused before any write', async () => {
+  reset()
+  routeState.scope = new Set(['00000000-0000-4000-8000-00000000b021'])
+  const response = await put(validBody())
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.equal(routeState.calls.length, 0)
+  assert.equal(routeState.committedAudits.length, 0)
 })

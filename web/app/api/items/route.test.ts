@@ -14,6 +14,8 @@ interface State {
   failAudit: boolean
   featureEnabled: boolean
   inTransaction: boolean
+  /** Caller lens (null = unrestricted). */
+  scope: Set<string> | null
 }
 
 const state: State = {
@@ -23,6 +25,7 @@ const state: State = {
   failAudit: false,
   featureEnabled: true,
   inTransaction: false,
+  scope: null,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
@@ -98,7 +101,17 @@ const mockSources = new Map<string, string>([
       finally { state.inTransaction = false }
     }
   `],
-  ['mock:authz', `export async function guardPermission() { return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } } }`],
+  ['mock:authz', `
+    const state = globalThis[Symbol.for('openbooks.item-create-route-test')]
+    export async function guardPermission() {
+      return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: state.scope ?? null }
+    }
+    // Org-wide catalog gate: only an explicit unrestricted scope passes.
+    export function guardUnrestrictedScope(authz) {
+      if (authz.allowedSubsidiaryIds === null) return null
+      return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+    }
+  `],
   ['mock:features', `export async function isFeatureEnabled() { return globalThis[Symbol.for('openbooks.item-create-route-test')].featureEnabled }`],
   ['mock:custom-fields', `
     export async function loadFieldDefs() { return [] }
@@ -149,6 +162,7 @@ function reset(): void {
   state.failAudit = false
   state.featureEnabled = true
   state.inTransaction = false
+  state.scope = null
 }
 
 function create(body: Record<string, unknown>, id = ITEM_ID): Promise<Response> {
@@ -228,4 +242,16 @@ test('POST refuses a newly disabled item kind without writing', async () => {
   assert.equal(response.status, 404)
   assert.equal(state.item, null)
   assert.equal(state.audits.length, 0)
+})
+
+test('POST by a subsidiary-scoped catalog manager is refused before any write', async () => {
+  reset()
+  state.scope = new Set(['00000000-0000-4000-8000-00000000b021'])
+  const response = await create({ kind: 'service', name: 'Consulting', defaultRate: '125', defaultCost: '50', isActive: true })
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.equal(state.item, null)
+  assert.equal(state.audits.length, 0)
+  assert.equal(state.calls.length, 0)
 })

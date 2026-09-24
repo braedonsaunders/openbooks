@@ -16,6 +16,8 @@ interface RouteState {
   transactionOrgs: string[]
   failAudit: boolean
   inTransaction: boolean
+  /** Caller lens (null = unrestricted). */
+  scope: Set<string> | null
 }
 
 const ITEM_ID = '00000000-0000-4000-8000-00000000a101'
@@ -57,6 +59,7 @@ const routeState: RouteState = {
   audits: [],
   calls: [],
   transactionOrgs: [],
+  scope: null,
   failAudit: false,
   inTransaction: false,
 }
@@ -147,8 +150,14 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      const state = globalThis[Symbol.for('openbooks.item-route-test')]
       export async function guardPermission() {
-        return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } }
+        return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: state.scope ?? null }
+      }
+      // Org-wide catalog gate: only an explicit unrestricted scope passes.
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
   ],
@@ -211,6 +220,7 @@ function reset(): void {
   routeState.transactionOrgs.length = 0
   routeState.failAudit = false
   routeState.inTransaction = false
+  routeState.scope = null
 }
 
 function patch(body: Record<string, unknown>): Promise<Response> {
@@ -304,4 +314,16 @@ test('PATCH commits a locked before/after accounting snapshot with actor and rea
   const updateIndex = routeState.calls.findIndex((call) => call.text.includes('update items set'))
   const auditIndex = routeState.calls.findIndex((call) => call.text.includes('insert into audit_log'))
   assert.ok(updateIndex >= 0 && auditIndex > updateIndex, 'the audit is written after the mutation inside the fence')
+})
+
+test('PATCH by a subsidiary-scoped catalog manager is refused before any write', async () => {
+  reset()
+  routeState.scope = new Set(['00000000-0000-4000-8000-00000000a201'])
+  const response = await patch({ defaultRate: '125', reason: 'corrected rate' })
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.deepEqual(routeState.item, originalItem)
+  assert.equal(routeState.audits.length, 0)
+  assert.equal(routeState.calls.length, 0)
 })

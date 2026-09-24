@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
-import { guardPermission } from '../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
@@ -114,6 +114,10 @@ function money(
 export async function POST(request: Request) {
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
+  // The item catalog (accounts, tax, recognition) is org-wide policy: a
+  // subsidiary-scoped catalog manager cannot mint shared items.
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
 
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('Invalid idempotency key', 400)
