@@ -4,6 +4,7 @@ import { db } from "../platform/db.ts";
 import { add, cmp, mulRate, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
+import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../close/period-policy.ts";
 import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import {
@@ -205,6 +206,30 @@ export async function recordPayRunPayment(input: {
     const subsidiaries = await loadSubsidiaryContext(tx, orgId);
     const origin = subsidiaries.byId.get(originSubId);
     if (!origin) throw new PayrollError("the posted pay run's subsidiary is missing or inactive");
+
+    // The posting kernel's own period gate, asked BEFORE the first journal
+    // write. The settlement entry below is flipped draft→posted by a direct
+    // UPDATE, so without this a paidOn in a closed period died at the
+    // je_guard Postgres gate with a raw driver error — posted history landing
+    // in a closed period, or a refusal nobody can read. This names the period
+    // and the remedy instead.
+    try {
+      await assertPeriodModulesOpen(tx, {
+        orgId,
+        periodId: period.id,
+        bookId: book.id,
+        subsidiaryIds: [originSubId, ...openItems.map((item) => item.subsidiary_id)],
+        modules: [closeModuleForDocument("pay_run")],
+      });
+    } catch (error) {
+      if (error instanceof CloseError) {
+        throw new PayrollError(
+          `cannot record payment on ${paidOn}: ${error.message} — `
+          + "record the payment on a date in an open period",
+        );
+      }
+      throw error;
+    }
 
     // Pay-run documents are denominated in their originating subsidiary's
     // functional currency. Keep the lookup defensive for hand-built/legacy
