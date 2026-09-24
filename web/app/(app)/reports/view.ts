@@ -9,6 +9,7 @@ import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-re
 import { getAuthz, can } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
+import { savedReportPathVisible } from '../../../lib/report-feature-gates'
 
 /**
  * The reports hub, split into a loader and a spec.
@@ -59,7 +60,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   if (orgId) await ensureReportDefinitions(orgId)
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
   const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, hiddenEntities, hrmEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled] = await Promise.all([
     orgId
       ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
           rows: { id: string; name: string; path: string; params: Record<string, string> }[]
@@ -81,6 +82,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'budgets') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'orders') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, 'inventory') : Promise.resolve(false),
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
     authz ? isFeatureEnabled(authz.user.orgId, 'hrm') : Promise.resolve(false),
   ])
@@ -277,10 +279,16 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
           desc: c.description ?? t('custom.kind.custom'),
           icon: 'Coins',
         })),
+        // Saved views hide by the route-gate registry (F1T-16): a view whose
+        // route would refuse the operator never lists. The registry derives
+        // the filter, never a hand-maintained prefix list.
         ...saved.rows.filter((s) =>
-          (projectsEnabled || !s.path.startsWith('/reports/project-profitability'))
-          && (budgetsEnabled || !s.path.startsWith('/reports/budget'))
-          && (ordersEnabled || !s.path.startsWith('/reports/orders'))
+          savedReportPathVisible(s.path, {
+            projects: projectsEnabled,
+            budgets: budgetsEnabled,
+            orders: ordersEnabled,
+            inventory: inventoryEnabled,
+          }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
           return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark' }
