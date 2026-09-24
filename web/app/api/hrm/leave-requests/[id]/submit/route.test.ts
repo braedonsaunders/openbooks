@@ -74,7 +74,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
 ]);
 
-let submitRoute: typeof import("./route.ts") | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -91,7 +90,7 @@ let submitRoute: typeof import("./route.ts") | undefined;
     },
   });
   const routeUrl = "./route.ts?hrm-leave-submit";
-  submitRoute = (await import(routeUrl)) as typeof import("./route.ts");
+  const submitRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
   hooks.deregister();
 
 

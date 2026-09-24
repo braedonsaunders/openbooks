@@ -71,8 +71,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
 ]);
 
-let withdrawRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined;
-let cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined;
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -90,8 +88,8 @@ let cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }
   });
   const withdrawUrl = "./withdraw/route.ts?hrm-leave-withdraw";
   const cancelUrl = "./cancel/route.ts?hrm-leave-cancel";
-  withdrawRoute = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
-  cancelRoute = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
+  const withdrawRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
+  const cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
   hooks.deregister();
 
 
