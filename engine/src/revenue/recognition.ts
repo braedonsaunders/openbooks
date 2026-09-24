@@ -778,7 +778,9 @@ export function recognitionProgressTarget(total:string,percent:string,basis?:Rev
 export interface BuildRecognitionResult {
   scheduleId: string;
   lineCount: number;
-  /** months that had no accounting period and were skipped. */
+  /** Period months the rebuild placed no line for: already-posted periods
+   * keep their postings, and zero-planned catch-up/event months carry
+   * nothing. A month with no accounting period is a refusal, never a skip. */
   skippedMonths: string[];
 }
 
@@ -1060,7 +1062,7 @@ export async function buildRecognitionScheduleOn(
   // Events are immutable evidence; a period can receive more events after its
   // first posting. Plan the period's current total less its posted amount as
   // an additional line, preserving every prior posting and its sequence.
-  const periodPlans: { periodId: string; planned: string; sequence: number }[] = [];
+  const periodPlans: { periodId: string; periodMonth: string; planned: string; sequence: number }[] = [];
   const eventPlans = new Map<string, (typeof periodPlans)[number]>();
   const periodIds = new Map<string, string>();
   for (const p of plan) {
@@ -1075,24 +1077,35 @@ export async function buildRecognitionScheduleOn(
       const prior = eventPlans.get(periodId);
       if (prior) prior.planned = add(prior.planned, p.planned);
       else {
-        const pending = { periodId, planned: p.planned, sequence: p.sequence };
+        const pending = { periodId, periodMonth: p.periodMonth, planned: p.planned, sequence: p.sequence };
         periodPlans.push(pending);
         eventPlans.set(periodId, pending);
       }
     } else {
-      periodPlans.push({ periodId, planned: p.planned, sequence: p.sequence });
+      periodPlans.push({ periodId, periodMonth: p.periodMonth, planned: p.planned, sequence: p.sequence });
     }
   }
 
+  // Months the builder actually skips: already-posted periods keep their
+  // lines (rebuilding never duplicates a posting), and zero-planned
+  // catch-up/event months carry nothing to place. Returned alongside the
+  // schedule so callers can name the gap instead of silently planning
+  // nothing — the depreciation builder's skippedMonths contract.
   const skippedMonths: string[] = [];
   let lineCount = 0;
   for (const p of periodPlans) {
     const { periodId } = p;
-    if (!isPercentComplete && !isMilestoneOrUsage && postedPeriods.has(periodId)) continue;
+    if (!isPercentComplete && !isMilestoneOrUsage && postedPeriods.has(periodId)) {
+      skippedMonths.push(p.periodMonth);
+      continue;
+    }
     const planned = isMilestoneOrUsage
       ? add(p.planned, neg(postedByPeriod.get(periodId) ?? "0"))
       : p.planned;
-    if ((isPercentComplete || isMilestoneOrUsage) && isZero(planned)) continue;
+    if ((isPercentComplete || isMilestoneOrUsage) && isZero(planned)) {
+      skippedMonths.push(p.periodMonth);
+      continue;
+    }
     const sequence = basis || isPercentComplete || isMilestoneOrUsage ? nextSequence + lineCount : p.sequence;
     await runner.execute(sql`
       insert into recognition_schedule_lines

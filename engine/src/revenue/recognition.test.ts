@@ -526,6 +526,57 @@ test("buildRecognitionSchedule throws when a planned month has no accounting per
   }
 });
 
+test("a schedule rebuild names the already-posted months it skips", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actorId = randomUUID();
+  try {
+    // Second month so the two-month term spans two periods.
+    const calId = (await db.execute<{ id: string }>(sql`
+      select id from fiscal_calendars where org_id = ${org.orgId} and is_default = true`)).rows[0]!.id;
+    await db.execute(sql`
+      insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      values (${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, ${calId})`);
+
+    const ruleId = randomUUID();
+    await db.execute(sql`
+      insert into recognition_rules
+        (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+         period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+      values (${ruleId}, ${org.orgId}, 'STRAIGHT2', 'Two-month straight line', 'straight_line_even', false, 2,
+              'obligation', 'term', 0, 0, '0', ${org.accounts.deferred}, ${org.accounts.recognized}, true)`);
+
+    const contractId = randomUUID();
+    await db.execute(sql`
+      insert into revenue_contracts
+        (id, org_id, customer_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
+      values (${contractId}, ${org.orgId}, ${org.customerId}, 'REV-REBUILD-SKIP-001', 'active', '2026-07-01',
+              'CAD', '1200', ${actorId}, ${actorId})`);
+
+    const obligationId = randomUUID();
+    await db.execute(sql`
+      insert into performance_obligations
+        (id, org_id, contract_id, description, recognition_rule_id,
+         booked_amount, allocated_price, recognition_starts_on, status, created_by, updated_by)
+      values (${obligationId}, ${org.orgId}, ${contractId}, 'Two-month subscription', ${ruleId},
+              '1200', '1200', '2026-07-15', 'open', ${actorId}, ${actorId})`);
+
+    const first = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(first.lineCount, 2);
+    assert.deepEqual(first.skippedMonths, []);
+
+    const run = await runRevenueRecognition(org.orgId, "2026-07-31", actorId, obligationId);
+    assert.equal(run.posted, 1);
+
+    // The rebuild keeps July's posting (never duplicates it) and names the
+    // month it placed no line for, instead of returning a bare [].
+    const rebuild = await buildRecognitionSchedule(obligationId, org.orgId, actorId);
+    assert.equal(rebuild.lineCount, 1);
+    assert.deepEqual(rebuild.skippedMonths, ["2026-07-01"]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Milestone + usage event persistence — live PG proofs
 // ---------------------------------------------------------------------------
