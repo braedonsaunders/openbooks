@@ -148,7 +148,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
       // align new mail with old sent-log rows. Recomputing it after any
       // crash must produce the same identity (and therefore the same
       // canonical log row) instead of minting new mail.
-      const deliveryKey = resolveEmailDeliveryKey(d, job.id ?? null);
+      const deliveryKey = resolveEmailDeliveryKey(d);
 
       // Hard sandbox block: a sandbox never sends email, regardless of any
       // provider config that survived the clone. Recorded as suppressed + acked.

@@ -117,20 +117,26 @@ export async function enqueueEmail(data: EnqueueEmailData, options: EnqueueEmail
 }
 
 /**
- * The delivery identity the worker claims its email_log row through. New
- * jobs carry it in `data.deliveryKey`; jobs enqueued before that field
- * existed fall back to the legacy derivation (same scopes the worker used
- * before) so they still drain exactly once.
+ * The delivery identity the worker claims its email_log row through. Every
+ * job carries it in `data.deliveryKey`, derived at enqueue from the caller's
+ * durable idempotency key — never from any queue-assigned id (E11).
+ *
+ * There is no legacy fallback: deriving from the scope queueJobId realigns
+ * new mail with old sent-log rows after a Redis reset (BullMQ
+ * auto-increment ids restart from 1 while Postgres rows survive), so a new
+ * job matches an old sent row and is skipped without ever sending. A job
+ * without a stored key refuses loudly instead of guessing an identity that
+ * could skip real mail. No-legacy-compat: the app has not launched, so no
+ * pre-key job can still be queued.
  */
 export function resolveEmailDeliveryKey(
-  data: Pick<EmailJobData, 'orgId' | 'to'> & { deliveryKey?: string; meta?: EmailJobData['meta'] },
-  queueJobId: string | null,
+  data: Pick<EmailJobData, 'orgId' | 'to'> & { deliveryKey?: string },
 ): string {
-  if (data.deliveryKey) return assertEmailDeliveryKey(data.deliveryKey)
-  const scope = data.meta?.reportDeliveryId
-    ? `report:${data.meta.reportDeliveryId}`
-    : data.meta?.paymentRemittanceId
-      ? `payment-remittance:${data.meta.paymentRemittanceId}`
-      : (queueJobId ?? '')
-  return deriveEmailDeliveryKey({ orgId: data.orgId, scope, to: data.to })
+  if (!data.deliveryKey) {
+    throw new Error(
+      'email job carries no durable delivery key — refusing to guess its identity; ' +
+      're-enqueue through enqueueEmail with a caller idempotency key',
+    )
+  }
+  return assertEmailDeliveryKey(data.deliveryKey)
 }

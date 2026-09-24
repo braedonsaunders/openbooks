@@ -44,17 +44,19 @@ test("delivery keys are deterministic per intent and distinct otherwise", () => 
   assert.notEqual(first[0]!.data.deliveryKey, otherOrg[0]!.data.deliveryKey);
 });
 
-test("single-recipient keys keep the pre-change worker identity", () => {
-  // Before this change the worker derived scope=job.id, and job.id equaled
-  // the caller's jobId. Keys for already-durable callers must not rotate,
-  // or every in-flight retry would mint a duplicate send.
+test("the worker resolves the stored key and never the queue id", () => {
+  // The stored delivery key is the one buildEmailJobs derived at enqueue;
+  // resolving it must not depend on, rotate with, or fall back to any
+  // queue-assigned id.
   const [job] = buildEmailJobs({ ...base, to: "dana@example.com" }, { jobId: "flow-email|row-1" });
-  assert.equal(
-    job!.data.deliveryKey,
-    resolveEmailDeliveryKey(
-      { orgId: ORG, to: "dana@example.com", meta: {} },
-      "flow-email|row-1",
-    ),
+  assert.equal(resolveEmailDeliveryKey(job!.data), job!.data.deliveryKey);
+  assert.throws(
+    () => resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com" }),
+    /no durable delivery key/,
+  );
+  assert.throws(
+    () => resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com", deliveryKey: "bogus" }),
+    /delivery key must match/,
   );
 });
 
@@ -86,24 +88,24 @@ test("one-off intent keys are unique per call and prefixed", () => {
 test("the worker key never depends on the queue-assigned job id", () => {
   // Regression test for the Redis-reset collision: BullMQ auto-increment
   // ids restart from 1, so any key derived from job.id realigns new mail
-  // with old sent-log rows. Stored keys must be immune to the queue id.
+  // with old sent-log rows. Stored keys must be immune to the queue id —
+  // and with the legacy fallback removed, there is no derivation left that
+  // could realign them.
   const [job] = buildEmailJobs({ ...base, to: "dana@example.com" }, { jobId: "gate-reminder|org|g|u|uuid-1" });
-  assert.equal(resolveEmailDeliveryKey(job!.data, "1"), job!.data.deliveryKey);
-  assert.equal(resolveEmailDeliveryKey(job!.data, "2"), job!.data.deliveryKey);
-  assert.equal(resolveEmailDeliveryKey(job!.data, null), job!.data.deliveryKey);
+  assert.equal(resolveEmailDeliveryKey(job!.data), job!.data.deliveryKey);
 });
 
-test("legacy jobs without a stored key drain through their old scopes", () => {
-  // Jobs enqueued before deliveryKey existed carry no key; the worker must
-  // still claim the same row the old derivation would have found.
-  assert.equal(
-    resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com", meta: { reportDeliveryId: "r1" } }, "99"),
-    resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com", meta: { reportDeliveryId: "r1" } }, "100"),
-  );
-  // ...but a legacy job with neither a durable scope nor a queue id refuses
-  // instead of minting an arbitrary identity that could skip real mail.
+test("a job without a stored key refuses instead of guessing an identity", () => {
+  // E11: the removed legacy fallback derived from the scope queueJobId, so
+  // after a Redis reset a new job matched an old sent row and was skipped
+  // without ever sending. Refusing loudly is the only safe shape — every
+  // legitimate job carries its key from buildEmailJobs.
   assert.throws(
-    () => resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com", meta: {} }, null),
-    /durable scope/,
+    () => resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com", deliveryKey: "" }),
+    /no durable delivery key/,
+  );
+  assert.throws(
+    () => resolveEmailDeliveryKey({ orgId: ORG, to: "dana@example.com" }),
+    /no durable delivery key/,
   );
 });
