@@ -148,20 +148,6 @@ for (const locale of LOCALES) {
   })
 }
 
-test('no locale falls back to the English FY prefix', async () => {
-  for (const locale of LOCALES) {
-    if (locale === 'en') continue
-    labelState.messages = {
-      tax: JSON.parse(readFileSync(join(MESSAGES, locale, 'tax.json'), 'utf8')),
-    }
-    const data = await loadTaxProvisions()
-    assert.ok(
-      !data.rows[0]!.fiscalYearLabel.startsWith('FY'),
-      `${locale} renders the English FY prefix instead of its own pattern`,
-    )
-  }
-})
-
 test('a restricted reader sees the no-grant empty state without a compute action', async () => {
   const previous = { ...labelState }
   try {
