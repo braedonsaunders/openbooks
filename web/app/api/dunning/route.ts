@@ -24,14 +24,23 @@ interface StageInput {
   escalate?: boolean;
 }
 
-function validStages(raw: unknown): StageInput[] | null {
-  if (!Array.isArray(raw)) return null;
+type StagesParse =
+  | { ok: true; stages: StageInput[] }
+  | { ok: false; error: "invalid_stages" | "blank_template" };
+
+function validStages(raw: unknown): StagesParse {
+  const invalid = { ok: false, error: "invalid_stages" } as const;
+  const blank = { ok: false, error: "blank_template" } as const;
+  if (!Array.isArray(raw)) return invalid;
   const stages: StageInput[] = [];
   for (const s of raw) {
-    if (typeof s !== "object" || s === null) return null;
+    if (typeof s !== "object" || s === null) return invalid;
     const o = s as Record<string, unknown>;
-    if (typeof o.name !== "string" || !o.name.trim()) return null;
-    if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return null;
+    if (typeof o.name !== "string" || !o.name.trim()) return invalid;
+    if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return invalid;
+    // A blank template renders an empty letter: refuse it at the boundary
+    // with the fix named instead of storing a rung that mails nothing.
+    if (!o.subjectTemplate.trim() || !o.bodyTemplate.trim()) return blank;
     stages.push({
       sequence: Number(o.sequence),
       name: o.name,
@@ -43,12 +52,19 @@ function validStages(raw: unknown): StageInput[] | null {
   }
   // Enforce unique, ascending sequences (the DB has a unique index too).
   const seqs = new Set(stages.map((s) => s.sequence));
-  if (seqs.size !== stages.length) return null;
+  if (seqs.size !== stages.length) return invalid;
   // sequence/offset_days are int4: integers beyond ±2^31 fail the insert as
   // an unhandled storage error (500). Negative offsets are legitimate
   // (pre-due courtesy rungs), so the bound is the column range, not >= 0.
-  if (stages.some((s) => !isInt32(s.sequence) || !isInt32(s.offsetDays))) return null;
-  return stages;
+  if (stages.some((s) => !isInt32(s.sequence) || !isInt32(s.offsetDays))) return invalid;
+  return { ok: true, stages };
+}
+
+function stagesRefusal(error: "invalid_stages" | "blank_template"): NextResponse {
+  return NextResponse.json(
+    { error: error === "blank_template" ? "stage subject and body templates must not be blank" : "invalid stages" },
+    { status: 400 },
+  );
 }
 
 /** int4 range guard shared by the day-count fields. */
@@ -103,8 +119,9 @@ export async function POST(req: Request) {
   if (typeof body.name !== "string" || !body.name.trim()) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
-  const stages = validStages(body.stages ?? []);
-  if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  const parsedStages = validStages(body.stages ?? []);
+  if (!parsedStages.ok) return stagesRefusal(parsedStages.error);
+  const stages = parsedStages.stages;
   // The runner selects documents by this kind and mails their party; only a
   // dunnable receivable kind may ever be configured (see engine dunning.ts).
   const appliesToKind = body.appliesToKind === undefined ? "customer_invoice" : body.appliesToKind;

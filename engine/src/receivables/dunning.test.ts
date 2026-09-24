@@ -698,6 +698,35 @@ test("an active stage-less policy is surfaced as skipped, not silently ignored",
   }
 });
 
+test("a legacy blank template fails loudly instead of mailing an empty letter", { skip: !DB }, async () => {
+  // A-S20: the boundary refuses new blanks, but stored rows predate it. The
+  // tick must fail the rung on the result — never send the empty letter,
+  // and never open a claim for something it refused to attempt.
+  const org = await createScratchOrg();
+  try {
+    const seeded = await seedDunnableInvoice(org, {
+      documentNumber: `DUN-${randomUUID().slice(0, 8)}`,
+      email: "billing@acme.test",
+      dueDate: "2026-06-01",
+    });
+    await db.execute(sql`
+      update dunning_stages set body_template = '   ' where id = ${seeded.stageId} and org_id = ${org.orgId}
+    `);
+    const run = await runDunningForOrg(org.orgId, "2026-07-10");
+    assert.equal(run.sent, 0);
+    assert.equal(run.failed, 1);
+    assert.deepEqual(run.notices.map((n) => [n.documentId, n.stageId, n.status]), [
+      [seeded.invoiceId, seeded.stageId, "failed"],
+    ]);
+    const { logRows, outboxRows } = await stagedNotice(seeded.invoiceId);
+    assert.equal(logRows.length, 0, "a refused rung opens no claim");
+    assert.equal(outboxRows.length, 0, "a refused rung defers no letter");
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where org_id = ${org.orgId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 /** One ladder per scenario, each in its own org: policies scan every invoice
  * of their kind, so two ladders sharing an org would dun each other's
  * invoices instead of isolating the rung under test. */

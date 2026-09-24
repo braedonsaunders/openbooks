@@ -26,15 +26,24 @@ function isInt32(n: number): boolean {
   return Number.isInteger(n) && n >= -2147483648 && n <= 2147483647;
 }
 
-function validStages(raw: unknown): StageInput[] | null {
-  if (!Array.isArray(raw)) return null;
+type StagesParse =
+  | { ok: true; stages: StageInput[] }
+  | { ok: false; error: "invalid_stages" | "blank_template" };
+
+function validStages(raw: unknown): StagesParse {
+  const invalid = { ok: false, error: "invalid_stages" } as const;
+  const blank = { ok: false, error: "blank_template" } as const;
+  if (!Array.isArray(raw)) return invalid;
   const stages: StageInput[] = [];
   for (const s of raw) {
-    if (typeof s !== "object" || s === null) return null;
+    if (typeof s !== "object" || s === null) return invalid;
     const o = s as Record<string, unknown>;
-    if (typeof o.name !== "string" || !o.name.trim()) return null;
-    if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return null;
-    if (!isInt32(Number(o.sequence)) || !isInt32(Number(o.offsetDays))) return null;
+    if (typeof o.name !== "string" || !o.name.trim()) return invalid;
+    if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return invalid;
+    // A blank template renders an empty letter: refuse it at the boundary
+    // with the fix named instead of storing a rung that mails nothing.
+    if (!o.subjectTemplate.trim() || !o.bodyTemplate.trim()) return blank;
+    if (!isInt32(Number(o.sequence)) || !isInt32(Number(o.offsetDays))) return invalid;
     stages.push({
       sequence: Number(o.sequence),
       name: o.name,
@@ -44,8 +53,15 @@ function validStages(raw: unknown): StageInput[] | null {
       escalate: Boolean(o.escalate),
     });
   }
-  if (new Set(stages.map((s) => s.sequence)).size !== stages.length) return null;
-  return stages;
+  if (new Set(stages.map((s) => s.sequence)).size !== stages.length) return invalid;
+  return { ok: true, stages };
+}
+
+function stagesRefusal(error: "invalid_stages" | "blank_template"): NextResponse {
+  return NextResponse.json(
+    { error: error === "blank_template" ? "stage subject and body templates must not be blank" : "invalid stages" },
+    { status: 400 },
+  );
 }
 
 /**
@@ -80,8 +96,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
-  const stages = "stages" in body ? validStages(body.stages) : undefined;
-  if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+  const parsedStages = "stages" in body ? validStages(body.stages) : undefined;
+  if (parsedStages !== undefined && !parsedStages.ok) return stagesRefusal(parsedStages.error);
+  const stages = parsedStages !== undefined && parsedStages.ok ? parsedStages.stages : undefined;
   if (
     "appliesToKind" in body &&
     (typeof body.appliesToKind !== "string" || !isDunnableDocumentKind(body.appliesToKind))
