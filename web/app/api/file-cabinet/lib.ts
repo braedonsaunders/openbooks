@@ -47,14 +47,35 @@ export function isAllowedContentType(ct: string): boolean {
  * user work with a document (so attaching to bills/invoices still works for
  * AP/AR clerks). Admin's `*` covers everything.
  */
-const DOCUMENT_WRITE_PERMS = ['documents.manage', 'ap.create', 'ar.create', 'expenses.create', 'gl.post']
+const DOCUMENT_ATTACHMENT_WRITE_PERMS: Record<string, string> = {
+  vendor_bill: 'ap.create',
+  vendor_payment: 'ap.pay',
+  vendor_credit: 'ap.create',
+  purchase_order: 'ap.create',
+  check: 'ap.create',
+  card_charge: 'ap.create',
+  card_refund: 'ap.create',
+  customer_invoice: 'ar.create',
+  customer_credit: 'ar.create',
+  customer_payment: 'ar.pay',
+  sales_order: 'ar.create',
+  quote: 'ar.create',
+  expense_report: 'expenses.create',
+  field_ticket: 'time.manage',
+  project_charge: 'projects.manage',
+  pay_run: 'payroll.run',
+  journal: 'gl.post',
+  deposit: 'gl.post',
+  transfer: 'gl.post',
+}
 
-export function canMutateFiles(authz: Authz, targetTable?: string): boolean {
+export function canMutateFiles(authz: Authz, targetTable?: string, kind?: string | null): boolean {
   if (can(authz, 'documents.manage')) return true
   if (targetTable === 'item_rate_versions') return can(authz, 'admin.setup.manage')
   if (targetTable === 'fixed_assets') return can(authz, 'assets.manage')
   if (targetTable !== 'documents') return false
-  return DOCUMENT_WRITE_PERMS.some((p) => can(authz, p))
+  const permission = kind ? DOCUMENT_ATTACHMENT_WRITE_PERMS[kind] : undefined
+  return permission !== undefined && can(authz, permission)
 }
 
 export { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from './target-tables'

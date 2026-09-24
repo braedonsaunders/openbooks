@@ -111,7 +111,7 @@ const hooks = registerHooks({
   },
 })
 
-const { GET } = (await import('./route.ts')) as typeof import('./route.ts')
+const { GET, POST } = (await import('./route.ts')) as typeof import('./route.ts')
 hooks.deregister()
 
 function reset(input: {
@@ -135,16 +135,11 @@ function get(targetTable: string): Promise<Response> {
 }
 
 test('GET uses the owning resource permission instead of documents.read', async () => {
-  reset({
-    permissions: ['documents.read'],
-    targetRows: [[{ partySubsidiaryId: null, projectSubsidiaryId: null }]],
-  })
+  reset({ permissions: ['documents.read'], targetRows: [[{ partySubsidiaryId: null, projectSubsidiaryId: null }]] })
 
   const response = await get('compliance_records')
 
-  assert.equal(response.status, 403)
-  assert.deepEqual(routeState.permissionChecks, ['compliance.read'])
-  assert.equal(routeState.listCalls, 0)
+  assert.deepEqual([response.status, routeState.permissionChecks, routeState.listCalls], [403, ['compliance.read'], 0])
 })
 
 test('GET hides out-of-scope targets before listing their attachments', async () => {
@@ -163,8 +158,7 @@ test('GET hides out-of-scope targets before listing their attachments', async ()
 
   const response = await get('compliance_records')
 
-  assert.equal(response.status, 404)
-  assert.equal(routeState.listCalls, 0)
+  assert.deepEqual([response.status, routeState.listCalls], [404, 0])
 })
 
 test('GET keeps org-wide rate-card targets visible to restricted setup users', async () => {
@@ -176,8 +170,7 @@ test('GET keeps org-wide rate-card targets visible to restricted setup users', a
 
   const response = await get('item_rate_versions')
 
-  assert.equal(response.status, 200)
-  assert.equal(routeState.listCalls, 1)
+  assert.deepEqual([response.status, routeState.listCalls], [200, 1])
 })
 
 test('GET filters attachment metadata through file visibility', async () => {
@@ -204,8 +197,13 @@ test('GET filters attachment metadata through file visibility', async () => {
 
   const response = await get('compliance_records')
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), {
-    attachments: [{ id: visibleFileId, name: 'visible.pdf' }],
-  })
+  assert.deepEqual([response.status, await response.json()], [200, { attachments: [{ id: visibleFileId, name: 'visible.pdf' }] }])
+})
+
+test('POST requires the write permission for the target document kind', async () => {
+  reset({ permissions: ['ar.create'], targetRows: [[{ kind: 'vendor_bill', subsidiaryId: null }]] })
+
+  const response = await POST(new Request('http://openbooks.test/api/file-cabinet/attachments', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fileId: visibleFileId, targetTable: 'documents', targetId }) }))
+
+  assert.deepEqual([response.status, routeState.permissionChecks], [403, ['documents.manage', 'ap.create']])
 })
