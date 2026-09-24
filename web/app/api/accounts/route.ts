@@ -233,7 +233,7 @@ export async function POST(request: Request) {
     throw error
   }
 
-  const payload = await loadAccount(requestId, gate.user.orgId)
+  const payload = await loadAccount(requestId, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
   // A fresh account backs no statements yet: corroboration is the request's
   // own name and reconcilable flag. The warning rides alongside success —
