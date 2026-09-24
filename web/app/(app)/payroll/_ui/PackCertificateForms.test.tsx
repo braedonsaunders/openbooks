@@ -169,3 +169,43 @@ test('edit mode keeps the inputs and the save button', () => {
   assert.match(html, /<input|<select/)
   assert.match(html, /Save certificate/)
 })
+
+// F3-11: a certificate amount the classifier cannot read names its cause
+// and remedy under the field, and the save stays disabled until every
+// amount reads. Seeded from the stored filing, so the refusal renders with
+// no interaction — a static render that passed before the fix cannot name
+// a remedy the old input never computed.
+test('an unreadable certificate amount names its remedy and blocks the save', () => {
+  const declared = packCertificates('NL').certificates
+  const certificate = declared.find((entry) => entry.key === 'nl_premies')!
+  const html = renderReadOnly(
+    React.createElement(CertificateForm, {
+      partyId: 'employee',
+      country: 'NL',
+      certificate: {
+        key: certificate.key,
+        form: certificate.form,
+        label: certificate.label,
+        scope: certificate.scope,
+        citation: certificate.citation,
+        summary: certificate.summary,
+        fields: certificate.fields,
+      },
+      stored: [
+        {
+          certificate_key: certificate.key,
+          country: 'NL',
+          region: null,
+          sub_region: null,
+          answers: { whk_percent: '12,34' },
+          effective_from: '2026-01-01',
+          superseded_on: null,
+        },
+      ],
+      onSaved: () => {},
+    }),
+  )
+  assert.match(html, /must use .* as the decimal point/)
+  assert.match(html, /12\.34/)
+  assert.match(html, /<button[^>]*disabled[^>]*>Save certificate<\/button>/)
+})

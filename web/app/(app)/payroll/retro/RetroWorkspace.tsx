@@ -9,6 +9,7 @@ import { Badge, Button, Drawer, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
+import { compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /* ------------------------------------------------------------------ */
@@ -355,13 +356,13 @@ export function RetroWorkspace({
             />
           </section>
 
-          {(proposal.unavailable > 0 || Number(proposal.overpaidTotal) < 0) && (
+          {(proposal.unavailable > 0 || compareDecimal(proposal.overpaidTotal, '0') < 0) && (
             <section className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-900 dark:bg-amber-950/40">
               <p className="flex items-center gap-2 font-medium text-amber-900 dark:text-amber-200">
                 <AlertTriangle size={14} aria-hidden />
                 {text('retro.exceptions', 'Findings that are not payable here')}
               </p>
-              {Number(proposal.overpaidTotal) < 0 && (
+              {compareDecimal(proposal.overpaidTotal, '0') < 0 && (
                 <p className="text-amber-900 dark:text-amber-200">
                   {text(
                     'retro.overpaidNote',
