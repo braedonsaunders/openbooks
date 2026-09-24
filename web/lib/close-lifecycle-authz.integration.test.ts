@@ -97,6 +97,16 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
             assert.match((error as Error).message,/unrestricted subsidiary visibility/)
             return true
           })
+          await assert.rejects(applicationClose.listPeriodLocks(context,{}),(error: unknown) => {
+            assert.equal((error as {status?: number}).status,403)
+            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
+            return true
+          })
+          await assert.rejects(applicationClose.listPeriodReopenRequests(context,{}),(error: unknown) => {
+            assert.equal((error as {status?: number}).status,403)
+            assert.match((error as Error).message,/unrestricted subsidiary visibility/)
+            return true
+          })
           await assert.rejects(applicationClose.getCloseRun(context,runId),{status:403})
           await assert.rejects(applicationClose.startApplicationCloseRun(context,{...target,subsidiaryIds:[org.subsidiaryId],idempotencyKey:randomUUID()}),{status:403})
           await assert.rejects(applicationClose.advanceCloseRun(context,{runId,action:'refresh',idempotencyKey:randomUUID()}),{status:403})
