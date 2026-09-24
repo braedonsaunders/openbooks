@@ -145,7 +145,13 @@ test("five wrong PINs lock the kiosk identity", { skip: !DB }, async () => {
       return kiosk;
     });
     await withOrg(org.orgId, async () => {
-      for (let i = 0; i < 4; i++) {
+      assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_wrong");
+      const firstFailure = (await db.execute<{ failed_attempts: number; locked_until: string | null }>(sql`
+        select failed_attempts, locked_until::text as locked_until from worker_clock_pins
+         where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0];
+      assert.equal(firstFailure?.failed_attempts, 1, "the refusal is raised only after its failure count commits");
+      assert.equal(firstFailure?.locked_until, null);
+      for (let i = 0; i < 3; i++) {
         assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_wrong");
       }
       assert.equal(await refusesCode(() => identifyByPin({ kiosk, employeePartyId: worker, pin: "0000" })), "pin_locked");
