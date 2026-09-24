@@ -8,6 +8,13 @@ import test from "node:test";
 // widget reads "—" next to a 97 tile. Both lists must read the union.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}",
+      };
+    }
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
@@ -30,7 +37,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -61,15 +68,15 @@ async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{
   const doc = randomUUID();
   const entry = randomUUID();
   const number = `WIDGET-${doc.slice(0, 8)}`;
-  await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,open_balance,submitted_by)
-    values(${doc},${org.orgId},'customer_invoice','pending_approval',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','1000',0,'1000','1000',${submittedBy})`);
-  await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,source_document_id)
-    values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${org.date},${org.periodId},'draft',${doc})`);
-  await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
+  await withBypassContext(() => (db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,due_date,currency,fx_rate,subtotal,tax_total,total,open_balance,submitted_by)
+    values(${doc},${org.orgId},'customer_invoice','pending_approval',${number},${org.subsidiaryId},${org.customerId},${org.date},'2027-12-31','CAD','1','1000',0,'1000','1000',${submittedBy})`)));
+  await withBypassContext(() => (db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,source_document_id)
+    values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},${entry},${org.date},${org.periodId},'draft',${doc})`)));
+  await withBypassContext(() => (db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,party_id,due_date,is_open_item)
     values(${randomUUID()},${org.orgId},${entry},1,${org.accounts.ar},${org.subsidiaryId},'1000','CAD','1000','1',${org.customerId},'2027-12-31',true),
-    (${randomUUID()},${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},'-1000','CAD','-1000','1',null,'2027-12-31',false)`);
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
-  await db.execute(sql`update documents set posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`);
+    (${randomUUID()},${org.orgId},${entry},2,${org.accounts.revenue},${org.subsidiaryId},'-1000','CAD','-1000','1',null,'2027-12-31',false)`)));
+  await withBypassContext(() => (db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`)));
+  await withBypassContext(() => (db.execute(sql`update documents set posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${doc}`)));
   return { docId: doc, number };
 }
 
@@ -77,13 +84,13 @@ async function postedPendingDoc(org: ScratchOrg, submittedBy: string): Promise<{
 async function postedPendingBudget(org: ScratchOrg, submittedBy: string): Promise<{ budgetId: string; name: string }> {
   const budget = randomUUID();
   const name = `WIDGET-BUDGET-${budget.slice(0, 8)}`;
-  await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
-    values(${budget},${org.orgId},${org.bookId},2026,${name},'budget','draft',${submittedBy},${submittedBy})`);
-  await db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
-    values(${org.orgId},${budget},${org.accounts.revenue},${org.periodId},'-50000.0000',${submittedBy},${submittedBy})`);
-  await db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1,
+  await withBypassContext(() => (db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name,kind,status,created_by,updated_by)
+    values(${budget},${org.orgId},${org.bookId},2026,${name},'budget','draft',${submittedBy},${submittedBy})`)));
+  await withBypassContext(() => (db.execute(sql`insert into budget_lines(org_id,scenario_id,account_id,period_id,amount,created_by,updated_by)
+    values(${org.orgId},${budget},${org.accounts.revenue},${org.periodId},'-50000.0000',${submittedBy},${submittedBy})`)));
+  await withBypassContext(() => (db.execute(sql`update budget_scenarios set status='pending_approval',revision=revision+1,
     submitted_at=now(),submitted_by=${submittedBy},updated_at=now(),updated_by=${submittedBy}
-    where id=${budget} and org_id=${org.orgId}`);
+    where id=${budget} and org_id=${org.orgId}`)));
   return { budgetId: budget, name };
 }
 

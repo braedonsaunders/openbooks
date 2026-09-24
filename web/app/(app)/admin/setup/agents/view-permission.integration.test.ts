@@ -79,7 +79,7 @@ function asManager(orgId: string) {
 }
 
 test("a setup manager sees one overview row per registered pack", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview());
@@ -99,7 +99,7 @@ test("a setup manager sees one overview row per registered pack", { skip: !DB },
 });
 
 test("without the setup key the overview redirects", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     loaderState.user = { orgId: org.orgId, id: "00000000-0000-0000-0000-000000000002" };
     loaderState.permissions = new Set(["assistant.use"]);

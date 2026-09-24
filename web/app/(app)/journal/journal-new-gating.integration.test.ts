@@ -38,7 +38,7 @@ registerHooks({
   },
 })
 
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
@@ -82,15 +82,15 @@ function collectWidgets(node: unknown, out: { widget: string; props?: Record<str
 }
 
 async function fixture() {
-  const org = await createScratchOrg()
-  const reader = await createScratchUser(org.orgId, 'Reader', 'journal_reader')
-  const poster = await createScratchUser(org.orgId, 'Poster', 'journal_poster')
-  await db.execute(sql`
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const reader = await withBypassContext(() => (createScratchUser(org.orgId, 'Reader', 'journal_reader')))
+  const poster = await withBypassContext(() => (createScratchUser(org.orgId, 'Poster', 'journal_poster')))
+  await withBypassContext(() => (db.execute(sql`
     update app_roles set permissions = '["gl.read"]'::jsonb
-     where org_id = ${org.orgId} and key = 'journal_reader'`)
-  await db.execute(sql`
+     where org_id = ${org.orgId} and key = 'journal_reader'`)))
+  await withBypassContext(() => (db.execute(sql`
     update app_roles set permissions = '["gl.read", "gl.post"]'::jsonb
-     where org_id = ${org.orgId} and key = 'journal_poster'`)
+     where org_id = ${org.orgId} and key = 'journal_poster'`)))
   const load = (userId: string, sp: Record<string, string | string[] | undefined>) => {
     session.user = asUser(userId, org.orgId)
     return withOrgContext(org.orgId, () => loadJournal(sp))
