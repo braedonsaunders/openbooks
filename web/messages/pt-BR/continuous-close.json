@@ -313,7 +313,9 @@
     "unbudgeted_project": "Projeto sem orçamento",
     "unmapped_component": "Componente sem atribuição",
     "unreconciled_activity": "Atividade não conciliada",
-    "untaxed_item": "Item sem código fiscal"
+    "untaxed_item": "Item sem código fiscal",
+    "customerless_invoice": "Fatura sem cliente",
+    "remittance_gap": "Lacuna no recolhimento da folha"
   },
   "actions": {
     "settings": "Configurações do agente",

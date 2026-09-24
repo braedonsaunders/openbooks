@@ -310,7 +310,9 @@
     "unbudgeted_project": "Unbudgeted project",
     "unmapped_component": "Unmapped pay component",
     "unreconciled_activity": "Unreconciled activity",
-    "untaxed_item": "Untaxed item"
+    "untaxed_item": "Untaxed item",
+    "customerless_invoice": "Invoice without a customer",
+    "remittance_gap": "Payroll remittance gap"
   },
   "actions": {
     "settings": "Agent settings",

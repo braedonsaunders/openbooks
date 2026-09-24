@@ -313,7 +313,9 @@
     "unbudgeted_project": "无预算项目",
     "unmapped_component": "未分配薪酬项目",
     "unreconciled_activity": "未对账活动",
-    "untaxed_item": "缺失税码的物料"
+    "untaxed_item": "缺失税码的物料",
+    "customerless_invoice": "无客户的发票",
+    "remittance_gap": "薪资代扣税款缴纳缺口"
   },
   "actions": {
     "settings": "代理设置",

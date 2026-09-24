@@ -313,7 +313,9 @@
     "unbudgeted_project": "予算のないプロジェクト",
     "unmapped_component": "未割当の給与項目",
     "unreconciled_activity": "未消込の取引",
-    "untaxed_item": "税コードのない品目"
+    "untaxed_item": "税コードのない品目",
+    "customerless_invoice": "顧客未設定の請求書",
+    "remittance_gap": "給与源泉税の納付漏れ期間"
   },
   "actions": {
     "settings": "エージェント設定",
