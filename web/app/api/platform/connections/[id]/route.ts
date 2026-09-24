@@ -18,7 +18,7 @@ import { storageIdentityError } from "../_storage-identity";
 import {
   callerOwnedConfigRefusal,
   connectionConfigUrlRefusal,
-  declaredSourceConfig,
+  mergedDeclaredSourceConfig,
 } from "../_connector-guard";
 
 export const runtime = "nodejs";
@@ -53,13 +53,6 @@ export async function PATCH(
     if (ownedError) {
       return NextResponse.json(
         { error: ownedError, errorCode: "OAUTH_IDENTITY_REFUSED" },
-        { status: 400 },
-      );
-    }
-    const urlError = await connectionConfigUrlRefusal(body.config);
-    if (urlError) {
-      return NextResponse.json(
-        { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
         { status: 400 },
       );
     }
@@ -106,8 +99,18 @@ export async function PATCH(
           { status: 400 },
         );
       }
-      const incoming = declaredSourceConfig(manifest, body.config);
-      const merged = { ...currentConfig, ...incoming };
+      const merged = mergedDeclaredSourceConfig(
+        manifest,
+        currentConfig as Record<string, unknown>,
+        body.config as Record<string, unknown>,
+      );
+      const urlError = await connectionConfigUrlRefusal(merged);
+      if (urlError) {
+        return NextResponse.json(
+          { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
+          { status: 400 },
+        );
+      }
       const configError = validateSourceConfig(manifest, merged, { today });
       if (configError) {
         return NextResponse.json({ error: configError }, { status: 400 });

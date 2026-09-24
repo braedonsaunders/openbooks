@@ -14,6 +14,8 @@
  *    on lastModifiedDateTime
  */
 
+import { guardedFetch } from "./ssrf-guard.ts";
+
 const API_ROOT = "https://api.businesscentral.dynamics.com/v2.0";
 const RESOURCE = "https://api.businesscentral.dynamics.com";
 const SCOPE = `${RESOURCE}/.default offline_access`;
@@ -46,8 +48,8 @@ class DynamicsOriginRefused extends Error {}
  * one), so any redirect with a Location is refused outright rather than
  * followed.
  */
-async function dynamicsFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, { ...init, redirect: "manual" });
+async function dynamicsFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+  const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
     throw new DynamicsRedirectRefused(
@@ -89,7 +91,7 @@ function toTokens(r: TokenResponse): DynamicsTokens {
   };
 }
 
-export async function exchangeCode(app: DynamicsApp, code: string): Promise<DynamicsTokens> {
+export async function exchangeCode(app: DynamicsApp, code: string, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
   const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -101,7 +103,7 @@ export async function exchangeCode(app: DynamicsApp, code: string): Promise<Dyna
       redirect_uri: app.redirectUri,
       scope: SCOPE,
     }),
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Dynamics token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
@@ -112,7 +114,7 @@ export async function exchangeCode(app: DynamicsApp, code: string): Promise<Dyna
  * to have an APPLICATION permission (admin-consented) and to be enabled inside
  * BC (Microsoft Entra Applications, with permission sets).
  */
-export async function clientCredentialsToken(app: DynamicsApp): Promise<DynamicsTokens> {
+export async function clientCredentialsToken(app: DynamicsApp, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
   const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -122,13 +124,13 @@ export async function clientCredentialsToken(app: DynamicsApp): Promise<Dynamics
       grant_type: "client_credentials",
       scope: `${RESOURCE}/.default`,
     }),
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Dynamics client-credentials HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   const r = (await res.json()) as TokenResponse;
   return { accessToken: r.access_token, refreshToken: "", expiresAt: new Date(Date.now() + (r.expires_in - 60) * 1000).toISOString() };
 }
 
-export async function refreshTokens(app: DynamicsApp, refreshToken: string): Promise<DynamicsTokens> {
+export async function refreshTokens(app: DynamicsApp, refreshToken: string, transport: typeof fetch = guardedFetch): Promise<DynamicsTokens> {
   const res = await dynamicsFetch(`${authBase(app.aadTenantId)}/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -139,7 +141,7 @@ export async function refreshTokens(app: DynamicsApp, refreshToken: string): Pro
       refresh_token: refreshToken,
       scope: SCOPE,
     }),
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Dynamics token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
@@ -151,9 +153,10 @@ export async function listCompanies(
   accessToken: string,
   aadTenantId: string,
   environment: string,
+  transport: typeof fetch = guardedFetch,
 ): Promise<DynamicsCompany[]> {
   const url = `${API_ROOT}/${aadTenantId}/${environment}/api/v2.0/companies`;
-  const res = await dynamicsFetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } });
+  const res = await dynamicsFetch(url, { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }, transport);
   if (!res.ok) throw new Error(`Dynamics companies HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   return ((await res.json()) as { value: DynamicsCompany[] }).value ?? [];
 }
@@ -168,6 +171,7 @@ export class DynamicsClient {
     private companyId: string,
     tokens: DynamicsTokens,
     private onRefresh?: (t: DynamicsTokens) => Promise<void> | void,
+    private transport: typeof fetch = guardedFetch,
   ) {
     this.tokens = tokens;
     this.base = `${API_ROOT}/${app.aadTenantId}/${environment}/api/v2.0`;
@@ -182,7 +186,7 @@ export class DynamicsClient {
       throw new Error("Dynamics connection has no delegated refresh token — reconnect to grant access");
     }
     if (!this.tokens.accessToken || new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken);
+      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken, this.transport);
       await this.onRefresh?.(this.tokens);
     }
     return this.tokens.accessToken;
@@ -205,7 +209,7 @@ export class DynamicsClient {
         const res = await dynamicsFetch(parsedUrl, {
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
           signal: ctrl.signal,
-        });
+        }, this.transport);
         if ((res.status === 429 || res.status >= 500) && attempt < 4) {
           const ra = Number(res.headers.get("Retry-After"));
           await new Promise((r) => setTimeout(r, ra > 0 ? ra * 1000 : attempt * 2000));

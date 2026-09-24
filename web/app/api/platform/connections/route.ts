@@ -153,14 +153,14 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const urlError = await connectionConfigUrlRefusal(suppliedConfig);
+  const config = declaredSourceConfig(manifest, suppliedConfig);
+  const urlError = await connectionConfigUrlRefusal(config);
   if (urlError) {
     return NextResponse.json(
       { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" },
       { status: 400 },
     );
   }
-  const config = declaredSourceConfig(manifest, suppliedConfig);
 
   const configError = validateSourceConfig(manifest, config, { today: await businessToday(orgId) });
   if (configError)

@@ -7,6 +7,7 @@ import {
   connectorUrlRefusal,
   declaredSourceConfig,
   isPublicUnicastAddress,
+  mergedDeclaredSourceConfig,
 } from "./_connector-guard.ts";
 
 const refusedLiterals = [
@@ -133,4 +134,14 @@ test("declaredSourceConfig keeps only manifest keys", () => {
     { url: "https://1.1.1.1", realmId: "should-not-persist", extra: 1 },
   );
   assert.deepEqual(declared, { url: "https://1.1.1.1" });
+});
+
+test("a PATCH validates the merged NetSuite host before replacing stored config", async () => {
+  const merged = mergedDeclaredSourceConfig(
+    { configFields: [{ key: "host" }, { key: "account" }] },
+    { host: "https://123456.suitetalk.api.netsuite.com", account: "123456" },
+    { host: "http://127.0.0.1:8080", ignored: "not persisted" },
+  );
+  assert.deepEqual(merged, { host: "http://127.0.0.1:8080", account: "123456" });
+  assert.match(String(await connectionConfigUrlRefusal(merged)), /public unicast/);
 });

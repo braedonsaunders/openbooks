@@ -13,6 +13,8 @@
  *  - incremental pulls use the If-Modified-Since header
  */
 
+import { guardedFetch } from "./ssrf-guard.ts";
+
 const AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize";
 const TOKEN_URL = "https://identity.xero.com/connect/token";
 const API = "https://api.xero.com/api.xro/2.0";
@@ -49,8 +51,8 @@ class XeroRedirectRefused extends Error {}
  * surfaces the real 3xx response (not a browser-style opaque one), so any
  * redirect with a Location is refused outright rather than followed.
  */
-async function xeroFetch(url: string | URL, init: RequestInit = {}): Promise<Response> {
-  const res = await fetch(url, { ...init, redirect: "manual" });
+async function xeroFetch(url: string | URL, init: RequestInit = {}, transport: typeof fetch = guardedFetch): Promise<Response> {
+  const res = await transport(url, { ...init, redirect: "manual" });
   const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
   if (location !== null) {
     throw new XeroRedirectRefused(
@@ -91,31 +93,31 @@ function toTokens(r: TokenResponse): XeroTokens {
   };
 }
 
-export async function exchangeCode(app: XeroApp, code: string): Promise<XeroTokens> {
+export async function exchangeCode(app: XeroApp, code: string, transport: typeof fetch = guardedFetch): Promise<XeroTokens> {
   const res = await xeroFetch(TOKEN_URL, {
     method: "POST",
     headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: app.redirectUri }),
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Xero token exchange HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
-export async function refreshTokens(app: XeroApp, refreshToken: string): Promise<XeroTokens> {
+export async function refreshTokens(app: XeroApp, refreshToken: string, transport: typeof fetch = guardedFetch): Promise<XeroTokens> {
   const res = await xeroFetch(TOKEN_URL, {
     method: "POST",
     headers: { Authorization: basicAuth(app), "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Xero token refresh HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
   return toTokens((await res.json()) as TokenResponse);
 }
 
 /** The tenants this token pair is authorized for (post-consent handshake). */
-export async function listConnections(accessToken: string): Promise<{ tenantId: string; tenantName: string }[]> {
+export async function listConnections(accessToken: string, transport: typeof fetch = guardedFetch): Promise<{ tenantId: string; tenantName: string }[]> {
   const res = await xeroFetch("https://api.xero.com/connections", {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-  });
+  }, transport);
   if (!res.ok) throw new Error(`Xero connections HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const rows = (await res.json()) as { tenantId: string; tenantName?: string }[];
   return rows.map((r) => ({ tenantId: r.tenantId, tenantName: r.tenantName ?? r.tenantId }));
@@ -136,13 +138,14 @@ export class XeroClient {
     private tenantId: string,
     tokens: XeroTokens,
     private onRefresh?: (t: XeroTokens) => Promise<void> | void,
+    private transport: typeof fetch = guardedFetch,
   ) {
     this.tokens = tokens;
   }
 
   private async accessToken(): Promise<string> {
     if (new Date(this.tokens.expiresAt).getTime() <= Date.now()) {
-      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken);
+      this.tokens = await refreshTokens(this.app, this.tokens.refreshToken, this.transport);
       await this.onRefresh?.(this.tokens);
     }
     return this.tokens.accessToken;
@@ -168,7 +171,7 @@ export class XeroClient {
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
           signal: ctrl.signal,
-        });
+        }, this.transport);
         if ((res.status === 429 || res.status >= 500) && attempt < MAX_ATTEMPTS) {
           const retryAfter = Number(res.headers.get("Retry-After"));
           await new Promise((r) => setTimeout(r, retryAfter > 0 ? retryAfter * 1000 : attempt * 2000));

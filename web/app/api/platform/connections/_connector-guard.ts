@@ -64,3 +64,12 @@ export function declaredSourceConfig(
   }
   return declared;
 }
+
+/** Merge only manifest-owned PATCH keys before validating or persisting them. */
+export function mergedDeclaredSourceConfig(
+  manifest: { configFields: ReadonlyArray<{ key: string }> },
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): Record<string, unknown> {
+  return { ...current, ...declaredSourceConfig(manifest, incoming) };
+}

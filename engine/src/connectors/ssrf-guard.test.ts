@@ -6,7 +6,9 @@
  * to (the loopback servers below must see zero requests).
  */
 import assert from "node:assert/strict";
-import { createServer, type Server } from "node:http";
+import { createServer, type ClientRequest, type IncomingMessage, type Server } from "node:http";
+import { EventEmitter } from "node:events";
+import { Readable } from "node:stream";
 import { test } from "node:test";
 import {
   CONNECTOR_URL_REFUSED,
@@ -177,4 +179,33 @@ test("guardedFetch never connects to a refused target", async () => {
 test("guardedFetch refuses without resolving when DNS fails", async () => {
   await assert.rejects(guardedFetch("https://no-such-host.invalid/"), /public unicast/);
   await assert.rejects(guardedFetch("ftp://8.8.8.8/x"), /public unicast/);
+});
+
+test("guardedFetch pins the request to the public address checked before a DNS rebind", async () => {
+  let dnsReads = 0;
+  let socketAddress = "";
+  const response = Readable.from([]) as IncomingMessage;
+  Object.assign(response, { statusCode: 200, statusMessage: "OK", headers: {} });
+  const result = await guardedFetch("https://rebind.example/resource", {}, {
+    lookup: async () => {
+      dnsReads++;
+      return dnsReads === 1 ? ["93.184.216.34"] : ["10.0.0.7"];
+    },
+    request: (_url, options, onResponse) => {
+      options.lookup!("rebind.example", {}, (error, address) => {
+        if (error) throw error;
+        socketAddress = Array.isArray(address) ? address[0]!.address : address;
+      });
+      queueMicrotask(() => onResponse(response));
+      const fakeRequest = Object.assign(new EventEmitter(), {
+        write: () => true,
+        end: () => undefined as unknown as ClientRequest,
+      }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+      return fakeRequest;
+    },
+  });
+
+  assert.equal(result.status, 200);
+  assert.equal(dnsReads, 1, "connection must not re-resolve the hostname");
+  assert.equal(socketAddress, "93.184.216.34", "socket lookup must use the address that passed validation");
 });

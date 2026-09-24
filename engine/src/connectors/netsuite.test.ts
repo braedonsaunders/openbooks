@@ -43,6 +43,7 @@ const creds: NetSuiteCreds = {
   tokenKey: "token-key",
   tokenSecret: "token-secret",
 };
+const mockedTransport: typeof fetch = (input, init) => globalThis.fetch(input, init);
 
 /** Remap the allowlisted NetSuite origins onto a local test server so the
  *  client exercises its real URL construction and credential placement
@@ -90,12 +91,12 @@ test("every credentialed NetSuite request opts out of redirect-following", async
   }) as typeof fetch;
 
   try {
-    await suiteql("select * from customer", creds);
-    await netsuiteRecords("customer", creds);
-    await netsuiteRecord("customer", 42, creds);
-    await netsuiteRestlet("customscript_x", "customdeploy_x", {}, creds);
-    await netsuiteRestlet("customscript_x", "customdeploy_x", { payload: { a: 1 } }, creds, "POST");
-    await netsuiteSoapFileGet("42", creds);
+    await suiteql("select * from customer", creds, 1000, mockedTransport);
+    await netsuiteRecords("customer", creds, 1000, mockedTransport);
+    await netsuiteRecord("customer", 42, creds, mockedTransport);
+    await netsuiteRestlet("customscript_x", "customdeploy_x", {}, creds, "GET", mockedTransport);
+    await netsuiteRestlet("customscript_x", "customdeploy_x", { payload: { a: 1 } }, creds, "POST", mockedTransport);
+    await netsuiteSoapFileGet("42", creds, "2022_1", mockedTransport);
 
     assert.deepEqual(seen.map(({ url }) => new URL(url).href), [
       `${SUITETALK_ORIGIN}/services/rest/query/v1/suiteql?limit=1000&offset=0`,
@@ -166,12 +167,12 @@ test("NetSuite SuiteQL/REST calls refuse every redirect class without forwarding
   const redirectModes = remapNetsuiteOrigins(originalFetch, [SUITETALK_ORIGIN, RESTLET_ORIGIN], netsuiteOrigin);
 
   try {
-    await assert.rejects(suiteql("select * from customer", creds), /HTTP 301 redirect.*credential-capture/s);
-    await assert.rejects(netsuiteRecords("customer", creds), /redirect/i);
-    await assert.rejects(netsuiteRecord("customer", 42, creds), /redirect/i);
-    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { p: "v" }, creds), /redirect/i);
-    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST"), /redirect/i);
-    await assert.rejects(netsuiteSoapFileGet("42", creds), /redirect/i);
+    await assert.rejects(suiteql("select * from customer", creds, 1000, mockedTransport), /HTTP 301 redirect.*credential-capture/s);
+    await assert.rejects(netsuiteRecords("customer", creds, 1000, mockedTransport), /redirect/i);
+    await assert.rejects(netsuiteRecord("customer", 42, creds, mockedTransport), /redirect/i);
+    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { p: "v" }, creds, "GET", mockedTransport), /redirect/i);
+    await assert.rejects(netsuiteRestlet("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST", mockedTransport), /redirect/i);
+    await assert.rejects(netsuiteSoapFileGet("42", creds, "2022_1", mockedTransport), /redirect/i);
 
     // Exactly one hop per call reaches the allowlisted NetSuite origin —
     // never a second, followed hop — proving each refusal is terminal rather
@@ -197,6 +198,13 @@ test("NetSuite SuiteQL/REST calls refuse every redirect class without forwarding
     await close(redirector);
     await close(attacker);
   }
+});
+
+test("the default NetSuite transport refuses a loopback host before sending credentials", async () => {
+  await assert.rejects(
+    netsuiteRecord("customer", 42, { ...creds, host: "http://127.0.0.1:9" }),
+    /public unicast/,
+  );
 });
 
 test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant origin", async () => {
@@ -261,7 +269,7 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
   remapNetsuiteOrigins(originalFetch, [RESTLET_ORIGIN], netsuiteOrigin);
 
   try {
-    const rows = await suiteql<{ id: string; entityid: string }>("select id, entityid from customer", { ...creds, host: netsuiteOrigin });
+    const rows = await suiteql<{ id: string; entityid: string }>("select id, entityid from customer", { ...creds, host: netsuiteOrigin }, 1000, mockedTransport);
     assert.deepEqual(rows, [
       { id: "1", entityid: "A" },
       { id: "2", entityid: "B" },
@@ -269,10 +277,10 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
     ]);
     assert.equal(suiteqlPages, 2, "pagination must follow hasMore with limit/offset");
 
-    const collection = await netsuiteRecords<{ id: string }>("customer", { ...creds, host: netsuiteOrigin });
+    const collection = await netsuiteRecords<{ id: string }>("customer", { ...creds, host: netsuiteOrigin }, 1000, mockedTransport);
     assert.deepEqual(collection, [{ id: "77", entityid: "Acme" }]);
 
-    const record = await netsuiteRecord<{ id: string }>("customer", "77", { ...creds, host: netsuiteOrigin });
+    const record = await netsuiteRecord<{ id: string }>("customer", "77", { ...creds, host: netsuiteOrigin }, mockedTransport);
     assert.equal(record.id, "77");
 
     const restletGet = await netsuiteRestlet<{ script: string; got: string }>(
@@ -280,13 +288,15 @@ test("valid SuiteQL and SuiteTalk REST calls still succeed against a compliant o
       "customdeploy_x",
       { p: "v" },
       creds,
+      "GET",
+      mockedTransport,
     );
     assert.deepEqual(restletGet, { script: "customscript_x", got: "v" });
 
-    const restletPost = await netsuiteRestlet<{ posted: unknown }>("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST");
+    const restletPost = await netsuiteRestlet<{ posted: unknown }>("customscript_x", "customdeploy_x", { a: 1 }, creds, "POST", mockedTransport);
     assert.deepEqual(restletPost, { posted: { a: 1 } });
 
-    const file = await netsuiteSoapFileGet("42", { ...creds, host: netsuiteOrigin });
+    const file = await netsuiteSoapFileGet("42", { ...creds, host: netsuiteOrigin }, "2022_1", mockedTransport);
     assert.equal(file.name, "invoice.pdf");
     assert.deepEqual(file.bytes, Buffer.from("pdf-bytes"));
 
