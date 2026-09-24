@@ -40,6 +40,7 @@ import {
 } from '@/lib/cash/core'
 import { presentationCurrency } from '@/lib/fx-presentation'
 import { WIDGETS } from './_widget-registry'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * The money readers the dashboard loads through, injectable so tests can
@@ -337,6 +338,9 @@ export async function loadDashboardMetrics(
   // a caller scoped to some subsidiaries tiles exactly what the hubs show
   // them, never the org-wide total.
   const subIds = authz.allowedSubsidiaryIds === null ? undefined : [...authz.allowedSubsidiaryIds]
+  const totalsGlScope = subsidiaryVisibleFilter(sql`g.subsidiary_id`, authz.allowedSubsidiaryIds)
+  const totalsAccountScope = subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })
+  const totalsEntryScope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds)
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
   const wantCash = need('cashBalance')
   const wantMoney = need('baseCurrency')
@@ -353,10 +357,10 @@ export async function loadDashboardMetrics(
     wantTotals
       ? db.execute<TotalsRow>(sql`
       select
-        (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
-        (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
-        (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = ${today}) as entries_today,
-        (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
+        (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId} ${totalsGlScope}) as journal_lines,
+        (select count(*) from accounts a where a.is_active and a.org_id = ${orgId} ${totalsAccountScope}) as accounts,
+        (select count(*) from journal_entries e where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.posting_date = ${today} ${totalsEntryScope}) as entries_today,
+        (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId} ${totalsGlScope}) as ledger_sum
     `)
       : Promise.resolve({ rows: [{ journal_lines: 0, accounts: 0, entries_today: 0, ledger_sum: '0' }] }),
     // Cash at bank is the cockpit's per-account reader, summed — the same
