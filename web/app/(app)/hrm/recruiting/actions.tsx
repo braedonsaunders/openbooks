@@ -713,7 +713,7 @@ export function ScorecardFormIsland({
   labels,
 }: {
   interviewId: string
-  labels: { overall: string; submit: string; failed: string }
+  labels: { overall: string; submit: string; failed: string; ratings: string; privateNotes: string; sharedNotes: string; ratingOptions: Record<(typeof RATING_KEYS)[number], string> }
 }) {
   const refresh = useRefresh()
   const [overall, setOverall] = useState<string>('yes')
@@ -753,15 +753,15 @@ export function ScorecardFormIsland({
         <Select value={overall} onChange={(event) => setOverall(event.target.value)}>
           {RATING_KEYS.map((key) => (
             <option key={key} value={key}>
-              {key}
+              {labels.ratingOptions[key]}
             </option>
           ))}
         </Select>
       </div>
       <div>
-        <Label>ratings (attribute id → key)</Label>
+        <Label>{labels.ratings}</Label>
         <Textarea
-          aria-label="ratings"
+          aria-label={labels.ratings}
           placeholder='{"<attribute-id>": "yes"}'
           value={JSON.stringify(ratings)}
           onChange={(event) => {
@@ -774,11 +774,11 @@ export function ScorecardFormIsland({
         />
       </div>
       <div>
-        <Label>private notes</Label>
+        <Label>{labels.privateNotes}</Label>
         <Textarea value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />
       </div>
       <div>
-        <Label>shared notes</Label>
+        <Label>{labels.sharedNotes}</Label>
         <Textarea value={sharedNotes} onChange={(event) => setSharedNotes(event.target.value)} />
       </div>
       {error ? (
@@ -801,7 +801,7 @@ export function SlotProposeIsland({
 }: {
   interviewId: string
   pools: { id: string; name: string; windowCount: number }[]
-  labels: { submit: string; failed: string; proposeFromPool: string }
+  labels: { submit: string; failed: string; proposeFromPool: string; starts: string; ends: string; timezone: string; bookingLink: string }
 }) {
   const refresh = useRefresh()
   const [startsAt, setStartsAt] = useState('')
@@ -874,16 +874,16 @@ export function SlotProposeIsland({
     ) : null}
     <form onSubmit={(event) => void submit(event)} className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Input aria-label="starts" type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
-        <Input aria-label="ends" type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
-        <Input aria-label="timezone" value={timezone} onChange={(event) => setTimezone(event.target.value)} />
+        <Input aria-label={labels.starts} type="datetime-local" value={startsAt} onChange={(event) => setStartsAt(event.target.value)} />
+        <Input aria-label={labels.ends} type="datetime-local" value={endsAt} onChange={(event) => setEndsAt(event.target.value)} />
+        <Input aria-label={labels.timezone} value={timezone} onChange={(event) => setTimezone(event.target.value)} />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
           {error}
         </p>
       ) : null}
-      {link ? <p className="text-xs text-slate-500">booking link: {link}</p> : null}
+      {link ? <p className="text-xs text-slate-500">{labels.bookingLink}: {link}</p> : null}
       <Button size="sm" type="submit" disabled={busy || !startsAt || !endsAt}>
         {labels.submit}
       </Button>
@@ -898,7 +898,7 @@ export function OfferSigningIsland({
   labels,
 }: {
   offerId: string
-  labels: { sendLink: string; void: string; failed: string }
+  labels: { sendLink: string; void: string; failed: string; email: string; name: string; reason: string }
 }) {
   const refresh = useRefresh()
   const [email, setEmail] = useState('')
@@ -927,14 +927,14 @@ export function OfferSigningIsland({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap gap-2">
-        <Input aria-label="email" placeholder="email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        <Input aria-label="name" placeholder="name" value={name} onChange={(event) => setName(event.target.value)} />
+        <Input aria-label={labels.email} placeholder={labels.email} value={email} onChange={(event) => setEmail(event.target.value)} />
+        <Input aria-label={labels.name} placeholder={labels.name} value={name} onChange={(event) => setName(event.target.value)} />
         <Button size="sm" disabled={busy || !email} onClick={() => void act({ action: 'send-link', candidateEmail: email, candidateName: name || undefined })}>
           {labels.sendLink}
         </Button>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Input aria-label="reason" placeholder="reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+        <Input aria-label={labels.reason} placeholder={labels.reason} value={reason} onChange={(event) => setReason(event.target.value)} />
         <Button size="sm" variant="outline" disabled={busy || !reason.trim()} onClick={() => void act({ action: 'void', reason: reason.trim() })}>
           {labels.void}
         </Button>

@@ -786,7 +786,21 @@
       "tagsLabel": "Marcadores (separados por vírgula)",
       "versionHistory": "Versões",
       "versions": "{count} versões",
-      "voidSignature": "Anular assinatura"
+      "voidSignature": "Anular assinatura",
+      "ratingStrongNo": "Certamente não",
+      "ratingNo": "Não",
+      "ratingYes": "Sim",
+      "ratingStrongYes": "Certamente sim",
+      "ratings": "Avaliações (ID do atributo para avaliação)",
+      "privateNotes": "Notas privadas",
+      "sharedNotes": "Notas compartilhadas",
+      "starts": "Início",
+      "ends": "Fim",
+      "timezone": "Fuso horário",
+      "bookingLink": "Link de agendamento",
+      "email": "E-mail",
+      "name": "Nome",
+      "reason": "Motivo"
     },
     "posting": {
       "closed": "Fechada",

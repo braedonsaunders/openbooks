@@ -842,7 +842,21 @@
       "tagsLabel": "Tags (comma separated)",
       "versionHistory": "Versions",
       "versions": "{count} versions",
-      "voidSignature": "Void signature"
+      "voidSignature": "Void signature",
+      "ratingStrongNo": "Strong no",
+      "ratingNo": "No",
+      "ratingYes": "Yes",
+      "ratingStrongYes": "Strong yes",
+      "ratings": "Ratings (attribute ID to rating)",
+      "privateNotes": "Private notes",
+      "sharedNotes": "Shared notes",
+      "starts": "Starts",
+      "ends": "Ends",
+      "timezone": "Time zone",
+      "bookingLink": "Booking link",
+      "email": "Email",
+      "name": "Name",
+      "reason": "Reason"
     },
     "posting": {
       "closed": "Closed",

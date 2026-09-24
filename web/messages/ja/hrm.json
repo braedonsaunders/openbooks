@@ -786,7 +786,21 @@
       "tagsLabel": "タグ（カンマ区切り）",
       "versionHistory": "版履歴",
       "versions": "{count}版",
-      "voidSignature": "署名を無効化"
+      "voidSignature": "署名を無効化",
+      "ratingStrongNo": "強く反対",
+      "ratingNo": "反対",
+      "ratingYes": "賛成",
+      "ratingStrongYes": "強く賛成",
+      "ratings": "評価（属性IDと評価）",
+      "privateNotes": "非公開メモ",
+      "sharedNotes": "共有メモ",
+      "starts": "開始",
+      "ends": "終了",
+      "timezone": "タイムゾーン",
+      "bookingLink": "予約リンク",
+      "email": "メールアドレス",
+      "name": "名前",
+      "reason": "理由"
     },
     "posting": {
       "closed": "終了",

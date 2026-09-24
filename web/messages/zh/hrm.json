@@ -786,7 +786,21 @@
       "tagsLabel": "标签（逗号分隔）",
       "versionHistory": "版本历史",
       "versions": "{count}个版本",
-      "voidSignature": "作废签署"
+      "voidSignature": "作废签署",
+      "ratingStrongNo": "强烈反对",
+      "ratingNo": "反对",
+      "ratingYes": "赞成",
+      "ratingStrongYes": "强烈赞成",
+      "ratings": "评分（属性 ID 对应评分）",
+      "privateNotes": "私人备注",
+      "sharedNotes": "共享备注",
+      "starts": "开始",
+      "ends": "结束",
+      "timezone": "时区",
+      "bookingLink": "预约链接",
+      "email": "电子邮件",
+      "name": "姓名",
+      "reason": "原因"
     },
     "posting": {
       "closed": "已关闭",

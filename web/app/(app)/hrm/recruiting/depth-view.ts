@@ -341,14 +341,14 @@ export async function loadInterviewDrawer(
         id: row.id,
         startsAt: row.startsAt.slice(0, 16).replace('T', ' '),
         endsAt: row.endsAt.slice(0, 16).replace('T', ' '),
-        kind: row.kind,
+        kind: t(`recruiting.interviewKind.${row.kind}`),
       })),
       mine: cards.mine
-        ? { id: cards.mine.id, overall: cards.mine.overall, submittedAt: cards.mine.submittedAt }
+        ? { id: cards.mine.id, overall: translateRating(t, cards.mine.overall), submittedAt: cards.mine.submittedAt }
         : null,
       others: cards.others.map((card) => ({
         interviewer: card.interviewerName,
-        overall: card.overall,
+        overall: translateRating(t, card.overall),
         submittedAt: card.submittedAt,
       })),
       blinded: cards.blinded,
@@ -367,11 +367,37 @@ export async function loadInterviewDrawer(
         submit: t('recruiting.depth.submitScorecard'),
         failed: t('recruiting.depth.failed'),
         overall: t('recruiting.depth.overall'),
+        ratings: t('recruiting.depth.ratings'),
+        privateNotes: t('recruiting.depth.privateNotes'),
+        sharedNotes: t('recruiting.depth.sharedNotes'),
+        ratingStrongNo: t('recruiting.depth.ratingStrongNo'),
+        ratingNo: t('recruiting.depth.ratingNo'),
+        ratingYes: t('recruiting.depth.ratingYes'),
+        ratingStrongYes: t('recruiting.depth.ratingStrongYes'),
+        starts: t('recruiting.depth.starts'),
+        ends: t('recruiting.depth.ends'),
+        timezone: t('recruiting.depth.timezone'),
+        bookingLink: t('recruiting.depth.bookingLink'),
+        email: t('recruiting.depth.email'),
+        name: t('recruiting.depth.name'),
+        reason: t('recruiting.depth.reason'),
       },
     }
   } catch {
     return null
   }
+}
+
+function translateRating(t: T, rating: string | null): string | null {
+  if (!rating) return null
+  const keys: Record<string, string> = {
+    strong_no: 'ratingStrongNo',
+    no: 'ratingNo',
+    yes: 'ratingYes',
+    strong_yes: 'ratingStrongYes',
+  }
+  const key = keys[rating]
+  return key ? t(`recruiting.depth.${key}`) : rating
 }
 
 export interface OfferDrawerExtra {
@@ -401,6 +427,9 @@ export async function loadOfferDrawerExtra(
         sendLink: t('recruiting.depth.sendLink'),
         void: t('recruiting.depth.voidSignature'),
         failed: t('recruiting.depth.failed'),
+        email: t('recruiting.depth.email'),
+        name: t('recruiting.depth.name'),
+        reason: t('recruiting.depth.reason'),
       },
     }
   } catch {

@@ -786,7 +786,21 @@
       "tagsLabel": "Stichwörter (kommagetrennt)",
       "versionHistory": "Versionen",
       "versions": "{count} Versionen",
-      "voidSignature": "Signatur zurückziehen"
+      "voidSignature": "Signatur zurückziehen",
+      "ratingStrongNo": "Auf keinen Fall",
+      "ratingNo": "Nein",
+      "ratingYes": "Ja",
+      "ratingStrongYes": "Auf jeden Fall",
+      "ratings": "Bewertungen (Attribut-ID zu Bewertung)",
+      "privateNotes": "Private Notizen",
+      "sharedNotes": "Geteilte Notizen",
+      "starts": "Beginn",
+      "ends": "Ende",
+      "timezone": "Zeitzone",
+      "bookingLink": "Buchungslink",
+      "email": "E-Mail",
+      "name": "Name",
+      "reason": "Grund"
     },
     "posting": {
       "closed": "Geschlossen",

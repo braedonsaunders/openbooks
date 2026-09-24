@@ -786,7 +786,21 @@
       "tagsLabel": "Etiquetas (separadas por comas)",
       "versionHistory": "Versiones",
       "versions": "{count} versiones",
-      "voidSignature": "Anular firma"
+      "voidSignature": "Anular firma",
+      "ratingStrongNo": "Rotundamente no",
+      "ratingNo": "No",
+      "ratingYes": "Sí",
+      "ratingStrongYes": "Rotundamente sí",
+      "ratings": "Valoraciones (ID de atributo a valoración)",
+      "privateNotes": "Notas privadas",
+      "sharedNotes": "Notas compartidas",
+      "starts": "Inicio",
+      "ends": "Fin",
+      "timezone": "Zona horaria",
+      "bookingLink": "Enlace de reserva",
+      "email": "Correo electrónico",
+      "name": "Nombre",
+      "reason": "Motivo"
     },
     "posting": {
       "closed": "Cerrada",
