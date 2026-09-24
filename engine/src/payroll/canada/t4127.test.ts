@@ -1,13 +1,4 @@
-/**
- * T4127 conformance tests.
- *
- * External goldens: the published CRA claim-code K1/K1P values (Chapter 8
- * tables, 122nd/123rd editions) and the Table 6.1 CPP exemptions — those
- * numbers come straight off canada.ca, so any drift in our constants or
- * credit arithmetic fails loudly. The full-stub cases are hand-worked
- * through the guide's formulas step by step (round at each parenthesis),
- * independent of the engine code.
- */
+/** T4127 conformance tests against CRA tables and independently worked cases. */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cmp } from "../../money/money.ts";
@@ -19,35 +10,38 @@ import { claimCodeAmount, RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate } from
 
 const money = (value: string) => `${value}00`; // "254.83" -> "254.8300"
 
-test("Ontario statutory withholding applies eligible dependants from the effective TD1ON", async () => {
-  const certificate = payrollCertificate("CA", "ca_td1_ON");
-  const tax = async (answers?: Record<string, string>) => {
+test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purchases", async () => {
+  const tax = async (region: "ON" | "QC", answers?: Record<string, string>) => {
+    const certificate = payrollCertificate("CA", `ca_td1_${region}`);
     const row: StoredCertificate | null = answers ? {
-      certificateKey: certificate.key, region: "ON", subRegion: null, answers,
+      certificateKey: certificate.key, region, subRegion: null, answers,
       effectiveFrom: "2026-01-01", supersededOn: null,
     } : null;
     const resolved = resolveCertificate({ certificate, stored: row ? [row] : [],
       profile: { federal_claim_code: "1", provincial_claim_code: "1" }, asOf: "2026-02-13" });
-    let incomeTax = "";
+    const taxes: Record<string, string> = {};
     await computeCaStatutory({ tx: { execute: async () => ({ rows: [{
       pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",
       qpip_employer: "0", non_periodic: "0", f5b: "0", qc_csb: "0",
     }] }) } as never, orgId: "org", documentId: "run", employeePartyId: "employee",
-    employeeName: "Test Employee", taxYear: 2026, country: "CA", region: "ON",
+    employeeName: "Test Employee", taxYear: 2026, country: "CA", region,
     run: { pay_date: "2026-02-13" }, emp: { federal_claim_code: "1", provincial_claim_code: "1" },
     filingAccountId: null, periodsPerYear: 26, income: "1100.0000", nonPeriodic: "0.0000",
     pensionable: "1100.0000", insurable: "1100.0000", deduction: () => "0.0000",
     pushStatutory: (slot: string, _kind: string, _label: string, amount: string) => {
-      if (slot === "income_tax") incomeTax = amount;
+      taxes[slot] = amount;
     }, storedCertificates: row ? [row] : [],
     certificateFor: (key: string) => key === certificate.key ? resolved : null,
     bool: () => false, assertRegionSupported: () => undefined,
     employerLevies: { wcbAmount: "0", wcbAssessable: "0", ehtAmount: "0", ehtEarnings: "0",
       hsfAmount: "0", hsfEarnings: "0" },
     } as never);
-    return incomeTax;
+    return taxes;
   };
-  assert.ok(cmp(await tax({ disabled_dependants: "0", dependants_under_19: "1" }), await tax()) < 0);
+  assert.ok(cmp((await tax("ON", { disabled_dependants: "0", dependants_under_19: "1" })).income_tax,
+    (await tax("ON")).income_tax) < 0);
+  const withFunds = await tax("QC", { ftq_shares_per_period: "100", fondaction_shares_per_period: "150" });
+  assert.deepEqual([withFunds.income_tax, withFunds.qc_income_tax], ["9.6900", "13.9500"]);
 });
 
 test("edition resolution: 122nd Jan–Jun, 123rd Jul–Dec, refuses unknown years", () => {

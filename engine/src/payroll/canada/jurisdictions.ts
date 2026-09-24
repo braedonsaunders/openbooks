@@ -188,7 +188,7 @@ function provincialCertificate(province: string): PayrollCertificate {
     // Ontario's TD1ON additionally has employee-filed dependant counts, so it
     // is served through certificate rows while the existing columns remain
     // fallback reads for its original claim fields.
-    storage: ontario ? "certificate_rows" : "profile_columns",
+    storage: ontario || quebec ? "certificate_rows" : "profile_columns",
     fields: [
       // TP-1015.3-V identifies the claim by an AMOUNT, and the Québec
       // calculation (canada/quebec/tp1015.ts) reads only that amount — the
@@ -240,6 +240,22 @@ function provincialCertificate(province: string): PayrollCertificate {
           help: "The number of eligible dependants under age 19 claimed on TD1ON. This count feeds "
             + "the Ontario tax reduction (T4127 factor Y) and is effective-dated with the "
             + "employee's filed TD1ON.",
+        },
+      ] : []),
+      ...(quebec ? [
+        {
+          key: "ftq_shares_per_period",
+          label: "FTQ class A share purchases per pay period",
+          kind: "amount" as const, decimals: 4, min: "0",
+          help: "Employee-authorized per-period purchase amount for eligible FTQ class A shares, "
+            + "where the employee is the first purchaser. TP-1015 factors Q and LCF use this amount.",
+        },
+        {
+          key: "fondaction_shares_per_period",
+          label: "Fondaction class A/B share purchases per pay period",
+          kind: "amount" as const, decimals: 4, min: "0",
+          help: "Employee-authorized per-period purchase amount for eligible Fondaction class A or B "
+            + "shares, where the employee is the first purchaser. TP-1015 factors Q1 and LCF use this amount.",
         },
       ] : []),
     ],
