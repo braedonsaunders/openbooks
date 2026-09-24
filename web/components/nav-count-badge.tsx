@@ -22,15 +22,21 @@ export function NavCountBadge({ source }: { source: string }) {
     async function load() {
       try {
         const res = await fetch(source, { headers: { Accept: 'application/json' } })
-        if (!res.ok) return
+        if (!res.ok) {
+          // The route is down or refusing: clear any previous count rather
+          // than badge a stale number nobody can verify.
+          if (alive) setCount(null)
+          return
+        }
         const data = await res.json().catch(() => null)
         const next = typeof data?.count === 'number' ? data.count : null
-        if (alive && next !== null) {
+        if (alive) {
           setCount(next)
-          setPartial(data?.partial === true)
+          setPartial(next !== null && data?.partial === true)
         }
       } catch {
-        // Unreachable route: stay silent rather than badge a guess.
+        // Unreachable route: clear rather than badge a guess.
+        if (alive) setCount(null)
       }
     }
     load()

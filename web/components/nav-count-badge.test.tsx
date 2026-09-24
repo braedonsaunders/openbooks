@@ -75,3 +75,68 @@ test("F5-9: the inbox badge aria-label pluralizes in the session locale", async 
     await one.done();
   }
 });
+
+const messagesEn = (await import("../messages/en")).default;
+
+async function renderBadgeWith(fetchImpl: typeof fetch, source: string) {
+  const prior = globalThis.fetch;
+  globalThis.fetch = fetchImpl;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  const show = async (next: string) => {
+    await act(async () => {
+      root.render(
+        <NextIntlClientProvider locale="en" messages={messagesEn} timeZone="UTC">
+          <NavCountBadge source={next} />
+        </NextIntlClientProvider>,
+      );
+      await tick();
+      await tick();
+    });
+  };
+  await show(source);
+  return {
+    host,
+    show,
+    done: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+      globalThis.fetch = prior;
+    },
+  };
+}
+
+test("B2-NAV-1: the badge clears when the count route errors after a good read", async () => {
+  const good = (async () => Response.json({ count: 5 })) as typeof fetch;
+  const bad = (async () => new Response("boom", { status: 500 })) as typeof fetch;
+  const badge = await renderBadgeWith(good, "/api/count-good");
+  try {
+    assert.match(badge.host.innerHTML, /5 items waiting/, "a live count badges");
+    // Switching source re-runs the load; the erroring route must clear
+    // the stale 5 rather than keep badging it.
+    globalThis.fetch = bad;
+    await badge.show("/api/count-bad");
+    assert.equal(badge.host.innerHTML, "", "an erroring route clears the badge");
+  } finally {
+    await badge.done();
+  }
+});
+
+test("B2-NAV-1: the badge clears when the count route is unreachable", async () => {
+  const good = (async () => Response.json({ count: 3 })) as typeof fetch;
+  const down = (async () => {
+    throw new Error("network down");
+  }) as typeof fetch;
+  const badge = await renderBadgeWith(good, "/api/count-good");
+  try {
+    assert.match(badge.host.innerHTML, /3 items waiting/);
+    globalThis.fetch = down;
+    await badge.show("/api/count-down");
+    assert.equal(badge.host.innerHTML, "", "an unreachable route clears the badge");
+  } finally {
+    await badge.done();
+  }
+});
