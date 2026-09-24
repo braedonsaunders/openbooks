@@ -8,7 +8,7 @@ import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhe
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import { isUuid } from '../../../../../lib/list-params'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope, subsidiariesInScope } from '../../../../../lib/authz'
 import { acquireFeatureGateLock } from '../../../../../lib/features'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -84,6 +84,34 @@ export async function POST(req: Request) {
       }
     }
     try {
+      if (gate.allowedSubsidiaryIds) {
+        if (rates.length === 0) {
+          // No explicit rates publishes EVERY department via the live
+          // engine: an org-wide write, so publish-all needs unrestricted
+          // scope.
+          const unrestricted = guardUnrestrictedScope(gate)
+          if (unrestricted) return unrestricted
+        } else {
+          // Every department in the publish must sit in the actor's scope
+          // (departments.subsidiary_id): a restricted admin cannot replace
+          // another entity's effective-dated rates.
+          const wanted = [...new Set(rates.map((r) => r.departmentId))]
+          const found = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+            select id, subsidiary_id from departments
+             where org_id = ${orgId} and id = any(${`{${wanted.join(',')}}`}::uuid[])
+          `)).rows
+          // Unknown and out-of-scope departments answer identically: the two
+          // cases are indistinguishable, so a restricted caller cannot probe
+          // another subsidiary's departments by id.
+          if (found.length !== wanted.length
+            || !subsidiariesInScope(gate, found.map((row) => row.subsidiary_id))) {
+            return NextResponse.json(
+              { error: 'unknown or out-of-scope department — publish only departments in your visible subsidiaries or ask an administrator for access' },
+              { status: 422 },
+            )
+          }
+        }
+      }
       const result = await publishOverheadRates(orgId, gate.user.id, effectiveFrom, rates.length ? rates : undefined)
       if (result.published === 0) return NextResponse.json({ error: 'no rates to publish' }, { status: 400 })
       return NextResponse.json({ ok: true, published: result.published })
