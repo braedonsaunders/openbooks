@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { redirect } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import {
   grid,
   page,
@@ -82,6 +82,7 @@ export interface AccountingData {
 }
 
 export async function loadAccounting(): Promise<AccountingData> {
+  const format = await getFormatter()
   const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
@@ -193,12 +194,12 @@ export async function loadAccounting(): Promise<AccountingData> {
     closeValue: data.close.progressPct === null ? t('home.vitals.noClose') : `${data.close.progressPct}%`,
     closeSub: data.close.periodName ? t('home.vitals.closeSub', { period: data.close.periodName }) : t('home.vitals.noCloseSub'),
     draftLabel: t('home.vitals.draftJournals'),
-    draftValue: data.draftJournals.toLocaleString(),
+    draftValue: format.number(data.draftJournals),
     draftSub: t('home.vitals.draftJournalsSub', { posted: data.postedJournals7d }),
     draftAccent: data.draftJournals > 0 ? 'amber' : 'emerald',
     draftTone: data.draftJournals > 0 ? 'warning' : 'positive',
     findingsLabel: t('home.vitals.openFindings'),
-    findingsValue: data.workItems.total.toLocaleString(),
+    findingsValue: format.number(data.workItems.total),
     findingsSub: t('home.vitals.openFindingsSub', { critical: data.workItems.critical }),
     findingsAccent: data.workItems.critical > 0 ? 'red' : data.workItems.total > 0 ? 'amber' : 'emerald',
     findingsTone: data.workItems.critical > 0 ? 'negative' : data.workItems.total > 0 ? 'warning' : 'positive',

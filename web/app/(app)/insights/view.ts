@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { allowedSources, getSource } from '@openbooks/analytics'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -90,10 +90,11 @@ export interface InsightsData {
 export async function loadInsights(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<InsightsData> {
-  const [t, tCommon, tCatalog] = await Promise.all([
+  const [t, tCommon, tCatalog, format] = await Promise.all([
     getTranslations('insights'),
     getTranslations('common'),
     getTranslations('reports'),
+    getFormatter(),
   ])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
@@ -185,7 +186,7 @@ export async function loadInsights(
         vizLabel: viz ? t(viz.labelKey) : String(row.viz_type),
         statusLabel: row.status === 'published' ? t('status.published') : tCommon('status.draft'),
         statusVariant: row.status === 'published' ? 'success' : 'outline',
-        updated: new Date(String(row.updated_at)).toLocaleDateString(),
+        updated: format.dateTime(new Date(String(row.updated_at)), { dateStyle: 'medium' }),
       }
     }),
     total: filteredTotal,

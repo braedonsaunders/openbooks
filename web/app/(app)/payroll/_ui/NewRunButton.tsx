@@ -62,16 +62,16 @@ export function runPayload(
  * non-JSON error body (a proxy page, an empty 502) must surface the
  * fallback with the status, never a SyntaxError from `res.json()`.
  */
-export async function postRun(body: Record<string, unknown>): Promise<string> {
+export async function postRun(body: Record<string, unknown>, failedMessage: string): Promise<string> {
   const res = await fetch('/api/payroll/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed to create the pay run'))
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, failedMessage))
   const j = (await res.json()) as { documentId?: string }
   if (typeof j.documentId !== 'string' || j.documentId === '') {
-    throw new Error('failed to create the pay run (status 200)')
+    throw new Error(`${failedMessage} (status 200)`)
   }
   return j.documentId
 }
@@ -88,7 +88,7 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
       onClick={async () => {
         setBusy(true)
         try {
-          router.push(`/payroll/runs/${await postRun({ payScheduleId })}`)
+          router.push(`/payroll/runs/${await postRun({ payScheduleId }, t('newRun.createFailed'))}`)
         } catch (e) {
           toast.error((e as Error).message)
           setBusy(false)
@@ -153,7 +153,10 @@ export function NewRunButton({
     if (!scheduleId) return
     setBusy(true)
     try {
-      const documentId = await postRun(runPayload(scheduleId, shown, runType, paidEmployees, touched))
+      const documentId = await postRun(
+        runPayload(scheduleId, shown, runType, paidEmployees, touched),
+        t('newRun.createFailed'),
+      )
       setOpen(false)
       router.push(`/payroll/runs/${documentId}`)
     } catch (e) {

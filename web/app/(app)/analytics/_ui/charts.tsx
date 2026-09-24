@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { InsightChart } from '@openbooks/analytics/viz'
 import { neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
 import { boundChartNumber, toChartNumber, useAnalyticsMoney } from './format'
@@ -99,7 +100,8 @@ export function TrendChart({
   format?: 'money' | 'count'
 }) {
   const money = useChartMoney()
-  const count = (value: number | string) => Number(value).toLocaleString()
+  const { number } = useViewerFormat()
+  const count = (value: number | string) => number(Number(value))
   const plain = (value: number | string) => (format === 'count' ? count(value) : money(value))
   const option: EChartsOption = {
     grid: baseGrid,

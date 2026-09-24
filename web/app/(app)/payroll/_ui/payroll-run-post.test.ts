@@ -15,7 +15,7 @@ function stubFetch(responder: () => Response | Promise<Response>): () => void {
   }
 }
 
-test('a non-JSON 502 surfaces the fallback with the status, never a SyntaxError', async () => {
+test('a non-JSON 502 surfaces the localized fallback with the status, never a SyntaxError', async () => {
   const restore = stubFetch(
     () => new Response('<html><body>Bad Gateway</body></html>', {
       status: 502,
@@ -24,10 +24,10 @@ test('a non-JSON 502 surfaces the fallback with the status, never a SyntaxError'
   )
   try {
     await assert.rejects(
-      postRun({ payScheduleId: 'schedule-1' }),
+      postRun({ payScheduleId: 'schedule-1' }, 'Impossible de créer la paie.'),
       (error: unknown) => {
         assert.ok(error instanceof Error)
-        assert.equal(error.message, 'failed to create the pay run (status 502)')
+        assert.equal(error.message, 'Impossible de créer la paie. (status 502)')
         assert.doesNotMatch(error.message, /JSON|SyntaxError|json/)
         return true
       },
@@ -43,7 +43,7 @@ test('a named 422 refusal surfaces the server message', async () => {
   )
   try {
     await assert.rejects(
-      postRun({ payScheduleId: 'schedule-1' }),
+      postRun({ payScheduleId: 'schedule-1' }, 'Échec de création.'),
       (error: unknown) => {
         assert.ok(error instanceof Error)
         assert.equal(error.message, 'the period overlaps an existing run')
@@ -58,7 +58,23 @@ test('a named 422 refusal surfaces the server message', async () => {
 test('a successful create returns the document id', async () => {
   const restore = stubFetch(() => Response.json({ documentId: 'doc-9' }))
   try {
-    assert.equal(await postRun({ payScheduleId: 'schedule-1' }), 'doc-9')
+    assert.equal(await postRun({ payScheduleId: 'schedule-1' }, 'Échec de création.'), 'doc-9')
+  } finally {
+    restore()
+  }
+})
+
+test('a malformed success body uses the localized failure message', async () => {
+  const restore = stubFetch(() => Response.json({ ok: true }))
+  try {
+    await assert.rejects(
+      postRun({ payScheduleId: 'schedule-1' }, 'Impossible de créer la paie.'),
+      (error: unknown) => {
+        assert.ok(error instanceof Error)
+        assert.equal(error.message, 'Impossible de créer la paie. (status 200)')
+        return true
+      },
+    )
   } finally {
     restore()
   }

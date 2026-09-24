@@ -109,6 +109,36 @@ export function formatPercent01(fraction: number, locale: string, maximumFractio
 }
 
 /**
+ * Shared viewer-facing formatting primitives. Locale and time zone are
+ * required so UI call sites cannot inherit the host machine's settings.
+ */
+export function viewerDate(
+  value: Date | string,
+  locale: string,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium" },
+): string {
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: options.timeZone ?? timeZone }).format(
+    typeof value === "string" ? new Date(value) : value,
+  );
+}
+
+export function viewerDateTime(
+  value: Date | string,
+  locale: string,
+  timeZone: string,
+  options: Intl.DateTimeFormatOptions = { dateStyle: "medium", timeStyle: "short" },
+): string {
+  return new Intl.DateTimeFormat(locale, { ...options, timeZone: options.timeZone ?? timeZone }).format(
+    typeof value === "string" ? new Date(value) : value,
+  );
+}
+
+export function viewerNumber(value: number, locale: string, options?: Intl.NumberFormatOptions): string {
+  return new Intl.NumberFormat(locale, options).format(value);
+}
+
+/**
  * A civil YYYY-MM-DD date as a medium date in the operator locale, anchored
  * at UTC noon so the civil day never shifts with the server timezone.
  */

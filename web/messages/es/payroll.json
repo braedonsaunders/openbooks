@@ -402,6 +402,7 @@
     "schedule": "Calendario de nómina",
     "noSchedules": "Sin calendarios de nómina activos",
     "create": "Nuevo ciclo de nómina",
+    "createFailed": "No se pudo crear el ciclo de nómina.",
     "description": "Confirme el período que cubre este ciclo. El siguiente período del calendario viene precargado; cambie las fechas para un ciclo fuera de ciclo o de recuperación.",
     "periodStart": "Inicio del período",
     "periodEnd": "Fin del período",

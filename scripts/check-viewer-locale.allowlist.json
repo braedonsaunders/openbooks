@@ -58,10 +58,5 @@
     "path": "web/lib/tax-form-facsimile-html.ts",
     "fn": "formatExactFacsimileValue",
     "reason": "government facsimile convention (2-decimal amounts with thousands separators, negatives in parentheses) — localizing breaks facsimile fidelity"
-  },
-  {
-    "path": "web/app/(app)/dashboard/_greeting.ts",
-    "fn": "hourInZone",
-    "reason": "numeric hour extraction parsed by Number() for the greeting stem — a non-latin-digit locale would fail the parse; not display formatting"
   }
 ]

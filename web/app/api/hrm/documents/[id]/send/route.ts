@@ -28,7 +28,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       actorId: gate.user.id,
       appBaseUrl: resolveAppBaseUrl(req),
       docTitle: document.title,
-      expiresDate: document.expiresAt ?? undefined,
+      expiresDate: document.expiresAt?.toISOString(),
       recipients: deliveries,
     });
     return NextResponse.json({

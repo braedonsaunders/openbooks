@@ -7,6 +7,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { SortTh } from '../../../../components/sortable-th'
 import { asDate } from '../../../../lib/platform-console'
 import type { PlatformEmail } from '../../../../lib/platform-admin'
+import { ViewerDateTime } from '../../../../components/viewer-format'
 
 /**
  * Composite cells in the platform email log.
@@ -166,10 +167,7 @@ export function EmailLogList({
                       <EmailEvidenceCell summary={row.provider ?? 'unknown provider'} error={row.errorMessage ?? ''} />
                     </TableCell>
                     <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                      {(asDate(row.createdAt) ?? new Date()).toLocaleString(undefined, {
-                        dateStyle: 'medium',
-                        timeStyle: 'short',
-                      })}
+                      <ViewerDateTime value={asDate(row.createdAt) ?? new Date()} />
                     </TableCell>
                   </TableRow>
                 ))

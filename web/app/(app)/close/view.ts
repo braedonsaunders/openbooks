@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getFormatter, getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
@@ -305,6 +305,7 @@ export async function loadClose(
   // UI-only enforcement.
   await requireFeatureEnabled(orgId, 'continuousClose')
   const t = await getTranslations('close')
+  const format = await getFormatter()
   const runId = pickString(sp.run)
   // The native page renders the wizard only for a UUID run id that names a
   // row; anything else falls through to the list.
@@ -430,7 +431,7 @@ export async function loadClose(
           })
         : null,
       readiness: period.readiness_score ?? 0,
-      entries: Number(period.entries).toLocaleString(),
+      entries: format.number(Number(period.entries)),
       actionHref: period.run_id ? `/close?run=${period.run_id}` : null,
       canStart: !period.run_id && canStartClose,
       startPeriodId: period.id,

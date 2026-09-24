@@ -10,6 +10,7 @@ import type { PlatformGrant, PlatformOrganization, PlatformUser } from '../../..
 import { revokeAccessAction } from '../actions'
 import { GrantAccessForm } from '../_components/GrantAccessForm'
 import { PlatformMutationButton } from '../_components/PlatformMutationButton'
+import { ViewerDateTime } from '../../../../components/viewer-format'
 
 /**
  * Two composite cells in the cross-org access list.
@@ -175,10 +176,7 @@ export function AccessList({
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-slate-600 dark:text-slate-400">
-                        {(asDate(grant.updatedAt) ?? new Date()).toLocaleString(undefined, {
-                          dateStyle: 'medium',
-                          timeStyle: 'short',
-                        })}
+                        <ViewerDateTime value={asDate(grant.updatedAt) ?? new Date()} />
                       </TableCell>
                       <TableCell className="w-px whitespace-nowrap px-2 text-center" style={{ width: 64 }}>
                         <AccessControlCell grantId={grant.id} isActive={grant.isActive} />

@@ -402,6 +402,7 @@
     "schedule": "Cronograma de folha",
     "noSchedules": "Sem cronogramas de folha ativos",
     "create": "Nova folha",
+    "createFailed": "Não foi possível criar a folha de pagamento.",
     "description": "Confirme o período desta folha. O próximo período do cronograma já vem preenchido; altere as datas para uma folha fora do ciclo ou retroativa.",
     "periodStart": "Início do período",
     "periodEnd": "Fim do período",

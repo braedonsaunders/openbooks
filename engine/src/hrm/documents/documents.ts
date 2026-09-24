@@ -82,9 +82,9 @@ export interface DocumentDTO {
   title: string;
   fileId: string | null;
   status: string;
-  sentAt: string | null;
+  sentAt: Date | null;
   completedAt: string | null;
-  expiresAt: string | null;
+  expiresAt: Date | null;
   retainUntil: string | null;
   retentionAction: string | null;
   legalHold: boolean;
@@ -99,18 +99,23 @@ type DocumentRow = {
   title: string;
   file_id: string | null;
   status: string;
-  sent_at: string | null;
+  sent_at: string | Date | null;
   completed_at: string | null;
-  expires_at: string | null;
+  expires_at: string | Date | null;
   retain_until: string | null;
   retention_action: string | null;
   legal_hold: boolean;
 };
 
+function timestamp(value: string | Date | null): Date | null {
+  if (value === null) return null;
+  return value instanceof Date ? value : new Date(value);
+}
+
 const DOC_COLS = sql`
   select id, employment_id, party_id, template_id, category_key, title, file_id,
-         status, sent_at::text as sent_at, completed_at::text as completed_at,
-         expires_at::text as expires_at, retain_until::text as retain_until, retention_action, legal_hold
+         status, sent_at, completed_at::text as completed_at,
+         expires_at, retain_until::text as retain_until, retention_action, legal_hold
     from hrm_documents`;
 
 function toDTO(row: DocumentRow): DocumentDTO {
@@ -123,9 +128,9 @@ function toDTO(row: DocumentRow): DocumentDTO {
     title: row.title,
     fileId: row.file_id,
     status: row.status,
-    sentAt: row.sent_at,
+    sentAt: timestamp(row.sent_at),
     completedAt: row.completed_at,
-    expiresAt: row.expires_at,
+    expiresAt: timestamp(row.expires_at),
     retainUntil: row.retain_until,
     retentionAction: row.retention_action,
     legalHold: row.legal_hold,
@@ -439,8 +444,8 @@ export async function generateDocument(input: {
       update hrm_documents set file_id = ${fileId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${docId}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     await recordEvent(db, input.orgId, docId, "created", input.actorId);
     return { document: toDTO(updated), mergePreview: values };
@@ -521,8 +526,8 @@ export async function uploadDocument(input: {
       update hrm_documents set file_id = ${fileId}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${docId}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     await recordEvent(db, input.orgId, docId, "created", input.actorId);
     return toDTO(updated);
@@ -531,7 +536,7 @@ export async function uploadDocument(input: {
 
 export interface DocumentDetail extends DocumentDTO {
   signers: SignerDTO[];
-  events: { kind: string; actor: string | null; recordedAt: string }[];
+  events: { kind: string; actor: string | null; recordedAt: Date }[];
   /**
    * True while the frozen retention action was inherited from the live
    * schedule (0274) rather than captured at completion (0326 legacy): the
@@ -682,8 +687,8 @@ export async function sendDocument(input: {
          set status = 'sent', sent_at = now(), updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     await recordEvent(db, input.orgId, doc.id, "sent", input.actorId);
     return { document: toDTO(updated), deliveries };
@@ -971,8 +976,8 @@ async function applySignature(
          set status = 'signed', completed_at = now(), updated_at = now()
        where org_id = ${orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     const { applyCompletionRetention } = await import("./retention.ts");
     await applyCompletionRetention(exec, orgId, completed.id, null);
@@ -1118,8 +1123,8 @@ export async function declineTokenDocument(input: {
       update hrm_documents set status = 'declined', updated_at = now()
        where org_id = ${orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     return toDTO(updated);
   });
@@ -1168,8 +1173,8 @@ export async function acknowledgeDocument(input: {
         update hrm_documents set status = 'acknowledged', completed_at = now(), updated_at = now()
          where org_id = ${orgId} and id = ${doc.id}
         returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                  status, sent_at::text as sent_at, completed_at::text as completed_at,
-                  expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                  status, sent_at, completed_at::text as completed_at,
+                  expires_at, retain_until::text as retain_until, legal_hold
       `)).rows[0]!;
       const { applyCompletionRetention } = await import("./retention.ts");
       await applyCompletionRetention(db, orgId, updated.id, null);
@@ -1204,8 +1209,8 @@ export async function acknowledgeDocument(input: {
              updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     const { applyCompletionRetention } = await import("./retention.ts");
     await applyCompletionRetention(db, orgId, updated.id, actorId);
@@ -1242,8 +1247,8 @@ export async function voidDocument(input: {
          set status = 'voided', void_reason = ${reason}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     await recordEvent(db, input.orgId, doc.id, "voided", input.actorId);
     return toDTO(updated);
@@ -1270,8 +1275,8 @@ export async function setLegalHold(input: {
          set legal_hold = ${input.hold}, updated_at = now(), updated_by = ${input.actorId}
        where org_id = ${input.orgId} and id = ${doc.id}
       returning id, employment_id, party_id, template_id, category_key, title, file_id,
-                status, sent_at::text as sent_at, completed_at::text as completed_at,
-                expires_at::text as expires_at, retain_until::text as retain_until, legal_hold
+                status, sent_at, completed_at::text as completed_at,
+                expires_at, retain_until::text as retain_until, legal_hold
     `)).rows[0]!;
     if (!input.hold) {
       // A released hold makes its previously blocked retention action
@@ -1393,12 +1398,12 @@ export async function getDocumentDetail(query: {
     partyId: doc.party_id,
   });
   const signers = await loadSigners(db, query.orgId, doc.id);
-  const events = (await db.execute<{ kind: string; actor: string | null; recordedAt: string }>(sql`
-    select kind, actor, recorded_at::text as "recordedAt"
+  const events = (await db.execute<{ kind: string; actor: string | null; recordedAt: string | Date }>(sql`
+    select kind, actor, recorded_at as "recordedAt"
       from hrm_document_events
      where org_id = ${query.orgId} and document_id = ${doc.id}
      order by recorded_at
-  `)).rows;
+  `)).rows.map((event) => ({ ...event, recordedAt: timestamp(event.recordedAt)! }));
   const retentionUnverified = await isLegacyProvenance(db, query.orgId, "hrm_documents", doc.id, {
     // Before 0326 applies there is no registry: a frozen action with no
     // provenance row is exactly what the backfill left behind.
@@ -1412,16 +1417,16 @@ export async function dueReminderSigners(
   exec: SqlExecutor,
   orgId: string,
   olderThanDays: number,
-): Promise<{ signerId: string; documentId: string; partyId: string; title: string; sentAt: string }[]> {
-  return (await exec.execute<{
+): Promise<{ signerId: string; documentId: string; partyId: string; title: string; sentAt: Date }[]> {
+  const rows = (await exec.execute<{
     signerId: string;
     documentId: string;
     partyId: string;
     title: string;
-    sentAt: string;
+    sentAt: string | Date;
   }>(sql`
     select s.id as "signerId", d.id as "documentId", s.signer_party_id as "partyId",
-           d.title, d.sent_at::text as "sentAt"
+           d.title, d.sent_at as "sentAt"
       from hrm_document_signers s
       join hrm_documents d on d.org_id = s.org_id and d.id = s.document_id
      where s.org_id = ${orgId} and s.status in ('pending', 'viewed')
@@ -1436,6 +1441,7 @@ export async function dueReminderSigners(
      order by d.sent_at
      limit 200
   `)).rows;
+  return rows.map((row) => ({ ...row, sentAt: timestamp(row.sentAt)! }));
 }
 
 /**

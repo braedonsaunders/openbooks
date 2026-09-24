@@ -2,8 +2,9 @@
 
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useMoney } from '@/components/money-provider'
+import { useViewerFormat } from '@/lib/viewer-format'
 import Link from 'next/link'
-import { useLocale, useTranslations } from 'next-intl'
+import { useTranslations } from 'next-intl'
 import {
   Activity,
   ArrowUpRight,
@@ -41,24 +42,22 @@ export function WidgetCard({
   data: DashboardMetrics
 }) {
   const { money } = useMoney()
+  const { date, dateTime, number } = useViewerFormat()
   const t = useTranslations('dashboard')
-  const locale = useLocale()
   // The cut-off the as-of readers used, so a tile that excludes
   // future-dated documents says which day it is cut at (F-t02-007).
   // Noon-anchored: a bare YYYY-MM-DD parses as UTC midnight and would
   // render a day early west of Greenwich.
   const asOf = data.asOfDate
     ? t('metricContext.asOf', {
-        date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-          new Date(`${data.asOfDate}T12:00:00Z`),
-        ),
+        date: date(new Date(`${data.asOfDate}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' }),
       })
     : null
   const withAsOf = (hint: string) => (asOf ? `${hint} · ${asOf}` : hint)
   // Noon-anchored like the as-of label above: a bare YYYY-MM-DD parses as
   // UTC midnight and would render a day early west of Greenwich.
   const fmtDay = (iso: string) =>
-    new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(`${iso}T12:00:00Z`))
+    date(new Date(`${iso}T12:00:00Z`), { dateStyle: 'medium', timeZone: 'UTC' })
   // Runway weeks read whole past ten, one decimal below — the precise
   // figure lives behind the tile's link on the banking page.
   const displayWeeks = (weeks: number) => (weeks >= 10 ? Math.round(weeks) : Math.round(weeks * 10) / 10)
@@ -77,7 +76,7 @@ export function WidgetCard({
       if (data.agentFindingsProposals > 0) parts.push(t('metricContext.agentProposals', { count: data.agentFindingsProposals }))
       if (data.agentFindingsLastRun) {
         parts.push(t('metricContext.agentLastRun', {
-          date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(data.agentFindingsLastRun)),
+          date: dateTime(new Date(data.agentFindingsLastRun), { dateStyle: 'medium' }),
         }))
       }
       return (
@@ -149,7 +148,7 @@ export function WidgetCard({
       // shows the gross profit it can state and drops the margin it cannot.
       const margin = data.grossMarginMtd === null
         ? null
-        : new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 1 }).format(Number(data.grossMarginMtd))
+        : number(Number(data.grossMarginMtd), { style: 'percent', maximumFractionDigits: 1 })
       const hint = margin === null ? t('metricContext.monthToDate') : `${margin} · ${t('metricContext.monthToDate')}`
       return data.grossProfitMtd === null
         ? <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value="—" href="/reports/pnl" tone="slate" hint={withAsOf(t('metricContext.noData'))} />
@@ -583,6 +582,7 @@ function PendingApprovalsList({
   title?: string
   href?: string
 }) {
+  const { date } = useViewerFormat()
   const { money } = useMoney()
   const t = useTranslations('dashboard')
   const ta = useTranslations('approvals')
@@ -615,7 +615,7 @@ function PendingApprovalsList({
                   {a.title ? <Badge variant="warning">{a.title}</Badge> : null}
                 </div>
                 <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-                  {new Date(a.createdAt).toLocaleDateString()}
+                  {date(new Date(a.createdAt))}
                 </div>
               </div>
               {a.amount ? (
@@ -692,6 +692,7 @@ function CloseReadinessList({
   runs: DashboardMetrics['closeRuns']
   unavailable: DashboardMetrics['closeRunsUnavailable']
 }) {
+  const { date } = useViewerFormat()
   const t = useTranslations('dashboard')
   const tc = useTranslations('close')
   // Canonical workspace labels; an unknown status/stage renders raw rather
@@ -752,7 +753,7 @@ function CloseReadinessList({
                   <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {r.book}
                     {stage ? ` · ${stage}` : null}
-                    {r.targetCloseDate ? ` · ${new Date(`${r.targetCloseDate}T12:00:00Z`).toLocaleDateString()}` : null}
+                    {r.targetCloseDate ? ` · ${date(new Date(`${r.targetCloseDate}T12:00:00Z`), { timeZone: 'UTC' })}` : null}
                   </div>
                 </div>
               </Link>

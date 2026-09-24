@@ -187,12 +187,12 @@ export async function loadPayroll(
       openSettingsLabel: t('checklist.openSettings'),
     },
     employeesLabel: t('home.vitals.employees'),
-    employeesValue: home.activeEmployees.toLocaleString(),
+    employeesValue: home.activeEmployees.toLocaleString(locale),
     employeesSub: t('home.vitals.employeesSub'),
     periodsLabel: t('home.vitals.periodsRan', { year: home.taxYear }),
     periodsValue: home.defaultPeriodsPerYear
       ? t('home.vitals.periodsOf', { ran: home.runsThisYear, total: home.defaultPeriodsPerYear })
-      : home.runsThisYear.toLocaleString(),
+      : home.runsThisYear.toLocaleString(locale),
     periodsSub: t('home.vitals.periodsRanSub'),
     ytdGrossLabel: t('home.vitals.ytdGross'),
     ytdGrossValue: moneyCompact(home.ytdGross),
@@ -227,7 +227,7 @@ export async function loadPayroll(
             periodEnd: shortDate(previousRun.periodEnd, locale),
             payDate: shortDate(previousRun.payDate, locale),
             net: money(previousRun.netTotal),
-            employees: previousRun.employeeCount.toLocaleString(),
+            employees: previousRun.employeeCount.toLocaleString(locale),
             posted: previousRun.posted,
             badgeLabel: t(previousRun.posted ? 'status.posted' : 'status.committed'),
             href: `/payroll/runs/${previousRun.documentId}`,
@@ -314,7 +314,7 @@ export function scheduleCardProps(
     periodStart: shortDate(schedule.periodStart, locale),
     periodEnd: shortDate(schedule.periodEnd, locale),
     payDate: shortDate(schedule.payDate, locale),
-    employees: schedule.activeEmployees.toLocaleString(),
+    employees: schedule.activeEmployees.toLocaleString(locale),
     runStatus: run?.runStatus ?? null,
     net: run && run.runStatus !== 'draft' ? money(run.netTotal) : null,
     action:

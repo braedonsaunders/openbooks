@@ -6,6 +6,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
 import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
@@ -142,6 +143,7 @@ export function RunDrawer({
   closeHref?: string
   paymentBasePath?: '/payments' | '/receipts'
 }) {
+  const { dateTime } = useViewerFormat()
   const { money } = useMoney()
   const today = useBusinessToday()
   const t = useTranslations('payments')
@@ -451,7 +453,7 @@ export function RunDrawer({
         </div>
         {instructionPages > 1 ? <div className="flex items-center justify-end gap-2"><Button size="sm" variant="outline" disabled={instructionPage <= 1} onClick={() => setInstructionPage((p) => p - 1)}>{tCommon('actions.previous')}</Button><span className="text-xs text-slate-500">{instructionPage} / {instructionPages}</span><Button size="sm" variant="outline" disabled={instructionPage >= instructionPages} onClick={() => setInstructionPage((p) => p + 1)}>{tCommon('actions.next')}</Button></div> : null}
 
-        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p>{(() => { const reason = postingEventReason(event, t); return reason ? <p className="text-xs text-red-600 dark:text-red-400">{reason}</p> : null })()}<p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()}</time></div>)}</div></section> : null}
+        {events.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.activityTitle')}</h3><div className="space-y-2">{events.slice(0, 10).map((event) => <div key={event.id} className="flex items-start justify-between gap-3 border-l-2 border-slate-200 pl-3 text-sm dark:border-slate-700"><div><p>{t((`runDrawer.events.${event.event_type}`))}</p>{(() => { const reason = postingEventReason(event, t); return reason ? <p className="text-xs text-red-600 dark:text-red-400">{reason}</p> : null })()}<p className="text-xs text-slate-500">{event.actor_name ?? t('runDrawer.systemActor')}</p></div><time className="shrink-0 text-xs text-slate-500">{dateTime(new Date(event.created_at))}</time></div>)}</div></section> : null}
       </div>
 
       <Drawer

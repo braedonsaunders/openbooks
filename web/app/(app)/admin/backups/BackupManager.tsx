@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
+import { useViewerFormat } from "@/lib/viewer-format";
 import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 
@@ -48,10 +49,6 @@ function formatBytes(n: number | null): string {
   return `${(n / 1024 ** 3).toFixed(2)} GB`;
 }
 
-function formatWhen(iso: string | null): string {
-  return iso ? new Date(iso).toLocaleString() : "—";
-}
-
 export interface BackupManagerProps {
   policy: BackupPolicyRow | null;
   runs: BackupRunRow[];
@@ -65,6 +62,8 @@ export function BackupManager({
   s3Enabled,
   workerOnline,
 }: BackupManagerProps) {
+  const { dateTime, number } = useViewerFormat();
+  const formatWhen = (iso: string | null) => iso ? dateTime(new Date(iso)) : "—";
   const router = useRouter();
   const t = useTranslations("admin.backupsManager");
   const [pending, start] = useTransition();
@@ -323,7 +322,7 @@ export function BackupManager({
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap text-slate-700 dark:text-slate-300">
                         {run.rowCount !== null
-                          ? t("table.rowsTables", { rows: run.rowCount.toLocaleString(), tables: run.tableCount ?? 0 })
+                          ? t("table.rowsTables", { rows: number(run.rowCount), tables: run.tableCount ?? 0 })
                           : "—"}
                       </td>
                       <td className="max-w-72 py-2.5 pr-4 font-mono text-xs break-all text-slate-500 dark:text-slate-400">

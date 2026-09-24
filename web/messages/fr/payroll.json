@@ -402,6 +402,7 @@
     "schedule": "Calendrier de paie",
     "noSchedules": "Aucun calendrier de paie actif",
     "create": "Nouvelle paie",
+    "createFailed": "Impossible de créer la paie.",
     "description": "Confirmez la période couverte par cette paie. La prochaine période du calendrier est présélectionnée; modifiez les dates pour une paie hors cycle ou de rattrapage.",
     "periodStart": "Début de période",
     "periodEnd": "Fin de période",

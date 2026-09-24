@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
+import { useViewerFormat } from '../../../../lib/viewer-format'
 import type { loadDocumentsHome } from '../../../../lib/hrm/documents-home'
 
 /**
@@ -92,6 +93,7 @@ function eventKindLabel(kind: string, labels: Record<string, string>): string {
 
 export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
   const router = useRouter()
+  const viewer = useViewerFormat()
   const labels = drawer.labels
   const document = drawer.document
   if (!document) {
@@ -182,7 +184,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
             {document.events.map((event, index) => (
               <li key={index} className="flex justify-between gap-3">
                 <span>{eventKindLabel(event.kind, labels)}</span>
-                <span className="text-slate-500">{event.recordedAt}</span>
+                <span className="text-slate-500">{viewer.dateTime(event.recordedAt)}</span>
               </li>
             ))}
           </ul>
@@ -198,7 +200,7 @@ export function DocumentDrawerBody({ drawer }: { drawer: Drawer }) {
         <section>
           <h3 className="mb-2 text-sm font-semibold">{msg(labels, 'retention')}</h3>
           <p className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
-            <span>{document.retentionAction ?? '—'}{document.retainUntil ? ` · ${document.retainUntil}` : ''}</span>
+            <span>{document.retentionAction ? msg(labels, `retentionAction${document.retentionAction[0]?.toUpperCase()}${document.retentionAction.slice(1)}`) : '—'}{document.retainUntil ? ` · ${viewer.date(document.retainUntil, { dateStyle: 'medium', timeZone: 'UTC' })}` : ''}</span>
             {document.retentionUnverified ? (
               <Badge variant="warning">{msg(labels, 'retentionUnverified')}</Badge>
             ) : null}

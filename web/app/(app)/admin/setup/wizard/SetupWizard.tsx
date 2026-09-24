@@ -87,9 +87,9 @@ const INDUSTRY_ICONS: Record<string, typeof Building2> = {
 /** The operator's own zone for a fresh org's default: the browser's
  *  resolved zone, UTC when the runtime cannot tell. The server validates
  *  and canonicalizes whatever the company step sends. */
-function browserTimeZone(): string {
+function browserTimeZone(locale: string): string {
   try {
-    return new Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC'
+    return new Intl.DateTimeFormat(locale).resolvedOptions().timeZone ?? 'UTC'
   } catch {
     return 'UTC'
   }
@@ -129,9 +129,9 @@ export function SetupWizard(props: {
   timeZones: string[]
   onClose?: () => void
 }) {
+  const locale = useLocale()
   const t = useTranslations('admin.setup.wizard')
   const tAdmin = useTranslations('admin')
-  const locale = useLocale()
   const router = useRouter()
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
@@ -152,7 +152,7 @@ export function SetupWizard(props: {
     // falls back to UTC rather than rendering a blank selection.
     const offered = new Set(props.timeZones)
     if (props.initial.timeZone && offered.has(props.initial.timeZone)) return props.initial.timeZone
-    const browser = browserTimeZone()
+    const browser = browserTimeZone(locale)
     return offered.has(browser) ? browser : 'UTC'
   })
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
@@ -553,7 +553,7 @@ export function SetupWizard(props: {
             fiscalMonth: props.initial.fiscalYearStartMonth,
             // The company step opened with the stored zone, or the browser
             // zone when none was stored — the same default the state holds.
-            timeZone: props.initial.timeZone ?? browserTimeZone(),
+            timeZone: props.initial.timeZone ?? browserTimeZone(locale),
             teamSize: props.initial.workspaceProfile.teamSize,
             complexity: props.initial.workspaceProfile.complexity,
             bookStart: props.initial.workspaceProfile.bookStart,
@@ -1341,11 +1341,12 @@ function ReviewStep(props: {
   payrollPacks: WizardPayrollPack[]
   seedChartOfAccounts: boolean
 }) {
+  const locale = useLocale()
   const { t, name, legalName, country, currency, fiscalMonth, timeZone, defaults, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, payrollPacks, seedChartOfAccounts } = props
   const payrollPackName = payrollPack
     ? (payrollPacks.find((pack) => pack.country === payrollPack)?.name ?? payrollPack)
     : null
-  const fiscalMonthName = new Intl.DateTimeFormat(undefined, { month: 'long', timeZone: 'UTC' }).format(
+  const fiscalMonthName = new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(2026, fiscalMonth - 1, 1)),
   )
   const defaultBadge = t('review.defaultBadge')

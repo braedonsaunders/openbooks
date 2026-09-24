@@ -402,6 +402,7 @@
     "schedule": "Pay schedule",
     "noSchedules": "No active pay schedules",
     "create": "New pay run",
+    "createFailed": "Could not create the pay run.",
     "description": "Confirm the period this run covers. The schedule’s next period is prefilled; change the dates for an off-cycle or catch-up run.",
     "periodStart": "Period start",
     "periodEnd": "Period end",

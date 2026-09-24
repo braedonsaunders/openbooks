@@ -8,6 +8,7 @@ import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyn
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useViewerFormat } from '@/lib/viewer-format'
 import {
   parseJsonEventStream,
   readUIMessageStream,
@@ -1132,7 +1133,8 @@ function MessageRow({ message, pending }: { message: ChatMessage; pending: boole
  * visible because touch has no dependable hover state.
  */
 function MessageTimestamp({ value }: { value: string }) {
-  const labels = formatMessageTimestamp(value)
+  const { locale, timeZone } = useViewerFormat()
+  const labels = formatMessageTimestamp(value, new Date(), locale, timeZone)
   if (!labels) return null
   return (
     <time

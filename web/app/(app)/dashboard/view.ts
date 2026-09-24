@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, grid, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { getAuthz } from '../../../lib/authz'
 
@@ -37,6 +37,7 @@ export interface DashboardData {
 
 export async function loadDashboard(): Promise<DashboardData | null> {
   const t = await getTranslations('dashboard')
+  const locale = await getLocale()
   const authz = await getAuthz()
   if (!authz) return null
 
@@ -48,7 +49,7 @@ export async function loadDashboard(): Promise<DashboardData | null> {
       morning: t('greeting.morning'),
       afternoon: t('greeting.afternoon'),
       evening: t('greeting.evening'),
-    }, await businessTimeZone(authz.user.orgId)),
+    }, await businessTimeZone(authz.user.orgId), locale),
     name: authz.user.name,
   }
 }
