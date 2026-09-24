@@ -34,8 +34,8 @@ const profile = {
   name: 'Default',
   color: '#3b82f6',
   compositeMethod: 'sum',
-  baseLaborRate: 50,
-  fringeRate: 0.25,
+  baseLaborRate: '50',
+  fringeRate: '0.25',
   categorySettings: {},
   customCategories: [],
   baseOverrides: {},
@@ -160,16 +160,13 @@ test('GET exposes the persisted configuration revision', async () => {
   assert.ok(state.executed.some((query) => query.includes("-> 'trueCost' as cfg")))
 })
 
-test('PUT rejects a missing revision before attempting a write', async () => {
-  reset(3)
-
-  const response = await put({ profiles: [profile] })
-
-  assert.equal(response.status, 409)
-  assert.match((await response.json()).error, /revision is required/)
+test('PUT rejects missing revisions and malformed nested categories before writing', async () => {
+  reset(3); const response = await put({ profiles: [profile] })
+  assert.equal(response.status, 409); assert.match((await response.json()).error, /revision is required/)
   assert.equal(state.executed.length, 0)
+  reset(3); const malformed = await put({ expectedRevision: 3, activeProfileId: profile.id, profiles: [{ ...profile, customCategories: [{ name: 'Valid', type: 'manual' }, { name: '', type: 'manual' }] }] })
+  assert.equal(malformed.status, 400); assert.equal(state.executed.some((query) => query.includes('returning settings')), false)
 })
-
 test('restricted actors cannot write org-wide True Cost settings', async () => {
   reset(3)
   state.allowedSubsidiaryIds = new Set(['subsidiary-a'])

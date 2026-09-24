@@ -75,6 +75,12 @@ class InvalidTrueCostAmount extends Error {
   }
 }
 
+class InvalidTrueCostConfiguration extends Error {
+  constructor() {
+    super("invalid_true_cost_configuration");
+  }
+}
+
 /** Persist a non-negative ledger amount. Missing values use the fallback. */
 function persistMoney(value: unknown, fallback: string): string {
   if (value == null || value === "") return fallback;
@@ -98,7 +104,8 @@ function persistBoundedDecimal(value: unknown, fallback: string, max: string, sc
 }
 
 function persistMoneyMap(raw: unknown): Record<string, string> {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  if (raw == null) return {};
+  if (typeof raw !== "object" || Array.isArray(raw)) throw new InvalidTrueCostConfiguration();
   const out: Record<string, string> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (value == null || value === "") continue;
@@ -107,14 +114,17 @@ function persistMoneyMap(raw: unknown): Record<string, string> {
   return out;
 }
 
-function cleanCustomCategory(raw: unknown): CustomCategory | null {
-  if (!raw || typeof raw !== "object") return null;
+function cleanCustomCategory(raw: unknown): CustomCategory {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new InvalidTrueCostConfiguration();
   const c = raw as Record<string, unknown>;
   const name = typeof c.name === "string" ? c.name.trim().slice(0, 80) : "";
   const type = String(c.type ?? "");
-  if (!name || !CUSTOM_TYPES.has(type)) return null;
-  const allocationBase = (BASE_KEYS.has(String(c.allocationBase)) ? c.allocationBase : "billed_hours") as AllocationBase;
-  const rateFormat = (FORMAT_KEYS.has(String(c.rateFormat)) ? c.rateFormat : "per_hour") as RateFormat;
+  if (!name || !CUSTOM_TYPES.has(type)) throw new InvalidTrueCostConfiguration();
+  if (c.allocationBase != null && !BASE_KEYS.has(String(c.allocationBase))) throw new InvalidTrueCostConfiguration();
+  if (c.rateFormat != null && !FORMAT_KEYS.has(String(c.rateFormat))) throw new InvalidTrueCostConfiguration();
+  if (c.includeInComposite != null && typeof c.includeInComposite !== "boolean") throw new InvalidTrueCostConfiguration();
+  const allocationBase = (c.allocationBase == null ? "billed_hours" : c.allocationBase) as AllocationBase;
+  const rateFormat = (c.rateFormat == null ? "per_hour" : c.rateFormat) as RateFormat;
   const out: CustomCategory = {
     id: typeof c.id === "string" && c.id ? c.id : `cat_${randomUUID().slice(0, 8)}`,
     name,
@@ -125,38 +135,50 @@ function cleanCustomCategory(raw: unknown): CustomCategory | null {
     includeInComposite: c.includeInComposite !== false,
   };
   if (type === "manual") {
+    if (c.manualConfig != null && (typeof c.manualConfig !== "object" || Array.isArray(c.manualConfig))) throw new InvalidTrueCostConfiguration();
     const m = (c.manualConfig ?? {}) as Record<string, unknown>;
-    const entryMode = ["fixed_total", "by_dept", "per_unit"].includes(String(m.entryMode)) ? (m.entryMode as "fixed_total" | "by_dept" | "per_unit") : "fixed_total";
+    if (m.entryMode != null && !["fixed_total", "by_dept", "per_unit"].includes(String(m.entryMode))) throw new InvalidTrueCostConfiguration();
+    if (m.unitType != null && !BASE_KEYS.has(String(m.unitType))) throw new InvalidTrueCostConfiguration();
+    const entryMode = (m.entryMode ?? "fixed_total") as "fixed_total" | "by_dept" | "per_unit";
     out.manualConfig = {
       entryMode,
       fixedTotal: persistMoney(m.fixedTotal, "0.0000"),
       byDeptAmounts: persistMoneyMap(m.byDeptAmounts),
-      unitType: (BASE_KEYS.has(String(m.unitType)) ? m.unitType : "headcount") as AllocationBase,
+      unitType: (m.unitType ?? "headcount") as AllocationBase,
       perUnitRate: persistMoney(m.perUnitRate, "0.0000"),
     };
   } else if (type === "derived") {
+    if (c.derivedConfig != null && (typeof c.derivedConfig !== "object" || Array.isArray(c.derivedConfig))) throw new InvalidTrueCostConfiguration();
     const dc = (c.derivedConfig ?? {}) as Record<string, unknown>;
+    if (dc.sourceCategory != null && typeof dc.sourceCategory !== "string") throw new InvalidTrueCostConfiguration();
     out.derivedConfig = {
       sourceCategory: typeof dc.sourceCategory === "string" ? dc.sourceCategory : undefined,
       percentage: persistBoundedDecimal(dc.percentage, "0", "100"),
       allocationBase: dc.allocationBase === "same" || BASE_KEYS.has(String(dc.allocationBase)) ? (dc.allocationBase as AllocationBase | "same") : "same",
     };
   } else {
+    if (c.formulaConfig != null && (typeof c.formulaConfig !== "object" || Array.isArray(c.formulaConfig))) throw new InvalidTrueCostConfiguration();
     const fc = (c.formulaConfig ?? {}) as Record<string, unknown>;
+    if (fc.formula != null && typeof fc.formula !== "string") throw new InvalidTrueCostConfiguration();
     out.formulaConfig = { formula: typeof fc.formula === "string" ? fc.formula.slice(0, 500) : "" };
   }
   return out;
 }
 
-function cleanProfile(raw: unknown): TrueCostProfile | null {
-  if (!raw || typeof raw !== "object") return null;
+function cleanProfile(raw: unknown): TrueCostProfile {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new InvalidTrueCostConfiguration();
   const p = raw as Record<string, unknown>;
   const name = typeof p.name === "string" ? p.name.trim().slice(0, 60) : "";
-  if (!name) return null;
+  if (!name) throw new InvalidTrueCostConfiguration();
+  if (p.categorySettings != null && (typeof p.categorySettings !== "object" || Array.isArray(p.categorySettings))) throw new InvalidTrueCostConfiguration();
+  if (p.customCategories != null && !Array.isArray(p.customCategories)) throw new InvalidTrueCostConfiguration();
+  if (Array.isArray(p.customCategories) && p.customCategories.length > 30) throw new InvalidTrueCostConfiguration();
   const catSettingsRaw = (p.categorySettings ?? {}) as Record<string, Record<string, unknown>>;
   const categorySettings: TrueCostProfile["categorySettings"] = {};
   for (const [id, s] of Object.entries(catSettingsRaw)) {
-    if (!s || typeof s !== "object") continue;
+    if (!s || typeof s !== "object" || Array.isArray(s)) throw new InvalidTrueCostConfiguration();
+    if (s.allocationWeights != null && (typeof s.allocationWeights !== "object" || Array.isArray(s.allocationWeights))) throw new InvalidTrueCostConfiguration();
+    if (s.allocationTiers != null && (!Array.isArray(s.allocationTiers) || s.allocationTiers.length > 10)) throw new InvalidTrueCostConfiguration();
     categorySettings[id] = {
       allocationBase: BASE_KEYS.has(String(s.allocationBase)) ? (s.allocationBase as AllocationBase) : undefined,
       allocationMethod: METHOD_KEYS.has(String(s.allocationMethod)) ? (s.allocationMethod as AllocationMethod) : undefined,
@@ -164,11 +186,15 @@ function cleanProfile(raw: unknown): TrueCostProfile | null {
       includeInComposite: s.includeInComposite === false ? false : s.includeInComposite === true ? true : undefined,
       allocationWeights: s.allocationWeights && typeof s.allocationWeights === "object" ? (s.allocationWeights as Record<string, number>) : undefined,
       allocationTiers: Array.isArray(s.allocationTiers)
-        ? (s.allocationTiers as { min?: number; max?: number; rate?: unknown }[]).slice(0, 10).map((tier) => ({
-            min: tier.min,
-            max: tier.max,
-            rate: tier.rate == null || tier.rate === "" ? undefined : persistMoney(tier.rate, "0.0000"),
-          }))
+        ? (s.allocationTiers as unknown[]).map((rawTier) => {
+            if (!rawTier || typeof rawTier !== "object" || Array.isArray(rawTier)) throw new InvalidTrueCostConfiguration();
+            const tier = rawTier as { min?: number; max?: number; rate?: unknown };
+            return {
+              min: tier.min,
+              max: tier.max,
+              rate: tier.rate == null || tier.rate === "" ? undefined : persistMoney(tier.rate, "0.0000"),
+            };
+          })
         : undefined,
     };
   }
@@ -182,7 +208,7 @@ function cleanProfile(raw: unknown): TrueCostProfile | null {
     baseLaborRate: persistMoney(p.baseLaborRate, "50.0000"),
     fringeRate: persistBoundedDecimal(p.fringeRate, "0.25", "1"),
     categorySettings,
-    customCategories: Array.isArray(p.customCategories) ? p.customCategories.map(cleanCustomCategory).filter((c): c is CustomCategory => c !== null).slice(0, 30) : [],
+      customCategories: Array.isArray(p.customCategories) ? p.customCategories.map(cleanCustomCategory) : [],
     baseOverrides: { squareFeet: numMap(bo.squareFeet), units: numMap(bo.units), custom: numMap(bo.custom) },
   };
 }
@@ -214,10 +240,13 @@ export async function PUT(req: Request) {
 
   let profiles: TrueCostProfile[];
   try {
-    profiles = body.profiles.map(cleanProfile).filter((p): p is TrueCostProfile => p !== null);
+    profiles = body.profiles.map(cleanProfile);
   } catch (error) {
     if (error instanceof InvalidTrueCostAmount) {
       return NextResponse.json({ error: "rates and amounts must be non-negative decimals" }, { status: 400 });
+    }
+    if (error instanceof InvalidTrueCostConfiguration) {
+      return NextResponse.json({ error: "profiles and nested categories must be valid; correct every item before saving" }, { status: 400 });
     }
     throw error;
   }
