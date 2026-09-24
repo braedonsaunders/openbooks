@@ -1,6 +1,7 @@
 import type { db } from "../platform/db.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
 import type { PayrollAssessedOn, PayrollTaxBaseKey } from "./packs.ts";
+import type { StatutoryRateResolution } from "./statutory-rates.ts";
 
 /** One line in the stub set `calculateStub` builds before the statutory pass. */
 export interface StubLine {
@@ -109,6 +110,8 @@ export interface PayrollStatutoryComputeContext {
   orgId: string;
   /** The legal-employer subsidiary whose effective facts govern this run. */
   subsidiaryId?: string;
+  /** Lazy, run-scoped resolution of the pack's effective statutory rates. */
+  resolveStatutoryRates?: () => Promise<StatutoryRateResolution>;
   /** Full contributory gross for the current stub (including non-taxable wages). */
   gross?: string;
   /** Requested schedule/work-line hour facts for hour-based statutory rules. */

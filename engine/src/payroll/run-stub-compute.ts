@@ -467,6 +467,7 @@ export async function calculateStub(
     factors = await pack.computeStatutory({
       tx, orgId, documentId, employeePartyId,
       subsidiaryId: ctx.runContext.subsidiaryId,
+      resolveStatutoryRates: () => ctx.statutoryRatesFor(country, taxYear),
       gross,
       statutoryHours,
       employmentId: emp.employment_id ?? null,

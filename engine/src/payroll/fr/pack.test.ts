@@ -88,7 +88,7 @@ test("FR statutory slots are named, assessed, and routable", () => {
   );
   // PAS moves with pre-tax deductions; everything else is rate × salary.
   assert.equal(bySystemKey.get("pas|deduction")?.assessedOn, "taxable_income");
-  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "ceg|deduction", "cet|deduction", "atmp|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution", "arrco|employer_contribution", "ceg|employer_contribution", "cet|employer_contribution"]) {
+  for (const key of ["vieillesse|deduction", "csg|deduction", "arrco|deduction", "ceg|deduction", "cet|deduction", "atmp|employer_contribution", "versement_mobilite_er|employer_contribution", "vieillesse_er|employer_contribution", "ags_er|employer_contribution", "cdn_er|employer_contribution", "arrco|employer_contribution", "ceg|employer_contribution", "cet|employer_contribution"]) {
     assert.equal(bySystemKey.get(key)?.assessedOn, "earnings", key);
   }
   assert.equal(bySystemKey.get("ceg|deduction")?.remittance, "external");
@@ -222,7 +222,7 @@ test("FR tenant-declared rates: AT/MP and versement mobilité ride the SIRET acc
     assert.deepEqual(slot?.regions, ["FR"]);
   }
   assert.deepEqual(byKey.get("fr_atmp")?.systemKeys, ["atmp"]);
-  assert.deepEqual(byKey.get("fr_versement_mobilite")?.systemKeys, ["cdn_er"]);
+  assert.deepEqual(byKey.get("fr_versement_mobilite")?.systemKeys, ["versement_mobilite_er"]);
 });
 
 test("FR employment calendars: 11 national holidays, 13 in Alsace-Moselle", () => {

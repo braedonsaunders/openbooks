@@ -20,7 +20,7 @@ export const FR_PACK_RATES: PayrollPackRates = {
       programType: "fr_siret",
       systemKeys: ["atmp"],
       regions: ["FR"],
-      whenUnconfigured: "legacy",
+      whenUnconfigured: "refuse",
       citation: "Code de la sécurité sociale, art. L242-5 (taux notifié par la caisse)",
       variesBecause:
         "The caisse notifies each establishment its own AT/MP rate from its activity risk class and sinistrality — a figure no published table can supply.",
@@ -37,7 +37,7 @@ export const FR_PACK_RATES: PayrollPackRates = {
       label: "Taux versement mobilité",
       scope: "filing_account",
       programType: "fr_siret",
-      systemKeys: ["cdn_er"],
+      systemKeys: ["versement_mobilite_er"],
       regions: ["FR"],
       whenUnconfigured: "legacy",
       citation: "URSSAF, taux et barèmes — versement mobilité (employers with 11+ employees)",

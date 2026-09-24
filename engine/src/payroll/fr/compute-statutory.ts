@@ -43,8 +43,7 @@
  *   name likewise.
  *
  * What this pass does NOT do (stated): APEC (cadres only, no channel),
- * a conventionally modified 60/40 split, AT/MP and versement mobilité
- * (tenant-declared, no context channel), the Alsace-Moselle salary
+ * a conventionally modified 60/40 split, the Alsace-Moselle salary
  * supplement, the AGS interim variant, and PAS reduced-rate modulation.
  * The brut/net-imposable bridge IS modelled: the stub's earnings figure
  * is the brut, and the PAS assiette is derived by
@@ -154,6 +153,8 @@ export const FR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   FR_RGDU_URSSAF: "Réduction RGDU imputée à l'Urssaf",
   FR_RGDU_AGIRC_ARRCO: "Réduction RGDU imputée à l'Agirc-Arrco",
   FR_RGDU_MAXIMUM_COEFFICIENT: "Plafond du coefficient RGDU selon les taux couverts",
+  ATMP_ER: "Accidents du travail et maladies professionnelles (employeur)",
+  VM_ER: "Versement mobilité (employeur)",
 };
 
 export interface FrPas2026Input {
@@ -333,15 +334,37 @@ export async function computeFrStatutory(
     transmittedRatePct: transmitted === "" ? null : transmitted,
     domicile: "metropole",
   });
-  // Cotisations price on the brut. The account's eligibility declaration is
-  // resolved when the complete employer-contribution path is supported.
+  // Establishment rates are an effective, audited statutory configuration,
+  // never a guessed zero. URSSAF assigns AT/MP per SIRET; VM is owed for an
+  // employer above the threshold in the applicable transport zone. Where the
+  // employer is above the threshold but not liable at this establishment,
+  // setup records an explicit zero rate.
+  const rateResolution = await ctx.resolveStatutoryRates?.();
+  const ratePoint = { region: "FR", filingAccountId: ctx.filingAccountId };
+  const atmpRate = rateResolution?.values("fr_atmp", ratePoint)?.taux;
+  if (atmpRate == null) {
+    throw new PayrollPackError(
+      "FR AT/MP refuses: no effective rate resolves for this establishment's SIRET. Enter the Carsat-notified AT/MP rate in Payroll Setup before calculating (CSS L.242-5; URSSAF 2026 sector-private rates).",
+    );
+  }
+  let versementMobiliteRate = "0";
+  if (employerEffectif != null && U(employerEffectif) >= U("11")) {
+    const configured = rateResolution?.values("fr_versement_mobilite", ratePoint)?.taux;
+    if (configured == null) {
+      throw new PayrollPackError(
+        "FR versement mobilité refuses: this employer's effectif is at least 11 and no effective SIRET rate resolves. Enter the zone's URSSAF rate, or an explicit 0.0000 when the establishment is not liable, in Payroll Setup before calculating (CGCT L.2333-64; URSSAF 2026).",
+      );
+    }
+    versementMobiliteRate = configured;
+  }
+  // Cotisations price on the brut using rates resolved at the run's pay date.
   const cots = calculateFrCotisations2026({
     brut: base,
     payDate,
     periodsPerYear,
     employerEffectif,
-    atmpRatePct: null,
-    versementMobilitePct: null,
+    atmpRatePct: atmpRate,
+    versementMobilitePct: versementMobiliteRate,
   });
   if (ctx.gross == null) {
     throw new PayrollPackError("FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.");
@@ -408,6 +431,8 @@ export async function computeFrStatutory(
   pushStatutory("chomage_er", "employer_contribution", "Assurance chômage (employeur)", cots.chomageEr, 225);
   pushStatutory("ags_er", "employer_contribution", "Cotisation AGS (employeur)", cots.agsEr, 226);
   pushStatutory("cdn_er", "employer_contribution", "FNAL, CSA et dialogue social (employeur)", cots.cdnEr, 230);
+  pushStatutory("atmp", "employer_contribution", "Accidents du travail et maladies professionnelles (employeur)", cots.atmpEr, 220);
+  pushStatutory("versement_mobilite_er", "employer_contribution", "Versement mobilité (employeur)", cots.versementMobiliteEr, 221);
   pushStatutory("arrco", "deduction", "Retraite complémentaire (salariale)", cots.arrcoSal, 140);
   pushStatutory("arrco", "employer_contribution", "Retraite complémentaire (employeur)", cots.arrcoEr, 240);
   pushStatutory("ceg", "deduction", "Contribution d'équilibre général (salariale)", cots.cegSal, 141);
@@ -429,6 +454,8 @@ export async function computeFrStatutory(
     CHOM_ER: cots.chomageEr,
     AGS_ER: cots.agsEr,
     CDN_ER: cots.cdnEr,
+    ATMP_ER: cots.atmpEr,
+    VM_ER: cots.versementMobiliteEr,
     ARRCO_SAL: cots.arrcoSal,
     ARRCO_ER: cots.arrcoEr,
     CEG_SAL: cots.cegSal,
