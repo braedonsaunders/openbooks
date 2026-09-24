@@ -202,6 +202,44 @@ test('project_profitability hides hidden-subsidiary source documents on a visibl
   }
 });
 
+test('retainage balances total only posted lines in visible subsidiaries', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, hidden } = await seedScopedOrg();
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`update orgs set settings=jsonb_set(
+        jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true}'::jsonb,true),
+        '{controlAccounts,retainageReceivable}',to_jsonb(${org.accounts.invAsset}::text),true) where id=${org.orgId}`);
+      for (const [label, subsidiaryId, amount] of [
+        ['VISIBLE', org.subsidiaryId, '100'],
+        ['HIDDEN', hidden, '900'],
+      ] as const) {
+        const entryId = randomUUID();
+        await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
+          values (${entryId},${org.orgId},${org.bookId},${subsidiaryId},${`RET-${label}-${entryId.slice(0,8)}`},${org.date},${org.periodId},'retainage scope fixture','draft','manual')`);
+        await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,party_id,amount,currency,txn_amount,fx_rate)
+          values (${org.orgId},${entryId},1,${org.accounts.invAsset},${subsidiaryId},${org.customerId},${amount},'CAD',${amount},'1'),
+                 (${org.orgId},${entryId},2,${org.accounts.adjustment},${subsidiaryId},${org.customerId},${`-${amount}`},'CAD',${`-${amount}`},'1')`);
+        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entryId} and org_id=${org.orgId}`);
+      }
+    });
+    await withOrgContext(org.orgId, async () => {
+      const authz = await getAuthz();
+      assert.ok(authz);
+      const result = await executeAssistantTool(authz, 'retainage_balances', { asOf: org.date });
+      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.ok(result.ok);
+      const data = result.data as { configured: boolean; total: string; lines: number; rows: { party: string; balance: string }[] };
+      assert.equal(data.configured, true);
+      assert.equal(data.total, '100.0000');
+      assert.equal(data.lines, 1);
+      assert.deepEqual(data.rows.map((row) => row.balance), ['100.0000']);
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test('get_document hides a hidden-subsidiary document from a restricted caller', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, hidden } = await seedScopedOrg();
   try {
