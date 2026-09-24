@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { formatDecimal } from '../../../lib/money-format'
+import { readApiErrorMessage } from '../../../lib/api-error'
 import { toast } from 'sonner'
 import { ChevronDown, Download, ExternalLink, FileCheck2, Play } from 'lucide-react'
 import {
@@ -171,10 +172,10 @@ export function TaxFilingsView({
     setBusy(true)
     try {
       const response = await fetch(`/api/tax/returns/${encodeURIComponent(code)}?from=${from}&to=${to}${adjustmentQuery(values)}`)
-      if (!response.ok) throw new Error()
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, tCommon('feedback.saveFailed')))
       setResult((await response.json()) as Result)
-    } catch {
-      toast.error(tCommon('feedback.saveFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : tCommon('feedback.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -189,11 +190,11 @@ export function TaxFilingsView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPrepareBody(code, result, adjustments)),
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, tCommon('feedback.saveFailed')))
       toast.success(t('history.saved'))
       router.refresh()
-    } catch {
-      toast.error(tCommon('feedback.saveFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : tCommon('feedback.saveFailed'))
     } finally {
       setSaving(false)
     }
