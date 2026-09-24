@@ -18,7 +18,7 @@ import {
   parseCivilDay,
   type TurnoverResult,
 } from "./performance-math.ts";
-import { loadAnswers, loadReview, type ReviewAnswerDTO, type ReviewDTO } from "./reviews.ts";
+import { loadAnswers, loadReview, projectReviewForReader, type ReviewAnswerDTO, type ReviewDTO } from "./reviews.ts";
 import { requireGoalReadAuthority } from "./goals.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import type { CycleDTO } from "./review-cycles.ts";
@@ -262,16 +262,6 @@ export async function listCycleProgress(args: {
  * calibrated rating with its share note, never the reason. Applied here —
  * never in the UI alone — so every read surface strips identically.
  */
-function projectReviewForReader(
-  review: ReviewDTO,
-  args: { granted: boolean; actorPartyId: string | null },
-): ReviewDTO {
-  if (args.granted) return review;
-  if (args.actorPartyId !== null && args.actorPartyId === review.reviewerPartyId) return review;
-  if (review.calibrationReason === null) return review;
-  return { ...review, calibrationReason: null };
-}
-
 export interface CycleDetailDTO extends CycleProgressDTO {
   readonly reviews: ReviewDTO[];
 }
