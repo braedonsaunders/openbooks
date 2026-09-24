@@ -738,3 +738,138 @@ for (const locale of LOCALES) {
     }
   });
 }
+
+// F3-96: switching tabs remounted TabContent and dropped unsaved
+// relationship, accounting, and compliance input (keep-alive covered only
+// wages and payroll). Those panels now stay mounted once visited, so a
+// half-typed form survives a tab round-trip.
+test("relationship edits survive a tab round-trip", async (t) => {
+  const profile = {
+    lifecycle_stage: "lead",
+    status_id: "s1",
+    owner_user_id: null,
+    territory_id: null,
+    lead_source_id: null,
+    industry: null,
+    category: null,
+    annual_revenue: null,
+    employee_count: null,
+    qualification_score: null,
+    next_action_at: null,
+    updated_at: "2026-09-17T12:00:00.000000Z",
+  };
+  const options = {
+    statuses: [{ id: "s1", name: "New", lifecycle_stage: "lead", is_default: true }],
+    owners: [],
+    territories: [],
+    sources: [],
+  };
+  const { done } = await renderDrawer({
+    role: "customer",
+    recordType: "customer",
+    grants: { canReadCrmAccounts: true, canManageCrmAccounts: true },
+    fetchHandler: (url) =>
+      url === `/api/crm/accounts/${PARTY_ID}`
+        ? Response.json({ account: { profile, opportunities: [] }, options })
+        : null,
+  });
+  t.after(done);
+  const relationship = railTabNamed(en("parties.drawer.tabs.relationship"));
+  assert.ok(relationship, "the relationship tab must render");
+  await clickTab(relationship);
+  const panel = [...document.querySelectorAll("section")].find((section) =>
+    section.textContent?.includes("Relationship profile"),
+  );
+  assert.ok(panel, "the relationship panel must render");
+  const industry = [...panel.querySelectorAll("input")].find(
+    (input) => (input as HTMLInputElement).type === "text",
+  ) as HTMLInputElement | undefined;
+  assert.ok(industry, "the industry input must render");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(industry!, "Software");
+    industry!.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  const overview = railTabNamed(en("parties.drawer.tabs.overview"));
+  assert.ok(overview, "the overview tab must render");
+  await clickTab(overview);
+  await clickTab(railTabNamed(en("parties.drawer.tabs.relationship"))!);
+  const revived = [...document.querySelectorAll("section")]
+    .find((section) => section.textContent?.includes("Relationship profile"))
+    ?.querySelectorAll("input");
+  const revivedIndustry = [...(revived ?? [])].find(
+    (input) => (input as HTMLInputElement).type === "text",
+  ) as HTMLInputElement | undefined;
+  assert.equal(revivedIndustry?.value, "Software", "the typed industry must survive the tab round-trip");
+});
+
+test("an open bank account draft survives a tab round-trip", async (t) => {
+  const { done } = await renderDrawer({});
+  t.after(done);
+  const accounting =
+    railTabNamed(en("parties.drawer.tabs.accounting")) ??
+    railTabNamed(en("parties.drawer.bankAccountsHeading"));
+  assert.ok(accounting, "the accounting tab must render");
+  await clickTab(accounting);
+  const add = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === en("parties.drawer.addBankAccount"),
+  ) as HTMLButtonElement | undefined;
+  assert.ok(add, "the add bank account action must render");
+  await clickTab(add);
+  const bankName = [...document.querySelectorAll("input")].find(
+    (input) =>
+      (input as HTMLInputElement).type === "text" &&
+      (input as HTMLInputElement).value === "",
+  ) as HTMLInputElement | undefined;
+  assert.ok(bankName, "the draft bank name input must render");
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
+  await act(async () => {
+    setter.call(bankName!, "First National");
+    bankName!.dispatchEvent(new window.Event("input", { bubbles: true }));
+    await tick();
+  });
+  await tick();
+  await clickTab(railTabNamed(en("parties.drawer.tabs.overview"))!);
+  await clickTab(
+    railTabNamed(en("parties.drawer.tabs.accounting")) ??
+      railTabNamed(en("parties.drawer.bankAccountsHeading"))!,
+  );
+  const revived = [...document.querySelectorAll("input")].find(
+    (input) => (input as HTMLInputElement).value === "First National",
+  ) as HTMLInputElement | undefined;
+  assert.ok(revived, "the half-typed bank draft must survive the tab round-trip");
+});
+
+test("compliance class selection survives a tab round-trip", async (t) => {
+  const { done } = await renderDrawer({
+    grants: {
+      complianceEnabled: true,
+      compliance: {
+        classId: null,
+        classes: [{ id: "c1", code: "C1", name: "Class one" }],
+      },
+      canManageCompliance: true,
+    },
+  });
+  t.after(done);
+  const compliance = railTabNamed(en("parties.drawer.tabs.compliance"));
+  assert.ok(compliance, "the compliance tab must render");
+  await clickTab(compliance);
+  const panel = [...document.querySelectorAll("section")].find((section) =>
+    section.textContent?.includes(en("parties.drawer.compliance.heading")),
+  );
+  assert.ok(panel, "the compliance panel must render");
+  const select = panel.querySelector("select") as HTMLSelectElement | null;
+  assert.ok(select, "the class select must render");
+  setSelectValue(select!, "c1");
+  await tick();
+  await tick();
+  await clickTab(railTabNamed(en("parties.drawer.tabs.overview"))!);
+  await clickTab(railTabNamed(en("parties.drawer.tabs.compliance"))!);
+  const revived = [...document.querySelectorAll("section")]
+    .find((section) => section.textContent?.includes(en("parties.drawer.compliance.heading")))
+    ?.querySelector("select") as HTMLSelectElement | null;
+  assert.equal(revived?.value, "c1", "the chosen class must survive the tab round-trip");
+});
