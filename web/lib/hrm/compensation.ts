@@ -260,10 +260,10 @@ export async function loadCompensationHome(
   const plansOn = await isFeatureEnabled(orgId, 'hrmHeadcountPlans')
   const canRunCycles = canManage && meritOn
   const [bands, levels, cycles, plans] = await Promise.all([
-    listPayBands({ orgId, actorId: authz.user.id, asOf: today }).catch(() => []),
-    listJobLevels({ orgId, actorId: authz.user.id }).catch(() => []),
-    (meritOn ? listCycles({ orgId, actorId: authz.user.id }).catch(() => []) : []),
-    (plansOn ? listPlans({ orgId, actorId: authz.user.id }).catch(() => []) : []),
+    listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
+    listJobLevels({ orgId, actorId: authz.user.id }),
+    (meritOn ? listCycles({ orgId, actorId: authz.user.id }) : []),
+    (plansOn ? listPlans({ orgId, actorId: authz.user.id }) : []),
   ])
   const levelById = new Map(levels.map((l) => [l.id, l]))
   // Headcount per band scope: employments whose position level the band
@@ -292,28 +292,24 @@ export async function loadCompensationHome(
   let pacingNote = ''
   let belowMinRound = '—'
   if (openCycles[0]) {
-    const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id).catch(() => null)
+    const pacing = await cyclePacing(orgId, authz.user.id, openCycles[0].id)
     if (pacing?.totalPct !== null && pacing?.totalPct !== undefined) {
       pacingNote = `${Math.round(pacing.totalPct)}%`
     }
     // Below-min on the live round: lines whose frozen rate sits under
     // their band's min edge (read back, never stored).
-    try {
-      const roundLines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId: openCycles[0].id })
-      const roundBandIds = [...new Set(roundLines.map((l) => l.bandId).filter((b): b is string => b !== null))]
-      const roundEdges = new Map<string, string>()
-      if (roundBandIds.length > 0) {
-        const edgeRows = (await db.execute<{ id: string; min: string }>(sql`
-          select id, min::text as min from hrm_pay_bands
-           where org_id = ${orgId} and id = any(${`{${roundBandIds.join(',')}}`}::uuid[])`)).rows
-        for (const row of edgeRows) roundEdges.set(row.id, row.min)
-      }
-      belowMinRound = String(
-        roundLines.filter((l) => l.bandId !== null && Number(l.currentRate) < Number(roundEdges.get(l.bandId) ?? '0')).length,
-      )
-    } catch {
-      belowMinRound = '—'
+    const roundLines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId: openCycles[0].id })
+    const roundBandIds = [...new Set(roundLines.map((l) => l.bandId).filter((b): b is string => b !== null))]
+    const roundEdges = new Map<string, string>()
+    if (roundBandIds.length > 0) {
+      const edgeRows = (await db.execute<{ id: string; min: string }>(sql`
+        select id, min::text as min from hrm_pay_bands
+         where org_id = ${orgId} and id = any(${`{${roundBandIds.join(',')}}`}::uuid[])`)).rows
+      for (const row of edgeRows) roundEdges.set(row.id, row.min)
     }
+    belowMinRound = String(
+      roundLines.filter((l) => l.bandId !== null && Number(l.currentRate) < Number(roundEdges.get(l.bandId) ?? '0')).length,
+    )
   }
   const awaitingPlans = plans.filter((p) => p.status === 'submitted').length
   // A refused snapshot read (a scoped reader cannot read org-wide frozen
@@ -344,7 +340,7 @@ export async function loadCompensationHome(
   ]
   const planRows: CompPlanRow[] = []
   for (const plan of plans.slice(0, 10)) {
-    const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId: plan.id }).catch(() => [])
+    const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId: plan.id })
     const total = lines.reduce((sum, l) => sum + Number(l.estAnnualCost), 0)
     planRows.push({
       id: plan.id,
@@ -598,11 +594,16 @@ export async function loadCompCycleDetail(
   await requireFeatureEnabled(authz.user.orgId, 'hrmMeritCycles')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
-  const cycle = await getCycle({ orgId, actorId: authz.user.id, cycleId }).catch(() => null)
-  if (!cycle) return null
+  let cycle: Awaited<ReturnType<typeof getCycle>>
+  try {
+    cycle = await getCycle({ orgId, actorId: authz.user.id, cycleId })
+  } catch (error) {
+    if (error instanceof CompensationError && error.code === 'NOT_FOUND') return null
+    throw error
+  }
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
   const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
-  const lines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId }).catch(() => [])
+  const lines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId })
   const names = await workerNames(orgId, lines.map((l) => l.employmentId))
   const departments = new Map<string, { label: string; count: number }>()
   const deptOf = new Map<string, string>()
@@ -673,7 +674,7 @@ export async function loadCompCycleDetail(
         department: deptOf.get(l.employmentId) ?? '',
       }
     })
-  const pacing = await cyclePacing(orgId, authz.user.id, cycleId).catch(() => ({ totalPct: null as number | null, overBudget: false }))
+  const pacing = await cyclePacing(orgId, authz.user.id, cycleId)
   const openLineId = sp.line ?? null
   const openLine = rows.find((r) => r.id === openLineId) ?? null
   const history = openLineId
@@ -683,11 +684,6 @@ export async function loadCompCycleDetail(
        where org_id = ${orgId} and cycle_id = ${cycleId} and (line_id = ${openLineId} or line_id is null)
        order by recorded_at`)).rows
     : []
-  const actorNames = await workerNames(
-    orgId,
-    [],
-  ).catch(() => new Map<string, string>())
-  void actorNames
   return {
     cycleId,
     title: cycle.name,
@@ -798,12 +794,12 @@ export async function loadHeadcountPlanDetail(
   await requireFeatureEnabled(authz.user.orgId, 'hrmHeadcountPlans')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
-  const plans = await listPlans({ orgId, actorId: authz.user.id }).catch(() => [])
+  const plans = await listPlans({ orgId, actorId: authz.user.id })
   const plan = plans.find((p) => p.id === planId) ?? null
   if (!plan) return null
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
   const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
-  const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId }).catch(() => [])
+  const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId })
   const total = lines.reduce((sum, l) => sum + Number(l.estAnnualCost), 0)
   return {
     title: plan.name,
@@ -1049,17 +1045,13 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
   let placement = 'no_band'
   let compaRatio: string | null = null
   let bandRange: string | null = null
-  try {
-    const placed = await compaRatioFor(orgId, authz.user.id, employmentId, today)
-    if (placed.band) {
-      placement = placed.placement
-      compaRatio = placed.compaRatio
-      bandRange = `${placed.band.min} – ${placed.band.max} ${placed.band.currency}`
-    }
-  } catch {
-    placement = 'no_band'
+  const placed = await compaRatioFor(orgId, authz.user.id, employmentId, today)
+  if (placed.band) {
+    placement = placed.placement
+    compaRatio = placed.compaRatio
+    bandRange = `${placed.band.min} – ${placed.band.max} ${placed.band.currency}`
   }
-  const statements = await listStatements({ orgId, actorId: authz.user.id, employmentId }).catch(() => [])
+  const statements = await listStatements({ orgId, actorId: authz.user.id, employmentId })
   const { meTabs } = await import('./self-service')
   const tabs = (await meTabs(authz, '/me/compensation')).map((t) => ({ href: t.href, label: t.label, active: t.active === true }))
   const openRequest = (await db.execute<{ status: string }>(sql`
