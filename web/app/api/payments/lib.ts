@@ -40,6 +40,15 @@ export async function guardPaymentRunPermission(
 ): Promise<Authz | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  // Permission before existence: a caller holding neither direction's
+  // permission learns nothing — existing and missing ids answer the same
+  // uniform 404, never a 403 naming the needed permission.
+  const payPerm = `ap.${capability}` as const;
+  const receivePerm = `ar.${capability}` as const;
+  if (!can(authz, payPerm) && !can(authz, receivePerm)) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
+  if (!isUuid(runId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const row = await db.execute<{ direction: string }>(sql`
     select r.direction from payment_runs r
      where r.id = ${runId} and ${paymentRunScopeSql(authz)}
