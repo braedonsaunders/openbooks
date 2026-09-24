@@ -313,6 +313,34 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
   return result;
 }
 
+/**
+ * Persist one finished schedule scan onto its schedule row. A zero matched
+ * row count means the schedule was deleted mid-scan (deactivation alone
+ * still matches — the update carries no is_active predicate): the run
+ * evidence (files seen, statement ids, errors) must not be dropped while
+ * the returned run claims success. It is recorded where it cannot be lost —
+ * an audit_log row keyed to the schedule — and reported as a named error in
+ * the returned run, so both the operator surface and the scheduler log show
+ * what happened instead of a phantom clean scan.
+ */
+export async function recordScheduleRunOutcome(
+  s: Pick<ScheduleRow, "id" | "org_id">,
+  run: ScheduleRun,
+): Promise<ScheduleRun> {
+  const updated = await db.execute(sql`
+    update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id} and org_id = ${s.org_id}
+  `);
+  if ((updated.rowCount ?? 0) > 0) return run;
+  const message =
+    `schedule '${s.id}' was deleted during the scan — last_result was not recorded; ` +
+    `the run evidence is preserved in the audit trail and in this result`;
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (${s.org_id}, 'sftp_import_schedules', ${s.id}, 'scan_outcome_unrecorded', ${JSON.stringify(run)}::jsonb, ${SYSTEM_ACTOR_ID}, ${sftpImportAuditSource(s.id)})
+  `);
+  return { ...run, errors: [...run.errors, message] };
+}
+
 /** Run every active import schedule due for a scan (called from the scheduler tick). */
 export async function runDueSftpImports(orgId?: string, scheduleId?: string): Promise<ScheduleRun[]> {
   // Discovering due schedules spans organizations (the scheduler tick passes no
@@ -342,9 +370,10 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
     catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message], files: [] }; }
     runs.push(run);
     await withOrgContext(s.org_id, async () => {
-      await db.execute(sql`
-      update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id} and org_id = ${s.org_id}
-    `);
+      // The recorded outcome (including a mid-scan deletion refusal) is the
+      // run the caller reports — never the pre-recorded silent version.
+      run = await recordScheduleRunOutcome(s, run);
+      runs[runs.length - 1] = run;
       // A schedule that cannot accept identified statements must not fail
       // silently into an empty watch folder: raise (or keep) the one named
       // house notice until the binding lands. Runs after the scan so a
