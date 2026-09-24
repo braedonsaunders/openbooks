@@ -2,25 +2,23 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { LOCALE_CODES as LOCALES } from "../i18n/config"
 
 /**
  * A catalog file that exists but is not imported by its locale index is
  * INVISIBLE: next-intl never loads the namespace, and every key in it renders
  * as its own raw path on the page — `inbox.filters.all` instead of "All".
- *
  * That shipped in v0.1.0-alpha.22. inbox.json was present in all seven
  * locales with every key correctly translated, and no index imported it, so
  * the unified inbox rendered raw key paths in production. The index carries a
  * comment telling authors to add the import to every locale, which is exactly
  * the shape that fails: a hand-maintained list can only OMIT, and an omission
  * is silent.
- *
  * So derive it. The filesystem is the source of truth for which namespaces
  * exist; the indexes must agree with it, and with each other.
  */
 
 const MESSAGES = join(process.cwd(), 'web', 'messages')
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 
 function catalogsOf(locale: string): string[] {
   return readdirSync(join(MESSAGES, locale))
