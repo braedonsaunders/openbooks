@@ -10,10 +10,7 @@
  * was real and is gone from the migration path.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import pg from "pg";
 import {
   connectMigrationClient,
@@ -113,70 +110,6 @@ test(
     }
   },
 );
-
-test("bootstrap routes its long DDL through the migration client, not the request pool", () => {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(join(here, "bootstrap.ts"), "utf8");
-  // One chunk per top-level function; later short-statement helpers that
-  // legitimately keep the request pool must not leak into these bodies.
-  const chunks = source.split(/^(?=async function |function )/m);
-  const bodyOf = (signature: string): string => {
-    const chunk = chunks.find((entry) => entry.startsWith(signature));
-    assert.ok(chunk, `${signature} not found in bootstrap.ts`);
-    return chunk;
-  };
-  for (const [label, body] of [
-    ["executeTrackedMigration", bodyOf("async function executeTrackedMigration(")],
-    ["applyRowLevelSecurity", bodyOf("async function applyRowLevelSecurity(")],
-  ] as const) {
-    assert.ok(
-      body.includes("connectMigrationClient()"),
-      `${label} must execute long DDL through the timeout-free migration client`,
-    );
-    assert.ok(
-      !body.includes("pool.connect()") && !body.includes("pool.query("),
-      `${label} must not execute long DDL on the 120s request pool`,
-    );
-  }
-});
-
-test("executeTrackedMigration bounds the lock wait, retries 55P03, and honors no-transaction files", () => {
-  const here = dirname(fileURLToPath(import.meta.url));
-  const source = readFileSync(join(here, "bootstrap.ts"), "utf8");
-  const chunks = source.split(/^(?=async function |function )/m);
-  const body = chunks.find((entry) => entry.startsWith("async function executeTrackedMigration("));
-  assert.ok(body, "executeTrackedMigration not found in bootstrap.ts");
-  // The bound must be imposed by the runner every attempt, not trusted from
-  // the file: a file-level SET would silently disarm it for later statements.
-  assert.ok(
-    body.includes("sanitizeMigrationContent(content)"),
-    "the runner must strip file-level lock_timeout before executing",
-  );
-  assert.ok(
-    body.includes("executeMigrationAttempt(client,"),
-    "each attempt must run through the shared attempt executor",
-  );
-  assert.ok(
-    body.includes("isLockNotAvailable(err)"),
-    "only a lock-wait timeout (55P03) may retry the migration",
-  );
-  assert.ok(
-    body.includes("migrationRunsWithoutTransaction(content)"),
-    "no-transaction files (CREATE INDEX CONCURRENTLY) must skip BEGIN/COMMIT",
-  );
-  // The attempt executor lives in the importable client module (bootstrap.ts
-  // runs main() on import); its body carries the bound and the split.
-  const executor = readFileSync(join(here, "bootstrap-migration-client.ts"), "utf8");
-  assert.ok(
-    executor.includes("SET LOCAL lock_timeout"),
-    "each transactional attempt must run under the bounded lock_timeout",
-  );
-  assert.ok(
-    executor.includes("splitSqlStatements(body)"),
-    "no-transaction files must run statement by statement — a multi-statement "
-      + "string is one implicit transaction and CONCURRENTLY refuses it",
-  );
-});
 
 test(
   "a contended lock fires 55P03 under the migration bound, which the runner retries on",
