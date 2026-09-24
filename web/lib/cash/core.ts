@@ -6,6 +6,7 @@ import { businessToday, daysInCivilMonth, utcDateFromParts } from "@openbooks/en
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { evaluateFormula } from "./formula";
+import { monthYearLabel } from "../format";
 import { getMoneyFormatter } from '../money-server'
 import { resolveOrgId } from '../org-scope'
 import { statementBookExpr } from '../gl-summary'
@@ -727,6 +728,13 @@ export async function categoryWeekly(
   asOfIso: string,
   weekStarts: string[],
   context: CategoryContext,
+  /**
+   * Viewer BCP-47 locale for breakdown month names (F2-14b). UI readers pass
+   * the request locale; the default serves the engine unit tests and the
+   * label-agnostic agent-tool callers, matching the F-t04-010 position
+   * readers. See scripts/check-viewer-locale.allowlist.json.
+   */
+  locale = "en-US",
 ): Promise<CategoryWeekly> {
   const { money } = await getMoneyFormatter(orgId)
   const n = weekStarts.length;
@@ -1072,7 +1080,7 @@ export async function categoryWeekly(
     }
 
     breakdown = completedMonths.map((m) => ({
-      name: new Date(m.month + "-01T00:00:00Z").toLocaleString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }),
+      name: monthYearLabel(new Date(m.month + "-01T00:00:00Z"), locale, "numeric"),
       amount: m.total,
       type: "Historical",
       details: `${m.paymentCount} payment(s), Day ${m.largestPaymentDay}`,

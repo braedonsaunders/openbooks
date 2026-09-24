@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { dateLabel } from '../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, frame, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
@@ -112,6 +113,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('banking.pspSettlements')
   const common = await getTranslations('common')
+  const locale = await getLocale()
 
   const subsidiaryFilter = authz.allowedSubsidiaryIds
     ? authz.allowedSubsidiaryIds.size > 0
@@ -146,13 +148,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
     label: `${a.number ? `${a.number} · ` : ''}${a.name}`,
   }))
 
-  const dateLabel = (value: string) =>
-    new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    })
+  const settlementDateLabel = (value: string) => dateLabel(new Date(`${value}T12:00:00Z`), locale)
 
   return {
     title: t('title'),
@@ -202,7 +198,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
       id: String(b.id),
       providerLabel: t(`providers.${b.provider}`),
       externalRef: String(b.externalRef),
-      settlementDate: dateLabel(String(b.settlementDate).slice(0, 10)),
+      settlementDate: settlementDateLabel(String(b.settlementDate).slice(0, 10)),
       netAmount: money(String(b.netAmount), { currency: String(b.currency) }),
       // `common`, not the page namespace: the client component resolves this
       // label from common.status.*, and the page namespace has no status keys

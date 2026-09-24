@@ -220,6 +220,13 @@ export async function cashPosition(
    * receive it.
    */
   includeNullSubsidiary?: boolean,
+  /**
+   * Viewer BCP-47 locale for week labels (F2-14b); defaults to en-US like
+   * the F-t04-010 position readers. The banking cash loader passes the
+   * request locale — the default serves the API route (entries only),
+   * vitals/metrics aggregates, engine tests, and agent callers.
+   */
+  locale = "en-US",
 ): Promise<CashPosition> {
   const subIds = allowedSubsidiaryIds === null ? requestedSubIds
     : requestedSubIds === undefined ? [...allowedSubsidiaryIds]
@@ -287,7 +294,7 @@ export async function cashPosition(
   // subsidiary. Unattributed ones hide (fail closed) rather than leaking
   // org-wide names and amounts into a restricted view.
   const visibleConfigs = catConfigs.filter((c) => isCategoryVisibleInScope(c, subIds, allowedSubsidiaryIds));
-  const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext)));
+  const categories = await Promise.all(visibleConfigs.map((c) => categoryWeekly(orgId, c, asOfIso, grid.weekStarts, catContext, locale)));
   const timeline = buildTimeline({
     weekStarts: grid.weekStarts,
     startingCash,
@@ -295,6 +302,7 @@ export async function cashPosition(
     apByWeek: ap.byWeek,
     categories,
     apSettings,
+    locale,
   });
 
   let lowestCash = startingCash;

@@ -3,6 +3,7 @@ import { AlertTriangle, ArrowRight } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
 import { StartRunButton } from './_ui/NewRunButton'
 import { RunStatusBadge } from './_ui/run-status'
+import { shortDateLabel } from '../../../lib/format'
 
 /**
  * The payroll cockpit's bespoke rail sections, extracted from the page.
@@ -252,12 +253,8 @@ export function PayrollManageLinks({
   )
 }
 
-export function shortDate(iso: string): string {
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
+export function shortDate(iso: string, locale: string): string {
+  return shortDateLabel(new Date(iso + 'T00:00:00Z'), locale)
 }
 
 export function Fact({ label, children }: { label: string; children: React.ReactNode }) {

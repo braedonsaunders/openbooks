@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import {
   AlertTriangle, BarChart3, CalendarDays, CheckCircle2, Copy, FileWarning, Flag, Ghost,
   History, Info, ListOrdered, Scale, ShieldAlert, SlidersHorizontal, Sigma, Zap, Database, Download,
@@ -18,12 +18,17 @@ import { exportCsv } from '../_ui/exportCsv'
 import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
 import { useAnalyticsMoney } from '../_ui/format'
+import { countLabel, dateLabel } from '@/lib/format'
 
 /* ------------------------------------------------------------------ helpers */
 
 const TABS = ['overview', 'benford', 'analysis', 'detection', 'vendors', 'audit', 'config'] as const
 type Tab = (typeof TABS)[number]
-const num = (n: number) => n.toLocaleString('en-US')
+/** Viewer-locale integer grouping (F2-14b): one hook so every tab shares it. */
+function useNum() {
+  const locale = useLocale()
+  return (n: number) => countLabel(n, locale)
+}
 
 interface BenfordDrillDocument {
   date: string
@@ -134,6 +139,7 @@ function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showR
 }
 
 function SubPills<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { key: T; label: string; count?: number }[] }) {
+  const num = useNum()
   return (
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => (
@@ -163,6 +169,7 @@ function useConformLabel() {
 
 export function SentinelView({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const conformLabel = useConformLabel()
@@ -221,6 +228,7 @@ export function SentinelView({ data }: { data: SentinelData }) {
 
 function OverviewTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const conformLabel = useConformLabel()
   const s = data.summary
   const b = data.benford1D
@@ -296,6 +304,7 @@ function OverviewTab({ data }: { data: SentinelData }) {
 
 function BenfordTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const conformLabel = useConformLabel()
@@ -451,6 +460,9 @@ function BenfordTab({ data }: { data: SentinelData }) {
 /** Benford digit → transactions drill (scoped to the active currency slice). */
 function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: number; dim: '1d' | '2d'; currency?: string; from: string; to: string; onClose: () => void }) {
   const t = useTranslations('analytics.sentinel')
+  const locale = useLocale()
+  const num = useNum()
+  const fmtDate = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<BenfordDrillData | null>(null)
@@ -464,7 +476,7 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
       .catch(() => { if (live) setError(true) })
     return () => { live = false }
   }, [digit, dim, currency, from, to])
-  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+
 
   return (
     <Drawer open onClose={onClose} size="lg" title={`${dim === '2d' ? t('drill.firstTwoDigits') : t('drill.leadingDigit')}: ${digit}`} description={data ? `${t('drill.documentsTotal', { count: num(data.count), total: money(data.total) })}${data.count > data.documents.length ? ` (${t('drill.top', { count: data.documents.length })})` : ''}` : t('loading')} bodyClassName="overflow-hidden flex flex-col p-0">
@@ -508,6 +520,7 @@ function BenfordDrill({ digit, dim, currency, from, to, onClose }: { digit: numb
 
 function AnalysisTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const fmtMoney = useAnalyticsMoney()
   const money0 = (n: number) => fmtMoney(n)
   const [sub, setSub] = useState<'rsf' | 'zscore' | 'calendar'>('rsf')
@@ -637,6 +650,7 @@ function AnalysisTab({ data }: { data: SentinelData }) {
 
 function DetectionTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const today = useBusinessToday()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
@@ -853,6 +867,7 @@ function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillT
 
 function AuditTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const a = data.auditTrail
   return (
     <div className="space-y-4">
@@ -899,6 +914,7 @@ function AuditTab({ data }: { data: SentinelData }) {
 
 function ConfigTab({ data }: { data: SentinelData }) {
   const t = useTranslations('analytics.sentinel')
+  const num = useNum()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const c = data.config

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { dateLabel } from '@/lib/format'
 import { Button, Card, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
@@ -196,6 +197,7 @@ export function PspSettlementsWorkspace({
   // Client-fetched rows (native path, and spec-path reloads after a mutation)
   // format through the same hooks the native page has always used.
   const common = useTranslations('common')
+  const locale = useLocale()
   const { money } = useMoney()
   const today = useBusinessToday()
   const [batches, setBatches] = useState<SettlementBatch[]>([])
@@ -354,12 +356,7 @@ export function PspSettlementsWorkspace({
   }
 
   const settlementDateLabel = (value: string) =>
-    new Date(`${value}T12:00:00Z`).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      timeZone: 'UTC',
-    })
+    dateLabel(new Date(`${value}T12:00:00Z`), locale)
   const providerLabel = (value: SettlementProvider) => t(`providers.${value}`)
   const statusLabel = (value: SettlementStatus) => common(`status.${STATUS_MESSAGE[value]}`)
 

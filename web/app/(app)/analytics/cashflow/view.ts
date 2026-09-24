@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { cashflowData } from '../../../../lib/analytics/cashflow-data'
@@ -40,10 +40,11 @@ export interface CashflowData {
 export async function loadCashflow(sp: Record<string, string | undefined>): Promise<CashflowData> {
   const t = await getTranslations('analytics.cashflow')
   const authz = await requirePermission('reports.read')
+  const locale = await getLocale()
 
   const horizon = normalizeCashHorizonWeeks(sp.horizon, 4)
 
-  const position = await cashflowData(authz.user.orgId, horizon, undefined, authz.allowedSubsidiaryIds)
+  const position = await cashflowData(authz.user.orgId, horizon, undefined, authz.allowedSubsidiaryIds, locale)
   // Week totals, counts and the per-counterparty aggregate travel with the
   // page; the transactions behind them do not. The week flyout fetches
   // whichever week is opened from /api/cash/week-entries, at full detail.

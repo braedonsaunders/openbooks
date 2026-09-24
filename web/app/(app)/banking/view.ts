@@ -1,7 +1,8 @@
 import 'server-only'
 
 import { getMoneyFormatter } from '@/lib/money-server'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { trendWeekLabel } from '../../../lib/format'
 import {
   grid,
   page,
@@ -125,6 +126,7 @@ export async function loadBanking(
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
+  const locale = await getLocale()
   const tNav = await getTranslations('nav')
   const tr = await getTranslations('reports')
 
@@ -277,7 +279,7 @@ export async function loadBanking(
     trendTitle: t('home.trend.title'),
     trendHint: t('home.trend.hint'),
     trendSeriesName: t('home.trend.series'),
-    trendLabels: data.trend.map((w) => weekLabel(w.weekStart)),
+    trendLabels: data.trend.map((w) => trendWeekLabel(w.weekStart, locale)),
     trendData: data.trend.map((w) => w.balance),
     directoryTitle: t('home.directory.title'),
     directory,
@@ -325,14 +327,6 @@ export function daysSince(iso: string | null): number | null {
   const then = new Date(iso).getTime()
   if (Number.isNaN(then)) return null
   return Math.max(0, Math.floor((Date.now() - then) / 86_400_000))
-}
-
-export function weekLabel(weekStart: string): string {
-  return new Date(weekStart + 'T00:00:00Z').toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
 }
 
 const f = ref<BankingData>()

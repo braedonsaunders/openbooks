@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { decimalLabel } from '../../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
   Badge,
@@ -37,6 +38,7 @@ export function renderCell(
   row: Record<string, unknown>,
   refLabels: Record<string, Map<string, string>>,
   t: (k: string) => string,
+  locale: string,
 ) {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
@@ -62,7 +64,7 @@ export function renderCell(
       const num = Number(raw)
       // Locale-formatted, trailing zeros trimmed (1.7500 → 1.75, 40.0000 → 40).
       return Number.isFinite(num)
-        ? num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4 })
+        ? decimalLabel(num, locale, 0, 4)
         : String(raw)
     }
     case 'date':
@@ -112,6 +114,7 @@ export async function SetupEntitySection({
       : gated,
   )
   const t = await getTranslations('admin.setup')
+  const locale = await getLocale()
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
   const list = parseListParams(sp, { sort: 'default', allowedSorts: ['default'] as const, perPage: 25 })
@@ -297,10 +300,10 @@ export async function SetupEntitySection({
                         href={mergeHref(basePath, sp, { row: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
-                        {renderCell(c, row, refLabels, t)}
+                        {renderCell(c, row, refLabels, t, locale)}
                       </Link>
                     ) : (
-                      renderCell(c, row, refLabels, t)
+                      renderCell(c, row, refLabels, t, locale)
                     )}
                   </TableCell>
                 ))}

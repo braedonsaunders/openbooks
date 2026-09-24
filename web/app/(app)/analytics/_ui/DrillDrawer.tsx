@@ -7,6 +7,8 @@ import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney } from '@
 import { TxnLink } from '../../reports/TxnLink'
 import { GroupedBar } from './charts'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
+import { useLocale } from 'next-intl'
+import { dateLabel, monthYearLabel } from '@/lib/format'
 
 /**
  * Shared analytics drill-down drawer — the openbooks implementation of'
@@ -83,6 +85,7 @@ const KIND_LABEL: Record<string, string> = {
 const kindLabel = (k: string | null) => (k ? (KIND_LABEL[k] ?? k.replace(/_/g, ' ')) : 'Journal')
 
 export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget | null; from: string; to: string; onClose: () => void }) {
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string | number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<DrillData | null>(null)
@@ -132,9 +135,9 @@ export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget
   if (!target) return null
   const monthLabel = (ym: string) => {
     const [y, m] = ym.split('-').map(Number)
-    return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })
+    return monthYearLabel(new Date(Date.UTC(y!, m! - 1, 1)), locale)
   }
-  const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  const fmtDate = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
 
   return (
     <Drawer open onClose={onClose} size="lg" title={target.name} description={target.sub ?? `${from} – ${to}`} bodyClassName="overflow-hidden flex flex-col p-0">

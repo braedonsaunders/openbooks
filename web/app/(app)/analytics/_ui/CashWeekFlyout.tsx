@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Button, Drawer, cn } from '@openbooks/ui'
 import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney, mulDecimal, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
 import {
@@ -27,12 +27,12 @@ import {
 import type { CategoryWeekly, ForecastEntry, WeekRow } from '../../../../lib/cash/core'
 import { TxnLink } from '../../reports/TxnLink'
 import { useBusinessToday } from '../../../../components/business-date-provider'
+import { shortDateLabel } from '@/lib/format'
 import { Gauge } from './Gauge'
 import { EntityDrawer } from './EntityDrawer'
 import { exportCsv } from './exportCsv'
 import { formatExactPercent, toChartNumber, useAnalyticsMoney } from './format'
 const ZERO_MONEY = '0.0000'
-const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 const PAGE_SIZE = 25
 
 type SortCol = 'docNumber' | 'partyName' | 'predictedDate' | 'amount'
@@ -85,6 +85,8 @@ export function CashWeekFlyout({
 }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
+  const locale = useLocale()
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>(initialSide)
@@ -382,8 +384,10 @@ export function CashWeekFlyout({
  */
 function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: string }) {
   const today = useBusinessToday()
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const t = useTranslations('analytics.cashWeek')
   const tMeta = useTranslations('analytics.cashWeek.meta')
   const [search, setSearch] = useState('')

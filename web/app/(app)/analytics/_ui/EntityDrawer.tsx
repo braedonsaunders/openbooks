@@ -5,6 +5,8 @@ import { Drawer, cn } from '@openbooks/ui'
 import { Gauge as GaugeIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { TxnLink } from '../../reports/TxnLink'
 import { useAnalyticsMoney } from './format'
+import { useLocale } from 'next-intl'
+import { dateLabel } from '@/lib/format'
 const PER_PAGE = 25
 
 /**
@@ -53,6 +55,7 @@ interface EntityData {
 }
 
 export function EntityDrawer({ party, name, side, onClose }: { party: string; name: string; side: 'ar' | 'ap'; onClose: () => void }) {
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: string) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<EntityData | null>(null)
@@ -79,7 +82,7 @@ export function EntityDrawer({ party, name, side, onClose }: { party: string; na
       .catch((e: unknown) => { if (live) setError(e instanceof Error ? e.message : 'Could not load history.') })
     return () => { live = false }
   }, [party, side])
-  const dt = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+  const dt = (d: string) => dateLabel(new Date(d + 'T00:00:00Z'), locale)
   const relTone = (r: number) => (r >= 80 ? 'text-emerald-600 dark:text-emerald-400' : r >= 60 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400')
 
   const openRows: EntityOpenItem[] = data?.openItems ?? []

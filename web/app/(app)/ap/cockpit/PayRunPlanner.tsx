@@ -3,7 +3,8 @@
 import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { shortDateLabel } from '@/lib/format'
 import { cmp as compareMoney, div as divideMoney, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
 import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
@@ -28,7 +29,7 @@ export interface PayRunPlannerProps {
   deferredThisWeek: string
 }
 
-const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+
 
 /**
  * The AP pay-run planner: the capacity-scheduled recommendation for this week.
@@ -39,7 +40,9 @@ const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en
  */
 export function PayRunPlanner(props: PayRunPlannerProps) {
   const { money, moneyCompact } = useMoney()
+  const locale = useLocale()
   const t = useTranslations('ap.cockpit.payRun')
+  const fmtDate = (d: string) => shortDateLabel(new Date(d + 'T00:00:00Z'), locale)
   const router = useRouter()
   const payable = useMemo(() => props.recommended.filter((e) => e.docId), [props.recommended])
   const [selected, setSelected] = useState<Set<string>>(() => new Set(payable.map((e) => e.id)))

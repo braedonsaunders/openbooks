@@ -3,6 +3,8 @@
 import { TableCell, TableRow } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import { useMoney } from '../../../../../components/money-provider'
+import { useLocale } from 'next-intl'
+import { decimalLabel } from '../../../../../lib/format'
 
 /**
  * The rows a derived earnings rule WOULD pay over a period — one line per
@@ -41,6 +43,7 @@ export function DerivedRulePreviewTable({
   }
 }) {
   const { money } = useMoney()
+  const locale = useLocale()
 
   return (
     <PagedTable
@@ -73,7 +76,7 @@ export function DerivedRulePreviewTable({
           key: 'quantity',
           header: labels.quantity,
           align: 'right',
-          cell: (row) => Number(row.quantity).toLocaleString('en-US', { maximumFractionDigits: 2 }),
+          cell: (row) => decimalLabel(Number(row.quantity), locale, 0, 2),
         },
         { key: 'amount', header: labels.amount, align: 'right', cell: (row) => money(row.amount) },
       ]}

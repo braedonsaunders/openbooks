@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import { countLabel } from '@/lib/format'
 import {
   AlertTriangle, ArrowDown, ArrowUp, BarChart3, Bolt, Bug, CalendarRange, ChartArea,
   CheckCircle2, DollarSign, Flame, Ghost, Info, Layers, Lightbulb, Mountain,
@@ -608,6 +609,7 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 
 function TrendsTab({ data }: { data: SpendVelocityData }) {
   const t = useTranslations('analytics.spendVelocity')
+  const locale = useLocale()
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const money0 = (n: number) => fmtMoney(n)
@@ -689,7 +691,7 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
                 <td className="px-4 py-2 text-right tabular-nums text-slate-400">{m.priorYearAmount ? money0(m.priorYearAmount) : '—'}</td>
                 <td className={cn('px-4 py-2 text-right font-semibold tabular-nums', m.yoyChange > 0 ? 'text-rose-600 dark:text-rose-400' : m.yoyChange < 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>{m.priorYearAmount ? `${m.yoyChange > 0 ? '+' : ''}${pct1(m.yoyChange)}` : '—'}</td>
                 <td className="px-4 py-2 text-right"><VelocityPill v={m.velocity} /></td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-400">{m.transactionCount.toLocaleString('en-US')}</td>
+                <td className="px-4 py-2 text-right tabular-nums text-slate-400">{countLabel(m.transactionCount, locale)}</td>
                 <td className="px-4 py-2 text-right tabular-nums text-slate-400">{m.vendorCount}</td>
               </tr>
             ))}
