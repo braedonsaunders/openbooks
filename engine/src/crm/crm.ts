@@ -85,8 +85,42 @@ export async function ensureCrmDefaults(
   }
 }
 
-/** Promote an account and write immutable evidence in the caller's transaction. */
-export async function promoteCrmAccount(
+/**
+ * The typed outcome of a lifecycle transition. Callers must handle it — a
+ * bare `await` discards the difference between "CRM is off" and "applied",
+ * which is how order conversion silently skipped the customer role.
+ */
+export interface CrmStageTransition {
+  /** The party holds an active customer role after this call. Core AR state:
+   *  ensured whenever the target is customer, with the CRM feature on or off. */
+  customerRoleActive: boolean;
+  /** CRM lifecycle state is authoritative after this call: bookkeeping was
+   *  written, or the stage had already converged. False only when the CRM
+   *  feature is off (lifecycle frozen) — concurrent promotions stay
+   *  idempotent instead of failing as "not applied". */
+  lifecycleApplied: boolean;
+  /** The lifecycle stage actually moved (implies lifecycleApplied). */
+  transitioned: boolean;
+}
+
+async function ensureActiveCustomerRole(
+  executor: SqlExecutor,
+  input: { orgId: string; partyId: string; actorId: string },
+): Promise<void> {
+  await executor.execute(sql`
+    insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
+    values (${input.orgId}, ${input.partyId}, true, ${input.actorId}, ${input.actorId})
+    on conflict (party_id) do update set is_active = true, updated_at = now(), updated_by = ${input.actorId}
+    where customer_roles.org_id = ${input.orgId}`);
+}
+
+/**
+ * Move an account forward one lifecycle transition and write immutable
+ * evidence in the caller's transaction. Becoming a customer (role plus
+ * profile) is core AR and happens with CRM on or off; only the CRM
+ * lifecycle and stage bookkeeping is CRM-gated.
+ */
+export async function transitionCrmAccountStage(
   executor: SqlExecutor,
   input: {
     orgId: string;
@@ -97,8 +131,9 @@ export async function promoteCrmAccount(
     sourceId?: string | null;
     reason?: string | null;
   },
-): Promise<boolean> {
-  if (!(await crmFeatureEnabled(executor, input.orgId))) return false;
+): Promise<CrmStageTransition> {
+  const idle: CrmStageTransition = { customerRoleActive: false, lifecycleApplied: false, transitioned: false };
+  const crmOn = await crmFeatureEnabled(executor, input.orgId);
   const existing = (await executor.execute<{ id: string; lifecycle_stage: CrmLifecycleStage }>(sql`
     select id, lifecycle_stage from crm_account_profiles
      where org_id = ${input.orgId} and party_id = ${input.partyId} for update
@@ -107,6 +142,14 @@ export async function promoteCrmAccount(
   let profileId = existing.rows[0]?.id;
   const fromStage = existing.rows[0]?.lifecycle_stage;
   if (!profileId) {
+    if (!crmOn) {
+      // No profile without CRM — but a new customer still needs its AR role.
+      if (input.toStage === "customer") {
+        await ensureActiveCustomerRole(executor, input);
+        return { ...idle, customerRoleActive: true };
+      }
+      return idle;
+    }
     const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
@@ -119,7 +162,22 @@ export async function promoteCrmAccount(
       returning id`));
     profileId = inserted.rows[0]!.id;
   } else {
-    if (!shouldPromoteLifecycle(fromStage!, input.toStage)) return false;
+    if (!shouldPromoteLifecycle(fromStage!, input.toStage)) {
+      // No stage movement — but a customer call still converges the role
+      // (rows created while CRM was off, or by AR writers, may lack one).
+      if (input.toStage === "customer") {
+        await ensureActiveCustomerRole(executor, input);
+        return { ...idle, customerRoleActive: true, lifecycleApplied: crmOn };
+      }
+      return { ...idle, lifecycleApplied: crmOn };
+    }
+    if (!crmOn) {
+      if (input.toStage === "customer") {
+        await ensureActiveCustomerRole(executor, input);
+        return { ...idle, customerRoleActive: true };
+      }
+      return idle;
+    }
     const status = (await executor.execute<{ id: string }>(sql`
       select id from crm_account_statuses
        where org_id = ${input.orgId} and lifecycle_stage = ${input.toStage} and is_default and is_active
@@ -133,18 +191,34 @@ export async function promoteCrmAccount(
   }
 
   if (input.toStage === "customer") {
-    await executor.execute(sql`
-      insert into customer_roles (org_id, party_id, is_active, created_by, updated_by)
-      values (${input.orgId}, ${input.partyId}, true, ${input.actorId}, ${input.actorId})
-      on conflict (party_id) do update set is_active = true, updated_at = now(), updated_by = ${input.actorId}
-      where customer_roles.org_id = ${input.orgId}`);
+    await ensureActiveCustomerRole(executor, input);
   }
   await executor.execute(sql`
     insert into crm_account_stage_events
       (org_id, account_profile_id, from_stage, to_stage, source_kind, source_id, reason, created_by, updated_by)
     values (${input.orgId}, ${profileId}, ${fromStage ?? null}, ${input.toStage}, ${input.sourceKind},
             ${input.sourceId ?? null}, ${input.reason ?? null}, ${input.actorId}, ${input.actorId})`);
-  return true;
+  return {
+    customerRoleActive: input.toStage === "customer",
+    lifecycleApplied: true,
+    transitioned: true,
+  };
+}
+
+/** Promote an account and write immutable evidence in the caller's transaction. */
+export async function promoteCrmAccount(
+  executor: SqlExecutor,
+  input: {
+    orgId: string;
+    partyId: string;
+    actorId: string;
+    toStage: CrmLifecycleStage;
+    sourceKind: string;
+    sourceId?: string | null;
+    reason?: string | null;
+  },
+): Promise<CrmStageTransition> {
+  return transitionCrmAccountStage(executor, input);
 }
 
 /** Route one account using the first matching active territory by priority. */

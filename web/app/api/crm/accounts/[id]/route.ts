@@ -233,7 +233,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (stage && stage !== row.lifecycle_stage) {
       const rank = { lead: 0, prospect: 1, customer: 2 }
       if (rank[stage] > rank[row.lifecycle_stage as Stage]) {
-        await promoteCrmAccount(tx, { orgId: user.orgId, partyId: id, actorId: user.id, toStage: stage, sourceKind: 'manual', reason: stageReason ?? null })
+        const promotion = await promoteCrmAccount(tx, { orgId: user.orgId, partyId: id, actorId: user.id, toStage: stage, sourceKind: 'manual', reason: stageReason ?? null })
+        // This route is CRM-gated, so lifecycle bookkeeping must land; a
+        // customer promotion additionally requires the AR role.
+        if (!promotion.lifecycleApplied) {
+          throw new Error('CRM lifecycle transition was not applied')
+        }
+        if (stage === 'customer' && !promotion.customerRoleActive) {
+          throw new Error('customer role was not established while promoting the account')
+        }
       } else {
         const reason = stageReason ?? null
         await tx.execute(sql`

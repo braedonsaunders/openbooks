@@ -532,7 +532,7 @@ const mockSources = new Map<string, string>([
     export async function segmentRegistry() { return [] }
     export function validateExtraDims(value) { return { ok: true, cleaned: value ?? {} } }
   `],
-  ['mock:crm', `export async function promoteCrmAccount() { return undefined }`],
+  ['mock:crm', `export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }`],
   ['mock:features', `
     export async function isFeatureEnabled() { return true }
     export async function subsidiaryFeatureEnabled() { return true }
