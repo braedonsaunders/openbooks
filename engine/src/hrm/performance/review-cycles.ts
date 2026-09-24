@@ -192,6 +192,11 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    if (scope.employerSubsidiaryId === null && allowed !== null) {
+      throw new HrmAuthorizationError(
+        "a restricted HR review cycle must name an employer subsidiary in their scope — select an allowed subsidiary or ask unrestricted HR to create an org-wide cycle",
+      );
+    }
     // Creation validates against the DECLARED scope — a caller cannot plant
     // a cycle over a legal entity they cannot see.
     if (scope.employerSubsidiaryId !== null && allowed !== null && !allowed.has(scope.employerSubsidiaryId)) {

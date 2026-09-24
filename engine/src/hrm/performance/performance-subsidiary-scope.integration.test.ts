@@ -338,6 +338,40 @@ test("a restricted HR moves only the cycles they cover", { skip: !DB }, async ()
   }
 });
 
+test("restricted HR must choose a legal entity when creating a review cycle", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    await assert.rejects(
+      createCycle({
+        orgId: h.org.orgId,
+        actorId: h.hrA,
+        templateId,
+        name: "Unscoped FY26",
+        periodStartOn: "2026-01-01",
+        periodEndOn: "2026-06-30",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmAuthorizationError);
+        assert.match(error.message, /must name an employer subsidiary in their scope/);
+        return true;
+      },
+    );
+    const scoped = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrA,
+      templateId,
+      name: "A-scope FY26",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+      appliesTo: { employer_subsidiary_id: h.org.subsidiaryId, department_id: null },
+    });
+    assert.equal(scoped.appliesTo.employerSubsidiaryId, h.org.subsidiaryId);
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
 test("restricted HR cycle lists and details hide other subsidiaries and scope org-wide progress", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {
