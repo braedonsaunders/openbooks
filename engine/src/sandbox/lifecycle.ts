@@ -30,6 +30,11 @@ export function requireFoundSandbox<T>(
 /** Stamped onto `sandboxes.last_error` while status is `refreshing`. Not a user error. */
 export const REFRESH_CLONE_PROOF_PREFIX = "clone-rls-proof:";
 
+/** Shared synchronous guard for the create action and lifecycle worker. */
+export function validateSandboxCutoff(tier: SandboxTier, asOfPeriodId?: string | null): void {
+  if (tier === "as_of" && !asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
+}
+
 export function newRefreshCloneProofToken(): string {
   return `${REFRESH_CLONE_PROOF_PREFIX}${randomUUID()}`;
 }
@@ -347,7 +352,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   const sandboxOrgId = randomUUID();
   const seed = randomUUID();
 
-  if (tier === "as_of" && !input.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
+  validateSandboxCutoff(tier, input.asOfPeriodId);
   // Only the cutoff period ID crosses into the clone: runClone resolves its
   // calendar and end date inside the copy snapshot, so no outer lookup can go
   // stale between here and the copy (SBOX1 addendum).
