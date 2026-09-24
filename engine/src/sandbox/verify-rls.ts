@@ -5,17 +5,22 @@
  *
  * Confirms deny-by-default tenant isolation is enforced at the database for
  * the production source AND its sandbox clone:
+ *   - the proof covers exactly the tables the clone tier actually copied
+ *     (derived from the clone plan, never a fixed list: a dev-tier proof
+ *     over ledger tables would pass vacuously on zero rows while production
+ *     counts kept the total positive)
  *   - bypass counts of each tenant match scoped counts of that tenant
  *   - scoping to a different/bogus org sees ZERO (fail-closed, no leak)
- *   - an empty pair is a failure: isolation cannot be proven on zero rows
+ *   - a table with no rows on either side proves nothing and is reported by
+ *     name as unverified; a proof with no verified table is a failure
  */
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypass, withOrg } from "../platform/db.ts";
+import { loadCatalog } from "./catalog.ts";
+import { selectCloneTables, type SandboxTier } from "./clone.ts";
 
 export const BOGUS_ORG_ID = "00000000-0000-0000-0000-000000000000";
-export const CLONE_RLS_TABLES = ["journal_lines", "accounts", "accounting_periods"] as const;
-export type CloneRlsTable = (typeof CLONE_RLS_TABLES)[number];
 
 const UUID_VALUE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -33,7 +38,22 @@ export type CloneRlsProof = {
   productionOrgId: string;
   sandboxOrgId: string;
   tables: CloneRlsTableCounts[];
+  /** Tables empty on at least one side: leak-checked but proving nothing, named aloud. */
+  unverifiedTables?: string[];
 };
+
+/**
+ * Tables a table-side observation actually proves something about: rows
+ * exist on BOTH sides, so both scoped comparisons are non-vacuous. A table
+ * with rows on only one side (or none) is still leak-checked by
+ * evaluateCloneRlsProof, but it joins the unverified list instead of the
+ * proof.
+ */
+export function unverifiedCloneRlsTables(tables: CloneRlsTableCounts[]): string[] {
+  return tables
+    .filter((table) => !(table.bypassProduction > 0 && table.bypassSandbox > 0))
+    .map((table) => table.table);
+}
 
 export function assertCloneRlsPair(productionOrgId: string, sandboxOrgId: string): void {
   if (!UUID_VALUE.test(productionOrgId)) {
@@ -79,34 +99,65 @@ export function evaluateCloneRlsProof(proof: CloneRlsProof): void {
         `clone RLS re-verification failed on ${table.table}: sandbox scope saw ${table.scopedSandbox} rows but bypass counted ${table.bypassSandbox} sandbox rows. Scoped reads must match the clone tenant exactly; a higher scoped count is a cross-tenant leak.`,
       );
     }
-    observedRows += table.bypassProduction + table.bypassSandbox;
+    // Only a both-sides observation proves isolation: a one-sided table
+    // (rows on production but none copied, the dev-tier ledger shape) still
+    // matches 0 == 0 on the empty side, so it is leak-checked above but
+    // never counted as proof.
+    if (table.bypassProduction > 0 && table.bypassSandbox > 0) {
+      observedRows += table.bypassProduction + table.bypassSandbox;
+    }
   }
 
   if (observedRows === 0) {
-    const names = proof.tables.map((table) => table.table).join(", ");
+    const unverified = unverifiedCloneRlsTables(proof.tables);
     throw new Error(
-      `clone RLS re-verification failed: production ${proof.productionOrgId} and sandbox ${proof.sandboxOrgId} have zero rows on ${names}; isolation cannot be proven on empty tables. Clone a tenant that holds accounts or accounting periods, or pass tables the clone actually copied.`,
+      `clone RLS re-verification failed: production ${proof.productionOrgId} and sandbox ${proof.sandboxOrgId} have zero verified rows (unverified tables: ${unverified.join(", ") || "none"}); isolation cannot be proven on empty tables. Clone a tenant that holds rows in the tables the clone tier actually copied.`,
     );
   }
 }
 
-async function countScoped(table: CloneRlsTable): Promise<number> {
-  const result = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(`"${table}"`)}`,
-  );
-  return result.rows[0]?.n ?? 0;
+/**
+ * The tables the proof must cover for one clone tier: the clone plan's
+ * table set for that tier, restricted to org-scoped (RLS-subject) tables.
+ * Anything else — a fixed ledger trio, the full catalog regardless of
+ * tier — either proves nothing (uncopied tables read 0 == 0 on the clone
+ * side) or reads tables RLS cannot scope.
+ */
+export async function cloneTierVerificationTables(tier: SandboxTier): Promise<string[]> {
+  const cat = await loadCatalog();
+  return selectCloneTables(cat.tables, tier)
+    .filter((table) => table.hasOrgId)
+    .map((table) => table.name)
+    .sort();
 }
 
-async function countForOrg(table: CloneRlsTable, orgId: string): Promise<number> {
-  const result = await db.execute<{ n: number }>(
-    sql`select count(*)::int as n from ${sql.raw(`"${table}"`)} where org_id = ${orgId}`,
-  );
-  return result.rows[0]?.n ?? 0;
+/** One round trip per chunk: per-table counts as (table, n) rows. */
+async function countChunk(
+  tables: string[],
+  whereOrg: string | null,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (let i = 0; i < tables.length; i += 100) {
+    const branches = tables.slice(i, i + 100).map((table) =>
+      whereOrg === null
+        ? sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)}`
+        : sql`select ${table}::text as tbl, count(*)::int as n from ${sql.raw(`"${table}"`)} where org_id = ${whereOrg}`,
+    );
+    const result = await db.execute<{ tbl: string; n: number }>(
+      sql.join(branches, sql` union all `),
+    );
+    for (const row of result.rows) out.set(row.tbl, row.n);
+    for (const table of tables.slice(i, i + 100)) {
+      if (!out.has(table)) out.set(table, 0);
+    }
+  }
+  return out;
 }
 
 export async function verifyCloneRls(args: {
   productionOrgId: string;
   sandboxOrgId: string;
+  tier: SandboxTier;
 }): Promise<CloneRlsProof> {
   assertCloneRlsPair(args.productionOrgId, args.sandboxOrgId);
 
@@ -139,34 +190,33 @@ export async function verifyCloneRls(args: {
     );
   }
 
-  const bypass = await withBypass(async () => {
-    const counts: Array<{ table: CloneRlsTable; production: number; sandbox: number }> = [];
-    for (const table of CLONE_RLS_TABLES) {
-      counts.push({
-        table,
-        production: await countForOrg(table, args.productionOrgId),
-        sandbox: await countForOrg(table, args.sandboxOrgId),
-      });
-    }
-    return counts;
-  });
-
-  const tables: CloneRlsTableCounts[] = [];
-  for (const row of bypass) {
-    tables.push({
-      table: row.table,
-      bypassProduction: row.production,
-      bypassSandbox: row.sandbox,
-      scopedProduction: await withOrg(args.productionOrgId, () => countScoped(row.table)),
-      scopedSandbox: await withOrg(args.sandboxOrgId, () => countScoped(row.table)),
-      scopedBogus: await withOrg(BOGUS_ORG_ID, () => countScoped(row.table)),
-    });
+  const verifyTables = await cloneTierVerificationTables(args.tier);
+  if (verifyTables.length === 0) {
+    throw new Error(
+      `clone RLS re-verification named no tables for tier ${args.tier}; isolation cannot be proven without a table set. Pass the tier the clone actually used.`,
+    );
   }
 
-  const proof = {
+  const bypassProduction = await withBypass(() => countChunk(verifyTables, args.productionOrgId));
+  const bypassSandbox = await withBypass(() => countChunk(verifyTables, args.sandboxOrgId));
+  const scopedProduction = await withOrg(args.productionOrgId, () => countChunk(verifyTables, null));
+  const scopedSandbox = await withOrg(args.sandboxOrgId, () => countChunk(verifyTables, null));
+  const scopedBogus = await withOrg(BOGUS_ORG_ID, () => countChunk(verifyTables, null));
+
+  const tables: CloneRlsTableCounts[] = verifyTables.map((table) => ({
+    table,
+    bypassProduction: bypassProduction.get(table) ?? 0,
+    bypassSandbox: bypassSandbox.get(table) ?? 0,
+    scopedProduction: scopedProduction.get(table) ?? 0,
+    scopedSandbox: scopedSandbox.get(table) ?? 0,
+    scopedBogus: scopedBogus.get(table) ?? 0,
+  }));
+
+  const proof: CloneRlsProof = {
     productionOrgId: args.productionOrgId,
     sandboxOrgId: args.sandboxOrgId,
     tables,
+    unverifiedTables: unverifiedCloneRlsTables(tables),
   };
   evaluateCloneRlsProof(proof);
   return proof;
@@ -175,11 +225,22 @@ export async function verifyCloneRls(args: {
 async function resolveClonePair(argv: string[]): Promise<{
   productionOrgId: string;
   sandboxOrgId: string;
+  tier: SandboxTier;
 }> {
   const productionOrgId = argv[0];
   const sandboxOrgId = argv[1];
   if (productionOrgId && sandboxOrgId) {
-    return { productionOrgId, sandboxOrgId };
+    const row = await withBypass(async () => {
+      const result = await db.execute<{ tier: SandboxTier }>(sql`
+        select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`);
+      return result.rows[0];
+    });
+    if (!row) {
+      throw new Error(
+        `clone RLS re-verification found no sandbox row for ${sandboxOrgId}; pass the production org and the sandbox org createSandbox just created.`,
+      );
+    }
+    return { productionOrgId, sandboxOrgId, tier: row.tier };
   }
   if (productionOrgId || sandboxOrgId) {
     throw new Error(
@@ -187,8 +248,8 @@ async function resolveClonePair(argv: string[]): Promise<{
     );
   }
   const pair = await withBypass(async () => {
-    const result = await db.execute<{ production_org_id: string; org_id: string }>(sql`
-      select production_org_id, org_id
+    const result = await db.execute<{ production_org_id: string; org_id: string; tier: SandboxTier }>(sql`
+      select production_org_id, org_id, tier
         from sandboxes
        where status = 'ready'
        order by created_at desc
@@ -200,7 +261,7 @@ async function resolveClonePair(argv: string[]): Promise<{
       "clone RLS re-verification has no ready sandbox to check; pass productionOrgId and sandboxOrgId, or create a sandbox first.",
     );
   }
-  return { productionOrgId: pair.production_org_id, sandboxOrgId: pair.org_id };
+  return { productionOrgId: pair.production_org_id, sandboxOrgId: pair.org_id, tier: pair.tier };
 }
 
 async function main(): Promise<void> {
@@ -208,13 +269,17 @@ async function main(): Promise<void> {
     const pair = await resolveClonePair(process.argv.slice(2));
     const proof = await verifyCloneRls(pair);
     console.log(
-      `table checks for production ${proof.productionOrgId} vs sandbox ${proof.sandboxOrgId}`,
+      `table checks for production ${proof.productionOrgId} vs sandbox ${proof.sandboxOrgId} (tier ${pair.tier})`,
     );
     for (const table of proof.tables) {
+      const verified = table.bypassProduction > 0 && table.bypassSandbox > 0 ? "verified" : "UNVERIFIED (one side empty)";
       console.log(
-        `  ${table.table}: bypass prod=${table.bypassProduction} sandbox=${table.bypassSandbox}; ` +
+        `  ${table.table} [${verified}]: bypass prod=${table.bypassProduction} sandbox=${table.bypassSandbox}; ` +
           `scoped prod=${table.scopedProduction} sandbox=${table.scopedSandbox} bogus=${table.scopedBogus}`,
       );
+    }
+    if ((proof.unverifiedTables ?? []).length > 0) {
+      console.log(`unverified tables (empty on at least one side, proving nothing): ${proof.unverifiedTables!.join(", ")}`);
     }
     console.log(
       "clone RLS enforced: scoped counts match each tenant and the bogus org sees nothing.",

@@ -428,6 +428,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
     await verifyCloneRls({
       productionOrgId: input.productionOrgId,
       sandboxOrgId,
+      tier,
     });
     await db.execute(sql`
       update sandboxes
@@ -592,6 +593,7 @@ export async function refreshSandbox(
       await verifyCloneRls({
         productionOrgId: s.production_org_id,
         sandboxOrgId: s.org_id,
+        tier: s.tier,
       });
       const markedReady = await db.execute<{ id: string }>(sql`
         update sandboxes
