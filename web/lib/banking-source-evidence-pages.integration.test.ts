@@ -142,11 +142,10 @@ test('statement sign-off keeps the statement header', { skip: !process.env.OPENB
 test('account reconciliation rows badge statement vs source evidence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, sourceRecon, statementRecon, orphanRecon } = await seedSourceEvidenceOrg()
   try {
-    const data = (await withOrgContext(org.orgId, async () => loadBankingAccount(org.accounts.bank, {}))) as {
-      columnEvidence: string
-      reconRows: Array<{ id: string; evidenceLabel: string; evidenceVariant: string }>
-    }
-    assert.equal(data.columnEvidence, 'account.columns.evidence')
+    const statementId = randomUUID(); await withBypassContext(() => db.execute(sql`insert into bank_statements(id,org_id,account_id,source,statement_date,raw_file_ref) values(${statementId},${org.orgId},${org.accounts.bank},'manual',${org.date},'test-fixture:source-not-retained')`))
+    const data: import('../app/(app)/banking/[accountId]/view.ts').BankingAccountData =
+      await withOrgContext(org.orgId, async () => loadBankingAccount(org.accounts.bank, { statement: statementId }))
+    assert.deepEqual([data.columnEvidence, data.sourceOptions.find((option) => option.value === 'manual')?.label, data.statementRows[0]?.sourceLabel, data.drawer?.statement.source], ['account.columns.evidence', 'statementSources.manual', 'statementSources.manual', 'statementSources.manual'])
     const byId = new Map(data.reconRows.map((row) => [row.id, row]))
     const source = byId.get(sourceRecon)
     assert.ok(source, 'source-evidenced reconciliation row is listed')

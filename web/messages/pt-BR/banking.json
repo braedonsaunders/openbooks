@@ -22,6 +22,16 @@
     "statement": "Extrato",
     "sourceFrom": "Conciliado a partir de {connector}"
   },
+  "statementSources": {
+    "manual": "Envio manual",
+    "ofx": "Arquivo OFX",
+    "csv": "Arquivo CSV",
+    "camt053": "Arquivo CAMT.053",
+    "bai2": "Arquivo BAI2",
+    "mt940": "Arquivo MT940",
+    "feed_api": "Conexão bancária",
+    "unknown": "Outra origem"
+  },
   "sourceSystem": {
     "other": "sistema de origem"
   },
@@ -759,7 +769,10 @@
       "none": "Nenhuma conexão bancária ativa. Configure uma em Configuração → Feeds bancários.",
       "lastSync": "Última sincronização",
       "lastAttempt": "Última tentativa",
-      "never": "Nunca"
+      "never": "Nunca",
+      "paused": "pausado",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"Manual","sftp":"SFTP","unknown":"Outro provedor"},
+      "statuses": {"pending":"Pendente","connected":"Conectado","error":"Erro","disconnected":"Desconectado","unknown":"Status desconhecido"}
     },
     "client": {
       "configure": {

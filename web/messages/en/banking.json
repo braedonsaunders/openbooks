@@ -22,6 +22,16 @@
     "statement": "Statement",
     "sourceFrom": "Reconciled from {connector}"
   },
+  "statementSources": {
+    "manual": "Manual upload",
+    "ofx": "OFX file",
+    "csv": "CSV file",
+    "camt053": "CAMT.053 file",
+    "bai2": "BAI2 file",
+    "mt940": "MT940 file",
+    "feed_api": "Bank feed",
+    "unknown": "Other source"
+  },
   "sourceSystem": {
     "other": "source system"
   },
@@ -766,7 +776,10 @@
       "none": "No live bank feed connections. Configure one in Company Settings → Bank Feeds.",
       "lastSync": "Last sync",
       "lastAttempt": "Last attempt",
-      "never": "Never"
+      "never": "Never",
+      "paused": "paused",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"Manual","sftp":"SFTP","unknown":"Other provider"},
+      "statuses": {"pending":"Pending","connected":"Connected","error":"Error","disconnected":"Disconnected","unknown":"Unknown status"}
     },
     "client": {
       "title": "Bank Feeds",

@@ -62,6 +62,7 @@ const RECON_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
 // with underscores spaced out.
 const TYPE_KEYS = ['asset_bank', 'liability_card']
 const RECON_STATUS_KEYS = ['signed_off', 'balanced', 'in_progress']
+const STATEMENT_SOURCE_KEYS = ['ofx', 'csv', 'camt053', 'bai2', 'mt940', 'feed_api', 'manual'] as const
 
 // Connector labels resolve from the tenant's own connections table, never
 // from a hardcoded vendor map: the display name is tenant data, so product
@@ -329,6 +330,10 @@ export async function loadBankingAccount(
   ]))
 
   // -- statement drawer (?statement=<id>) ------------------------------------
+  const statementSourceLabel = (source: string) => {
+    const key = STATEMENT_SOURCE_KEYS.find((candidate) => candidate === source) ?? 'unknown'
+    return t(`statementSources.${key}`)
+  }
   let drawer: BankingAccountData['drawer'] = null
   if (openStatementId && isUuid(openStatementId)) {
     const s = (await db.execute<StatementDetailRow>(sql`
@@ -358,7 +363,7 @@ export async function loadBankingAccount(
       drawer = {
         basePath,
         currentParams: sp,
-        statement: s.rows[0],
+        statement: { ...s.rows[0], source: statementSourceLabel(s.rows[0].source) },
         lines: lines.rows,
         lineTotal: Number(lineCount.rows[0]?.n ?? 0),
         page: lineParams.page,
@@ -391,7 +396,7 @@ export async function loadBankingAccount(
   const evidenceLabel = (kind: string, connector: string | null) =>
     kind === 'source' ? t('evidenceKind.sourceFrom', { connector: connectorLabel(connector) }) : t('evidenceKind.statement')
 
-  const sourceOptions = sourceCounts.rows.map((r) => ({ value: r.source, label: r.source, count: Number(r.n) }))
+  const sourceOptions = sourceCounts.rows.map((r) => ({ value: r.source, label: statementSourceLabel(r.source), count: Number(r.n) }))
   const reconStatusOptions = reconStatusCounts.rows.map((r) => ({
     value: r.status,
     label: reconStatusLabel(r.status),
@@ -455,7 +460,7 @@ export async function loadBankingAccount(
       // page underneath to an unfiltered page 1 (F1T-12).
       dateHref: mergeHref(basePath, sp, { statement: s.id }),
       dateLabel: s.statement_date,
-      sourceLabel: s.source,
+      sourceLabel: statementSourceLabel(s.source),
       lineCount: Number(s.line_count).toLocaleString(locale),
       unmatchedCount: Number(s.unmatched_count).toLocaleString(locale),
       unmatchedIsZero: Number(s.unmatched_count) === 0,

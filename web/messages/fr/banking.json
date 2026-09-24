@@ -22,6 +22,16 @@
     "statement": "Relevé",
     "sourceFrom": "Rapproché depuis {connector}"
   },
+  "statementSources": {
+    "manual": "Importation manuelle",
+    "ofx": "Fichier OFX",
+    "csv": "Fichier CSV",
+    "camt053": "Fichier CAMT.053",
+    "bai2": "Fichier BAI2",
+    "mt940": "Fichier MT940",
+    "feed_api": "Flux bancaire",
+    "unknown": "Autre source"
+  },
   "sourceSystem": {
     "other": "système source"
   },
@@ -759,7 +769,10 @@
       "none": "Aucune connexion de flux bancaire active. Configurez-en une dans Configuration → Flux bancaires.",
       "lastSync": "Dernière synchronisation",
       "lastAttempt": "Dernière tentative",
-      "never": "Jamais"
+      "never": "Jamais",
+      "paused": "en pause",
+      "providers": {"plaid":"Plaid","gocardless":"GoCardless","truelayer":"TrueLayer","manual":"Manuel","sftp":"SFTP","unknown":"Autre fournisseur"},
+      "statuses": {"pending":"En attente","connected":"Connecté","error":"Erreur","disconnected":"Déconnecté","unknown":"Statut inconnu"}
     },
     "client": {
       "configure": {
