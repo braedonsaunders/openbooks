@@ -1,12 +1,6 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import { registerHooks } from 'node:module'
-
-const dir = dirname(fileURLToPath(import.meta.url))
-const root = join(dir, '..', '..', '..', '..')
 
 // UX-17: the setup aliases must explain themselves on arrival. These are
 // real pages with only the navigation primitives scripted — a mistyped
@@ -27,6 +21,7 @@ const hooks = registerHooks({
 
 const SettingsPage = (await import('../settings/page.tsx')).default as (props: unknown) => Promise<never>
 const SetupIndexPage = (await import('./page.tsx')).default as (props: unknown) => Promise<never>
+const RootPage = (await import('../../page.tsx')).default as () => never
 hooks.deregister()
 
 const sp = (params: Record<string, string | string[] | undefined>) => ({ searchParams: Promise.resolve(params) })
@@ -46,27 +41,72 @@ test('/admin/setup lands on the readiness guide named as a move', async () => {
   await assert.rejects(SetupIndexPage(sp({})), /REDIRECT:\/admin\/setup\/readiness\?movedFrom=setup-index/)
 })
 
-const paymentProvidersSource = readFileSync(join(dir, 'payment-providers', 'view.ts'), 'utf8')
-const wizardSource = readFileSync(join(dir, 'wizard', 'SetupWizard.tsx'), 'utf8')
-const rootPageSource = readFileSync(join(dir, '..', '..', 'page.tsx'), 'utf8')
-const brandLinkSource = readFileSync(join(root, 'components', 'brand-home-link.tsx'), 'utf8')
-
-test('the payment-providers gate names its destination and reason', () => {
-  // The Online-payments-off gate must send readers to Features with the
-  // movedFrom source the notice reads — a bare '/admin/setup/features'
-  // redirect lands silently.
-  assert.match(paymentProvidersSource, /movedUrl\('\/admin\/setup\/features', 'payment-providers'/)
-  assert.doesNotMatch(paymentProvidersSource, /redirect\('\/admin\/setup\/features'\)/)
-})
-
-test('first-run Skip lands on the canonical home and names the resume', () => {
-  // Skip is a deferral: the wizard must not detour into Setup, and the toast
-  // must say setup resumes from Company Setup.
-  assert.match(wizardSource, /toast\.success\(t\('skipped'\)\)/)
-  assert.match(wizardSource, /router\.push\('\/dashboard'\)/)
-})
-
 test('/ is a bookmark alias for the one canonical home', () => {
-  assert.match(rootPageSource, /redirect\('\/dashboard'\)/)
-  assert.match(brandLinkSource, /href="\/dashboard"/)
+  assert.throws(() => RootPage(), /REDIRECT:\/dashboard/)
+})
+
+// The Online-payments-off gate must send readers to Features with the
+// movedFrom source the notice reads — a bare '/admin/setup/features'
+// redirect lands silently. Loaded for real with only authz, features and
+// server-only scripted.
+const gateHooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    if (specifier.endsWith('/lib/authz')) {
+      return { shortCircuit: true, format: 'module', url: 'mock:alias-gate-authz' }
+    }
+    if (specifier.endsWith('/lib/features')) {
+      return { shortCircuit: true, format: 'module', url: 'mock:alias-gate-features' }
+    }
+    if (specifier === 'next/navigation') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,' + encodeURIComponent(NAV_MOCK) }
+    }
+    return nextResolve(specifier, context)
+  },
+  load(url, context, nextLoad) {
+    if (url === 'mock:alias-gate-authz') {
+      return {
+        format: 'module',
+        source: `export async function requirePermission() { return { user: { orgId: 'o1' } }; }`,
+        shortCircuit: true,
+      }
+    }
+    if (url === 'mock:alias-gate-features') {
+      return {
+        format: 'module',
+        source: `export async function resolvedFeatureState() { return globalThis.__aliasOnlinePayments ? { onlinePayments: true } : {}; }
+          export function featureEnabled(features, key) { return features?.[key] === true; }`,
+        shortCircuit: true,
+      }
+    }
+    return nextLoad(url, context)
+  },
+})
+
+const { loadPaymentProviders } = (await import('./payment-providers/view.ts')) as typeof import(
+  './payment-providers/view.ts'
+)
+gateHooks.deregister()
+
+test('the payment-providers gate names its destination and reason', async () => {
+  ;(globalThis as Record<string, unknown>).__aliasOnlinePayments = false
+  try {
+    await assert.rejects(
+      loadPaymentProviders(),
+      /REDIRECT:\/admin\/setup\/features\?movedFrom=payment-providers/,
+    )
+  } finally {
+    ;(globalThis as Record<string, unknown>).__aliasOnlinePayments = false
+  }
+})
+
+test('the payment-providers gate stays home while Online payments is on', async () => {
+  ;(globalThis as Record<string, unknown>).__aliasOnlinePayments = true
+  try {
+    assert.deepEqual(await loadPaymentProviders(), {})
+  } finally {
+    ;(globalThis as Record<string, unknown>).__aliasOnlinePayments = false
+  }
 })

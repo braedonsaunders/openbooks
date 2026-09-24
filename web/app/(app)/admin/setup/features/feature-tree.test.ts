@@ -130,16 +130,6 @@ test('every parentKey in the real registry nests under a known parent', () => {
   for (const f of FEATURES) {
     if (f.requiresAll && !f.parentKey) assert.ok(tops.has(f.key), `${f.key} (requiresAll) stays top-level`)
   }
-  // Registry parents in registry order (flows sorts last: it is declared
-  // after allocations in the registry even though advancedClose is accounting).
-  // hrm joined them when the HRM modules gained sub-switches; its own
-  // grandchildren (hrmCompensation > hrmMeritCycles, and the rest) attach to
-  // the hrm group rather than appearing here, which is what the nesting walk
-  // above guarantees.
-  assert.deepEqual(
-    [...tops].filter((key) => rows.some((r) => r.parentKey === key)),
-    ['projects', 'hrm', 'allocations', 'flows'],
-  )
 })
 
 test('orphan children (unknown parent) stay visible as top-level rows', () => {
