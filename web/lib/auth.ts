@@ -103,6 +103,22 @@ function privacyHash(kind: string, value: string | null): string | null {
     .digest("hex");
 }
 
+/**
+ * Rate-limit/state bucket for a blank or malformed login address (anything
+ * normalizeLoginEmail refuses). The sentinel carries no '@', so it can never
+ * equal a normalized real address and its hash can never collide with a real
+ * identity's bucket. Blank addresses travel the exact unknown-identity path —
+ * same generic invalid refusal, same failure accounting — keyed on this
+ * non-null bucket, so no write can ever carry a null email_hash.
+ */
+const INVALID_EMAIL_SENTINEL = "invalid-email-address";
+
+function loginEmailHash(email: string | null): string {
+  const hash = privacyHash("email", email ?? INVALID_EMAIL_SENTINEL);
+  if (!hash) throw new Error("email hash unavailable — session secret misconfigured");
+  return hash;
+}
+
 function contextHashes(context: AuthRequestContext) {
   return {
     networkHash: privacyHash("network", context.networkAddress),
@@ -498,7 +514,7 @@ export async function login(
   const deploymentLimit = await consumeDeploymentLoginCapacity();
   const email = normalizeLoginEmail(rawEmail);
   const usablePassword = typeof password === "string" && password.length > 0 && password.length <= 1024;
-  const emailHash = privacyHash("email", email ?? rawEmail.slice(0, 320).toLowerCase())!;
+  const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
 
   return withBypass(async () => {
@@ -719,7 +735,7 @@ async function reauthenticateMfaEnrollment(
   `));
   const email = normalizeLoginEmail(identityResult.rows[0]?.email ?? "");
   if (!email) return null;
-  const emailHash = privacyHash("email", email)!;
+  const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
   await acquireAuthLocks(emailHash, networkHash);
 
@@ -979,7 +995,7 @@ async function reauthenticateMfaSecurityChange(
   `));
   const email = normalizeLoginEmail(identityResult.rows[0]?.email ?? "");
   if (!email) return { ok: false, reason: "invalid_credentials" };
-  const emailHash = privacyHash("email", email)!;
+  const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
   await acquireAuthLocks(emailHash, networkHash);
   const userResult = (await db.execute<{ email: string; passwordHash: string }>(sql`
@@ -1238,7 +1254,7 @@ export async function finishOidcLogin(input: {
 }): Promise<LoginResult> {
   const normalizedEmail = normalizeLoginEmail(input.email);
   if (!normalizedEmail || !input.emailVerified) return { kind: "invalid", retryAfter: 0 };
-  const emailHash = privacyHash("email", normalizedEmail)!;
+  const emailHash = loginEmailHash(normalizedEmail);
   const { networkHash, userAgentHash } = contextHashes(input.context);
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
