@@ -1043,7 +1043,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'jurisdictionId', kind: 'ref', ref: 'tax-jurisdictions', required: true },
       { key: 'registrationNumber', kind: 'text' },
       { key: 'filingFrequency', kind: 'select', options: FILING_FREQUENCIES, keepDefault: true },
-      { key: 'returnFormCode', kind: 'text' },
+      // The org's own configured return forms (by code) — the picker offers
+      // only valid, installed forms instead of free text, while the
+      // write-time integrity check refuses a form from another jurisdiction.
+      { key: 'returnFormCode', kind: 'ref', ref: 'tax-return-forms' },
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
       { key: 'isActive', kind: 'boolean' },
@@ -1168,6 +1171,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     // channel. New jurisdictions are data (a form + its boxes), not code.
     key: 'tax-return-forms',
     table: 'tax_return_forms',
+    // Referencing rows (registrations) store the form CODE, not the row id —
+    // pickers offer the code and the coercer accepts it as a natural key.
+    refValue: 'code',
     actorCols: true,
     groupKey: 'taxes',
     iconKey: 'file',

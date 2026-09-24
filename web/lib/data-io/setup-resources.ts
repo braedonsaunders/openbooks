@@ -53,6 +53,13 @@ function refNaturalKey(ref: string): string {
   return entity?.naturalKey ?? 'id'
 }
 
+/** A ref target whose rows are referenced by natural key (the stored value
+ *  IS the key, e.g. a registration's form code) — never resolved to a row
+ *  id on import nor to a label on export. */
+function refTargetStoresKey(ref: string): boolean {
+  return (SETUP_ENTITY_BY_KEY.get(ref)?.refValue ?? null) !== null
+}
+
 /**
  * Rows for the setup entities whose records live in org settings JSON
  * rather than in a table of their own. Their registry entry still names
@@ -109,8 +116,13 @@ function setupFields(entity: SetupEntity): ResourceField[] {
         : f.options?.map((o) => ({ value: o.value, label: o.value })),
       // Only true reference fields resolve natural keys → ids on import. A
       // stringArray's `ref` is merely its type-ahead corpus — the values ARE
-      // the stored strings.
-      ref: f.kind === 'ref' && f.ref ? { resource: f.ref, by: refNaturalKey(f.ref) } : undefined,
+      // the stored strings. Likewise a ref whose target declares `refValue`
+      // stores the natural key itself (a registration's returnFormCode IS
+      // the form code): resolving it to a row id would write a uuid the
+      // engine can never match, silently unlinking the row.
+      ref: f.kind === 'ref' && f.ref && !refTargetStoresKey(f.ref)
+        ? { resource: f.ref, by: refNaturalKey(f.ref) }
+        : undefined,
     }))
 }
 
@@ -225,7 +237,9 @@ async function writeSetup(
 ): Promise<WriteOutcome> {
   const resolver = new RefResolver(ctx.orgId)
   const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
-  const refFields = entity.fields.filter((f) => f.kind === 'ref')
+  // Refs whose target stores the natural key itself (refValue) are stored
+  // verbatim — resolving them to row ids would corrupt the stored value.
+  const refFields = entity.fields.filter((f) => f.kind === 'ref' && f.ref && !refTargetStoresKey(f.ref))
 
   for (let i = 0; i < rows.length; i++) {
     const rowNo = i + 1
