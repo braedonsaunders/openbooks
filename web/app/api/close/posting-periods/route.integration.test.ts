@@ -13,7 +13,7 @@ const stateKey = Symbol.for("openbooks.close-posting-periods-route-test");
 interface RouteState {
   authz: {
     user: { orgId: string; id: string };
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -86,10 +86,10 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } =
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function authorize(orgId: string, actorId: string): void {
+function authorize(orgId: string, actorId: string, allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = {
     user: { orgId, id: actorId },
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds,
   };
 }
 
@@ -143,6 +143,59 @@ test("posting-periods route previews then commits idempotently", { skip: !DB }, 
     assert.equal(again.status, 200);
     const repeated = (await again.json()) as { assigned: unknown[] };
     assert.equal(repeated.assigned.length, 0);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting-periods route scopes preview and commit to the caller's subsidiaries", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const second = (
+      (await db.execute<{ id: string }>(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        select ${randomUUID()}, ${org.orgId}, s.id, 'Second Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb
+          from subsidiaries s where s.org_id = ${org.orgId} and s.parent_id is null limit 1 returning id`))
+    ).rows[0]!.id;
+    const seed = async (subsidiaryId: string | null): Promise<string> => {
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, subsidiary_id, kind, status, document_number, document_date,
+           posting_date, currency, subtotal, tax_total, total)
+        values (${id}, ${org.orgId}, ${subsidiaryId}, 'customer_invoice', 'approved',
+                ${id}, ${org.date}, ${org.date}, 'CAD', '10.0000', '0.0000', '10.0000')`);
+      return id;
+    };
+    const visible = await seed(org.subsidiaryId);
+    const hidden = await seed(second);
+    const unattributed = await seed(null);
+    authorize(org.orgId, actor, new Set([org.subsidiaryId]));
+
+    const previewRes = await GET(
+      new Request(`http://openbooks.test/api/close/posting-periods?bookId=${org.bookId}`),
+    );
+    assert.equal(previewRes.status, 200);
+    const preview = (await previewRes.json()) as { rows: { documentId: string }[] };
+    assert.deepEqual(preview.rows.map((row) => row.documentId), [visible]);
+
+    const commitRes = await POST(
+      new Request("http://openbooks.test/api/close/posting-periods", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bookId: org.bookId }),
+      }),
+    );
+    assert.equal(commitRes.status, 200);
+    const committed = (await commitRes.json()) as { assigned: { documentId: string }[] };
+    assert.deepEqual(committed.assigned.map((row) => row.documentId), [visible]);
+    const stored = (await db.execute<{ id: string; posting_period_id: string | null }>(sql`
+      select id, posting_period_id from documents where org_id = ${org.orgId} and id in (${visible}, ${hidden}, ${unattributed})`)).rows;
+    assert.equal(stored.find((row) => row.id === visible)?.posting_period_id, org.periodId);
+    assert.equal(stored.find((row) => row.id === hidden)?.posting_period_id, null);
+    assert.equal(stored.find((row) => row.id === unattributed)?.posting_period_id, null);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(org.orgId);
