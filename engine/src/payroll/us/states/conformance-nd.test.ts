@@ -11,7 +11,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { ND_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax } from "./nd.ts";
+import {
+  ND_CERTIFICATE, ND_NDWM_CERTIFICATE, ND_REGION, ND_RATES_2026, ND_WITHHOLDING, ndAnnualTax,
+} from "./nd.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -20,8 +22,33 @@ const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
 
 test("ND certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(ND_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(ND_NDWM_CERTIFICATE), null);
   assert.equal(ND_REGION.implemented, true);
   assert.equal(ND_REGION.certificateKey, "us_nd_w4");
+});
+
+test("ND Form NDW-M requires the spouse's eligibility facts and attached dependent ID", () => {
+  const input = {
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "1800.00", basis: "resident" as const,
+    certificate: cert(),
+  };
+  const incomplete = resolvedCertificate(ND_NDWM_CERTIFICATE, {
+    employee_is_civilian_spouse: "true",
+    both_domiciled_outside_nd: "true",
+  });
+  assert.throws(() => ND_WITHHOLDING.compute({
+    ...input, supportingCertificates: { us_nd_ndwm: incomplete },
+  }), /North Dakota military-spouse withholding exemption requires proof that .*permanent duty station.*solely.*military ID/);
+
+  const complete = resolvedCertificate(ND_NDWM_CERTIFICATE, Object.fromEntries([
+    "employee_is_civilian_spouse", "both_domiciled_outside_nd", "servicemember_stationed_in_nd",
+    "employee_present_solely_to_accompany", "dependent_military_id_attached",
+  ].map((key) => [key, "true"])));
+  const result = ND_WITHHOLDING.compute({
+    ...input, supportingCertificates: { us_nd_ndwm: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.ND_MILITARY_SPOUSE_EXEMPT, money("0.0001"));
 });
 
 test("ND printed percents and the Single table's $35,975 remainder", () => {

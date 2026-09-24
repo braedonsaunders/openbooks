@@ -30,6 +30,7 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   payPeriodFor,
   refuseUnprintedPeriod,
@@ -163,6 +164,19 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
 
+  const militarySpouseCertificate = input.supportingCertificates?.us_nd_ndwm;
+  if (militarySpouseCertificate?.onFile) {
+    requireMilitarySpouseEligibility(militarySpouseCertificate, "North Dakota", [
+      { key: "employee_is_civilian_spouse", description: "the employee is a civilian married to an active-duty U.S. Armed Forces servicemember" },
+      { key: "both_domiciled_outside_nd", description: "the employee and servicemember spouse are domiciled outside North Dakota" },
+      { key: "servicemember_stationed_in_nd", description: "the spouse's permanent duty station is in North Dakota" },
+      { key: "employee_present_solely_to_accompany", description: "the employee is residing and working in North Dakota solely to be with the servicemember" },
+      { key: "dependent_military_id_attached", description: "a copy of the employee's dependent military ID card is attached" },
+    ]);
+    trace("ND_MILITARY_SPOUSE_EXEMPT", 1n);
+    return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  }
+
   if (certificateFlag(input.certificate, "exempt")) {
     trace("ND_EXEMPT", 1n);
     return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
@@ -239,6 +253,7 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ND_TAX_YEAR_EDITIONS,
   printedPeriods: ND_PERIODS,
+  supportingCertificateKeys: ["us_nd_ndwm"],
   compute,
 };
 
@@ -308,6 +323,26 @@ export const ND_CERTIFICATE: PayrollCertificate = {
         + "separate exemption form; dating any lapse is certificate "
         + "administration.",
     },
+  ],
+};
+
+/** North Dakota Form NDW-M for an eligible civilian spouse of a servicemember. */
+export const ND_NDWM_CERTIFICATE: PayrollCertificate = {
+  key: "us_nd_ndwm",
+  form: "NDW-M",
+  label: "Exemption from Withholding for a Qualifying Military Spouse",
+  scope: { level: "region", region: "ND" },
+  purpose: "exemption",
+  validity: { kind: "following_year_date", monthDay: "01-31" },
+  citation: "North Dakota Form NDW-M (SFN 28720, 12/2023); Income Tax Withholding & Information Returns Guideline, p. 3",
+  summary: "File each calendar year and attach the employee's dependent military ID. Renew by January 31 to continue the exemption.",
+  storage: "certificate_rows",
+  fields: [
+    { key: "employee_is_civilian_spouse", label: "Employee is a civilian married to an active-duty U.S. Armed Forces servicemember", kind: "flag", required: true, help: "NDW-M eligibility statement 1." },
+    { key: "both_domiciled_outside_nd", label: "Employee and servicemember spouse are domiciled outside North Dakota", kind: "flag", required: true, help: "NDW-M eligibility statement 2; spouses need not share the same non-North-Dakota domicile." },
+    { key: "servicemember_stationed_in_nd", label: "Spouse's permanent duty station is in North Dakota", kind: "flag", required: true, help: "NDW-M eligibility statement 3." },
+    { key: "employee_present_solely_to_accompany", label: "Employee resides and works in North Dakota solely to be with the servicemember", kind: "flag", required: true, help: "NDW-M eligibility statement 4." },
+    { key: "dependent_military_id_attached", label: "Copy of employee's dependent military ID card is attached", kind: "flag", required: true, help: "NDW-M instructions require an attached copy of the dependent military ID card." },
   ],
 };
 
