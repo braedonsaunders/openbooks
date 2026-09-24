@@ -421,6 +421,7 @@ export function getBankFeedAdapter(provider: string): BankFeedAdapter | null {
 export async function testBankFeedConnection(
   connectionId: string,
   ctx: { orgId: string },
+  credentialSnapshot?: string | null,
 ): Promise<{ ok: boolean; detail?: string }> {
   const row = await withBypass(async () =>
     (await db.execute<{ orgId: string; provider: string; credentials: string | null }>(sql`
@@ -439,7 +440,8 @@ export async function testBankFeedConnection(
   if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
-  const creds = unsealJson<Record<string, string>>(conn.credentials) ?? {};
+  const sealedCredentials = credentialSnapshot === undefined ? conn.credentials : credentialSnapshot;
+  const creds = unsealJson<Record<string, string>>(sealedCredentials) ?? {};
   return adapter.test(creds);
 }
 
@@ -521,6 +523,7 @@ async function syncOne(
     syncOverlapDays: number | null;
   },
   actorId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<FeedSyncOutcome> {
   const adapter = getBankFeedAdapter(row.provider);
   if (!adapter) return { connectionId: row.id, imported: 0, duplicates: 0, error: "not an API provider" };
@@ -548,7 +551,7 @@ async function syncOne(
           currency: currency ?? undefined,
           sourceEvidence,
         },
-        { orgId: row.orgId, userId: actorId, allowedSubsidiaryIds: null },
+        { orgId: row.orgId, userId: actorId, allowedSubsidiaryIds },
       ),
     );
     imported = result.imported;
@@ -617,11 +620,13 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
         nextSyncAt: Date | null;
         lastSyncAt: Date | string | null;
         syncOverlapDays: number | null;
+        configurationRevision: string;
       }>(sql`
       select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
              c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
              c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt",
-             c.sync_overlap_days as "syncOverlapDays"
+             c.sync_overlap_days as "syncOverlapDays",
+             c.updated_at::text as "configurationRevision"
         from bank_feed_connections c
         join orgs o on o.id = c.org_id
        where c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
@@ -635,24 +640,48 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
   const outcomes: FeedSyncOutcome[] = [];
   for (const row of due.rows) {
     const nextSync = new Date(now + cadenceIntervalMs(row.syncCadence));
-    // Claim: only the tick that moves next_sync_at off its current value wins.
+    // The scan is only a candidate list. Claim the row only if its complete
+    // configuration revision and eligibility are still current, and sync
+    // exclusively from the values returned by that successful claim.
     const claimed = await withBypass(async () =>
-      (await db.execute<{ id: string }>(sql`
-        update bank_feed_connections set next_sync_at = ${nextSync}
-         where id = ${row.id} and org_id = ${row.orgId}
-           and (next_sync_at is null and ${row.nextSyncAt === null} or next_sync_at = ${row.nextSyncAt})
-        returning id
+      (await db.execute<{
+        id: string;
+        orgId: string;
+        provider: string;
+        accountId: string;
+        credentials: string | null;
+        externalAccountId: string | null;
+        syncCadence: string;
+        nextSyncAt: Date | null;
+        lastSyncAt: Date | string | null;
+        syncOverlapDays: number | null;
+      }>(sql`
+        update bank_feed_connections c set next_sync_at = ${nextSync}
+          from orgs o
+         where c.id = ${row.id} and c.org_id = ${row.orgId} and o.id = c.org_id
+           and c.updated_at::text = ${row.configurationRevision}
+           and c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
+           and o.env_kind = 'production'
+           and case (o.settings->'features'->>'bankFeeds') when 'true' then true when 'false' then false else false end
+           and c.sync_cadence <> 'manual'
+           and (c.next_sync_at is null and ${row.nextSyncAt === null} or c.next_sync_at = ${row.nextSyncAt})
+        returning c.id, c.org_id as "orgId", c.provider,
+                  c.account_id as "accountId", c.credentials,
+                  c.external_account_id as "externalAccountId",
+                  c.sync_cadence as "syncCadence", c.next_sync_at as "nextSyncAt",
+                  c.last_sync_at as "lastSyncAt", c.sync_overlap_days as "syncOverlapDays"
       `)),
     );
-    if (!claimed.rows.length) continue;
+    const claim = claimed.rows[0];
+    if (!claim) continue;
 
     let outcome: FeedSyncOutcome;
     try {
-      outcome = await syncOne(row, SYSTEM_ACTOR_ID);
+      outcome = await syncOne(claim, SYSTEM_ACTOR_ID, null);
     } catch (e) {
       outcome = { connectionId: row.id, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
     }
-    await recordSyncOutcome(row, outcome);
+    await recordSyncOutcome(claim, outcome);
     outcomes.push(outcome);
   }
   return outcomes;
@@ -702,7 +731,7 @@ export async function syncBankFeedNow(
   await requireBankAccountInScope(db, ctx.orgId, conn.accountId, ctx.allowedSubsidiaryIds);
   let outcome: FeedSyncOutcome;
   try {
-    outcome = await syncOne(conn, ctx.userId);
+    outcome = await syncOne(conn, ctx.userId, ctx.allowedSubsidiaryIds);
   } catch (e) {
     outcome = { connectionId, imported: 0, duplicates: 0, error: e instanceof Error ? e.message : String(e) };
   }

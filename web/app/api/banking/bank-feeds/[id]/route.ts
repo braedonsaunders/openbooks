@@ -121,6 +121,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   await db.transaction(async (tx) => {
     const updated = (await tx.execute<Record<string, unknown>>(sql`
+      /* updated_at is the scheduler's configuration revision: any route edit
+       * invalidates a scan-time bank-feed snapshot before it can be claimed. */
       update bank_feed_connections set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${authz.user.id}
        where id = ${id} and org_id = ${authz.user.orgId}
        returning *
@@ -148,19 +150,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   }
   const deleteScoped = await requireConnectionScope(authz, target);
   if (deleteScoped) return deleteScoped;
-  await db.transaction(async (tx) => {
+  const missing = await db.transaction(async (tx) => {
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
+       for update
     `));
     const deleted = (await tx.execute<{ id: string }>(sql`
       delete from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
        returning id
     `));
-    if (!before.rows[0] || !deleted.rows[0]) return;
+    if (!before.rows[0] || !deleted.rows[0]) return true;
     await audit(tx, authz.user.orgId, id, "delete", {
       before: withoutCredentials(before.rows[0]),
     }, authz.user.id, req.headers.get("X-Request-Id"));
+    return false;
   });
+  if (missing) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
@@ -184,17 +189,30 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as { action?: string };
   if (body.action === "test") {
-    const result = await testBankFeedConnection(id, { orgId: authz.user.orgId });
+    // The route's credential snapshot is the probe's revision. Probe exactly
+    // those credentials, then only publish health if they are still current.
+    const credentialRevision = existing.credentials as string | null;
+    const result = await testBankFeedConnection(id, { orgId: authz.user.orgId }, credentialRevision);
     // Reflect the probe result on the row so the list shows connection health,
     // and record the flip in the append-only audit trail.
     const nextStatus = result.ok ? "connected" : "error";
     const nextError = result.ok ? null : result.detail ?? "test failed";
+    let testConflict: "deleted" | "stale" | null = null;
     await db.transaction(async (tx) => {
-      await tx.execute(sql`
+      const updated = (await tx.execute<{ id: string }>(sql`
         update bank_feed_connections set status = ${nextStatus},
                last_error = ${nextError}, updated_at = now()
          where id = ${id} and org_id = ${authz.user.orgId}
-      `);
+           and credentials is not distinct from ${credentialRevision}
+         returning id
+      `)).rows[0];
+      if (!updated) {
+        const current = (await tx.execute<{ id: string }>(sql`
+          select id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
+        `)).rows[0];
+        testConflict = current ? "stale" : "deleted";
+        return;
+      }
       await audit(tx, authz.user.orgId, id, "update", {
         field: "status",
         before: {
@@ -210,6 +228,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         source: "connection_test",
       }, authz.user.id, req.headers.get("X-Request-Id"));
     });
+    if (testConflict === "deleted") {
+      return NextResponse.json({ error: "deleted while testing" }, { status: 409 });
+    }
+    if (testConflict === "stale") return NextResponse.json({ error: "stale probe" }, { status: 409 });
     return NextResponse.json(result);
   }
   if (body.action === "sync") {
