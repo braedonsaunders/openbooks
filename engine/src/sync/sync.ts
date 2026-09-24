@@ -70,6 +70,18 @@ import type { ComputedTaxComponent } from "../tax/tax.ts";
  *    stays the system of record; only controller-dispositioned refs are kept
  */
 
+/**
+ * House UUID check: the 8-4-4-4-12 hex shape — 36 dashes-and-hex is not a
+ * UUID. Every actor attribution in this file goes through it, so a
+ * malformed id can never flow into audit rows as if it were a user.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value);
+}
+
 export interface SyncResult {
   runId: string;
   kind: "incremental" | "full_migration" | "targeted_repair";
@@ -1383,12 +1395,7 @@ export async function runSync(
   if (kind === "targeted_repair" && !targetedRefs?.length) {
     throw new Error("targeted repair requires explicit source references");
   }
-  if (
-    kind === "targeted_repair" &&
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      triggeredBy,
-    )
-  ) {
+  if (kind === "targeted_repair" && !isUuid(triggeredBy)) {
     throw new Error(
       "targeted repair requires the active organization user UUID that authorized the correction",
     );
@@ -1407,7 +1414,7 @@ export async function runSync(
   const postedChangeAuthorization = opts.postedChangeAuthorization;
   if (
     postedChangeAuthorization &&
-    (!/^[0-9a-f-]{36}$/i.test(postedChangeAuthorization.actorId) ||
+    (!isUuid(postedChangeAuthorization.actorId) ||
       Number.isNaN(postedChangeAuthorization.authorizedAt.getTime()))
   ) {
     throw new Error("posted-change authorization is invalid");
@@ -1470,9 +1477,7 @@ export async function runSync(
       const audit = {
         connectionId,
         runId: run!.id,
-        actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
-          ? triggeredBy
-          : null,
+        actorId: isUuid(triggeredBy) ? triggeredBy : null,
         sourceName: source.name,
       };
       const referenceStats =
@@ -1513,9 +1518,7 @@ export async function runSync(
         {
           connectionId,
           runId: run!.id,
-          actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
-            ? triggeredBy
-            : null,
+          actorId: isUuid(triggeredBy) ? triggeredBy : null,
           sourceName: source.name,
         },
         undefined,
@@ -1548,7 +1551,7 @@ export async function runSync(
           from accounts
          where org_id = ${org.id}
            and id = any(${`{${Object.values(existingCtrl ?? {})
-             .filter((value) => /^[0-9a-f-]{36}$/i.test(value))
+             .filter((value) => isUuid(value))
              .join(",")}}`}::uuid[])
       `);
       const ownedIds = new Set(
@@ -1588,7 +1591,7 @@ export async function runSync(
                      true
                    ),
                    updated_at = now(),
-                   updated_by = ${/^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : null}
+                   updated_by = ${isUuid(triggeredBy) ? triggeredBy : null}
              where id = ${org.id}
           `);
           await tx.execute(sql`
@@ -1602,7 +1605,7 @@ export async function runSync(
                 before,
                 after: resolved,
               })}::jsonb,
-              ${/^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : null},
+              ${isUuid(triggeredBy) ? triggeredBy : null},
               ${requestId}
             )
           `);
@@ -2292,9 +2295,7 @@ export async function runSync(
       ).rows[0]?.on === true;
     const trueUp = trueUpEnabled && !targetedRefs
       ? await trueUpResidualGl(org.id, source, {
-          actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
-            ? triggeredBy
-            : null,
+          actorId: isUuid(triggeredBy) ? triggeredBy : null,
           syncRunId: run!.id,
         })
       : null;
@@ -2331,7 +2332,7 @@ export async function runSync(
       sourceEvidence = await applySourceReconciliationEvidence({
         orgId: org.id,
         connector: source.name,
-        actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : SYSTEM_ACTOR_ID,
+        actorId: isUuid(triggeredBy) ? triggeredBy : SYSTEM_ACTOR_ID,
         refKey,
         source,
         documents: changes.documents,
