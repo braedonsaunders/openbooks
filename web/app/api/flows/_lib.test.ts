@@ -29,7 +29,9 @@ export const withMaintenanceTransaction = (...args) => fail();
 export const withOrg = (...args) => fail();
 export const withOrgContext = (...args) => fail();
 export const withOrgTransaction = (...args) => fail();
-export const withTransactionSavepoint = (...args) => fail();`;
+export const withTransactionSavepoint = (...args) => fail();
+// No ambient bypass in this test: the real helper's answer outside a transaction.
+export const ambientBypassWithoutTransaction = () => false;`;
 
 registerHooks({
   resolve(specifier, context, next) {
