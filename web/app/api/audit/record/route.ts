@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -22,6 +23,25 @@ export async function GET(request: NextRequest) {
   const recordId = request.nextUrl.searchParams.get('id')
   if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions') || !recordId || !isUuid(recordId)) {
     return NextResponse.json({ error: 'invalid record' }, { status: 400 })
+  }
+
+  // Permission before existence (canonical shape 4 in
+  // engine/src/organization/subsidiary-scope.ts): a caller holding none of
+  // the table family's permissions learns nothing — an existing record and a
+  // missing id answer the same uniform 404, never a 403 naming the needed
+  // permission. The kind is unknown before the lookup, so the family gate
+  // admits every document-read permission here; the kind check below narrows
+  // it, still as a uniform 404.
+  const family = table === 'parties'
+    ? ['parties.read']
+    : table === 'item_rate_versions'
+      ? ['admin.setup.manage']
+      : ['ar.read', 'ap.read', 'gl.read', 'expenses.read']
+  try {
+    assertAnyPermission((permission) => can(authz, permission), family)
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    throw error
   }
 
   // Existence, kind, and creator metadata are disclosures too: resolve the
@@ -48,7 +68,10 @@ export async function GET(request: NextRequest) {
     if (denied) return denied
   }
   const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
-  if (!can(authz, permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  // Wrong-kind callers learn nothing either: the kind-specific permission
+  // fails closed with the same uniform 404, so an ar.read-only caller cannot
+  // distinguish an existing AP bill from a missing id (and symmetrically).
+  if (!can(authz, permission)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, 120) ?? ''
   const requestedAction = request.nextUrl.searchParams.get('action') ?? ''
