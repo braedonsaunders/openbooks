@@ -62,6 +62,42 @@ test(
         },
       });
 
+      const invoiceEntryId = (await db.execute<{ id: string }>(sql`
+        select posted_entry_id as id from documents where id = ${documentId} and org_id = ${org.orgId}
+      `)).rows[0]!.id;
+      const invoiceArLineId = (await db.execute<{ id: string }>(sql`
+        select id from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${invoiceEntryId} and account_id = ${org.accounts.ar}
+      `)).rows[0]!.id;
+      const paymentEntryId = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values (${paymentEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`PAY-${paymentEntryId.slice(0, 8)}`},
+                ${org.date}, ${org.periodId}, 'Customer payment', 'draft', 'manual')
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, amount, currency, txn_amount, fx_rate, is_open_item)
+        values (${org.orgId}, ${paymentEntryId}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, ${org.customerId}, '100', 'CAD', '100', '1', false),
+               (${org.orgId}, ${paymentEntryId}, 2, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, '-100', 'CAD', '-100', '1', true)
+      `);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${paymentEntryId}`);
+      const paymentArLineId = (await db.execute<{ id: string }>(sql`
+        select id from journal_lines
+         where org_id = ${org.orgId} and entry_id = ${paymentEntryId} and account_id = ${org.accounts.ar}
+      `)).rows[0]!.id;
+      const applicationId = randomUUID();
+      await db.execute(sql`
+        insert into applications
+          (id, org_id, from_line_id, to_line_id, amount, applied_on, source_amount,
+           source_transaction_amount, source_transaction_currency, target_transaction_amount,
+           target_transaction_currency, settlement_rate, settlement_rate_source,
+           settlement_rate_reference)
+        values (${applicationId}, ${org.orgId}, ${paymentArLineId}, ${invoiceArLineId}, '100', ${org.date}, '100',
+                '100', 'CAD', '100', 'CAD', '1', 'same_currency', 'SOURCE-DELETE-SETTLEMENT')
+      `);
+
       const result = await mirrorSourceDeletion({
         orgId: org.orgId,
         source: "netsuite",
@@ -120,6 +156,22 @@ test(
         audited_reversal_count: 1,
       });
 
+      const settlement = (await db.execute<{
+        id: string;
+        from_line_id: string;
+        to_line_id: string;
+        unapplied: boolean;
+      }>(sql`
+        select id, from_line_id, to_line_id, unapplied_at is not null as unapplied
+          from applications where org_id = ${org.orgId} and id = ${applicationId}
+      `)).rows[0];
+      assert.deepEqual(settlement, {
+        id: applicationId,
+        from_line_id: paymentArLineId,
+        to_line_id: invoiceArLineId,
+        unapplied: true,
+      }, "source deletion releases but preserves the original settlement evidence");
+
       const repeat = await mirrorSourceDeletion({
         orgId: org.orgId,
         source: "netsuite",
@@ -135,6 +187,54 @@ test(
          )
       `));
       assert.equal(reversalCount.rows[0]?.count, 1);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "controller resolution refuses an inactive organization actor before changing the imported document",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const connectionId = randomUUID();
+      const documentId = randomUUID();
+      const sourceRef = `inactive-actor-${randomUUID()}`;
+      const actorId = await createScratchUser(org.orgId, "Inactive source-deletion actor", "viewer");
+      await db.execute(sql`update users set is_active = false where org_id = ${org.orgId} and id = ${actorId}`);
+      await db.execute(sql`
+        insert into connections (id, org_id, source, display_name, status)
+        values (${connectionId}, ${org.orgId}, 'netsuite', 'Inactive-actor test', 'active')
+      `);
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, status, document_number, document_date, currency,
+           subtotal, tax_total, total, custom)
+        values (${documentId}, ${org.orgId}, 'sales_order', 'approved', 'SO-INACTIVE-ACTOR',
+                ${org.date}, 'CAD', '30', '0', '30',
+                ${JSON.stringify({ nsId: sourceRef, connectionId })}::jsonb)
+      `);
+
+      await assert.rejects(
+        resolveSourceDeletion({
+          orgId: org.orgId,
+          connectionId,
+          sourceRef,
+          action: "retain",
+          actorId,
+        }),
+        (error: unknown) =>
+          error instanceof Error && error.message === "resolution actor is not an active organization user",
+      );
+      const state = (await db.execute<{ status: string; resolutions: number }>(sql`
+        select d.status,
+               (select count(*)::int from source_deletion_resolutions r
+                 where r.org_id = d.org_id and r.connection_id = ${connectionId} and r.source_ref = ${sourceRef}) as resolutions
+          from documents d where d.org_id = ${org.orgId} and d.id = ${documentId}
+      `)).rows[0];
+      assert.deepEqual(state, { status: "approved", resolutions: 0 });
     } finally {
       await dropScratchOrg(org.orgId);
     }
