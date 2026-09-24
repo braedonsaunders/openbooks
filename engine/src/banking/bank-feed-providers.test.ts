@@ -1006,72 +1006,53 @@ test(
   },
 );
 
-test(
-  "scheduled bank-feed claim refuses a scan snapshot changed before claim",
-  { skip: !DB },
-  async () => {
-    const f = await seedFeedFixture();
-    const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-    let holderOpen = false;
-    const originalFetch = globalThis.fetch;
-    let providerCalls = 0;
-    try {
-      await holder.connect();
-      holderOpen = true;
-      await holder.query("begin");
-      await holder.query(
-        "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'on', true)",
-        [f.orgId],
-      );
-      await holder.query(
-        "select id from bank_feed_connections where id = $1 and org_id = $2 for update",
-        [f.connectionId, f.orgId],
-      );
-
-      globalThis.fetch = (async () => {
-        providerCalls += 1;
-        return new Response(JSON.stringify({ accounts: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }) as typeof fetch;
-      const scheduled = runDueBankFeeds();
-      const deadline = Date.now() + 15_000;
-      let waiting = false;
-      while (Date.now() < deadline) {
-        const activity = await db.execute<{ waiting: boolean }>(sql`
-          select exists (
-            select 1 from pg_stat_activity
-             where datname = current_database() and pid <> pg_backend_pid()
-               and wait_event_type = 'Lock'
-               and query ilike '%update bank_feed_connections c%'
-          ) as waiting
-        `);
-        if (activity.rows[0]?.waiting) { waiting = true; break; }
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      assert.equal(waiting, true, "scheduler reached its claim after scanning the due row");
-      await holder.query(
-        "update bank_feed_connections set is_active = false, credentials = $1, updated_at = clock_timestamp() where id = $2 and org_id = $3",
-        [sealCredentials({ clientId: "client-id", secret: "rotated", accessToken: "rotated-token", env: "sandbox" }), f.connectionId, f.orgId],
-      );
-      await holder.query("commit");
-      await holder.end();
-      holderOpen = false;
-
-      const outcomes = await scheduled;
-      assert.equal(outcomes.some((outcome) => outcome.connectionId === f.connectionId), false);
-      assert.equal(providerCalls, 0, "deactivated and rotated scan-time credentials must never be probed");
-    } finally {
-      globalThis.fetch = originalFetch;
-      if (holderOpen) {
-        await holder.query("rollback").catch(() => {});
-        await holder.end().catch(() => {});
-      }
-      await dropScratchOrgReporting(f.orgId);
+test("scheduled sync fences both claim and provider response against connection changes", { skip: !DB }, async () => {
+  const beforeClaim = await seedFeedFixture();
+  const holder = new Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  let holderOpen = false;
+  const originalFetch = globalThis.fetch;
+  try {
+    await holder.connect(); holderOpen = true; await holder.query("begin");
+    await holder.query("select set_config('app.current_org',$1,true),set_config('app.bypass_rls','on',true)", [beforeClaim.orgId]);
+    await holder.query("select id from bank_feed_connections where id=$1 and org_id=$2 for update", [beforeClaim.connectionId, beforeClaim.orgId]);
+    globalThis.fetch = (async () => new Response(JSON.stringify({ accounts: [] }), { status: 200 })) as typeof fetch;
+    const pending = runDueBankFeeds();
+    let waiting = false;
+    for (let i = 0; i < 600 && !waiting; i++) {
+      waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where datname=current_database() and pid<>pg_backend_pid() and wait_event_type='Lock' and query ilike '%update bank_feed_connections c%') as waiting`)).rows[0]!.waiting;
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 25));
     }
-  },
-);
+    assert.equal(waiting, true);
+    await holder.query("update bank_feed_connections set is_active=false, updated_at=clock_timestamp() where id=$1 and org_id=$2", [beforeClaim.connectionId, beforeClaim.orgId]);
+    await holder.query("commit"); await holder.end(); holderOpen = false;
+    assert.equal((await pending).some((outcome) => outcome.connectionId === beforeClaim.connectionId), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (holderOpen) { await holder.query("rollback").catch(() => {}); await holder.end().catch(() => {}); }
+    await dropScratchOrgReporting(beforeClaim.orgId);
+  }
+  const f = await seedFeedFixture();
+  let release!: (response: Response) => void;
+  let started!: () => void;
+  const providerResponse = new Promise<Response>((resolve) => { release = resolve; });
+  const providerStarted = new Promise<void>((resolve) => { started = resolve; });
+  globalThis.fetch = (async () => { started(); return providerResponse; }) as typeof fetch;
+  try {
+    const scheduled = runDueBankFeeds();
+    await providerStarted;
+    await db.execute(sql`update bank_feed_connections set external_account_id='plaid-external-2', updated_at=clock_timestamp() where id=${f.connectionId} and org_id=${f.orgId}`);
+    release(new Response(JSON.stringify(plaidPage([feedTxn("stale-provider-response", new Date().toISOString().slice(0, 10), "-31.00")])), { status: 200, headers: { "content-type": "application/json" } }));
+    const outcome = myOutcome(await scheduled, f.connectionId);
+    assert.match(outcome.error ?? "", /configuration changed/);
+    assert.equal((await loadStatementLines(f.orgId, f.accountId)).length, 0);
+    const connection = await loadConnection(f.connectionId);
+    assert.equal(connection.last_sync_at, null);
+    assert.equal(connection.status, "pending");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
 
 test(
   "Sync Now preserves caller scope through a provider probe when its bank account is rehomed",

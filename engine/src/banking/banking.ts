@@ -1438,6 +1438,7 @@ export async function importStatement(
     currency?: string | null;
     sourceEvidence?: StatementSourceEvidence | null;
     dryRun?: boolean;
+    beforeWrite?: (executor: SqlExecutor) => Promise<void>;
   },
   ctx: BankingContext,
 ): Promise<ImportResult> {
@@ -1511,6 +1512,7 @@ export async function importStatement(
         `Statement currency ${currency} does not match account currency ${account.currency}`,
       );
     }
+    await opts.beforeWrite?.(tx);
     const sourceAlreadyImported = Boolean((await tx.execute<{ imported: boolean }>(sql`
       select exists (
         select 1
