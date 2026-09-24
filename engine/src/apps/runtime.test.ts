@@ -482,13 +482,6 @@ test("the guest-visible host surface is exactly the sealed set", async () => {
 });
 
 test("a post-outcome straggler cannot append logs or reach adapters", async () => {
-  // The wall-clock timer and the host-call deadline share one absolute
-  // deadline, so with an adapter that outlives it the two timers expire on
-  // the same millisecond and either may fire first: the host deadline may
-  // win (the guest catches, finishes pre-seal, the run reports ok) or the
-  // wall may win (the timeout outcome is determined while the guest is
-  // still suspended, and the guest resumes AFTER the seal). Only the
-  // wall-won path exercises the seal, so repeat until it is observed.
   // The catch block below then calls every host function; each must refuse
   // instead of charging budget or reaching its adapter. When adding a host
   // function, add its call here too.
@@ -584,32 +577,25 @@ test("a post-outcome straggler cannot append logs or reach adapters", async () =
     };
     return { adapters, calls };
   };
-  // Warm the sandbox once so a cold first compile cannot outlast the test's
-  // deadline before the first host call (that path resolves the host
-  // deadline synchronously and never suspends past the wall).
+  // Warm the sandbox so the host call, not compilation, reaches the deadline.
   const warm = await runAppEndpoint({
     source: `function handler() { return 1 }`,
     request: req(),
     adapters: fakeAdapters(),
   });
   assert.equal(warm.status, "ok");
-  let timeoutsObserved = 0;
-  for (let attempt = 0; attempt < 25 && timeoutsObserved === 0; attempt++) {
-    const { adapters, calls } = buildAdapters();
-    const r = await runAppEndpoint({
-      source: stragglerSource,
-      request: req(),
-      adapters,
-      timeoutMs: 20,
-    });
-    if (r.status !== "timeout") continue;
-    timeoutsObserved++;
-    // Let the suspended guest resume post-seal and run its straggler calls.
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    assert.deepEqual(r.logs, [], "a sealed ob.log must not mutate the returned logs");
-    assert.deepEqual(calls, ["get:slow"], "no sealed host function may reach its adapter");
-  }
-  assert.equal(timeoutsObserved, 1, "expected the wall to win at least once in 25 tries");
+  const { adapters, calls } = buildAdapters();
+  const r = await runAppEndpoint({
+    source: stragglerSource,
+    request: req(),
+    adapters,
+    timeoutMs: 20,
+  });
+  assert.equal(r.status, "timeout");
+  // Let the suspended guest resume post-seal and run its straggler calls.
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.deepEqual(r.logs, [], "a sealed ob.log must not mutate the returned logs");
+  assert.deepEqual(calls, ["get:slow"], "no sealed host function may reach its adapter");
 });
 
 test("raw records, journal, and platform host functions fail closed without adapters", async () => {

@@ -172,13 +172,19 @@ export async function runAppEndpoint(opts: {
    */
   const withHostDeadline = async <T>(operation: () => Promise<T>): Promise<T | typeof HOST_TIMEOUT> => {
     const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) return HOST_TIMEOUT;
+    if (remainingMs <= 0) {
+      sealed = true;
+      return HOST_TIMEOUT;
+    }
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       return await Promise.race([
         Promise.resolve().then(operation),
         new Promise<typeof HOST_TIMEOUT>((resolve) => {
-          timer = setTimeout(() => resolve(HOST_TIMEOUT), remainingMs);
+          timer = setTimeout(() => {
+            sealed = true;
+            resolve(HOST_TIMEOUT);
+          }, remainingMs);
         }),
       ]);
     } finally {
@@ -569,6 +575,19 @@ export async function runAppEndpoint(opts: {
       // From here on no new host work belongs to this attempt: the outcome is
       // being adjudicated. Applies on both the resolved and rejected paths.
       sealed = true;
+    }
+    // A guest can catch HOST_TIMEOUT and return before the wall timer wins its
+    // own race. The endpoint's absolute deadline still determines the result.
+    if (Date.now() >= deadline) {
+      if (result.error) result.error.dispose();
+      else result.value.dispose();
+      return {
+        status: "timeout",
+        error: "execution timed out",
+        logs,
+        units,
+        durationMs: Date.now() - started,
+      };
     }
     if (result.error) {
       const err = vm.dump(result.error);
