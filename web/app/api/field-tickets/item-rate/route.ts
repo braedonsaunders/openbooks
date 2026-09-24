@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { divRate, mul } from '@openbooks/engine/src/money/money.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveItemRate } from '../../../../lib/item-rates'
@@ -34,6 +34,14 @@ export async function GET(req: Request) {
   if (rateUnitCode && !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(rateUnitCode)) {
     return NextResponse.json({ error: 'invalid rate unit' }, { status: 422 })
   }
+
+  const project = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from projects
+     where id = ${projectId} and org_id = ${gate.user.orgId} and is_active
+  `)).rows[0]
+  if (!project) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const denied = guardSubsidiaryScope(gate, project.subsidiary_id)
+  if (denied) return denied
 
   const item = (await db.execute<{ default_rate: string | null; default_cost: string | null; unit: string | null; kind: string }>(sql`
     select default_rate, default_cost, unit, kind from items
