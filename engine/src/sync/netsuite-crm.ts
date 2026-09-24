@@ -287,7 +287,16 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   if (!(await orgFeatureEnabled(orgId, 'crm'))) throw new Error('CRM feature is disabled')
   const creds = await credentials(orgId, connectionId)
-  const actor = (await db.execute<{ id: string }>(sql`select id from users where org_id=${orgId} and is_active order by role='controller' desc, created_at limit 1`))
+  // Roles live in app_roles/role_assignments; users has no role column, so
+  // prefer a controller through the assignment join, else the earliest user.
+  const actor = (await db.execute<{ id: string }>(sql`
+    select u.id from users u
+     where u.org_id=${orgId} and u.is_active
+     order by exists (
+       select 1 from role_assignments ra
+         join app_roles r on r.id = ra.role_id
+        where ra.org_id = u.org_id and ra.user_id = u.id and r.key = 'controller'
+     ) desc, u.created_at limit 1`))
   const actorId = actor.rows[0]?.id
   if (!actorId) throw new Error('The tenant needs an active user before CRM data can be imported')
   await ensureCrmDefaults(orgId, actorId)
