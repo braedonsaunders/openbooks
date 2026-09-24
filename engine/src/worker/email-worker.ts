@@ -121,7 +121,22 @@ export function createEmailWorker(): Worker<EmailJobData> {
         deleteStoredEmailAttachments(d.attachments).catch((error) => {
           console.error("[worker] email attachment cleanup failed:", error instanceof Error ? error.message : error);
         });
-      if (reportDeliveryId) await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
+      // The start mark is the worker's lease on this delivery: when the fence
+      // rejects it (a racing callback or rebuild sweep already moved the row
+      // on), this job is stale and must not transmit — the owning transition
+      // drives the delivery from here. Standing down is lossless: a row the
+      // sweep parked as failed is redispatched as a new generation, and a
+      // sent row is already delivered.
+      if (reportDeliveryId) {
+        const started = await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
+        if (!started) {
+          console.error(
+            `[worker] report delivery ${reportDeliveryId} start not applied — ` +
+              `standing down without sending; the owning transition drives this delivery`,
+          );
+          return { skipped: true, reportDeliveryNotApplied: reportDeliveryId };
+        }
+      }
       if (paymentRemittanceId) {
         await markPaymentRemittanceAttempt(d.orgId, paymentRemittanceId, queueAttempt);
       }
@@ -163,7 +178,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
           );
         }
         if (reportDeliveryId) {
-          await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "sandbox environment — email egress blocked");
+          if (!(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "sandbox environment — email egress blocked"))) {
+            console.error(
+              `[worker] report delivery ${reportDeliveryId} suppression not applied — ` +
+                `the row moved on under a racing transition; the sandbox suppression stands in email_log ${claimed.id}`,
+            );
+          }
         }
         // A dunning claim stays staged here: the letter was never attempted,
         // so there is no verdict to settle — the evidence names the sandbox
@@ -195,7 +215,12 @@ export function createEmailWorker(): Worker<EmailJobData> {
           await markPaymentRemittanceFailed(d.orgId, paymentRemittanceId, "email provider not configured", queueAttempt, true);
         }
         if (reportDeliveryId) {
-          await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "email provider not configured");
+          if (!(await markReportDeliverySuppressed(d.orgId, reportDeliveryId, claimed.id, "email provider not configured"))) {
+            console.error(
+              `[worker] report delivery ${reportDeliveryId} suppression not applied — ` +
+                `the row moved on under a racing transition; the unconfigured-provider suppression stands in email_log ${claimed.id}`,
+            );
+          }
         }
         // As above: never attempted, so the dunning claim stays staged with
         // the cause named on the email_log row, not settled as a verdict.
@@ -233,7 +258,14 @@ export function createEmailWorker(): Worker<EmailJobData> {
         if (paymentRemittanceId) {
           await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
         }
-        if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, decision.providerMessageId);
+        if (reportDeliveryId) {
+          if (!(await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, decision.providerMessageId))) {
+            console.error(
+              `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
+                `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
+            );
+          }
+        }
         return { id: decision.providerMessageId, reconciled: true };
       }
       if (decision.action === "suppress") {
@@ -307,7 +339,14 @@ export function createEmailWorker(): Worker<EmailJobData> {
             if (paymentRemittanceId) {
               await markPaymentRemittanceSent(d.orgId, paymentRemittanceId);
             }
-            if (reportDeliveryId) await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId);
+            if (reportDeliveryId) {
+              if (!(await markReportDeliverySent(d.orgId, reportDeliveryId, canonical.id, outcome.providerMessageId))) {
+                console.error(
+                  `[worker] report delivery ${reportDeliveryId} sent-mark not applied — ` +
+                    `the row moved on under a racing transition; the provider acceptance stands in email_log ${canonical.id}`,
+                );
+              }
+            }
           } catch (bookkeepingError) {
             console.error(
               `[worker] email ${canonical.id} was accepted by the provider but post-acceptance bookkeeping failed — leaving the acceptance for reconciliation, never re-sending:`,

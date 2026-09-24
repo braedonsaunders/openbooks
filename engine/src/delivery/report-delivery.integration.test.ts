@@ -1057,3 +1057,120 @@ test("a superseded renderer's bytes are never stored; the live renderer owns the
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a fenced-out run dispatch is not counted (B-DLV-02/B2-DLV-1)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const definitionId = randomUUID();
+    await db.execute(sql`
+      insert into report_definitions
+        (id, org_id, kind, report_type, slug, name, query, created_by, updated_by)
+      values (${definitionId}, ${org.orgId}, 'custom', 'query', 'fence-out-run',
+              'Fence-out run', '{}'::jsonb, null, null)
+    `);
+    const runId = randomUUID();
+    await db.execute(sql`
+      insert into report_runs
+        (id, org_id, schedule_id, definition_id, trigger, status, scheduled_for,
+         recipient_emails, next_attempt_at)
+      values (${runId}, ${org.orgId}, null, ${definitionId}, 'scheduled', 'queued',
+              ${new Date(Date.now() - 60_000)}, '[]'::jsonb, now())
+    `);
+    const asOf = new Date(Date.now() + 60_000);
+    // The enqueue stub stands in for the winning dispatcher: it moves the
+    // row first, so this dispatcher's fenced update matches zero rows.
+    const counted = await dispatchQueuedReportRuns(async (data) => {
+      await db.execute(sql`
+        update report_runs set dispatch_count=dispatch_count+1, updated_at=now()
+         where id=${(data as { runId: string }).runId} and org_id=${(data as { orgId: string }).orgId}
+      `);
+      return {} as never;
+    }, asOf);
+    assert.equal(counted, 0);
+    const row = (await db.execute<{ dispatch_count: number }>(sql`
+      select dispatch_count from report_runs where id=${runId}
+    `)).rows[0]!;
+    assert.equal(row.dispatch_count, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a fenced-out delivery dispatch is not counted (B-DLV-02)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "fence-out");
+    const deliveryId = randomUUID();
+    await db.execute(sql`
+      insert into report_delivery_outbox
+        (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+      values (${deliveryId}, ${org.orgId}, ${runId}, 'fenced@example.com', 'pending', 0,
+              ${new Date(Date.now() - 60_000)})
+    `);
+    const asOf = new Date(Date.now() + 60_000);
+    // The stub stands in for a racing callback: the row is already sent
+    // before this dispatcher's fenced update runs.
+    const counted = await dispatchReportDeliveries(async () => {
+      await db.execute(sql`
+        update report_delivery_outbox set status='sent', sent_at=now(), updated_at=now()
+         where id=${deliveryId} and org_id=${org.orgId}
+      `);
+      return [];
+    }, asOf);
+    assert.equal(counted, 0);
+    const row = (await db.execute<{ status: string; dispatch_count: number }>(sql`
+      select status, dispatch_count from report_delivery_outbox where id=${deliveryId}
+    `)).rows[0]!;
+    assert.deepEqual(row, { status: "sent", dispatch_count: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("fenced delivery marks report not-applied instead of silent success (B-DLV-03)", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { runId } = await seedSucceededRunWithArtifact(org.orgId, "marks");
+    const mk = async (status: string): Promise<string> => {
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into report_delivery_outbox
+          (id, org_id, run_id, recipient, status, attempt_count, next_attempt_at)
+        values (${id}, ${org.orgId}, ${runId}, ${`${status}@example.com`}, ${status}, 0,
+                ${new Date(Date.now() - 60_000)})
+      `);
+      return id;
+    };
+    const logId = randomUUID();
+    await db.execute(sql`
+      insert into email_log (id, org_id, recipients, recipient_primary, subject, status, category_key)
+      values (${logId}, ${org.orgId}, '["m@example.com"]'::jsonb, 'm@example.com', 'Marks', 'sent', 'report')
+    `);
+
+    // Started applies from enqueued, then the fence rejects the replay.
+    const starting = await mk("enqueued");
+    assert.equal(await markReportDeliveryStarted(org.orgId, starting, "job-1"), true);
+    // A racing completion moves the row on; the stale start must not re-apply.
+    assert.equal(await markReportDeliverySent(org.orgId, starting, logId, "p-1"), true);
+    assert.equal(await markReportDeliveryStarted(org.orgId, starting, "job-1"), false);
+
+    // A sent row is idempotent success for Sent, but refuses Suppressed —
+    // a stale retry must not erase the delivery evidence.
+    assert.equal(await markReportDeliverySent(org.orgId, starting, logId, "p-1"), true);
+    assert.equal(await markReportDeliverySuppressed(org.orgId, starting, logId, "stale retry"), false);
+
+    // A failed row refuses Sent: the racing callback must not record a send.
+    const failed = await mk("failed");
+    assert.equal(await markReportDeliverySent(org.orgId, failed, logId, "p-2"), false);
+    // ...but still accepts Suppressed.
+    assert.equal(await markReportDeliverySuppressed(org.orgId, failed, logId, "no provider"), true);
+    assert.equal(await markReportDeliverySuppressed(org.orgId, failed, logId, "no provider"), true);
+
+    // An unknown id applies nothing.
+    assert.equal(await markReportDeliveryStarted(org.orgId, randomUUID(), "job-9"), false);
+    assert.equal(await markReportDeliverySent(org.orgId, randomUUID(), logId, "p-9"), false);
+    assert.equal(await markReportDeliverySuppressed(org.orgId, randomUUID(), logId, "x"), false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

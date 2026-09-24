@@ -152,11 +152,15 @@ export async function dispatchQueuedReportRuns(
       { runId: row.id, orgId: row.org_id, definitionId: row.definition_id, scheduleId: row.schedule_id },
       { jobId },
     );
-    await db.execute(sql`
+    // The fence serializes concurrent dispatchers: a loser observes zero
+    // matched rows and must not count a dispatch it did not land. The
+    // enqueued job above still exists under its deterministic id, but the
+    // winner owns the row and the orphan converges without a second send.
+    const marked = await db.execute(sql`
       update report_runs set dispatch_count=dispatch_count+1, updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and dispatch_count=${row.dispatch_count} and status in ('queued','failed')
     `);
-    dispatched++;
+    if ((marked.rowCount ?? 0) > 0) dispatched++;
   }
   return dispatched;
 }
@@ -567,44 +571,84 @@ export async function dispatchReportDeliveries(
         `(job ${settled.jobIds.join(", ")}); keeping staged attachments`,
       );
     }
-    await db.execute(sql`
+    // Same fence-out rule as the run dispatcher above: a concurrent
+    // dispatcher, racing callback, or rebuild sweep may have moved the row
+    // first, and the loser must not count a dispatch it did not land.
+    const marked = await db.execute(sql`
       update report_delivery_outbox set status='enqueued', dispatch_count=dispatch_count+1,
              queue_job_id=${jobId}, error=null, updated_at=now()
        where id=${row.id} and org_id=${row.org_id} and status in ('pending','failed') and dispatch_count=${row.dispatch_count}
     `);
-    dispatched++;
+    if ((marked.rowCount ?? 0) > 0) dispatched++;
   }
   return dispatched;
 }
 
-export async function markReportDeliveryStarted(orgId: string, deliveryId: string, jobId: string | null): Promise<void> {
-  await db.execute(sql`
+/**
+ * Name a fenced-out delivery transition the way the house names every lost
+ * write: which delivery, which transition, which states it was legal from.
+ * The fence rejecting is the guard working (a racing callback or rebuild
+ * sweep moved the row first) — but the caller must see the rejection, never
+ * a silent success it mistakes for a landed transition.
+ */
+function logDeliveryNotApplied(deliveryId: string, transition: string, legalFrom: string): void {
+  console.warn(
+    `[reports] delivery ${deliveryId} not marked ${transition} — ` +
+      `the row is missing or no longer ${legalFrom}; the owning transition stands and this attempt stands down`,
+  );
+}
+
+export async function markReportDeliveryStarted(orgId: string, deliveryId: string, jobId: string | null): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(sql`
     update report_delivery_outbox set status='sending', attempt_count=attempt_count+1,
            last_attempt_at=now(), queue_job_id=coalesce(${jobId},queue_job_id), updated_at=now()
      where id=${deliveryId} and org_id=${orgId} and status in ('enqueued','sending')
+    returning id
   `);
+  if (marked.rows[0]) return true;
+  logDeliveryNotApplied(deliveryId, "sending", "enqueued/sending");
+  return false;
 }
 
 // Only a dispatched row ('sending', or 'enqueued' when the rebuild sweep
 // reconciles a recorded provider acceptance after a crash) may complete as
 // 'sent'; a stale retry/racing callback must not rewrite a failed or
-// already-sent row into a second recorded send.
-export async function markReportDeliverySent(orgId: string, deliveryId: string, emailLogId: string, providerMessageId: string): Promise<void> {
-  await db.execute(sql`
+// already-sent row into a second recorded send. An already-sent row is
+// success (idempotent completion, like the dunning claim settle); anything
+// else unmoved is false and the caller must not proceed as if sent.
+export async function markReportDeliverySent(orgId: string, deliveryId: string, emailLogId: string, providerMessageId: string): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(sql`
     update report_delivery_outbox set status='sent', email_log_id=${emailLogId}, provider_message_id=${providerMessageId},
            sent_at=now(), error=null, updated_at=now() where id=${deliveryId} and org_id=${orgId} and status in ('sending','enqueued')
+    returning id
   `);
+  if (marked.rows[0]) return true;
+  const current = (await db.execute<{ status: string }>(sql`
+    select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
+  `)).rows[0];
+  if (current?.status === "sent") return true;
+  logDeliveryNotApplied(deliveryId, "sent", "sending/enqueued");
+  return false;
 }
 
 // Only a delivery that has not recorded a send may become 'suppressed'; a
 // stale retry/racing callback must not rewrite an already-sent row into a
 // suppression, erasing the evidence that the report email was delivered.
-export async function markReportDeliverySuppressed(orgId: string, deliveryId: string, emailLogId: string, reason: string): Promise<void> {
-  await db.execute(sql`
+// An already-suppressed row is success; anything else unmoved is false.
+export async function markReportDeliverySuppressed(orgId: string, deliveryId: string, emailLogId: string, reason: string): Promise<boolean> {
+  const marked = await db.execute<{ id: string }>(sql`
     update report_delivery_outbox set status='suppressed', email_log_id=${emailLogId}, error=${reason.slice(0, 1000)},
            updated_at=now() where id=${deliveryId} and org_id=${orgId}
              and status = any(array['pending','enqueued','sending','failed'])
+    returning id
   `);
+  if (marked.rows[0]) return true;
+  const current = (await db.execute<{ status: string }>(sql`
+    select status from report_delivery_outbox where id=${deliveryId} and org_id=${orgId}
+  `)).rows[0];
+  if (current?.status === "suppressed") return true;
+  logDeliveryNotApplied(deliveryId, "suppressed", "pending/enqueued/sending/failed");
+  return false;
 }
 
 export async function markReportDeliveryFailed(
