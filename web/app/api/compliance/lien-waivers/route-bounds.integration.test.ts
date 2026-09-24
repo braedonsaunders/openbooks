@@ -123,6 +123,36 @@ test("lien-waiver creation refuses a decimal-comma amount with the dotted rewrit
   }
 });
 
+test("lien-waiver creation refuses an unknown currency without writing", { skip: !DB }, async () => {
+  const { org, partyId, projectId } = await fixture();
+  try {
+    const base = { partyId, projectId, waiverType: "conditional_progress", throughDate: "2026-03-31", amount: "1000.00" };
+    const response = await post({ ...base, currency: "XX" });
+    const json = (await response.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? "", /ISO 4217/, `expected a named currency error, got: ${JSON.stringify(json)}`);
+    assert.equal(await waiverCount(org.orgId), 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("lien-waiver creation refuses a lowercase code without writing", { skip: !DB }, async () => {
+  const { org, partyId, projectId } = await fixture();
+  try {
+    const response = await post({
+      partyId, projectId, waiverType: "conditional_progress",
+      throughDate: "2026-03-31", amount: "1000.00", currency: "cad",
+    });
+    const json = (await response.json().catch(() => null)) as { error?: string } | null;
+    assert.equal(response.status, 422, `expected 422, got ${response.status}: ${JSON.stringify(json)}`);
+    assert.match(json?.error ?? "", /uppercase/, `expected a named currency error, got: ${JSON.stringify(json)}`);
+    assert.equal(await waiverCount(org.orgId), 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("lien-waiver creation still files an ordinary waiver", { skip: !DB }, async () => {
   const { org, partyId, projectId } = await fixture();
   try {
