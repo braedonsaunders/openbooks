@@ -65,7 +65,7 @@ test("property-management API gates reads, accounting effects, and subsidiary re
   assert.match(route, /guardPropertyManagementFeature/);
   assert.match(
     route,
-    /const glActions = new Set\(\["recordDeposit", "reverseDeposit", "finalizeCam"\]\)/,
+    /const glActions = new Set\(\["recordDeposit", "reverseDeposit", "finalizeCam", "levelRent"\]\)/,
   );
   assert.match(route, /guardSubsidiaryAccess/);
   assert.match(

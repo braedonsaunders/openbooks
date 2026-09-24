@@ -164,3 +164,58 @@ test('property create/update refuse foreign reference custom values', { skip: !p
     await dropScratchOrg(org.orgId);
   }
 });
+
+test('levelRent levels one visible lease and refuses hidden, bulk, and property-wide scopes', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, fx } = await seed();
+  try {
+    await db.execute(sql`update app_roles set permissions='["ar.read","ar.create","gl.post"]'::jsonb
+      where org_id=${org.orgId} and key='property_clerk'`);
+    // A flat lease (delta zero) exercises dispatch and guards without
+    // requiring a straight-line account: the zero-delta path returns before
+    // any posting configuration is read.
+    const seedFlatLease = async (propertyId: string, leaseNumber: string): Promise<string> => {
+      const leaseId = randomUUID();
+      await db.execute(sql`insert into property_leases (id, org_id, property_id, tenant_id, lease_number, status, starts_on, ends_on, billing_day, late_fee_type, late_fee_value)
+        values (${leaseId}, ${fx.orgId}, ${propertyId}, ${fx.tenantId}, ${leaseNumber}, 'active', '2026-01-01', '2026-12-31', 1, 'none', '0')`);
+      await db.execute(sql`insert into lease_charges (org_id, lease_id, charge_type, description, amount, frequency, effective_from, income_account_id)
+        values (${fx.orgId}, ${leaseId}, 'base_rent', 'Base rent', '1000', 'monthly', '2026-01-01', ${fx.revenueAccountId})`);
+      return leaseId;
+    };
+    const leaseId = await seedFlatLease(fx.propertyId, 'L-LEVEL-SEEN');
+    const hiddenLeaseId = await seedFlatLease(fx.hiddenPropertyId, 'L-LEVEL-HIDDEN');
+    state.user = session(fx);
+
+    const ok = await withOrgContext(org.orgId, () => post({ action: 'levelRent', leaseId, asOf: '2026-03-01' }));
+    assert.equal(ok.status, 200, JSON.stringify(await ok.clone().json()));
+    const rows = (await ok.json()) as Array<{ delta: string; entryId: string | null }>;
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]!.delta, '0.0000');
+    assert.equal(rows[0]!.entryId, null);
+
+    // The shared lease-scope fence answers 403 here — exactly as the
+    // long-standing billing actions do (parity control below); redesigning
+    // hidden-lease 403/404 semantics is out of scope for the levelling wire-up.
+    const hidden = await withOrgContext(org.orgId, () => post({ action: 'levelRent', leaseId: hiddenLeaseId, asOf: '2026-03-01' }));
+    assert.equal(hidden.status, 403);
+    assert.match(String((await hidden.json() as { error: string }).error), /outside your subsidiary access/);
+    const sibling = await withOrgContext(org.orgId, () => post({ action: 'assessLateFees', leaseId: hiddenLeaseId, asOf: '2026-03-01' }));
+    assert.equal(sibling.status, 403, 'levelRent fences hidden leases exactly like assessLateFees');
+
+    const bulk = await withOrgContext(org.orgId, () => post({ action: 'levelRent', asOf: '2026-03-01' }));
+    assert.equal(bulk.status, 403);
+
+    const propertyWide = await withOrgContext(org.orgId, () => post({ action: 'levelRent', propertyId: fx.propertyId, asOf: '2026-03-01' }));
+    assert.equal(propertyWide.status, 400);
+    assert.match(String((await propertyWide.json() as { error: string }).error), /leaseId/);
+
+    // Straight-line accruals are direct GL writes: without gl.post the route
+    // refuses before any guard or engine work, exactly like recordDeposit.
+    await db.execute(sql`update app_roles set permissions='["ar.read","ar.create"]'::jsonb
+      where org_id=${org.orgId} and key='property_clerk'`);
+    const unprivileged = await withOrgContext(org.orgId, () => post({ action: 'levelRent', leaseId, asOf: '2026-03-01' }));
+    assert.equal(unprivileged.status, 403);
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
