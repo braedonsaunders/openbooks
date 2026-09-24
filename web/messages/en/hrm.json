@@ -1959,11 +1959,13 @@
       "kind": "Kind",
       "anonymity": "Anonymity",
       "minGroup": "Minimum group size",
+      "minGroupInvalid": "Minimum group size must be a whole number from 2 to 1000.",
       "questions": "Questions",
       "addQuestion": "Add question",
       "prompt": "Prompt",
       "driver": "Driver key",
       "options": "Options",
+      "optionsHint": "One option per line.",
       "remove": "Remove",
       "submit": "Save survey",
       "failed": "Saving failed."

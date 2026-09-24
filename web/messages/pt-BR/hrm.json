@@ -1902,11 +1902,13 @@
       "kind": "Tipo",
       "anonymity": "Anonimato",
       "minGroup": "Tamanho mínimo do grupo",
+      "minGroupInvalid": "O tamanho mínimo do grupo deve ser um número inteiro entre 2 e 1000.",
       "questions": "Perguntas",
       "addQuestion": "Adicionar pergunta",
       "prompt": "Pergunta",
       "driver": "Chave direcionadora",
       "options": "Opções",
+      "optionsHint": "Uma opção por linha.",
       "remove": "Remover",
       "submit": "Salvar pesquisa",
       "failed": "Falha ao salvar."

@@ -1902,11 +1902,13 @@
       "kind": "类型",
       "anonymity": "匿名度",
       "minGroup": "最小分组人数",
+      "minGroupInvalid": "最小分组人数必须是 2 到 1000 之间的整数。",
       "questions": "问题",
       "addQuestion": "添加问题",
       "prompt": "题干",
       "driver": "驱动因素键",
       "options": "选项",
+      "optionsHint": "每行一个选项。",
       "remove": "删除",
       "submit": "保存调查",
       "failed": "保存失败。"

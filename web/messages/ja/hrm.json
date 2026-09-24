@@ -1902,11 +1902,13 @@
       "kind": "種類",
       "anonymity": "匿名度",
       "minGroup": "最小グループサイズ",
+      "minGroupInvalid": "最小グループサイズは 2 から 1000 までの整数で入力してください。",
       "questions": "設問",
       "addQuestion": "設問を追加",
       "prompt": "設問文",
       "driver": "ドライバーキー",
       "options": "選択肢",
+      "optionsHint": "1 行に 1 つの選択肢。",
       "remove": "削除",
       "submit": "調査を保存",
       "failed": "保存に失敗しました。"
