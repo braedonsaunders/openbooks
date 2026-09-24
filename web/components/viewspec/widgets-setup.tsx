@@ -379,6 +379,7 @@ export const SETUP_WIDGETS = {
       automation={props.automation as ComponentProps<typeof AutomationBuilder>['automation']}
       runs={props.runs as ComponentProps<typeof AutomationBuilder>['runs']}
       canSimulate={props.canSimulate === true}
+      canManage={props.canManage === true}
       saveFailed={str(props, 'saveFailed') ?? ''}
       backHref={str(props, 'backHref') ?? '/admin/automations'}
       backLabel={str(props, 'backLabel') ?? ''}

@@ -5464,6 +5464,7 @@
       "stepDetail": "Detail",
       "runStatus": "Status",
       "runsEmpty": "No runs yet.",
+      "readOnlyNotice": "Read-only: editing this recipe needs the automations manage permission.",
       "runVersion": "Version",
       "runSubject": "Subject",
       "runCreated": "Created",
