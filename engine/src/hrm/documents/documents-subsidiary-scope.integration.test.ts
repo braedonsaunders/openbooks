@@ -349,6 +349,33 @@ test("upload refuses an undeclared category and files a declared one", { skip: !
   });
 });
 
+test("generation and upload reject an employment that belongs to another party", { skip: !DB }, async () => {
+  await withHarness(async (h: Harness) => {
+    const before = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_documents where org_id = ${h.org.orgId}
+    `)).rows[0]!.count;
+    await assert.rejects(
+      generateDocument({
+        orgId: h.org.orgId, actorId: h.adminId, templateId: h.templateId,
+        employmentId: h.employmentB, partyId: h.partyA, title: "Cross-linked generated document", today: "2026-09-21",
+      }),
+      (error: unknown) => error instanceof HrmDocumentsError && /does not belong to this document subject/.test(error.message),
+    );
+    await assert.rejects(
+      uploadDocument({
+        orgId: h.org.orgId, actorId: h.adminId, employmentId: h.employmentB, partyId: h.partyA,
+        categoryKey: "contract", title: "Cross-linked uploaded document", filename: "memo.pdf",
+        contentType: "application/pdf", bytes: Buffer.from("%PDF-1.4 memo"),
+      }),
+      (error: unknown) => error instanceof HrmDocumentsError && /does not belong to this document subject/.test(error.message),
+    );
+    const after = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_documents where org_id = ${h.org.orgId}
+    `)).rows[0]!.count;
+    assert.equal(after, before, "mismatched identities create no document rows");
+  });
+});
+
 test("an A-restricted manager cannot generate for or template over an out-of-scope subject", { skip: !DB }, async () => {
   await withHarness(async (h: Harness) => {
     const before = (await db.execute<{ n: string }>(sql`
