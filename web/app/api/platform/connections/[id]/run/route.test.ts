@@ -327,7 +327,7 @@ for (const [name, config] of refusedConnectorUrls) {
       params: Promise.resolve({ id: "conn-1" }),
     });
 
-    assert.equal(response.status, 404);
+    assert.equal(response.status, 422);
     const body = (await response.json()) as { errorCode?: string };
     assert.equal(body.errorCode, "CONNECTOR_URL_REFUSED");
     assert.equal(routeState.enqueueAttempts, 0, "must not enqueue a refused connector URL");
