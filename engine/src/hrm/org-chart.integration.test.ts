@@ -283,3 +283,22 @@ test("chart and directory are fenced by employer scope and the self-service team
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("impossible calendar dates refuse by name before any database read", async () => {
+  // 2023-02-30 passes the YYYY-MM-DD shape and Date.parse normalizes it
+  // into March, so the old check waved it through to the CTE's asOf::date
+  // cast, which failed as a raw database error. The shared strict parser
+  // refuses it as a named VALIDATION (400 at the route) up front — no org,
+  // actor, or database is touched.
+  for (const asOf of ["2023-02-30", "2023-13-01", "2023-00-10", "not-a-date"]) {
+    await assert.rejects(
+      loadOrgChart({ orgId: "00000000-0000-0000-0000-000000000000", actorId: "00000000-0000-0000-0000-000000000000", asOf }),
+      (e: unknown) => {
+        assert.ok(e instanceof HrmOrgChartError);
+        assert.equal((e as HrmOrgChartError).code, "VALIDATION");
+        assert.match((e as Error).message, /civil date/);
+        return true;
+      },
+    );
+  }
+});

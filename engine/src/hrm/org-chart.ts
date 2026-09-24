@@ -9,6 +9,7 @@ import {
   loadTeamEmploymentIdsForManager,
   requireOrgChartRead,
 } from "./authorization.ts";
+import { parseCivilDate } from "./temporal.ts";
 import { HrmOrgChartError } from "./documents/errors.ts";
 
 /**
@@ -76,7 +77,14 @@ type IncumbentRow = {
 };
 
 function assertCivilDate(asOf: string): void {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(asOf) || Number.isNaN(Date.parse(asOf))) {
+  // Strict civil-date parsing through the shared temporal parser: the old
+  // regex plus Date.parse accepted impossible dates (2023-02-30 parses by
+  // rolling into March), which then failed deep in the CTE's asOf::date
+  // cast as a raw database error. The shared parser refuses by calendar,
+  // wrapped here so the route still maps it to a named 400.
+  try {
+    parseCivilDate(asOf);
+  } catch {
     throw new HrmOrgChartError("VALIDATION", "asOf must be a civil date (YYYY-MM-DD) — the chart is an as-of read, never a live peek");
   }
 }
