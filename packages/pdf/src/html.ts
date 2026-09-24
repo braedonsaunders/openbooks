@@ -20,7 +20,7 @@
 import { type Page } from 'puppeteer-core'
 import { sharedPdfPool } from './browser-pool'
 import { isAllowedPdfRequest, sanitizeTokenizedFragment } from './template'
-import type { PdfPaperSize } from './types'
+import { PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, PDF_PAPER_SIZES, type PdfPaperSize } from './types'
 
 export { isAllowedPdfRequest }
 
@@ -55,13 +55,39 @@ export function preparePdfChromeHtml(html: string): string {
 }
 
 /**
+ * Refuse an unsupported paper size or an out-of-range margin by name instead
+ * of silently printing the wrong paper (an unknown size used to fall back to
+ * Letter, and a 500 mm margin printed a blank page). The template save routes
+ * enforce the same set and range, so a refusal here means a stored row went
+ * stale — never a silent misprint.
+ */
+export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asserts paperSize is PdfPaperSize {
+  if (!PDF_PAPER_SIZES.includes(paperSize as never)) {
+    throw new Error(
+      `Unknown paper size "${String(paperSize)}" — use one of ${PDF_PAPER_SIZES.join(', ')}.`,
+    )
+  }
+  if (typeof marginMm !== 'number' || !Number.isFinite(marginMm)) {
+    throw new Error(
+      `Margin must be a number of millimetres from ${PDF_MARGIN_MM_MIN} to ${PDF_MARGIN_MM_MAX} — got ${String(marginMm)}.`,
+    )
+  }
+  if (marginMm < PDF_MARGIN_MM_MIN || marginMm > PDF_MARGIN_MM_MAX) {
+    throw new Error(
+      `Margin ${String(marginMm)} mm is outside the printable ${PDF_MARGIN_MM_MIN}–${PDF_MARGIN_MM_MAX} mm range.`,
+    )
+  }
+}
+
+/**
  * Print merged template HTML on the chosen paper at the chosen orientation and
  * margins, with the org's own running header/footer. `{{page}}`/`{{pages}}` in
  * the header/footer become Chromium's live page counters.
  */
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
+  assertPrintablePage(input.paperSize, input.marginMm)
   const formatMap = { letter: 'Letter', a4: 'A4', legal: 'Legal' } as const
-  const m = `${Math.max(0, input.marginMm)}mm`
+  const m = `${input.marginMm}mm`
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     *{box-sizing:border-box;} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}
     table{page-break-inside:auto;} tr{page-break-inside:avoid;}
@@ -78,7 +104,7 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
   return sharedPdfPool().withPage(async (page: Page) => {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
-      format: formatMap[input.paperSize] ?? 'Letter',
+      format: formatMap[input.paperSize],
       landscape: input.orientation === 'landscape',
       printBackground: true,
       margin: { top: m, bottom: m, left: m, right: m },

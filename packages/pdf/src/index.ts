@@ -6,7 +6,7 @@ export * from './page'
 export { drawTable, computeColumnWidths } from './table'
 export { renderPdfDocument } from './document'
 export { renderStatementPdf } from './statement'
-export { renderHtmlDocumentPdf, type HtmlDocumentPdfInput, type PdfOrientation } from './html'
+export { assertPrintablePage, renderHtmlDocumentPdf, type HtmlDocumentPdfInput, type PdfOrientation } from './html'
 export {
   PdfBrowserPool,
   RendererUnavailableError,
