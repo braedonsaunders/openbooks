@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getMoneyFormatter } from '@/lib/money-server'
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -173,6 +173,10 @@ export async function loadContinuousClose(
 ): Promise<ContinuousCloseData> {
   const { money: formatMoney } = await getMoneyFormatter()
   const authz = await requirePermission('assistant.use')
+  // Work-item summaries, facets, and generated narratives are stored at the
+  // organization level. Their source population spans subsidiaries, and
+  // report prose cannot be safely split after it has been generated.
+  if (authz.allowedSubsidiaryIds !== null) notFound()
   const readable = readableContinuousCloseAgents(authz)
   if (readable.length === 0) redirect('/assistant')
   const t = await getTranslations('continuousClose')
