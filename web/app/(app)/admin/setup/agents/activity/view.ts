@@ -17,7 +17,8 @@ import {
   pagination,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../../../lib/authz'
+import { guardRootSubsidiaryScope, requirePermission } from '../../../../../../lib/authz'
+import { notFound } from 'next/navigation'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
 import { dateTime } from '../../../../../../lib/format'
 import {
@@ -123,6 +124,7 @@ export async function loadAgentsActivity(
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<AgentsActivityData> {
   const authz = await requirePermission('admin.setup.manage')
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const t = await getTranslations('admin')
   const params = parseListParams(sp, {
     sort: 'started',
