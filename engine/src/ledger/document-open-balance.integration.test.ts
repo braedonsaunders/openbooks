@@ -321,26 +321,41 @@ test("posting-date moves keep payment stats tied to the sanctioned verifier", { 
   await fixture(async (org, actor) => {
     const inv = await invoice(org, actor);
     await payment(org, actor, inv.line);
+    const movedTo = await invoice(org, actor);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+      await tx.execute(sql`update journal_entries set posting_date = posting_date + 1 where id = ${movedTo.entry}`);
+    });
     const drifted = async () => (await db.execute(sql`
       select * from openbooks_party_payment_stats_verify(${org.orgId})`)).rows;
     const stats = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from party_payment_stats where org_id = ${org.orgId}`)).rows[0]!.n;
     assert.ok(stats > 0, "settlement must record payment stats to move");
     assert.deepEqual(await drifted(), []);
-    await db.transaction(async (tx) => {
+    const lineIds = (await db.execute<{ id: string }>(sql`select id from journal_lines where entry_id = ${inv.entry}`)).rows.map((row) => row.id);
+    const moveEntryLines = (entryId: string) => db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-      await tx.execute(sql`update journal_lines set posting_date = posting_date + 30 where id = ${inv.line}`);
+      const lineList = sql.join(lineIds.map((id) => sql`${id}::uuid`), sql`, `);
+      await tx.execute(sql`update journal_lines set entry_id = ${entryId} where id in (${lineList})`);
     });
+    // The baseline BEFORE trigger stamps posting_date from the new entry.
+    // Dropping G11 demonstrates that its posting_date-only event list misses
+    // the entry_id write that caused that date move.
+    await db.execute(sql`drop trigger if exists party_payment_stats_date on public.journal_lines`);
+    await moveEntryLines(movedTo.entry);
+    assert.notDeepEqual(await drifted(), [], "an entry move without G11 leaves the settled-date aggregate stale");
+    await db.execute(sql`select openbooks_party_payment_stats_rebuild(${org.orgId})`);
+    assert.deepEqual(await drifted(), [], "the sanctioned rebuild establishes the moved line's current bucket");
+    const shipped = sql.raw(readFileSync("schema/migrations/generated/0358_ledger_cache_triggers_cover_trusted_amend.sql", "utf8"));
+    await db.transaction(async (tx) => { await tx.execute(shipped); });
+    await moveEntryLines(inv.entry);
     assert.deepEqual(await drifted(), []);
   });
 });
 
-test("amend-path line edits recompute open_balance like a from-scratch rebuild", { skip: !DB }, async () => {
-  // G10: the amend branch of the line guard fenced only the period, with
-  // no column allowlist, so flipping is_open_item on a posted line left
-  // the cached projection stale. Proven in both states: without the
-  // trigger the amend leaves the cache behind the rebuild; with the
-  // shipped file applied the same amend keeps them equal.
+test("amend-path transaction amount edits recompute open_balance like a from-scratch rebuild", { skip: !DB }, async () => {
+  // G10 must observe every value used by document_open_balance_amount,
+  // including txn_amount and currency, in both its event list and guard.
   await fixture(async (org, actor) => {
     const inv = await invoice(org, actor);
     assert.equal(await balance(inv.id), "100.0000");
@@ -350,22 +365,38 @@ test("amend-path line edits recompute open_balance like a from-scratch rebuild",
       return (await db.execute<{ amount: string | null }>(sql`
         select public.document_open_balance_amount(${org.orgId}, ${inv.entry}, ${doc.currency}, ${doc.status}) as amount`)).rows[0]!.amount;
     };
-    const amendFlip = (open: boolean) =>
+    const amendAmount = (transactionAmount: string, functionalAmount: string) =>
       db.transaction(async (tx) => {
         await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
-        await tx.execute(sql`update journal_lines set is_open_item = ${open} where id = ${inv.line}`);
+        await tx.execute(sql`
+          update journal_lines
+             set txn_amount = case when is_open_item then ${transactionAmount}::numeric else -${transactionAmount}::numeric end,
+                 amount = case when is_open_item then ${functionalAmount}::numeric else -${functionalAmount}::numeric end
+           where entry_id = ${inv.entry}`);
       });
     // Defect state: no line trigger, the amend leaves the cache stale.
     await db.execute(sql`drop trigger if exists journal_line_open_balance on public.journal_lines`);
-    await amendFlip(false);
+    await amendAmount("75", "90");
     assert.notEqual(await balance(inv.id), await rebuild());
-    // Guard installed: the shipped file heals forward and the amend
-    // re-ties the cache to the rebuild.
-    const shipped = sql.raw(readFileSync("schema/migrations/generated/0338_posting_guards_and_summary_heals.sql", "utf8"));
+    // Guard installed: the forward migration re-ties the cache to the rebuild.
+    const shipped = sql.raw(readFileSync("schema/migrations/generated/0358_ledger_cache_triggers_cover_trusted_amend.sql", "utf8"));
     await db.transaction(async (tx) => {
       await tx.execute(shipped);
     });
-    await amendFlip(true);
+    await amendAmount("60", "72");
     assert.equal(await balance(inv.id), await rebuild());
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+        await tx.execute(sql`update journal_lines set currency = 'USD' where id = ${inv.line}`);
+      }),
+      (error: unknown) => {
+        if (typeof error !== "object" || error === null) return false;
+        const cause = (error as { cause?: unknown }).cause;
+        return cause instanceof Error && /document open-item currency mismatch/.test(cause.message);
+      },
+      "the currency trigger refuses a trusted amend that would stale the document cache",
+    );
+    assert.equal(await balance(inv.id), await rebuild(), "the refused currency amend rolls back its cache effect");
   });
 });
