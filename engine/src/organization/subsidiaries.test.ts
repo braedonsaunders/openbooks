@@ -109,6 +109,102 @@ test("posting refuses a line party outside that line's subsidiary", async () => 
   );
 });
 
+test("posting refuses an unknown header party instead of skipping it", async () => {
+  // A deleted or foreign header partyId resolves to no row: the header
+  // path must fail closed exactly like the line path, never proceed.
+  const headerPartyId = randomUUID();
+  let calls = 0;
+  const runner = {
+    execute: async () => {
+      calls += 1;
+      return { rows: [] };
+    },
+  } as unknown as Pick<typeof db, "execute">;
+  await assert.rejects(
+    validateSubsidiaryRestrictions(runner, {
+      orgId: randomUUID(),
+      ctx,
+      docSubsidiaryId: originSubId,
+      partyId: headerPartyId,
+      lines: [{
+        accountId: randomUUID(),
+        amount: "10.0000",
+        subsidiaryId: originSubId,
+      }],
+    }),
+    (error: unknown) =>
+      error instanceof SubsidiaryError &&
+      /does not exist in this organization/.test(error.message) &&
+      error.message.includes(headerPartyId),
+  );
+  // The accounts lookup plus the header party lookup both ran: the
+  // refusal came from the check, not from skipping it.
+  assert.equal(calls, 2);
+});
+
+test("posting refuses a header party outside the document subsidiary", async () => {
+  const headerPartyId = randomUUID();
+  let calls = 0;
+  const runner = {
+    execute: async () => {
+      calls += 1;
+      if (calls === 1) return { rows: [] };
+      return {
+        rows: [{
+          id: headerPartyId,
+          name: "Root-only customer",
+          subsidiaryId: originSubId,
+          extra: [],
+        }],
+      };
+    },
+  } as unknown as Pick<typeof db, "execute">;
+  await assert.rejects(
+    validateSubsidiaryRestrictions(runner, {
+      orgId: randomUUID(),
+      ctx,
+      docSubsidiaryId: counterSubId,
+      partyId: headerPartyId,
+      lines: [{
+        accountId: randomUUID(),
+        amount: "10.0000",
+        subsidiaryId: counterSubId,
+      }],
+    }),
+    (error: unknown) =>
+      error instanceof SubsidiaryError &&
+      /Root-only customer/.test(error.message) &&
+      /Counter/.test(error.message),
+  );
+});
+
+test("posting accepts a header party inside the document subsidiary", async () => {
+  const headerPartyId = randomUUID();
+  const runner = {
+    execute: async () => {
+      return {
+        rows: [{
+          id: headerPartyId,
+          name: "Counter customer",
+          subsidiaryId: counterSubId,
+          extra: [],
+        }],
+      };
+    },
+  } as unknown as Pick<typeof db, "execute">;
+  await validateSubsidiaryRestrictions(runner, {
+    orgId: randomUUID(),
+    ctx,
+    docSubsidiaryId: counterSubId,
+    partyId: headerPartyId,
+    lines: [{
+      accountId: randomUUID(),
+      amount: "10.0000",
+      subsidiaryId: counterSubId,
+    }],
+  });
+});
+
 test("intercompany balancing blends differing subsidiary FX rates", async () => {
   const legs = await balancingLegs([
     line(originSubId, "-125.0000", "-125.0000", "1"),
