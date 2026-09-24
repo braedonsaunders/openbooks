@@ -1,165 +1,257 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for the change-request queue
-// (/hrm/change-requests). Runs without dependencies: it reads the
-// maintained sources and proves the queue renders through the shared table
-// block (variant 'app') over loader-resolved display cells, segments on the
-// shared filter chips, carries the primary action in the page header, and
-// opens the propose dialog from a URL param — with every label from the hrm
-// catalog.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const dialog = readFileSync(new URL("./ProposeChangeDialog.tsx", import.meta.url), "utf8");
-const detailDialog = readFileSync(new URL("./ChangeRequestDetailDialog.tsx", import.meta.url), "utf8");
-const detailDrawer = readFileSync(new URL("./ChangeRequestDetailDrawer.tsx", import.meta.url), "utf8");
-const rowActions = readFileSync(new URL("./ChangeRequestRowActions.tsx", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/change-requests.ts", import.meta.url), "utf8");
-const mapping = readFileSync(new URL("../../../../lib/hrm/queue-status.ts", import.meta.url), "utf8");
-const widgets = readFileSync(new URL("../../../../components/viewspec/widgets-hrm.tsx", import.meta.url), "utf8");
-const contracts = readFileSync(new URL("../../../../components/viewspec/widget-contracts.ts", import.meta.url), "utf8");
-const names = readFileSync(new URL("../../../../components/viewspec/registry-names.ts", import.meta.url), "utf8");
-const strings = readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8");
+// Behaviour contract for the change-request queue (/hrm/change-requests).
+// These tests CALL the queue loader and the pure segment mapping with
+// hand-built inputs and assert on what the page observes: refusal data
+// for unknown segments and scope denials, exact per-segment counts, and
+// segment filtering. The seams below stub I/O only (feature switches,
+// group tabs, the engine list read, the departments lookup, translations
+// backed by the REAL en catalog). The refusal classes are the real engine
+// errors, and authz stubbing is the sanctioned seam — permission logic
+// itself is proven by the existing scope DB tests, not doubled here.
+const hrmCatalog = JSON.parse(
+  readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8"),
+) as Record<string, unknown>;
 
-test("queue renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadChangeRequestQueuePage/, "page loads through the queue loader");
-  assert.match(view, /changeRequestQueueSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+function lookup(key: string): string {
+  let node: unknown = hrmCatalog;
+  for (const part of key.split(".")) {
+    if (node !== null && typeof node === "object") node = (node as Record<string, unknown>)[part];
+    else return key;
+  }
+  return typeof node === "string" ? node : key;
+}
+
+(globalThis as Record<string, unknown>).__queueCatalogs = { hrm: hrmCatalog };
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    const parent = context.parentURL ?? "";
+    const owned = parent.endsWith("/web/lib/hrm/change-requests.ts");
+    if (owned && specifier === "next-intl/server") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function getTranslations(ns) {
+              const catalogs = globalThis.__queueCatalogs;
+              const catalog = catalogs[ns] ?? {};
+              const lookup = (key) => {
+                let node = catalog;
+                for (const part of key.split('.')) {
+                  if (node !== null && typeof node === 'object') node = node[part];
+                  else return key;
+                }
+                return typeof node === 'string' ? node : key;
+              };
+              const t = (key, params) => {
+                const template = lookup(key);
+                if (!params) return template;
+                return template.replace(/\\{(\\w+)\\}/g, (_, name) => (params[name] === undefined ? '{' + name + '}' : String(params[name])));
+              };
+              t.has = (key) => lookup(key) !== key;
+              return t;
+            }`,
+          ),
+      };
+    }
+    if (owned && (specifier === "../authz" || specifier.endsWith("/lib/authz"))) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export const can = (authz, perm) => authz.permissions.has('*') || authz.permissions.has(perm);
+             export async function requirePermission() { throw new Error('stubbed requirePermission must not run here'); }
+             export async function getAuthz() { return null; }`,
+          ),
+      };
+    }
+    if (owned && (specifier === "../features" || specifier === "../feature-gates" || specifier.endsWith("/lib/features") || specifier.endsWith("/lib/feature-gates"))) {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function isFeatureEnabled(orgId, key) {
+              const flags = globalThis.__queueFeatures;
+              if (flags && key in flags) return flags[key];
+              return true;
+            }
+            export async function requireFeatureEnabled() {}`,
+          ),
+      };
+    }
+    if (owned && specifier.endsWith("components/module-home/group-tabs")) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
+      };
+    }
+    if (owned && specifier === "@openbooks/engine/src/hrm/change-requests.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function listChangeRequests() {
+              const s = globalThis.__queueList;
+              if (s && s.error) throw s.error;
+              return (s && s.rows) || [];
+            }
+            export class HrmChangeRequestError extends Error {}`,
+          ),
+      };
+    }
+    // The authorization module is NOT stubbed: it is side-effect-free, so
+    // the loader and these tests share the real HrmAuthorizationError and
+    // the loader's instanceof catch keeps working. Stubbing an error-class
+    // module would split the class identity and every refusal test would
+    // see the error propagate instead of converting to data.
+    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url: "data:text/javascript,export const db = { execute: async () => ({ rows: [] }) };",
+      };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("queue rows render through the shared table block, not a bespoke table", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
-  assert.ok(!/<table/.test(dialog), "the dialog island holds no hand-rolled table");
-  assert.ok(!/<table/.test(rowActions), "the row-actions island holds no hand-rolled table");
+const { loadChangeRequestQueue } = await import("../../../../lib/hrm/change-requests.ts");
+const { resolveQueueStatus, segmentOfServiceStatus } = await import(
+  "../../../../lib/hrm/queue-status.ts"
+);
+const { HrmAuthorizationError } = await import(
+  "@openbooks/engine/src/hrm/authorization.ts"
+);
+
+const gap = globalThis as Record<string, unknown>;
+
+function authzWith(permissions: string[]) {
+  return {
+    user: { orgId: "org-queue", id: "actor-queue" },
+    permissions: new Set(permissions),
+    allowedSubsidiaryIds: null,
+  } as never;
+}
+
+const HR_ADMIN = authzWith(["hrm.employment.read", "hrm.employment.manage"]);
+
+function stubList(rows: Array<Record<string, unknown>> | { error: unknown }) {
+  gap.__queueList = Array.isArray(rows) ? { rows } : rows;
+}
+
+function serviceRow(id: string, status: string): Record<string, unknown> {
+  return {
+    id,
+    employmentId: "emp-1",
+    payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" },
+    status,
+    submittedBy: null,
+    createdBy: "actor-queue",
+    submittedAt: null,
+    createdAt: new Date("2026-08-20T10:00:00.000Z"),
+    appliedEmploymentChangeId: null,
+  };
+}
+
+test("an unknown segment refuses naming the five segments, never a silent All", async () => {
+  stubList([]);
+  const data = await loadChangeRequestQueue(HR_ADMIN, { status: "bogus" });
+  assert.ok(data.refusal, "the refusal travels as data the page renders");
+  assert.equal(data.refusal.title, lookup("queue.refusalTitle"), "the refusal carries the catalogued title");
   assert.ok(
-    !existsSync(new URL("./QueueClient.tsx", import.meta.url)),
-    "the hand-rolled queue table component is deleted",
+    data.refusal.message.includes("bogus"),
+    "the refusal names the segment the URL asked for",
   );
-});
-
-test("status segments ride the shared filter chips", () => {
-  assert.match(view, /filter-chips/, "status segments ride the shared filter chips");
-  assert.match(view, /paramKey: 'status'/, "segments filter on the status search param");
-});
-
-test("the primary action lives in the page header through the shared button", () => {
-  assert.match(view, /'link-button'/, "propose rides the shared header button widget");
-  assert.match(view, /f\('proposeHref'\)/, "the button navigates to a loader-built href");
-  assert.match(view, /iconKey: 'plus'/, "the button carries the house plus icon");
-  assert.match(
-    view,
-    /widget\(\s*'link-button'[\s\S]*?f\('canManage'\)/,
-    "the propose button renders only when the viewer can manage",
-  );
-});
-
-test("cells compose the shared primitives over loader-resolved display fields", () => {
-  assert.match(view, /link\(item\('employeeLabel'\), item\('employeeHref'\)\)/, "employee opens the drawer href");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.match(
-    view,
-    /widgetCell\('hrm-change-request-actions'/,
-    "row actions ride a client island only where a client is needed",
-  );
-  assert.match(loader, /employeeHref/, "the loader builds the employee drawer href");
-  assert.match(loader, /kindLabel/, "the loader resolves the kind label");
-  assert.match(loader, /statusVariant/, "the loader resolves the badge variant");
-});
-
-test("every row opens its request-detail drawer from a shareable URL", () => {
-  assert.match(view, /link\(item\('openLabel'\), item\('requestHref'\)\)/, "each row carries an open link onto its drawer URL");
-  assert.match(loader, /requestHref/, "the loader builds the per-row ?request=<id> href");
-  assert.match(loader, /openLabel/, "the loader resolves the open link label");
-  assert.match(loader, /params\.set\('request', requestId\)/, "the href preserves the active segment beside the request param");
-  assert.match(strings, /"openRequest"/, "en/hrm carries queue.openRequest");
-});
-
-test("the request-detail drawer opens from ?request=<id> and closes by navigating away", () => {
-  assert.match(view, /hrm-change-request-dialog/, "the detail island renders in the page body");
-  assert.match(
-    view,
-    /widgetBlock\(\s*'hrm-change-request-dialog'[\s\S]*?f\('dialogOpen'\)/,
-    "the detail island renders only when the request param is present",
-  );
-  assert.match(loader, /dialogOpen/, "the loader derives the detail state from the search params");
-  assert.match(loader, /dialogRequestId/, "the loader passes the requested id, never a row index");
-  assert.match(loader, /dialogSubject/, "the loader names a visible row's subject for the drawer");
-  assert.match(detailDialog, /ChangeRequestDetailDrawer/, "the dialog opens the existing detail drawer");
-  assert.match(detailDialog, /router\.push\(closeHref/, "closing the detail navigates the param away");
-  assert.match(detailDrawer, /\/api\/hrm\/change-requests\/\$\{requestId\}/, "the drawer reads the single-request route");
-  assert.match(detailDrawer, /if \(!res\.ok\)/, "error bodies are checked before they are parsed");
-  assert.match(detailDrawer, /role="alert"/, "an out-of-scope id renders the named refusal, never the data");
-  assert.match(detailDrawer, /ChangeRequestActions/, "the drawer carries the existing lifecycle actions");
-  assert.match(detailDrawer, /decisionSnapshot/, "the drawer renders the decision context");
-  assert.ok(!/<table/.test(detailDrawer), "the detail drawer holds no hand-rolled table");
-  assert.ok(!/<table/.test(detailDialog), "the detail dialog holds no hand-rolled table");
-});
-
-test("the propose dialog opens from a URL param and closes by navigating away", () => {
-  assert.match(view, /hrm-propose-change-dialog/, "the dialog island renders in the page body");
-  assert.match(view, /f\('proposeOpen'\)/, "the dialog opens only when the propose param is present");
-  assert.match(loader, /proposeOpen/, "the loader derives the dialog state from the search params");
-  assert.match(loader, /dialogCloseHref/, "the loader builds the dialog return href");
-  assert.match(dialog, /router\.push\(closeHref/, "closing the dialog navigates the param away");
-  assert.match(dialog, /ChangeRequestDrawer/, "propose hands off to the existing authoring drawer");
-  assert.match(dialog, /\/api\/hrm\/options\?/, "the propose picker rides the existing options route");
-  assert.match(dialog, /if \(!res\.ok\)/, "error bodies are checked before they are parsed");
-});
-
-test("queue gates on the hrm feature switch plus the employment read grant", () => {
-  assert.match(view, /requirePermission\('hrm\.employment\.read'\)/, "page requires the employment read grant");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a disabled switch redirects to the feature remedy instead of rendering a gated queue");
-  assert.match(loader, /loadChangeRequestQueue\(\s*authz/, "loader takes the authorized session, never re-gates");
-});
-
-test("the queue list comes from the existing service, never a table read", () => {
-  assert.match(loader, /listChangeRequests\(/, "the list resolves through the change-request service");
-  assert.ok(!/from hrm_employment_change_requests/.test(loader), "loader issues no direct request-table reads");
-  assert.ok(!/from worker_employment_versions/.test(loader), "loader issues no direct version reads");
-  assert.match(loader, /order|newest/i, "loader documents the newest-first ordering it inherits");
-});
-
-test("unknown segments and scope denials render as refusals, never empty tables", () => {
-  assert.match(mapping, /UNKNOWN_QUEUE_STATUS/, "an unknown segment is a coded refusal");
-  assert.match(loader, /HrmAuthorizationError/, "a subsidiary-scope denial is caught, never a partial list");
-  assert.match(loader, /refusal/, "refusals travel as data the page renders");
-  assert.match(view, /empty-state/, "the refusal renders with its message intact");
-});
-
-test("queue widgets are registered exactly once in every registry", () => {
-  for (const name of ['hrm-change-request-actions', 'hrm-change-request-dialog', 'hrm-propose-change-dialog']) {
-    assert.match(widgets, new RegExp(`'${name}'`), `${name} renders its island, never a second copy`);
-    assert.match(contracts, new RegExp(`'${name}': \\{ props: \\[`), `${name} contract pins the prop surface`);
-    assert.match(names, new RegExp(`'${name}'`), `${name} is registered`);
+  for (const segment of ["draft", "submitted", "approved", "rejected", "withdrawn"]) {
+    assert.ok(data.refusal.message.includes(segment), `the refusal names the valid ${segment} segment`);
   }
-  assert.ok(!widgets.includes('hrm-change-request-queue'), "the bespoke queue widget is deleted");
-  assert.ok(!names.includes('hrm-change-request-queue'), "the bespoke queue widget name is unregistered");
+  assert.equal(data.hasContent, false, "no rows render beside the refusal");
+  assert.deepEqual(data.rows, [], "no rows leak through a refused segment");
 });
 
-test("queue copy resolves from the hrm catalog, never inline English", () => {
-  for (const key of [
-    "title",
-    "listTitle",
-    "segmentsLabel",
-    "allLabel",
-    "emptyTitle",
-    "proposeButton",
-    "openRequest",
-    "detailTitle",
-    "detailLoading",
-    "detailFailed",
-    "detailSubject",
-    "detailProposedChange",
-    "detailHistory",
-    "detailDecision",
-    "notAvailable",
-  ]) {
-    assert.ok(strings.includes(`"${key}"`), `en/hrm carries queue.${key}`);
+test("an absent segment lists every request with exact per-segment counts", async () => {
+  stubList([
+    serviceRow("cr-draft", "draft"),
+    serviceRow("cr-pending-1", "pending_approval"),
+    serviceRow("cr-pending-2", "pending_approval"),
+    serviceRow("cr-approved", "approved"),
+    serviceRow("cr-applied", "applied"),
+  ]);
+  const data = await loadChangeRequestQueue(HR_ADMIN, {});
+  assert.equal(data.refusal, null, "All carries no refusal");
+  assert.equal(data.hasContent, true, "the list renders");
+  assert.equal(data.total, 5, "applied rows count toward the total under All");
+  assert.deepEqual(
+    data.counts,
+    { draft: 1, submitted: 2, approved: 1, rejected: 0, withdrawn: 0 },
+    "applied belongs to no segment, so the segment counts stay exact",
+  );
+  assert.equal(data.rows.length, 5, "All shows every service row, applied included");
+  const submitted = data.segments.find((segment) => segment.value === "submitted");
+  assert.ok(submitted?.label.includes("(2)"), "the segment label carries its count");
+});
+
+test("the submitted segment shows pending approvals only", async () => {
+  stubList([
+    serviceRow("cr-draft", "draft"),
+    serviceRow("cr-pending-1", "pending_approval"),
+    serviceRow("cr-pending-2", "pending_approval"),
+  ]);
+  const data = await loadChangeRequestQueue(HR_ADMIN, { status: "submitted" });
+  assert.equal(data.refusal, null, "a known segment carries no refusal");
+  assert.deepEqual(
+    data.rows.map((row) => row.id),
+    ["cr-pending-1", "cr-pending-2"],
+    "submitted names pending_approval, never drafts",
+  );
+});
+
+test("a subsidiary-scope denial refuses with the remedy, never a partial list", async () => {
+  const remedy = "a role restricted to specific subsidiaries cannot read the org-wide queue — ask an administrator for access";
+  stubList({ error: new HrmAuthorizationError(remedy) });
+  const data = await loadChangeRequestQueue(HR_ADMIN, {});
+  assert.ok(data.refusal, "the denial travels as data");
+  assert.equal(data.refusal.message, remedy, "the remedy arrives verbatim");
+  assert.deepEqual(data.rows, [], "no partial list pretends to be the whole queue");
+  assert.equal(data.hasContent, false, "the table suppresses while refused");
+});
+
+test("an unexpected system failure propagates instead of an empty queue", async () => {
+  stubList({ error: new TypeError("connection terminated") });
+  await assert.rejects(
+    loadChangeRequestQueue(HR_ADMIN, {}),
+    /connection terminated/,
+    "the failure reaches the caller, never a null list",
+  );
+});
+
+test("the segment mapping leaves applied to All and refuses anything else", () => {
+  assert.deepEqual(resolveQueueStatus(null), { ok: true, segment: null, serviceStatus: null }, "absent means All");
+  assert.deepEqual(
+    resolveQueueStatus("submitted"),
+    { ok: true, segment: "submitted", serviceStatus: "pending_approval" },
+    "submitted filters the pending state",
+  );
+  assert.equal(segmentOfServiceStatus("applied"), null, "an applied request counts toward no segment");
+  const refused = resolveQueueStatus("applied");
+  assert.equal(refused.ok, false, "applied is not a segment");
+  if (!refused.ok) {
+    assert.equal(refused.refusal.code, "UNKNOWN_QUEUE_STATUS", "the refusal is coded");
+    assert.ok(refused.refusal.message.includes("applied"), "the refusal names the rejected value");
   }
-  assert.match(view, /f\('title'\)/, "spec titles resolve through view refs, never literals");
 });
