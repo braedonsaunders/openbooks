@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-returns/pool-run.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
@@ -20,9 +21,17 @@ async function primaryBook(orgId: string): Promise<string | null> {
   const r = (await db.execute<{ id: string }>(sql`select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`))
   return r.rows[0]?.id ?? null
 }
+/**
+ * The shared unscoped-posting default: the hierarchy root. An org with no
+ * subsidiaries at all keeps the established 422 instead of a 500.
+ */
 async function rootSubsidiary(orgId: string): Promise<string | null> {
-  const r = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${orgId} and parent_id is null order by created_at limit 1`))
-  return r.rows[0]?.id ?? null
+  try {
+    return defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId))
+  } catch (e) {
+    if (!(e instanceof SubsidiaryError)) throw e
+    return null
+  }
 }
 
 /** Read a tax year's computed pool results (Schedule 8-style). */

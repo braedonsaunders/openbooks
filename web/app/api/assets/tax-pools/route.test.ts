@@ -136,7 +136,14 @@ const mockSources = new Map<string, string>([
             return { rows: [{ tax_year: '2026', class_code: '8', regime: 'ca_cca' }] }
           }
           if (text.includes('from subsidiaries')) {
-            if (text.includes('parent_id is null')) return { rows: [{ id: 'sub-root' }] }
+            if (text.includes('is_elimination')) {
+              // Subsidiary-context load: the elder sibling sorts first so
+              // only a parent-null (root) default passes the pin below.
+              return { rows: [
+                { id: 'sub-elder', parentId: 'sub-root', name: 'Elder', baseCurrency: 'CAD', isElimination: false, isActive: true },
+                { id: 'sub-root', parentId: null, name: 'Root', baseCurrency: 'CAD', isElimination: false, isActive: true },
+              ] }
+            }
             if (!state.explicitSubsidiaryExists) return { rows: [] }
             return { rows: [{ id: state.requestedSubsidiaryId ?? SUB_VISIBLE }] }
           }
@@ -287,4 +294,21 @@ test("POST refuses an explicit book outside the caller org before running the po
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not found" });
   assert.deepEqual(routeState.runCalls, [], "a foreign-org book must never reach the engine");
+});
+
+test("POST without a subsidiary runs the pool for the root when an older sibling exists", async () => {
+  reset(null);
+
+  const response = await post({ taxYear: 2026 });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.runCalls, [
+    {
+      orgId: "org-1",
+      bookId: "book-1",
+      subsidiaryId: "sub-root",
+      regime: "ca_cca",
+      taxYear: 2026,
+    },
+  ]);
 });
