@@ -156,13 +156,33 @@ test("Canadian vehicle cost caps apply to additions and disposition capital cost
 
     const first = await runYear(org, actorId, "ca_cca", 2023);
     assert.deepEqual(first.lines.map((line) => [line.classCode, line.additions, line.allowance, line.closingBalance]), [
-      ["10.1", "37000.00", "5550.00", "31450.00"],
+      ["10.1", "36000.00", "5400.00", "30600.00"],
     ]);
 
     await seedDisposalEvent(org, actorId, assetId, "2024-05-01", "60000.00");
     const second = await runYear(org, actorId, "ca_cca", 2024);
     assert.deepEqual(second.lines.map((line) => [line.classCode, line.dispositions, line.recapture, line.closingBalance]), [
-      ["10.1", "37000.00", "0.00", "0.00"],
+      ["10.1", "36000.00", "0.00", "0.00"],
+    ]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("Canadian vehicle dispositions retain the cap effective on their acquisition date", { skip: !DB }, async () => {
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "Passenger vehicle", { ca_cca_class: "10.1" });
+    const assetId = await seedAsset(org, actorId, categoryId, "60000.00", "2025-05-01");
+    const first = await runYear(org, actorId, "ca_cca", 2025);
+    assert.deepEqual(first.lines.map((line) => [line.additions, line.allowance]), [
+      ["38000.00", "5700.00"],
+    ]);
+
+    await seedDisposalEvent(org, actorId, assetId, "2026-05-01", "60000.00");
+    const second = await runYear(org, actorId, "ca_cca", 2026);
+    assert.deepEqual(second.lines.map((line) => [line.dispositions, line.recapture]), [
+      ["38000.00", "0.00"],
     ]);
   } finally {
     await dropScratchOrg(org.orgId);

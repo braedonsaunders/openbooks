@@ -46,6 +46,8 @@ export interface PoolClassDef {
   allowTerminalLoss: boolean;
   /** Per-item capital-cost ceiling (e.g. Canada Class 10.1 / 54 vehicles). */
   costCap?: ExactDecimal;
+  /** Statutory per-item capital-cost limits selected by acquisition date. */
+  costCapByAcquiredOn?: readonly { effectiveFrom: string; amount: ExactDecimal }[];
   /** Per-asset MACRS configuration; omitted for pooled regimes. */
   depreciationSystem?: "gds" | "ads";
   macrsMethod?: "200_db" | "150_db" | "straight_line";
@@ -86,10 +88,31 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
       "43.2": [0.5, "Clean-energy equipment (2005–2024)"],
       "50": [0.55, "Computer hardware & systems software"],
       "53": [0.5, "Manufacturing equipment (2016–2025)"],
-      "54": [0.3, "Zero-emission passenger vehicles", { costCap: 61000 }],
+      // Finance Canada acquisition-date ceilings: $55,000 from 2019-03-19,
+      // $59,000 from 2022, then $61,000 from 2023 onward. The 2026 release
+      // confirms $61,000 remains the 2026 cap:
+      // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
+      "54": [0.3, "Zero-emission passenger vehicles", { costCapByAcquiredOn: [
+        { effectiveFrom: "2019-03-19", amount: 55000 },
+        { effectiveFrom: "2022-01-01", amount: 59000 },
+        { effectiveFrom: "2023-01-01", amount: 61000 },
+      ] }],
       "55": [0.4, "Zero-emission vehicles (Class 16 type)"],
       "56": [0.3, "Zero-emission automotive equipment"],
-      "10.1": [0.3, "Passenger vehicles (over ceiling)", { costCap: 37000, allowRecapture: false, allowTerminalLoss: false }],
+      // Finance Canada acquisition-date ceilings: $30,000 from 2001, $34,000
+      // from 2022, $36,000 from 2023, $37,000 from 2024, $38,000 from 2025,
+      // and $39,000 from 2026. CRA publishes the earlier history and Finance
+      // Canada publishes the 2026 increase:
+      // https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-22900-other-employment-expenses/capital-cost-allowance.html
+      // https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
+      "10.1": [0.3, "Passenger vehicles (over ceiling)", { costCapByAcquiredOn: [
+        { effectiveFrom: "2001-01-01", amount: 30000 },
+        { effectiveFrom: "2022-01-01", amount: 34000 },
+        { effectiveFrom: "2023-01-01", amount: 36000 },
+        { effectiveFrom: "2024-01-01", amount: 37000 },
+        { effectiveFrom: "2025-01-01", amount: 38000 },
+        { effectiveFrom: "2026-01-01", amount: 39000 },
+      ], allowRecapture: false, allowTerminalLoss: false }],
     }),
   },
   uk_wda: {
@@ -194,6 +217,7 @@ function caClass(
       allowRecapture: over.allowRecapture ?? true,
       allowTerminalLoss: over.allowTerminalLoss ?? true,
       costCap: over.costCap,
+      costCapByAcquiredOn: over.costCapByAcquiredOn,
       name,
     };
   }
@@ -202,6 +226,25 @@ function caClass(
 
 export function resolvePoolClass(regime: string, code: string): PoolClassDef | null {
   return TAX_DEPRECIATION_REGIMES[regime]?.classes[code] ?? null;
+}
+
+/** Resolve a per-asset ceiling using the asset's acquisition date. */
+export function costCapForAcquisition(
+  classDef: PoolClassDef,
+  acquiredOn: string,
+): ExactDecimal | undefined {
+  const schedule = classDef.costCapByAcquiredOn;
+  if (!schedule) return classDef.costCap;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(acquiredOn)) {
+    throw new Error(`acquisition date is required to resolve the ${classDef.name} cost cap`);
+  }
+  const effective = schedule
+    .filter((rule) => rule.effectiveFrom <= acquiredOn)
+    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0];
+  if (!effective) {
+    throw new Error(`no acquisition-date cost cap is configured for ${classDef.name} acquired ${acquiredOn}`);
+  }
+  return effective.amount;
 }
 
 export interface MacrsYearInput {

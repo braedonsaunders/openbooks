@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  costCapForAcquisition,
   computePoolYear,
   computeMacrsYear,
   resolvePoolClass,
@@ -21,6 +22,21 @@ test("ships multiple pooled regimes (not just Canada), all resolvable", () => {
   assert.equal(resolvePoolClass("uk_wda", "main")?.firstYearFraction, 1);
   assert.equal(resolvePoolClass("au_pool", "sbp")?.firstYearFraction, 0.5);
   assert.equal(resolvePoolClass("ca_cca", "10")?.firstYearFraction, 0.5); // half-year rule
+});
+
+test("Canadian vehicle cost caps resolve from acquisition-date statutory tiers", () => {
+  // Official annual limits: https://www.canada.ca/en/department-finance/news/2026/01/government-announces-the-2026-automobile-deduction-limits-and-expense-benefit-rates-for-businesses.html
+  // Historical 10.1 tiers: https://www.canada.ca/en/revenue-agency/services/tax/individuals/topics/about-your-tax-return/tax-return/completing-a-tax-return/deductions-credits-expenses/line-22900-other-employment-expenses/capital-cost-allowance.html
+  const class101 = resolvePoolClass("ca_cca", "10.1")!;
+  assert.equal(costCapForAcquisition(class101, "2024-12-31"), 37000);
+  assert.equal(costCapForAcquisition(class101, "2025-01-01"), 38000);
+  assert.equal(costCapForAcquisition(class101, "2026-01-01"), 39000);
+  const class54 = resolvePoolClass("ca_cca", "54")!;
+  assert.equal(costCapForAcquisition(class54, "2021-12-31"), 55000);
+  assert.equal(costCapForAcquisition(class54, "2022-01-01"), 59000);
+  assert.equal(costCapForAcquisition(class54, "2023-01-01"), 61000);
+  assert.equal(costCapForAcquisition(class54, "2026-01-01"), 61000);
+  assert.throws(() => costCapForAcquisition(class101, ""), /acquisition date is required/);
 });
 
 test("U.S. MACRS 5-year 200% DB half-year schedule switches to straight line", () => {
