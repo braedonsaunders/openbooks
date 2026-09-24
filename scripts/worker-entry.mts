@@ -22,7 +22,7 @@ import { FEATURE_BY_KEY } from "../engine/src/organization/feature-registry.ts";
 import { registerWorkerDuty } from "../engine/src/worker/duties.ts";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
 import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
-import { db, withBypassContext, withOrgTransaction } from "../engine/src/platform/db.ts";
+import { db, pool, withBypassContext, withOrgTransaction } from "../engine/src/platform/db.ts";
 import { businessToday } from "../engine/src/platform/business-date.ts";
 import { runRetentionTick } from "../engine/src/hrm/documents/retention.ts";
 import { drainExportQueue } from "../engine/src/hrm/documents/dsar.ts";
@@ -97,15 +97,35 @@ async function withOrgClaim(
   today: string,
   fn: () => Promise<void>,
 ): Promise<void> {
-  const lockSql = sql`select pg_try_advisory_lock(hashtextextended(${`${key}:${orgId}:${today}`}, 0)) as locked`;
-  const row = (await withBypassContext(() => db.execute<{ locked: boolean }>(lockSql))).rows[0];
-  if (row?.locked !== true) return;
+  // Session locks belong to the checked-out connection. Keep this client
+  // pinned through the duty so the unlock cannot land on another pool session.
+  const client = await withBypassContext(() => pool.connect());
+  let acquired = false;
   try {
+    const row = (await client.query<{ locked: boolean }>(
+      "select pg_try_advisory_lock(hashtextextended($1, 0)) as locked",
+      [`${key}:${orgId}:${today}`],
+    )).rows[0];
+    acquired = row?.locked === true;
+    if (!acquired) return;
     await fn();
   } finally {
-    await withBypassContext(() =>
-      db.execute(sql`select pg_advisory_unlock(hashtextextended(${`${key}:${orgId}:${today}`}, 0))`),
-    ).catch((e: unknown) => console.error(`[worker] ${key} unlock failed:`, (e as Error).message));
+    let discard: Error | undefined;
+    if (acquired) {
+      try {
+        const unlocked = await client.query<{ unlocked: boolean }>(
+          "select pg_advisory_unlock(hashtextextended($1, 0)) as unlocked",
+          [`${key}:${orgId}:${today}`],
+        );
+        if (unlocked.rows[0]?.unlocked !== true) {
+          discard = new Error("session advisory lock was not held by the pinned worker connection");
+        }
+      } catch (error) {
+        discard = error instanceof Error ? error : new Error(String(error));
+      }
+      if (discard) console.error(`[worker] ${key} unlock failed:`, discard.message);
+    }
+    client.release(discard);
   }
 }
 
