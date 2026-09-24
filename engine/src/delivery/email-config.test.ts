@@ -281,13 +281,10 @@ test("markPaymentRemittanceFailed refuses when the pending update writes zero ro
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
 });
 
-test("markPaymentRemittanceFailed refuses when the pending update writes zero rows even if a follow-up read would see sent", async () => {
+test("markPaymentRemittanceFailed preserves a remittance already sent by the worker", async () => {
   writeEffectHarness.reset();
-  writeEffectHarness.responses.push({ rows: [{ status: null, written: 0 }] });
-  await assert.rejects(
-    () => markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "smtp down", 1, true),
-    /payment remittance remit-sent was not marked failed[\s\S]*matched no row/u,
-  );
+  writeEffectHarness.responses.push({ rows: [{ status: "sent", written: 0 }] });
+  await markPaymentRemittanceFailedUnderTest("org-1", "remit-sent", "enqueue acknowledgement lost", 1, true);
   assert.match(writeEffectHarness.queries[0]!.text, /returning/u);
-  assert.equal(writeEffectHarness.queries.length, 1, "a zero-row write must refuse without a follow-up success read");
+  assert.equal(writeEffectHarness.queries.length, 1, "terminal state is resolved from the guarded write itself");
 });

@@ -14,6 +14,7 @@ import { createPaymentDocument, updateDraftPayment } from "./payment-documents.t
 import { createPaymentRun } from "./run-creation.ts";
 import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
+import { markAutomaticRemittanceEnqueueFailed } from "./run-remittance.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
@@ -2925,6 +2926,36 @@ test("posting completion leaves a queued remittance unstamped until delivery con
       remittance_status: "pending",
       stamp_missing: true,
     });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a late remittance enqueue failure cannot overwrite worker-confirmed sent state", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Late remittance failure", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
+    const remittanceId = randomUUID();
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      insert into payment_remittances
+        (id, org_id, payment_instruction_id, recipients, status, attempt_count, sent_at, created_by, updated_by)
+      values
+        (${remittanceId}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test"]'::jsonb,
+         'sent', 1, now(), ${actorId}, ${actorId})
+    `));
+
+    await withOrgContext(org.orgId, () =>
+      markAutomaticRemittanceEnqueueFailed(org.orgId, remittanceId, actorId, "queue acknowledgement was lost"),
+    );
+
+    const state = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ status: string; attempt_count: number }>(sql`
+        select status, attempt_count from payment_remittances
+         where id = ${remittanceId} and org_id = ${org.orgId}
+      `)).rows[0],
+    );
+    assert.deepEqual(state, { status: "sent", attempt_count: 1 });
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

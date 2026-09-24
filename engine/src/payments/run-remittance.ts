@@ -2,6 +2,38 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
+
+/**
+ * Record an enqueue failure without overwriting a provider acceptance that
+ * raced with a lost queue acknowledgement. The pending predicate is the
+ * compare-and-set: sent and other terminal states remain authoritative.
+ */
+export async function markAutomaticRemittanceEnqueueFailed(
+  orgId: string,
+  remittanceId: string,
+  actorId: string,
+  error: string,
+): Promise<void> {
+  const outcome = await db.execute<{ status: string | null; written: number }>(sql`
+    with updated as (
+      update payment_remittances
+         set status = 'failed', attempt_count = greatest(attempt_count, 1),
+             last_attempt_at = now(), error = ${error.slice(0, 500)},
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${remittanceId} and org_id = ${orgId} and status = 'pending'
+      returning id
+    ), target as (
+      select status from payment_remittances
+       where id = ${remittanceId} and org_id = ${orgId}
+    )
+    select (select status from target) as status,
+           (select count(*) from updated)::int as written
+  `);
+  const result = outcome.rows?.[0];
+  if ((result?.written ?? 0) === 0 && (result?.status === null || result?.status === "pending")) {
+    throw new Error(`payment remittance ${remittanceId} enqueue failure was not recorded`);
+  }
+}
 /**
  * Queue the payee's automatic remittance advice for one instruction the
  * worker just posted under its posting claim.
@@ -125,9 +157,12 @@ export async function queueAutomaticRemittance(
     enqueueError = error;
   }
   if (enqueueError) {
-    await db.execute(sql`
-      update payment_remittances set status = 'failed', attempt_count = 1, last_attempt_at = now(), error = ${enqueueError instanceof Error ? enqueueError.message : String(enqueueError)}, updated_at = now(), updated_by = ${userId} where id = ${staged.remittanceId} and org_id = ${orgId}
-    `);
+    await markAutomaticRemittanceEnqueueFailed(
+      orgId,
+      staged.remittanceId,
+      userId,
+      enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+    );
     console.error(`[payments] automatic remittance failed for instruction ${instructionId}:`, enqueueError);
     return;
   }
