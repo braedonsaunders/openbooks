@@ -3,7 +3,7 @@
 import { sum } from '@openbooks/engine/src/money/money.ts'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
-import { useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { CheckCheck, Link2, Pencil, Trash2, Wand2 } from 'lucide-react'
@@ -127,6 +127,8 @@ export function ReconcileWorkspace({
   const [selectedStmt, setSelectedStmt] = useState<string | null>(null)
   const [selectedGl, setSelectedGl] = useState<Set<string>>(new Set())
   const [adjustOpen, setAdjustOpen] = useState(false)
+  const adjustThroughDateId = useId()
+  const adjustStatementBalanceId = useId()
   const [throughDate, setThroughDate] = useState(reconciliation.throughDate)
   const [statementBalance, setStatementBalance] = useState(() =>
     reconciliation.statementBalance,
@@ -487,12 +489,13 @@ export function ReconcileWorkspace({
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>{tBanking('labels.reconcileThrough')}</Label>
-            <Input type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
+            <Label htmlFor={adjustThroughDateId}>{tBanking('labels.reconcileThrough')}</Label>
+            <Input id={adjustThroughDateId} type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
           </div>
           <div className="space-y-1.5">
-            <Label>{tBanking('labels.statementBalance')}</Label>
+            <Label htmlFor={adjustStatementBalanceId}>{tBanking('labels.statementBalance')}</Label>
             <Input
+              id={adjustStatementBalanceId}
               inputMode="decimal"
               value={statementBalance}
               onChange={(e) => setStatementBalance(e.target.value)}

@@ -1,5 +1,5 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, fromUnits, mulRate, mulRatio, neg, normalizeDecimal, toUnits } from "../money/money.ts";
+import { add, cmp, fromUnits, mulRate, mulRatio, neg, toUnits } from "../money/money.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 
