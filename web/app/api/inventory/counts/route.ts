@@ -17,6 +17,7 @@ import {
 import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -147,15 +148,16 @@ export async function POST(req: Request) {
       if (!body.lines || body.lines.length === 0) {
         return NextResponse.json({ error: 'at least one count line required' }, { status: 422 })
       }
-      // Default to the org's primary/first subsidiary, exactly as the
-      // inventory actions route does when the caller scopes none.
+      // An unscoped count books to the hierarchy root through the shared
+      // default-entity resolver — the same default the document path applies.
       let subsidiaryId = body.subsidiaryId
       if (subsidiaryId === undefined) {
-        const r = (await db.execute<{ id: string }>(
-          sql`select id from subsidiaries where org_id = ${user.orgId} order by created_at, id limit 1`,
-        ))
-        subsidiaryId = r.rows[0]?.id
-        if (!subsidiaryId) return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
+        try {
+          subsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, user.orgId))
+        } catch (e) {
+          if (!(e instanceof SubsidiaryError)) throw e
+          return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
+        }
       }
       if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
         return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })

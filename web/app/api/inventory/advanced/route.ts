@@ -9,6 +9,7 @@ import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@o
 import { ensureLot, ensureSerial, queryLotRecall } from "@openbooks/engine/src/inventory/tracking.ts";
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
 import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from "@openbooks/engine/src/organization/subsidiaries.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
@@ -262,10 +263,12 @@ export async function POST(req: Request) {
         }
         let subsidiaryId = body.subsidiaryId;
         if (subsidiaryId === undefined) {
-          const r = (await db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1`,
-          ));
-          subsidiaryId = r.rows[0]?.id;
+          try {
+            subsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
+          } catch (e) {
+            if (!(e instanceof SubsidiaryError)) throw e;
+            return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
+          }
         }
         if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
@@ -325,10 +328,12 @@ export async function POST(req: Request) {
         }
         let subsidiaryId = body.subsidiaryId;
         if (subsidiaryId === undefined) {
-          const r = (await db.execute<{ id: string }>(
-            sql`select id from subsidiaries where org_id = ${orgId} order by created_at, id limit 1`,
-          ));
-          subsidiaryId = r.rows[0]?.id;
+          try {
+            subsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, orgId));
+          } catch (e) {
+            if (!(e instanceof SubsidiaryError)) throw e;
+            return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
+          }
         }
         if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
         if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {

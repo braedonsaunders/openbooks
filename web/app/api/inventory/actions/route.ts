@@ -15,6 +15,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/organization/permissions.ts'
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 
 export const runtime = 'nodejs'
@@ -135,14 +136,16 @@ export async function POST(req: Request) {
   }
   const date = body.date ?? await businessToday(user.orgId)
 
-  // Default to the org's primary/first subsidiary when the caller didn't scope one.
+  // An unscoped posting books to the hierarchy root through the shared
+  // default-entity resolver — the same default the document path applies.
   let subsidiaryId = body.subsidiaryId
   if (subsidiaryId === undefined) {
-    const r = (await db.execute<{ id: string }>(
-      sql`select id from subsidiaries where org_id = ${user.orgId} order by created_at, id limit 1`,
-    ))
-    subsidiaryId = r.rows[0]?.id
-    if (!subsidiaryId) return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
+    try {
+      subsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(db, user.orgId))
+    } catch (e) {
+      if (!(e instanceof SubsidiaryError)) throw e
+      return NextResponse.json({ error: 'no subsidiary configured' }, { status: 422 })
+    }
   }
   if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
     return NextResponse.json({ error: 'subsidiary not permitted' }, { status: 403 })

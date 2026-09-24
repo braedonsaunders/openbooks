@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { toBaseQuantity } from "./costing.ts";
 import { InventoryError, InventoryOwnershipError, type InventoryProfile, type Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, assertMovementOwner } from "./profile-policy.ts";
@@ -100,7 +100,7 @@ export async function loadDocumentInventoryLines(
      order by dl.line_number`));
   if (r.rows.length === 0) return [];
   const ctx = await loadSubsidiaryContext(runner, orgId);
-  const subsidiaryId = r.rows[0]!.document_subsidiary_id ?? ctx.rootId;
+  const subsidiaryId = r.rows[0]!.document_subsidiary_id ?? defaultPostingSubsidiaryId(ctx);
   assertMovementOwner(ctx, subsidiaryId);
   const out: DocumentInventoryLine[] = [];
   for (const row of r.rows) {
