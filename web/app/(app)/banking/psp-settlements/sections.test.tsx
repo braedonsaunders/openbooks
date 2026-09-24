@@ -145,6 +145,19 @@ async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS; sub
   return { host, root };
 }
 
+test("PSP reversal fields are associated with their visible labels", async (t) => {
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  for (const name of [STRINGS.reversalDate, STRINGS.reversalReason]) {
+    const label = [...host.querySelectorAll("label")].find((candidate) => candidate.textContent?.trim() === name);
+    assert.ok(label, `${name} label renders`);
+    assert.ok(label.control, `${name} label controls its input`);
+  }
+});
+
 function setNativeValue(element: HTMLElement, value: string) {
   const prototype = element instanceof window.HTMLTextAreaElement
     ? window.HTMLTextAreaElement.prototype
