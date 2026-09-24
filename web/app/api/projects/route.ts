@@ -313,9 +313,7 @@ export async function POST(request: Request) {
   }
   if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
-  const payload = await loadProject(requestId, user.orgId)
+  const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
-  const payloadDenied = guardSubsidiaryScope(gate, payload.project.subsidiary_id as string | null | undefined)
-  if (payloadDenied) return payloadDenied
   return NextResponse.json(payload, { status: created ? 201 : 200 })
 }

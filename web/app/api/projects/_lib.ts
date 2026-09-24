@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
@@ -50,34 +50,45 @@ export async function loadProject(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ProjectPayload | null> {
-  const proj = (await db.execute<Record<string, unknown>>(sql`
-    select * from projects where id = ${id} and org_id = ${orgId}
-      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
-  `))
-  if (!proj.rows[0]) return null
-  const row = proj.rows[0]
-
-  const [names, fieldDefs] = await Promise.all([
-    Promise.all([
-      row.customer_id
-        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.customer_id} and org_id = ${orgId}`)
-        : Promise.resolve({ rows: [] }),
-      row.foreman_id
-        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.foreman_id} and org_id = ${orgId}`)
-        : Promise.resolve({ rows: [] }),
-      row.manager_id
-        ? db.execute<Record<string, unknown>>(sql`select display_name from parties where id = ${row.manager_id} and org_id = ${orgId}`)
-        : Promise.resolve({ rows: [] }),
-      db.execute<ProjectTaskRow>(sql`
+  // One transaction for the whole bundle, locking the header first (READ
+  // COMMITTED, like loadAsset): a concurrent project rehome blocks on the
+  // lock instead of moving rows between the header read and the
+  // task/customer reads of one response. Linked party names carry the party
+  // lens (org-wide nulls stay visible); a linked party outside scope
+  // resolves to no name rather than disclosing the row. (A REPEATABLE READ
+  // snapshot cannot take the lock: a locking read that meets a concurrent
+  // update errors with 40001 instead of waiting.)
+  const [bundle, fieldDefs] = await Promise.all([
+    withOrgTransaction(orgId, async () => {
+      const proj = (await db.execute<Record<string, unknown>>(sql`
+        select * from projects where id = ${id} and org_id = ${orgId}
+          ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
+          for share
+      `))
+      if (!proj.rows[0]) return null
+      const row = proj.rows[0]
+      const partyName = (partyId: unknown) =>
+        partyId
+          ? db.execute<Record<string, unknown>>(sql`
+              select display_name from parties
+               where id = ${partyId} and org_id = ${orgId}
+                 ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)
+          : Promise.resolve({ rows: [] as Record<string, unknown>[] })
+      const customer = await partyName(row.customer_id)
+      const foreman = await partyName(row.foreman_id)
+      const manager = await partyName(row.manager_id)
+      const tasks = await db.execute<ProjectTaskRow>(sql`
         select id, code, name, status, estimated_hours, estimated_cost, updated_at
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name
-      `),
-    ]),
+      `)
+      return { row, customer, foreman, manager, tasks }
+    }),
     loadFieldDefs('projects'),
   ])
-  const [customer, foreman, manager, tasks] = names
+  if (!bundle) return null
+  const { row, customer, foreman, manager, tasks } = bundle
 
   const name = (r?: Record<string, unknown>) => (r ? ((r.display_name as string) ?? null) : null)
   const contractValue = row.contract_value == null ? null : String(row.contract_value)
