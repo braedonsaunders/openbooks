@@ -186,7 +186,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...HRM_PROCESS_WIDGETS,
   // HR-20: field-time family (clock island, crew workspace, setup).
   ...HRM_FIELD_TIME_WIDGETS,
-  // HR-15: persona-home widgets (inbox task list, dashboard persona tiles).
+  // HR-15: persona-home widgets (inbox task list; the dashboard persona tiles stay native).
   ...PERSONA_WIDGETS,
   ...OPERATIONS_WIDGETS,
   ...RECORDS_WIDGETS,

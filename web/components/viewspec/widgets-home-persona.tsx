@@ -4,10 +4,13 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /**
  * HR-15 persona-home widgets: the inbox task list for the unified inbox
- * page plus the dashboard persona tiles (inbox-list, celebrations-list,
- * announcements-card, pay-tile, balance-tile, whos-out-strip, and the
- * manager/admin tiles). Verbatim adapters only — every widget re-checks
- * its permission the way its native surface does.
+ * page. Verbatim adapters only — every widget re-checks its permission the
+ * way its native surface does.
+ *
+ * The dashboard persona tiles (inbox-list, celebrations-list,
+ * announcements-card, pay-tile, balance-tile, whos-out-strip, manager/admin
+ * tiles) are NOT ported here: they remain native to the dashboard's own
+ * registry (web/app/(app)/dashboard/_widget-registry.ts).
  */
 export const PERSONA_WIDGETS: Record<string, WidgetRenderer> = {
   'inbox-task-list': (props) => (
