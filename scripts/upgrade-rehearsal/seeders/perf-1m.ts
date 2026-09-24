@@ -269,7 +269,12 @@ async function main(): Promise<void> {
     ];
     for (const [code, name, kind, remit] of defs) {
       const id = randomUUID();
-      const vendor = remit ? remittanceVendors[componentIds.length % 2]! : null;
+      // FUTA alone resolves to the second vendor: the exact-total coverage
+      // bill targets the FUTA accrual group, and 0296's repair compares the
+      // bill's lines against EVERY line resolving to the marker party in the
+      // window — a shared vendor would pull STATETAX lines into the group
+      // and the bill would never reconcile.
+      const vendor = !remit ? null : code === "FUTA" ? remittanceVendors[1]! : remittanceVendors[0]!;
       await db.execute(sql`
         insert into pay_components (id, org_id, code, name, kind, remittance_party_id, liability_account_id,
                                     expense_account_id)
