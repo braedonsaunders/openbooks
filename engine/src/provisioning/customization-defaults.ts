@@ -6,9 +6,9 @@ import {
   markSeededDefaultView,
 } from "@openbooks/customization";
 import { db } from "../platform/db.ts";
+import { DEFAULT_VIEW_NAME } from "./default-view-name.ts";
 
 const DEFAULT_FORM_NAME = "Default form";
-const DEFAULT_VIEW_NAME = "Default view";
 
 /**
  * Provision editable, tenant-owned baseline forms and views during an explicit
