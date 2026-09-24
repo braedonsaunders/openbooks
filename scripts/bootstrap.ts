@@ -1733,6 +1733,17 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "later 0338 revision re-points every earlier digest here to its own.",
   },
   {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
+    to: "05bc89024bb2d2a614e14b7fb564d505600c7a026a648c7acac59af23b17aa6c",
+    strategy: "reapply",
+    reason:
+      "same growth as the entries above, for databases at the merged "
+      + "G4+G5+G6+G8+G9+G10 body: the delta is only the G11 payment-stats "
+      + "date-move trigger (plus the delta-function date overrides), all "
+      + "idempotent on replay. Reapply, not restamp.",
+  },
+  {
     filename: "generated/0257_provisional_cost_subsidiary.sql",
     from: "ecd2626b775e72025ce26251643930f1bf676ec06fcfae4f1605d35374c734f3",
     to: "67256fd8450973ff88a2592c4d0bb834547499da41e9410ff96a43a3eb1583fa",

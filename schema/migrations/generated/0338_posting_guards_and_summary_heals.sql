@@ -418,3 +418,93 @@ end $$;
 
 COMMENT ON FUNCTION public.jl_check_account() IS
   'openbooks:jl_check_account:v5 - locks the tenant-coherent account row before validating a direct journal-line write; evidence-only stamps (0236) are not re-validated as postings; the inactive-account refusal (0338/G9) names the remedy';
+
+-- ---------------------------------------------------------------------------
+-- Section G11: payment stats follow posting-date moves.
+-- ---------------------------------------------------------------------------
+-- party_payment_stats_maintain watches applications only and snapshots each
+-- line's posting_date at apply time, so a later amend-path posting_date
+-- change — direct, or fanned out by the je_cascade_posting_date header
+-- change — left the settled_on bucket and day counts drifting behind the
+-- rows they summarize. The trigger below moves every live application on
+-- a re-dated line between buckets: the old leg with the previous date,
+-- the new leg with the current one. Row-by-row cascade updates stay
+-- consistent because each firing moves its own application from its own
+-- before-image to its own after-image. Heals only forward drift (G6
+-- precedent): past rehomes are detectable through the sanctioned
+-- openbooks_party_payment_stats_verify(org) and repairable through
+-- openbooks_party_payment_stats_rebuild(org), so no bulk rebuild ships
+-- here. The delta's new optional date overrides default to the live row,
+-- so the existing application-leg callers are byte-identical in behavior.
+-- The 3-argument body lives in the baseline (immutable): drop that
+-- signature first, or the defaulted replacement would stand beside it as
+-- a second overload and every existing 3-argument call would go ambiguous.
+DROP FUNCTION IF EXISTS public.openbooks_party_payment_stats_delta(uuid, uuid, integer);
+CREATE OR REPLACE FUNCTION public.openbooks_party_payment_stats_delta(
+  p_from_line uuid, p_to_line uuid, p_sign integer,
+  p_settled date DEFAULT NULL, p_paid date DEFAULT NULL) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_org uuid; v_party uuid; v_type text; v_settled date; v_paid date; v_days numeric;
+begin
+  select bl.org_id, bl.party_id, a.type, bl.posting_date, pl.posting_date
+    into v_org, v_party, v_type, v_settled, v_paid
+    from journal_lines bl
+    join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+    join journal_lines pl on pl.id = p_from_line
+   where bl.id = p_to_line;
+  -- A bulk copy can insert an application before its lines; the rebuild
+  -- function is the repair path for that (clones copy lines first).
+  if v_party is null or v_settled is null or v_paid is null then return; end if;
+  if v_type not in ('asset_receivable', 'liability_payable') then return; end if;
+  -- A date move passes explicit before/after images; ordinary legs keep
+  -- reading the live rows exactly as before.
+  v_settled := coalesce(p_settled, v_settled);
+  v_paid := coalesce(p_paid, v_paid);
+  v_days := (v_paid - v_settled)::numeric;
+  insert into party_payment_stats as s (org_id, party_id, account_type, settled_on, n, sum_days, sum_days_sq)
+  values (v_org, v_party, v_type, v_paid,
+          p_sign, p_sign * v_days, p_sign * v_days * v_days)
+  on conflict (org_id, account_type, settled_on, party_id) do update
+    set n = s.n + excluded.n,
+        sum_days = s.sum_days + excluded.sum_days,
+        sum_days_sq = s.sum_days_sq + excluded.sum_days_sq;
+end $$;
+
+CREATE OR REPLACE FUNCTION public.trg_party_payment_stats_date() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_app record;
+  v_bill_now date;
+  v_pay_now date;
+begin
+  -- Only the re-dated line's image differs; the other leg still reads its
+  -- live row. Each firing moves its own applications from its own
+  -- before-image to its own after-image, so multi-row cascades converge.
+  for v_app in select x.from_line_id as f, x.to_line_id as t
+                 from public.applications x
+                where x.org_id = new.org_id and x.unapplied_at is null
+                  and (x.from_line_id = new.id or x.to_line_id = new.id) loop
+    select bl.posting_date, pl.posting_date
+      into v_bill_now, v_pay_now
+      from public.journal_lines bl
+      join public.journal_lines pl on pl.id = v_app.f and pl.org_id = new.org_id
+     where bl.id = v_app.t and bl.org_id = new.org_id;
+    perform public.openbooks_party_payment_stats_delta(
+      v_app.f, v_app.t, -1,
+      case when v_app.t = old.id then old.posting_date else v_bill_now end,
+      case when v_app.f = old.id then old.posting_date else v_pay_now end);
+    perform public.openbooks_party_payment_stats_delta(
+      v_app.f, v_app.t, 1,
+      case when v_app.t = new.id then new.posting_date else v_bill_now end,
+      case when v_app.f = new.id then new.posting_date else v_pay_now end);
+  end loop;
+  return new;
+end $$;
+
+DROP TRIGGER IF EXISTS party_payment_stats_date ON public.journal_lines;
+CREATE TRIGGER party_payment_stats_date AFTER UPDATE OF posting_date ON public.journal_lines
+FOR EACH ROW WHEN (old.posting_date IS DISTINCT FROM new.posting_date)
+EXECUTE FUNCTION public.trg_party_payment_stats_date();
