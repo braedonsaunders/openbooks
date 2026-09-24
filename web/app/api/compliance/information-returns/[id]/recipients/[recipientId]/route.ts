@@ -6,6 +6,7 @@ import {
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 
 export const runtime = 'nodejs'
@@ -64,6 +65,6 @@ export async function PATCH(
     if (e instanceof InformationReturnError) {
       return NextResponse.json({ error: e.message }, { status: e.status })
     }
-    return NextResponse.json({ error: 'save failed' }, { status: 500 })
+    return complianceWriteFailure(e)
   }
 }

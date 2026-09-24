@@ -278,9 +278,13 @@ test(
         backupWithholding: true,
         reportable: true,
       });
-      assert.equal(response.status, 400);
-      const failure = (await response.json()) as { error?: unknown };
-      assert.equal(typeof failure.error, "string", "the failed audit is surfaced as a storage error");
+      // C-39: an unclassified write failure is a generic 500 with a
+      // correlation id — the trigger's message never reaches the operator.
+      assert.equal(response.status, 500);
+      const failure = (await response.json()) as { error?: unknown; correlationId?: unknown };
+      assert.equal(failure.error, "save failed");
+      assert.ok(!String(failure.error).includes("forced vendor audit failure"));
+      assert.equal(typeof failure.correlationId, "string");
       assert.deepEqual(await roleState(fixture), before);
       assert.deepEqual(await audits(fixture), []);
     } finally {

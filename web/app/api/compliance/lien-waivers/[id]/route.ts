@@ -9,6 +9,7 @@ import {
   lienWaiverPrintData,
   loadLienWaiverPrintSource,
 } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import type { LienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
@@ -221,6 +222,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
     return result
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
+    return complianceWriteFailure(e)
   }
 }

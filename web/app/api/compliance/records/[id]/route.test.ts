@@ -340,7 +340,13 @@ for (const scenario of scenarios) {
 
     const response = await patch(scenario.body)
 
-    assert.equal(response.status, 400)
+    // C-39: an unclassified write failure is a generic 500 with a
+    // correlation id — the sink's internals never reach the operator.
+    assert.equal(response.status, 500)
+    const refusal = (await response.json()) as { error?: string; correlationId?: string }
+    assert.equal(refusal.error, 'save failed')
+    assert.ok(!String(refusal.error).includes('audit sink'), 'sink internals leaked into the refusal')
+    assert.ok(typeof refusal.correlationId === 'string' && refusal.correlationId.length > 0)
     assert.deepEqual(state.committedRecord, scenario.before, 'the certificate mutation rolled back')
     assert.equal(state.committedAudits.length, 0, 'the failed audit row did not commit')
     const writes = state.calls.filter((call) =>

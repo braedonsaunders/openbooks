@@ -11,6 +11,7 @@ import {
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isUuid } from '@/lib/list-params'
@@ -80,8 +81,8 @@ export async function POST(req: Request) {
   }
 
   // Threshold reaches a numeric(19,4) column raw: junk text or a pasted
-  // 20-digit figure would otherwise die in Postgres as a raw storage failure
-  // (HTTP 500 — only InformationReturnError maps to 422 below).
+  // 20-digit figure would otherwise die in Postgres as a driver failure, so
+  // it is refused with a named 400 before any write.
   if (body.threshold !== undefined) {
     const exact = canonicalDecimal(body.threshold, 4)
     if (exact === null) {
@@ -108,7 +109,11 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(filing)
   } catch (e) {
-    const status = e instanceof InformationReturnError ? 422 : 500
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status })
+    // A computed filing refusal names its remedy; only an unclassified
+    // driver failure falls through to the generic write mapping.
+    if (e instanceof InformationReturnError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
+    return complianceWriteFailure(e)
   }
 }

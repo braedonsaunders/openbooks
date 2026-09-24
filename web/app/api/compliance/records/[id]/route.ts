@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
+import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
@@ -269,6 +270,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (outcome) return outcome
     return NextResponse.json({ id, revision: savedRevision })
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'save failed' }, { status: 400 })
+    return complianceWriteFailure(e)
   }
 }
