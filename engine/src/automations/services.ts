@@ -379,7 +379,14 @@ export async function saveApprovalSettings(input: {
   });
 }
 
-/** Five shipped recipe templates (created disabled-ready as drafts). */
+/**
+ * Four shipped recipe templates (created disabled-ready as drafts).
+ *
+ * No document/event/field_change recipe is listed: no writer stages those
+ * events, so such a recipe would install but could never be enabled or
+ * fired (D14). When writers exist for one, add its recipe back with the
+ * enable-time refusal lifted for exactly that trigger.
+ */
 export function automationRecipes(): { key: string; name: string; description: string; trigger: unknown; actions: unknown }[] {
   return [
     {
@@ -402,13 +409,6 @@ export function automationRecipes(): { key: string; name: string; description: s
       description: "Warns the employee before a qualification lapses (lights up when certifications land).",
       trigger: { kind: "date_relative", entity: "enrollment", dateField: "coverage_to", offsetDays: 30, direction: "before", atTime: "09:00" },
       actions: [{ kind: "send_notification", to: "initiator", body: "A qualification expires in 30 days — renew it to stay compliant." }],
-    },
-    {
-      key: "document_signed_onboarding",
-      name: "Document signed starts onboarding",
-      description: "When a signed document lands, start the onboarding process for the employment.",
-      trigger: { kind: "document", event: "signed" },
-      actions: [{ kind: "send_notification", to: "manager", body: "Signed document received — onboarding begins." }],
     },
     {
       key: "timesheet_unsubmitted",
