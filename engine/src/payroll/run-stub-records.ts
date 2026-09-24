@@ -228,7 +228,7 @@ export async function statutoryHolidayLinesForStub(
 export async function insertPayStubRow(
   tx: Pick<typeof db, "execute">,
   stub: {
-    orgId: string; actorId: string; documentId: string; employeePartyId: string;
+    orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string | null;
     country: string; filingAccountId: string | null; province: string; periodsPerYear: number; payDate: string; taxYear: number;
     federalClaim: string; provincialClaim: string; currency: string | null;
     gross: string; pensionable: string; insurable: string; net: string;
@@ -237,12 +237,12 @@ export async function insertPayStubRow(
   },
 ): Promise<string> {
   const inserted = (await tx.execute<{ id: string }>(sql`
-    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, country, country_source, filing_account_id, filing_account_source, province,
+    insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, employment_id, country, country_source, filing_account_id, filing_account_source, province,
                            periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
                            currency_code, gross, pensionable_earnings, insurable_earnings,
                            net_pay, employer_cost, vacation_accrued, factors, payment_method,
                            created_by, updated_by)
-    values (${stub.orgId}, ${stub.documentId}, ${stub.employeePartyId}, ${stub.country}, 'calculation', ${stub.filingAccountId}, 'calculation', ${stub.province}, ${stub.periodsPerYear},
+    values (${stub.orgId}, ${stub.documentId}, ${stub.employeePartyId}, ${stub.employmentId}, ${stub.country}, 'calculation', ${stub.filingAccountId}, 'calculation', ${stub.province}, ${stub.periodsPerYear},
             ${stub.payDate}, ${stub.taxYear}, ${stub.federalClaim}, ${stub.provincialClaim},
             ${stub.currency}, ${stub.gross}, ${stub.pensionable}, ${stub.insurable},
             ${stub.net}, ${stub.employerCost}, ${stub.vacationAccrued}, ${JSON.stringify(stub.factors)}::jsonb,

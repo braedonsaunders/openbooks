@@ -11,6 +11,7 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { add } from "../../money/money.ts";
 import { toUnits } from "../../money/money.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
@@ -237,19 +238,23 @@ test("guards: out-of-year dates, unknown effectif, bad amounts refuse by name", 
   );
 });
 
-test("adapter refuses before emitting gross charges while 2026 RGDU is unsupported", async () => {
+test("the FR adapter emits the URSSAF-published RGDU and apportions it to both institutions", async () => {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
+  let query = 0;
   const ctx: PayrollStatutoryComputeContext = {
-    tx: { execute: async () => ({ rows: [{ fact_value: "10.00" }] }) } as never,
+    tx: { execute: async () => ++query === 1
+      ? ({ rows: [{ fact_value: "70.00" }] })
+      : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
     documentId: "doc",
     employeePartyId: "emp",
+    employmentId: "employment",
     employeeName: "Test",
     taxYear: 2026,
     country: "FR",
     region: "FR",
-    run: { pay_date: "2026-06-15" },
+    run: { pay_date: "2026-06-15", run_type: "regular" },
     emp: {},
     filingAccountId: null,
     periodsPerYear: 12,
@@ -257,6 +262,8 @@ test("adapter refuses before emitting gross charges while 2026 RGDU is unsupport
     nonPeriodic: "0",
     pensionable: "2000.00",
     insurable: "0",
+    gross: "2000.0000",
+    statutoryHours: { regular: "151.6667", extra: "0" },
     // FR declares no pre-tax treatments: the reduced legs equal the raw
     // legs by construction — derived via the real helper, not mirrored.
     reducedBases: reduceTaxBases(
@@ -270,11 +277,10 @@ test("adapter refuses before emitting gross charges while 2026 RGDU is unsupport
     },
     storedCertificates: [],
     certificateFor: (() => ({
-      answers: { domicile: "metropole", taux_option: "non_personnalise" },
+      answers: { domicile: "metropole", taux_option: "non_personnalise", rgdu_eligibility: "eligible" },
     })) as never,
     bool: () => false,
     assertRegionSupported: () => {},
-    employerEmployeeCount: 10,
     employerLevies: {
       wcbAmount: "0",
       wcbAssessable: "0",
@@ -284,11 +290,16 @@ test("adapter refuses before emitting gross charges while 2026 RGDU is unsupport
       hsfEarnings: "0",
     },
   };
-  await assert.rejects(
-    () => FR_PAYROLL_PACK.computeStatutory(ctx),
-    /FR RGDU.*2026 reduction générale dégressive unifiée.*not calculated/,
+  const factors = await FR_PAYROLL_PACK.computeStatutory(ctx);
+  assert.equal(factors.FR_RGDU_COEFFICIENT, "0.3178");
+  assert.equal(factors.FR_RGDU_ADJUSTMENT, "635.6000");
+  assert.equal(pushed.find((line) => line.systemKey === "rgdu_urssaf")?.amount, "-540.6000");
+  assert.equal(pushed.find((line) => line.systemKey === "rgdu_arrco")?.amount, "-95.0000");
+  assert.equal(
+    pushed.filter((line) => line.systemKey.startsWith("rgdu_")).reduce((sum, line) => add(sum, line.amount), "0"),
+    "-635.6000",
+    "the emitted reduction lines reconcile exactly to the cumulative calculator adjustment",
   );
-  assert.deepEqual(pushed, [], "a failed RGDU calculation emits no partial payslip");
 });
 
 test("adapter refuses without a known effectif, naming FNAL", async () => {

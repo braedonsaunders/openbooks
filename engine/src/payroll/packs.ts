@@ -843,6 +843,11 @@ export interface PayrollCountryPack {
     taxYear: number,
   ) => readonly PayrollEmployerAggregateLevy[];
   /**
+   * Request the common schedule/work-line hour facts in the statutory context.
+   * A pack opts in only when its law prices an obligation against paid hours.
+   */
+  statutoryHours?: { basis: "contractual-plus-worked-extra" };
+  /**
    * Second-order opening year-to-date the pack's statutory engine reads for a
    * mid-year adopter: history the BASE opening columns cannot express because
    * it is attributed to lump-sum payments (T4127 F5B, TP-1015 CSB1) or counts

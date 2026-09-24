@@ -40,17 +40,21 @@ const COTS = { payDate: PAY, periodsPerYear: 12, employerEffectif: "10.00" } as 
 /** Adapter context for a métropole employee with a transmitted PAS rate. */
 function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeContext {
   const pushed: { systemKey: string; kind: string; amount: string }[] = [];
+  let query = 0;
   return {
-    tx: { execute: async () => ({ rows: [{ fact_value: "10.00" }] }) } as never,
+    tx: { execute: async () => ++query === 1
+      ? ({ rows: [{ fact_value: "10.00" }] })
+      : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
     documentId: "doc",
     employeePartyId: "emp",
+    employmentId: "employment",
     employeeName: "Test",
     taxYear: 2026,
     country: "FR",
     region: "FR",
-    run: { pay_date: PAY },
+    run: { pay_date: PAY, run_type: "regular" },
     emp: {},
     filingAccountId: null,
     periodsPerYear: 12,
@@ -58,6 +62,8 @@ function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeConte
     nonPeriodic: "0",
     pensionable: brut,
     insurable: "0",
+    gross: brut,
+    statutoryHours: { regular: "151.6667", extra: "0" },
     reducedBases: reduceTaxBases(
       [],
       { income: brut, nonPeriodic: "0", pensionable: brut, insurable: "0" },
@@ -73,6 +79,7 @@ function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeConte
         domicile: "metropole",
         taux_option: "personnalise",
         taux_transmis: transmitted,
+        rgdu_eligibility: "eligible",
       },
     })) as never,
     bool: () => false,
@@ -135,11 +142,10 @@ test("DEFECT 1: PAS prices the net imposable, not the brut (3 400 €, transmis 
   assert.equal(statutory.pas, "139.4200");
 });
 
-test("adapter does not publish a complete payslip before unsupported RGDU is priced", async () => {
-  await assert.rejects(
-    FR_PAYROLL_PACK.computeStatutory(ctxFor("3400.00", "5")),
-    /FR RGDU.*2026 reduction générale dégressive unifiée.*not calculated/,
-  );
+test("eligible French payroll refuses a missing period-hours fact by name", async () => {
+  const context = ctxFor("3400.00", "5");
+  context.statutoryHours = { regular: null, extra: "0" };
+  await assert.rejects(FR_PAYROLL_PACK.computeStatutory(context), /contractual hours for this pay period are missing.*effective work schedule or approved hours/);
 });
 
 test("PAS assiette: CSG add-back identity holds below and above the PASS", () => {

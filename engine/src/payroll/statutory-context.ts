@@ -109,8 +109,13 @@ export interface PayrollStatutoryComputeContext {
   orgId: string;
   /** The legal-employer subsidiary whose effective facts govern this run. */
   subsidiaryId?: string;
+  /** Full contributory gross for the current stub (including non-taxable wages). */
+  gross?: string;
+  /** Requested schedule/work-line hour facts for hour-based statutory rules. */
+  statutoryHours?: { regular: string | null; extra: string };
   documentId: string;
   employeePartyId: string;
+  employmentId?: string | null;
   employeeName: string;
   taxYear: number;
   country: string;

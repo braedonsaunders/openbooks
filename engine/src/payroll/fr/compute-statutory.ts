@@ -67,6 +67,9 @@ import {
 } from "./tables-2026.ts";
 import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
+import { resolveEmployeeFact } from "../employee-facts.ts";
+import "./employee-facts.ts";
+import { calculateFrRgdu2026, committedFrRgduYearToDate, frRgduSmicFromHours2026 } from "./rgdu-2026.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -145,6 +148,12 @@ export const FR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CEG_ER: "Contribution d'équilibre général (employeur)",
   CET_SAL: "Contribution d'équilibre technique (salariale)",
   CET_ER: "Contribution d'équilibre technique (employeur)",
+  FR_RGDU_COEFFICIENT: "Coefficient RGDU annuel",
+  FR_RGDU_SMIC: "SMIC contractuel du mois pour RGDU",
+  FR_RGDU_ADJUSTMENT: "Régularisation RGDU du mois",
+  FR_RGDU_URSSAF: "Réduction RGDU imputée à l'Urssaf",
+  FR_RGDU_AGIRC_ARRCO: "Réduction RGDU imputée à l'Agirc-Arrco",
+  FR_RGDU_MAXIMUM_COEFFICIENT: "Plafond du coefficient RGDU selon les taux couverts",
 };
 
 export interface FrPas2026Input {
@@ -334,20 +343,61 @@ export async function computeFrStatutory(
     atmpRatePct: null,
     versementMobilitePct: null,
   });
-  // The 2026 RGDU is a per-employee, per-contract annual calculation. CSS
-  // L.241-13 requires the contract-period SMIC (including eligible
-  // complementary/overtime hours), annual remuneration and annual
-  // regularization; the resulting reduction is allocated over covered
-  // employer contributions. This adapter has none of those inputs and would
-  // otherwise emit gross employer contributions as if they were complete.
-  // Refuse before pushing any statutory line until the RGDU path is supported.
-  throw new PayrollPackError(
-    "FR RGDU refuses this payroll: the 2026 reduction générale dégressive unifiée "
-    + "is not calculated. Do not approve or post this run with gross employer "
-    + "contributions; calculate the RGDU with an authorized payroll process and "
-    + "retry only after the resulting supported payroll data is available "
-    + "(CSS art. L.241-13, effective 2026).",
-  );
+  if (ctx.gross == null) {
+    throw new PayrollPackError("FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.");
+  }
+  const employeeEligibility = resolveEmployeeFact("FR", "fr_rgdu_eligible", answers["rgdu_eligibility"]);
+  const eligible = employeeEligibility === "eligible";
+  if (eligible && !ctx.employmentId) {
+    throw new PayrollPackError(
+      "FR RGDU refuses this employee: an employment contract is required to apply the contract-specific annual calculation (CSS D.241-7 V). Record the worker's legal employment before calculating.",
+    );
+  }
+  const history = eligible ? await committedFrRgduYearToDate({
+    tx: ctx.tx,
+    orgId: ctx.orgId,
+    subsidiaryId: ctx.subsidiaryId,
+    employeePartyId: ctx.employeePartyId,
+    employmentId: ctx.employmentId!,
+    taxYear,
+    payDate,
+    excludeDocumentId: ctx.documentId,
+  }) : { remuneration: "0", smic: "0", reduction: "0" };
+  let currentSmic = "0";
+  if (eligible && run["run_type"] === "regular") {
+    const regularHours = resolveEmployeeFact("FR", "fr_rgdu_regular_hours", ctx.statutoryHours?.regular);
+    if (regularHours == null) {
+      throw new PayrollPackError(
+        "FR RGDU refuses this employee: contractual hours for this pay period are missing. Record the effective work schedule or approved hours before calculating (CSS D.241-7 IV).",
+      );
+    }
+    currentSmic = frRgduSmicFromHours2026(regularHours, ctx.statutoryHours?.extra ?? "0");
+  }
+  const remunerationYtd = D(U(history.remuneration) + U(ctx.gross));
+  const smicYtd = D(U(history.smic) + U(currentSmic));
+  const contributoryBase = U(base);
+  const coveredAtmp = roundDiv(contributoryBase * 4_900n, RATE6);
+  const urssafCoveredAmount = U(cots.maladieEr) + U(cots.vieillesseEr)
+    + U(cots.allocFamEr) + U(cots.fnalEr) + U(cots.csaEr) + U(cots.chomageEr)
+    + coveredAtmp;
+  const agircArrcoCoveredAmount = U(cots.arrcoEr) + U(cots.cegEr) + U(cots.cetEr);
+  const coveredRate = (amount: bigint): string => contributoryBase === 0n
+    ? "0"
+    : D(roundDiv(amount * 10_000n, contributoryBase));
+  const urssafCoveredRate = coveredRate(urssafCoveredAmount);
+  const agircArrcoCoveredRate = coveredRate(agircArrcoCoveredAmount);
+  const rgdu = calculateFrRgdu2026({
+    employerEffectif: employerEffectif ?? "",
+    eligible,
+    remunerationYearToDate: remunerationYtd,
+    smicYearToDate: smicYtd,
+    priorReductionYearToDate: history.reduction,
+    urssafCoveredRate,
+    agircArrcoCoveredRate,
+  });
+  const signedReduction = (amount: string): string => D(-U(amount));
+  pushStatutory("rgdu_urssaf", "employer_contribution", "Réduction générale (part Urssaf)", signedReduction(rgdu.urssafAdjustment), 250);
+  pushStatutory("rgdu_arrco", "employer_contribution", "Réduction générale (part Agirc-Arrco)", signedReduction(rgdu.agircArrcoAdjustment), 251);
   pushStatutory("pas", "deduction", "Prélèvement à la source", result.pas, 110);
   pushStatutory("vieillesse", "deduction", "Assurance vieillesse (salariale)", cots.vieillesseSal, 120);
   pushStatutory("csg", "deduction", "CSG (salariale)", cots.csg, 130);
@@ -385,5 +435,11 @@ export async function computeFrStatutory(
     CEG_ER: cots.cegEr,
     CET_SAL: cots.cetSal,
     CET_ER: cots.cetEr,
+    FR_RGDU_COEFFICIENT: rgdu.coefficient,
+    FR_RGDU_SMIC: currentSmic,
+    FR_RGDU_ADJUSTMENT: rgdu.periodAdjustment,
+    FR_RGDU_URSSAF: rgdu.urssafAdjustment,
+    FR_RGDU_AGIRC_ARRCO: rgdu.agircArrcoAdjustment,
+    FR_RGDU_MAXIMUM_COEFFICIENT: rgdu.maximumCoefficient,
   };
 }
