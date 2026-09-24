@@ -19,6 +19,9 @@ const PARTY_A = '00000000-0000-4000-8000-00000000b011'
 const PARTY_B = '00000000-0000-4000-8000-00000000b012'
 const PARTY_INACTIVE = '00000000-0000-4000-8000-00000000b013'
 const OTHER_ORG_PARTY = '00000000-0000-4000-8000-00000000b097'
+const SUB_A = '00000000-0000-4000-8000-00000000b00a'
+const SUB_B = '00000000-0000-4000-8000-00000000b00b'
+const PARTY_SHARED = '00000000-0000-4000-8000-00000000b014'
 
 interface PartyRow {
   kind: string
@@ -26,6 +29,7 @@ interface PartyRow {
   isActive: boolean
   roles: string[]
   orgId: string
+  subsidiaryId: string | null
 }
 
 interface PartyState {
@@ -39,17 +43,20 @@ interface PartyState {
   authz: {
     user: { orgId: string; id: string; isSuperAdmin: boolean }
     permissions: Set<string>
+    allowedSubsidiaryIds?: Set<string> | null
   } | null
   parties: Record<string, PartyRow>
 }
 
 function baseParties(): Record<string, PartyRow> {
   return {
-    [PARTY_A]: { kind: 'person', displayName: 'Ada Person', isActive: true, roles: [], orgId: ORG_ID },
+    [PARTY_A]: { kind: 'person', displayName: 'Ada Person', isActive: true, roles: [], orgId: ORG_ID, subsidiaryId: SUB_A },
     // kind=company carrying an employee role: kind is not proof, roles are signals.
-    [PARTY_B]: { kind: 'company', displayName: 'Beta Corp', isActive: true, roles: ['employee'], orgId: ORG_ID },
-    [PARTY_INACTIVE]: { kind: 'person', displayName: 'Inactive Person', isActive: false, roles: [], orgId: ORG_ID },
-    [OTHER_ORG_PARTY]: { kind: 'person', displayName: 'Other Org Person', isActive: true, roles: [], orgId: OTHER_ORG_ID },
+    [PARTY_B]: { kind: 'company', displayName: 'Beta Corp', isActive: true, roles: ['employee'], orgId: ORG_ID, subsidiaryId: SUB_B },
+    [PARTY_INACTIVE]: { kind: 'person', displayName: 'Inactive Person', isActive: false, roles: [], orgId: ORG_ID, subsidiaryId: SUB_A },
+    [OTHER_ORG_PARTY]: { kind: 'person', displayName: 'Other Org Person', isActive: true, roles: [], orgId: OTHER_ORG_ID, subsidiaryId: null },
+    // Null-subsidiary parties are org-wide shared: visible to every admin lens.
+    [PARTY_SHARED]: { kind: 'person', displayName: 'Shared Person', isActive: true, roles: [], orgId: ORG_ID, subsidiaryId: null },
   }
 }
 
@@ -74,8 +81,14 @@ function sqlText(query: unknown): string {
   return chunks
     .map((chunk) => {
       if (typeof chunk === 'string') return chunk
-      const value = (chunk as { value?: unknown[] })?.value
+      const value = (chunk as { value?: unknown })?.value
       if (Array.isArray(value)) return value.map(String).join('')
+      // Scalar bound params (uuids, the subsidiary allow-list) render
+      // inline so the fake database can honour the predicates the route
+      // sends; without them an allow-list reads as empty.
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        return String(value)
+      }
       if ((chunk as { queryChunks?: unknown[] })?.queryChunks) return sqlText(chunk)
       // A bound null (the unlink case) must render as the literal the fake
       // database keys on; an empty string silently turned unlink into a 409.
@@ -86,7 +99,7 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & { openbooksSqlTextAdminUsersParty: typeof sqlText }).openbooksSqlTextAdminUsersParty = sqlText
 
-const KNOWN_PARTIES = [PARTY_A, PARTY_B, PARTY_INACTIVE, OTHER_ORG_PARTY]
+const KNOWN_PARTIES = [PARTY_A, PARTY_B, PARTY_INACTIVE, OTHER_ORG_PARTY, PARTY_SHARED]
 
 
 const mockSources = new Map<string, string>([
@@ -108,12 +121,13 @@ const mockSources = new Map<string, string>([
           }
           return []
         }
-        // POST: validate native party (same-org, with kind/display/active).
-        if (text.includes('select id, kind, display_name, is_active from parties')) {
+        // POST: validate native party (same-org, with kind/display/active/subsidiary).
+        if (text.includes('select id, kind, display_name, is_active, subsidiary_id from parties')) {
           const found = KNOWN.map((id) => ({ id, row: state.parties[id] }))
             .find(({ id, row }) => row && row.orgId === '${ORG_ID}' && lower.includes(id.toLowerCase()))
           if (!found) return []
-          return [{ id: found.id, kind: found.row.kind, display_name: found.row.displayName, is_active: found.row.isActive }]
+          return [{ id: found.id, kind: found.row.kind, display_name: found.row.displayName,
+                    is_active: found.row.isActive, subsidiary_id: found.row.subsidiaryId }]
         }
         // POST: canonical role signals for audit only.
         if (text.includes("select 'vendor' as role")) {
@@ -145,12 +159,24 @@ const mockSources = new Map<string, string>([
         }
         // GET: per-query bounded active-person page.
         if (text.includes('from parties p') && text.includes('group by p.id')) {
+          // An empty scope denies every row, exactly like the SQL predicate.
+          if (lower.includes('and false')) return []
+          // The fake database honours the subsidiary predicate the route
+          // sends: null-subsidiary rows are org-wide shared, other rows must
+          // sit in the allowed set parsed from the query itself.
+          const anyAt = text.indexOf('p.subsidiary_id = any({')
+          const allowed = anyAt < 0 ? null : new Set(
+            text.slice(anyAt + 'p.subsidiary_id = any({'.length).split('}::uuid[]')[0]
+              .split(',').filter(Boolean).map((s) => s.toLowerCase()),
+          )
+          const visible = (row) => !allowed || row.subsidiaryId === null
+            || allowed.has(String(row.subsidiaryId).toLowerCase())
           // Selected preservation lookup has an id equality predicate.
           const hasIdPredicate = text.includes('and p.id =')
           if (hasIdPredicate) {
             const target = KNOWN.map((id) => ({ id, row: state.parties[id] }))
               .find(({ id, row }) => row && row.orgId === '${ORG_ID}' && lower.includes(id.toLowerCase()))
-            if (!target) return []
+            if (!target || !visible(target.row)) return []
             return [{
               id: target.id,
               display_name: target.row.displayName,
@@ -168,7 +194,7 @@ const mockSources = new Map<string, string>([
           const limitMatch = text.match(/limit\\s+(\\d+)/i)
           const limit = limitMatch ? Math.max(5, Math.min(50, Number(limitMatch[1]))) : 25
           const rows = Object.entries(state.parties)
-            .filter(([, row]) => row.orgId === '${ORG_ID}' && row.isActive)
+            .filter(([, row]) => row.orgId === '${ORG_ID}' && row.isActive && visible(row))
             .filter(([, row]) => !q || row.displayName.toLowerCase().includes(q))
             .sort((a, b) => a[1].displayName.localeCompare(b[1].displayName))
             .slice(0, limit)
@@ -255,9 +281,19 @@ const mockSources = new Map<string, string>([
         if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
         const holds = authz.permissions.has(perm) || authz.permissions.has('*')
         if (!holds) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
-        return { ...authz, allowedSubsidiaryIds: null }
+        return { ...authz, allowedSubsidiaryIds: authz.allowedSubsidiaryIds ?? null }
       }
       export async function getAuthz() { return state.authz }
+      // Direct-record visibility over one loaded party: the canonical
+      // subsidiary-scope rule (null scope passes; null subsidiary is
+      // org-wide only when the caller passes orgWideNull).
+      export function subsidiaryScopeAllows(scope, subsidiaryId, opts) {
+        if (scope === null || scope === undefined) return true
+        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === '') {
+          return (opts && opts.orgWideNull) === true
+        }
+        return scope.has(subsidiaryId)
+      }
     `,
   ],
 ])
@@ -518,6 +554,7 @@ test('person search is per-query bounded and finds people beyond the first page'
       isActive: true,
       roles: [],
       orgId: ORG_ID,
+      subsidiaryId: null,
     }
   }
   state.parties['00000000-0000-4000-8000-00000000c999'] = {
@@ -526,6 +563,7 @@ test('person search is per-query bounded and finds people beyond the first page'
     isActive: true,
     roles: [],
     orgId: ORG_ID,
+    subsidiaryId: null,
   }
   const response = await get('/api/admin/users?q=zelda&limit=5')
   assert.equal(response.status, 200)
@@ -555,4 +593,51 @@ test('person search preserves the selected option across queries', async () => {
   assert.equal(crossOrg.status, 200)
   const crossPayload = (await crossOrg.json()) as { selected: unknown }
   assert.equal(crossPayload.selected, null, 'cross-org include discloses nothing')
+})
+
+function scopedAuthz(): void {
+  state.authz = {
+    user: { orgId: ORG_ID, id: ACTOR_ID, isSuperAdmin: false },
+    permissions: new Set(['admin.users.manage']),
+    allowedSubsidiaryIds: new Set([SUB_A]),
+  }
+}
+
+test('a subsidiary-scoped admin enumerates only their lens and shared parties', async () => {
+  reset()
+  scopedAuthz()
+  const response = await get('/api/admin/users?q=&limit=50')
+  assert.equal(response.status, 200)
+  const payload = (await response.json()) as { options: { value: string; label: string }[] }
+  const labels = payload.options.map((o) => o.label)
+  assert.ok(labels.includes('Ada Person'), 'in-scope party is enumerated')
+  assert.ok(labels.includes('Shared Person'), 'org-wide shared party stays visible')
+  assert.ok(!labels.includes('Beta Corp'), 'out-of-scope party is not enumerated')
+})
+
+test('a subsidiary-scoped include exposes an out-of-scope identity as nothing', async () => {
+  reset()
+  scopedAuthz()
+  const denied = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_B}`)
+  assert.equal(denied.status, 200)
+  assert.equal((await denied.json() as { selected: unknown }).selected, null)
+
+  const allowed = await get(`/api/admin/users?q=zzz-no-match&limit=5&include=${PARTY_A}`)
+  assert.equal(allowed.status, 200)
+  assert.equal((await allowed.json() as { selected: { value: string } | null }).selected?.value, PARTY_A.toLowerCase())
+})
+
+test('linking an out-of-scope party answers exactly like a missing one', async () => {
+  reset()
+  scopedAuthz()
+  const denied = await post(validLink({ partyId: PARTY_B }))
+  assert.equal(denied.status, 404)
+  assert.deepEqual(await denied.json(), { error: 'party not found' })
+  assert.equal(state.currentPartyId, null)
+  assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
+  assert.equal(state.committed.some((t) => t.includes('insert into audit_log')), false)
+
+  const allowed = await post(validLink({ partyId: PARTY_A }))
+  assert.equal(allowed.status, 200)
+  assert.equal(state.currentPartyId, PARTY_A.toLowerCase())
 })

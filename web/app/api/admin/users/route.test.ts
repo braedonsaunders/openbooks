@@ -194,6 +194,16 @@ const mockSources = new Map<string, string>([
           ? { ...state.authz, allowedSubsidiaryIds: null }
           : state.authz
       }
+      // Direct-record visibility over one loaded party: the canonical
+      // subsidiary-scope rule (null scope passes; null subsidiary is
+      // org-wide only when the caller passes orgWideNull).
+      export function subsidiaryScopeAllows(scope, subsidiaryId, opts) {
+        if (scope === null || scope === undefined) return true
+        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === '') {
+          return (opts && opts.orgWideNull) === true
+        }
+        return scope.has(subsidiaryId)
+      }
     `,
   ],
 ])

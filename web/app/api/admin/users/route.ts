@@ -15,7 +15,8 @@ import {
   type SubsidiaryGrantCoverage,
 } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
-import { guardPermission, type Authz } from "../../../../lib/authz";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { guardPermission, subsidiaryScopeAllows, type Authz } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
 import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
@@ -531,11 +532,18 @@ export async function POST(req: Request) {
             kind: string;
             display_name: string;
             is_active: boolean;
+            subsidiary_id: string | null;
           }>(sql`
-            select id, kind, display_name, is_active from parties
+            select id, kind, display_name, is_active, subsidiary_id from parties
              where id = ${partyId} and org_id = ${actor.orgId}`);
           const found = party.rows[0];
           if (!found) return NextResponse.json({ error: "party not found" }, { status: 404 });
+          // A subsidiary-restricted admin cannot link a login to an employee
+          // outside their scope: out-of-scope answers exactly like missing,
+          // so the link writer cannot probe other subsidiaries' people.
+          if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, found.subsidiary_id, { orgWideNull: true })) {
+            return NextResponse.json({ error: "party not found" }, { status: 404 });
+          }
           if (!found.is_active) {
             return NextResponse.json({ error: "party is not active" }, { status: 422 });
           }
@@ -893,6 +901,10 @@ export async function GET(req: Request) {
   }
 
   const like = `%${rawQ}%`;
+  // A subsidiary-restricted admin may only enumerate parties they can see:
+  // null-subsidiary parties are org-wide shared, every other party must sit
+  // in the actor's allowed set. Unrestricted callers keep the whole roster.
+  const partyScope = subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true });
   const optionsR = await db.execute<{
     id: string;
     display_name: string;
@@ -909,7 +921,7 @@ export async function GET(req: Request) {
         union all
         select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active
       ) r on r.party_id = p.id
-     where p.org_id = ${orgId} and p.is_active
+     where p.org_id = ${orgId} and p.is_active ${partyScope}
        and (${rawQ} = '' or p.display_name ilike ${like} or coalesce(p.email, '') ilike ${like})
      group by p.id, p.display_name, p.kind
      order by p.display_name
@@ -956,7 +968,7 @@ export async function GET(req: Request) {
           union all
           select party_id, 'employee' as role from employee_roles where org_id = ${orgId} and is_active
         ) r on r.party_id = p.id
-       where p.org_id = ${orgId} and p.id = ${include}
+       where p.org_id = ${orgId} and p.id = ${include} ${partyScope}
        group by p.id, p.display_name, p.kind, p.is_active`);
     const found = selR.rows[0];
     if (found) selected = toOption(found, found.is_active);
