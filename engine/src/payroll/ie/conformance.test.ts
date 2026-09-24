@@ -41,6 +41,7 @@ function weekly(input: Partial<IeStatutoryInput>): IeStatutoryInput {
     uscPaidYtd: "0",
     uscExempt: false,
     uscReducedEligible: false,
+    prsiClass: "A",
     elapsedPeriods: 1,
     ...input,
   };
@@ -231,6 +232,18 @@ describe("IE conformance: DSP PRSI worked figures", () => {
     assert.equal(r.prsiEmployee, "8.0000");
     // Employer: 377 × 9.00% = 33.93.
     assert.equal(r.prsiEmployer, "33.9300");
+  });
+
+  it("DSP Class M has no employee or employer contribution", () => {
+    const r = calculateIeStatutory({
+      ...weekly({}),
+      taxablePayPeriod: "1000",
+      reckonablePayPeriod: "1000",
+      prsiClass: "M",
+    });
+    assert.equal(r.prsiSubclass, "M");
+    assert.equal(r.prsiEmployee, "0.0000");
+    assert.equal(r.prsiEmployer, "0.0000");
   });
 
   it("SW14 illustrative table: engine reproduces every charge to the penny except four 1c errata rows", () => {

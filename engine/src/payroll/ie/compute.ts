@@ -149,6 +149,8 @@ export interface IeStatutoryInput {
   uscPaidYtd: string;
   /** RPN states USC exemption (e.g. income at/below the €13,000 floor). */
   uscExempt: boolean;
+  /** Authoritative DSP PRSI class; only Class A and Class M are computed. */
+  prsiClass: string;
   /** 70+/medical-card reduced rates — refused by name (no status input). */
   uscReducedEligible: boolean;
   /**
@@ -358,6 +360,12 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
         "standard bands on a reduced-rate employee would be wrong money",
     );
   }
+  if (input.prsiClass !== "A" && input.prsiClass !== "M") {
+    fail(
+      `PRSI class ${input.prsiClass || "(unset)"} is not implemented — only Classes A and M are supported; `
+      + "determine the employee's class under DSP rules and use payroll software that computes it.",
+    );
+  }
   if (!Number.isInteger(input.elapsedPeriods) || input.elapsedPeriods < 1) {
     fail(`elapsed periods must be a positive integer, got ${input.elapsedPeriods}`);
   }
@@ -415,6 +423,9 @@ export function calculateIeStatutory(input: IeStatutoryInput): IeStatutoryResult
       "four-weekly PRSI has no published bands (DSP publishes weekly, " +
         "fortnightly and monthly only) — refused by name",
     );
+  } else if (input.prsiClass === "M") {
+    // DSP Class M: no contribution is payable by the employee or employer.
+    prsi = { employee: 0n, employer: 0n, subclass: "M" };
   } else {
     prsi = prsiPass(edition, input.periodsPerYear as 12 | 26 | 52, reckonable);
   }
