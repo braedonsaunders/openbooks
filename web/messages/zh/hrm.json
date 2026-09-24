@@ -489,15 +489,15 @@
     },
     "segmentsLabel": "显示",
     "templates": {
-      "title": "Checklist templates", "description": "Reusable onboarding, offboarding, and transfer checklists. Opening a checklist snapshots its template so later edits never rewrite history.",
-      "newTemplate": "New template", "editTemplate": "Edit template", "createTemplate": "Create a template", "createDescription": "Define who this checklist covers, then add its ordered steps.", "editDescription": "Edit the reusable definition. Already-opened checklists keep their original snapshot.",
-      "template": "Template", "name": "Name", "kind": "Kind", "scope": "Applies to", "status": "Status", "active": "Active", "retired": "Retired", "subsidiary": "Employer subsidiary", "department": "Department", "allSubsidiaries": "All subsidiaries", "allDepartments": "All departments", "allEmployees": "All employees", "limitedScope": "Limited scope",
-      "steps": "Steps", "stepsDescription": "Ordered work copied into each new checklist.", "addStep": "Add step", "newStep": "New step", "editStep": "Edit step", "deleteStep": "Delete step", "stepTitle": "Step title", "stepDescription": "Description", "owner": "Owner", "namedOwner": "Named person", "dueOffset": "Due offset (days)", "evidence": "Evidence", "required": "Required",
-      "saveBeforeSteps": "Save the template details first, then add at least one step before using it for a checklist.", "noSteps": "This template is not ready. Add at least one step before it can be selected for a checklist.", "noneEligible": "No ready template covers this employee, kind, and date.", "loadFailed": "Templates could not be loaded.", "saveFailed": "The template could not be saved.", "stepSaveFailed": "The template step could not be saved.", "stepDeleteFailed": "The template step could not be deleted.",
-      "created": "Template created. Add its steps before opening a checklist.", "updated": "Template updated.", "stepCreated": "Step added.", "stepUpdated": "Step updated.", "stepDeleted": "Step deleted.", "confirmDeleteStep": "Delete the step “{title}”? Open checklists keep their existing snapshot.", "stepSummary": "{owner} · due {days} days from the effective date", "search": "Search templates", "empty": "No templates match this search.", "backToChecklists": "Back to checklists",
-      "kinds": { "onboarding": "Onboarding", "offboarding": "Offboarding", "transfer": "Transfer" },
-      "owners": { "manager": "Manager", "hr": "HR", "employee": "Employee", "named_party": "Named person" },
-      "evidenceKinds": { "none": "None", "acknowledgement": "Acknowledgement", "attachment": "Attachment" }
+      "title": "清单模板", "description": "可复用的入职、离职和调动清单。打开清单时会固定其模板，因此后续更改不会重写历史。",
+      "newTemplate": "新建模板", "editTemplate": "编辑模板", "createTemplate": "创建模板", "createDescription": "先确定此清单覆盖的人员，再按顺序添加步骤。", "editDescription": "编辑可复用的定义。已打开的清单保留其原始快照。",
+      "template": "模板", "name": "名称", "kind": "类型", "scope": "适用于", "status": "状态", "active": "启用", "retired": "停用", "subsidiary": "雇佣子公司", "department": "部门", "allSubsidiaries": "所有子公司", "allDepartments": "所有部门", "allEmployees": "所有员工", "limitedScope": "有限范围",
+      "steps": "步骤", "stepsDescription": "复制到每个新清单的有序工作。", "addStep": "添加步骤", "newStep": "新建步骤", "editStep": "编辑步骤", "deleteStep": "删除步骤", "stepTitle": "步骤标题", "stepDescription": "描述", "owner": "负责人", "namedOwner": "指定人员", "dueOffset": "到期（天）", "evidence": "凭证", "required": "必需",
+      "saveBeforeSteps": "先保存模板详细信息，再添加至少一个步骤，然后才能用于清单。", "noSteps": "此模板尚未就绪。先添加至少一个步骤，才能将其选用于清单。", "noneEligible": "没有就绪模板覆盖此员工、类型和日期。", "loadFailed": "无法加载模板。", "saveFailed": "无法保存模板。", "stepSaveFailed": "无法保存模板步骤。", "stepDeleteFailed": "无法删除模板步骤。",
+      "created": "模板已创建。打开清单前请先添加步骤。", "updated": "模板已更新。", "stepCreated": "步骤已添加。", "stepUpdated": "步骤已更新。", "stepDeleted": "步骤已删除。", "confirmDeleteStep": "删除步骤“{title}”吗?打开的清单将保留其现有快照。", "stepSummary": "{owner} · 自生效日期起 {days} 天到期", "search": "搜索模板", "empty": "没有模板符合此次搜索。", "backToChecklists": "返回清单",
+      "kinds": { "onboarding": "入职", "offboarding": "离职", "transfer": "调动" },
+      "owners": { "manager": "经理", "hr": "人力资源", "employee": "员工", "named_party": "指定人员" },
+      "evidenceKinds": { "none": "无", "acknowledgement": "确认", "attachment": "附件" }
     }
   },
   "leave": {

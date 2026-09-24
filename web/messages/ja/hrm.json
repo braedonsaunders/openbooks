@@ -489,15 +489,15 @@
     },
     "segmentsLabel": "表示",
     "templates": {
-      "title": "Checklist templates", "description": "Reusable onboarding, offboarding, and transfer checklists. Opening a checklist snapshots its template so later edits never rewrite history.",
-      "newTemplate": "New template", "editTemplate": "Edit template", "createTemplate": "Create a template", "createDescription": "Define who this checklist covers, then add its ordered steps.", "editDescription": "Edit the reusable definition. Already-opened checklists keep their original snapshot.",
-      "template": "Template", "name": "Name", "kind": "Kind", "scope": "Applies to", "status": "Status", "active": "Active", "retired": "Retired", "subsidiary": "Employer subsidiary", "department": "Department", "allSubsidiaries": "All subsidiaries", "allDepartments": "All departments", "allEmployees": "All employees", "limitedScope": "Limited scope",
-      "steps": "Steps", "stepsDescription": "Ordered work copied into each new checklist.", "addStep": "Add step", "newStep": "New step", "editStep": "Edit step", "deleteStep": "Delete step", "stepTitle": "Step title", "stepDescription": "Description", "owner": "Owner", "namedOwner": "Named person", "dueOffset": "Due offset (days)", "evidence": "Evidence", "required": "Required",
-      "saveBeforeSteps": "Save the template details first, then add at least one step before using it for a checklist.", "noSteps": "This template is not ready. Add at least one step before it can be selected for a checklist.", "noneEligible": "No ready template covers this employee, kind, and date.", "loadFailed": "Templates could not be loaded.", "saveFailed": "The template could not be saved.", "stepSaveFailed": "The template step could not be saved.", "stepDeleteFailed": "The template step could not be deleted.",
-      "created": "Template created. Add its steps before opening a checklist.", "updated": "Template updated.", "stepCreated": "Step added.", "stepUpdated": "Step updated.", "stepDeleted": "Step deleted.", "confirmDeleteStep": "Delete the step “{title}”? Open checklists keep their existing snapshot.", "stepSummary": "{owner} · due {days} days from the effective date", "search": "Search templates", "empty": "No templates match this search.", "backToChecklists": "Back to checklists",
-      "kinds": { "onboarding": "Onboarding", "offboarding": "Offboarding", "transfer": "Transfer" },
-      "owners": { "manager": "Manager", "hr": "HR", "employee": "Employee", "named_party": "Named person" },
-      "evidenceKinds": { "none": "None", "acknowledgement": "Acknowledgement", "attachment": "Attachment" }
+      "title": "チェックリストテンプレート", "description": "再利用可能なオンボーディング、オフボーディング、異動チェックリスト。チェックリストを開くとテンプレートがスナップショットされるため、後の編集で履歴が書き換わることはありません。",
+      "newTemplate": "新しいテンプレート", "editTemplate": "テンプレートを編集", "createTemplate": "テンプレートを作成", "createDescription": "このチェックリストの対象者を定義してから、手順を順番に追加します。", "editDescription": "再利用可能な定義を編集します。開いているチェックリストは元のスナップショットを保持します。",
+      "template": "テンプレート", "name": "名称", "kind": "種類", "scope": "対象", "status": "ステータス", "active": "有効", "retired": "廃止", "subsidiary": "雇用主となる子会社", "department": "部門", "allSubsidiaries": "すべての子会社", "allDepartments": "すべての部門", "allEmployees": "すべての従業員", "limitedScope": "限定範囲",
+      "steps": "手順", "stepsDescription": "新しいチェックリストごとにコピーされる順序付きの作業。", "addStep": "手順を追加", "newStep": "新しい手順", "editStep": "手順を編集", "deleteStep": "手順を削除", "stepTitle": "手順のタイトル", "stepDescription": "説明", "owner": "担当者", "namedOwner": "指定者", "dueOffset": "期限（日数）", "evidence": "証跡", "required": "必須",
+      "saveBeforeSteps": "チェックリストに使用する前に、テンプレートの詳細を保存し、少なくとも1つの手順を追加してください。", "noSteps": "このテンプレートは未完成です。チェックリストに選択できるようにするには、少なくとも1つの手順を追加してください。", "noneEligible": "この従業員、種類、日付をカバーする完成済みテンプレートはありません。", "loadFailed": "テンプレートを読み込めませんでした。", "saveFailed": "テンプレートを保存できませんでした。", "stepSaveFailed": "テンプレートの手順を保存できませんでした。", "stepDeleteFailed": "テンプレートの手順を削除できませんでした。",
+      "created": "テンプレートを作成しました。チェックリストを開く前に手順を追加してください。", "updated": "テンプレートを更新しました。", "stepCreated": "手順を追加しました。", "stepUpdated": "手順を更新しました。", "stepDeleted": "手順を削除しました。", "confirmDeleteStep": "手順「{title}」を削除しますか?開いているチェックリストは既存のスナップショットを保持します。", "stepSummary": "{owner} · 発効日から {days} 日が期限", "search": "テンプレートを検索", "empty": "この検索に一致するテンプレートはありません。", "backToChecklists": "チェックリストに戻る",
+      "kinds": { "onboarding": "オンボーディング", "offboarding": "オフボーディング", "transfer": "異動" },
+      "owners": { "manager": "マネージャー", "hr": "人事", "employee": "従業員", "named_party": "指定者" },
+      "evidenceKinds": { "none": "なし", "acknowledgement": "確認", "attachment": "添付ファイル" }
     }
   },
   "leave": {

@@ -489,15 +489,15 @@
     },
     "segmentsLabel": "Afficher",
     "templates": {
-      "title": "Checklist templates", "description": "Reusable onboarding, offboarding, and transfer checklists. Opening a checklist snapshots its template so later edits never rewrite history.",
-      "newTemplate": "New template", "editTemplate": "Edit template", "createTemplate": "Create a template", "createDescription": "Define who this checklist covers, then add its ordered steps.", "editDescription": "Edit the reusable definition. Already-opened checklists keep their original snapshot.",
-      "template": "Template", "name": "Name", "kind": "Kind", "scope": "Applies to", "status": "Status", "active": "Active", "retired": "Retired", "subsidiary": "Employer subsidiary", "department": "Department", "allSubsidiaries": "All subsidiaries", "allDepartments": "All departments", "allEmployees": "All employees", "limitedScope": "Limited scope",
-      "steps": "Steps", "stepsDescription": "Ordered work copied into each new checklist.", "addStep": "Add step", "newStep": "New step", "editStep": "Edit step", "deleteStep": "Delete step", "stepTitle": "Step title", "stepDescription": "Description", "owner": "Owner", "namedOwner": "Named person", "dueOffset": "Due offset (days)", "evidence": "Evidence", "required": "Required",
-      "saveBeforeSteps": "Save the template details first, then add at least one step before using it for a checklist.", "noSteps": "This template is not ready. Add at least one step before it can be selected for a checklist.", "noneEligible": "No ready template covers this employee, kind, and date.", "loadFailed": "Templates could not be loaded.", "saveFailed": "The template could not be saved.", "stepSaveFailed": "The template step could not be saved.", "stepDeleteFailed": "The template step could not be deleted.",
-      "created": "Template created. Add its steps before opening a checklist.", "updated": "Template updated.", "stepCreated": "Step added.", "stepUpdated": "Step updated.", "stepDeleted": "Step deleted.", "confirmDeleteStep": "Delete the step “{title}”? Open checklists keep their existing snapshot.", "stepSummary": "{owner} · due {days} days from the effective date", "search": "Search templates", "empty": "No templates match this search.", "backToChecklists": "Back to checklists",
-      "kinds": { "onboarding": "Onboarding", "offboarding": "Offboarding", "transfer": "Transfer" },
-      "owners": { "manager": "Manager", "hr": "HR", "employee": "Employee", "named_party": "Named person" },
-      "evidenceKinds": { "none": "None", "acknowledgement": "Acknowledgement", "attachment": "Attachment" }
+      "title": "Modèles de listes", "description": "Listes d'intégration, de départ et de transfert réutilisables. L'ouverture d'une liste fige son modèle, si bien que les modifications ultérieures ne réécrivent jamais l'historique.",
+      "newTemplate": "Nouveau modèle", "editTemplate": "Modifier le modèle", "createTemplate": "Créer un modèle", "createDescription": "Définissez qui cette liste couvre, puis ajoutez ses étapes dans l'ordre.", "editDescription": "Modifiez la définition réutilisable. Les listes déjà ouvertes conservent leur instantané d'origine.",
+      "template": "Modèle", "name": "Nom", "kind": "Type", "scope": "S'applique à", "status": "Statut", "active": "Actif", "retired": "Retiré", "subsidiary": "Filiale employeuse", "department": "Service", "allSubsidiaries": "Toutes les filiales", "allDepartments": "Tous les services", "allEmployees": "Tous les employés", "limitedScope": "Portée limitée",
+      "steps": "Étapes", "stepsDescription": "Travail ordonné copié dans chaque nouvelle liste.", "addStep": "Ajouter une étape", "newStep": "Nouvelle étape", "editStep": "Modifier l'étape", "deleteStep": "Supprimer l'étape", "stepTitle": "Titre de l'étape", "stepDescription": "Description", "owner": "Responsable", "namedOwner": "Personne désignée", "dueOffset": "Échéance (en jours)", "evidence": "Preuve", "required": "Requis",
+      "saveBeforeSteps": "Enregistrez d'abord les détails du modèle, puis ajoutez au moins une étape avant de l'utiliser pour une liste.", "noSteps": "Ce modèle n'est pas prêt. Ajoutez au moins une étape avant de pouvoir le sélectionner pour une liste.", "noneEligible": "Aucun modèle prêt ne couvre cet employé, ce type et cette date.", "loadFailed": "Impossible de charger les modèles.", "saveFailed": "Impossible d'enregistrer le modèle.", "stepSaveFailed": "Impossible d'enregistrer l'étape du modèle.", "stepDeleteFailed": "Impossible de supprimer l'étape du modèle.",
+      "created": "Modèle créé. Ajoutez ses étapes avant d'ouvrir une liste.", "updated": "Modèle mis à jour.", "stepCreated": "Étape ajoutée.", "stepUpdated": "Étape mise à jour.", "stepDeleted": "Étape supprimée.", "confirmDeleteStep": "Supprimer l'étape « {title} » ? Les listes ouvertes conservent leur instantané.", "stepSummary": "{owner} · échéance {days} jours après la date d'effet", "search": "Rechercher des modèles", "empty": "Aucun modèle ne correspond à cette recherche.", "backToChecklists": "Retour aux listes",
+      "kinds": { "onboarding": "Intégration", "offboarding": "Départ", "transfer": "Transfert" },
+      "owners": { "manager": "Manager", "hr": "RH", "employee": "Employé", "named_party": "Personne désignée" },
+      "evidenceKinds": { "none": "Aucune", "acknowledgement": "Accusé de réception", "attachment": "Pièce jointe" }
     }
   },
   "leave": {
@@ -1742,7 +1742,7 @@
     },
     "alertsTitle": "Alertes d'expiration",
     "alertsEmpty": "Aucune alerte émise.",
-    "alertDue": "Due",
+    "alertDue": "Échéance",
     "taxonomyTitle": "Taxonomie des qualifications",
     "windowOpen": "{from} – en cours",
     "verify": "Vérifier",
