@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "Feeds bancários",
     "description": "Conecte contas bancárias para a importação automatizada de extratos — feeds agregadores ao vivo ou o endpoint SFTP integrado.",
-    "navTitle": "Bank Feeds",
+    "navTitle": "Feeds bancários",
     "tabs": {
       "connections": "Conexões",
       "sftp-endpoint": "Endpoint SFTP",
@@ -726,7 +726,7 @@
     "operational": {
       "title": "Conexões de feeds bancários",
       "manage": "Gerenciar feeds",
-      "none": "Nenhuma conexão bancária ativa. Configure uma em Company Settings → Bank Feeds.",
+      "none": "Nenhuma conexão bancária ativa. Configure uma em Configuração → Feeds bancários.",
       "lastSync": "Última sincronização",
       "lastAttempt": "Última tentativa",
       "never": "Nunca"
@@ -764,7 +764,7 @@
         "addConnection": "Adicionar conexão",
         "cancel": "Cancelar"
       },
-      "title": "Bank Feeds",
+      "title": "Feeds bancários",
       "description": "Conecte cada conta bancária para a importação automatizada de extratos — feeds ao vivo, entregas de arquivos SFTP ou upload manual. Tudo é importado pelo mesmo pipeline de conciliação.",
       "addConnection": "+ Adicionar conexão",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "A conta de compensação com os recebíveis pendentes até o repasse. Obrigatória antes de lançar.",
     "stripePayloadLabel": "Array JSON de transações de saldo",
     "genericPayloadLabel": "Objeto JSON da liquidação",
-    "payloadShapeHint": "Cada linha requer id, type, amount em unidades mínimas, fee, net e currency — ex.: {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Sem type, a linha não pode ser classificada.",
+    "payloadShapeHint": "Cada linha requer id, type, amount em unidades mínimas, fee, net e currency — ex.: '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'. Sem type, a linha não pode ser classificada.",
     "genericPayloadHint": "Um objeto JSON por liquidação: id, moeda, valores de cobrança/reembolso/taxas/líquido e linhas opcionais.",
     "accountPlaceholder": "Selecionar conta…",
     "uploadPayload": "Enviar JSON",

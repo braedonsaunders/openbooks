@@ -911,7 +911,7 @@
     "clearingAccountHint": "The clearing account holding provider receivables until payout. Required before posting.",
     "stripePayloadLabel": "Balance transactions JSON array",
     "genericPayloadLabel": "Settlement JSON object",
-    "payloadShapeHint": "Each row needs id, type, amount in minor units, fee, net and currency — e.g. {\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}. Without a type the row cannot be classified.",
+    "payloadShapeHint": "Each row needs id, type, amount in minor units, fee, net and currency — e.g. '{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'. Without a type the row cannot be classified.",
     "genericPayloadHint": "One JSON object for a single settlement: id, currency, charge/refund/fee/net amounts, and optional lines.",
     "accountPlaceholder": "Select an account…",
     "uploadPayload": "Upload JSON",

@@ -422,7 +422,7 @@
     "orPasteBelow": "或在下方粘贴",
     "statementText": "对账单文本",
     "pastePlaceholderOfx": "'<OFX>…<STMTTRN>…'",
-    "pastePlaceholderCsv": "Date,Description,Amount\n2026-07-02,Payroll run,-18250.00",
+    "pastePlaceholderCsv": "日期,描述,金额\n2026-07-02,工资发放,-18250.00",
     "columnMapping": "列映射",
     "selectColumn": "选择列…",
     "columnN": "第 {n} 列",
@@ -714,9 +714,9 @@
     }
   },
   "bankFeeds": {
-    "title": "Bank Feeds",
+    "title": "银行数据",
     "description": "连接银行账户，实现对账单自动导入 — 实时聚合源或内置SFTP端点。",
-    "navTitle": "Bank Feeds",
+    "navTitle": "银行数据",
     "tabs": {
       "connections": "连接",
       "sftp-endpoint": "SFTP端点",
@@ -726,7 +726,7 @@
     "operational": {
       "title": "银行数据连接",
       "manage": "管理推送",
-      "none": "没有启用的银行数据连接。请前往 Company Settings → Bank Feeds 配置。",
+      "none": "没有启用的银行数据连接。请前往 设置 → 银行数据 配置。",
       "lastSync": "上次同步",
       "lastAttempt": "上次尝试",
       "never": "从未"
@@ -764,7 +764,7 @@
         "addConnection": "添加连接",
         "cancel": "取消"
       },
-      "title": "Bank Feeds",
+      "title": "银行数据",
       "description": "连接每个银行账户，实现对账单自动导入 — 实时源、SFTP文件投递或手动上传。所有导入经由同一对账管道。",
       "addConnection": "+ 添加连接",
       "empty": {
@@ -904,7 +904,7 @@
     "clearingAccountHint": "在付款前挂账应收支付机构款项的清算账户。过账前必填。",
     "stripePayloadLabel": "余额交易 JSON 数组",
     "genericPayloadLabel": "结算 JSON 对象",
-    "payloadShapeHint": "每行需要 id、type、最小单位的 amount、fee、net 和 currency — 例如：{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}。缺少 type 的行无法分类。",
+    "payloadShapeHint": "每行需要 id、type、最小单位的 amount、fee、net 和 currency — 例如：'{\"id\":\"ch_1\",\"type\":\"charge\",\"amount\":250000,\"fee\":7250,\"net\":242750,\"currency\":\"USD\"}'。缺少 type 的行无法分类。",
     "genericPayloadHint": "每次结算对应一个JSON对象：id、币种、收费/退款/手续费/净额，以及可选明细行。",
     "accountPlaceholder": "选择账户…",
     "uploadPayload": "上传 JSON",
