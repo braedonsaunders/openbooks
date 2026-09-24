@@ -11,7 +11,9 @@ import {
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
-import { OK_CERTIFICATE, OK_REGION, OK_RATES_2026, OK_WITHHOLDING, okPeriodTax } from "./ok.ts";
+import {
+  OK_CERTIFICATE, OK_OW9MSE_CERTIFICATE, OK_REGION, OK_RATES_2026, OK_WITHHOLDING, okPeriodTax,
+} from "./ok.ts";
 import { pctToRate } from "./transcription.ts";
 import { money, resolvedCertificate } from "./conformance-support.ts";
 
@@ -20,8 +22,40 @@ const cert = (answers: Record<string, string> = {}): ResolvedCertificate =>
 
 test("OK certificate and region declarations are well formed", () => {
   assert.equal(certificateDeclarationProblem(OK_CERTIFICATE), null);
+  assert.equal(certificateDeclarationProblem(OK_OW9MSE_CERTIFICATE), null);
   assert.equal(OK_REGION.implemented, true);
   assert.equal(OK_REGION.certificateKey, "us_ok_okw4");
+});
+
+test("OK-W-4 line 8 requires the annual OW-9-MSE and employer evidence", () => {
+  const wages = {
+    payDate: "2026-03-15", periodsPerYear: 24, wages: "1825.00", basis: "resident" as const,
+  };
+  assert.throws(() => OK_WITHHOLDING.compute({
+    ...wages, certificate: cert({ military_spouse_exempt: "true" }),
+  }), /Oklahoma military-spouse withholding exemption requires the filed state exemption certificate/);
+
+  const incomplete = resolvedCertificate(OK_OW9MSE_CERTIFICATE, {
+    employee_is_not_servicemember: "true", spouse_is_servicemember: "true",
+  });
+  assert.throws(() => OK_WITHHOLDING.compute({
+    ...wages,
+    certificate: cert({ military_spouse_exempt: "true" }),
+    supportingCertificates: { us_ok_ow9mse: incomplete },
+  }), /Oklahoma military-spouse withholding exemption requires proof that .*orders.*domicile.*same state.*Leave and Earnings Statement.*ID/);
+
+  const complete = resolvedCertificate(OK_OW9MSE_CERTIFICATE, Object.fromEntries([
+    "employee_is_not_servicemember", "spouse_is_servicemember", "current_orders_assign_ok",
+    "employee_domiciled_outside_ok", "spouses_share_tax_domicile", "latest_spouse_les_on_file",
+    "current_military_id_on_file",
+  ].map((key) => [key, "true"])));
+  const result = OK_WITHHOLDING.compute({
+    ...wages,
+    certificate: cert({ military_spouse_exempt: "true" }),
+    supportingCertificates: { us_ok_ow9mse: complete },
+  });
+  assert.equal(result.tax, money("0"));
+  assert.equal(result.factors.OK_MILITARY_SPOUSE_EXEMPT, money("0.0001"));
 });
 
 test("OK printed percents and the sample's $612.66 remainder", () => {
