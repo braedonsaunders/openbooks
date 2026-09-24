@@ -111,7 +111,7 @@ async function racePair(
   const gate = new Promise<void>((resolve) => { release = resolve; });
   const run = (captureItemId: string): Promise<Materialized> => (async () => {
     await gate;
-    return materializeCapture({ orgId, captureItemId, actorId: null });
+    return materializeCapture({ orgId, captureItemId, actorId: null, allowedSubsidiaryIds: null });
   })();
   const first = run(firstId);
   const second = run(secondId);
@@ -184,7 +184,7 @@ test("same source file with divergent invoice numbers admits exactly one draft",
     // Sequential replay of the winner stays idempotent on the existing path.
     const replay = await materializeCapture({ orgId: org.orgId, captureItemId: (await db.execute<{ id: string }>(sql`
       select id from ap_capture_items where org_id = ${org.orgId} and document_id = ${documentId}
-    `)).rows[0]!.id, actorId: null });
+    `)).rows[0]!.id, actorId: null, allowedSubsidiaryIds: null });
     assert.equal(replay.documentId, documentId, "replaying a materialized capture returns the same draft");
   } finally {
     await cleanup(org.orgId);
@@ -198,10 +198,10 @@ test("sequential duplicate of the same source file is refused", { skip: !DB }, a
     const contentHash = `dupseq-${randomUUID().replaceAll("-", "")}`;
     const first = await insertCapture(org, fileId, "SEQ-INV-A", contentHash, false);
     const second = await insertCapture(org, fileId, "SEQ-INV-B", contentHash, true);
-    const won = await materializeCapture({ orgId: org.orgId, captureItemId: first, actorId: null });
+    const won = await materializeCapture({ orgId: org.orgId, captureItemId: first, actorId: null, allowedSubsidiaryIds: null });
     assert.ok(won.documentId);
     await assert.rejects(
-      materializeCapture({ orgId: org.orgId, captureItemId: second, actorId: null }),
+      materializeCapture({ orgId: org.orgId, captureItemId: second, actorId: null, allowedSubsidiaryIds: null }),
       (error: unknown) => error instanceof CaptureMaterializationError
         && /already uses this source or vendor invoice number/.test(error.message),
     );
@@ -265,11 +265,11 @@ test("the source fence is org-scoped: identical hash and invoice in two orgs bot
     const gate = new Promise<void>((resolve) => { release = resolve; });
     const runA = (async () => {
       await gate;
-      return materializeCapture({ orgId: orgA.orgId, captureItemId: itemA, actorId: null });
+      return materializeCapture({ orgId: orgA.orgId, captureItemId: itemA, actorId: null, allowedSubsidiaryIds: null });
     })();
     const runB = (async () => {
       await gate;
-      return materializeCapture({ orgId: orgB.orgId, captureItemId: itemB, actorId: null });
+      return materializeCapture({ orgId: orgB.orgId, captureItemId: itemB, actorId: null, allowedSubsidiaryIds: null });
     })();
     release();
     const raced = await Promise.allSettled([runA, runB]);

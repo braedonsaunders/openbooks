@@ -511,14 +511,14 @@ test(
       }
 
       const billId = await insertCapture("vendor_bill", "BILL-CAPTURE-REG", "2.1250");
-      const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
+      const bill = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId, allowedSubsidiaryIds: null });
       assert.ok(bill.documentId);
       let billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
       `)).rows[0]!.quantity_billed);
       assert.equal(billed, "6.1250", "a positive vendor bill increases PO billed quantity");
 
-      const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId });
+      const replay = await materializeCapture({ orgId: org.orgId, captureItemId: billId, actorId, allowedSubsidiaryIds: null });
       assert.equal(replay.documentId, bill.documentId, "replaying a materialized capture is idempotent");
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
@@ -526,7 +526,7 @@ test(
       assert.equal(billed, "6.1250");
 
       const creditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-REG", "2.1250");
-      const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditId, actorId });
+      const credit = await materializeCapture({ orgId: org.orgId, captureItemId: creditId, actorId, allowedSubsidiaryIds: null });
       assert.ok(credit.documentId);
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
         select quantity_billed::text from document_lines where id = ${poLineId}
@@ -535,7 +535,7 @@ test(
 
       const overCreditId = await insertCapture("vendor_credit", "CREDIT-CAPTURE-OVER", "4.0001");
       await assert.rejects(
-        materializeCapture({ orgId: org.orgId, captureItemId: overCreditId, actorId }),
+        materializeCapture({ orgId: org.orgId, captureItemId: overCreditId, actorId, allowedSubsidiaryIds: null }),
         (error: unknown) => error instanceof CaptureMaterializationError && /insufficient billed quantity/.test(error.message),
       );
       billed = normalizeCapturedDecimal((await db.execute<{ quantity_billed: string }>(sql`
@@ -546,8 +546,8 @@ test(
       const racingBillA = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-A", "4.0000");
       const racingBillB = await insertCapture("vendor_bill", "BILL-CAPTURE-RACE-B", "4.0000");
       const raced = await Promise.allSettled([
-        materializeCapture({ orgId: org.orgId, captureItemId: racingBillA, actorId }),
-        materializeCapture({ orgId: org.orgId, captureItemId: racingBillB, actorId }),
+        materializeCapture({ orgId: org.orgId, captureItemId: racingBillA, actorId, allowedSubsidiaryIds: null }),
+        materializeCapture({ orgId: org.orgId, captureItemId: racingBillB, actorId, allowedSubsidiaryIds: null }),
       ]);
       assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
       assert.equal(raced.filter((result) => result.status === "rejected").length, 1);
@@ -639,8 +639,8 @@ test(
       // is the materialize fence.
       const [itemA, itemB] = [await insertCapture(fileA), await insertCapture(fileB)];
       const raced = await Promise.allSettled([
-        materializeCapture({ orgId: org.orgId, captureItemId: itemA, actorId: null }),
-        materializeCapture({ orgId: org.orgId, captureItemId: itemB, actorId: null }),
+        materializeCapture({ orgId: org.orgId, captureItemId: itemA, actorId: null, allowedSubsidiaryIds: null }),
+        materializeCapture({ orgId: org.orgId, captureItemId: itemB, actorId: null, allowedSubsidiaryIds: null }),
       ]);
       assert.equal(raced.filter((result) => result.status === "fulfilled").length, 1);
       const rejected = raced.filter((result) => result.status === "rejected");
@@ -764,7 +764,7 @@ test(
                 '{}'::jsonb, '[]'::jsonb, null, null)
       `);
 
-      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId, fetchImpl: stubFetch, lookup: stubLookup });
+      await processCaptureItem({ orgId: org.orgId, captureItemId: captureId, allowedSubsidiaryIds: null, fetchImpl: stubFetch, lookup: stubLookup });
 
       const item = (await db.execute<{
         status: string; normalized: NormalizedCapture; validation_issues: CaptureIssue[];

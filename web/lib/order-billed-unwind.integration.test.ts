@@ -248,7 +248,7 @@ test("deleting a draft captured bill restores the purchase order billed quantity
     const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-DELETE-1",
     }));
-    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId }));
+    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId, allowedSubsidiaryIds: null }));
     assert.equal(await billedOf(org.orgId, poId), "10.00000000");
     await withBypassContext(() => deleteDocument(materialized.documentId, actorId, org.orgId, { reason: "Discard a mistakenly captured draft" }));
     assert.equal(await billedOf(org.orgId, poId), "0.00000000");
@@ -269,7 +269,7 @@ test("voiding a captured bill restores the purchase order billed quantity", { sk
     const itemId = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId: lineId, quantity: "10", invoiceNumber: "AP-VOID-1",
     }));
-    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId }));
+    const materialized = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: itemId, actorId, allowedSubsidiaryIds: null }));
     await approveAndPostBill(org, materialized.documentId);
     const voided = await requestDocumentVoid({
       documentId: materialized.documentId, orgId: org.orgId, actorId,
@@ -288,13 +288,13 @@ test("voiding a captured vendor credit re-consumes the purchase order billed qua
     const billItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_bill", poId, poLineId, quantity: "10", invoiceNumber: "AP-CREDIT-BILL-1",
     }));
-    const bill = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: billItem, actorId }));
+    const bill = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: billItem, actorId, allowedSubsidiaryIds: null }));
     await approveAndPostBill(org, bill.documentId);
     assert.equal(await billedOf(org.orgId, poId), "10.00000000");
     const creditItem = await withBypassContext(() => seedCaptureItem(org, actorId, {
       kind: "vendor_credit", poId, poLineId, quantity: "4", invoiceNumber: "AP-CREDIT-1",
     }));
-    const credit = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: creditItem, actorId }));
+    const credit = await withBypassContext(() => materializeCapture({ orgId: org.orgId, captureItemId: creditItem, actorId, allowedSubsidiaryIds: null }));
     assert.equal(await billedOf(org.orgId, poId), "6.00000000");
     await approveAndPostBill(org, credit.documentId);
     const voided = await requestDocumentVoid({

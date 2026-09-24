@@ -79,17 +79,19 @@ test("the third confirmation writes an activation audit and reports the rule", {
       orgId: org.orgId,
       captureItemId: await insertCapture(org, fileId, `RULE-INV-1-${randomUUID().slice(0, 8)}`),
       actorId,
+      allowedSubsidiaryIds: null,
     });
     assert.deepEqual(first.rulesActivated, [], "the first confirmation activates nothing");
     const second = await materializeCapture({
       orgId: org.orgId,
       captureItemId: await insertCapture(org, fileId, `RULE-INV-2-${randomUUID().slice(0, 8)}`),
       actorId,
+      allowedSubsidiaryIds: null,
     });
     assert.deepEqual(second.rulesActivated, [], "the second confirmation activates nothing");
 
     const thirdCaptureId = await insertCapture(org, fileId, `RULE-INV-3-${randomUUID().slice(0, 8)}`);
-    const third = await materializeCapture({ orgId: org.orgId, captureItemId: thirdCaptureId, actorId });
+    const third = await materializeCapture({ orgId: org.orgId, captureItemId: thirdCaptureId, actorId, allowedSubsidiaryIds: null });
     const kinds = third.rulesActivated.map((rule) => rule.ruleKind).sort();
     assert.deepEqual(kinds, ["vendor_account", "vendor_alias"]);
 

@@ -445,7 +445,20 @@ export async function resolveAndValidateCapture(input: {
   return { normalized, vendorId, purchaseOrderId, issues, duplicate };
 }
 
-export async function processCaptureItem(input: { orgId: string; captureItemId: string; actorId?: string; fetchImpl?: typeof fetch; lookup?: AddressLookup }): Promise<void> {
+export async function processCaptureItem(input: {
+  orgId: string;
+  captureItemId: string;
+  actorId?: string;
+  /**
+   * The actor's subsidiary scope, REQUIRED with no default: null is the
+   * explicit unrestricted sentinel. The worker carries the enqueue-time
+   * capture here so auto-materialize cannot inherit an unrestricted worker
+   * context for a restricted uploader.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  fetchImpl?: typeof fetch;
+  lookup?: AddressLookup;
+}): Promise<void> {
   const claimed = (await db.execute<CaptureRow>(sql`
     update ap_capture_items set status = 'extracting', attempts = attempts + 1,
            last_error = null, updated_at = now(), updated_by = ${input.actorId ?? null}
@@ -517,7 +530,37 @@ export async function processCaptureItem(input: { orgId: string; captureItemId: 
     });
     if (settings.autoCreatePoMatchedDrafts && resolved.purchaseOrderId && !resolved.duplicate
         && resolved.issues.length === 0) {
-      await materializeCapture({ orgId: input.orgId, captureItemId: item.id, actorId: input.actorId ?? item.created_by });
+      try {
+        await materializeCapture({
+          orgId: input.orgId,
+          captureItemId: item.id,
+          actorId: input.actorId ?? item.created_by,
+          allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+        });
+      } catch (error) {
+        if (!(error instanceof CaptureScopeDeniedError)) throw error;
+        // The match sits outside the uploader's scope: an out-of-scope match
+        // stays in review for a supervisor whose scope covers the purchase
+        // order instead of auto-creating another entity's vendor bill (and
+        // instead of failing the capture, which would bury it).
+        const actorId = input.actorId ?? item.created_by;
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`
+            update ap_capture_items
+               set status = 'needs_review',
+                   validation_issues = coalesce(validation_issues, '[]'::jsonb)
+                     || ${JSON.stringify(issue("purchase_order_out_of_scope", "blocking", { field: "purchaseOrderNumber" }))}::jsonb,
+                   updated_at = now(), updated_by = ${actorId}
+             where id = ${item.id} and org_id = ${input.orgId}
+          `);
+          await tx.execute(sql`
+            insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+            values (${input.orgId}, ${item.id}, 'auto_materialize_blocked',
+                    ${JSON.stringify({ purchaseOrderId: resolved.purchaseOrderId })}::jsonb,
+                    ${actorId})
+          `);
+        });
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 500) : "Capture failed";
@@ -548,6 +591,20 @@ export class CaptureMaterializationError extends Error {
   constructor(message: string, readonly status = 422) {
     super(message);
     this.name = "CaptureMaterializationError";
+  }
+}
+
+/**
+ * The capture's vendor or purchase order sits outside the actor's subsidiary
+ * scope. Same uniform message as every other scope denial (a hidden capture
+ * is indistinguishable from a missing one); a distinct class so the
+ * auto-materialize path can leave the item in review instead of failing it,
+ * while manual callers keep the materialization refusal.
+ */
+export class CaptureScopeDeniedError extends CaptureMaterializationError {
+  constructor() {
+    super("Capture item not found");
+    this.name = "CaptureScopeDeniedError";
   }
 }
 
@@ -608,10 +665,10 @@ async function assertLockedCaptureAssociationsVisible(
   tx: SqlExecutor,
   orgId: string,
   item: Pick<CaptureRow, "vendor_candidate_id" | "purchase_order_id">,
-  allowed: ReadonlySet<string> | null | undefined,
+  allowed: ReadonlySet<string> | null,
 ): Promise<void> {
-  if (allowed == null) return;
-  if (allowed.size === 0) throw new CaptureMaterializationError("Capture item not found");
+  if (allowed === null) return;
+  if (allowed.size === 0) throw new CaptureScopeDeniedError();
   if (item.vendor_candidate_id) {
     const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
@@ -619,7 +676,7 @@ async function assertLockedCaptureAssociationsVisible(
        for update
     `)).rows[0];
     if (!vendor || (vendor.subsidiaryId != null && !allowed.has(vendor.subsidiaryId))) {
-      throw new CaptureMaterializationError("Capture item not found");
+      throw new CaptureScopeDeniedError();
     }
   }
   if (item.purchase_order_id) {
@@ -629,7 +686,7 @@ async function assertLockedCaptureAssociationsVisible(
        for update
     `)).rows[0];
     if (!purchaseOrder || (purchaseOrder.subsidiaryId != null && !allowed.has(purchaseOrder.subsidiaryId))) {
-      throw new CaptureMaterializationError("Capture item not found");
+      throw new CaptureScopeDeniedError();
     }
   }
 }
@@ -691,8 +748,8 @@ export async function materializeCapture(input: {
   actorId: string | null;
   /** Accept an off-price PO match; requires AP approval and is audited. */
   priceOverride?: boolean;
-  /** Null/omitted = unrestricted. Restricted callers must pass their set. */
-  allowedSubsidiaryIds?: ReadonlySet<string> | null;
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<{ documentId: string; documentNumber: string; rulesActivated: ActivatedCaptureRule[] }> {
   const result = await db.transaction(async (tx) => {
     const loaded = (await tx.execute<CaptureRow>(sql`
