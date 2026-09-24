@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -107,6 +107,7 @@ export function ImportWizard() {
   const [sampleIndustry, setSampleIndustry] = useState('')
   const [sampleBusy, setSampleBusy] = useState(false)
   const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
+  const commitIdempotencyKey = useRef<string | null>(null)
 
   const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
     const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
@@ -272,15 +273,20 @@ export function ImportWizard() {
   const doCommit = async () => {
     setBusy(true)
     try {
+      // Retain this key after transport/server errors. If the server committed
+      // but the response was lost, another click must replay that import.
+      const idempotencyKey = commitIdempotencyKey.current ?? crypto.randomUUID()
+      commitIdempotencyKey.current = idempotencyKey
       const res = await fetch('/api/data/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'commit', resource, format, rows, mapping, importMode, fileName, post }),
+        body: JSON.stringify({ mode: 'commit', resource, format, rows, mapping, importMode, fileName, post, idempotencyKey }),
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'import failed')
       setResult(d.outcome)
       setStep('result')
+      commitIdempotencyKey.current = null
     } catch (e) {
       toast.error((e as Error).message)
     } finally {
@@ -289,6 +295,7 @@ export function ImportWizard() {
   }
 
   const reset = () => {
+    commitIdempotencyKey.current = null
     setStep('source')
     setResource('')
     setFileName('')
