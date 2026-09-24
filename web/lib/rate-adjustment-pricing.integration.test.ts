@@ -1,27 +1,12 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-const routeSource = readFileSync(
-  "web/app/api/admin/setup/payment-providers/route.ts",
-  "utf8",
-);
-const migrationSource = readFileSync(
-  "schema/migrations/generated/0023_payment_surcharge_rule_uniqueness.sql",
-  "utf8",
-);
-
-test("surcharge setup maps both storage conflict codes to its existing 409 contract", () => {
-  assert.match(routeSource, /code === "23P01" \|\| code === "23505"/);
-  assert.match(
-    routeSource,
-    /error: new SurchargeRuleDatingConflict\(values\.effectiveFrom\)\.message/,
-  );
-  assert.match(migrationSource, /EXCLUDE USING gist/);
-  assert.match(migrationSource, /daterange\(effective_from, effective_to, '\[\]'\)\) WITH &&/);
-});
-
+// Database partition: this races two real route transactions against
+// PostgreSQL (exclusion constraint, deadlock injection, audit capture).
+// The unit partition has no database, so it lives under the .integration
+// suffix with no skip guard. The 409 conflict contract it proves replaces
+// the old source pin on the route's conflict-code mapping.
 const stateKey = Symbol.for("openbooks.payment-surcharge-concurrency-test");
 interface RouteState {
   authz: {
@@ -53,7 +38,6 @@ type QueryClient = {
  */
 test(
   "concurrent surcharge saves commit one rule and return the documented conflict for the loser",
-  { skip: !process.env.OPENBOOKS_DB_URL },
   async (t) => {
     const hooks = registerHooks({
       resolve(specifier, context, nextResolve) {
