@@ -144,87 +144,77 @@ function postRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("collection route gates on the hrm feature and the employment permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /guardPermission\("hrm\.employment\.manage"\)/);
-    assert.match(source, /guardPermission\("hrm\.employment\.read"\)/);
-    assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-  });
-} else {
-  test("a missing feature flag 404s before the service runs", async () => {
-    reset();
-    routeState.featureOn = false;
-    const get = await collectionRoute!.GET(
-      new Request("http://openbooks.test/api/hrm/change-requests"),
-    );
-    assert.equal(get.status, 404);
-    assert.deepEqual(routeState.calls, []);
-    const post = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
-    assert.equal(post.status, 404);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  const get = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/change-requests"),
+  );
+  assert.equal(get.status, 404);
+  assert.deepEqual(routeState.calls, []);
+  const post = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
+  assert.equal(post.status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("an unauthenticated caller never reaches the service", async () => {
-    reset();
-    routeState.gate = { status: 401 };
-    const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
-    assert.equal(response.status, 401);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.gate = { status: 401 };
+  const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload: {} }));
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create validates the body before the service runs", async () => {
-    reset();
-    assert.equal((await collectionRoute!.POST(postRequest({ payload: {} }))).status, 400);
-    assert.equal(
-      (await collectionRoute!.POST(postRequest({ employmentId: "nope", payload: {} }))).status,
-      400,
-    );
-    assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("create validates the body before the service runs", async () => {
+  reset();
+  assert.equal((await collectionRoute!.POST(postRequest({ payload: {} }))).status, 400);
+  assert.equal(
+    (await collectionRoute!.POST(postRequest({ employmentId: "nope", payload: {} }))).status,
+    400,
+  );
+  assert.equal((await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID }))).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("create forwards org, actor, employment, and payload, then 201s", async () => {
-    reset();
-    const payload = { kind: "hire", effectiveFrom: "2026-09-01" };
-    const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload }));
-    assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { request: { id: "request-1", status: "draft" } });
-    assert.deepEqual(routeState.calls, [
-      { fn: "create", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, payload } },
-    ]);
-  });
+test("create forwards org, actor, employment, and payload, then 201s", async () => {
+  reset();
+  const payload = { kind: "hire", effectiveFrom: "2026-09-01" };
+  const response = await collectionRoute!.POST(postRequest({ employmentId: EMPLOYMENT_ID, payload }));
+  assert.equal(response.status, 201);
+  assert.deepEqual(await response.json(), { request: { id: "request-1", status: "draft" } });
+  assert.deepEqual(routeState.calls, [
+    { fn: "create", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, payload } },
+  ]);
+});
 
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("a terminal request is terminal");
-    routeState.serviceThrow = refusal;
-    const response = await collectionRoute!.POST(
-      postRequest({ employmentId: EMPLOYMENT_ID, payload: { kind: "hire" } }),
-    );
-    assert.equal(response.status, 409);
-    assert.deepEqual(routeState.mapped.map((m) => m.error), [refusal]);
-  });
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("a terminal request is terminal");
+  routeState.serviceThrow = refusal;
+  const response = await collectionRoute!.POST(
+    postRequest({ employmentId: EMPLOYMENT_ID, payload: { kind: "hire" } }),
+  );
+  assert.equal(response.status, 409);
+  assert.deepEqual(routeState.mapped.map((m) => m.error), [refusal]);
+});
 
-  test("list forwards filters and returns the service rows", async () => {
-    reset();
-    const response = await collectionRoute!.GET(
-      new Request(`http://openbooks.test/api/hrm/change-requests?employment=${EMPLOYMENT_ID}&status=draft`),
-    );
-    assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { requests: [{ id: "request-1", status: "draft" }] });
-    assert.deepEqual(routeState.calls, [
-      { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, status: "draft" } },
-    ]);
-  });
+test("list forwards filters and returns the service rows", async () => {
+  reset();
+  const response = await collectionRoute!.GET(
+    new Request(`http://openbooks.test/api/hrm/change-requests?employment=${EMPLOYMENT_ID}&status=draft`),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { requests: [{ id: "request-1", status: "draft" }] });
+  assert.deepEqual(routeState.calls, [
+    { fn: "list", args: { orgId: "org-1", actorId: "user-1", employmentId: EMPLOYMENT_ID, status: "draft" } },
+  ]);
+});
 
-  test("list rejects a non-uuid employment filter", async () => {
-    reset();
-    const response = await collectionRoute!.GET(
-      new Request("http://openbooks.test/api/hrm/change-requests?employment=nope"),
-    );
-    assert.equal(response.status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
-}
+test("list rejects a non-uuid employment filter", async () => {
+  reset();
+  const response = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/change-requests?employment=nope"),
+  );
+  assert.equal(response.status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
