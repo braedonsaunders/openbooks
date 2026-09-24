@@ -68,6 +68,15 @@ test('agents home serves the ranked snapshot with facets', { skip: !process.env.
       assert.equal(data.triage.rows.length, 1);
       assert.equal(data.triage.canWrite, false);
       assert.equal(data.itemDrawerOpen, false);
+      assert.equal(data.movedNotice, null, 'ordinary workbench visits do not show the migration notice');
+
+      const movedLanding = await loadAgents({ from: 'continuous-close' });
+      assert.deepEqual(movedLanding.movedNotice, {
+        title: 'movedNotice.title',
+        description: 'movedNotice.description',
+        dismissLabel: 'movedNotice.dismiss',
+      });
+
       // The spec builds over the loader's own output and serializes (the
       // ModuleView wire format) without throwing.
       const spec = agentsSpec(data);

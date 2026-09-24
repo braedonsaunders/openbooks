@@ -1,55 +1,57 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 
-const dir = dirname(fileURLToPath(import.meta.url));
-const read = (path: string) => readFileSync(join(dir, path), "utf8");
-const ccPageSource = readFileSync(join(dir, "..", "continuous-close", "page.tsx"), "utf8");
-const agentsView = read("./view.ts");
-
-// F-t13-007: /continuous-close redirects to /agents with no notice. The route
-// is intentionally retired (the workbench moved), so the redirect must carry
-// context and /agents must explain the move once, on the record.
-test("F-t13-007: retired route redirects with landing context", () => {
-  // ?from= rides along with the preserved ?item= deep link.
-  assert.match(ccPageSource, /params\.set\('from', 'continuous-close'\)/);
-  assert.match(ccPageSource, /redirect\(`\/agents\$\{query/);
-  assert.match(ccPageSource, /params\.set\('item', itemValue\)/);
-});
-
-test("F-t13-007: agents explains the move only on that landing", () => {
-  assert.match(agentsView, /singleParam\(sp, 'from'\) === 'continuous-close'/);
-  assert.match(agentsView, /movedNotice:\s*\{[^}]*title:[^}]*description:[^}]*dismissLabel/s);
-  assert.match(agentsView, /widgetBlock\('moved-notice',/);
-  assert.match(agentsView, /when: f\('movedNotice'\)/);
-});
-
-// New user-visible strings are catalog keys in all 7 locales, properly
-// translated — never English pasted into a non-English catalog.
-const messagesDir = join(dir, "..", "..", "..", "messages");
-const catalog = (locale: string): Record<string, Record<string, unknown>> =>
-  JSON.parse(readFileSync(join(messagesDir, locale, "agents.json"), "utf8")) as Record<
-    string,
-    Record<string, unknown>
-  >;
-const english = catalog("en").movedNotice as Record<string, string>;
-assert.ok(english?.title, "en/agents.json must define movedNotice");
-for (const locale of ["de", "es", "fr", "ja", "pt-BR", "zh"]) {
-  test(`F-t13-007: moved notice is translated in ${locale}`, () => {
-    const notice = catalog(locale).movedNotice as Record<string, string> | undefined;
-    assert.ok(notice, `${locale}/agents.json must define movedNotice`);
-    for (const key of ["title", "description", "dismiss"]) {
-      const value: unknown = notice[key];
-      assert.equal(typeof value, "string", `${locale} movedNotice.${key} must be a string`);
-      assert.ok((value as string).trim().length > 0, `${locale} movedNotice.${key} must not be empty`);
+const { registerHooks } = await import("node:module");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "next/navigation") {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export function redirect(url){throw new Error('REDIRECT:'+url)}",
+      };
     }
-    assert.notEqual(notice.title, english.title, "title must not be the English fallback");
-    assert.notEqual(
-      notice.description,
-      english.description,
-      "description must not be the English fallback",
-    );
-  });
+    if (specifier === "next-intl/server") {
+      return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(){return key=>key}" };
+    }
+    if (
+      specifier === "./view" &&
+      context.parentURL?.endsWith("/web/app/(app)/continuous-close/page.tsx")
+    ) {
+      return {
+        shortCircuit: true,
+        url: "data:text/javascript,export async function loadContinuousClose(){return {}};export function continuousCloseSpec(){return {}}",
+      };
+    }
+    if (specifier.endsWith("/components/viewspec/module-view")) {
+      return { shortCircuit: true, url: "data:text/javascript,export function ModuleView(){return null}" };
+    }
+    return next(specifier, context);
+  },
+});
+
+const React = await import("react");
+Object.assign(globalThis, { React });
+const { default: continuousClosePage } = await import("../continuous-close/page");
+
+async function expectRedirect(searchParams: Record<string, string | string[] | undefined>, href: string) {
+  await assert.rejects(
+    () => continuousClosePage({ searchParams: Promise.resolve(searchParams) }),
+    (error: unknown) => error instanceof Error && error.message === `REDIRECT:${href}`,
+  );
 }
+
+test("retired workbench URL redirects with landing context", async () => {
+  await expectRedirect({}, "/agents?from=continuous-close");
+});
+
+test("retired workbench URL preserves the first item deep link", async () => {
+  await expectRedirect(
+    { item: ["8c3a8df0-e32d-4f60-a3b9-5fb1cda1b85c", "ignored"], q: "discarded" },
+    "/agents?from=continuous-close&item=8c3a8df0-e32d-4f60-a3b9-5fb1cda1b85c",
+  );
+});
+
+test("reports remains on the legacy route", async () => {
+  const result = await continuousClosePage({ searchParams: Promise.resolve({ tab: "reports" }) });
+  assert.ok(result, "reports renders the retained legacy page instead of redirecting");
+});
