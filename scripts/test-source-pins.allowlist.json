@@ -34,7 +34,6 @@
     "web/app/(app)/projects/duplicates/ProjectDuplicatesView.test.ts": 3,
     "web/app/(app)/projects/tabs/FinancialsTab.pricing.test.ts": 2,
     "web/app/(app)/property-management/CamTable.test.tsx": 2,
-    "web/app/(app)/property-management/lease-charge.test.ts": 1,
     "web/app/(app)/purchasing/view.banner.test.ts": 4,
     "web/app/(app)/purchasing/view.hero.test.ts": 3,
     "web/app/(app)/records/types/TypeBuilderDrawer.test.ts": 1,
