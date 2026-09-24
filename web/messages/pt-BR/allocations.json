@@ -362,7 +362,7 @@
     "anyAccountScope": "Todas as contas",
     "measureLabel": "Medida",
     "measures": {
-      "headcount": "Headcount",
+      "headcount": "Efetivo",
       "labor_hours": "Horas de trabalho",
       "billed_hours": "Horas faturáveis",
       "labor_cost": "Custo de mão de obra",
