@@ -79,14 +79,16 @@ const PROFILE = {
 const script = {
   postStatus: 500,
   postBody: { error: 'sample-company-clone-failed', stage: 'clone' },
+  resources: [] as { key: string; label: string; group: string }[],
+  importRequests: [] as { mode?: string }[],
 }
 
 function stubFetch(): void {
-  globalThis.fetch = (async (input: unknown, init?: { method?: string }) => {
+  globalThis.fetch = (async (input: unknown, init?: { method?: string; body?: BodyInit | null }) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
     if (url === '/api/data/resources' && method === 'GET') {
-      return Response.json({ resources: [] })
+      return Response.json({ resources: script.resources })
     }
     if (url === '/api/data/sample-companies' && method === 'GET') {
       return Response.json({ profiles: [PROFILE] })
@@ -100,6 +102,17 @@ function stubFetch(): void {
       }
       return Response.json({ ok: true, orgId: 'org-new', created: true, templateGenerated: false })
     }
+    if (url === '/api/data/import' && method === 'POST') {
+      const body = JSON.parse(String(init?.body ?? '{}')) as { mode?: string }
+      script.importRequests.push(body)
+      if (body.mode === 'parse') {
+        return Response.json({ headers: ['Name'], rows: [{ Name: 'Acme' }], mapping: { Name: 'name' }, fields: [{ key: 'name', label: 'Name', kind: 'text' }] })
+      }
+      if (body.mode === 'preview') {
+        return Response.json({ outcome: { created: 1, updated: 0, failed: 0, errors: [] } })
+      }
+      return Response.json({ outcome: { created: 1, updated: 0, failed: 0, errors: [] } })
+    }
     throw new Error(`unexpected fetch ${method} ${url}`)
   }) as typeof fetch
 }
@@ -110,6 +123,7 @@ async function mountWizard(t: TestContext): Promise<void> {
   globalThis.__sampleTestEnteredOrgs = []
   script.postStatus = 500
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
+  script.importRequests = []
   stubFetch()
   const rootHandle = createRoot(document.body)
   t.after(async () => {
@@ -196,4 +210,58 @@ test('a subsequent success clears the error and enters the new company', async (
     ),
     'success must surface the ready confirmation',
   )
+})
+
+test('the wizard does not send a commit when retry-key session storage cannot persist', async (t) => {
+  script.resources = [{ key: 'customers', label: 'Customers', group: 'Master data' }]
+  const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage')
+  Object.defineProperty(window, 'sessionStorage', {
+    configurable: true,
+    get() {
+      throw new Error('session storage is disabled')
+    },
+  })
+  t.after(() => {
+    if (original) Object.defineProperty(window, 'sessionStorage', original)
+    else Reflect.deleteProperty(window, 'sessionStorage')
+  })
+  await mountWizard(t)
+
+  const resourceSelect = ([...document.querySelectorAll('select')] as HTMLSelectElement[]).find((candidate) =>
+    [...candidate.options].some((option) => option.value === 'customers'),
+  )
+  assert.ok(resourceSelect, 'an import resource is available')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set?.call(resourceSelect, 'customers')
+    resourceSelect.dispatchEvent(new window.Event('change', { bubbles: true }))
+    const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set?.call(textarea, 'Name\nAcme')
+    textarea.dispatchEvent(new window.Event('input', { bubbles: true }))
+    textarea.dispatchEvent(new window.Event('change', { bubbles: true }))
+  })
+
+  const button = (label: string) => [...document.querySelectorAll('button')].find((candidate) =>
+    (candidate.textContent ?? '').includes(label),
+  ) as HTMLButtonElement | undefined
+  assert.ok(button('Continue') && !button('Continue')?.disabled, 'source data is ready to parse')
+  await act(async () => {
+    button('Continue')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  await act(async () => {
+    button('Preview')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  await act(async () => {
+    button('Import 1 rows')!.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+
+  assert.deepEqual(script.importRequests.map(({ mode }) => mode), ['parse', 'preview'])
+  assert.ok((globalThis.__sampleTestToasts ?? []).some(
+    ({ kind, message }) => kind === 'error' && /browser could not save the import retry key, so no import was sent/.test(message),
+  ))
 })

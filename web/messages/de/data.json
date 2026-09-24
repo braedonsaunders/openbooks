@@ -55,6 +55,7 @@
     "commit": "{n} Zeilen importieren",
     "committing": "Wird importiert…",
     "commitFailed": "Der Import konnte nicht abgeschlossen werden.",
+    "commitPersistenceFailed": "Dieser Browser konnte den Import-Wiederholungsschlüssel nicht speichern, daher wurde kein Import gesendet. Aktivieren Sie den Sitzungsspeicher oder verwenden Sie einen Browser, der ihn zulässt, und versuchen Sie es erneut.",
     "commitConflict": "Dieser Import steht im Konflikt mit einem früheren Versuch. Prüfen Sie zuerst den Importverlauf. Wenn Sie die Datei oder Zuordnung geändert haben, zeigen Sie eine Vorschau an und senden Sie den aktualisierten Import; beim Neuladen mit unveränderten Eingaben wird die frühere Anfrage sicher erneut versucht.",
     "row": "Zeile",
     "status": "Status",

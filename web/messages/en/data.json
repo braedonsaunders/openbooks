@@ -59,6 +59,7 @@
     "commit": "Import {n} rows",
     "committing": "Importing…",
     "commitFailed": "The import could not be completed.",
+    "commitPersistenceFailed": "This browser could not save the import retry key, so no import was sent. Enable session storage or use a browser that allows it, then try again.",
     "commitConflict": "This import conflicts with an earlier attempt. Check Import History first. If you changed the file or mapping, preview and submit the updated import; reloading with unchanged inputs safely retries the earlier request.",
     "row": "Row",
     "status": "Status",

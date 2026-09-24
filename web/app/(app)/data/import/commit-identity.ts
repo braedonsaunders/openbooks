@@ -15,6 +15,13 @@ export interface ImportCommitIdentity {
 
 type ImportIdentityStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 
+export class ImportIdentityPersistenceError extends Error {
+  constructor() {
+    super('Import retry information could not be saved; no import request was sent')
+    this.name = 'ImportIdentityPersistenceError'
+  }
+}
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (value !== null && typeof value === 'object') {
@@ -44,19 +51,19 @@ export async function resolveImportCommitIdentity(
   createKey: () => string,
 ): Promise<ImportCommitIdentity> {
   const digest = await fingerprint(input)
-  if (previous?.fingerprint === digest) return previous
-
-  let key: string | null = null
+  if (!storage) throw new ImportIdentityPersistenceError()
+  let stored: string | null
   try {
-    key = storage?.getItem(storageKey(digest)) ?? null
+    stored = storage.getItem(storageKey(digest))
   } catch {
-    // Storage can be unavailable in private or quota-restricted browser contexts.
+    throw new ImportIdentityPersistenceError()
   }
-  key ??= createKey()
+  const key = previous?.fingerprint === digest ? previous.key : stored ?? createKey()
   try {
-    storage?.setItem(storageKey(digest), key)
+    storage.setItem(storageKey(digest), key)
+    if (storage.getItem(storageKey(digest)) !== key) throw new Error('session storage did not retain the import key')
   } catch {
-    // The in-memory identity still keeps retries in this page stable.
+    throw new ImportIdentityPersistenceError()
   }
   return { fingerprint: digest, key }
 }
