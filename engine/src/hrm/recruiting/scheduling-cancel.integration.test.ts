@@ -199,3 +199,85 @@ test("booking a cancelled interview is refused by name even when the link resolv
     await dropScratchOrg(h.org.orgId);
   }
 });
+test("public booking tokens refuse after interview scheduling is disabled", async () => {
+  const h = await setupHarness();
+  try {
+    const { token, slotId } = await seedProposed(h);
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmInterviewScheduling}', 'false'::jsonb, true)
+       where id = ${h.org.orgId}
+    `);
+    for (const result of [
+      await readBookingLink(token).then(() => null, (error: unknown) => error),
+      await bookSlot({
+        bookingToken: token,
+        slotId,
+        candidateName: "Slot Candidate",
+        enqueueEmail: async () => {},
+      }).then(() => null, (error: unknown) => error),
+    ]) {
+      const error = recruitingError(result);
+      assert.equal(error.code, "REFUSED");
+      assert.match(error.message, /Interview scheduling is off/);
+    }
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("concurrent bookings across different slots still book only one sitting", async () => {
+  const h = await setupHarness();
+  try {
+    const { interviewId } = await seedProposed(h);
+    const proposed = await proposeSlots({
+      orgId: h.org.orgId,
+      actorId: h.recruiterId,
+      interviewId,
+      windows: [
+        { startsAt: "2027-10-02T09:00:00Z", endsAt: "2027-10-02T09:30:00Z", timezone: "UTC" },
+        { startsAt: "2027-10-03T09:00:00Z", endsAt: "2027-10-03T09:30:00Z", timezone: "UTC" },
+      ],
+    });
+    const results = await Promise.allSettled(proposed.slots.map((slot) => bookSlot({
+      bookingToken: proposed.bookingToken,
+      slotId: slot.id,
+      candidateName: "Slot Candidate",
+      enqueueEmail: async () => {},
+    })));
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    const booked = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_interview_slots
+       where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'booked'
+    `)).rows[0]!.count;
+    assert.equal(booked, "1");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("concurrent proposals leave only the final booking link live", async () => {
+  const h = await setupHarness();
+  try {
+    const { interviewId } = await seedProposed(h);
+    const batches = await Promise.all([0, 1].map((day) => proposeSlots({
+      orgId: h.org.orgId,
+      actorId: h.recruiterId,
+      interviewId,
+      windows: [{
+        startsAt: `2027-11-0${day + 1}T09:00:00Z`,
+        endsAt: `2027-11-0${day + 1}T09:30:00Z`,
+        timezone: "UTC",
+      }],
+    })));
+    const live = (await db.execute<{ tokenHash: string | null }>(sql`
+      select distinct candidate_token_hash as "tokenHash" from hrm_interview_slots
+       where org_id = ${h.org.orgId} and interview_id = ${interviewId} and kind = 'proposed'
+    `)).rows;
+    assert.equal(live.length, 1, "one serialized proposal batch owns the live link");
+    const hashes = new Set(batches.map((batch) => hashRecruitingToken(batch.bookingToken)));
+    assert.ok(hashes.has(live[0]!.tokenHash!));
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});

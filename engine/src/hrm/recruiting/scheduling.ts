@@ -96,7 +96,13 @@ export function validateAvailabilityWindows(windows: unknown): AvailabilityWindo
     if (typeof timezone !== "string" || timezone.trim().length === 0) {
       throw new RecruitingError("INVALID_INPUT", `window ${index} needs a timezone — declare where the clock lives`);
     }
-    return { startsAt, endsAt, timezone: timezone.trim() };
+    const normalizedTimezone = timezone.trim();
+    try {
+      new Intl.DateTimeFormat("en", { timeZone: normalizedTimezone }).format(new Date(0));
+    } catch {
+      throw new RecruitingError("INVALID_INPUT", `window ${index} names an invalid IANA timezone — use a supported region such as Europe/Paris`);
+    }
+    return { startsAt, endsAt, timezone: normalizedTimezone };
   });
 }
 
@@ -272,7 +278,7 @@ export async function proposeSlots(query: {
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
     await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     const interview = (await db.execute<{ status: string }>(sql`
-      select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId}
+      select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
     `)).rows[0];
     if (!interview) throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
     if (interview.status !== "scheduled") {
@@ -280,6 +286,14 @@ export async function proposeSlots(query: {
         "REFUSED",
         `a ${interview.status} interview takes no new slots — schedule a fresh interview instead of reopening this one`,
       );
+    }
+    const alreadyBooked = (await db.execute<{ one: number }>(sql`
+      select 1 as one from hrm_interview_slots
+       where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
+       limit 1
+    `)).rows[0];
+    if (alreadyBooked) {
+      throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
     }
     // A fresh link per batch: any live proposed batch for this interview is
     // declined first, so exactly one booking link is live at a time and an
@@ -370,11 +384,12 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   }
   const orgId = scope[0].orgId;
   return withOrgTransaction(orgId, async () => {
+    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     // The interview's own fate gates every booking: a cancel that lands
     // between the link lookup above and this transaction must still read
     // cancelled, never book a dead sitting.
     const interview = (await db.execute<{ status: string }>(sql`
-      select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId}
+      select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
     `)).rows[0];
     if (!interview) {
       throw new RecruitingError("NOT_FOUND", "interview is not visible in this organization");
@@ -390,6 +405,14 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
         "REFUSED",
         `a ${interview.status} interview takes no bookings — ask the recruiter for a fresh interview instead of reusing this link`,
       );
+    }
+    const alreadyBooked = (await db.execute<{ one: number }>(sql`
+      select 1 as one from hrm_interview_slots
+       where org_id = ${orgId} and interview_id = ${interviewId} and kind = 'booked'
+       limit 1
+    `)).rows[0];
+    if (alreadyBooked) {
+      throw new RecruitingError("REFUSED", "a slot was already taken for this interview — ask the recruiter to schedule a fresh interview before booking another time");
     }
     const slotId = requireId(query.slotId, "slotId");
     // The requested slot names its own fate before link liveness is
@@ -510,6 +533,7 @@ export async function readBookingLink(bookingToken: string): Promise<{
   // request-org RLS scope, so the explicit org predicate alone is not
   // enough under FORCE RLS).
   return withOrgTransaction(orgId, async () => {
+    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     const chain = await interviewChain(db, orgId, claims.rowId);
     return {
       interviewId: claims.rowId,
@@ -576,7 +600,7 @@ export async function listUpcomingInterviews(query: {
         join hrm_candidates c on c.org_id = i.org_id and c.id = a.candidate_id
         join hrm_requisitions r on r.org_id = i.org_id and r.id = a.requisition_id
        where i.org_id = ${orgId} and i.status = 'scheduled'
-         and (${allowed === null} or a.requisition_id = any(${allowed === null ? "{}" : pgUuidArray([...allowed])}::uuid[]))
+         and (${allowed === null} or r.employer_subsidiary_id = any(${allowed === null ? "{}" : pgUuidArray([...allowed])}::uuid[]))
        order by i.scheduled_at
        limit 200
     `)).rows;
