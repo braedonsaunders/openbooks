@@ -141,69 +141,76 @@ function patchRequest(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("goal item route resolves through the goal read scope", async () => {
-    const { readFileSync } = await import("node:fs");
-    const source = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
-    assert.match(source, /getGoal\(/);
-  });
-} else {
-  test("an unknown id never reaches the service", async () => {
-    reset();
-    const bad = { params: Promise.resolve({ id: "nope" }) };
-    assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), bad)).status, 400);
-    assert.deepEqual(routeState.calls, []);
-  });
+test("a missing feature flag 404s before the service runs", async () => {
+  reset();
+  routeState.featureOn = false;
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), params)).status, 404);
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("progress forwards the percent and note", async () => {
-    reset();
-    const response = await itemRoute!.PATCH(
-      patchRequest({ action: "progress", progressPercent: 50, note: "halfway" }),
+test("an unauthenticated caller never reaches the service", async () => {
+  reset();
+  routeState.authz = null;
+  const response = await itemRoute!.GET(new Request("http://openbooks.test/x"), params);
+  assert.equal(response.status, 401);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("an unknown id never reaches the service", async () => {
+  reset();
+  const bad = { params: Promise.resolve({ id: "nope" }) };
+  assert.equal((await itemRoute!.GET(new Request("http://openbooks.test/x"), bad)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), bad)).status, 400);
+  assert.deepEqual(routeState.calls, []);
+});
+
+test("progress forwards the percent and note", async () => {
+  reset();
+  const response = await itemRoute!.PATCH(
+    patchRequest({ action: "progress", progressPercent: 50, note: "halfway" }),
+    params,
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.calls, [
+    {
+      fn: "progress",
+      args: { orgId: "org-1", actorId: "user-1", goalId: GOAL_ID, progressPercent: 50, note: "halfway" },
+    },
+  ]);
+});
+
+test("miss and cancel require their note at the real boundary", async () => {
+  reset();
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "miss" }), params)).status, 400);
+  assert.equal((await itemRoute!.PATCH(patchRequest({ action: "achieve" }), params)).status, 200);
+  assert.equal(
+    (await itemRoute!.PATCH(patchRequest({ action: "cancel", note: "role eliminated" }), params)).status,
+    200,
+  );
+  assert.deepEqual(routeState.calls.map((c) => c.fn), ["status", "status"]);
+});
+
+test("action routes refuse hostile payloads at the real boundary", async () => {
+  reset();
+  for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
+    const refused = await itemRoute!.PATCH(
+      new Request(`http://openbooks.test/api/hrm/goals/${GOAL_ID}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body,
+      }),
       params,
     );
-    assert.equal(response.status, 200);
-    assert.deepEqual(routeState.calls, [
-      {
-        fn: "progress",
-        args: { orgId: "org-1", actorId: "user-1", goalId: GOAL_ID, progressPercent: 50, note: "halfway" },
-      },
-    ]);
-  });
+    assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
+  }
+  assert.deepEqual(routeState.calls, []);
+});
 
-  test("miss and cancel require their note at the real boundary", async () => {
-    reset();
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "miss" }), params)).status, 400);
-    assert.equal((await itemRoute!.PATCH(patchRequest({ action: "achieve" }), params)).status, 200);
-    assert.equal(
-      (await itemRoute!.PATCH(patchRequest({ action: "cancel", note: "role eliminated" }), params)).status,
-      200,
-    );
-    assert.deepEqual(routeState.calls.map((c) => c.fn), ["status", "status"]);
-  });
-
-  test("action routes refuse hostile payloads at the real boundary", async () => {
-    reset();
-    for (const body of ["{not json", "null", "[1,2]", '"text"', "42"]) {
-      const refused = await itemRoute!.PATCH(
-        new Request(`http://openbooks.test/api/hrm/goals/${GOAL_ID}`, {
-          method: "PATCH",
-          headers: { "content-type": "application/json" },
-          body,
-        }),
-        params,
-      );
-      assert.equal(refused.status, 400, `boundary accepted hostile payload: ${body}`);
-    }
-    assert.deepEqual(routeState.calls, []);
-  });
-
-  test("a service refusal delegates to the shared mapping with the error intact", async () => {
-    reset();
-    const refusal = new Error("only an active goal takes progress");
-    routeState.serviceThrow = refusal;
-    const response = await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), params);
-    assert.equal(response.status, 409);
-    assert.equal(routeState.mapped[0]!.error, refusal);
-  });
-}
+test("a service refusal delegates to the shared mapping with the error intact", async () => {
+  reset();
+  const refusal = new Error("only an active goal takes progress");
+  routeState.serviceThrow = refusal;
+  const response = await itemRoute!.PATCH(patchRequest({ action: "progress", progressPercent: 10 }), params);
+  assert.equal(response.status, 409);
+  assert.equal(routeState.mapped[0]!.error, refusal);
+});
