@@ -478,7 +478,8 @@
       "cancel": "キャンセル",
       "manageBooks": "帳簿を管理",
       "managePeriod": "{period}を管理",
-      "addRow": "追加"
+      "addRow": "追加",
+      "removeValue": "{value}を削除"
     },
     "fields": {
       "name": "名称",

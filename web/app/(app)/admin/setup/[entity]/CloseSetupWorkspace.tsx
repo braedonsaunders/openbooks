@@ -323,11 +323,12 @@ function Chips({ options, value, onChange }: { options: Option[]; value: string[
 /** Searchable add-and-remove token list backed by a large/grouped option set
  * (people, roles, reports). Selected values render as removable chips. */
 function TokenSelect({ options, value, onChange, placeholder, empty }: { options: Option[]; value: string[]; onChange: (next: string[]) => void; placeholder?: string; empty?: string }) {
+  const t = useTranslations("close.setup");
   const byValue = new Map(options.map((option) => [option.value, option]));
   const available = options.filter((option) => !value.includes(option.value));
   return <div className="space-y-2">
     <SearchSelect value="" onChange={(next) => { if (next && !value.includes(next)) onChange([...value, next]); }} options={available} placeholder={placeholder} searchable emptyLabel={empty} ariaLabel={placeholder} />
-    {value.length > 0 ? <div className="flex flex-wrap gap-1.5">{value.map((item) => <span key={item} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{byValue.get(item)?.label ?? item}<button type="button" onClick={() => onChange(value.filter((value) => value !== item))} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"><X size={12} /></button></span>)}</div> : null}
+    {value.length > 0 ? <div className="flex flex-wrap gap-1.5">{value.map((item) => { const label = byValue.get(item)?.label ?? item; return <span key={item} className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">{label}<button type="button" aria-label={t("actions.removeValue", { value: label })} onClick={() => onChange(value.filter((value) => value !== item))} className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-100"><X size={12} /></button></span>; })}</div> : null}
   </div>;
 }
 
@@ -335,7 +336,7 @@ function TokenSelect({ options, value, onChange, placeholder, empty }: { options
  * Only used for policy/delivery shapes that have no dedicated engine schema. */
 function KeyValueRows({ rows, onChange }: { rows: Array<{ key: string; value: string }>; onChange: (next: Array<{ key: string; value: string }>) => void }) {
   const t = useTranslations("close.setup");
-  return <div className="space-y-2">{rows.map((row, index) => <div key={index} className="flex items-center gap-2"><Input className="flex-1" placeholder={t("kv.key")} value={row.key} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} /><Input className="flex-1" placeholder={t("kv.value")} value={row.value} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} /><Button variant="ghost" size="sm" onClick={() => onChange(rows.filter((_, i) => i !== index))}><Trash2 size={14} /></Button></div>)}<Button variant="outline" size="sm" onClick={() => onChange([...rows, { key: "", value: "" }])}><Plus size={14} />{t("kv.add")}</Button></div>;
+  return <div className="space-y-2">{rows.map((row, index) => <div key={index} className="flex items-center gap-2"><Input className="flex-1" placeholder={t("kv.key")} value={row.key} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, key: event.target.value } : item))} /><Input className="flex-1" placeholder={t("kv.value")} value={row.value} onChange={(event) => onChange(rows.map((item, i) => i === index ? { ...item, value: event.target.value } : item))} /><Button variant="ghost" size="sm" aria-label={t("actions.removeValue", { value: row.key.trim() || String(index + 1) })} onClick={() => onChange(rows.filter((_, i) => i !== index))}><Trash2 size={14} /></Button></div>)}<Button variant="outline" size="sm" onClick={() => onChange([...rows, { key: "", value: "" }])}><Plus size={14} />{t("kv.add")}</Button></div>;
 }
 
 /** Coerce a stored jsonb object into editable key/value rows, and back. */
@@ -693,7 +694,7 @@ function ReportAttachmentCard({ attachment, meta, props, onChange, onRemove }: {
         <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{name}</span>
         {meta?.kind === "custom" ? <Badge variant="outline">{t("reportGroups.custom")}</Badge> : null}
       </button>
-      <Button variant="ghost" size="sm" onClick={onRemove}><X size={14} /></Button>
+      <Button variant="ghost" size="sm" aria-label={t("actions.removeValue", { value: name })} onClick={onRemove}><X size={14} /></Button>
     </div>
     {open ? <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-800">
       <ReportDescriptorSummary descriptor={descriptor} />

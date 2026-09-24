@@ -478,7 +478,8 @@
       "cancel": "取消",
       "manageBooks": "管理账簿",
       "managePeriod": "管理 {period}",
-      "addRow": "添加"
+      "addRow": "添加",
+      "removeValue": "移除{value}"
     },
     "fields": {
       "name": "名称",
