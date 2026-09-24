@@ -279,8 +279,14 @@ export const WI_CERTIFICATE: PayrollCertificate = {
   label: "Employee's Wisconsin Withholding Exemption Certificate",
   scope: { level: "region", region: "WI" },
   purpose: "withholding",
+  // W-166 p. 8: a complete-exemption WT-4 must be renewed by April 30.
+  validity: {
+    kind: "following_year_date",
+    monthDay: "04-30",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
   citation:
-    "Wisconsin Form WT-4 (W-204 R. 8-23); Publication W-166, Withholding Tax Guide (January 2026)",
+    "Wisconsin Form WT-4 (W-204 R. 8-23); Publication W-166, Withholding Tax Guide (January 2026), p. 8, https://www.revenue.wi.gov/DOR%20Publications/pb166.pdf",
   summary:
     "Sets Wisconsin withholding exemptions and marital status. W-166: if the employee fails to "
     + "furnish a WT-4, \"the employee shall be considered as claiming zero withholding exemptions.\"",

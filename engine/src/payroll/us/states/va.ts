@@ -276,8 +276,16 @@ export const VA_CERTIFICATE: PayrollCertificate = {
   label: "Employee's Virginia Income Tax Withholding Exemption Certificate",
   scope: { level: "region", region: "VA" },
   purpose: "withholding",
+  // Virginia Form VA-4 Line 3: an exempt election must be filed anew each calendar year.
+  // https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf
+  validity: {
+    kind: "calendar_year_end",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
   citation:
-    "Virginia Form VA-4; Income Tax Withholding Guide for Employers, Rev. 05/25 (2614086), "
+    "Virginia Form VA-4 Line 3 (annual exemption filing), "
+    + "https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf; "
+    + "Income Tax Withholding Guide for Employers, Rev. 05/25 (2614086), "
     + "Formula for Computing Tax to be Withheld (p. 21)",
   summary:
     "Sets Virginia withholding exemptions. \"If you do not file this form, your employer must "
