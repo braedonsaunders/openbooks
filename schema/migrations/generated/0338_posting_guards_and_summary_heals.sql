@@ -284,3 +284,31 @@ end $$;
 
 DROP TRIGGER IF EXISTS gl_activity_entry ON public.journal_entries;
 CREATE TRIGGER gl_activity_entry AFTER INSERT OR DELETE OR UPDATE OF status, posting_date, book_id ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION public.openbooks_gl_activity_entry();
+
+-- ---------------------------------------------------------------------------
+-- Section G8: open_balance is computed on INSERT, and NULL caches are healed.
+-- ---------------------------------------------------------------------------
+-- The open-balance trigger watched UPDATE OF posted_entry_id, status only,
+-- and open_balance is nullable with no default, so a direct INSERT of a
+-- posted document (a backfill or migration) left open_balance NULL and
+-- AR/AP aging read an unknown balance. The trigger below computes it on
+-- INSERT too, through the same recompute the UPDATE path uses.
+--
+-- Backfill (UPG-0265 pattern): the UPDATE touches open_balance only, which
+-- sits outside every document guard's column list (financial guard watches
+-- financial columns, status guard watches status, period guard watches
+-- status/entry/period, tieout re-asserts totals which the heal does not
+-- move), so no trigger is suspended — and the populated-fixture test proves
+-- the backfill passes them. Mixed-currency open lines would raise the
+-- currency guard instead of guessing: the 0338 preflight refuses those
+-- installs before this migration applies.
+DROP TRIGGER IF EXISTS document_open_balance_insert ON public.documents;
+CREATE TRIGGER document_open_balance_insert AFTER INSERT ON public.documents
+FOR EACH ROW WHEN (new.status = 'posted' AND new.posted_entry_id IS NOT NULL)
+EXECUTE FUNCTION public.trg_document_open_balance();
+
+UPDATE public.documents d
+   SET open_balance = public.document_open_balance_amount(d.org_id, d.posted_entry_id, d.currency, d.status::text)
+ WHERE d.status = 'posted'
+   AND d.posted_entry_id IS NOT NULL
+   AND d.open_balance IS NULL;
