@@ -1561,7 +1561,7 @@ export async function convertOrder(
         on conflict (document_id) do nothing`)
     }
     if (doc.party_id && ['sales_order', 'customer_invoice', 'customer_credit', 'customer_payment'].includes(target.kind)) {
-      await promoteCrmAccount(tx, {
+      const promotion = await promoteCrmAccount(tx, {
         orgId,
         partyId: doc.party_id,
         actorId: userId,
@@ -1569,6 +1569,11 @@ export async function convertOrder(
         sourceKind: target.kind,
         sourceId: newId,
       })
+      // Conversion into an order or AR document makes the party a customer:
+      // core AR state the hold and limit checks depend on, with CRM on or off.
+      if (!promotion.customerRoleActive) {
+        throw new Error('customer role was not established while converting the order')
+      }
     }
 
     return { id: newId, documentNumber, kind: target.kind }

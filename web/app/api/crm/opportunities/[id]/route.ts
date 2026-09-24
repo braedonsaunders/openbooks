@@ -597,7 +597,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
                 ${textOrNull(body.stageReason)}, ${user.id}, ${user.id})`)
     }
     if (partyId) {
-      await promoteCrmAccount(tx, { orgId: user.orgId, partyId, actorId: user.id, toStage: nextStatus.is_won ? 'customer' : 'prospect', sourceKind: 'opportunity', sourceId: id, reason: textOrNull(body.stageReason) })
+      const promotion = await promoteCrmAccount(tx, { orgId: user.orgId, partyId, actorId: user.id, toStage: nextStatus.is_won ? 'customer' : 'prospect', sourceKind: 'opportunity', sourceId: id, reason: textOrNull(body.stageReason) })
+      // This route is CRM-gated, so lifecycle bookkeeping must land; a won
+      // opportunity additionally requires the AR role for its new customer.
+      if (!promotion.lifecycleApplied) {
+        throw new Error('CRM lifecycle transition was not applied')
+      }
+      if (nextStatus.is_won && !promotion.customerRoleActive) {
+        throw new Error('customer role was not established while closing the opportunity as won')
+      }
     }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)

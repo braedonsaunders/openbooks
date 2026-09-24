@@ -557,7 +557,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       `)
       const nextPartyId = body.partyId !== undefined ? body.partyId : null
       if (nextPartyId && (cfg.kind === 'quote' || cfg.kind === 'sales_order')) {
-        await promoteCrmAccount(tx, {
+        const promotion = await promoteCrmAccount(tx, {
           orgId: user.orgId,
           partyId: nextPartyId,
           actorId: user.id,
@@ -565,6 +565,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           sourceKind: cfg.kind,
           sourceId: id,
         })
+        // A sales order makes the party a customer: core AR state the credit
+        // checks downstream depend on. A quote only touches CRM lifecycle,
+        // which is legitimately absent with CRM off.
+        if (cfg.kind === 'sales_order' && !promotion.customerRoleActive) {
+          throw new Error('customer role was not established while saving the sales order')
+        }
       }
       return 'saved' as const
     })

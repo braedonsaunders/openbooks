@@ -227,7 +227,7 @@ const mockSources = new Map<string, string>([
     export function registerRequestOrgResolver() {}
   `],
   ['mock:crm', `
-    export async function promoteCrmAccount() {}
+    export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }
   `],
   ['mock:crm-scope', `
     export function crmOpportunityScope() { return '' }

@@ -45,6 +45,9 @@ export async function POST(req: NextRequest) {
       values (${user.orgId}, ${number}, 'New opportunity', ${body.partyId ?? null}, ${user.id}, ${s.id},
               ${s.probability}, ${s.default_forecast_category}, ${org.rows[0]!.base_currency}, false, ${user.id}, ${user.id})
       returning id`))
+    // A draft opportunity only touches CRM lifecycle: prospect creates no AR
+    // state, so there is no role to require. This route is CRM-gated, so the
+    // lifecycle write always lands.
     if (body.partyId) await promoteCrmAccount(tx, { orgId: user.orgId, partyId: body.partyId, actorId: user.id, toStage: 'prospect', sourceKind: 'opportunity', sourceId: inserted.rows[0]!.id })
     await tx.execute(sql`
       insert into crm_opportunity_stage_events

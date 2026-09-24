@@ -1957,7 +1957,7 @@ export async function applyDocumentEdit(
 
       const effectivePartyId = body.partyId !== undefined ? body.partyId : current.partyId
       if (effectivePartyId && ['customer_invoice', 'customer_credit', 'customer_payment'].includes(current.kind)) {
-        await promoteCrmAccount(tx, {
+        const promotion = await promoteCrmAccount(tx, {
           orgId,
           partyId: effectivePartyId,
           actorId: userId,
@@ -1965,6 +1965,11 @@ export async function applyDocumentEdit(
           sourceKind: current.kind,
           sourceId: id,
         })
+        // An AR document makes the party a customer: core AR state the
+        // hold and limit checks depend on, with CRM on or off.
+        if (!promotion.customerRoleActive) {
+          throw new Error('customer role was not established while saving the document')
+        }
       }
 
       if (auditBefore) {

@@ -391,7 +391,7 @@ export async function createOrder(
       }
       const nextPartyId = body.partyId ?? null
       if (nextPartyId && (cfg.kind === 'quote' || cfg.kind === 'sales_order')) {
-        await promoteCrmAccount(tx, {
+        const promotion = await promoteCrmAccount(tx, {
           orgId: user.orgId,
           partyId: nextPartyId,
           actorId: user.id,
@@ -399,6 +399,12 @@ export async function createOrder(
           sourceKind: cfg.kind,
           sourceId: requestId,
         })
+        // A sales order makes the party a customer: core AR state the credit
+        // checks below depend on. A quote only touches CRM lifecycle, which
+        // is legitimately absent with CRM off.
+        if (cfg.kind === 'sales_order' && !promotion.customerRoleActive) {
+          throw new Error('customer role was not established while issuing the sales order')
+        }
       }
       await tx.execute(sql`
         insert into audit_log
