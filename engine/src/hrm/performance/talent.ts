@@ -434,6 +434,7 @@ export interface SuccessionPlanDTO {
   readonly incumbentEmploymentId: string | null;
   readonly incumbentName: string | null;
   readonly status: SuccessionPlanStatus;
+  readonly notes: string | null;
   readonly candidates: readonly SuccessionCandidateDTO[];
 }
 
@@ -472,6 +473,7 @@ export async function createSuccessionPlan(args: {
   actorId: string;
   positionId: string;
   incumbentEmploymentId?: string | null;
+  notes?: string | null;
 }): Promise<SuccessionPlanDTO> {
   const orgId = requireId("orgId", args.orgId);
   const actorId = requireId("actorId", args.actorId);
@@ -505,8 +507,8 @@ export async function createSuccessionPlan(args: {
     }
     try {
       const inserted = (await db.execute<{ id: string }>(sql`
-        insert into hrm_succession_plans (org_id, position_id, incumbent_employment_id, status, created_by, updated_by)
-        values (${orgId}, ${positionId}, ${args.incumbentEmploymentId ?? null}, 'draft', ${actorId}, ${actorId})
+        insert into hrm_succession_plans (org_id, position_id, incumbent_employment_id, status, notes, created_by, updated_by)
+        values (${orgId}, ${positionId}, ${args.incumbentEmploymentId ?? null}, 'draft', ${args.notes ?? null}, ${actorId}, ${actorId})
         returning id
       `)).rows[0];
       if (!inserted) throw new HrmPerformanceError("REFUSED", "the succession plan was not stored — no row was written; retry the action");
@@ -554,11 +556,36 @@ export async function setSuccessionPlanStatus(args: {
   });
 }
 
+/** Update the plan's own notes; candidate notes remain on candidate rows. */
+export async function setSuccessionPlanNotes(args: {
+  orgId: string;
+  actorId: string;
+  id: string;
+  notes: string | null;
+}): Promise<void> {
+  const orgId = requireId("orgId", args.orgId);
+  const actorId = requireId("actorId", args.actorId);
+  const id = requireId("id", args.id);
+  await withOrgTransaction(orgId, async () => {
+    await assertTalentFeature(db, orgId);
+    const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    await loadScopedPlan(db, orgId, id, allowed);
+    const updated = (await db.execute(sql`
+      update hrm_succession_plans set notes = ${args.notes}, updated_by = ${actorId}, updated_at = now()
+       where org_id = ${orgId} and id = ${id}
+      returning id
+    `)).rows;
+    if (updated.length !== 1) {
+      throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — it may belong to another organization");
+    }
+  });
+}
+
 async function readSuccessionPlan(db: SqlExecutor, orgId: string, id: string): Promise<SuccessionPlanDTO | null> {
   const plans = (await db.execute<{
-    id: string; position_id: string; incumbent_employment_id: string | null; status: SuccessionPlanStatus;
+    id: string; position_id: string; incumbent_employment_id: string | null; status: SuccessionPlanStatus; notes: string | null;
   }>(sql`
-    select id, position_id, incumbent_employment_id::text as incumbent_employment_id, status
+    select id, position_id, incumbent_employment_id::text as incumbent_employment_id, status, notes
       from hrm_succession_plans where org_id = ${orgId} and id = ${id}
   `)).rows;
   const plan = plans[0];
@@ -594,6 +621,7 @@ async function readSuccessionPlan(db: SqlExecutor, orgId: string, id: string): P
     positionCode: position?.position_code ?? '—', positionTitle: position?.title ?? '—',
     incumbentEmploymentId: plan.incumbent_employment_id, incumbentName: incumbent?.name ?? null,
     status: plan.status,
+    notes: plan.notes,
     candidates: candidates.map((c) => ({ id: c.id, employmentId: c.employment_id, employeeName: c.employee_name, readiness: c.readiness, order: c.candidate_order, notes: c.notes })),
   };
 }

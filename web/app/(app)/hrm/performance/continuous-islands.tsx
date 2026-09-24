@@ -698,7 +698,7 @@ export function TalentDialog({
               promotionReady: promotion,
               notes: notes.trim() || null,
             }
-          : { positionId, incumbentEmploymentId: employmentId || null }
+          : { positionId, incumbentEmploymentId: employmentId || null, notes: notes.trim() || null }
       const res = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

@@ -22,6 +22,7 @@ import {
   removeSuccessionCandidate,
   resolveTalentScales,
   setSuccessionPlanStatus,
+  setSuccessionPlanNotes,
 } from "./talent.ts";
 
 /**
@@ -251,7 +252,25 @@ test("succession plans and candidates stay inside the fence", async () => {
     assert.equal(createError.code, "NOT_FOUND");
     assert.match(createError.message, /position was not found/);
     const planB = await createSuccessionPlan({ orgId: h.org.orgId, actorId: h.hrAll, positionId: positionB.id });
-    const planA = await createSuccessionPlan({ orgId: h.org.orgId, actorId: h.hrAll, positionId: positionA.id });
+    const planA = await createSuccessionPlan({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      positionId: positionA.id,
+      notes: "Interim coverage while the successor is prepared.",
+    });
+    assert.equal(planA.notes, "Interim coverage while the successor is prepared.");
+    const planAReadback = (await listSuccessionPlans({ orgId: h.org.orgId, actorId: h.hrAll }))
+      .find((plan) => plan.id === planA.id);
+    assert.equal(planAReadback?.notes, "Interim coverage while the successor is prepared.", "plan notes read back from storage");
+    await setSuccessionPlanNotes({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      id: planA.id,
+      notes: "The regional lead will cover the role through quarter end.",
+    });
+    const editedPlan = (await listSuccessionPlans({ orgId: h.org.orgId, actorId: h.hrAll }))
+      .find((plan) => plan.id === planA.id);
+    assert.equal(editedPlan?.notes, "The regional lead will cover the role through quarter end.", "plan notes can be edited and read back");
     // …cannot move its status, add to it, list it, or staff it cross-fence.
     const statusError = perfError(await setSuccessionPlanStatus({
       orgId: h.org.orgId,
