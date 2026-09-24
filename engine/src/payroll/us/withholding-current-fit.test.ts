@@ -336,6 +336,24 @@ test('North Dakota and Nebraska separate supplementals use their published flat 
   assert.equal(ne?.factors.US_SUPPLEMENTAL_RATE, '0.035')
 })
 
+test('Arkansas combined bonus uses the bonus rate beside the regular formula', () => {
+  // Arkansas DFA 2026 Employer Instructions, p. 4, require formula withholding
+  // on regular wages and 3.9% of bonuses paid at the same time:
+  // https://www.dfa.arkansas.gov/wp-content/uploads/withholdInstructions_2026.pdf
+  // At $900 biweekly, the $23,400 annualized regular wage is in the 3.4% band:
+  // $424 rounded annual tax / 26 = $16.31 rounded to cents. The separate
+  // $1,000 bonus is $39.
+  const result = computeUsWithholding({
+    levy: levy('AR', 'us_ar_ar4ec'), payDate: '2026-06-01', periodEnd: PERIOD_END,
+    periodsPerYear: 26, wages: '900.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'combined', federalIncomeTax: '0.00',
+    certificateFor: () => certificate('us_ar_ar4ec', {}), tenantRates: () => undefined,
+  })
+  assert.equal(result?.tax, '55.3100')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.039')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '39.0000')
+})
+
 test('US regional and subregional methods receive exact, sourced allocation facts', () => {
   const allocation = {
     region: 'MI', subRegion: 'DETROIT', workShare: '0.250000', source: 'approved work-location record',
