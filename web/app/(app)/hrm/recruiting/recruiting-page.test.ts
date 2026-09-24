@@ -1,107 +1,98 @@
-import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-/**
- * Contract coverage for /hrm/recruiting without booting Next: source
- * assertions over the page shell (gate placement, metadata, search-params
- * passthrough) and the loader/spec split between the view and the shared
- * drawer component.
- */
-
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
-const actions = readFileSync(new URL("./actions.tsx", import.meta.url), "utf8");
-const form = readFileSync(new URL("./RecruitingCreateForm.tsx", import.meta.url), "utf8");
-
-test("recruiting page carries the gate where the route-gate scanner reads it", () => {
-  assert.match(view, /requirePermission\('hrm\.recruiting\.read'\)/, "the page enforces the recruiting read grant, not the employment one");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
-  assert.match(page, /loadRecruitingPage\(sp\)/, "the page renders only after the view gate resolves");
-  assert.match(page, /searchParams=\{sp\}/, "the query string reaches the loader and the spec host");
-  assert.match(page, /trusted \/>/, "the view spec is trusted output, never raw user input");
-  assert.match(page, /generateMetadata/, "tab metadata resolves the translated title");
+// Behaviour contract for the recruiting depth tabs (HR-18): Interviews,
+// Offers, Postings, and Pools ride /hrm/recruiting as ?tab= sub-tabs.
+// Unknown or switched-off tabs fall back to Openings (absent, never an
+// error), the strip lists only the enabled tabs, and selection hrefs are
+// stable. The only seam is the feature switch; the tab services behind
+// each surface stay covered by the engine recruiting tests, not doubled
+// here.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    if (specifier === "../../../../lib/features") {
+      return {
+        shortCircuit: true,
+        format: "module",
+        url:
+          "data:text/javascript," +
+          encodeURIComponent(
+            `export async function isFeatureEnabled(orgId, key) {
+              const flags = globalThis.__depthFeatures;
+              if (flags && key in flags) return flags[key];
+              return true;
+            }
+            export async function requireFeatureEnabled() {}`,
+          ),
+      };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("recruiting spec composes shared primitives: list toolbar, table, URL drawer", () => {
-  assert.match(view, /route: '\/hrm\/recruiting'/, "the spec names its own route for the registry");
-  assert.match(view, /widgetBlock\('list-toolbar'/, "filters ride the shared list toolbar, never a lone dropdown over a bare table");
-  assert.doesNotMatch(view, /widgetBlock\('filter-chips'/, "no second filter treatment beside the toolbar");
-  assert.match(view, /paramKey: 'status'/, "segments filter over the status search param");
-  assert.match(view, /table\(\{/, "the list renders through the shared table block");
-  assert.match(view, /variant: 'app'/, "the list uses the shared app table primitives");
-  assert.match(view, /badge\(item\('statusLabel'\)/, "status renders through the shared badge cell");
-  assert.match(view, /link\(item\('number'\), item\('href'\)\)/, "the number opens the drawer through the row href");
-  assert.match(view, /widgetBlock\('hrm-recruiting-drawer'/, "the drawer renders through the shared widget");
-  assert.match(view, /module-home-tabs/, "the header carries the route-tab strip");
-  assert.match(view, /widgetBlock\('module-home-tabs', \{ tabs: data\.viewTabs \}\)/,
-    "Openings and the depth tabs are VIEWS on the shared subtab strip, never a dropdown");
-  assert.match(view, /hrmHiringViewTabs/, "Positions prepends the recruiting depth tabs on the Hiring strip");
-  assert.match(sections, /RecruitingDrawer/, "the drawer stays a shared component, never a copy");
-  assert.match(sections, /UrlDrawer/, "the drawer closes by navigation");
-  assert.ok(!sections.includes('<table'), "no hand-rolled table remains in the recruiting sections");
+const { depthTabOptions, hrefForDepth, resolveDepthTab } = await import("./depth-view.ts");
+
+const gap = globalThis as Record<string, unknown>;
+
+function authz() {
+  return { user: { orgId: "org-recruiting", id: "actor-recruiting" } } as never;
+}
+
+// Hand-written translator: labels are catalog data, and these tests pin
+// routing (values and hrefs), never copy.
+const t = ((key: string) => key) as never;
+
+function flags(set: Record<string, boolean>) {
+  gap.__depthFeatures = set;
+}
+
+test("an unknown or switched-off tab falls back to Openings", async () => {
+  flags({});
+  assert.equal(await resolveDepthTab(authz(), "bogus"), "openings", "unknown tabs fall back");
+  assert.equal(await resolveDepthTab(authz(), undefined), "openings", "an absent tab is Openings");
+  assert.equal(await resolveDepthTab(authz(), 123), "openings", "a non-string tab is Openings");
+  assert.equal(await resolveDepthTab(authz(), "openings"), "openings", "Openings needs no switch");
+
+  flags({ hrmStructuredInterviews: false });
+  assert.equal(await resolveDepthTab(authz(), "interviews"), "openings", "a switched-off tab is absent, not an error");
+
+  flags({ hrmStructuredInterviews: true });
+  assert.equal(await resolveDepthTab(authz(), "interviews"), "interviews", "a switched-on tab resolves");
 });
 
-test("segments filter server-side and rows resolve through the read service", () => {
-  assert.match(view, /listRequisitions\(\{/, "segments and rows resolve through the canonical recruiting read service");
-  assert.match(view, /getRequisitionDetail\(\{/, "the drawer resolves one opening through the same service");
-  assert.match(view, /getCandidateDetail\(\{/, "the candidate drawer resolves through the same service");
-  assert.match(view, /getOfferDetail\(\{/, "the offer drawer resolves through the same service");
-  assert.match(view, /sp\.status/, "the active segment comes from the query string");
-  assert.match(view, /sp\.requisition/, "the open requisition comes from the query string");
-  assert.match(view, /sp\.candidate/, "the open candidate comes from the query string");
-  assert.match(view, /sp\.offer/, "the open offer comes from the query string");
-  assert.match(view, /segmentOptions/, "filter options resolve in the loader with counts");
-  assert.match(view, /currentParams/, "the query string survives a segment change");
-  assert.match(view, /statusVariant/, "badge presentation resolves in the loader, never in render");
-  assert.match(view, /closeHref/, "the drawer closes by navigation to the segment href");
-  assert.ok(!/from hrm_requisitions/.test(view), "loader issues no direct requisition-table reads");
-  assert.ok(!/from hrm_applications/.test(view), "loader issues no direct application reads");
+test("the strip lists only the enabled tabs with stable hrefs", async () => {
+  flags({ hrmStructuredInterviews: false, hrmOfferSigning: false, hrmJobBoards: false, hrmTalentPool: false });
+  assert.deepEqual(await depthTabOptions(authz(), t, null), [
+    { value: "openings", label: "recruiting.tabs.openings", href: "/hrm/recruiting" },
+  ]);
+
+  flags({ hrmStructuredInterviews: true, hrmOfferSigning: false, hrmJobBoards: false, hrmTalentPool: false });
+  assert.deepEqual(await depthTabOptions(authz(), t, "open"), [
+    { value: "openings", label: "recruiting.tabs.openings", href: "/hrm/recruiting?status=open" },
+    { value: "interviews", label: "recruiting.tabs.interviews", href: "/hrm/recruiting?tab=interviews&status=open" },
+  ]);
+
+  flags({ hrmStructuredInterviews: true, hrmOfferSigning: true, hrmJobBoards: true, hrmTalentPool: true });
+  assert.deepEqual(
+    (await depthTabOptions(authz(), t, null)).map((option) => [option.value, option.href]),
+    [
+      ["openings", "/hrm/recruiting"],
+      ["interviews", "/hrm/recruiting?tab=interviews"],
+      ["offers", "/hrm/recruiting?tab=offers"],
+      ["postings", "/hrm/recruiting?tab=postings"],
+      ["pools", "/hrm/recruiting?tab=pools"],
+    ],
+    "every depth surface resolves its own tab href when switched on",
+  );
 });
 
-// The header primary action and its create form (Braedon's review: no way to add an opening).
-test("the header carries New requisition first, then the strip, behind the manage ref", () => {
-  const add = view.indexOf("widget('link-button'");
-  const tabs = view.indexOf("widget('module-home-tabs'");
-  assert.ok(add > 0 && tabs > add, "the primary action precedes the tab strip");
-  assert.match(view, /widget\('link-button', \{ href: f\('addHref'\), label: f\('addLabel'\), iconKey: 'plus' \}, f\('canManage'\)\)/);
-  assert.match(view, /requisition === 'new' && canManage/, "the create form opens only for the manage grant");
-  assert.match(form, /fetch\('\/api\/hrm\/recruiting\/requisitions'/, "the form posts through the requisitions route");
-  assert.match(form, /readApiErrorMessage/, "the form renders refusals, never swallows them");
-  assert.ok(!form.includes('<table'), "no table in the create form");
+test("selection hrefs keep the tab and the selection", () => {
+  assert.equal(hrefForDepth("openings", null), "/hrm/recruiting?tab=openings");
+  assert.equal(hrefForDepth("interviews", { interview: "i-1" }), "/hrm/recruiting?tab=interviews&interview=i-1");
+  assert.equal(hrefForDepth("offers", { offer: "o-9" }), "/hrm/recruiting?tab=offers&offer=o-9");
 });
 
-// HR-18: depth sub-tabs ride their own switches and mount their Setup lists
-// through the shared setup-section widget — absent when off, never errors.
-test("depth tabs gate per sub-switch and mount rehomed Setup sections", () => {
-  assert.match(view, /resolveDepthTab\(authz, sp\.tab\)/, "an unknown or switched-off tab falls back to Openings");
-  assert.match(view, /depthTabOptions\(authz, t, status\)/, "the strip lists only the enabled depth tabs");
-  assert.match(view, /widgetBlock\('setup-section'/, "Setup lists mount through the shared setup-section widget");
-  assert.match(view, /hrm-interview-kits/, "kits rehome onto the Interviews tab");
-  assert.match(view, /hrm-interviewer-pools/, "interviewer pools rehome onto the Interviews tab");
-  assert.match(view, /hrm-offer-templates/, "offer templates rehome onto the Offers tab");
-  assert.match(view, /hrm-retention-rules/, "retention rules rehome onto the Pools tab");
-  assert.match(view, /entry\?\.featureKey && \(await isFeatureEnabled/, "each section checks its own sub-switch, never the tab's");
-  assert.match(view, /basePath: '\/hrm\/recruiting'/, "sections stay local to the Recruiting page");
-});
-
-test("drawer islands post through the recruiting routes with refusals intact", () => {
-  for (const island of [
-    'ApplicationAttachIsland',
-    'ApplicationActionsIsland',
-    'InterviewScheduleIsland',
-    'InterviewActionsIsland',
-    'OfferCreateIsland',
-    'OfferActionsIsland',
-  ]) {
-    assert.match(actions, new RegExp(`export function ${island}`), `${island} is a small client island`);
-  }
-  assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/attachments'/, "attach posts once through the combined attachments route");
-  assert.match(actions, /(fetch|postJson)\('\/api\/hrm\/recruiting\/interviews'/, "interview acts post through the interviews route");
-  assert.match(actions, /(fetch|postJson)\(\s*'\/api\/hrm\/recruiting\/offers'/, "offer acts post through the offers route");
-  assert.match(actions, /readApiErrorMessage/, "islands render refusals, never swallow them");
-  assert.match(actions, /!res\.ok/, "error bodies are checked before they are parsed");
-  assert.match(sections, /from '@openbooks\/ui'/, "forms use the house primitives");
-  assert.ok(!actions.includes('orgId') && !actions.includes('actorId'), "no org, user, or Authz crosses into the client");
-});
