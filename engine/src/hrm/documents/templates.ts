@@ -2,7 +2,11 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
-import { requireHrmDocumentsManage, requireHrmDocumentsRead } from "../authorization.ts";
+import {
+  requireHrmDocumentsManage,
+  requireHrmDocumentsRead,
+  requireUnrestrictedHrmScope,
+} from "../authorization.ts";
 import { assertCategoryDeclared } from "./categories.ts";
 import { HrmDocumentsError } from "./errors.ts";
 
@@ -201,6 +205,10 @@ export async function saveTemplate(input: {
   const valid = validateTemplateInput(input);
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
+    // Templates are org-wide configuration (body, merge fields and
+    // signature rules apply to every legal entity): restricted authors get
+    // the canonical 403.
+    await requireUnrestrictedHrmScope(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     // Membership, not shape: the key must be declared under Setup →
     // Workforce → Document Categories, which is the vocabulary's single

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { renderPdfDocument, renderTemplate } from "@openbooks/pdf";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
@@ -7,13 +7,18 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import {
   loadActorPartyId,
+  requireAggregateDocumentsRead,
   requireHrmDocumentsManage,
   requireHrmDocumentsRead,
+  requirePartyInScope,
+  requireRowSubjectInScope,
 } from "../authorization.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { subsidiaryVisibleFilter, withScopeSnapshot } from "../../organization/subsidiary-scope.ts";
 import { isLegacyProvenance } from "../../platform/legacy-provenance.ts";
 import { refuseMaskedStorageKind } from "../../platform/file-storage.ts";
 import { HrmDocumentsError } from "./errors.ts";
+import { assertCategoryDeclared } from "./categories.ts";
 import { hashHrmToken, mintDocumentSignerToken, verifyDocumentSignerToken } from "./tokens.ts";
 import { appendCabinetVersion, storeCabinetFile } from "./cabinet.ts";
 import type { DocumentSignerRole } from "./templates.ts";
@@ -340,6 +345,9 @@ export async function generateDocument(input: {
   return withOrgTransaction(input.orgId, async () => {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
+    // The subject's employer subsidiary decides visibility: a restricted
+    // author generates only for subjects they cover.
+    await requirePartyInScope(db, input.orgId, input.actorId, input.partyId);
     const tpl = (await db.execute<{
       id: string;
       category_key: string;
@@ -373,8 +381,9 @@ export async function generateDocument(input: {
       }
     }
     if (input.employmentId) {
-      const emp = (await db.execute<{ id: string }>(sql`
-        select id from worker_employments where org_id = ${input.orgId} and id = ${input.employmentId}
+      const emp = (await db.execute<{ id: string; workerPartyId: string }>(sql`
+        select id, worker_party_id as "workerPartyId"
+          from worker_employments where org_id = ${input.orgId} and id = ${input.employmentId}
       `)).rows[0];
       if (!emp) {
         throw new HrmDocumentsError(
@@ -382,6 +391,7 @@ export async function generateDocument(input: {
           "employment is not visible in this organization and legal-entity scope",
         );
       }
+      await requirePartyInScope(db, input.orgId, input.actorId, emp.workerPartyId);
     }
     const values = await resolveMergeFields(
       db,
@@ -464,6 +474,24 @@ export async function uploadDocument(input: {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     await loadPerson(db, input.orgId, input.partyId);
+    // Membership, not shape: like templates and retention schedules, an
+    // upload for an undeclared category would never match a retention
+    // rule, so the save is refused against the Setup vocabulary.
+    await assertCategoryDeclared(db, input.orgId, categoryKey);
+    await requirePartyInScope(db, input.orgId, input.actorId, input.partyId);
+    if (input.employmentId) {
+      const emp = (await db.execute<{ id: string; workerPartyId: string }>(sql`
+        select id, worker_party_id as "workerPartyId"
+          from worker_employments where org_id = ${input.orgId} and id = ${input.employmentId}
+      `)).rows[0];
+      if (!emp) {
+        throw new HrmDocumentsError(
+          "NOT_FOUND",
+          "employment is not visible in this organization and legal-entity scope",
+        );
+      }
+      await requirePartyInScope(db, input.orgId, input.actorId, emp.workerPartyId);
+    }
     const docId = (await db.execute<{ id: string }>(sql`
       insert into hrm_documents
         (org_id, employment_id, party_id, template_id, category_key, title,
@@ -580,6 +608,7 @@ export async function sendDocument(input: {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     const doc = await loadDocument(db, input.orgId, input.documentId);
+    await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     if (doc.status !== "draft") {
       throw new HrmDocumentsError(
         "REFUSED",
@@ -676,6 +705,7 @@ export async function remindDocument(input: {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     const doc = await loadDocument(db, input.orgId, input.documentId);
+    await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     if (doc.status === "draft") {
       throw new HrmDocumentsError(
         "REFUSED",
@@ -1156,6 +1186,10 @@ export async function acknowledgeDocument(input: {
     const isOwner = ownParty !== null && ownParty === doc.party_id;
     if (!isOwner) {
       await requireHrmDocumentsManage(db, orgId, actorId);
+      await requireRowSubjectInScope(db, orgId, actorId, {
+        employmentId: doc.employment_id,
+        partyId: doc.party_id,
+      });
     } else if (!(await actorHasPermission(db, orgId, actorId, "hrm.self.read"))) {
       await requireHrmDocumentsManage(db, orgId, actorId);
     }
@@ -1192,6 +1226,7 @@ export async function voidDocument(input: {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     const doc = await loadDocument(db, input.orgId, input.documentId);
+    await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     if (doc.status === "voided") throw new HrmDocumentsError("REFUSED", "this document is already voided");
     if (doc.status === "signed" || doc.status === "acknowledged") {
       throw new HrmDocumentsError(
@@ -1224,6 +1259,7 @@ export async function setLegalHold(input: {
     await requireHrmDocumentsManage(db, input.orgId, input.actorId);
     await assertDocumentsFeature(db, input.orgId);
     const doc = await loadDocument(db, input.orgId, input.documentId);
+    await requireRowSubjectInScope(db, input.orgId, input.actorId, { employmentId: doc.employment_id, partyId: doc.party_id });
     const updated = (await db.execute<DocumentRow>(sql`
       update hrm_documents
          set legal_hold = ${input.hold}, updated_at = now(), updated_by = ${input.actorId}
@@ -1250,17 +1286,54 @@ export async function listDocuments(query: {
   categoryKey?: string;
   limit?: number;
 }): Promise<DocumentDTO[]> {
-  await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  const rows = (await db.execute<DocumentRow>(sql`
-    ${DOC_COLS}
-     where org_id = ${query.orgId}
-       ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
-       ${query.status ? sql`and status = ${query.status}` : sql``}
-       ${query.categoryKey ? sql`and category_key = ${query.categoryKey}` : sql``}
-     order by created_at desc
-     limit ${Math.min(Math.max(query.limit ?? 50, 1), 200)}
-  `)).rows;
-  return rows.map(toDTO);
+  // One REPEATABLE READ snapshot for the scope resolution and the list,
+  // so a concurrent rehome cannot move a row between the two reads.
+  return withScopeSnapshot(query.orgId, async () => {
+    const allowed = await requireAggregateDocumentsRead(db, query.orgId, query.actorId);
+    if (query.partyId) {
+      await requirePartyInScope(db, query.orgId, query.actorId, query.partyId);
+    }
+    const rows = (await db.execute<DocumentRow>(sql`
+      ${DOC_COLS}
+       where org_id = ${query.orgId}
+         ${query.partyId ? sql`and party_id = ${query.partyId}` : sql``}
+         ${query.status ? sql`and status = ${query.status}` : sql``}
+         ${query.categoryKey ? sql`and category_key = ${query.categoryKey}` : sql``}
+         ${documentScopePredicate(query.orgId, allowed)}
+       order by created_at desc
+       limit ${Math.min(Math.max(query.limit ?? 50, 1), 200)}
+    `)).rows;
+    return rows.map(toDTO);
+  });
+}
+
+/**
+ * Employer-subsidiary predicate for document lists, narrowest link first:
+ * an employment-linked row lists only when THAT employment's employer is
+ * in the actor's allowed set (a dual A+B employee's B-employment rows
+ * never surface through the A employment); a party-only row lists when
+ * the party holds at least one in-scope employment. The subsidiary test
+ * itself is the canonical subsidiaryVisibleFilter; the employment joins
+ * are the HRM narrowest-link shape the generic column filter cannot
+ * express. Unrestricted callers read everything; delinked
+ * (retention-anonymized, party-less) rows stay with unrestricted readers.
+ */
+function documentScopePredicate(orgId: string, allowed: Set<string> | null) {
+  if (allowed === null) return sql``;
+  const employmentInScope: SQL = subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed);
+  return sql`and (
+    (hrm_documents.employment_id is not null and exists (
+      select 1 from worker_employments e
+       where e.org_id = ${orgId}
+         and e.id = hrm_documents.employment_id
+         ${employmentInScope}
+    )) or (hrm_documents.employment_id is null and exists (
+      select 1 from worker_employments e
+       where e.org_id = ${orgId}
+         and e.worker_party_id = hrm_documents.party_id
+         ${employmentInScope}
+    ))
+  )`;
 }
 
 /** Own documents for the Me surface (hrm.self.read, fenced to own party). */
@@ -1298,6 +1371,10 @@ export async function getDocumentDetail(query: {
 }): Promise<DocumentDetail> {
   await requireHrmDocumentsRead(db, query.orgId, query.actorId);
   const doc = await loadDocument(db, query.orgId, query.documentId);
+  await requireRowSubjectInScope(db, query.orgId, query.actorId, {
+    employmentId: doc.employment_id,
+    partyId: doc.party_id,
+  });
   const signers = await loadSigners(db, query.orgId, doc.id);
   const events = (await db.execute<{ kind: string; actor: string | null; recordedAt: string }>(sql`
     select kind, actor, recorded_at::text as "recordedAt"
@@ -1374,9 +1451,14 @@ export async function readDocumentFile(query: {
   documentId: string;
 }): Promise<{ bytes: Buffer; filename: string }> {
   const doc = await loadDocument(db, query.orgId, query.documentId);
-  try {
-    await requireHrmDocumentsRead(db, query.orgId, query.actorId);
-  } catch {
+  if (await actorHasPermission(db, query.orgId, query.actorId, "hrm.documents.read")) {
+    // Grant holders read in-scope subjects only; the uniform refusal keeps
+    // a scoped-out document indistinguishable from a missing one.
+    await requireRowSubjectInScope(db, query.orgId, query.actorId, {
+      employmentId: doc.employment_id,
+      partyId: doc.party_id,
+    });
+  } else {
     const ownParty = await loadActorPartyId(db, query.orgId, query.actorId);
     if (
       ownParty !== doc.party_id ||

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { HrmDocumentsError } from "@openbooks/engine/src/hrm/documents/errors.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { MaskedFileContentError } from "@openbooks/engine/src/platform/file-storage.ts";
 import { hrmDocumentsErrorResponse } from "./_lib.ts";
 
@@ -29,6 +30,12 @@ test("a masked-sandbox file tombstone reaches the caller as a named 403, never a
   const body = (await res.json()) as { error: string };
   assert.match(body.error, /masked sandboxes never receive/);
   assert.match(body.error, /re-upload the file here/);
+});
+
+test("the canonical org-wide scope refusal reaches the caller as a named 403", async () => {
+  const res = await hrmDocumentsErrorResponse(new UnrestrictedScopeError());
+  assert.equal(res.status, 403);
+  assert.equal(((await res.json()) as { error: string }).error, "requires unrestricted subsidiary access");
 });
 
 test("unknown failures are a bare 500, never a leaked refusal", async () => {

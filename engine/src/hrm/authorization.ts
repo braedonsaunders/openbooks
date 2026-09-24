@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { businessToday } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
@@ -642,6 +643,34 @@ export async function requireHrmDocumentsManage(
   return requireHrmDocumentAccess(exec, orgId, actorId, "hrm.documents.manage");
 }
 
+/**
+ * Aggregate half of document authority for list-shaped reads that name no
+ * single subject: the read grant, then the employer-subsidiary scope for
+ * the caller to filter by (null = unrestricted), never a boolean to trust.
+ */
+export async function requireAggregateDocumentsRead(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmDocumentsRead(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
+/**
+ * Aggregate half of document authority for creates (which name no stored
+ * row yet): the manage grant, then the employer-subsidiary scope the
+ * caller validates the declared subject against.
+ */
+export async function requireAggregateDocumentsManage(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null> {
+  await requireHrmDocumentsManage(exec, orgId, actorId);
+  return actorAllowedSubsidiaryIds(exec, orgId, actorId);
+}
+
 /** Author surveys and read aggregate results (never respondent links). */
 export async function requireHrmSurveysManage(
   exec: SqlExecutor,
@@ -691,13 +720,18 @@ export async function requireOrgChartRead(
 // HR-19 end
 
 // H-lens begin: party-subject subsidiary lens shared across hrm/ (H wave).
+// Every decision below delegates to the canonical subsidiary-scope module
+// (engine/src/organization/subsidiary-scope.ts) — the HRM layer only loads
+// person/employment subjects and keeps the HRM refusal shapes. Do not add a
+// second copy of the scope logic here.
 /**
  * Party-subject subsidiary lens, shared by every HRM service whose subject
  * is a person (documents, DSAR exports, surveys, directory reads) rather
  * than one employment row. The subject's employers are the distinct
  * employer_subsidiary_id values across their worker_employments rows on
- * the trusted runner — never caller input. Callers check their own grant
- * first (requireHrmDocumentsRead etc.); this is the scope half only.
+ * the trusted runner — never caller input. Membership is decided by the
+ * canonical subsidiaryScopeAllows; callers check their own grant first
+ * (requireHrmDocumentsRead etc.), this is the scope half only.
  */
 export async function loadPartyEmployerSubsidiaries(
   exec: SqlExecutor,
@@ -737,7 +771,7 @@ export async function requirePartyInScope(
     );
   }
   const employers = await loadPartyEmployerSubsidiaries(exec, orgId, partyId);
-  if (!employers.some((id) => allowed.has(id))) {
+  if (!employers.some((id) => subsidiaryScopeAllows(allowed, id))) {
     throw new HrmAuthorizationError(
       "Subject is not visible in this organization and legal-entity scope.",
     );
@@ -745,23 +779,68 @@ export async function requirePartyInScope(
 }
 
 /**
+ * Scope half for employment-linked rows (documents, DSAR slices, anomaly
+ * flags, benefit enrollments, comp lines, per-diem entries): the check is
+ * against THAT employment's employer, never the party's any-employment
+ * set. A party employed by both A and B has a B slice an A-only actor
+ * must not reach through the A employment, so rows carrying an employment
+ * always use this gate; rows with no employment fall back to
+ * requirePartyInScope. Unknown, cross-org, and out-of-scope employments
+ * all refuse with the uniform not-visible message.
+ */
+export async function requireEmploymentRowInScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  employmentId: string,
+): Promise<void> {
+  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
+  if (allowed === null) return;
+  const row = (await exec.execute<{ employerSubsidiaryId: string | null }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId"
+      from worker_employments
+     where org_id = ${orgId} and id = ${employmentId}
+  `)).rows[0];
+  if (!subsidiaryScopeAllows(allowed, row?.employerSubsidiaryId)) {
+    throw new HrmAuthorizationError(
+      "Employment is not visible in this organization and legal-entity scope.",
+    );
+  }
+}
+
+/**
+ * Narrowest-link dispatcher for rows carrying both an employment and a
+ * party (hrm_documents): an employment-linked row is scoped by that
+ * employment; a party-only row falls back to the party lens. Callers pass
+ * the stored row links verbatim — never a caller-chosen subject.
+ */
+export async function requireRowSubjectInScope(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  subject: { employmentId: string | null; partyId: string | null },
+): Promise<void> {
+  if (subject.employmentId !== null) {
+    await requireEmploymentRowInScope(exec, orgId, actorId, subject.employmentId);
+    return;
+  }
+  await requirePartyInScope(exec, orgId, actorId, subject.partyId);
+}
+
+/**
  * Org-wide configuration writes (retention schedules, org-wide enrollment
  * windows and templates, org-wide recruiting rules): there is no single
- * subject to scope by, so a subsidiary-restricted actor is refused by name.
- * The refusal names the remedy — an administrator with organization-wide
- * scope — and the remedy exists (the all-scope admin role).
+ * subject to scope by, so the canonical assertUnrestrictedScope decides —
+ * a subsidiary-restricted actor gets the canonical 403
+ * 'requires unrestricted subsidiary access', which HRM routes map like any
+ * other 403 refusal with its message intact.
  */
 export async function requireUnrestrictedHrmScope(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
-  what: string,
 ): Promise<void> {
-  const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  if (allowed === null) return;
-  throw new HrmAuthorizationError(
-    `${what} applies across legal entities — ask an administrator with organization-wide scope to change it instead.`,
-  );
+  assertUnrestrictedScope(await actorAllowedSubsidiaryIds(exec, orgId, actorId));
 }
 // H-lens end
 
