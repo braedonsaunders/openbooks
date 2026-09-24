@@ -248,6 +248,11 @@ test("vacancy rejects bad dates and unknown statuses before the service runs", a
     (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=nope"))).status,
     400,
   );
+  const impossibleDate = await collectionRoute!.GET(
+    new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-02-30"),
+  );
+  assert.equal(impossibleDate.status, 400);
+  assert.match((await impossibleDate.json()).error, /real.*calendar date/);
   assert.equal(
     (await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/positions?effectiveDate=2026-07-15&status=draft"))).status,
     400,

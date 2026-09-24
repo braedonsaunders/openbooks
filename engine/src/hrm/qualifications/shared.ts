@@ -1,6 +1,7 @@
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { daysInCivilMonth } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { parseCivilDate } from "../temporal.ts";
 import { HrmQualificationError } from "./errors.ts";
 
 /**
@@ -38,10 +39,11 @@ export function requireId(value: unknown, field: string): string {
 }
 
 export function requireDate(value: unknown, field: string): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    throw new HrmQualificationError(`${field} must be a YYYY-MM-DD date.`);
+  try {
+    return parseCivilDate(value);
+  } catch {
+    throw new HrmQualificationError(`${field} must be a real YYYY-MM-DD calendar date in years 0001 through 9999.`);
   }
-  return value;
 }
 
 export function requireText(value: unknown, field: string): string {

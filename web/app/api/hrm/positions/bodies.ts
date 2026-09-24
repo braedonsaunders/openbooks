@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -9,7 +10,7 @@ import { isUuid } from "../../../../lib/list-params";
  * shape it can pin.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const civilDate = (field: string) => civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
 const fte = z.string().regex(/^\d+(\.\d{1,4})?$/, "must be a decimal with up to 4 fraction digits");
 const text255 = z.string().trim().min(1).max(255);
 const reason = z.string().trim().min(1, "reason required").max(2000);
@@ -23,8 +24,8 @@ export const createPositionBody = z.object({
   jobGrade: z.string().trim().min(1).max(120).nullable().optional(),
   plannedFte: fte.optional(),
   status: z.enum(["planned", "open", "filled", "frozen", "closed"]).optional(),
-  effectiveFrom: civilDate,
-  effectiveTo: civilDate.nullable().optional(),
+  effectiveFrom: civilDate("effectiveFrom"),
+  effectiveTo: civilDate("effectiveTo").nullable().optional(),
   reason,
 });
 
@@ -37,14 +38,14 @@ export const revisePositionBody = z.object({
   jobGrade: z.string().trim().min(1).max(120).nullable().optional(),
   plannedFte: fte.optional(),
   status: z.enum(["planned", "open", "filled", "frozen"]).optional(),
-  effectiveFrom: civilDate.optional(),
-  effectiveTo: civilDate.nullable().optional(),
+  effectiveFrom: civilDate("effectiveFrom").optional(),
+  effectiveTo: civilDate("effectiveTo").nullable().optional(),
   reason,
 });
 
 export const closePositionBody = z.object({
   action: z.literal("close"),
-  effectiveDate: civilDate,
+  effectiveDate: civilDate("effectiveDate"),
   reason,
 });
 

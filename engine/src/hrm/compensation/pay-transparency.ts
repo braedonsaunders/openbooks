@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
@@ -278,7 +279,7 @@ export async function computeGapSnapshot(query: {
 }): Promise<GapSnapshotDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(query.asOf)) {
+  if (!isCivilDate(query.asOf)) {
     throw new CompensationError("INVALID_INPUT", "asOf (YYYY-MM-DD) required");
   }
   if (!query.groupA || !query.groupB || query.groupA === query.groupB) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -9,7 +10,7 @@ import { isUuid } from "../../../../lib/list-params";
  * service copies them from the plan basis at election.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a YYYY-MM-DD date");
+const civilDate = civilDateInput();
 const reason = z.string().trim().min(1, "reason required").max(2000);
 
 const electBase = z.object({

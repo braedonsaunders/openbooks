@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
@@ -688,7 +689,7 @@ export async function scanAnomalies(
 ): Promise<ScanSummary> {
   const { orgId, actorId, periodFrom: from, periodTo: to } = input;
   if (!orgId || !actorId) throw new AiRailsError("ai_invalid_input", "orgId and actorId are required");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) {
+  if (!isCivilDate(from) || !isCivilDate(to) || from > to) {
     throw new AiRailsError("ai_invalid_input", "periodFrom/periodTo must be YYYY-MM-DD with periodFrom <= periodTo");
   }
   const timeOnly = input.options?.timeOnly === true;
@@ -1073,4 +1074,3 @@ export async function resolveFlag(query: {
 }): Promise<FlagRow> {
   return withOrgTransaction(query.orgId, () => transitionFlag(db, query));
 }
-

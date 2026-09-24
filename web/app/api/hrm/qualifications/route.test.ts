@@ -274,6 +274,20 @@ test("record carries the caller's org and actor into the service", async () => {
   ]);
 });
 
+test("record refuses an impossible issuedOn date before calling the service", async () => {
+  reset();
+  const response = await ledgerRoute!.POST(
+    new Request("http://openbooks.test/api/hrm/qualifications", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ employmentId: UUID, typeId: UUID2, issuedOn: "2025-02-31" }),
+    }),
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /issuedOn.*real.*calendar date/);
+  assert.deepEqual(routeState.calls, []);
+});
+
 test("an engine refusal maps with its message intact", async () => {
   reset();
   routeState.serviceThrow = new HrmQualificationError("expiry 2026-01-01 is before issue 2026-09-21 — fix the dates and record again.");

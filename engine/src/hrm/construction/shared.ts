@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
@@ -40,7 +41,7 @@ export function requireId(value: unknown, field: string): string {
 }
 
 export function requireDate(value: unknown, field: string): string {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (typeof value !== "string" || !isCivilDate(value)) {
     throw new HrmConstructionError(`${field} must be a YYYY-MM-DD date.`);
   }
   return value;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { canonicalDecimal, isPositiveDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decimal-refusal";
@@ -9,7 +10,7 @@ import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decim
  * bare object).
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const civilDate = civilDateInput();
 // A band/cycle/line amount must retain its exact decimal spelling across the
 // JSON boundary. Numeric JSON values have already crossed IEEE-754 and are
 // refused with a remedy instead of being stringified.

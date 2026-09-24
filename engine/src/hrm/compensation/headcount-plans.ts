@@ -1,3 +1,4 @@
+import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
@@ -131,7 +132,6 @@ function toLineDTO(row: PlanLineRow): PlanLineDTO {
   };
 }
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Planned FTE rounded per the org's declared rounding. Requisition headcount is whole people (ceil of the rounded FTE); the line keeps the precise FTE for costing. */
 export function roundFteForHeadcount(plannedFte: string, rounding: FteRounding): number {
@@ -346,7 +346,7 @@ export async function createPlan(query: {
   if (typeof query.name !== "string" || query.name.trim().length === 0) {
     throw new CompensationError("INVALID_INPUT", "a plan name is required");
   }
-  if (!DATE_RE.test(query.fiscalPeriodFrom) || !DATE_RE.test(query.fiscalPeriodTo) || query.fiscalPeriodTo < query.fiscalPeriodFrom) {
+  if (!isCivilDate(query.fiscalPeriodFrom) || !isCivilDate(query.fiscalPeriodTo) || query.fiscalPeriodTo < query.fiscalPeriodFrom) {
     throw new CompensationError("INVALID_INPUT", "fiscalPeriodFrom/To (YYYY-MM-DD) required with To on or after From");
   }
   return withOrgTransaction(orgId, async () => {
@@ -391,10 +391,10 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
   if (!/^\d+(\.\d{1,4})?$/.test(query.plannedFte) || !(Number(query.plannedFte) > 0)) {
     throw new CompensationError("INVALID_INPUT", "plannedFte must be a positive FTE figure with at most 4 decimals");
   }
-  if (!DATE_RE.test(query.startOn)) {
+  if (!isCivilDate(query.startOn)) {
     throw new CompensationError("INVALID_INPUT", "startOn (YYYY-MM-DD) required");
   }
-  if (query.endOn !== undefined && query.endOn !== null && (!DATE_RE.test(query.endOn) || query.endOn < query.startOn)) {
+  if (query.endOn !== undefined && query.endOn !== null && (!isCivilDate(query.endOn) || query.endOn < query.startOn)) {
     throw new CompensationError("INVALID_INPUT", "endOn (YYYY-MM-DD) must be on or after startOn");
   }
   if (!/^[A-Z]{3}$/.test(query.currency)) {

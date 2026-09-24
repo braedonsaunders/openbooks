@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -8,7 +9,7 @@ import { isUuid } from "../../../../lib/list-params";
  * the shape it can pin.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const civilDate = civilDateInput();
 const decimal = z.string().regex(/^\d+(\.\d+)?$/, "must be a non-negative decimal");
 const note = z.string().trim().min(1).max(2000);
 

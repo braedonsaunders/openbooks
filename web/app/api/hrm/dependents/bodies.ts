@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -7,7 +8,7 @@ import { isUuid } from "../../../../lib/list-params";
  * updates edit descriptors only, never move a person between workers.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be a YYYY-MM-DD date");
+const civilDate = civilDateInput();
 
 export const createDependentBody = z.object({
   employmentId: uuid,

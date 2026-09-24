@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { civilDateInput } from "@/lib/api/civil-date";
 import { isUuid } from "../../../../lib/list-params";
 
 /**
@@ -7,7 +8,7 @@ import { isUuid } from "../../../../lib/list-params";
  * engine service owns the full contract.
  */
 const uuid = z.string().refine(isUuid, "must be a valid id");
-const civilDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const civilDate = (field: string) => civilDateInput(`${field} must be a real YYYY-MM-DD calendar date`);
 const text255 = z.string().trim().min(1).max(255);
 
 export const createQualificationTypeBody = z.object({
@@ -34,8 +35,8 @@ export const recordQualificationBody = z.object({
   employmentId: uuid,
   typeId: uuid,
   identifier: z.string().trim().max(120).nullable().optional(),
-  issuedOn: civilDate,
-  expiresOn: civilDate.nullable().optional(),
+  issuedOn: civilDate("issuedOn"),
+  expiresOn: civilDate("expiresOn").nullable().optional(),
   evidenceFileId: uuid.nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
 });
@@ -45,8 +46,8 @@ export const verifyQualificationBody = z.object({
 });
 
 export const renewQualificationBody = z.object({
-  issuedOn: civilDate,
-  expiresOn: civilDate.nullable().optional(),
+  issuedOn: civilDate("issuedOn"),
+  expiresOn: civilDate("expiresOn").nullable().optional(),
   evidenceFileId: uuid.nullable().optional(),
   identifier: z.string().trim().max(120).nullable().optional(),
   notes: z.string().trim().max(2000).nullable().optional(),
@@ -64,8 +65,8 @@ export const setRequirementBody = z.object({
   subjectKind: z.enum(["project", "equipment", "position", "classification"]),
   subjectId: uuid,
   typeId: uuid,
-  requiredFrom: civilDate.optional(),
-  requiredTo: civilDate.nullable().optional(),
+  requiredFrom: civilDate("requiredFrom").optional(),
+  requiredTo: civilDate("requiredTo").nullable().optional(),
   severity: z.enum(["block", "warn"]).optional(),
 });
 
@@ -73,7 +74,7 @@ export const checkAssignmentBody = z.object({
   employmentId: uuid,
   subjectKind: z.enum(["project", "equipment", "position", "classification"]),
   subjectId: uuid,
-  on: civilDate.optional(),
+  on: civilDate("on").optional(),
 });
 
 export const declareCategoryBody = z.object({
