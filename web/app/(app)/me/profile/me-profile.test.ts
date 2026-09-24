@@ -1,35 +1,62 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Composition contract for the Me profile (/me/profile): read-only facts
-// through the shared facts widget, Edit in the header through the shared
-// button, and the pending banner plus the edit drawer gated on loader
-// booleans. No hand-rolled markup, no second profile surface.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-
-test("profile renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMeProfilePage/, "page loads through the profile loader");
-  assert.match(page, /searchParams/, "the page forwards search params for the URL-param drawer");
-  assert.match(view, /meProfileSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the profile page (/me/profile). The spec builder
+// runs over hand-built data: a refused read renders its title and remedy,
+// contact facts render verbatim, and the edit dialog renders only with
+// its dialog data. Proposal validation stays covered by
+// engine/src/hrm/self-service/scope.test.ts ('profile proposals validate
+// field by field'), which owns the profile write contract.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("contact fields render through the shared facts widget with a drawer edit", () => {
-  assert.match(view, /hrm-facts/, "facts render through the shared facts widget");
-  assert.match(view, /'link-button'/, "edit rides the shared header button widget");
-  assert.match(view, /f\('editHref'\)/, "the button navigates to a loader-built href");
-  assert.match(view, /hrm-profile-dialog/, "edit opens the shared profile dialog island");
-  assert.match(view, /when: f\('hasPending'\)/, "the pending banner renders only for a pending proposal");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
-  assert.ok(!/<input/.test(view), "the spec holds no hand-rolled form: fields live in the island");
+const { meProfileSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meProfileSpec(data as never));
+}
+
+const TABS = [{ label: "Profile", href: "/me/profile" }];
+
+function baseData(): Record<string, unknown> {
+  return {
+    tabs: TABS,
+    refusal: null,
+    contactFacts: [{ label: "Email", value: "ada@example.com" }],
+    addressFacts: [],
+    emergencyFacts: [],
+    noAddress: "No address on file",
+    noEmergency: "No emergency contact on file",
+    dialog: null,
+    dialogCloseHref: "/me/profile",
+  } as unknown as Record<string, unknown>;
+}
+
+test("a refused profile read renders the remedy", () => {
+  const data = baseData();
+  data.refusal = { title: "No profile", message: "ask an administrator for a linked employment" };
+  const json = specJson(data);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No profile"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
 });
 
-test("the profile dialog submits through the self-service endpoint", () => {
-  const islands = readFileSync(new URL("../islands.tsx", import.meta.url), "utf8");
-  assert.match(islands, /\/api\/hrm\/me\/profile-changes/, "submit files through the profile-changes route");
-  assert.match(islands, /\/api\/hrm\/me\/profile/, "fields prefill from the profile read");
-  assert.match(islands, /if \(!res\.ok\)/, "error bodies are checked before they are parsed");
+test("facts render verbatim with the dialog gated on its data", () => {
+  const json = specJson(baseData());
+  assert.ok(json.includes("Email"), "the fact label renders");
+  assert.ok(json.includes("ada@example.com"), "the fact value renders verbatim");
+  assert.ok(json.includes("No address on file"), "the address empty state renders");
+  assert.ok(json.includes('"dialog":null'), "no edit dialog renders without its dialog data");
+
+  const withDialog = baseData();
+  withDialog.dialog = { title: "Edit contact" };
+  const dialogJson = specJson(withDialog);
+  assert.ok(dialogJson.includes("Edit contact"), "the dialog carries its data");
 });
