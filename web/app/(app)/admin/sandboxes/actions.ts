@@ -15,6 +15,7 @@ import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { validateSandboxCutoff } from "@openbooks/engine/src/sandbox/lifecycle.ts";
+import { validateSandboxCadence } from "@openbooks/engine/src/sandbox/cadence.ts";
 import type { PromotionTransition } from "../../../../lib/sandbox-promotion";
 
 function assertUuid(value: string, label: string): void {
@@ -121,7 +122,7 @@ export async function deleteSandboxAction(sandboxId: string, clientOpKey: string
 export async function setScheduleAction(sandboxId: string, cadence: string | null): Promise<void> {
   const authz = await requireManager();
   assertUuid(sandboxId, "Sandbox");
-  const value = cadence && ["hourly", "daily", "weekly"].includes(cadence) ? cadence : null;
+  const value = validateSandboxCadence(cadence);
   await db.transaction(async (tx) => {
     const existing = await tx.execute<{ orgId: string; refreshSchedule: string | null }>(sql`
       select org_id as "orgId", refresh_schedule as "refreshSchedule"
