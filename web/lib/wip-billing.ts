@@ -907,6 +907,19 @@ export async function holdPrebillLine(
   const cleanEvidence = evidenceList(evidence)
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
+    const target = (await tx.execute<{ project_id: string }>(sql`
+      select worksheet.project_id
+        from wip_prebill_lines line
+        join wip_prebills worksheet on worksheet.org_id = line.org_id and worksheet.id = line.prebill_id
+       where line.org_id = ${orgId} and line.prebill_id = ${prebillId} and line.id = ${lineId}
+    `)).rows[0]
+    if (!target) throw new WipBillingError('Prebill line not found', 404)
+    try {
+      await lockProjectForScope(tx, orgId, target.project_id, scope)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill line not found', 404)
+      throw error
+    }
     const row = (await tx.execute<{ source_type: WipSourceType; source_id: string; project_id: string; status: PrebillStatus }>(sql`
       select line.source_type, coalesce(line.time_entry_id, line.document_line_id) as source_id,
              line.project_id, worksheet.status
@@ -954,16 +967,26 @@ export async function releaseWipHold(orgId: string, actorId: string, holdId: str
   if (!releaseReason) throw new WipBillingError('A release reason is required')
   return db.transaction(async (tx) => {
     await assertWipBillingEnabledTx(tx, orgId)
+    // Read only enough to find the project's serialization fence. The hold
+    // stays unlocked until the project row is locked, so a concurrent rehome
+    // cannot pass between authorization and release.
+    const target = (await tx.execute<{ project_id: string }>(sql`
+      select project_id from wip_holds
+       where org_id = ${orgId} and id = ${holdId} and released_at is null
+    `)).rows[0]
+    if (!target) throw new WipBillingError('Active hold not found', 404)
+    try {
+      await lockProjectForScope(tx, orgId, target.project_id, scope)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Active hold not found', 404)
+      throw error
+    }
     const released = (await tx.execute<{ source_type: WipSourceType; source_id: string }>(sql`
       update wip_holds
          set released_at = now(), released_by = ${actorId}, release_reason = ${releaseReason},
              updated_at = now(), updated_by = ${actorId}
-       where org_id = ${orgId} and id = ${holdId} and released_at is null
-         and exists (
-           select 1 from projects project
-            where project.org_id = wip_holds.org_id and project.id = wip_holds.project_id
-              ${subsidiaryVisibleFilter(sql`project.subsidiary_id`, scope)}
-         )
+       where org_id = ${orgId} and id = ${holdId} and project_id = ${target.project_id}
+         and released_at is null
        returning source_type, source_id
     `))
     const source = released.rows[0]
@@ -974,6 +997,7 @@ export async function releaseWipHold(orgId: string, actorId: string, holdId: str
         from wip_prebills worksheet
        where line.org_id = ${orgId}
          and worksheet.org_id = line.org_id and worksheet.id = line.prebill_id
+         and worksheet.project_id = ${target.project_id}
          and worksheet.status = 'draft'
          and line.source_type = ${source.source_type}
          and coalesce(line.time_entry_id, line.document_line_id) = ${source.source_id}

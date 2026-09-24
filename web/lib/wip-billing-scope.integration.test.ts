@@ -159,6 +159,58 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
       const notFound = (error: unknown) => error instanceof wip.WipBillingError && error.status === 404
       const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, restricted)
       const lineId = (await wip.loadPrebill(org.orgId, prebill.id, restricted))!.lines[0]!.id
+      const deferred = () => {
+        let resolve!: () => void
+        const promise = new Promise<void>((done) => { resolve = done })
+        return { promise, resolve }
+      }
+      const waitForProjectLock = async () => {
+        for (let i = 0; i < 100; i++) {
+          const waiting = (await db.execute<{ waiting: boolean }>(sql`
+            select exists (
+              select 1 from pg_stat_activity
+               where datname = current_database() and wait_event_type = 'Lock'
+                 and query ilike '%from projects p%' and query ilike '%for update%'
+            ) as waiting
+          `)).rows[0]!.waiting
+          if (waiting) return
+          await new Promise((resolve) => setTimeout(resolve, 10))
+        }
+        assert.fail('WIP hold mutation must wait on the locked project scope row')
+      }
+      const raceRehome = async (subsidiaryId: string, work: () => Promise<unknown>) => {
+        const locked = deferred()
+        const resume = deferred()
+        const rehome = db.transaction(async (tx) => {
+          await tx.execute(sql`update projects set subsidiary_id = ${subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
+          locked.resolve()
+          await resume.promise
+        })
+        await locked.promise
+        let finished = false
+        const mutation = work().then((value) => ({ value }), (error: unknown) => ({ error })).finally(() => { finished = true })
+        try {
+          await waitForProjectLock()
+          assert.equal(finished, false, 'the scoped mutation cannot pass a concurrent project rehome')
+        } finally {
+          resume.resolve()
+        }
+        await rehome
+        return mutation
+      }
+      // Hold creation and release share the project row with rehome. An A-only
+      // operation waits, then rechecks and returns the same 404 as an absent
+      // project after the project commits into B.
+      const createRace = await raceRehome(other, () => wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Create race', [], restricted))
+      assert.ok('error' in createRace && notFound(createRace.error))
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from wip_holds where org_id = ${org.orgId} and source_id = ${entry} and released_at is null`)).rows[0]!.n, 0)
+      await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
+      const hold = await wip.holdPrebillLine(org.orgId, preparer, prebill.id, lineId, 'Release race', [], restricted)
+      const releaseRace = await raceRehome(other, () => wip.releaseWipHold(org.orgId, preparer, hold.id, 'Release race', restricted))
+      assert.ok('error' in releaseRace && notFound(releaseRace.error))
+      assert.equal((await db.execute<{ released_at: string | null }>(sql`select released_at from wip_holds where org_id = ${org.orgId} and id = ${hold.id}`)).rows[0]!.released_at, null)
+      await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where id = ${project} and org_id = ${org.orgId}`)
+      await wip.releaseWipHold(org.orgId, preparer, hold.id, 'Restore test fixture', restricted)
       await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted)
 
       // The concurrent rehome commits: the project (and its worksheet) now
