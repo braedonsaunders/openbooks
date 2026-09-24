@@ -66,7 +66,7 @@ import {
 } from "./tables-2026.ts";
 import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
-import { resolveEmployeeFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import "./employee-facts.ts";
 import { calculateFrRgdu2026, committedFrRgduYearToDate, frRgduSmicFromHours2026 } from "./rgdu-2026.ts";
 
@@ -369,7 +369,13 @@ export async function computeFrStatutory(
   if (ctx.gross == null) {
     throw new PayrollPackError("FR RGDU cannot calculate because the payroll engine did not supply this stub's contributory gross.");
   }
-  const employeeEligibility = resolveEmployeeFact("FR", "fr_rgdu_eligible", answers["rgdu_eligibility"]);
+  const rgduEmployeeFacts = {
+    fr_rgdu_eligible: answers["rgdu_eligibility"] ?? null,
+    fr_rgdu_regular_hours: ctx.statutoryHours?.regular ?? null,
+  };
+  const employeeEligibility = resolveEmployeeFact(
+    "FR", "fr_rgdu_eligible", empFact("FR", rgduEmployeeFacts, "fr_rgdu_eligible"),
+  );
   const eligible = employeeEligibility === "eligible";
   if (eligible && !ctx.employmentId) {
     throw new PayrollPackError(
@@ -388,7 +394,9 @@ export async function computeFrStatutory(
   }) : { remuneration: "0", smic: "0", reduction: "0" };
   let currentSmic = "0";
   if (eligible && run["run_type"] === "regular") {
-    const regularHours = resolveEmployeeFact("FR", "fr_rgdu_regular_hours", ctx.statutoryHours?.regular);
+    const regularHours = resolveEmployeeFact(
+      "FR", "fr_rgdu_regular_hours", empFact("FR", rgduEmployeeFacts, "fr_rgdu_regular_hours"),
+    );
     if (regularHours == null) {
       throw new PayrollPackError(
         "FR RGDU refuses this employee: contractual hours for this pay period are missing. Record the effective work schedule or approved hours before calculating (CSS D.241-7 IV).",
