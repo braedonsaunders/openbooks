@@ -134,10 +134,24 @@ function toCycleDTO(row: StoredCycle): CycleDTO {
  * org-wide cycle (no subsidiary scope) needs an unrestricted HR: moving it
  * touches every legal entity, including ones the actor cannot see.
  */
-function assertCycleInScope(allowed: Set<string> | null, cycle: StoredCycle): void {
-  if (allowed === null) return;
+async function assertCycleInScope(exec: SqlExecutor, orgId: string, allowed: Set<string> | null, cycle: StoredCycle): Promise<void> {
   const scope = mathRefusal("REFUSED", () => parseAppliesScope(cycle.appliesTo));
-  if (scope.employerSubsidiaryId === null || !allowed.has(scope.employerSubsidiaryId)) {
+  const department = scope.departmentId === null
+    ? null
+    : (await exec.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from departments
+         where org_id = ${orgId} and id = ${scope.departmentId}
+      `)).rows[0] ?? null;
+  if (scope.departmentId !== null && department === null) {
+    throw new HrmPerformanceError("REFUSED", `review cycle ${cycle.id} names a department outside this organization — choose a department in this organization`);
+  }
+  if (scope.employerSubsidiaryId !== null && department?.subsidiaryId != null &&
+      scope.employerSubsidiaryId !== department.subsidiaryId) {
+    throw new HrmPerformanceError("REFUSED", `review cycle ${cycle.id} names a department in another subsidiary — choose a department in the cycle subsidiary`);
+  }
+  const effectiveSubsidiary = scope.employerSubsidiaryId ?? department?.subsidiaryId ?? null;
+  if (allowed === null) return;
+  if (effectiveSubsidiary === null || !allowed.has(effectiveSubsidiary)) {
     throw new HrmAuthorizationError(
       `review cycle ${cycle.id} is not visible in this organization and legal-entity scope — ask an HR administrator covering its legal entity to move it`,
     );
@@ -192,24 +206,17 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    if (scope.employerSubsidiaryId === null && allowed !== null) {
-      throw new HrmAuthorizationError(
-        "a restricted HR review cycle must name an employer subsidiary in their scope — select an allowed subsidiary or ask unrestricted HR to create an org-wide cycle",
-      );
-    }
-    // Creation validates against the DECLARED scope — a caller cannot plant
-    // a cycle over a legal entity they cannot see.
-    if (scope.employerSubsidiaryId !== null && allowed !== null && !allowed.has(scope.employerSubsidiaryId)) {
-      throw new HrmAuthorizationError(
-        "Review cycle is not visible in this organization and legal-entity scope.",
-      );
-    }
     // The scope must name entities that exist here: a cycle that can never
     // apply is refused by field name instead of saved as applicable.
-    const refs = (await db.execute<{ subsidiaryOk: boolean; departmentOk: boolean }>(sql`
+    const refs = (await db.execute<{
+      subsidiaryOk: boolean;
+      departmentOk: boolean;
+      departmentSubsidiaryId: string | null;
+    }>(sql`
       select
         ${scope.employerSubsidiaryId ? sql`exists(select 1 from subsidiaries where id = ${scope.employerSubsidiaryId} and org_id = ${orgId})` : sql`true`} as "subsidiaryOk",
-        ${scope.departmentId ? sql`exists(select 1 from departments where id = ${scope.departmentId} and org_id = ${orgId})` : sql`true`} as "departmentOk"
+        ${scope.departmentId ? sql`exists(select 1 from departments where id = ${scope.departmentId} and org_id = ${orgId})` : sql`true`} as "departmentOk",
+        ${scope.departmentId ? sql`(select subsidiary_id from departments where id = ${scope.departmentId} and org_id = ${orgId})` : sql`null::uuid`} as "departmentSubsidiaryId"
     `)).rows[0]!;
     if (!refs.subsidiaryOk) {
       throw new HrmPerformanceError(
@@ -221,6 +228,16 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
       throw new HrmPerformanceError(
         "REFUSED",
         "the cycle department is not visible in this organization — pick a department of this org, or null for all",
+      );
+    }
+    if (scope.employerSubsidiaryId !== null && refs.departmentSubsidiaryId !== null &&
+        scope.employerSubsidiaryId !== refs.departmentSubsidiaryId) {
+      throw new HrmPerformanceError("REFUSED", "the cycle department belongs to another subsidiary — choose a department in the selected subsidiary");
+    }
+    const effectiveSubsidiary = scope.employerSubsidiaryId ?? refs.departmentSubsidiaryId;
+    if (allowed !== null && (effectiveSubsidiary === null || !allowed.has(effectiveSubsidiary))) {
+      throw new HrmAuthorizationError(
+        "a restricted HR review cycle must name a department or employer subsidiary in their scope — choose an allowed scope or ask unrestricted HR to create an org-wide cycle",
       );
     }
     const template = (await db.execute<{ id: string; isActive: boolean }>(sql`
@@ -442,7 +459,7 @@ export async function openCycle(args: {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId, true);
-    assertCycleInScope(allowed, cycle);
+    await assertCycleInScope(db, orgId, allowed, cycle);
     if (cycle.status !== "draft") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -594,7 +611,7 @@ export async function moveToCalibrating(args: {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId, true);
-    assertCycleInScope(allowed, cycle);
+    await assertCycleInScope(db, orgId, allowed, cycle);
     if (cycle.status !== "open") {
       throw new HrmPerformanceError(
         "BAD_STATE",
@@ -662,7 +679,7 @@ export async function closeCycle(args: {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId);
-    assertCycleInScope(allowed, cycle);
+    await assertCycleInScope(db, orgId, allowed, cycle);
     if (cycle.status !== "open" && cycle.status !== "calibrating") {
       throw new HrmPerformanceError(
         "BAD_STATE",

@@ -393,7 +393,7 @@ test("restricted HR must choose a legal entity when creating a review cycle", { 
       }),
       (error: unknown) => {
         assert.ok(error instanceof HrmAuthorizationError);
-        assert.match(error.message, /must name an employer subsidiary in their scope/);
+        assert.match(error.message, /must name a department or employer subsidiary in their scope/);
         return true;
       },
     );
@@ -440,6 +440,54 @@ test("restricted HR cannot open an existing org-wide draft cycle", { skip: !DB }
     `)).rows[0]!.count;
     assert.equal(current.status, "draft");
     assert.equal(reviews, "0");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
+test("cycle department subsidiary must match cycle and actor scope", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const departmentId = (await db.execute<{ id: string }>(sql`
+      insert into departments (org_id, name, subsidiary_id)
+      values (${h.org.orgId}, 'B-only department', ${h.subB}) returning id
+    `)).rows[0]!.id;
+    await assert.rejects(
+      createCycle({
+        orgId: h.org.orgId, actorId: h.hrFull, templateId, name: "Mismatched scope",
+        periodStartOn: "2026-01-01", periodEndOn: "2026-06-30",
+        appliesTo: { employer_subsidiary_id: h.org.subsidiaryId, department_id: departmentId },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmPerformanceError);
+        assert.match(error.message, /department belongs to another subsidiary/);
+        return true;
+      },
+    );
+    const cycle = await createCycle({
+      orgId: h.org.orgId, actorId: h.hrFull, templateId, name: "B department cycle",
+      periodStartOn: "2026-01-01", periodEndOn: "2026-06-30",
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentId },
+    });
+    await assert.rejects(
+      openCycle({ orgId: h.org.orgId, actorId: h.hrA, cycleId: cycle.id }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmAuthorizationError);
+        assert.match(error.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    const listed = await listCycleProgress({ orgId: h.org.orgId, actorId: h.hrA });
+    assert.equal(listed.some((item) => item.id === cycle.id), false);
+    await assert.rejects(
+      getCycleDetail({ orgId: h.org.orgId, actorId: h.hrA, cycleId: cycle.id }),
+      (error: unknown) => error instanceof HrmPerformanceError && error.code === "NOT_FOUND",
+    );
+    const current = (await db.execute<{ status: string }>(sql`
+      select status from hrm_review_cycles where org_id = ${h.org.orgId} and id = ${cycle.id}
+    `)).rows[0]!;
+    assert.equal(current.status, "draft");
   } finally {
     await dropScratchOrg(h.org.orgId);
   }
