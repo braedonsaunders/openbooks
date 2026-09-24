@@ -33,6 +33,8 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   const t = useTranslations('items.fairValue')
   const common = useTranslations('common')
   const [prices, setPrices] = useState<Price[]>([])
+  const [loadState, setLoadState] = useState<'loading' | 'loaded' | 'failed'>('loading')
+  const [loadError, setLoadError] = useState('')
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
   // A read-only viewer must never hold the form open. Adjusted during render
@@ -42,12 +44,20 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   function load() {
+    setLoadState('loading')
+    setLoadError('')
+    setPrices([])
     return fetch(`/api/items/${itemId}/fair-values`)
       .then((res) => {
-        if (!res.ok) return
+        if (!res.ok) throw new Error(common('feedback.loadFailed'))
         return (res.json() as Promise<{ prices: Price[] }>).then((data) => {
           setPrices(data.prices)
+          setLoadState('loaded')
         })
+      })
+      .catch((error: unknown) => {
+        setLoadError(error instanceof Error ? error.message : common('feedback.loadFailed'))
+        setLoadState('failed')
       })
   }
   useEffect(() => {
@@ -56,6 +66,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   }, [itemId])
 
   function startNew() {
+    if (loadState !== 'loaded') return
     setForm({ id: null, currency: '', unitPrice: '', lowValue: '', highValue: '', effectiveFrom: '', effectiveTo: '', isActive: true })
   }
   function startEdit(p: Price) {
@@ -111,10 +122,17 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('description')}</p>
         </div>
-        {canManage && !form ? (
+        {canManage && loadState === 'loaded' && !form ? (
           <Button variant="outline" size="sm" onClick={startNew}>{t('new')}</Button>
         ) : null}
       </div>
+
+      {loadState === 'loading' ? <p role="status" className="text-sm text-slate-500">{common('loading')}</p> : null}
+      {loadState === 'failed' ? (
+        <div role="alert" className="flex items-center gap-3 text-sm text-red-600 dark:text-red-400">
+          <span>{loadError}</span><Button variant="outline" size="sm" onClick={() => { void load() }}>{common('retry')}</Button>
+        </div>
+      ) : null}
 
       {form ? (
         <Card>
@@ -192,7 +210,7 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
             </tbody>
           </table>
         </div>
-      ) : !form ? (
+      ) : loadState === 'loaded' && !form ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('empty')}</p>
       ) : null}
     </section>
