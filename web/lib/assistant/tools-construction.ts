@@ -60,6 +60,8 @@ const retainageBalances: AssistantToolDef = {
     const base = sql`
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    `;
+    const filters = sql`
      where l.org_id = ${orgId}
        and l.account_id = ${acct.id}
        and e.status in ('posted', 'reversed')
@@ -69,7 +71,7 @@ const retainageBalances: AssistantToolDef = {
        ${lineScope}
     `;
     const total = (await db.execute<{ total: string; lines: number }>(sql`
-      select coalesce(${signed}, 0) as total, count(*)::int as lines ${base}
+      select coalesce(${signed}, 0) as total, count(*)::int as lines ${base} ${filters}
     `)).rows[0];
     let rows: Record<string, unknown>[];
     if (groupBy === "party") {
@@ -77,6 +79,7 @@ const retainageBalances: AssistantToolDef = {
         select p.id as party_id, p.display_name as party, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join parties p on p.id = l.party_id and p.org_id = l.org_id
+          ${filters}
          group by p.id, p.display_name
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
@@ -87,6 +90,7 @@ const retainageBalances: AssistantToolDef = {
         select pr.id as project_id, pr.name as project, pr.code as project_code, coalesce(${signed}, 0) as balance, count(*)::int as lines
           ${base}
           left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+          ${filters}
          group by pr.id, pr.name, pr.code
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
@@ -99,6 +103,7 @@ const retainageBalances: AssistantToolDef = {
           ${base}
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
+          ${filters}
          group by d.id, d.kind, d.document_number, d.document_date, d.status, p.display_name
         having coalesce(${signed}, 0) <> 0
          order by abs(coalesce(${signed}, 0)) desc
