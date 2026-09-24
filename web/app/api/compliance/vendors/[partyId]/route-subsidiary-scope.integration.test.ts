@@ -187,3 +187,55 @@ test(
     }
   },
 );
+
+test(
+  "a vendor TIN save audits secret-free before/after snapshots under the same lock",
+  { skip: !DB },
+  async () => {
+    // Replacement cover for the deleted source pin on the audit envelope:
+    // the route locks vendor_roles, snapshots tin_present/tin_last4 without
+    // ever persisting ciphertext, and answers with row identity alone.
+    const fixture = await seed();
+    try {
+      authorize(fixture, null);
+      const response = await patch(fixture, {
+        tin: "222-33-4444",
+        tinType: "ein",
+        reason: "W-9 reviewed by compliance",
+      });
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { partyId: fixture.hiddenPartyId });
+
+      const audits = await withOrgContext(fixture.orgId, () =>
+        db.execute<{
+          action: string;
+          actor: string;
+          changes: { reason: string; before: Record<string, unknown>; after: Record<string, unknown> };
+        }>(sql`
+          select action, actor_id as "actor", changes from audit_log
+           where org_id = ${fixture.orgId} and table_name = 'vendor_roles'
+             and row_id = ${fixture.hiddenPartyId}
+           order by at desc limit 1`),
+      );
+      assert.equal(audits.rows.length, 1, "the TIN save writes one audit row");
+      const entry = audits.rows[0]!;
+      assert.equal(entry.action, "update");
+      assert.equal(entry.actor, fixture.actorId);
+      assert.equal(entry.changes.reason, "W-9 reviewed by compliance");
+      assert.equal(entry.changes.before["tin_last4"], "0000");
+      assert.equal(entry.changes.after["tin_last4"], "4444");
+      assert.equal(entry.changes.before["tin_present"], true);
+      assert.equal(entry.changes.after["tin_present"], true);
+      for (const snapshot of [entry.changes.before, entry.changes.after]) {
+        assert.ok(!("tin_encrypted" in snapshot), "no ciphertext key in the audit snapshot");
+      }
+      assert.ok(
+        !JSON.stringify(entry.changes).includes("sealed-original"),
+        "the prior ciphertext is not persisted in the trail",
+      );
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(fixture.orgId);
+    }
+  },
+);
