@@ -1902,11 +1902,13 @@
       "kind": "Art",
       "anonymity": "Anonymität",
       "minGroup": "Mindestgruppengröße",
+      "minGroupInvalid": "Die Mindestgruppengröße muss eine ganze Zahl zwischen 2 und 1000 sein.",
       "questions": "Fragen",
       "addQuestion": "Frage hinzufügen",
       "prompt": "Fragetext",
       "driver": "Treiberschlüssel",
       "options": "Optionen",
+      "optionsHint": "Eine Option pro Zeile.",
       "remove": "Entfernen",
       "submit": "Befragung speichern",
       "failed": "Speichern fehlgeschlagen."

@@ -1902,11 +1902,13 @@
       "kind": "Type",
       "anonymity": "Anonymat",
       "minGroup": "Taille minimale du groupe",
+      "minGroupInvalid": "La taille minimale du groupe doit être un nombre entier entre 2 et 1000.",
       "questions": "Questions",
       "addQuestion": "Ajouter une question",
       "prompt": "Libellé",
       "driver": "Clé de moteur",
       "options": "Options",
+      "optionsHint": "Une option par ligne.",
       "remove": "Retirer",
       "submit": "Enregistrer l’enquête",
       "failed": "L’enregistrement a échoué."

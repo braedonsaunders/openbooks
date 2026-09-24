@@ -3,9 +3,10 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
-import { Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
+import { Button, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { loadSurveysHome } from '../../../../lib/hrm/surveys-home'
+import { buildSurveyAuthorPayload } from './authoring'
 
 /**
  * Surveys drawer + author dialog islands (0230, HR-19).
@@ -254,24 +255,14 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
 
   async function submit() {
     setFailed(null)
-    const ok = await post(
-      '/api/hrm/surveys',
-      {
-        name,
-        kind,
-        anonymity,
-        minGroupSize: Number(minGroup) || 5,
-        questions: questions.map((q) => ({
-          kind: q.kind,
-          prompt: q.prompt,
-          ...(q.kind === 'single' || q.kind === 'multi'
-            ? { options: q.options.split('\n').map((o) => o.trim()).filter(Boolean) }
-            : {}),
-          ...(q.driverKey.trim() ? { driverKey: q.driverKey.trim() } : {}),
-        })),
-      },
-      msg(labels, 'failed'),
-    )
+    // The group size is the anonymity threshold: an unparseable value
+    // refuses by name instead of silently falling back to 5.
+    const built = buildSurveyAuthorPayload({ name, kind, anonymity, minGroup, questions })
+    if (!built.ok) {
+      setFailed(msg(labels, built.error))
+      return
+    }
+    const ok = await post('/api/hrm/surveys', built.body, msg(labels, 'failed'))
     if (!ok) {
       setFailed(msg(labels, 'failed'))
       return
@@ -333,7 +324,12 @@ export function SurveysAuthorDialog({ author }: { author: Home['author'] }) {
             {(question.kind === 'single' || question.kind === 'multi') && (
               <div>
                 <Label>{msg(labels, 'options')}</Label>
-                <Input value={question.options} onChange={(e) => setQuestion(index, { options: e.target.value })} />
+                <Textarea
+                  rows={3}
+                  value={question.options}
+                  onChange={(e) => setQuestion(index, { options: e.target.value })}
+                />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{msg(labels, 'optionsHint')}</p>
               </div>
             )}
             {questions.length > 1 && (
