@@ -3,20 +3,19 @@
 import type { ReactNode } from 'react'
 
 /**
- * The drawer's tab strip — one level of `role="tab"` buttons in house style.
- * Extracted from TransactionDrawer so record panels can nest a second level
- * (the employee Payroll tab's General / Tax / Pay banks / Bank accounts)
- * without inventing a second tab look or behaviour.
+ * A labelled group of pressed buttons for drawer panels. These panels do not
+ * implement the tablist/tabpanel and arrow-key contract, so keep native button
+ * activation and expose the selected panel as pressed instead of claiming tab semantics.
  */
-export function DrawerTabStrip({
+export function DrawerTabStrip<T extends string>({
   tabs,
   activeKey,
   onSelect,
   ariaLabel,
 }: {
-  tabs: { key: string; label: ReactNode }[]
-  activeKey: string
-  onSelect: (key: string) => void
+  tabs: { key: T; label: ReactNode }[]
+  activeKey: T
+  onSelect: (key: T) => void
   ariaLabel: string
 }) {
   return (
@@ -25,8 +24,7 @@ export function DrawerTabStrip({
         <button
           key={tab.key}
           type="button"
-          role="tab"
-          aria-selected={activeKey === tab.key}
+          aria-pressed={activeKey === tab.key}
           onClick={() => onSelect(tab.key)}
           className={`flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
             activeKey === tab.key

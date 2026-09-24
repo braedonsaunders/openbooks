@@ -36,6 +36,7 @@ import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 import { confirmDialog } from '../../../lib/confirm'
 import { GroupValuationButton } from './GroupValuationButton'
 import { AssetChangeButton } from './AssetChangeButton'
@@ -503,14 +504,10 @@ export function AssetDrawer({
     size="2xl"
     title={<span className="flex items-center gap-2.5"><span className="font-mono text-sm text-slate-500 dark:text-slate-400">{assetNumber || a.asset_number}</span><span>{displayName}</span><Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></span>}
     description={createMode ? t('create.description') : mode === 'edit' ? t('drawer.editing') : (payload.category?.name ?? undefined)}
-    subtabs={<nav className="-mb-px flex gap-1" aria-label={t('drawer.tabsAria')}>
-      {/* Attachments address a persisted record: the files tab stays hidden
-        until Save creates one. Schedule stays visible with its empty hint. */}
-      {(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', ...(!createMode ? ['files' as const] : [])] as const).map((item) => <button
-        key={item} type="button" role="tab" aria-selected={tab === item} onClick={() => setTab(item)}
-        className={cn('border-b-2 px-3 py-3 text-sm font-medium transition-colors', tab === item ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200')}
-      >{item === 'details' ? tCommon('auditTrail.tabs.details') : item === 'tax' ? t('drawer.taxDepreciation') : item === 'files' ? tCommon('labels.attachments') : t('drawer.schedule')}</button>)}
-    </nav>}
+    subtabs={<DrawerTabStrip ariaLabel={t('drawer.tabsAria')} activeKey={tab} onSelect={setTab} tabs={(['details', ...(taxConfigurations.length ? ['tax' as const] : []), 'schedule', ...(!createMode ? ['files' as const] : [])] as const).map((item) => ({
+      key: item,
+      label: item === 'details' ? tCommon('auditTrail.tabs.details') : item === 'tax' ? t('drawer.taxDepreciation') : item === 'files' ? tCommon('labels.attachments') : t('drawer.schedule'),
+    }))} />}
     headerActions={mode === 'edit' ? <div className="flex items-center gap-1.5">
       <Button size="sm" variant="outline" disabled={busy} onClick={cancel}>{tCommon('actions.cancel')}</Button>
       <Button size="sm" disabled={busy} onClick={save}>{busy ? tCommon('actions.saving') : createMode ? t('create.create') : tCommon('actions.save')}</Button>

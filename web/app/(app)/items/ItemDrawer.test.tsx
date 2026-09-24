@@ -123,7 +123,7 @@ async function clickButton(label: string) {
 }
 
 async function clickTab(key: string) {
-  const tab = [...document.querySelectorAll('button[role="tab"]')].find((candidate) => candidate.textContent?.trim() === `drawer.tabs.${key}`)
+  const tab = [...document.querySelectorAll('button[aria-pressed]')].find((candidate) => candidate.textContent?.trim() === `drawer.tabs.${key}`)
   assert.ok(tab, `the ${key} tab is rendered`)
   await act(async () => { tab.dispatchEvent(new window.MouseEvent('click', { bubbles: true })) })
 }

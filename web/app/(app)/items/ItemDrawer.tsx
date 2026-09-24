@@ -24,7 +24,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import {
   defaultFormLayout,
   isCustomTabKey,
@@ -40,6 +40,7 @@ import { ItemPriceMatrixEditor } from './ItemPriceMatrixEditor'
 import { ItemCostingEditor } from './ItemCostingEditor'
 import { FairValuePricesEditor } from './FairValuePricesEditor'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { DrawerTabStrip } from '../../../components/drawer-tab-strip'
 
 interface AccountOpt {
   id: string
@@ -580,27 +581,7 @@ export function ItemDrawer({
         </span>
       }
       description={choosingKind ? t('drawer.chooseKindDescription') : mode === 'edit' ? tCommon('feedback.editingHint') : undefined}
-      subtabs={
-        choosingKind ? undefined : <nav className="-mb-px flex flex-wrap gap-1" aria-label={tCommon('auditTrail.ariaLabel')}>
-          {tabs.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              role="tab"
-              aria-selected={activeTabKey === item.key}
-              onClick={() => setTab(item.key)}
-              className={cn(
-                'border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                activeTabKey === item.key
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-              )}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      }
+      subtabs={choosingKind ? undefined : <DrawerTabStrip tabs={tabs} activeKey={activeTabKey} onSelect={setTab} ariaLabel={tCommon('auditTrail.ariaLabel')} />}
       headerActions={
         <>
           {choosingKind ? (

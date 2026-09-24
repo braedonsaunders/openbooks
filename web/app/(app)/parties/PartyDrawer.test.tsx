@@ -311,7 +311,7 @@ async function renderDrawer(options: {
 function railTabs(scope: ParentNode = document, tree: Record<string, unknown> = enMessages): HTMLButtonElement[] {
   const rail = scope.querySelector(`nav[aria-label="${msg(tree, "common.auditTrail.ariaLabel")}"]`);
   assert.ok(rail, "the flyout must render its tab rail");
-  return [...rail.querySelectorAll('button[role="tab"]')] as HTMLButtonElement[];
+  return [...rail.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[];
 }
 
 function railTabNamed(name: string, scope: ParentNode = document, tree: Record<string, unknown> = enMessages): HTMLButtonElement | undefined {
@@ -602,7 +602,7 @@ test("payroll sub-tabs keep every section mounted", async (t) => {
   const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
   const subTab = (label: string): HTMLButtonElement => {
-    const button = [...strip.querySelectorAll('button[role="tab"]')].find(
+    const button = [...strip.querySelectorAll('button[aria-pressed]')].find(
       (candidate) => candidate.textContent?.trim() === label,
     ) as HTMLButtonElement | undefined;
     assert.ok(button, `the payroll strip must offer ${label}`);
@@ -658,12 +658,12 @@ test("general and tax share one profile editor", async (t) => {
   assert.equal(nativeSchedule().value, "sched-2", "the schedule change must land");
   const strip = document.querySelector(`nav[aria-label="${en("parties.drawer.payrollTabs.ariaLabel")}"]`);
   assert.ok(strip, "the payroll tab must render its sub-tab strip");
-  const tax = [...strip.querySelectorAll('button[role="tab"]')].find(
+  const tax = [...strip.querySelectorAll('button[aria-pressed]')].find(
     (candidate) => candidate.textContent?.trim() === "Tax and withholding",
   ) as HTMLButtonElement;
   assert.ok(tax, "the payroll strip must offer the tax half");
   await clickTab(tax);
-  const general = [...strip.querySelectorAll('button[role="tab"]')].find(
+  const general = [...strip.querySelectorAll('button[aria-pressed]')].find(
     (candidate) => candidate.textContent?.trim() === "General",
   ) as HTMLButtonElement;
   assert.ok(general, "the payroll strip must offer the general half");

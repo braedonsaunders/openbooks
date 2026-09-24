@@ -188,7 +188,7 @@ export function FolderDrawer({
       title={title}
       size="md"
       subtabs={
-        mode === 'edit' ? <DrawerTabs tabs={tabs} active={tab} onSelect={setTab} /> : undefined
+        mode === 'edit' ? <DrawerTabs tabs={tabs} active={tab} onSelect={setTab} ariaLabel={tc('auditTrail.ariaLabel')} /> : undefined
       }
       headerActions={
         mode === 'edit' ? (

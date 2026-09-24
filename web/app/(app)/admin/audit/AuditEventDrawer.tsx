@@ -5,6 +5,7 @@ import { useFormatter, useTranslations } from 'next-intl'
 import { Badge, Drawer, UrlDrawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
 import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
+import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 
 export { auditEventDiffs } from '../../../../lib/audit-diff'
 
@@ -232,27 +233,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
       <Badge variant={ACTION_VARIANT[event.action] ?? 'secondary'}>{actionLabel}</Badge>
     </span>
   )
-  const subtabs = (
-    <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabsAria')}>
-      {tabs.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          role="tab"
-          aria-selected={activeTab === tab}
-          onClick={() => setActiveTab(tab)}
-          className={cn(
-            'shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-            activeTab === tab
-              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-          )}
-        >
-          {t(`drawer.tabs.${tab}`)}
-        </button>
-      ))}
-    </nav>
-  )
+  const subtabs = <DrawerTabStrip tabs={tabs.map((tab) => ({ key: tab, label: t(`drawer.tabs.${tab}`) }))} activeKey={activeTab} onSelect={setActiveTab} ariaLabel={t('drawer.tabsAria')} />
   const content = (
       <div className="space-y-6 pb-2">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
