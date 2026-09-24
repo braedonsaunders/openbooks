@@ -79,6 +79,7 @@ class OrderRouteHarness {
   voidFailure: string | null = null
   convertFailure: { message: string; status?: number; code?: string; details?: unknown } | null = null
   stockLocationFailure: string | null = null
+  allowInventoryPost = true
 
   private readonly transactions = new AsyncLocalStorage<TransactionContext>()
   private lockHeld = false
@@ -123,6 +124,7 @@ class OrderRouteHarness {
     this.voidFailure = null
     this.convertFailure = null
     this.stockLocationFailure = null
+    this.allowInventoryPost = true
     this.submitPause = null
     this.voidPause = null
   }
@@ -488,7 +490,14 @@ const mockSources = new Map<string, string>([
     }
   `],
   ['mock:authz', `
+    const state = ${stateExpression}
     export function guardSubsidiaryScope() { return null }
+    // Fulfillment/receipt conversions take items.post on top of the order
+    // permission; everything else stays allowed in this harness.
+    export function can(authz, perm) {
+      if (perm === 'items.post') return state.allowInventoryPost
+      return true
+    }
   `],
   ['mock:order-cycle', `
     const state = ${stateExpression}
@@ -1182,6 +1191,19 @@ const poolMockSources = new Map<string, string>([
   `],
   ['pool:document-delete', `export class DeleteError extends Error {}; export async function deleteDocument() { return {} }`],
   ['pool:document-void', `export class DocumentVoidError extends Error { constructor(message, status = 422) { super(message); this.status = status } }; export async function requestDocumentVoid() { return {} }`],
+  ['pool:actor-scope', `
+    // The pool-saturated script fixture represents an unrestricted caller
+    // with sql.execute; keep its authorization reads on the same fake db as
+    // the script runtime instead of accidentally importing the real pool.
+    export async function actorHasPermission() { return true }
+    export async function actorAllowedSubsidiaryIds() { return null }
+  `],
+  ['pool:scripting-gates', `
+    // The script is configured in this pool harness for an enabled feature;
+    // actual feature state is exercised by its dedicated integration tests.
+    export async function orgFeatureEnabled() { return true }
+    export function featureEnabled() { return true }
+  `],
 ])
 
 const poolHooks = registerHooks({
@@ -1209,6 +1231,12 @@ const poolHooks = registerHooks({
       if (specifier === '../platform/db.ts') return { url: 'pool:db', shortCircuit: true }
       if (specifier === '../platform/sqlapi.ts') return { url: poolSqlapiUrl, shortCircuit: true }
       if (specifier === '../ledger/journal-writes.ts') return { url: 'pool:journal-writes', shortCircuit: true }
+      if (specifier === '../organization/actor-permissions.ts' || specifier === '../organization/actor-subsidiaries.ts') {
+        return { url: 'pool:actor-scope', shortCircuit: true }
+      }
+      if (specifier === '../organization/org-feature-lock.ts' || specifier === '../organization/feature-registry.ts') {
+        return { url: 'pool:scripting-gates', shortCircuit: true }
+      }
     }
     if (context.parentURL === poolSqlapiUrl && specifier === './db.ts') {
       return { url: 'pool:db', shortCircuit: true }
@@ -1539,6 +1567,31 @@ test('a typed conversion failure serializes its code and details for the caller'
     code: 'ITEM_MISSING_RNB_ACCOUNT',
     details: { lineNumber: 1, itemId: 'item-1', itemName: 'Widget' },
   })
+})
+
+test('converting to fulfillment without items.post is refused before anything converts', async () => {
+  harness.reset('approved')
+  harness.allowInventoryPost = false
+  const refused = await convert({ targetKind: 'sales_fulfillment' })
+  assert.equal(refused.status, 403)
+  assert.deepEqual(await refused.json(), { error: 'missing permission: items.post' })
+  assert.equal(harness.convertCalls, 0)
+})
+
+test('converting to receipt without items.post is refused before anything converts', async () => {
+  harness.reset('approved')
+  harness.allowInventoryPost = false
+  const refused = await convert({ targetKind: 'purchase_receipt' })
+  assert.equal(refused.status, 403)
+  assert.deepEqual(await refused.json(), { error: 'missing permission: items.post' })
+  assert.equal(harness.convertCalls, 0)
+})
+
+test('converting to fulfillment with items.post converts as before', async () => {
+  harness.reset('approved')
+  const converted = await convert({ targetKind: 'sales_fulfillment' })
+  assert.equal(converted.status, 200)
+  assert.equal(harness.convertCalls, 1)
 })
 
 test('before_submit uses isolated governed capacity when duplicate issuers saturate the request pool', async () => {

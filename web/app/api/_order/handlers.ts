@@ -5,7 +5,7 @@ import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
-import { guardSubsidiaryScope } from '../../../lib/authz'
+import { can, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { assignOrderLineWarehouse, convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
 import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } from './lib'
@@ -685,6 +685,17 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied
+    // Fulfillment and receipt conversions move stock and post value-carrying
+    // inventory journals when Inventory is enabled, so they take items.post
+    // on top of the order permission — the same authority the inventory
+    // movement API demands (INVENTORY_ACTION_PERMISSIONS). Without it an
+    // ar.create/ap.create-only caller posts inventory movements through
+    // these convert endpoints. Refused by name before anything converts.
+    if ((body.targetKind === 'sales_fulfillment' || body.targetKind === 'purchase_receipt')
+      && (await isFeatureEnabled(user.orgId, 'inventory'))
+      && !can(gate, 'items.post')) {
+      return NextResponse.json({ error: 'missing permission: items.post' }, { status: 403 })
+    }
     // Fence the conversion on the caller's revision before creating the
     // downstream document from a possibly outdated source view.
     if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {
