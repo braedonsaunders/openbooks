@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -276,6 +276,49 @@ test("F13 restricted HR render/generate/attach refuse as uniform not-found", { s
     assert.equal(await countRows(h.org.orgId, "files"), filesBefore);
     // The refused generate above likewise wrote no statement row.
     assert.equal(await countRows(h.org.orgId, "hrm_comp_statements"), statementsBefore);
+  });
+});
+
+async function assertEmploymentLockHeld(
+  orgId: string,
+  employmentId: string,
+  operation: () => Promise<unknown>,
+): Promise<void> {
+  let settled = false;
+  let failure: unknown;
+  let releaseStart!: () => void;
+  const start = new Promise<void>((resolve) => { releaseStart = resolve; });
+  const observed = (async () => {
+    await start;
+    try {
+      await operation();
+    } catch (error) {
+      failure = error;
+    } finally {
+      settled = true;
+    }
+  })();
+  await withOrgTransaction(orgId, async () => {
+    await db.execute(sql`
+      select id from worker_employments
+       where org_id = ${orgId} and id = ${employmentId}
+       for update`);
+    releaseStart();
+    await new Promise((resolve) => setTimeout(resolve, 75));
+    assert.equal(settled, false, failure instanceof Error ? failure.message : "the statement operation must wait for the employment row lock");
+  });
+  await observed;
+  assert.equal(failure, undefined);
+}
+
+test("I1-refix-152 statement generation holds the employment lock through payload and insert", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const before = await countRows(h.org.orgId, "hrm_comp_statements");
+    await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, () => generateStatement({
+      orgId: h.org.orgId, actorId: h.managerAId, employmentId: h.empA.employmentId,
+      periodFrom: "2025-01-01", periodTo: "2025-12-31",
+    }));
+    assert.equal(await countRows(h.org.orgId, "hrm_comp_statements"), before + 1);
   });
 });
 
