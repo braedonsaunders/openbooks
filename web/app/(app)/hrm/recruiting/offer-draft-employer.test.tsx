@@ -69,7 +69,7 @@ function provider(children: React.ReactNode): React.ReactNode {
 }
 // Dynamic: the islands resolve next/navigation through the stub above,
 // so the module must load after the hook registers.
-const { buildOfferDraftBody, OfferCreateIsland, OfferActionsIsland } = await import('./actions')
+const { buildOfferDraftBody, OfferCreateIsland, OfferActionsIsland, ScorecardFormIsland } = await import('./actions')
 
 const EMPLOYER_ID = 'd726d187-0000-0000-0000-000000000001'
 const OTHER_ID = 'd726d187-0000-0000-0000-000000000002'
@@ -96,6 +96,27 @@ const ACTION_LABELS = {
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
+
+test('scorecard choices and field names are translated labels, not enum keys or English literals', () => {
+  const markup = renderToStaticMarkup(
+    provider(
+      <ScorecardFormIsland
+        interviewId="interview-1"
+        labels={{
+          overall: 'Overall', submit: 'Submit', failed: 'Save failed', ratings: 'Ratings',
+          privateNotes: 'Private notes', sharedNotes: 'Shared notes',
+          ratingOptions: { strong_no: 'Strongly no', no: 'No', yes: 'Yes', strong_yes: 'Strongly yes' },
+        }}
+      />,
+    ),
+  )
+  assert.match(markup, />Strongly no</)
+  assert.match(markup, />Strongly yes</)
+  assert.doesNotMatch(markup, />strong_no</)
+  assert.doesNotMatch(markup, />strong_yes</)
+  assert.match(markup, /aria-label="Ratings"/)
+  assert.match(markup, />Shared notes</)
+})
 
 test('the draft POST carries the requisition employer', () => {
   const body = buildOfferDraftBody({

@@ -494,7 +494,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <SlotProposeIsland
             interviewId={detail.id}
             pools={detail.pools}
-            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool' }}
+            labels={{ submit: labels.submit ?? 'Propose slots', failed: labels.failed ?? 'Save failed.', proposeFromPool: detail.labels.proposeFromPool ?? 'Propose from pool', starts: detail.labels.starts ?? 'Starts', ends: detail.labels.ends ?? 'Ends', timezone: detail.labels.timezone ?? 'Time zone', bookingLink: detail.labels.bookingLink ?? 'Booking link' }}
           />
         </div>
       </div>
@@ -508,7 +508,7 @@ export function InterviewDrawerBody({ detail }: { detail: InterviewDrawer }) {
           <div className="mt-2">
             <ScorecardFormIsland
               interviewId={detail.id}
-              labels={{ overall: labels.overall ?? 'Overall', submit: labels.submit ?? 'Submit', failed: labels.failed ?? 'Save failed.' }}
+              labels={{ overall: labels.overall ?? 'Overall', submit: labels.submit ?? 'Submit', failed: labels.failed ?? 'Save failed.', ratings: detail.labels.ratings ?? 'Ratings', privateNotes: detail.labels.privateNotes ?? 'Private notes', sharedNotes: detail.labels.sharedNotes ?? 'Shared notes', ratingOptions: { strong_no: detail.labels.ratingStrongNo ?? 'Strong no', no: detail.labels.ratingNo ?? 'No', yes: detail.labels.ratingYes ?? 'Yes', strong_yes: detail.labels.ratingStrongYes ?? 'Strong yes' } }}
             />
           </div>
         )}
@@ -559,7 +559,7 @@ export function OfferDepthBody({ offerId, extra }: { offerId: string; extra: Off
       <div className="mt-3">
         <OfferSigningIsland
           offerId={offerId}
-          labels={{ sendLink: extra.labels.sendLink ?? 'Send signing link', void: extra.labels.void ?? 'Void', failed: extra.labels.failed ?? 'Save failed.' }}
+          labels={{ sendLink: extra.labels.sendLink ?? 'Send signing link', void: extra.labels.void ?? 'Void', failed: extra.labels.failed ?? 'Save failed.', email: extra.labels.email ?? 'Email', name: extra.labels.name ?? 'Name', reason: extra.labels.reason ?? 'Reason' }}
         />
       </div>
     </div>
