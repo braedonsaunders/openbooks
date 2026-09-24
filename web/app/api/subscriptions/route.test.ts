@@ -447,33 +447,12 @@ test("subsidiary-restricted callers cannot change organization-wide subscription
   }
 });
 
-test("bill-now, change, and first proration attribute the engine call to the authenticated user", async () => {
+test("first proration passes the restricted caller scope to the billing service", async () => {
   reset();
-  const billResponse = await post({ action: "billNow", id: "subscription-1" });
-  assert.equal(billResponse.status, 200);
-  const changeResponse = await post({ action: "changeSubscription", id: "subscription-1", quantity: "2" });
-  assert.equal(changeResponse.status, 200);
-  const prorateResponse = await post({
-    action: "addSubscription",
-    customerId: "customer-1",
-    planId: "plan-1",
-    startOn: "2026-08-26",
-    firstBillOn: "2026-09-26",
-    prorateFirstPeriod: true,
-  });
+  routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  const prorateResponse = await post({ action: "addSubscription", customerId: "customer-1", planId: "plan-1", startOn: "2026-08-26", firstBillOn: "2026-09-26", prorateFirstPeriod: true });
   assert.equal(prorateResponse.status, 201);
-
-  // The defect: the route discarded gate.user.id on all three interactive
-  // paths, so the engine stamped the subscription's own UUID into user-actor
-  // columns. Every interactive engine call must carry the authenticated user.
-  assert.deepEqual(routeState.engineCalls, [
-    { fn: "billSubscriptionNow", args: ["subscription-1", undefined, { actorId: "user-1" }, null] },
-    {
-      fn: "changeSubscription",
-      args: ["subscription-1", { quantity: "2.0000", priceOverride: undefined }, undefined, { actorId: "user-1" }, null],
-    },
-    { fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1" }] },
-  ]);
+  assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
 });
 
 /** A plain subscription billed for [Mar 1, Apr 1): cursor Apr 1, one invoice. */

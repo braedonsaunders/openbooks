@@ -10,6 +10,7 @@ import {
   runDueSubscriptions,
   SubscriptionError,
 } from "./subscription-billing.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -184,6 +185,23 @@ test(
         branch.branchId,
         "the first-period invoice must carry branch B, not the root",
       );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "first proration refuses a customer rehomed after subscription commit",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin"), plan = await seedPlan(org, actorId), branch = await seedBranchCustomer(org, "Rehomed Starter");
+      const subscriptionId = await seedSubscription(org, actorId, plan, org.customerId, { startOn: "2026-07-10", nextBillOn: "2026-07-10" });
+      await db.execute(sql`update parties set subsidiary_id = ${branch.branchId} where id = ${org.customerId} and org_id = ${org.orgId}`);
+      await assert.rejects(prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-20", { actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), ScopeNotFoundError);
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`)).rows[0]!.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

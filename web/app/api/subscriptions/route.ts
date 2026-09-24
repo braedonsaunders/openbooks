@@ -428,7 +428,10 @@ export async function POST(req: Request) {
         if (prorateFirstPeriod) {
           // The authenticated caller authors the proration invoice — the
           // subscription's own id is never an actor.
-          proration = await prorateFirstInvoice(id, firstBillOn, undefined, { actorId: userId });
+          proration = await prorateFirstInvoice(id, firstBillOn, undefined, {
+            actorId: userId,
+            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+          });
         }
         return NextResponse.json({ id, proration }, { status: 201 });
       }
