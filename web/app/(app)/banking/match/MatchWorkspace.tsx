@@ -33,6 +33,10 @@ export interface StatementRow extends Record<string, unknown> {
   amount: string
   description: string | null
   counterparty_ref?: string | null
+  possible_duplicate_of?: string | null
+  dup_posted_on?: string | null
+  dup_amount?: string | number | null
+  dup_description?: string | null
 }
 export interface GlRow extends Record<string, unknown> {
   id: string
@@ -55,6 +59,7 @@ interface MatchData {
   stmtRows: StatementRow[]
   stmtTotal: number
   stmtParams: ListParams
+  flaggedTotal: number
   glRows: GlRow[]
   glTotal: number
   glParams: ListParams
@@ -240,6 +245,26 @@ export function MatchWorkspace({
     if (!d) return
     toast.success(t('restoredToast')); router.refresh()
   }
+  async function clearDuplicate(id: string) {
+    const ok = await confirmDialog({ message: t('clearDuplicateConfirm') })
+    if (!ok) return
+    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'clear-duplicate' })
+    if (!d) return
+    toast.success(t('clearedDuplicateToast')); if (selectedStmt === id) setSelectedStmt(null); router.refresh()
+  }
+  async function excludeFlaggedDuplicates() {
+    if (!account || (data?.flaggedTotal ?? 0) === 0) return
+    const ok = await confirmDialog({ message: t('excludeFlaggedConfirm', { count: data?.flaggedTotal ?? 0 }) })
+    if (!ok) return
+    const d = await call('POST', '/api/banking/statement-lines/bulk', {
+      action: 'exclude-duplicates',
+      accountId: account.id,
+      reason: t('excludeFlaggedReason'),
+    })
+    if (!d) return
+    toast.success(t('excludedFlaggedToast', { count: d.excluded ?? 0 }))
+    setSelectedStmt(null); router.refresh()
+  }
   async function unmatch(statementLineId: string) {
     if (!session) return
     const d = await call('DELETE', `/api/banking/reconciliations/${session.id}/matches?statementLineId=${statementLineId}`)
@@ -343,6 +368,9 @@ export function MatchWorkspace({
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="outline" disabled={busy} onClick={autoMatch}><Wand2 size={15} /> {tW('autoMatch')}</Button>
         <Button variant="outline" disabled={busy} onClick={runRules}><Workflow size={15} /> {tBanking('rules.runRules')}</Button>
+        {(data?.flaggedTotal ?? 0) > 0 ? (
+          <Button variant="outline" disabled={busy} onClick={excludeFlaggedDuplicates}><Ban size={15} /> {t('excludeFlagged', { count: data?.flaggedTotal ?? 0 })}</Button>
+        ) : null}
         <span className="flex-1" />
         {selectedStmt ? <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">{tW('selectionSummary', { bank: money((data.stmtRows.find((r) => r.id === selectedStmt)?.amount) ?? 0), gl: money(glSelectionSum) })}</span> : null}
         <Button disabled={busy || !selectedStmt || selectedGl.size === 0} onClick={matchSelected}><Link2 size={15} /> {tW('matchSelected')}</Button>
@@ -383,6 +411,18 @@ export function MatchWorkspace({
                       <TableCell className="whitespace-nowrap">{l.posted_on}</TableCell>
                       <TableCell className="max-w-[14rem]">
                         <div className="truncate">{l.description ?? '—'}{l.counterparty_ref ? <span className="ml-1.5 text-xs text-slate-400">{l.counterparty_ref}</span> : null}</div>
+                        {l.possible_duplicate_of ? (
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            <Badge variant="warning">{t('possibleDuplicateBadge')}</Badge>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              {t('possibleDuplicateOf', {
+                                date: String(l.dup_posted_on ?? ''),
+                                amount: money((l.dup_amount ?? 0) as MoneyValue),
+                              })}
+                            </span>
+                            <Button variant="ghost" size="sm" disabled={busy} title={t('clearDuplicate')} onClick={(e) => { e.stopPropagation(); clearDuplicate(l.id) }}><RotateCcw size={14} /></Button>
+                          </div>
+                        ) : null}
                         {suggestions.has(l.id) ? (
                           <button
                             type="button"

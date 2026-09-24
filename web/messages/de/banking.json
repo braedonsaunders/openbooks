@@ -336,6 +336,15 @@
     "searchExcluded": "Ausgeschlossene Zeilen suchen…",
     "noExcluded": "Keine ausgeschlossenen Zeilen.",
     "restore": "Wiederherstellen",
+    "possibleDuplicateBadge": "Mögliches Duplikat",
+    "possibleDuplicateOf": "vom {date} · {amount}",
+    "clearDuplicate": "Als kein Duplikat markieren",
+    "clearDuplicateConfirm": "Ist diese Zeile eine echte Transaktion und keine Wiederholung des früheren Imports?",
+    "clearedDuplicateToast": "Duplikat-Markierung entfernt",
+    "excludeFlagged": "{count, plural, one {# Duplikat ausschließen} other {# Duplikate ausschließen}}",
+    "excludeFlaggedConfirm": "{count, plural, one {# markierte Zeile als Duplikat früherer Importe ausschließen?} other {# markierte Zeilen als Duplikate früherer Importe ausschließen?}}",
+    "excludeFlaggedReason": "Duplikat eines früheren Imports (Sammelprüfung von Duplikaten)",
+    "excludedFlaggedToast": "{count, plural, one {# Duplikat ausgeschlossen} other {# Duplikate ausgeschlossen}}",
     "createRule": "Regel aus dieser Zeile erstellen",
     "postAndMatch": "Buchen und zuordnen",
     "suggestedBy": "Vorschlag: {rule}"
@@ -400,8 +409,8 @@
     "preview": "Vorschau",
     "importAction": "Importieren",
     "importCount": "{count, plural, one {# Zeile} other {# Zeilen}} importieren",
-    "importedToast": "{imported, plural, one {# Zeile importiert} other {# Zeilen importiert}}{duplicates, plural, =0 {} one { — # Duplikat übersprungen} other { — # Duplikate übersprungen}}",
-    "previewSummary": "{imported, plural, one {# neue Zeile} other {# neue Zeilen}}{duplicates, plural, =0 {} one { · # Duplikat übersprungen} other { · # Duplikate übersprungen}}",
+    "importedToast": "{imported, plural, one {# Zeile importiert} other {# Zeilen importiert}}{duplicates, plural, =0 {} one { — # Duplikat übersprungen} other { — # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { — # zur Prüfung markiert} other { — # zur Prüfung markiert}}",
+    "previewSummary": "{imported, plural, one {# neue Zeile} other {# neue Zeilen}}{duplicates, plural, =0 {} one { · # Duplikat übersprungen} other { · # Duplikate übersprungen}}{possibleDuplicates, plural, =0 {} one { · # zur Prüfung markiert} other { · # zur Prüfung markiert}}",
     "format": "Format",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -424,7 +433,8 @@
     "optionalPlaceholder": "optional",
     "nothingNew": "Jede geparste Zeile existiert bereits auf diesem Konto — nichts Neues zu importieren.",
     "moreLines": "…und {count, plural, one {# weitere Zeile} other {# weitere Zeilen}}",
-    "totalBadge": "{count, number} insgesamt"
+    "totalBadge": "{count, number} insgesamt",
+    "possibleDuplicateBadge": "Mögliches Duplikat"
   },
   "start": {
     "resume": "Abstimmung fortsetzen",

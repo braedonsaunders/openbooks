@@ -12,12 +12,14 @@ interface PreviewLine {
   amount: string
   description: string | null
   counterpartyRef?: string | null
+  possibleDuplicateOf?: string | null
 }
 
 interface StatementPreview {
   lines: PreviewLine[]
   imported: number
   duplicates: number
+  possibleDuplicates: number
   sourceRevision: number
 }
 
@@ -200,6 +202,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     lines?: PreviewLine[]
     imported?: number
     duplicates?: number
+    possibleDuplicates?: number
     statementDate?: string
     closingBalance?: string
   }
@@ -268,6 +271,10 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         source,
         ...sourcePayload,
         mode: 'preview',
+        // Balances already typed by the operator feed the same proven-replay
+        // scope as the import, so the preview agrees with what import writes.
+        openingBalance: openingBalance || null,
+        closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
       if (requestRevision !== sourceRevision.current) return
@@ -275,6 +282,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         lines: data.lines ?? [],
         imported: data.imported ?? 0,
         duplicates: data.duplicates ?? 0,
+        possibleDuplicates: data.possibleDuplicates ?? 0,
         sourceRevision: requestRevision,
       })
       const { statementDate: previewStatementDate, closingBalance: previewClosingBalance } = data
@@ -308,7 +316,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
         closingBalance: closingBalance || null,
         ...(source === 'csv' ? { mapping: toEngineMapping(mapping) } : {}),
       })
-      toast.success(t('importedToast', { imported: data.imported ?? 0, duplicates: data.duplicates ?? 0 }))
+      toast.success(t('importedToast', { imported: data.imported ?? 0, duplicates: data.duplicates ?? 0, possibleDuplicates: data.possibleDuplicates ?? 0 }))
       setOpen(false)
       reset()
       router.refresh()
@@ -373,7 +381,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
           <div className="flex w-full items-center gap-3">
             {preview ? (
               <span className="text-xs text-slate-500 dark:text-slate-400">
-                {t('previewSummary', { imported: preview.imported, duplicates: preview.duplicates })}
+                {t('previewSummary', { imported: preview.imported, duplicates: preview.duplicates, possibleDuplicates: preview.possibleDuplicates })}
               </span>
             ) : null}
             <span className="flex-1" />
@@ -525,7 +533,12 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
                       {preview.lines.slice(0, PREVIEW_CAP).map((l, i) => (
                         <tr key={i}>
                           <td className="px-3 py-1.5 whitespace-nowrap">{l.postedOn}</td>
-                          <td className="max-w-[18rem] truncate px-3 py-1.5">{l.description ?? '—'}</td>
+                          <td className="max-w-[18rem] truncate px-3 py-1.5">
+                            {l.description ?? '—'}
+                            {l.possibleDuplicateOf ? (
+                              <Badge variant="warning" className="ml-2">{t('possibleDuplicateBadge')}</Badge>
+                            ) : null}
+                          </td>
                           <td className="px-3 py-1.5 text-slate-500 dark:text-slate-400">{l.counterpartyRef ?? ''}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{money(l.amount)}</td>
                         </tr>

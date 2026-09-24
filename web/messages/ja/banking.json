@@ -336,6 +336,15 @@
     "searchExcluded": "除外済み明細を検索…",
     "noExcluded": "除外済みの明細はありません。",
     "restore": "復元",
+    "possibleDuplicateBadge": "重複の可能性あり",
+    "possibleDuplicateOf": "{date}・{amount}の明細",
+    "clearDuplicate": "重複ではないとする",
+    "clearDuplicateConfirm": "この明細は以前のインポートの再掲ではなく、正規の取引ですか?",
+    "clearedDuplicateToast": "重複フラグを解除しました",
+    "excludeFlagged": "{count, plural, one {# 件の重複を除外する} other {# 件の重複を除外する}}",
+    "excludeFlaggedConfirm": "{count, plural, one {以前のインポートとの重複としてフラグされた # 件の明細を除外しますか?} other {以前のインポートとの重複としてフラグされた # 件の明細を除外しますか?}}",
+    "excludeFlaggedReason": "以前のインポートとの重複（一括重複確認）",
+    "excludedFlaggedToast": "{count, plural, one {# 件の重複を除外しました} other {# 件の重複を除外しました}}",
     "createRule": "この明細からルールを作成",
     "postAndMatch": "記帳して照合",
     "suggestedBy": "提案: {rule}"
@@ -400,8 +409,8 @@
     "preview": "プレビュー",
     "importAction": "インポート",
     "importCount": "{count, plural, one {# 件の明細をインポート} other {# 件の明細をインポート}}",
-    "importedToast": "{imported, plural, one {# 件の明細をインポートしました} other {# 件の明細をインポートしました}}{duplicates, plural, =0 {} one { — # 件の重複をスキップ} other { — # 件の重複をスキップ}}",
-    "previewSummary": "{imported, plural, one {# 件の新規明細} other {# 件の新規明細}}{duplicates, plural, =0 {} one { · # 件の重複をスキップ} other { · # 件の重複をスキップ}}",
+    "importedToast": "{imported, plural, one {# 件の明細をインポートしました} other {# 件の明細をインポートしました}}{duplicates, plural, =0 {} one { — # 件の重複をスキップ} other { — # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { — # 件を要確認としてマーク} other { — # 件を要確認としてマーク}}",
+    "previewSummary": "{imported, plural, one {# 件の新規明細} other {# 件の新規明細}}{duplicates, plural, =0 {} one { · # 件の重複をスキップ} other { · # 件の重複をスキップ}}{possibleDuplicates, plural, =0 {} one { · # 件を要確認としてマーク} other { · # 件を要確認としてマーク}}",
     "format": "形式",
     "formatOfx": "OFX / QFX",
     "formatCsv": "CSV",
@@ -424,7 +433,8 @@
     "optionalPlaceholder": "任意",
     "nothingNew": "解析されたすべての明細はこの勘定に既に存在します。新規にインポートするものはありません。",
     "moreLines": "…他 {count, plural, one {# 件の明細} other {# 件の明細}}",
-    "totalBadge": "合計 {count, number} 件"
+    "totalBadge": "合計 {count, number} 件",
+    "possibleDuplicateBadge": "重複の可能性あり"
   },
   "start": {
     "resume": "消込を再開",

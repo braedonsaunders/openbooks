@@ -1,13 +1,13 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking/banking.ts'
+import { clearPossibleDuplicateFlag, excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
 
 export const runtime = 'nodejs'
 
-/** Toggle a statement line's exclusion: { action: 'exclude' | 'restore' }. */
+/** Toggle a statement line's exclusion or clear its possible-duplicate flag. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
@@ -22,7 +22,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await excludeStatementLine(id, String(body.reason ?? ''), { orgId: user.orgId, userId: user.id })
     }
     else if (body.action === 'restore') await restoreStatementLine(id, { orgId: user.orgId, userId: user.id })
-    else return NextResponse.json({ error: 'action must be "exclude" or "restore"' }, { status: 400 })
+    else if (body.action === 'clear-duplicate') await clearPossibleDuplicateFlag(id, { orgId: user.orgId, userId: user.id })
+    else return NextResponse.json({ error: 'action must be "exclude", "restore" or "clear-duplicate"' }, { status: 400 })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return bankingErrorResponse(e)

@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  assignStatementLineIds,
   filterDuplicateStatementLines,
+  isProvenReplay,
   normalizeFingerprintText,
   statementSourceSha256,
-  synthesizeStatementLineId,
   type ParsedStatementLine,
 } from "./banking.ts";
 import {
@@ -24,10 +23,10 @@ const line = (overrides: Partial<ParsedStatementLine> = {}): ParsedStatementLine
 });
 
 // The filter primitive keys ONLY on transaction IDs, never on content: it
-// cannot tell two ID-less lines apart. That is why importStatement runs
-// assignStatementLineIds first — at the import level a re-exported ID-less
-// file resolves to the same synthesized IDs and dedupes (see the
-// re-import integration test), while the primitive below stays content-blind.
+// cannot tell two ID-less lines apart, so every ID-less line passes through
+// it untouched. Content overlap is partitioned at the import level, where a
+// tuple proves a replay only inside proven scope and otherwise imports
+// flagged (see the re-import integration tests).
 test("the filter primitive keys only on transaction IDs, not on content", () => {
   const first = filterDuplicateStatementLines([line()], new Set());
   assert.equal(first.lines.length, 1);
@@ -49,71 +48,50 @@ test("content-identical ID-less transactions within one filter pass are all reta
   assert.equal(filtered.duplicates, 0);
 });
 
-test("synthesized IDs are deterministic and namespaced away from FITIDs", () => {
-  const first = synthesizeStatementLineId(
-    { postedOn: "2026-08-01", amount: "-5.0000", description: "COFFEE SHOP" },
-    1,
-  );
-  const same = synthesizeStatementLineId(
-    { postedOn: "2026-08-01", amount: "-5.0000", description: "COFFEE SHOP" },
-    1,
-  );
-  assert.equal(first, same);
-  assert.match(first, /^synth-v1:[0-9a-f]{64}$/);
-  const twin = synthesizeStatementLineId(
-    { postedOn: "2026-08-01", amount: "-5.0000", description: "COFFEE SHOP" },
-    2,
-  );
-  assert.notEqual(twin, first);
-  assert.throws(
-    () => synthesizeStatementLineId(
-      { postedOn: "2026-08-01", amount: "-5.0000", description: "COFFEE SHOP" },
-      0,
-    ),
-    /positive integer/,
-  );
-});
-
-test("the fingerprint ignores description case and spacing, nothing else", () => {
-  const canonical = { postedOn: "2026-08-01", amount: "-5.0000", description: "COFFEE SHOP" };
-  assert.equal(
-    synthesizeStatementLineId({ ...canonical, description: "  coffee   shop " }, 1),
-    synthesizeStatementLineId(canonical, 1),
-  );
+test("content comparison ignores description case and spacing", () => {
+  assert.equal(normalizeFingerprintText("  coffee   shop "), "COFFEE SHOP");
   assert.equal(normalizeFingerprintText(null), "");
-  assert.notEqual(
-    synthesizeStatementLineId({ ...canonical, amount: "-6.0000" }, 1),
-    synthesizeStatementLineId(canonical, 1),
-  );
-  assert.notEqual(
-    synthesizeStatementLineId({ ...canonical, postedOn: "2026-08-02" }, 1),
-    synthesizeStatementLineId(canonical, 1),
-  );
+  assert.notEqual(normalizeFingerprintText("COFFEE SHOP"), normalizeFingerprintText("TEA SHOP"));
 });
 
-test("assignStatementLineIds keeps source IDs and ordinals identical twins", () => {
-  const assigned = assignStatementLineIds([
-    line({ bankTransactionId: "FITID-1" }),
-    line({ amount: "-5.0000", description: "COFFEE SHOP" }),
-    line({ amount: "-5.0000", description: "COFFEE SHOP" }),
-    line({ amount: "-5.0000", description: "  coffee shop" }),
-    line(),
-  ]);
-  assert.equal(assigned[0]!.bankTransactionId, "FITID-1");
-  const twins = assigned.slice(1, 4).map((entry) => entry.bankTransactionId);
-  assert.equal(new Set(twins).size, 3, "three identical lines need three IDs");
-  for (const id of twins) assert.match(id, /^synth-v1:/);
-  // A re-exported file in another row order resolves to the same ID set.
-  const reordered = assignStatementLineIds([
-    line({ amount: "-5.0000", description: "coffee  SHOP" }),
-    line({ bankTransactionId: "FITID-1" }),
-    line(),
-    line({ amount: "-5.0000", description: "COFFEE SHOP" }),
-    line({ amount: "-5.0000", description: "COFFEE SHOP" }),
-  ]);
-  assert.deepEqual(
-    new Set(reordered.map((entry) => entry.bankTransactionId)),
-    new Set(assigned.map((entry) => entry.bankTransactionId)),
+test("a replay needs an overlapping window plus a matching balance", () => {
+  const incoming = {
+    fromDate: "2026-09-01",
+    toDate: "2026-09-30",
+    openingBalance: "1000.0000",
+    closingBalance: "900.0000",
+  };
+  // Same window, same closing balance: proven.
+  assert.equal(
+    isProvenReplay(incoming, { ...incoming }),
+    true,
+  );
+  // Same window, same opening balance, different close: still proven.
+  assert.equal(
+    isProvenReplay(incoming, { ...incoming, closingBalance: "800.0000" }),
+    true,
+  );
+  // Same window but neither balance matches: possible overlap, not proof.
+  assert.equal(
+    isProvenReplay(incoming, { ...incoming, openingBalance: "0.0000", closingBalance: "800.0000" }),
+    false,
+  );
+  // Matching balances on a disjoint window: a different statement.
+  assert.equal(
+    isProvenReplay(incoming, { ...incoming, fromDate: "2026-08-01", toDate: "2026-08-31" }),
+    false,
+  );
+  // Touching windows overlap; a file without balance evidence proves nothing.
+  assert.equal(
+    isProvenReplay(incoming, { ...incoming, fromDate: "2026-09-30", toDate: "2026-10-05" }),
+    true,
+  );
+  assert.equal(
+    isProvenReplay(
+      { ...incoming, openingBalance: null, closingBalance: null },
+      { ...incoming },
+    ),
+    false,
   );
 });
 
