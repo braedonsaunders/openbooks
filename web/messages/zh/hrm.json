@@ -1849,6 +1849,17 @@
       "viewed": "已查看",
       "missing": "此文档已不可用。",
       "retention": "保留",
+      "eventCreated": "已创建",
+      "eventSent": "已发送",
+      "eventViewed": "已查看",
+      "eventSigned": "已签署",
+      "eventDeclined": "已拒绝",
+      "eventAcknowledged": "已确认",
+      "eventVoided": "已作废",
+      "eventReminded": "已提醒",
+      "eventExpired": "已过期",
+      "eventRetentionFlagged": "已标记留存",
+      "eventDeleted": "已删除",
       "retentionUnverified": "遗留 — 继承的动作，完成时未记录"
     },
     "generate": {

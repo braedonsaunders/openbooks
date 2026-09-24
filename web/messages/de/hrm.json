@@ -1849,6 +1849,17 @@
       "viewed": "Gelesen",
       "missing": "Dieses Dokument ist nicht mehr verfügbar.",
       "retention": "Aufbewahrung",
+      "eventCreated": "Erstellt",
+      "eventSent": "Versendet",
+      "eventViewed": "Angesehen",
+      "eventSigned": "Unterschrieben",
+      "eventDeclined": "Abgelehnt",
+      "eventAcknowledged": "Bestätigt",
+      "eventVoided": "Annulliert",
+      "eventReminded": "Erinnert",
+      "eventExpired": "Abgelaufen",
+      "eventRetentionFlagged": "Zur Aufbewahrung markiert",
+      "eventDeleted": "Gelöscht",
       "retentionUnverified": "Legacy — Aktion übernommen, bei Abschluss nicht erfasst"
     },
     "generate": {

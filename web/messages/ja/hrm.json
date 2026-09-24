@@ -1849,6 +1849,17 @@
       "viewed": "既読",
       "missing": "この文書は利用できません。",
       "retention": "保存",
+      "eventCreated": "作成",
+      "eventSent": "送信",
+      "eventViewed": "閲覧",
+      "eventSigned": "署名",
+      "eventDeclined": "拒否",
+      "eventAcknowledged": "確認済み",
+      "eventVoided": "無効化",
+      "eventReminded": "リマインド済み",
+      "eventExpired": "期限切れ",
+      "eventRetentionFlagged": "保存対象としてフラグ付け",
+      "eventDeleted": "削除済み",
       "retentionUnverified": "レガシー — 完了時に記録されず継承されたアクション"
     },
     "generate": {

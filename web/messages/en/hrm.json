@@ -1905,6 +1905,17 @@
       "viewed": "Viewed",
       "missing": "This document is no longer available.",
       "retention": "Retention",
+      "eventCreated": "Created",
+      "eventSent": "Sent",
+      "eventViewed": "Viewed",
+      "eventSigned": "Signed",
+      "eventDeclined": "Declined",
+      "eventAcknowledged": "Acknowledged",
+      "eventVoided": "Voided",
+      "eventReminded": "Reminded",
+      "eventExpired": "Expired",
+      "eventRetentionFlagged": "Flagged for retention",
+      "eventDeleted": "Deleted",
       "retentionUnverified": "Legacy — action inherited, not captured at completion"
     },
     "generate": {

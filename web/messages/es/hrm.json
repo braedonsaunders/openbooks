@@ -1849,6 +1849,17 @@
       "viewed": "Visto",
       "missing": "Este documento ya no está disponible.",
       "retention": "Retención",
+      "eventCreated": "Creado",
+      "eventSent": "Enviado",
+      "eventViewed": "Visto",
+      "eventSigned": "Firmado",
+      "eventDeclined": "Rechazado",
+      "eventAcknowledged": "Confirmado",
+      "eventVoided": "Anulado",
+      "eventReminded": "Recordado",
+      "eventExpired": "Caducado",
+      "eventRetentionFlagged": "Marcado para retención",
+      "eventDeleted": "Eliminado",
       "retentionUnverified": "Legacy — acción heredada, no registrada al completar"
     },
     "generate": {

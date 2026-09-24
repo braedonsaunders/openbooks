@@ -387,7 +387,12 @@ export function ChangeRequestDetailDrawer({
                   <p className="text-sm font-medium">{statusLabelOf(outcome)}</p>
                   {snapshotGates.map((gate, index) => (
                     <div key={index} className="rounded-lg bg-slate-50 p-3 text-sm dark:bg-slate-800">
-                      <p className="font-medium">{asText(gate.decision) ?? t('queue.notAvailable')}</p>
+                      <p className="font-medium">
+                        {(() => {
+                          const decision = asText(gate.decision)
+                          return decision ? statusLabelOf(decision) : t('queue.notAvailable')
+                        })()}
+                      </p>
                       {asText(gate.comment) ? (
                         <p className="mt-1 text-slate-600 dark:text-slate-300">{asText(gate.comment)}</p>
                       ) : null}

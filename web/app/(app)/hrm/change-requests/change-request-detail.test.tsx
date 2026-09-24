@@ -317,6 +317,11 @@ test('the drawer shows the decision context of a decided request', async () => {
     const text = textOf()
     assert.match(text, /Backfill for the dinner shift\./, 'the drawer shows the stamped reason')
     assert.match(text, /Approved/, 'the drawer shows the decision outcome')
+    assert.equal(
+      (text.match(/Approved/g) ?? []).length,
+      2,
+      'the outcome and the gate decision both render the Approved label, never the raw approved code',
+    )
     assert.match(text, /References checked\./, 'the drawer shows the gate comment')
     assert.match(text, /2026-08-22T09:00:00\.000Z/, 'the drawer shows when the gate decided')
     assert.match(text, /2026-08-23T09:00:00\.000Z/, 'the drawer shows when the decision applied')

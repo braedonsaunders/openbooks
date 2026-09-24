@@ -1849,6 +1849,17 @@
       "viewed": "Lu",
       "missing": "Ce document n’est plus disponible.",
       "retention": "Conservation",
+      "eventCreated": "Créé",
+      "eventSent": "Envoyé",
+      "eventViewed": "Consulté",
+      "eventSigned": "Signé",
+      "eventDeclined": "Refusé",
+      "eventAcknowledged": "Accusé de réception",
+      "eventVoided": "Annulé",
+      "eventReminded": "Relancé",
+      "eventExpired": "Expiré",
+      "eventRetentionFlagged": "Signalé pour conservation",
+      "eventDeleted": "Supprimé",
       "retentionUnverified": "Legacy — action héritée, non constatée à l'achèvement"
     },
     "generate": {

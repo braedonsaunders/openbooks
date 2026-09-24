@@ -224,6 +224,17 @@ export async function loadDocumentsHome(
           viewed: t('documents.drawer.viewed'),
           retention: t('documents.drawer.retention'),
           retentionUnverified: t('documents.drawer.retentionUnverified'),
+          eventCreated: t('documents.drawer.eventCreated'),
+          eventSent: t('documents.drawer.eventSent'),
+          eventViewed: t('documents.drawer.eventViewed'),
+          eventSigned: t('documents.drawer.eventSigned'),
+          eventDeclined: t('documents.drawer.eventDeclined'),
+          eventAcknowledged: t('documents.drawer.eventAcknowledged'),
+          eventVoided: t('documents.drawer.eventVoided'),
+          eventReminded: t('documents.drawer.eventReminded'),
+          eventExpired: t('documents.drawer.eventExpired'),
+          eventRetentionFlagged: t('documents.drawer.eventRetentionFlagged'),
+          eventDeleted: t('documents.drawer.eventDeleted'),
         },
       }
     } catch {

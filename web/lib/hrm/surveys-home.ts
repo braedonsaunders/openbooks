@@ -123,12 +123,19 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
     })
   }
 
+  // Question-kind labels serve both the author dialog's options and the
+  // results drawer, so stored codes never render beside translated options.
+  const questionKinds = (['scale', 'enps', 'text', 'single', 'multi'] as const).map((value) => ({
+    value,
+    label: t(`surveys.questionKind.${value}`),
+  }))
   let drawer: {
     closeHref: string
     title: string
     survey: Awaited<ReturnType<typeof getSurvey>> | null
     results: Awaited<ReturnType<typeof getSurveyResults>> | null
     people: { value: string; label: string }[]
+    questionKinds: { value: string; label: string }[]
     missingDetail: string | null
     labels: Record<string, string>
   } | null = null
@@ -148,6 +155,7 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
         survey,
         results,
         people: people.map((p) => ({ value: p.id, label: p.name })),
+        questionKinds,
         missingDetail: null,
         labels: {
           results: t('surveys.drawer.results'),
@@ -173,14 +181,13 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
         survey: null,
         results: null,
         people: [],
+        questionKinds: [],
         missingDetail: t('surveys.drawer.missing'),
         labels: {},
       }
     }
   }
 
-  // The author dialog's inputs: kinds, anonymity grades, and question
-  // kinds — ids and labels only; the drawer posts the question cards.
   const author = authoring
     ? {
         closeHref: hrefFor(status, null, false),
@@ -192,10 +199,7 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
           value,
           label: anonymityLabel(value),
         })),
-        questionKinds: (['scale', 'enps', 'text', 'single', 'multi'] as const).map((value) => ({
-          value,
-          label: t(`surveys.questionKind.${value}`),
-        })),
+        questionKinds,
         labels: {
           title: t('surveys.author.title'),
           name: t('surveys.author.name'),
