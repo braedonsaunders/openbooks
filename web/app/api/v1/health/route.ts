@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
 import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
 import { pool } from "@openbooks/engine/src/platform/db.ts";
+import {
+  isSchedulerTickHealthDegraded,
+  readSchedulerTickHealth,
+} from "@openbooks/engine/src/scheduling/tick-health.ts";
 import { pdfRendererStatus, type PdfRendererStatus } from "@openbooks/pdf";
 import { requireSessionSecret } from "../../../../lib/auth-secret-policy";
 
@@ -106,12 +110,28 @@ export async function GET(req: Request) {
     const heartbeat = await getWorkerHeartbeat();
     const ageMs = heartbeat ? Date.now() - new Date(heartbeat).getTime() : Number.POSITIVE_INFINITY;
     const workerReady = Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= 45_000;
+    // The scheduler tick publishes overlap skips and duty failures to
+    // Redis (B2-SCH-1, C-56); a sustained cadence miss degrades this
+    // signal, while an unreadable key simply reports a null scheduler.
+    const scheduler = await readSchedulerTickHealth();
+    const schedulerDegraded = scheduler !== null && isSchedulerTickHealthDegraded(scheduler);
+    const ready = workerReady && !schedulerDegraded;
     return NextResponse.json({
-      status: workerReady ? "ok" : "degraded",
+      status: ready ? "ok" : "degraded",
       service: "openbooks-api",
       version,
       worker: { status: workerReady ? "ok" : "stale", heartbeat, ageMs: Number.isFinite(ageMs) ? ageMs : null },
-    }, { status: workerReady ? 200 : 503 });
+      scheduler: scheduler
+        ? {
+            status: schedulerDegraded ? "degraded" : "ok",
+            overlapSkips: scheduler.overlapSkips,
+            consecutiveSkips: scheduler.consecutiveSkips,
+            lastTickAt: scheduler.lastTickAt,
+            lastTickOk: scheduler.lastTickOk,
+            dutyFailures: scheduler.lastDutyFailures,
+          }
+        : null,
+    }, { status: ready ? 200 : 503 });
   } catch {
     return NextResponse.json({
       status: "degraded",
