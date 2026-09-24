@@ -289,44 +289,12 @@ test("home propagates an unexpected system failure instead of a zero tile", asyn
   await assert.rejects(loadCompensationHome(authz), /db went away/, "the failure reaches the caller, never a zero tile");
 });
 
-test("both specs render the refusal through the house empty-state block", async () => {
-  const homeView = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-  const equityView = readFileSync(new URL("./equity/view.ts", import.meta.url), "utf8");
-  const loader = readFileSync(new URL("../../../../lib/hrm/compensation.ts", import.meta.url), "utf8");
-  const strings = readFileSync(new URL("../../../../messages/en/hrm.json", import.meta.url), "utf8");
-  for (const [name, view] of [["home", homeView], ["equity", equityView]] as const) {
-    assert.match(
-      view,
-      /widgetBlock\('empty-state', \{ title: data\.refusal\?\.title \?\? '', description: data\.refusal\?\.message \}, f\('refusal'\)\)/,
-      `the ${name} spec renders the computed refusal through the shared empty-state block, gated on refusal`,
-    );
-  }
-  assert.match(loader, /refusal: \{ title: string; message: string \} \| null/, "the loader data carries the refusal beside the content");
-  assert.match(loader, /t\('compensation\.title'\)/, "the home refusal banner reuses the existing page title");
-  assert.match(loader, /t\('equity\.title'\)/, "the equity refusal banner reuses the existing page title");
-  // The /me compensation refusal lives in this file too and reuses the
-  // shared me.refusedTitle (the same title every /me loader carries since
-  // 1cc5f9c78) — the property is no NEW refusal-title key, not zero
-  // occurrences of the shared one.
-  assert.deepEqual(
-    [...loader.matchAll(/t\('([^']*refusedTitle)'\)/g)].map((m) => m[1]),
-    ['me.refusedTitle'],
-    "the loader introduces no new refusal-title key: home/equity reuse their page titles, /me reuses the shared title",
-  );
-  const catalogNamespaces = JSON.parse(strings) as {
-    compensation?: { refusedTitle?: unknown };
-    equity?: { refusedTitle?: unknown };
-  };
-  assert.equal(catalogNamespaces.compensation?.refusedTitle, undefined, "no new refusal-title key under compensation");
-  assert.equal(catalogNamespaces.equity?.refusedTitle, undefined, "no new refusal-title key under equity");
-  assert.match(equityView, /when: f\('hasContent'\)/, "the equity grid and table gate on content");
-  assert.match(
-    loader,
-    /await countBandHolders\(\{ orgId, actorId: authz\.user\.id, levelId: band\.levelId, asOf: today \}\)/,
-    "the scoped holder count stays a bare awaited call",
-  );
-  assert.ok(!/latestGapSnapshot\([^)]*\)\.catch\(/.test(loader), "no snapshot read swallows its refusal into null");
-});
+// The refusal rendering the pin test above asserted statically (which
+// empty-state block shape, which title key, no swallowed snapshot read)
+// stays covered behaviourally by 'the computed refusal reaches the
+// operator surface in both specs' and 'genuine no-snapshot equity keeps
+// its table distinct from a refusal', which run both specs and assert on
+// their output.
 
 interface SpecBlock {
   kind?: string;

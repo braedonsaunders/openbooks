@@ -1,3 +1,4 @@
+// source-pin-contract: every literal ?<param>=new href is armed where it lands; subjects derived by walking web/lib and web/app
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { createRequire, registerHooks } from "node:module";
@@ -359,24 +360,11 @@ test("both specs emit the dialog widgets gated on the loader-derived open state"
   );
 });
 
-test("the loader, spec, and page thread the params end to end", () => {
-  const loader = readFileSync(new URL("../../../../lib/hrm/compensation.ts", import.meta.url), "utf8");
-  const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-  const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-  const equityView = readFileSync(new URL("./equity/view.ts", import.meta.url), "utf8");
-  const equityPage = readFileSync(new URL("./equity/page.tsx", import.meta.url), "utf8");
-  const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
-  assert.match(loader, /firstParam\(sp\.plan\) === 'new'/, "the loader derives the plan state from the search params");
-  assert.match(loader, /firstParam\(sp\.cycle\) === 'new'/, "the loader derives the cycle state from the search params");
-  assert.match(loader, /dialogCloseHref/, "the loader builds the dialog return href");
-  assert.match(view, /widgetBlock\('hrm-comp-cycle-dialog', \{ dialog: f\('cycleDialog'\) \}, f\('cycleOpen'\)\)/, "the cycle island renders gated on its open state");
-  assert.match(view, /widgetBlock\('hrm-comp-plan-dialog', \{ dialog: f\('planDialog'\) \}, f\('planOpen'\)\)/, "the plan island renders gated on its open state");
-  assert.match(page, /loadCompensationPage\(sp\)/, "the page hands its query string to the loader");
-  assert.match(equityView, /widgetBlock\('hrm-comp-equity-dialog', \{ dialog: f\('generateDialog'\) \}, f\('generateOpen'\)\)/, "the equity island renders gated on its open state");
-  assert.match(equityPage, /loadEquityPage\(sp\)/, "the equity page hands its query string to the loader");
-  assert.match(sections, /dialog\.refusal \? \(/, "the dialogs render the refusal branch instead of the form");
-  assert.match(sections, /remedyHref && remedyLabel/, "the refusal carries the real switch when one exists");
-});
+// The pin test this replaced ('the loader, spec, and page thread the
+// params end to end') asserted single-file source text; every behaviour
+// it named stays covered by the loader/spec behaviour tests above.
+// What remains below is the derived repo-wide invariant, kept under the
+// contract header at the top of this file.
 
 // The OM-15 sweep guard: every literal `?<param>=new` href emitted anywhere
 // in web/lib or web/app must be armed — the emitting file or the target
