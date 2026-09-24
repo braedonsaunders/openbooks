@@ -1760,6 +1760,9 @@
     "recordForm": {
       "employment": "雇佣关系",
       "type": "资质类型",
+      "employmentPlaceholder": "选择一名员工…",
+      "employmentsFailed": "无法加载员工。",
+      "recordFailed": "无法记录该资格。",
       "issuedOn": "签发日期",
       "expiresOn": "到期日期",
       "identifier": "执照编号",

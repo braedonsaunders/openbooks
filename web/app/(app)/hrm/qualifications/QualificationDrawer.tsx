@@ -68,6 +68,11 @@ export function QualificationDrawer({
   const [loaded, setLoaded] = useState<{ id: string; detail: Detail } | null>(null)
   const detail = loaded && loaded.id === qualificationId ? loaded.detail : null
   const [types, setTypes] = useState<QualificationType[]>([])
+  // The record form names the worker through the employments picker (ids,
+  // never free-text uuids). A picker failure is an error with retry, never
+  // a silent empty list.
+  const [employments, setEmployments] = useState<{ value: string; label: string }[]>([])
+  const [employmentsError, setEmploymentsError] = useState<string | null>(null)
   const [status, setStatus] = useState<string | undefined>(undefined)
   // Loading is a fact about the state, not a second copy of it: the
   // drawer is loading while an id is open, its row has not arrived, and
@@ -169,6 +174,30 @@ export function QualificationDrawer({
     }
   }
 
+  async function readEmployments(): Promise<{ value: string; label: string }[]> {
+    const res = await fetch('/api/hrm/options?source=employments&limit=200', { method: 'GET' })
+    // res.ok first, always: the refusal names the missing grant.
+    if (!res.ok) throw new Error(await readApiErrorMessage(res, t('qualifications.recordForm.employmentsFailed')))
+    const payload = (await res.json().catch(() => ({}))) as {
+      options?: { employmentId?: unknown; label?: unknown }[]
+    }
+    const page = Array.isArray(payload.options) ? payload.options : []
+    return page.flatMap((row) =>
+      typeof row.employmentId === 'string' && typeof row.label === 'string'
+        ? [{ value: row.employmentId, label: row.label }]
+        : [],
+    )
+  }
+
+  async function loadEmployments(): Promise<void> {
+    setEmploymentsError(null)
+    try {
+      setEmployments(await readEmployments())
+    } catch (e) {
+      setEmploymentsError((e as Error).message)
+    }
+  }
+
   async function record(): Promise<void> {
     await run('/api/hrm/qualifications', 'POST', {
       employmentId: form.employmentId || undefined,
@@ -177,8 +206,27 @@ export function QualificationDrawer({
       expiresOn: form.expiresOn || null,
       identifier: form.identifier || null,
       notes: form.notes || null,
-    }, 'failed to record')
+    }, t('qualifications.recordForm.recordFailed'))
   }
+
+  // The employment picker loads with the record form, not with the drawer:
+  // detail never needs it.
+  useEffect(() => {
+    if (!recordOpen) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const list = await readEmployments()
+        if (!cancelled) setEmployments(list)
+      } catch (e) {
+        if (!cancelled) setEmploymentsError((e as Error).message)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordOpen])
 
   const q = detail?.qualification
   const isPending = q?.storedStatus === 'pending_verification'
@@ -241,7 +289,20 @@ export function QualificationDrawer({
         <div className="flex flex-col gap-3">
           <div>
             <Label htmlFor="q-employment">{t('qualifications.recordForm.employment')}</Label>
-            <Input id="q-employment" value={form.employmentId} onChange={(e) => setForm({ ...form, employmentId: e.target.value })} placeholder="employment id" />
+            <Select id="q-employment" value={form.employmentId} onChange={(e) => setForm({ ...form, employmentId: e.target.value })}>
+              <option value="">{t('qualifications.recordForm.employmentPlaceholder')}</option>
+              {employments.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </Select>
+            {employmentsError ? (
+              <p role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+                {employmentsError}{' '}
+                <Button variant="ghost" size="sm" onClick={() => void loadEmployments()}>
+                  {tCommon('actions.retry')}
+                </Button>
+              </p>
+            ) : null}
           </div>
           <div>
             <Label htmlFor="q-type">{t('qualifications.recordForm.type')}</Label>
@@ -271,7 +332,9 @@ export function QualificationDrawer({
             <Textarea id="q-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </div>
           <div>
-            <Button onClick={record}>{t('qualifications.record')}</Button>
+            <Button onClick={record} disabled={!form.employmentId || !form.typeId || !form.issuedOn}>
+              {t('qualifications.record')}
+            </Button>
           </div>
         </div>
       ) : null}
