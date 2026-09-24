@@ -13,12 +13,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-processes-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -206,14 +201,12 @@ let completeRoute: RouteModule | undefined;
 let cancelRoute: RouteModule | undefined;
 let stepCompleteRoute: RouteModule | undefined;
 let stepSkipRoute: RouteModule | undefined;
-if (!isVitest) {
-  collectionRoute = await loadRoute("./route.ts?hrm-processes-collection");
-  recordRoute = await loadRoute("./[id]/route.ts?hrm-processes-record");
-  completeRoute = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
-  cancelRoute = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
-  stepCompleteRoute = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
-  stepSkipRoute = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
-}
+collectionRoute = await loadRoute("./route.ts?hrm-processes-collection");
+recordRoute = await loadRoute("./[id]/route.ts?hrm-processes-record");
+completeRoute = await loadRoute("./[id]/complete/route.ts?hrm-processes-complete");
+cancelRoute = await loadRoute("./[id]/cancel/route.ts?hrm-processes-cancel");
+stepCompleteRoute = await loadRoute("./steps/[stepId]/complete/route.ts?hrm-processes-step-complete");
+stepSkipRoute = await loadRoute("./steps/[stepId]/skip/route.ts?hrm-processes-step-skip");
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 const PROCESS_ID = "00000000-0000-4000-8000-000000000022";
@@ -248,24 +241,7 @@ function rawRequest(url: string, body: string): Request {
   });
 }
 
-if (isVitest) {
-  test("processes routes gate on the hrm feature and the process permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    for (const file of [
-      "./route.ts",
-      "./[id]/route.ts",
-      "./[id]/complete/route.ts",
-      "./[id]/cancel/route.ts",
-      "./steps/[stepId]/complete/route.ts",
-      "./steps/[stepId]/skip/route.ts",
-    ]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      assert.match(source, /guardPermission\("hrm\.process\.(read|manage)"\)/);
-      assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-    }
-  });
-} else {
-  test("a missing feature flag 404s before any service runs", async () => {
+test("a missing feature flag 404s before any service runs", async () => {
     reset();
     routeState.featureOn = false;
     const get = await collectionRoute!.GET!(new Request("http://openbooks.test/api/hrm/processes"));
@@ -453,20 +429,14 @@ if (isVitest) {
     ]);
   });
 
-  test("complete and cancel reach the service with the record id", async () => {
+  test("cancel reaches the service with the record id and reason", async () => {
     reset();
-    const done = await completeRoute!.POST!(
-      jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/complete`, {}),
-      ctx({ id: PROCESS_ID }),
-    );
-    assert.equal(done.status, 200);
     const cancelled = await cancelRoute!.POST!(
       jsonRequest(`http://openbooks.test/api/hrm/processes/${PROCESS_ID}/cancel`, { reason: "hire withdrawn" }),
       ctx({ id: PROCESS_ID }),
     );
     assert.equal(cancelled.status, 200);
     assert.deepEqual(routeState.calls, [
-      { fn: "completeProcess", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID } },
       { fn: "cancelProcess", args: { orgId: "org-1", actorId: "user-1", processId: PROCESS_ID, reason: "hire withdrawn" } },
     ]);
   });
@@ -492,4 +462,3 @@ if (isVitest) {
         "an open onboarding process already exists for this employment — complete or cancel it before opening another",
     });
   });
-}

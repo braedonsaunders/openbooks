@@ -12,12 +12,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-me-work-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -94,7 +89,7 @@ let benefitsRoute: typeof import("./benefits/route.ts") | undefined;
 let electRoute: typeof import("./benefits/elect/route.ts") | undefined;
 let changeRoute: typeof import("./benefits/change/route.ts") | undefined;
 
-if (!isVitest) {
+{
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -150,28 +145,7 @@ function post(body: unknown): Request {
   });
 }
 
-if (isVitest) {
-  test("me work routes gate on the hrm feature and the self permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    for (const file of ["./reviews/route.ts", "./benefits/route.ts"]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      assert.match(source, /guardPermission\("hrm\.self\.read"\)/);
-      assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-    }
-    for (const file of [
-      "./reviews/acknowledge/route.ts",
-      "./reviews/submit/route.ts",
-      "./goals/progress/route.ts",
-      "./benefits/elect/route.ts",
-      "./benefits/change/route.ts",
-    ]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      assert.match(source, /guardPermission\("hrm\.self\.request"\)/);
-      assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-    }
-  });
-} else {
-  test("a missing feature flag 404s before any service runs", async () => {
+test("a missing feature flag 404s before any service runs", async () => {
     reset();
     routeState.featureOn = false;
     assert.equal((await reviewsRoute!.GET()).status, 404);
@@ -298,4 +272,3 @@ if (isVitest) {
     assert.equal(response.status, 403);
     assert.match((await response.json()).error as string, /only against your own employment/);
   });
-}

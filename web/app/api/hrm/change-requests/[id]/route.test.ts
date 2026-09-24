@@ -16,12 +16,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-changerequest-id-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -137,7 +132,6 @@ const mockUrls = new Map<string, string>([
 let idRoute: typeof import("./route.ts") | undefined;
 let submitRoute: typeof import("./submit/route.ts") | undefined;
 let withdrawRoute: typeof import("./withdraw/route.ts") | undefined;
-if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
@@ -162,7 +156,7 @@ if (!isVitest) {
   submitRoute = (await import(submitUrl)) as typeof import("./submit/route.ts");
   withdrawRoute = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
   hooks.deregister();
-}
+
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };
@@ -176,16 +170,7 @@ function reset(): void {
   routeState.mapped = [];
 }
 
-if (isVitest) {
-  test("record routes gate on the hrm feature and employment permissions", async () => {
-    const { readFileSync } = await import("node:fs");
-    for (const file of ["./route.ts", "./submit/route.ts", "./withdraw/route.ts"]) {
-      const source = readFileSync(new URL(file, import.meta.url), "utf8");
-      assert.match(source, /isFeatureEnabled\(gate\.user\.orgId, "hrm"\)/);
-    }
-  });
-} else {
-  test("record read returns the service row", async () => {
+test("record read returns the service row", async () => {
     reset();
     const response = await idRoute!.GET(new Request("http://openbooks.test/x"), ctx);
     assert.equal(response.status, 200);
@@ -295,4 +280,3 @@ if (isVitest) {
   assert.equal(withdraw.status, 403);
   assert.deepEqual(routeState.calls, [], "no write reached the service without the manage grant");
 });
-}

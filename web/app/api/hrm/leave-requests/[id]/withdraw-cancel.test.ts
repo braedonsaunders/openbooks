@@ -20,12 +20,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-leave-action-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = { signedIn: true, grants: ["hrm.leave.request"], calls: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
@@ -78,7 +73,6 @@ const mockUrls = new Map<string, string>([
 
 let withdrawRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined;
 let cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined;
-if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       if (specifier === "server-only") {
@@ -99,7 +93,7 @@ if (!isVitest) {
   withdrawRoute = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
   cancelRoute = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
   hooks.deregister();
-}
+
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
 const ctx = { params: Promise.resolve({ id: REQUEST_ID }) };

@@ -12,12 +12,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for("openbooks.hrm-me-route-test");
-const isVitest = process.env.VITEST === "true";
-type TestFn = typeof nodeTest;
-const vitestPackage = "vitest";
-const test: TestFn = isVitest
-  ? ((await import(vitestPackage)) as unknown as { test: TestFn }).test
-  : nodeTest;
+const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
@@ -118,7 +113,6 @@ let stepsRoute: typeof import("./steps/route.ts") | undefined;
 let requestsRoute: typeof import("./requests/route.ts") | undefined;
 let teamRoute: typeof import("./team/route.ts") | undefined;
 let fileRoute: typeof import("./profile-changes/route.ts") | undefined;
-if (!isVitest) {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs
@@ -149,7 +143,7 @@ if (!isVitest) {
   const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
   fileRoute = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
   hooks.deregister();
-}
+
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
 
