@@ -50,6 +50,12 @@
     "failedTitle": "无法打开此应用。",
     "failedHint": "请尝试刷新。如果问题持续出现，请联系您的管理员。"
   },
+  "runtime": {
+    "notFoundTitle": "找不到应用",
+    "notInstalled": "此应用未安装或没有活动版本。",
+    "disabled": "此应用当前已停用。",
+    "backToApps": "返回应用"
+  },
   "admin": {
     "title": "应用",
     "description": "构建和安装应用包；每个应用都拥有隔离的前端和受控的后端。",

@@ -50,6 +50,12 @@
     "failedTitle": "Impossible d’ouvrir cette application.",
     "failedHint": "Essayez d’actualiser la page. Si le problème persiste, contactez votre administrateur."
   },
+  "runtime": {
+    "notFoundTitle": "Application introuvable",
+    "notInstalled": "Cette application n'est pas installée ou n'a aucune version active.",
+    "disabled": "Cette application est actuellement désactivée.",
+    "backToApps": "Retour aux applications"
+  },
   "admin": {
     "title": "Applications",
     "description": "Créez et installez des paquets d’application — une interface en bac à sable et un service dorsal contrôlé, isolés pour chaque application.",

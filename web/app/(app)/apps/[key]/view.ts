@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
+import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '@/lib/authz'
 import { getAppByKey } from '@/lib/apps/store'
 import type { AppFrame } from './AppFrame'
@@ -25,9 +26,8 @@ import type { AppFrame } from './AppFrame'
  * id/key/name plus the caller's id, name and role KEYS — so it crosses the
  * spec boundary as data, not as a capability. An `Authz` never would.
  *
- * The copy is hardcoded English on the native page (this route predates its
- * message catalog entry), so the loader carries the same literals rather than
- * inventing keys the catalog does not have.
+ * The two notice branches resolve their copy through the apps.runtime
+ * catalog keys, in the request locale like the sibling library loader.
  */
 
 type FrameContext = Parameters<typeof AppFrame>[0]['context']
@@ -50,18 +50,16 @@ export interface AppRuntimeData {
   context: FrameContext | null
 }
 
-const NOT_INSTALLED = 'This app is not installed, or has no active version.'
-const DISABLED = 'This app is currently disabled.'
-
 export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
   const authz = await requirePermission('apps.use')
+  const t = await getTranslations('apps')
   const app = await getAppByKey(authz.user.orgId, key)
 
   const base = {
     backHref: '/apps',
-    backLabel: '← Back to apps',
+    backLabel: `← ${t('runtime.backToApps')}`,
     appsHref: '/apps',
-    appsLabel: 'Apps',
+    appsLabel: t('title'),
   }
 
   if (!app || !app.activeVersionId) {
@@ -70,8 +68,8 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
       notFound: true,
       disabled: false,
       live: false,
-      noticeTitle: 'App not found',
-      noticeDescription: NOT_INSTALLED,
+      noticeTitle: t('runtime.notFoundTitle'),
+      noticeDescription: t('runtime.notInstalled'),
       appKey: key,
       appName: '',
       context: null,
@@ -85,7 +83,7 @@ export async function loadAppRuntime(key: string): Promise<AppRuntimeData> {
       disabled: true,
       live: false,
       noticeTitle: app.name,
-      noticeDescription: DISABLED,
+      noticeDescription: t('runtime.disabled'),
       appKey: app.key,
       appName: app.name,
       context: null,

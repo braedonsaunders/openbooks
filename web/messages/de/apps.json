@@ -50,6 +50,12 @@
     "failedTitle": "Diese App konnte nicht geöffnet werden.",
     "failedHint": "Versuchen Sie es erneut. Wenn das Problem weiterhin auftritt, wenden Sie sich an Ihren Administrator."
   },
+  "runtime": {
+    "notFoundTitle": "App nicht gefunden",
+    "notInstalled": "Diese App ist nicht installiert oder hat keine aktive Version.",
+    "disabled": "Diese App ist derzeit deaktiviert.",
+    "backToApps": "Zurück zu Apps"
+  },
   "admin": {
     "title": "Apps",
     "description": "Erstellen und installieren Sie App-Pakete mit einer isolierten Oberfläche und einem kontrollierten Backend.",
