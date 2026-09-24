@@ -22,6 +22,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateAu2027, computeAuStatutory } from "./compute-statutory.ts";
+import { toUnits } from "../../money/money.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
 import { AU_PAYROLL_PACK } from "./pack.ts";
 
@@ -209,12 +210,12 @@ test("AU sweep: STSL floor edges switch tables without a cliff", () => {
 
 // Withholding never falls as weekly pay rises (scale 2, $0–$3,700).
 test("AU sweep: scale-2 withholding is monotonic in weekly pay", () => {
-  let previous = -1;
+  let previous = -1n;
   for (let weekly = 0; weekly <= 3700; weekly++) {
     const result = calculateAu2027({
       ...RESIDENT, income: String(weekly), pensionable: "0", periodsPerYear: 52,
     });
-    const current = Number(result.payg);
+    const current = toUnits(result.payg);
     assert.ok(current >= previous, `weekly ${weekly}: ${current} < ${previous}`);
     previous = current;
   }

@@ -12,6 +12,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calculateAu2027 } from "./compute-statutory.ts";
+import { toUnits } from "../../money/money.ts";
 
 const WEEKLY = {
   residency: "australian_resident",
@@ -178,7 +179,7 @@ test("AU instrument: STSL example 1 component is $193 of $847", () => {
   const combined = withhold("2608", { stslDebt: true });
   assert.equal(base, "654.0000");
   assert.equal(combined, "847.0000");
-  assert.equal(Number(combined) - Number(base), 193);
+  assert.equal(toUnits(combined) - toUnits(base), toUnits("193"));
 });
 
 /**
@@ -195,7 +196,7 @@ test("AU instrument: STSL example 2 component is $260 of $1,308", () => {
   const combined = withhold("4409.75", { ...opts, stslDebt: true });
   assert.equal(base, "1048.0000");
   assert.equal(combined, "1308.0000");
-  assert.equal(Number(combined) - Number(base), 260);
+  assert.equal(toUnits(combined) - toUnits(base), toUnits("260"));
 });
 
 /**
@@ -212,5 +213,5 @@ test("AU instrument: STSL example 3 component is $979 of $4,134", () => {
   const combined = withhold("10627.88", { ...opts, stslDebt: true });
   assert.equal(base, "3155.0000");
   assert.equal(combined, "4134.0000");
-  assert.equal(Number(combined) - Number(base), 979);
+  assert.equal(toUnits(combined) - toUnits(base), toUnits("979"));
 });
