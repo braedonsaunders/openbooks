@@ -24,9 +24,9 @@ import {
 const AUDIT = { actorId: null, reason: "fleet test" };
 const REVISION_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
-async function org(): Promise<{ orgId: string; bookId: string }> {
+async function org(): Promise<{ orgId: string; bookId: string; subsidiaryId: string }> {
   const scratch = await createScratchOrg();
-  return { orgId: scratch.orgId, bookId: scratch.bookId };
+  return { orgId: scratch.orgId, bookId: scratch.bookId, subsidiaryId: scratch.subsidiaryId };
 }
 
 async function publishedRule(
@@ -399,6 +399,28 @@ test("listRuleHeads filters and summarizes current versions", { skip: !process.e
     assert.match(published.definitionHash ?? "", /^[0-9a-f]{64}$/);
     // Draft-only rules have no current version.
     assert.equal(all.find((h) => h.rule.key === "heads-a")?.currentVersion, null);
+  } finally {
+    await dropScratchOrg(orgId);
+  }
+});
+
+test("listRuleHeads applies the same subsidiary visibility as rule detail", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { orgId, subsidiaryId } = await org();
+  try {
+    const created = await createRule({ orgId, key: "scoped-head", name: "Scoped head", mode: "period" }, AUDIT);
+    await createDraftVersion(created.rule.id, {
+      orgId,
+      allowedSubsidiaryIds: null,
+      effectiveFrom: "2026-01-01",
+      dimensionFilters: { subsidiaryIds: [subsidiaryId] },
+      targets: [{ subsidiaryId, fixedPercent: "100" }],
+    }, AUDIT);
+    const visible = await listRuleHeads(orgId, { allowedSubsidiaryIds: new Set([subsidiaryId]) });
+    assert.ok(visible.some((head) => head.rule.id === created.rule.id));
+    const hidden = await listRuleHeads(orgId, { allowedSubsidiaryIds: new Set() });
+    assert.ok(!hidden.some((head) => head.rule.id === created.rule.id));
+    await assert.rejects(getRuleDetail(orgId, created.rule.id, new Set()),
+      (error: unknown) => error instanceof AllocationRuleError && error.code === "NOT_FOUND");
   } finally {
     await dropScratchOrg(orgId);
   }
