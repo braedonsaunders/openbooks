@@ -30,7 +30,9 @@ const journalDraftSchema = z.object({
         account: z.string().max(120)
           .describe("Account number (preferred, e.g. '5100') or exact account name"),
         description: z.string().max(200).optional(),
-        amount: z.string()
+        // The money kernel's decimal grammar (canonicalDecimal); the handler
+        // still refuses more than four places with its own message.
+        amount: z.string().max(40).regex(/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/, "decimal")
           .describe("Signed base amount: positive = debit, negative = credit"),
       }),
     )
