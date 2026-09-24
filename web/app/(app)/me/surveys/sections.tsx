@@ -15,10 +15,12 @@ export function MeSurveyRespond({
   invitationId,
   respondLabel,
   actionFailed,
+  reissueFailed,
 }: {
   invitationId: string
   respondLabel: string
   actionFailed: string
+  reissueFailed: string
 }) {
   const router = useRouter()
 
@@ -28,8 +30,15 @@ export function MeSurveyRespond({
       toast.error(await readApiErrorMessage(res, actionFailed))
       return
     }
-    const body = (await res.json()) as { token: string }
-    router.push(`/survey/${body.token}`)
+    // A 200 without a usable token must never navigate: /survey/undefined
+    // is a dead public page, not a survey. Refuse by name instead.
+    const body = (await res.json().catch(() => null)) as { token?: unknown } | null
+    const token = typeof body?.token === 'string' && body.token.length > 0 ? body.token : null
+    if (!token) {
+      toast.error(reissueFailed)
+      return
+    }
+    router.push(`/survey/${token}`)
   }
 
   return (

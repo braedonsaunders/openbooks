@@ -67,5 +67,6 @@ export async function loadMeSurveysHome(authz: MeSurveysAuthz) {
     empty: t('meSurveys.empty'),
     respondLabel: t('meSurveys.respond'),
     actionFailed: t('meSurveys.actionFailed'),
+    reissueFailed: t('meSurveys.reissueFailed'),
   }
 }

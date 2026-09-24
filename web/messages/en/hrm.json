@@ -2088,7 +2088,8 @@
     },
     "empty": "No open surveys right now.",
     "respond": "Respond",
-    "actionFailed": "This action failed."
+    "actionFailed": "This action failed.",
+    "reissueFailed": "The survey link could not be reissued — no token came back. Try responding again."
   },
   "public": {
     "book": {

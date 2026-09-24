@@ -2032,7 +2032,8 @@
     },
     "empty": "Aucune enquête ouverte.",
     "respond": "Répondre",
-    "actionFailed": "Cette action a échoué."
+    "actionFailed": "Cette action a échoué.",
+    "reissueFailed": "Le lien du sondage n'a pas pu être réémis — aucun jeton reçu. Réessayez."
   },
   "public": {
     "book": {
