@@ -112,14 +112,33 @@ test("VA extra withholding is added AFTER the formula", () => {
   assert.equal(result.tax, money("119.48"));
 });
 
-test("VA-4 lines 3 and 4 stop withholding", () => {
+test("VA-4 line 3 exempts eligible claims and line 4 requires military-spouse evidence", () => {
   assert.equal(VA_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "2649.00", basis: "resident",
     certificate: cert({ exempt: "true" }),
   }).tax, money("0"));
+
+  // Form VA-4 requires current military orders, the spouse's presence solely
+  // to accompany, the same non-Virginia domicile, and the spouse military ID.
+  // https://www.tax.virginia.gov/sites/default/files/taxforms/withholding/any/va-4-any.pdf
+  assert.throws(
+    () => VA_WITHHOLDING.compute({
+      payDate: "2026-03-15", periodsPerYear: 24, wages: "2649.00", basis: "resident",
+      certificate: cert({ military_spouse_exempt: "true" }),
+    }),
+    /Virginia military-spouse withholding exemption requires proof that the servicemember's current Virginia military orders are on file; the spouse is present in Virginia solely to be with the servicemember; the spouse and servicemember maintain the same domicile outside Virginia; a copy of the spousal military identification card is attached/,
+  );
+
+  const militarySpouse = cert({
+    military_spouse_exempt: "true",
+    servicemember_orders_on_file: "true",
+    spouse_present_solely_to_accompany: "true",
+    same_nonvirginia_domicile: "true",
+    spousal_military_id_on_file: "true",
+  });
   assert.equal(VA_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 24, wages: "2649.00", basis: "resident",
-    certificate: cert({ military_spouse_exempt: "true" }),
+    certificate: militarySpouse,
   }).tax, money("0"));
 });
 
