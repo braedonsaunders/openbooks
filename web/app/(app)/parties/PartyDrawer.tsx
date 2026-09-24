@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -36,6 +36,7 @@ import {
   TableRow,
   TabContent,
 } from '@openbooks/ui'
+import { FieldControlAssociations } from '@/components/field'
 import { currencyDisplayName, currencyOptions } from '../../../lib/iso-currencies'
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -1019,6 +1020,7 @@ export function PartyDrawer({
   }
 
   const ro = !editable
+  const partyFieldsId = useId()
   const yesNo = useMemo(() => [
     { value: 'false', label: tc('labels.no') },
     { value: 'true', label: tc('labels.yes') },
@@ -1058,6 +1060,9 @@ export function PartyDrawer({
       const definition = customDefByKey.get(customFieldDefKey(placement.key))
       return definition ? <CustomFieldInput def={definition} value={customValues[definition.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} readOnly={ro} /> : null
     }
+    const controlId = `${partyFieldsId}-${placement.key}`
+    const labelId = `${controlId}-label`
+    const content = (() => {
     switch (placement.key) {
       case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option><option value="customer">{t('kindCustomer')}</option><option value="vendor">{t('kindVendor')}</option><option value="employee">{t('kindEmployee')}</option></Select> : partyValue(kindLabel)}</>
       case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} aria-invalid={nameError && !nameValid} />{nameError && !nameValid ? <p className="mt-1 text-xs text-red-600 dark:text-red-400">{t('nameRequired')}</p> : null}</> : partyValue(displayName)}</>
@@ -1108,6 +1113,8 @@ export function PartyDrawer({
       case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} /> : partyValue(employee.hiredOn)}</>
       default: return null
     }
+    })()
+    return <FieldControlAssociations controlId={controlId} labelId={labelId}>{content}</FieldControlAssociations>
   }
   // ONE rail, in reading order: what the account is, then how we sell to it,
   // then what we have done with it, then (appended by the shell) the record's

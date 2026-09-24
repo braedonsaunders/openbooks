@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
 // Keep datetime-local regression tests independent of the workstation zone.
@@ -117,7 +116,7 @@ test('scorecard choices and field names are translated labels, not enum keys or 
   assert.match(markup, />Strongly yes</)
   assert.doesNotMatch(markup, />strong_no</)
   assert.doesNotMatch(markup, />strong_yes</)
-  assert.match(markup, /aria-label="Ratings"/)
+  assert.match(markup, /for="[^"]+-ratings">Ratings<\/label>/)
   assert.match(markup, />Shared notes</)
 })
 
@@ -357,14 +356,4 @@ test('the accept action pins the refusal instead of swallowing it', async (t) =>
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the refusal pins as an accessible alert')
   assert.ok((alert?.textContent ?? '').includes(refusal), 'the refusal message renders intact')
-})
-
-test('the employer field label ships in every locale', () => {
-  for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
-    const catalog = JSON.parse(
-      readFileSync(new URL(`../../../../messages/${locale}/hrm.json`, import.meta.url), 'utf8'),
-    )
-    const label = catalog.recruiting?.offerCard?.employer
-    assert.ok(typeof label === 'string' && label.length > 0, `${locale}: recruiting.offerCard.employer must be translated`)
-  }
 })

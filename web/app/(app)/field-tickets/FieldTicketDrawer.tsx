@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import Link from 'next/link'
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
@@ -305,6 +305,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const t = useTranslations('fieldTickets')
   const tCommon = useTranslations('common')
   const tNav = useTranslations('nav')
+  const headerFieldId = useId()
   const router = useRouter()
   const pathname = usePathname() ?? '/field-tickets'
   const searchParams = useSearchParams()
@@ -745,13 +746,17 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   // ---- standard configurable header form -----------------------------------
   const renderHeaderField = (placement: HeaderFieldPlacement, isEditable: boolean) => {
     const label = placement.labelOverride?.trim()
+    const controlId = `${headerFieldId}-${placement.key}`
+    const labelId = `${controlId}-label`
     switch (placement.key) {
       case 'project_id':
         return (
           <>
-            <Label>{label || tCommon('labels.project')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>
+            <Label id={labelId}>{label || tCommon('labels.project')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>
             {isEditable ? (
               <SearchSelect
+                id={controlId}
+                ariaLabelledBy={labelId}
                 options={props.projects.map((p) => ({ value: p.id, label: p.name }))}
                 value={projectId}
                 onChange={(value) => void selectProject(value ?? '')}
@@ -778,9 +783,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'document_date':
         return (
           <>
-            <Label>{label || tCommon('labels.date')}</Label>
+            <Label id={labelId} htmlFor={controlId}>{label || tCommon('labels.date')}</Label>
             {isEditable ? (
-              <Input type="date" value={documentDate} onChange={(e) => markHeader(setDocumentDate)(e.target.value)} />
+              <Input id={controlId} aria-labelledby={labelId} type="date" value={documentDate} onChange={(e) => markHeader(setDocumentDate)(e.target.value)} />
             ) : (
               <p className="text-sm">{ticket.documentDate}</p>
             )}
@@ -789,9 +794,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'reference_number':
         return (
           <>
-            <Label>{label || t('editor.po')}</Label>
+            <Label id={labelId} htmlFor={controlId}>{label || t('editor.po')}</Label>
             {isEditable ? (
-              <Input value={referenceNumber} onChange={(e) => markHeader(setReferenceNumber)(e.target.value)} />
+              <Input id={controlId} aria-labelledby={labelId} value={referenceNumber} onChange={(e) => markHeader(setReferenceNumber)(e.target.value)} />
             ) : (
               <p className="text-sm">{ticket.referenceNumber || '—'}</p>
             )}
@@ -800,9 +805,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'period':
         return (
           <>
-            <Label>{label || t('list.period')}</Label>
+            <Label id={labelId} htmlFor={controlId}>{label || t('list.period')}</Label>
             {isEditable ? (
               <Select
+                id={controlId}
+                aria-labelledby={labelId}
                 value={period}
                 disabled={gridHasHours}
                 title={gridHasHours ? t('editor.periodLocked') : undefined}
@@ -820,9 +827,11 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'foreman_party_id':
         return (
           <>
-            <Label>{label || t('editor.foreman')}</Label>
+            <Label id={labelId}>{label || t('editor.foreman')}</Label>
             {isEditable ? (
               <SearchSelect
+                id={controlId}
+                ariaLabelledBy={labelId}
                 options={[{ value: '', label: '—' }, ...props.employees.map((e) => ({ value: e.id, label: e.name }))]}
                 value={foreman}
                 onChange={markHeader((v: string) => setForeman(v ?? ''))}
@@ -836,9 +845,9 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       case 'memo':
         return (
           <>
-            <Label>{label || t('editor.workDescription')}</Label>
+            <Label id={labelId} htmlFor={controlId}>{label || t('editor.workDescription')}</Label>
             {isEditable ? (
-              <Textarea rows={2} value={memo} onChange={(e) => markHeader(setMemo)(e.target.value)} />
+              <Textarea id={controlId} aria-labelledby={labelId} rows={2} value={memo} onChange={(e) => markHeader(setMemo)(e.target.value)} />
             ) : (
               <p className="whitespace-pre-wrap text-sm">{ticket.memo || '—'}</p>
             )}
@@ -1259,8 +1268,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 : 'md:grid-cols-[minmax(16rem,1fr)_7rem_9rem_9rem]',
             )}>
               <div className="min-w-0">
-                <Label>{t('editor.lines.item')}</Label>
+                <Label id={`${headerFieldId}-line-item-label`}>{t('editor.lines.item')}</Label>
                 <SearchSelect
+                  id={`${headerFieldId}-line-item`}
+                  ariaLabelledBy={`${headerFieldId}-line-item-label`}
                   options={props.catalogItems.map((it) => ({ value: it.id, label: it.name }))}
                   value={lineItem}
                   onChange={(v) => {
@@ -1301,16 +1312,18 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 <Input id="ft-rate" className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineRate ? money(lineRate) : '—'} readOnly />
               </div>
               <div>
-                <Label>{t('editor.lines.amount')}</Label>
-                <Input className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineAmount ? money(lineAmount) : '—'} readOnly />
+                <Label htmlFor={`${headerFieldId}-line-amount`}>{t('editor.lines.amount')}</Label>
+                <Input id={`${headerFieldId}-line-amount`} className="w-full cursor-not-allowed bg-slate-100 text-right tabular-nums text-slate-700 dark:bg-slate-900 dark:text-slate-300" value={lineRateLoading ? '…' : lineAmount ? money(lineAmount) : '—'} readOnly />
               </div>
               {lineRateError && !lineRateLoading ? (
                 <p role="alert" className="text-xs text-red-600 md:col-span-full dark:text-red-400">{lineRateError}</p>
               ) : null}
               {props.equipmentEnabled && selectedItem?.kind === 'equipment_charge' && equipmentOptions.length > 0 ? (
                 <div className="min-w-0 md:col-span-2">
-                  <Label>{t('editor.lines.equipment')}</Label>
+                  <Label id={`${headerFieldId}-line-equipment-label`}>{t('editor.lines.equipment')}</Label>
                   <SearchSelect
+                    id={`${headerFieldId}-line-equipment`}
+                    ariaLabelledBy={`${headerFieldId}-line-equipment-label`}
                     options={[{ value: '', label: t('editor.lines.pooledItem') }, ...equipmentOptions.map((unit) => ({ value: unit.id, label: `${unit.unitNumber} · ${unit.name}` }))]}
                     value={lineEquipment}
                     onChange={(value) => {
@@ -1332,8 +1345,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   equipment incentive that refuses an unattributed month. */}
               {props.equipmentEnabled && lineEquipment && crewOperatorOptions.length > 0 ? (
                 <div className="min-w-0 md:col-span-2">
-                  <Label>{tOr('editor.lines.operator', 'Operator')}</Label>
+                  <Label id={`${headerFieldId}-line-operator-label`}>{tOr('editor.lines.operator', 'Operator')}</Label>
                   <SearchSelect
+                    id={`${headerFieldId}-line-operator`}
+                    ariaLabelledBy={`${headerFieldId}-line-operator-label`}
                     options={[{ value: '', label: tOr('editor.lines.noOperator', 'Not recorded') }, ...crewOperatorOptions]}
                     value={lineOperator}
                     onChange={(value) => setLineOperator(value ?? '')}

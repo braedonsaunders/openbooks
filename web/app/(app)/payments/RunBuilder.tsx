@@ -2,7 +2,7 @@
 
 import { useMoney } from '@/components/money-provider'
 import type { ReactNode } from 'react'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -65,6 +65,7 @@ export function RunBuilder({
   const { money } = useMoney()
   const t = useTranslations('payments.runBuilder')
   const tCommon = useTranslations('common')
+  const fieldId = useId()
   const router = useRouter()
   /** Selected bills (whole row kept so totals survive pagination). */
   const [selected, setSelected] = useState<Record<string, RunBill>>(() =>
@@ -162,10 +163,12 @@ export function RunBuilder({
       <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-6 dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-3 lg:grid-cols-[minmax(16rem,1fr)_12rem_minmax(18rem,auto)] lg:items-end">
           <div className="space-y-1.5">
-            <Label>
+            <Label id={`${fieldId}-bank-label`}>
               {t('payFromBankAccount')}<span className="text-red-500"> *</span>
             </Label>
             <SearchSelect
+              id={`${fieldId}-bank`}
+              ariaLabelledBy={`${fieldId}-bank-label`}
               options={bankProfiles.map((profile) => ({
                 value: profile.id,
                 label: `${profile.name} · ${`${profile.bank_number ?? ''} ${profile.bank_name}`.trim()} · ${profile.currency} · ${profile.format_name}`,
@@ -180,8 +183,10 @@ export function RunBuilder({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>{t('fundsDate')}</Label>
+            <Label id={`${fieldId}-funds-date-label`} htmlFor={`${fieldId}-funds-date`}>{t('fundsDate')}</Label>
             <Input
+              id={`${fieldId}-funds-date`}
+              aria-labelledby={`${fieldId}-funds-date-label`}
               type="date"
               value={scheduledFor}
               onChange={(e) => {

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
@@ -33,6 +33,7 @@ export function VendorCompliancePanel({
   classes: ComplianceClassOption[]
   canManage: boolean
 }) {
+  const classFieldId = useId()
   const t = useTranslations('parties.drawer')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -78,8 +79,8 @@ export function VendorCompliancePanel({
       {canManage ? (
         <div className="max-w-md space-y-3">
           <div className="space-y-1.5">
-            <Label>{t('compliance.classLabel')}</Label>
-            <Select value={classId} onChange={(event) => setClassId(event.target.value)}>
+            <Label id={`${classFieldId}-label`}>{t('compliance.classLabel')}</Label>
+            <Select id={classFieldId} aria-labelledby={`${classFieldId}-label`} aria-label={t('compliance.classLabel')} value={classId} onChange={(event) => setClassId(event.target.value)}>
               <option value="">{t('compliance.noClass')}</option>
               {classes.map((option) => (
                 <option key={option.id} value={option.id}>{`${option.code} — ${option.name}`}</option>

@@ -71,6 +71,7 @@ const messages = (await import("../../../../messages/en")).default;
 const { CaptureReviewDrawer } = await import("./CaptureReviewDrawer");
 
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const REV0 = "2026-09-17T12:00:00.000000Z";
 const REV1 = "2026-09-17T12:00:01.000000Z";
 const REV2 = "2026-09-17T12:00:02.000000Z";
@@ -219,6 +220,8 @@ function normalized(invoiceNumber: string | null, updatedAt: string) {
 test("a slow first save neither 409s nor clobbers newer keystrokes", async (t) => {
   const drawer = await mount("INV-1", () => {});
   t.after(() => drawer.done());
+
+  assert.ok(["Document type", "Vendor", "Invoice number", "Invoice date", "Due date", "Currency", "Purchase order", "Memo"].every((text) => [...document.querySelectorAll('label')].some((label) => label.textContent?.trim() === text && (label.htmlFor ? document.getElementById(label.htmlFor) : label.id && document.querySelector(`[aria-labelledby="${label.id}"]`)))), "visible invoice labels name their controls")
 
   await typeInto(invoiceInput("INV-1"), "INV-1a");
   await settleDebounce();

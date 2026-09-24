@@ -834,12 +834,14 @@ export function FeedbackSettingsForm({
   current,
   anyoneLabel,
   managersLabel,
+  scopeLabel,
   saveLabel,
   failed,
 }: {
   current: string
   anyoneLabel: string
   managersLabel: string
+  scopeLabel: string
   saveLabel: string
   failed: string
 }) {
@@ -871,7 +873,7 @@ export function FeedbackSettingsForm({
 
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <Select value={value} onChange={(e) => setValue(e.target.value)} aria-label={saveLabel}>
+      <Select value={value} onChange={(e) => setValue(e.target.value)} aria-label={scopeLabel}>
         <option value="anyone">{anyoneLabel}</option>
         <option value="managers_and_hr">{managersLabel}</option>
       </Select>

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, Skeleton } from '@openbooks/ui'
+import { Badge, Button, Input, Select, Skeleton } from '@openbooks/ui'
+import { Field } from '@/components/field'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useAppAction } from '@/lib/use-app-action'
@@ -314,10 +315,12 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
       </div>
 
       {movingBackward ? (
-        <Field label={t('accounts.stageReason')}>
-          <Input value={stageReason} onChange={(event) => setStageReason(event.target.value)} disabled={!canManage} />
+        <div className="space-y-1.5">
+          <Field label={t('accounts.stageReason')}>
+            <Input value={stageReason} onChange={(event) => setStageReason(event.target.value)} disabled={!canManage} />
+          </Field>
           <p className="text-xs text-slate-500">{t('accounts.stageReasonHint')}</p>
-        </Field>
+        </div>
       ) : null}
 
       <section>
@@ -334,8 +337,4 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
       </section>
     </section>
   )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div className="space-y-1.5"><Label>{label}</Label>{children}</div>
 }

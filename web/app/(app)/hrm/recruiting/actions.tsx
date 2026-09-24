@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
@@ -334,6 +334,7 @@ export function InterviewScheduleIsland({
   employees: Option[]
   labels: { kind: string; when: string; duration: string; location: string; panel: string; submit: string; failed: string }
 }) {
+  const fieldPrefix = useId()
   const refresh = useRefresh()
   const [kind, setKind] = useState(kinds[0]?.value ?? 'video')
   const [when, setWhen] = useState('')
@@ -380,8 +381,8 @@ export function InterviewScheduleIsland({
     <form className="space-y-2" onSubmit={submit}>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label>{labels.kind}</Label>
-          <Select value={kind} onChange={(event) => setKind(event.target.value)}>
+          <Label id={`${fieldPrefix}-kind-label`}>{labels.kind}</Label>
+          <Select aria-labelledby={`${fieldPrefix}-kind-label`} value={kind} onChange={(event) => setKind(event.target.value)}>
             {kinds.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -390,18 +391,18 @@ export function InterviewScheduleIsland({
           </Select>
         </div>
         <div>
-          <Label>{labels.when}</Label>
-          <Input type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} required />
+          <Label htmlFor={`${fieldPrefix}-when`}>{labels.when}</Label>
+          <Input id={`${fieldPrefix}-when`} type="datetime-local" value={when} onChange={(event) => setWhen(event.target.value)} required />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label>{labels.duration}</Label>
-          <Input inputMode="numeric" value={duration} onChange={(event) => setDuration(event.target.value)} />
+          <Label htmlFor={`${fieldPrefix}-duration`}>{labels.duration}</Label>
+          <Input id={`${fieldPrefix}-duration`} inputMode="numeric" value={duration} onChange={(event) => setDuration(event.target.value)} />
         </div>
         <div>
-          <Label>{labels.location}</Label>
-          <Input value={location} onChange={(event) => setLocation(event.target.value)} />
+          <Label htmlFor={`${fieldPrefix}-location`}>{labels.location}</Label>
+          <Input id={`${fieldPrefix}-location`} value={location} onChange={(event) => setLocation(event.target.value)} />
         </div>
       </div>
       {employees.length > 0 ? (
@@ -533,6 +534,7 @@ export function OfferCreateIsland({
   employers: Option[]
   labels: { employer: string; job: string; start: string; amount: string; currency: string; basis: string; expires: string; submit: string; failed: string }
 }) {
+  const fieldPrefix = useId()
   const refresh = useRefresh()
   const [job, setJob] = useState('')
   const [start, setStart] = useState('')
@@ -583,9 +585,9 @@ export function OfferCreateIsland({
   return (
     <form className="space-y-2" onSubmit={submit}>
       <div>
-        <Label>{labels.employer}</Label>
+        <Label id={`${fieldPrefix}-employer-label`}>{labels.employer}</Label>
         {showPicker ? (
-          <Select value={employerId} onChange={(event) => setEmployerId(event.target.value)}>
+          <Select aria-labelledby={`${fieldPrefix}-employer-label`} value={employerId} onChange={(event) => setEmployerId(event.target.value)}>
             {employers.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -598,26 +600,26 @@ export function OfferCreateIsland({
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <Label>{labels.job}</Label>
-          <Input value={job} onChange={(event) => setJob(event.target.value)} required />
+          <Label htmlFor={`${fieldPrefix}-job`}>{labels.job}</Label>
+          <Input id={`${fieldPrefix}-job`} value={job} onChange={(event) => setJob(event.target.value)} required />
         </div>
         <div>
-          <Label>{labels.start}</Label>
-          <Input type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
+          <Label htmlFor={`${fieldPrefix}-start`}>{labels.start}</Label>
+          <Input id={`${fieldPrefix}-start`} type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
         <div>
-          <Label>{labels.amount}</Label>
-          <Input value={amount} onChange={(event) => setAmount(event.target.value)} required />
+          <Label htmlFor={`${fieldPrefix}-amount`}>{labels.amount}</Label>
+          <Input id={`${fieldPrefix}-amount`} value={amount} onChange={(event) => setAmount(event.target.value)} required />
         </div>
         <div>
-          <Label>{labels.currency}</Label>
-          <Input value={currency} onChange={(event) => setCurrency(event.target.value)} required />
+          <Label htmlFor={`${fieldPrefix}-currency`}>{labels.currency}</Label>
+          <Input id={`${fieldPrefix}-currency`} value={currency} onChange={(event) => setCurrency(event.target.value)} required />
         </div>
         <div>
-          <Label>{labels.basis}</Label>
-          <Select value={basis} onChange={(event) => setBasis(event.target.value)}>
+          <Label id={`${fieldPrefix}-basis-label`}>{labels.basis}</Label>
+          <Select aria-labelledby={`${fieldPrefix}-basis-label`} value={basis} onChange={(event) => setBasis(event.target.value)}>
             {bases.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -627,8 +629,8 @@ export function OfferCreateIsland({
         </div>
       </div>
       <div>
-        <Label>{labels.expires}</Label>
-        <Input type="date" value={expires} onChange={(event) => setExpires(event.target.value)} />
+        <Label htmlFor={`${fieldPrefix}-expires`}>{labels.expires}</Label>
+        <Input id={`${fieldPrefix}-expires`} type="date" value={expires} onChange={(event) => setExpires(event.target.value)} />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -716,6 +718,7 @@ export function ScorecardFormIsland({
   interviewId: string
   labels: { overall: string; submit: string; failed: string; ratings: string; privateNotes: string; sharedNotes: string; ratingOptions: Record<(typeof RATING_KEYS)[number], string> }
 }) {
+  const fieldPrefix = useId()
   const refresh = useRefresh()
   const [overall, setOverall] = useState<string>('yes')
   const [ratings, setRatings] = useState<Record<string, string>>({})
@@ -750,8 +753,8 @@ export function ScorecardFormIsland({
   return (
     <form onSubmit={(event) => void submit(event)} className="space-y-3">
       <div>
-        <Label>{labels.overall}</Label>
-        <Select value={overall} onChange={(event) => setOverall(event.target.value)}>
+        <Label id={`${fieldPrefix}-overall-label`}>{labels.overall}</Label>
+        <Select aria-labelledby={`${fieldPrefix}-overall-label`} value={overall} onChange={(event) => setOverall(event.target.value)}>
           {RATING_KEYS.map((key) => (
             <option key={key} value={key}>
               {labels.ratingOptions[key]}
@@ -760,9 +763,9 @@ export function ScorecardFormIsland({
         </Select>
       </div>
       <div>
-        <Label>{labels.ratings}</Label>
+        <Label htmlFor={`${fieldPrefix}-ratings`}>{labels.ratings}</Label>
         <Textarea
-          aria-label={labels.ratings}
+          id={`${fieldPrefix}-ratings`}
           placeholder='{"<attribute-id>": "yes"}'
           value={JSON.stringify(ratings)}
           onChange={(event) => {
@@ -775,12 +778,12 @@ export function ScorecardFormIsland({
         />
       </div>
       <div>
-        <Label>{labels.privateNotes}</Label>
-        <Textarea value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />
+        <Label htmlFor={`${fieldPrefix}-private-notes`}>{labels.privateNotes}</Label>
+        <Textarea id={`${fieldPrefix}-private-notes`} value={privateNotes} onChange={(event) => setPrivateNotes(event.target.value)} />
       </div>
       <div>
-        <Label>{labels.sharedNotes}</Label>
-        <Textarea value={sharedNotes} onChange={(event) => setSharedNotes(event.target.value)} />
+        <Label htmlFor={`${fieldPrefix}-shared-notes`}>{labels.sharedNotes}</Label>
+        <Textarea id={`${fieldPrefix}-shared-notes`} value={sharedNotes} onChange={(event) => setSharedNotes(event.target.value)} />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

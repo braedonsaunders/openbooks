@@ -8,7 +8,6 @@ import {
   CardContent,
   Drawer,
   Input,
-  Label,
   Select,
   Table,
   TableBody,
@@ -18,6 +17,7 @@ import {
   TableRow,
   cn,
 } from "@openbooks/ui";
+import { Field } from "@/components/field";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -988,14 +988,5 @@ function RetainageSection({
         </div>
       </Drawer>
     </>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
-      {children}
-    </div>
   );
 }

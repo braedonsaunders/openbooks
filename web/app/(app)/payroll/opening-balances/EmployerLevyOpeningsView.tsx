@@ -320,7 +320,7 @@ export function EmployerLevyOpeningsView({
                       </td>
                       <td className="px-3 py-2">
                         <Input
-                          aria-label={text('newBaseLabel', 'New region base year-to-date')}
+                          aria-label={`${levy.label} · ${text('newBaseLabel', 'New region base year-to-date')}${row.region ? ` · ${row.region}` : ''}`}
                           className="w-40"
                           inputMode="decimal"
                           disabled={!canManage}

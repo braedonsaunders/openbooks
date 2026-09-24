@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -36,6 +36,7 @@ export function GenerateDialog({
 }) {
   const router = useRouter()
   const params = useSearchParams()
+  const fieldId = useId()
   const [projectId, setProjectId] = useState(projects[0]?.value ?? '')
   const [weekEnding, setWeekEnding] = useState('')
   const [formatKey, setFormatKey] = useState(formats[0]?.value ?? '')
@@ -72,8 +73,8 @@ export function GenerateDialog({
         <h2 className="text-lg font-semibold">{title}</h2>
         <div className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label>{projectLabel}</Label>
-            <Select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+            <Label id={`${fieldId}-project-label`}>{projectLabel}</Label>
+            <Select id={`${fieldId}-project`} aria-labelledby={`${fieldId}-project-label`} aria-label={projectLabel} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
               {projects.map((project) => (
                 <option key={project.value} value={project.value}>
                   {project.label}
@@ -82,12 +83,12 @@ export function GenerateDialog({
             </Select>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>{weekLabel}</Label>
-            <Input type="date" value={weekEnding} onChange={(event) => setWeekEnding(event.target.value)} />
+            <Label id={`${fieldId}-week-label`} htmlFor={`${fieldId}-week`}>{weekLabel}</Label>
+            <Input id={`${fieldId}-week`} aria-labelledby={`${fieldId}-week-label`} aria-label={weekLabel} type="date" value={weekEnding} onChange={(event) => setWeekEnding(event.target.value)} />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>{formatLabel}</Label>
-            <Select value={formatKey} onChange={(e) => setFormatKey(e.target.value)}>
+            <Label id={`${fieldId}-format-label`}>{formatLabel}</Label>
+            <Select id={`${fieldId}-format`} aria-labelledby={`${fieldId}-format-label`} aria-label={formatLabel} value={formatKey} onChange={(e) => setFormatKey(e.target.value)}>
               {formats.map((format) => (
                 <option key={format.value} value={format.value}>
                   {format.label}

@@ -220,6 +220,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
             <div className="relative">
               <Search size={14} className="pointer-events-none absolute top-2.5 left-2.5 text-slate-400" />
               <Input
+                aria-label={t('searchPlaceholder')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t('searchPlaceholder')}
@@ -293,6 +294,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
                   </Select>
                   {needsId ? (
                     <Input
+                      aria-label={t('console.idPlaceholder')}
                       value={id}
                       onChange={(e) => setId(e.target.value)}
                       placeholder={t('console.idPlaceholder')}
@@ -315,6 +317,7 @@ export function ApiConsole({ schema }: { schema: RecordType[] }) {
                     </div>
                     <textarea
                       ref={bodyRef}
+                      aria-label={t('console.requestBody')}
                       value={body}
                       onChange={(e) => setBody(e.target.value)}
                       spellCheck={false}

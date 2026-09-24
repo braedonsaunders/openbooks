@@ -786,7 +786,7 @@ test("relationship edits survive a tab round-trip", async (t) => {
   const industry = [...panel.querySelectorAll("input")].find(
     (input) => (input as HTMLInputElement).type === "text",
   ) as HTMLInputElement | undefined;
-  assert.ok(industry, "the industry input must render");
+  assert.ok(industry && panel.querySelector(`label[for="${industry.id}"][id="${industry.getAttribute("aria-labelledby")}"]`), "the shared party renderer associates the visible label with the input");
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
   await act(async () => {
     setter.call(industry!, "Software");

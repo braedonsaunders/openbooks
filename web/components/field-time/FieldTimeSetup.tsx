@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, Select } from '@openbooks/ui'
+import { Button, Input, Select } from '@openbooks/ui'
+import { Field } from '@/components/field'
 
 export interface FieldTimeRuleSettings {
   roundingIncrement: number | null
@@ -150,8 +151,7 @@ export function FieldTimeSetup({
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <h2 className="text-base font-semibold">{t('field.rulesTitle')}</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          <div>
-            <Label>{t('field.roundingIncrement')}</Label>
+          <Field label={t('field.roundingIncrement')}>
             <Select
               value={settings.roundingIncrement == null ? '' : String(settings.roundingIncrement)}
               onChange={(event) => setSettings((prev) => ({ ...prev, roundingIncrement: event.target.value === '' ? null : Number(event.target.value) }))}
@@ -161,27 +161,23 @@ export function FieldTimeSetup({
               <option value="6">{t('field.rounding6')}</option>
               <option value="15">{t('field.rounding15')}</option>
             </Select>
-          </div>
-          <div>
-            <Label>{t('field.roundingMode')}</Label>
+          </Field>
+          <Field label={t('field.roundingMode')}>
             <Select value={settings.roundingMode ?? 'nearest'} onChange={(event) => setSettings((prev) => ({ ...prev, roundingMode: event.target.value }))}>
               <option value="nearest">{t('field.roundNearest')}</option>
               <option value="up">{t('field.roundUp')}</option>
               <option value="down">{t('field.roundDown')}</option>
             </Select>
-          </div>
-          <div>
-            <Label>{t('field.unpaidBreak')}</Label>
+          </Field>
+          <Field label={t('field.unpaidBreak')}>
             <Input value={settings.unpaidBreakMinutes == null ? '' : String(settings.unpaidBreakMinutes)} onChange={(event) => setSettings((prev) => ({ ...prev, unpaidBreakMinutes: num(event.target.value) }))} inputMode="numeric" placeholder="30" />
-          </div>
-          <div>
-            <Label>{t('field.autoClose')}</Label>
+          </Field>
+          <Field label={t('field.autoClose')}>
             <Input value={settings.autoCloseHours == null ? '' : String(settings.autoCloseHours)} onChange={(event) => setSettings((prev) => ({ ...prev, autoCloseHours: num(event.target.value) }))} inputMode="decimal" placeholder="16" />
-          </div>
-          <div>
-            <Label>{t('field.equipmentTolerance')}</Label>
+          </Field>
+          <Field label={t('field.equipmentTolerance')}>
             <Input value={settings.equipmentToleranceHours ?? ''} onChange={(event) => setSettings((prev) => ({ ...prev, equipmentToleranceHours: event.target.value.trim() || null }))} inputMode="decimal" placeholder="0.5" />
-          </div>
+          </Field>
         </div>
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={settings.signatureRequired} onChange={(event) => setSettings((prev) => ({ ...prev, signatureRequired: event.target.checked }))} />
