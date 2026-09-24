@@ -15,6 +15,11 @@ import {
 import { nextDocumentNumber } from "./bills.ts";
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import {
+  lockProjectForScope,
+  ScopeNotFoundError,
+  withScopeSnapshot,
+} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {
@@ -740,11 +745,22 @@ export async function listPrebills(orgId: string, projectId?: string, scope: Sub
 
 export async function loadPrebill(orgId: string, id: string, scope: SubsidiaryScope = null): Promise<PrebillDetail | null> {
   await assertWipBillingEnabled(orgId)
-  const headers = await listPrebills(orgId, undefined, scope)
-  const header = headers.find((row) => row.id === id)
-  if (!header) return null
-  const [lineResult, eventResult, detailResult] = await Promise.all([
-    db.execute<PrebillLineRow>(sql`
+  // One REPEATABLE READ snapshot for header + details, with the project
+  // locked (share) and scope rechecked inside it: a concurrent A→B rehome
+  // between the header read and the detail reads refuses as not-found
+  // instead of disclosing B's lines, events and totals.
+  return withScopeSnapshot(orgId, async () => {
+    const headers = await listPrebills(orgId, undefined, scope)
+    const header = headers.find((row) => row.id === id)
+    if (!header) return null
+    try {
+      await lockProjectForScope(db, orgId, header.projectId, scope, 'share')
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return null
+      throw error
+    }
+    const [lineResult, eventResult, detailResult] = await Promise.all([
+      db.execute<PrebillLineRow>(sql`
       select line.id, line.line_number as "lineNumber", line.source_type as "sourceType",
              line.time_entry_id as "timeEntryId", line.document_line_id as "documentLineId",
              line.source_document_id as "sourceDocumentId", line.source_date::text as "sourceDate",
@@ -782,7 +798,8 @@ export async function loadPrebill(orgId: string, id: string, scope: SubsidiarySc
         from wip_prebills where org_id = ${orgId} and id = ${id}
     `),
   ])
-  return { ...header, ...detailResult.rows[0]!, lines: lineResult.rows, events: eventResult.rows }
+    return { ...header, ...detailResult.rows[0]!, lines: lineResult.rows, events: eventResult.rows }
+  })
 }
 
 export async function updatePrebillLine(
@@ -821,6 +838,15 @@ export async function updatePrebillLine(
     `))
     const before = current.rows[0]
     if (!before) throw new WipBillingError('Prebill line not found', 404)
+    // Pin the project for the rest of this transaction and recheck scope
+    // under the lock: the line/worksheet lock above does not stop a
+    // concurrent A→B rehome from moving this edit onto B's project.
+    try {
+      await lockProjectForScope(tx, orgId, before.project_id, scope)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill line not found', 404)
+      throw error
+    }
     if (before.status !== 'draft') throw new WipBillingError('Only a draft prebill can be edited')
     if (before.revision !== options.expectedRevision) {
       throw new WipBillingError('This line changed after you opened it; reload the worksheet and reapply your adjustment', 409)
@@ -834,7 +860,11 @@ export async function updatePrebillLine(
     if (changed && evidence.length === 0) throw new WipBillingError('Evidence is required for a write-up or write-down')
     if (before.custom?.policy?.totalPriceMethod === 'not_to_exceed'
         || (await currentPolicyIsNte(tx, orgId, before.project_id, before.period_end))) {
-      const policy = await loadProjectPolicy(tx, orgId, before.project_id, false, scope)
+      // Lock the project and recheck scope in the same transaction: an
+      // unlocked re-read would authorize a stale subsidiary when a
+      // concurrent A→B rehome lands between the line lock above and this
+      // policy read.
+      const policy = await loadProjectPolicy(tx, orgId, before.project_id, true, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, before.period_end, prebillId)
       if (capacity != null && cmp(add(before.other_proposed, proposed), capacity) > 0) {
         throw new WipBillingError(`Proposed billing exceeds the remaining not-to-exceed capacity of ${capacity}`)
@@ -989,6 +1019,14 @@ export async function transitionPrebill(
     `))
     const header = locked.rows[0]
     if (!header) throw new WipBillingError('Prebill not found', 404)
+    // Same rehome race as the line path: the worksheet lock above pins the
+    // worksheet, not its project — lock and recheck before transitioning.
+    try {
+      await lockProjectForScope(tx, orgId, header.project_id, scope)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill not found', 404)
+      throw error
+    }
     const current = (await tx.execute<{ bill_lines: number; proposed_total: string; unsupported_adjustments: number }>(sql`
       select count(*) filter (where disposition = 'bill')::int as bill_lines,
              coalesce(sum(proposed_bill_amount) filter (where disposition = 'bill'), 0)::text as proposed_total,
@@ -1013,7 +1051,9 @@ export async function transitionPrebill(
     if ((action === 'submit' || action === 'approve')
         && (header.custom?.policy?.totalPriceMethod === 'not_to_exceed'
           || (await currentPolicyIsNte(tx, orgId, header.project_id, header.period_end)))) {
-      const policy = await loadProjectPolicy(tx, orgId, header.project_id, false, scope)
+      // Same rehome race as the line path: the header lock above does not
+      // pin the project, so lock and recheck it here before transitioning.
+      const policy = await loadProjectPolicy(tx, orgId, header.project_id, true, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, header.period_end, id)
       if (capacity != null && cmp(worksheet.proposed_total, capacity) > 0) {
         throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity}`)
@@ -1077,6 +1117,14 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     `))
     const worksheet = header.rows[0]
     if (!worksheet) throw new WipBillingError('Prebill not found', 404)
+    // Conversion mints a customer invoice: pin the project and recheck scope
+    // under the lock before any line or document write.
+    try {
+      await lockProjectForScope(tx, orgId, worksheet.project_id, scope)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new WipBillingError('Prebill not found', 404)
+      throw error
+    }
     if (worksheet.status === 'converted' && worksheet.invoice_document_id) {
       const invoice = (await tx.execute<{ document_number: string }>(sql`
         select document_number from documents where org_id = ${orgId} and id = ${worksheet.invoice_document_id}
@@ -1097,7 +1145,9 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
     }
     if (policySnapshot.totalPriceMethod === 'not_to_exceed'
         || (await currentPolicyIsNte(tx, orgId, worksheet.project_id, worksheet.period_end))) {
-      const policy = await loadProjectPolicy(tx, orgId, worksheet.project_id, false, scope)
+      // Conversion mints the invoice: lock the project and recheck scope in
+      // the same transaction so a concurrent rehome cannot bill B's project.
+      const policy = await loadProjectPolicy(tx, orgId, worksheet.project_id, true, scope)
       const capacity = await remainingContractCapacity(tx, orgId, policy, worksheet.period_end, id)
       if (cmp(String(worksheet.proposed_bill_amount), capacity ?? '0') > 0) {
         throw new WipBillingError(`Prebill exceeds the remaining not-to-exceed capacity of ${capacity ?? '0.0000'}`)

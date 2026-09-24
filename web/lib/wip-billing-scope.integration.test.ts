@@ -126,3 +126,62 @@ test('prebill line edits refuse proposed amounts wider than numeric(19,4)', {ski
     } finally { await dropScratchOrg(org.orgId) }
   })
 })
+
+/**
+ * H-WIP-REHOME: a concurrent project A→B rehome must not let an A-only
+ * caller keep reading or writing the worksheet. The project row is locked
+ * and scope is rechecked inside every transaction (share for the detail
+ * read, update for line/transition/convert writes), so post-rehome calls
+ * answer not-found instead of acting on B's data.
+ */
+test('a project rehome out of scope hides the worksheet from reads and writes', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    try {
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,wipBilling}', 'true'::jsonb, true) where id = ${org.orgId}`)
+      const actors = await seedFlowActors(org.orgId)
+      const preparer = actors.adminId, approver = actors.approver1Id
+      const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
+      const typeId = randomUUID(), other = randomUUID(), project = randomUUID(), employee = randomUUID(), entry = randomUUID()
+      await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
+      await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+        values (${typeId},${org.orgId},'time_and_materials','Time & Materials','time_and_materials',${JSON.stringify(tm.invoicingProfile)}::jsonb,${JSON.stringify(tm.backupProfile)}::jsonb)`)
+      await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+        values (${org.orgId},${typeId},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'rehome fixture')`)
+      await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,project_type_id,status,is_active,custom)
+        values (${project},${org.orgId},${org.subsidiaryId},'WIPRE','Rehome WIP job',${org.customerId},${typeId},'active',true,'{}'::jsonb)`)
+      await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'employee','Rehome worker',${org.subsidiaryId})`)
+      await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,bill_rate_currency)
+        values (${entry},${org.orgId},${employee},${org.date},'2.0000',${project},${org.items.service},true,'approved','100.0000','CAD')`)
+
+      const restricted = new Set([org.subsidiaryId])
+      const both = new Set([org.subsidiaryId, other])
+      const notFound = (error: unknown) => error instanceof wip.WipBillingError && error.status === 404
+      const prebill = await wip.createPrebill(org.orgId, preparer, { projectId: project, periodEnd: org.date }, restricted)
+      const lineId = (await wip.loadPrebill(org.orgId, prebill.id, restricted))!.lines[0]!.id
+      await wip.transitionPrebill(org.orgId, preparer, prebill.id, 'submit', undefined, restricted)
+
+      // The concurrent rehome commits: the project (and its worksheet) now
+      // belongs to the other entity.
+      await db.execute(sql`update projects set subsidiary_id = ${other} where id = ${project} and org_id = ${org.orgId}`)
+
+      // Reads recheck under a share lock: the A-only caller sees nothing.
+      assert.equal(await wip.loadPrebill(org.orgId, prebill.id, restricted), null)
+      assert.deepEqual(await wip.listPrebills(org.orgId, undefined, restricted), [])
+      // Writes recheck under an update lock: every path refuses by name and
+      // persists nothing.
+      const detail = (await wip.loadPrebill(org.orgId, prebill.id, both))!
+      await assert.rejects(
+        wip.updatePrebillLine(org.orgId, preparer, prebill.id, lineId, { proposedBillAmount: '150.0000', adjustmentReason: 'rehome', adjustmentEvidence: ['note'] }, restricted, { expectedRevision: detail.lines[0]!.updatedAt }),
+        notFound,
+      )
+      await assert.rejects(wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, restricted), notFound)
+      await assert.rejects(wip.convertPrebill(org.orgId, preparer, prebill.id, restricted), notFound)
+      assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId} and kind='customer_invoice'`)).rows[0]!.n, 0)
+      // The locks do not break the legitimate flow: in-scope callers proceed.
+      await wip.transitionPrebill(org.orgId, approver, prebill.id, 'approve', undefined, both)
+      const converted = await wip.convertPrebill(org.orgId, preparer, prebill.id, both)
+      assert.equal(converted.idempotent, false)
+    } finally { await dropScratchOrg(org.orgId) }
+  })
+})
