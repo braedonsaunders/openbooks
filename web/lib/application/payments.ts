@@ -167,6 +167,7 @@ export async function postPayment(
               { allocations: input.allocations },
               context.authz.user.id,
               context.authz.user.orgId,
+              { allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
             );
           }
           const submission = await submitAndReleaseIfUngated(

@@ -8,6 +8,7 @@ import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-docum
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
@@ -88,14 +89,17 @@ export async function POST(req: Request) {
       // fence before that save and before the document row, not only in the kernel.
       await db.execute(sql`select id from orgs where id = ${authz.user.orgId} for update`)
 
-      const locked = (await db.execute<{ kind: PaymentKind; status: string }>(sql`
-        select kind, status from documents
+      const locked = (await db.execute<{ kind: PaymentKind; status: string; subsidiaryId: string | null }>(sql`
+        select kind, status, subsidiary_id as "subsidiaryId" from documents
          where id = ${documentId} and org_id = ${authz.user.orgId}
            and kind in ('vendor_payment', 'customer_payment')
          for update
       `))
       const payment = locked.rows[0]
       if (!payment) return { kind: 'not_found' as const }
+      // The earlier scope check is only a fast refusal. Recheck the locked
+      // row so a concurrent rehome cannot authorize this save or post.
+      await lockScopeRow(db, authz.user.orgId, "document", documentId, authz.allowedSubsidiaryIds)
       const previousStatus = payment.status
       if (previousStatus === 'draft') {
         // The posting body is a convenience for the drawer's final action,
@@ -109,7 +113,7 @@ export async function POST(req: Request) {
             authz.user.orgId,
             // The OCC token is route-level evidence; it never enters the
             // engine's financial patch shape.
-            { expectedRevision },
+            { expectedRevision, allowedSubsidiaryIds: authz.allowedSubsidiaryIds },
           )
         }
         const submission = await submitAndReleaseIfUngated(
@@ -157,6 +161,7 @@ export async function POST(req: Request) {
     await runPostDocumentEffects(documentId, outcome.previousStatus)
     return NextResponse.json({ ok: true, ...outcome.result })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
       return NextResponse.json({ error: e.message }, { status: 409 })
