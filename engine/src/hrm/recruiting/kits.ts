@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmRecruitingManageOrg } from "../authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { assertUnrestrictedScope } from "../../organization/subsidiary-scope.ts";
+import { requireHrmRecruitingManageOrg, requireHrmRecruitingReadOrg } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { pgTextArray, requireDepthFeature } from "./depth.ts";
@@ -120,7 +122,9 @@ export async function listKits(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    // Kits are shared configuration: readers read, writers need the manage
+    // grant plus canonical unrestricted scope (assertUnrestrictedScope).
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     const rows = (await db.execute<KitRow>(sql`
       select id, name, pipeline_stage_id as "pipelineStageId", instructions,
@@ -152,7 +156,11 @@ export async function createKit(query: {
       ? null
       : String(query.instructions);
   return withOrgTransaction(orgId, async () => {
+    // Org-wide shared configuration: the manage grant, then the canonical
+    // unrestricted-scope assertion (a scoped writer would reinterpret
+    // another entity's pipeline).
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     if (stageId) {
       const stage = (await db.execute<{ one: number }>(sql`
@@ -198,6 +206,7 @@ export async function setKitActive(query: {
   const kitId = requireId(query.kitId, "kitId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     const row = (await db.execute<KitRow>(sql`
       update hrm_interview_kits
@@ -220,6 +229,7 @@ export async function deleteKit(query: { orgId: string; actorId: string; kitId: 
   const kitId = requireId(query.kitId, "kitId");
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     const sittings = (await db.execute<{ count: string }>(sql`
       select count(*)::text as count from hrm_interviews where org_id = ${orgId} and kit_id = ${kitId}
@@ -274,6 +284,7 @@ export async function addKitAttribute(query: {
     query.description == null || String(query.description).trim().length === 0 ? null : String(query.description);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     await requireKit(db, orgId, kitId);
     try {
@@ -334,6 +345,7 @@ export async function addKitQuestion(query: {
   const attributeId = query.attributeId == null ? null : requireId(query.attributeId, "attributeId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
     await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     await requireKit(db, orgId, kitId);
     if (attributeId) {
