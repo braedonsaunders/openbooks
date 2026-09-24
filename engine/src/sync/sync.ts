@@ -2466,9 +2466,24 @@ export async function runSync(
     const verificationResult =
       e instanceof SyncVerificationError ? e.result : null;
     if (connectionId) {
-      await db.execute(sql`
-        update connections set last_run_at = now(), updated_at = now()
-         where id = ${connectionId} and org_id = ${org.id}`);
+      // A failed run is connection health, not just run history: record the
+      // named refusal on the connection (house status model active / error /
+      // paused / unconfigured, surfaced as lastError) so the operator sees it
+      // instead of a healthy connection. Targeted repairs leave the last full
+      // run's health alone, exactly like the success path above; the next
+      // successful full run clears both fields back to healthy. The message is
+      // bounded so a verbose verification dump cannot bloat the connections row.
+      const failureMessage = (e instanceof Error ? e.message : String(e)).slice(0, 2000);
+      if (!targetedRefs) {
+        await db.execute(sql`
+          update connections
+             set last_run_at = now(), updated_at = now(), status = 'error', last_error = ${failureMessage}
+           where id = ${connectionId} and org_id = ${org.id}`);
+      } else {
+        await db.execute(sql`
+          update connections set last_run_at = now(), updated_at = now()
+           where id = ${connectionId} and org_id = ${org.id}`);
+      }
     }
     await db
       .update(schema.syncRuns)
