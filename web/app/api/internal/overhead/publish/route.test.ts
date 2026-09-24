@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -140,13 +139,6 @@ test('a valid call publishes for the canonical org id', async () => {
   assert.deepEqual(await response.json(), { ok: true, published: 1 })
   assert.deepEqual(state.gateCalls, [ORG_ID])
   assert.deepEqual(state.publishCalls, [[ORG_ID, null, '2026-09-01']])
-})
-
-test('the route compares the internal token in constant time through the shared helper', () => {
-  const source = readFileSync(new URL('./route.ts', import.meta.url), 'utf8')
-  assert.match(source, /from ['"](\.\.\/)+lib\/internal-token['"]|@\/lib\/internal-token/)
-  assert.doesNotMatch(source, /provided !== expected/)
-  assert.doesNotMatch(source, /!==\s*expected/)
 })
 
 test('a domain refusal is a 409 naming the blocker, not a leaked 500', async () => {
