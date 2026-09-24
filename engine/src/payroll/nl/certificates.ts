@@ -25,6 +25,7 @@ import type {
   PayrollCertificate,
   PayrollPackCertificates,
 } from "../certificates.ts";
+import { NL_AOK_2026 } from "./rates.ts";
 
 /**
  * Model opgaaf gegevens voor de loonheffingen — the wage tax details form.
@@ -89,7 +90,7 @@ const OPGAAF_LOONHEFFINGEN: PayrollCertificate = {
       label: "Alleenstaande-ouderenkorting toepassen",
       kind: "flag",
       default: "false",
-      help: "Whether the alleenstaande-ouderenkorting (€ 2.076 in 2026) is applied. Only for "
+      help: `Whether the alleenstaande-ouderenkorting (€ ${NL_AOK_2026} in 2026) is applied. Only for `
         + "employees at or above the AOW age who meet the Handboek conditions (Rekenvoorschriften "
         + "2026, Tabel 5: \"niet van toepassing\" below the AOW age — the engine refuses that "
         + "combination by name).",
