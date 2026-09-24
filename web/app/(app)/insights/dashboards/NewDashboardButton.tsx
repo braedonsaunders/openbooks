@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
+import { UNTITLED_DASHBOARD_NAME } from '../../../../lib/insight-untitled'
 
 /**
  * Unsaved create: opens a local dialog (name + description, zero writes) and
@@ -36,7 +37,10 @@ export function NewDashboardButton() {
           'Idempotency-Key': requestIdRef.current,
         },
         body: JSON.stringify({
-          name: name.trim() || tb('untitled'),
+          // The stored name is the canonical sentinel, never the localized
+          // display string: the builder and the publish gate recognize exactly
+          // this value, and the title renders it localized.
+          name: name.trim() || UNTITLED_DASHBOARD_NAME,
           description: description.trim() || null,
         }),
       })

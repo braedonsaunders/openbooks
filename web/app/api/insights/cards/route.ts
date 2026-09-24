@@ -1,4 +1,5 @@
 import { parseJsonBody } from '@/lib/api/json'
+import { UNTITLED_CARD_NAME } from '@/lib/insight-untitled'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
   if (body.name !== undefined && typeof body.name !== 'string') {
     return bad('Card name must be a string')
   }
-  const name = body.name?.trim() || 'Untitled card'
+  const name = body.name?.trim() || UNTITLED_CARD_NAME
 
   let query: ReturnType<typeof normalizeQuery>
   try {

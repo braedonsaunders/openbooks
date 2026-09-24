@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { mutateInsight } from '@/lib/insight-mutations'
+import { UNTITLED_DASHBOARD_NAME } from '@/lib/insight-untitled'
 import { insightDashboards } from '@openbooks/schema/src/insights.ts'
 import { guardPermission } from '../../../../../lib/authz'
 
@@ -19,7 +20,7 @@ export async function POST() {
       .values({
         id,
         orgId: user.orgId,
-        name: 'Untitled dashboard',
+        name: UNTITLED_DASHBOARD_NAME,
         layout: [],
         status: 'draft',
         createdBy: user.id,
