@@ -92,9 +92,16 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   // The verb commits the mutation and its attributable audit atomically (for
   // purge, before any post-commit S3 deletion).
   const audit = { actorId: gate.user.id, viewer: fileViewer(gate) }
-  const ok = purge
-    ? await purgeFile(gate.user.orgId, id, audit)
-    : await deleteFile(gate.user.orgId, id, audit)
+  if (purge) {
+    const outcome = await purgeFile(gate.user.orgId, id, audit)
+    if (outcome === 'retained') {
+      return NextResponse.json({ error: 'retained_evidence_cannot_be_purged' }, { status: 409 })
+    }
+    if (outcome === 'forbidden') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    if (outcome === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return NextResponse.json({ ok: true })
+  }
+  const ok = await deleteFile(gate.user.orgId, id, audit)
   if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

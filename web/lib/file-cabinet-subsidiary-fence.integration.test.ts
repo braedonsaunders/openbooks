@@ -126,7 +126,7 @@ test('subsidiary-restricted managers cannot read or alter out-of-fence files', {
       false,
     )
     assert.equal(await deleteFile(org.orgId, faId, auditB), false)
-    assert.equal(await purgeFile(org.orgId, faId, auditB), false)
+    assert.equal(await purgeFile(org.orgId, faId, auditB), 'forbidden')
     assert.equal((await patchFolder(org.orgId, leafAId, { name: 'hacked' }, userB, auditB)).ok, false)
     assert.equal(await moveFolder(org.orgId, leafAId, commonId, userB, auditB), false)
     assert.equal((await deleteFolder(org.orgId, leafAId, auditB)).ok, false)
