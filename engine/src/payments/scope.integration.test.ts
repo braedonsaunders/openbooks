@@ -11,12 +11,15 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createPaymentRun } from "./run-creation.ts";
-import { openItemsForParty } from "./payment-queries.ts";
+import { loadPaymentDocument, openItemsForParty } from "./payment-queries.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
+import { postPaymentRun } from "./run-posting.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
 async function line(
   org: ScratchOrg,
   overrides: {
@@ -127,6 +130,15 @@ test(
         [target],
       );
       const before = await snapshot(org, payment.id);
+      const movedTo = randomUUID();
+      await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
+        values (${movedTo}, ${org.orgId}, ${org.subsidiaryId}, 'Payment rehome target', 'CAD', 'CA')`);
+      await db.execute(sql`update documents set subsidiary_id=${movedTo} where id=${payment.id} and org_id=${org.orgId}`);
+      assert.equal(await loadPaymentDocument(payment.id, "customer_payment", org.orgId, new Set([org.subsidiaryId])), null);
+      await assert.rejects(updateDraftPayment(payment.id, { memo: "must not cross scope" }, actor, org.orgId,
+        { allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), (e: unknown) => e instanceof ScopeNotFoundError);
+      assert.deepEqual(await snapshot(org, payment.id), before);
+      await db.execute(sql`update documents set subsidiary_id=${org.subsidiaryId} where id=${payment.id} and org_id=${org.orgId}`);
       await assert.rejects(
         updateDraftPayment(
           payment.id,
@@ -593,7 +605,8 @@ test(
       await db.execute(
         sql`update documents set status='approved' where id=${generated.id}`,
       );
-      await postPaymentWithApplications(generated.id, undefined, actor);
+      await db.execute(sql`update payment_runs set status='generated' where id=${run.id} and org_id=${org.orgId}`);
+      await postPaymentRun(run.id, org.orgId, actor);
       assert.deepEqual(
         await openItemsForParty(org.vendorId, "ap", org.orgId),
         [],

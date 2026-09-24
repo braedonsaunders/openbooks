@@ -122,7 +122,13 @@ export async function updatePayment(
     request: { documentId: input.documentId, patch: input.patch },
     execute: async () => {
       try {
-        return await updateDraftPayment(input.documentId, input.patch, context.authz.user.id, context.authz.user.orgId);
+        return await updateDraftPayment(
+          input.documentId,
+          input.patch,
+          context.authz.user.id,
+          context.authz.user.orgId,
+          { allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
+        );
       } catch (error) {
         paymentFailure(error);
       }

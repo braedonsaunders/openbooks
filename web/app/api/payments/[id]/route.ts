@@ -98,7 +98,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
-  const payment = await loadPaymentDocument(id, gate.kind, gate.authz.user.orgId)
+  const payment = await loadPaymentDocument(
+    id, gate.kind, gate.authz.user.orgId, gate.authz.allowedSubsidiaryIds,
+  )
   if (!payment) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json(payment)
 }
@@ -151,8 +153,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       gate.authz.user.id,
       gate.authz.user.orgId,
       // The OCC token is route-level evidence; it never enters the engine's
-      // financial patch shape.
-      { expectedRevision },
+      // financial patch shape. The engine also rechecks this scope under the
+      // locked payment row; the earlier lookup is only a permission gate.
+      {
+        expectedRevision,
+        ...(gate.authz.allowedSubsidiaryIds === null
+          ? {}
+          : { allowedSubsidiaryIds: gate.authz.allowedSubsidiaryIds }),
+      },
     )
     return NextResponse.json(payment)
   } catch (e) {
@@ -160,6 +168,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof PaymentRevisionConflictError) {
       return NextResponse.json({ error: e.message }, { status: 409 })
     }
+    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
     return paymentErrorResponse(e)
   }
 }
