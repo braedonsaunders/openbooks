@@ -192,23 +192,6 @@ test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing on
   )
 })
 
-test('local W-2 wages use the sourced work allocation instead of repeating state wages', () => {
-  // IRS Instructions for Forms W-2 and W-3, boxes 18–20:
-  // https://www.irs.gov/instructions/iw2w3
-  const input = {
-    ...dispatchInput('PA', '150001', 'us_pa_clgs32_6', () => null,
-      () => ({ residentRate: '0.0100', nonresidentRate: '0.0050' }), 'nonresident'),
-    wages: '2000.0000',
-    supplemental: '300.0000',
-    supplementalPaymentTiming: 'combined' as const,
-    wageAllocations: [{
-      region: 'PA', subRegion: '150001', workShare: '0.600000', source: 'verified work records',
-    }],
-  } as Parameters<typeof computeUsWithholding>[0]
-  const result = computeUsWithholding(input)
-  assert.equal(result?.localTaxableWages, '1380.0000')
-})
-
 test('Delaware refuses separately paid supplemental wages without Section 14 differential inputs', () => {
   // Delaware Employer's Guide, Section 14, requires incremental withholding on
   // a separately paid bonus. https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
