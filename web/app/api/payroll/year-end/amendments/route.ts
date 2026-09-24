@@ -12,6 +12,7 @@ import {
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import {
+  FilingScopeDenied,
   guardPayrollFilingData,
   guardPayrollFilingRowIds,
 } from '../../subsidiary-scope'
@@ -68,6 +69,13 @@ export async function GET(req: Request) {
     const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
     if (populationDenied) return populationDenied
   }
+  // The in-service authorization: the lifecycle authorizes the ids it
+  // actually returns, inside its own build — a row committed after the
+  // pre-guard above is denied here, before the response renders it.
+  const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
+    if (denied) throw new FilingScopeDenied(denied)
+  }
   try {
     const lifecycle = await filingLifecycle(
       gate.user.orgId,
@@ -75,6 +83,7 @@ export async function GET(req: Request) {
       filing,
       year,
       gate.allowedSubsidiaryIds ?? undefined,
+      authorizeRowIds,
     )
     return NextResponse.json({
       ...lifecycle,
@@ -99,6 +108,7 @@ export async function GET(req: Request) {
       })),
     })
   } catch (e) {
+    if (e instanceof FilingScopeDenied) return e.response
     if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e
@@ -166,6 +176,14 @@ export async function POST(req: Request) {
     const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
     if (denied) return denied
   }
+  // The in-service authorization: the issue authorizes the ids it actually
+  // persists, inside its own transaction — a row committed after the
+  // pre-guard above is denied here, before the file, the slips, or the
+  // submission exist. The denial carries the guard's own response.
+  const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
+    if (denied) throw new FilingScopeDenied(denied)
+  }
   try {
     const issueInput = {
       orgId: gate.user.orgId,
@@ -176,6 +194,7 @@ export async function POST(req: Request) {
       revision: revision as 'original' | 'amended' | 'cancelled',
       rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
       scope: gate.allowedSubsidiaryIds ?? undefined,
+      authorizeRowIds,
       // A cancellation's explanation is its audit evidence. Keep it in the
       // existing filing note column so history readers show the same reason
       // that was confirmed at the destructive boundary.
@@ -197,6 +216,7 @@ export async function POST(req: Request) {
       fileRefusal: result.fileRefusal,
     })
   } catch (e) {
+    if (e instanceof FilingScopeDenied) return e.response
     if (e instanceof PayrollPackError) return NextResponse.json({ error: e.message }, { status: 404 })
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })
     throw e

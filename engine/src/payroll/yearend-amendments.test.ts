@@ -934,6 +934,108 @@ test(
 );
 
 test(
+  "an original authorizes the exact population inside the issue: a denial persists nothing",
+  { skip: !DB },
+  async () => {
+    // The barrier closer for the guard-then-use race: the route guards the
+    // population outside the issue transaction, so the service authorizes
+    // the ids it actually built — here a row that arrived in between, which
+    // the authorizer refuses — before the file, the slips, or the submission
+    // exist. Nothing is persisted.
+    const fx = await seedT4Year();
+    try {
+      const seen: string[][] = [];
+      await assert.rejects(
+        recordFilingIssue({
+          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+          taxYear: 2026, revision: "original",
+          authorizeRowIds: async (rowIds) => {
+            seen.push([...rowIds]);
+            throw new PayrollError("subsidiary scope denied for the test barrier row");
+          },
+        }),
+        /subsidiary scope denied for the test barrier row/,
+      );
+      assert.deepEqual(seen, [[fx.rowId]], "the service authorized exactly its built population");
+      assert.deepEqual(
+        await filingSubmissions(fx.orgId, "CA", "t4", 2026),
+        [],
+        "the denied issue persisted no submission",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a correction authorizes exactly its requested rows inside the issue",
+  { skip: !DB },
+  async () => {
+    const fx = await seedT4Year();
+    try {
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+      });
+      const seen: string[][] = [];
+      await assert.rejects(
+        recordFilingIssue({
+          orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+          taxYear: 2026, revision: "cancelled", rowIds: [fx.rowId],
+          reason: "Employee belonged to another entity",
+          authorizeRowIds: async (rowIds) => {
+            seen.push([...rowIds]);
+            throw new PayrollError("subsidiary scope denied for the test barrier row");
+          },
+        }),
+        /subsidiary scope denied for the test barrier row/,
+      );
+      assert.deepEqual(seen, [[fx.rowId]], "the service authorized exactly the requested rows");
+      assert.deepEqual(
+        (await filingSubmissions(fx.orgId, "CA", "t4", 2026)).map((s) => s.revision),
+        ["original"],
+        "the denied correction persisted nothing",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "the lifecycle authorizes what it returns: a denial aborts before the caller renders",
+  { skip: !DB },
+  async () => {
+    const fx = await seedT4Year();
+    try {
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+      });
+      const seen: string[][] = [];
+      await assert.rejects(
+        filingLifecycle(
+          fx.orgId, "CA", "t4", 2026, undefined,
+          async (rowIds) => {
+            seen.push([...rowIds]);
+            throw new PayrollError("subsidiary scope denied for the test barrier row");
+          },
+        ),
+        /subsidiary scope denied for the test barrier row/,
+      );
+      assert.deepEqual(
+        seen,
+        [[fx.rowId]],
+        "the lifecycle authorized its stored plus current rows",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
   "an original filing snapshots artifact bytes and slip evidence together",
   { skip: !DB },
   async () => {
