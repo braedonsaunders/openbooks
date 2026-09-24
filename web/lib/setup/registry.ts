@@ -319,6 +319,16 @@ export interface SetupEntity {
   filters?: SetupFilter[]
 }
 
+/** Direct subsidiary anchor for generic row visibility and write authorization. */
+export function setupEntitySubsidiaryField(entity: SetupEntity): SetupField | undefined {
+  return entity.fields.find((field) => field.ref === 'subsidiaries')
+}
+
+/** References whose target row carries the subsidiary ownership anchor. */
+export function setupEntitySubsidiaryReferenceFields(entity: SetupEntity): SetupField[] {
+  return entity.fields.filter((field) => field.ref === 'equipment-units')
+}
+
 /**
  * Optional-module columns are not merely nullable database fields. Keep the
  * registry as the source of truth, then derive the UI/write descriptor so

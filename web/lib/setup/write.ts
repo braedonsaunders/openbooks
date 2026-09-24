@@ -23,7 +23,8 @@ import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
 import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
 // HR-18 end
-import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from './registry'
+import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
+import { UNRESTRICTED_SCOPE_REQUIRED } from '../subsidiaries'
 import {
   buildRow,
   coerceBoolean,
@@ -73,7 +74,12 @@ const bindSetupValue = (value: unknown) => Array.isArray(value) ? sql.param(valu
 
 /** The acting admin: org, user id (stamped on rows + audit), and permissions
  *  (extension settings scope themselves by permission). */
-export type SetupActor = { orgId: string; id: string; permissions: Iterable<string> }
+export type SetupActor = {
+  orgId: string
+  id: string
+  permissions: Iterable<string>
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
+}
 
 /** Transport-neutral outcome: the HTTP status the route answers with and the
  *  JSON body. Adapters map it onto their wire. */
@@ -102,6 +108,13 @@ class SetupWriteRefusal extends Error {
 }
 type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
+function setupScopeRefusal(actor: SetupActor, entity: SetupEntity): SetupWriteResult | null {
+  return actor.allowedSubsidiaryIds !== undefined && actor.allowedSubsidiaryIds !== null
+    && !setupEntitySubsidiaryField(entity) && setupEntitySubsidiaryReferenceFields(entity).length === 0
+    ? { status: 403, body: { error: UNRESTRICTED_SCOPE_REQUIRED } }
+    : null
+}
+
 async function savePayComponentEarningClassification(
   tx: Pick<typeof db, 'execute'>,
   orgId: string,
@@ -121,7 +134,7 @@ async function savePayComponentEarningClassification(
 async function setupWriteTransaction<T>(
   entity: SetupEntity, orgId: string, body: Record<string, unknown> | undefined,
   rowId: string | undefined, write: (tx: SetupTransaction) => Promise<T>,
-  options: { idempotencyKey?: string } = {},
+  options: { idempotencyKey?: string; allowedSubsidiaryIds?: ReadonlySet<string> | null } = {},
 ): Promise<T> {
   return db.transaction(async (tx) => {
     // Same-key retries serialize here, before any create effect: the second
@@ -131,6 +144,54 @@ async function setupWriteTransaction<T>(
     }
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${featureGateLockKey(orgId)}, 0))`)
     if (!(await setupEntityEnabled(entity, orgId, tx))) throw new SetupWriteRefusal('unknown setup entity', 404)
+    const allowedSubsidiaryIds = options.allowedSubsidiaryIds
+    if (allowedSubsidiaryIds !== undefined && allowedSubsidiaryIds !== null) {
+      const scopeField = setupEntitySubsidiaryField(entity)
+      const allowed = new Set([...allowedSubsidiaryIds].map((id) => id.toLowerCase()))
+      if (scopeField) {
+        const column = toSnake(scopeField.key)
+        let current: unknown
+        if (rowId) {
+          const selected = await tx.execute<Record<string, unknown>>(sql`
+            select ${sql.raw(column)} from ${sql.raw(entity.table)}
+             where ${sql.raw(idColumn(entity))} = ${rowId}
+               ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             for update`)
+          if (!selected.rows[0]) throw new SetupWriteRefusal('not found', 404)
+          current = selected.rows[0][column]
+        }
+        const requested = body && body[scopeField.key] !== undefined ? body[scopeField.key] : current
+        if (typeof requested !== 'string' || !allowed.has(requested.toLowerCase())) {
+          throw new SetupWriteRefusal('subsidiary is outside your allowed scope', 403)
+        }
+      }
+      for (const field of setupEntitySubsidiaryReferenceFields(entity)) {
+        const column = toSnake(field.key)
+        let current: unknown
+        if (rowId && (!body || body[field.key] === undefined)) {
+          const selected = await tx.execute<Record<string, unknown>>(sql`
+            select ${sql.raw(column)} from ${sql.raw(entity.table)}
+             where ${sql.raw(idColumn(entity))} = ${rowId}
+               ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             for update`)
+          if (!selected.rows[0]) throw new SetupWriteRefusal('not found', 404)
+          current = selected.rows[0][column]
+        }
+        const requested = body && body[field.key] !== undefined ? body[field.key] : current
+        if (requested == null && !scopeField) {
+          throw new SetupWriteRefusal('Choose an equipment unit in your allowed subsidiary scope', 403)
+        }
+        if (requested != null) {
+          const visible = await tx.execute<{ subsidiary_id: string | null }>(sql`
+            select subsidiary_id from equipment_units where id = ${String(requested)} and org_id = ${orgId}
+             for share
+          `)
+          if (!visible.rows[0] || !allowed.has(String(visible.rows[0].subsidiary_id ?? '').toLowerCase())) {
+            throw new SetupWriteRefusal('equipment unit is outside your allowed subsidiary scope', 403)
+          }
+        }
+      }
+    }
     if (body) {
       const problem = await validateEntityIntegrity(entity, body, orgId, rowId, tx)
       if (problem) throw new SetupWriteRefusal(problem, problem === 'not found' ? 404 : 400)
@@ -1552,6 +1613,8 @@ export async function preflightSetupWrite(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, actor.orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const scopeRefusal = setupScopeRefusal(actor, entity)
+  if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
@@ -1609,9 +1672,12 @@ export async function createSetupRecord(
   options: { requestId?: string } = {},
 ): Promise<SetupWriteResult> {
   const { orgId, id: actorId } = actor
+  const scopeOptions = { allowedSubsidiaryIds: actor.allowedSubsidiaryIds }
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const scopeRefusal = setupScopeRefusal(actor, entity)
+  if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
@@ -1693,7 +1759,7 @@ export async function createSetupRecord(
     try {
       const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
         saveSetupBook(entity, orgId, actorId, body, tx, { idempotencyKey: requestId, match: setupBookMatch() }),
-        { idempotencyKey: requestId })
+        { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -1712,7 +1778,7 @@ export async function createSetupRecord(
     try {
       const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
         saveSetupBook(entity, orgId, actorId, body, tx, { idempotencyKey: requestId, match: setupBookMatch() }),
-        { idempotencyKey: requestId })
+        { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -1859,7 +1925,7 @@ export async function createSetupRecord(
           requestId,
         }, tx)
         return id
-      }, { idempotencyKey: requestId })
+      }, { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id: newId } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -1917,7 +1983,7 @@ export async function createSetupRecord(
         requestId,
       }, tx)
       return id
-    }, { idempotencyKey: requestId })
+    }, { ...scopeOptions, idempotencyKey: requestId })
     return { status: 200, body: { id: newId } }
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -1955,9 +2021,12 @@ export async function updateSetupRecord(
   rawBody: Record<string, unknown>,
 ): Promise<SetupWriteResult> {
   const { orgId, id: actorId } = actor
+  const scopeOptions = { allowedSubsidiaryIds: actor.allowedSubsidiaryIds }
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const scopeRefusal = setupScopeRefusal(actor, entity)
+  if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
@@ -2021,7 +2090,7 @@ export async function updateSetupRecord(
   if (entity.key === 'accounting-books') {
     try {
       await setupWriteTransaction(entity, orgId, body, id, (tx) =>
-        saveSetupBook(entity, orgId, actorId, body, tx, { id }))
+        saveSetupBook(entity, orgId, actorId, body, tx, { id }), scopeOptions)
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -2042,7 +2111,7 @@ export async function updateSetupRecord(
     }
     try {
       await setupWriteTransaction(entity, orgId, body, id, (tx) =>
-        saveSetupBook(entity, orgId, actorId, body, tx, { id }))
+        saveSetupBook(entity, orgId, actorId, body, tx, { id }), scopeOptions)
       return { status: 200, body: { id } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -2174,7 +2243,7 @@ export async function updateSetupRecord(
           actorId,
         }, tx)
         return successorId
-      })
+      }, scopeOptions)
       return { status: 200, body: { id: versionId } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -2344,7 +2413,7 @@ export async function updateSetupRecord(
           actorId,
         }, tx)
         return successorId
-      })
+      }, scopeOptions)
       return { status: 200, body: { id: versionId } }
     } catch (e) {
       if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -2466,7 +2535,7 @@ export async function updateSetupRecord(
         }
       }
       return true
-    })
+    }, scopeOptions)
     if (!found) return { status: 404, body: { error: 'not found' } }
     return { status: 200, body: { id, ...(scheduleRescope ? { rescope: scheduleRescope } : {}) } }
   } catch (e) {
@@ -2499,9 +2568,12 @@ export async function deleteSetupRecord(
   id: string,
 ): Promise<SetupWriteResult> {
   const { orgId, id: actorId } = actor
+  const scopeOptions = { allowedSubsidiaryIds: actor.allowedSubsidiaryIds }
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const scopeRefusal = setupScopeRefusal(actor, entity)
+  if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   if (entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
@@ -2555,7 +2627,7 @@ export async function deleteSetupRecord(
         actorId,
       }, tx)
       return true
-    })
+    }, scopeOptions)
     if (!found) return { status: 404, body: { error: 'not found' } }
     return { status: 200, body: { ok: true } }
   } catch (e) {

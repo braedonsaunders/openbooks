@@ -20,7 +20,7 @@ const PERMISSION = 'admin.setup.manage'
 export async function POST(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
-  const actor = { ...gate.user, permissions: gate.permissions }
+  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'create')
   if (refused) return NextResponse.json(refused.body, { status: refused.status })
@@ -46,7 +46,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
 export async function PATCH(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
-  const actor = { ...gate.user, permissions: gate.permissions }
+  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'update')
   if (refused) return NextResponse.json(refused.body, { status: refused.status })
@@ -59,7 +59,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
 export async function DELETE(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
-  const actor = { ...gate.user, permissions: gate.permissions }
+  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'delete')
   if (refused) return NextResponse.json(refused.body, { status: refused.status })

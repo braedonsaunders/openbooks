@@ -51,7 +51,7 @@ export async function POST(
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, body },
       execute: async () => settleWrite(await createSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions },
+        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
         entityKey,
         body,
       )),

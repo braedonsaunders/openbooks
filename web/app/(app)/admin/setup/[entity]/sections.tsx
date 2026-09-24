@@ -23,6 +23,7 @@ import {
   pickString,
 } from '../../../../../lib/list-params'
 import { loadRefOptions } from '../../../../../lib/setup/ref-options'
+import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
@@ -146,6 +147,7 @@ export async function SetupDrawerSlot({
     equipment: featureEnabled(features, 'equipment'),
     fieldTickets: featureEnabled(features, 'fieldTickets'),
   }))
+  if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return null
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
@@ -188,6 +190,7 @@ export async function SetupDrawerSlot({
             select ${setupReadProjection(entity)} from ${setupReadSource(entity)}
              where ${sql.raw(idColumn)} = ${rowParam}
              ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+             ${setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
              limit 1`)))
           const found = selected.rows[0] ?? null
           // Rule-slot entities store drawer fields folded into jsonb (no

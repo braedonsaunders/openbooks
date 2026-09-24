@@ -117,7 +117,7 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
  * The list/report WHERE predicate lives in the canonical engine scope module
  * (shapes 1 and 3); re-exported here so existing importers keep working.
  */
-export { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 
 /**
  * The subsidiaries this user may SEE, from the union of their roles'

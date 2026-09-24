@@ -90,7 +90,9 @@ export async function loadEntityOptions(
     // no setup-registry entry of its own — equipment is managed under Assets.
     const units = (await db.execute(sql`
       select id as value, unit_number || ' · ' || name as label from equipment_units
-       where org_id = ${orgId} and status = 'active' order by unit_number`))
+       where org_id = ${orgId} and status = 'active'
+         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
+       order by unit_number`))
     return units.rows as RefOption[]
   }
   if (source === 'job-titles') {

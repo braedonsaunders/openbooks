@@ -20,6 +20,8 @@ import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
 import { ApplicationError } from "./errors";
 import { setupReadProjection, setupReadSource } from "../setup/read-shape";
+import { UNRESTRICTED_SCOPE_REQUIRED } from "../subsidiaries";
+import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../setup/subsidiary-scope";
 
 function setupEntityEnabled(entity: SetupEntity, features: FeatureState): boolean {
   if (!entity.featureKey) return true;
@@ -93,8 +95,12 @@ export async function listSetupRecords(
   input: { entityKey: string; query?: string; limit?: number },
 ) {
   const entity = await requireSetupEntity(context, input.entityKey);
+  if (context.authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) {
+    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+  }
   const limit = clamp(input.limit ?? 50, 1, 200);
   if (entity.dataSource === "extension-settings") {
+    if (context.authz.allowedSubsidiaryIds !== null) throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
     const needle = input.query?.trim().toLowerCase();
     const rows = (await loadExtensionSettingRows(context.authz.user.orgId)).filter((row) =>
       !needle || Object.values(row).some((value) => String(value).toLowerCase().includes(needle)),
@@ -114,6 +120,7 @@ export async function listSetupRecords(
   );
   const rowFilter = sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+    ${context.authz.allowedSubsidiaryIds === null ? sql`` : setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}
     ${entity.hasActive ? sql`and is_active` : sql``}
     ${input.query && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`;
   const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);
@@ -138,7 +145,11 @@ export async function getSetupRecord(
   input: { entityKey: string; id: string },
 ) {
   const entity = await requireSetupEntity(context, input.entityKey);
+  if (context.authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) {
+    throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
+  }
   if (entity.dataSource === "extension-settings") {
+    if (context.authz.allowedSubsidiaryIds !== null) throw new ApplicationError("forbidden", UNRESTRICTED_SCOPE_REQUIRED, 403)
     // The adapter returns the full active catalog, not a page; find by id
     // here is a key lookup over that complete set.
     const record = (await loadExtensionSettingRows(context.authz.user.orgId))
@@ -153,7 +164,8 @@ export async function getSetupRecord(
   const rows = await db.execute<Record<string, unknown>>(sql`
     select ${setupReadProjection(entity, selectCols)} from ${setupReadSource(entity)}
      where ${sql.raw(idColumn)} = ${input.id}
-     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}`);
+     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+     ${setupEntitySubsidiaryFilter(entity, context.authz.allowedSubsidiaryIds)}`);
   if (rows.rows.length === 0) throw setupRecordMissing(entity.key);
   if (rows.rows.length !== 1) {
     throw new ApplicationError(

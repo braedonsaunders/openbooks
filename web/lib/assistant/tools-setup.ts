@@ -19,6 +19,7 @@ import {
 import type { AssistantToolDef, ToolResult } from "./types";
 import { capList } from "./tools-shared";
 import { setupReadProjection, setupReadSource } from "../setup/read-shape";
+import { setupEntityHasSubsidiaryAnchor, setupEntitySubsidiaryFilter } from "../setup/subsidiary-scope";
 
 /**
  * Read tools for the Setup registry (/admin/setup) and the Features
@@ -91,9 +92,10 @@ const listSetupRecordsTool: AssistantToolDef = {
       equipment: featureEnabled(features, "equipment"),
       fieldTickets: featureEnabled(features, "fieldTickets"),
     });
+    if (authz.allowedSubsidiaryIds !== null && !setupEntityHasSubsidiaryAnchor(entity)) return { ok: false, error: "forbidden" }
     const limit = Math.min(a.limit ?? 50, 200);
     if (entity.dataSource === 'extension-settings') {
-      const rows = (await loadExtensionSettingRows(orgId)).filter((row) => !a.query || Object.values(row).some((value) => String(value).toLowerCase().includes(a.query!.toLowerCase())));
+      const rows = (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)).filter((row) => !a.query || Object.values(row).some((value) => String(value).toLowerCase().includes(a.query!.toLowerCase())));
       return { ok: true, data: { entityKey: entity.key, total: rows.length, returned: Math.min(rows.length, limit), truncated: rows.length > limit,
         href: `/admin/setup/${entity.key}`, items: rows.slice(0, limit) } };
     }
@@ -107,6 +109,7 @@ const listSetupRecordsTool: AssistantToolDef = {
     );
     const rowFilter = sql`where 1 = 1
       ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+      ${authz.allowedSubsidiaryIds === null ? sql`` : setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
       ${entity.hasActive ? sql`and is_active` : sql``}
       ${a.query && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`;
     const orderBy = entity.orderBy ?? (entity.naturalKey ? toSnake(entity.naturalKey) : idColumn);

@@ -42,7 +42,7 @@ export async function PATCH(
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, body },
       execute: async () => settleWrite(await updateSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions },
+        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
         entityKey,
         body,
       )),
@@ -69,7 +69,7 @@ export async function DELETE(
       idempotencyKey: requireV1IdempotencyKey(request),
       request: { entityKey, id },
       execute: async () => settleWrite(await deleteSetupRecord(
-        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions },
+        { orgId: context.authz.user.orgId, id: context.authz.user.id, permissions: context.authz.permissions, allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds },
         entityKey,
         id,
       )),
