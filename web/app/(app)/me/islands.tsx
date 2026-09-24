@@ -554,7 +554,7 @@ export function BenefitElectDialog({
         <div className="flex flex-col gap-1.5">
           <Label>{dialog.windowLabel}</Label>
           <Select value={windowId} onChange={(event) => setWindowId(event.target.value)}>
-            <option value="">{dialog.lifeEventLabel}</option>
+            <option value="">{dialog.windowLabel}</option>
             {dialog.windows.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
