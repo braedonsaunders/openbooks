@@ -111,7 +111,7 @@ test('retirement rechecks open work after waiting for the account lock', enabled
   pending=withOrgContext(org.orgId,()=>PATCH(request,params(org.customerId)));
   await blockedBy(pid);
   const id=randomUUID();
-  await client.query('insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active) values($1,$2,$7,$3,$4,$5,$6,true)',[id,org.orgId,'Concurrent open work',org.customerId,open,'CAD',id]);
+  await withBypassContext(() => (client.query('insert into crm_opportunities(id,org_id,opportunity_number,title,party_id,status_id,currency,is_active) values($1,$2,$7,$3,$4,$5,$6,true)',[id,org.orgId,'Concurrent open work',org.customerId,open,'CAD',id])));
   await client.query('commit');
   const response=await pending;
   assert.equal(response.status,422,await response.clone().text());
@@ -127,7 +127,7 @@ test('opportunity activation rechecks account retirement after waiting for its l
   await client.query('begin');
   await client.query('select set_config($1,$2,true)',['app.current_org',org.orgId]);
   const pid=(await client.query('select pg_backend_pid() as pid')).rows[0].pid as number;
-  await client.query('update parties set is_active=false where id=$1',[org.customerId]);
+  await withBypassContext(() => (client.query('update parties set is_active=false where id=$1',[org.customerId])));
   pending=withOrgContext(org.orgId,async()=>edit(await editRequest(org,id,{isActive:true}),params(id)));
   await blockedBy(pid);
   await client.query('commit');

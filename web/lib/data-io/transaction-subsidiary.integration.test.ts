@@ -64,7 +64,7 @@ interface Fixture {
  * as soon as the first test ends.
  */
 async function fixture(): Promise<Fixture> {
-  const o = await createScratchOrg()
+  const o = await withBypassContext(() => (createScratchOrg()))
   // The data-io import above leaves the ambient scope RLS-enforced with no
   // tenant: seed writes go through the bypass, reads through the org.
   const revenueNo = await withOrgContext(o.orgId, async () => (

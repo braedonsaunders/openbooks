@@ -96,8 +96,8 @@ async function orgLegalName(orgId: string): Promise<string | null> {
 }
 
 test('get_company_settings reads the caller org through the shared settings command', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('get_company_settings')
     assert.ok(tool, 'get_company_settings must resolve in the application catalog')
@@ -122,8 +122,8 @@ test('get_company_settings reads the caller org through the shared settings comm
 })
 
 test('update_company_settings mutates only the caller org and replays idempotently', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('update_company_settings')
     assert.ok(tool, 'update_company_settings must resolve in the application catalog')
@@ -156,8 +156,8 @@ test('update_company_settings mutates only the caller org and replays idempotent
 })
 
 test('update_features toggles through the fenced command and replays idempotently', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('update_features')
     assert.ok(tool, 'update_features must resolve in the application catalog')
@@ -197,7 +197,7 @@ test('update_features toggles through the fenced command and replays idempotentl
 })
 
 test('create_setup_record creates through the shared validated command and replays idempotently', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('create_setup_record')
     assert.ok(tool, 'create_setup_record must resolve in the application catalog')
@@ -230,8 +230,8 @@ test('create_setup_record creates through the shared validated command and repla
 })
 
 test('update_setup_record edits only the caller org row and replays idempotently', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('update_setup_record')
     assert.ok(tool, 'update_setup_record must resolve in the application catalog')
@@ -273,8 +273,8 @@ test('update_setup_record edits only the caller org row and replays idempotently
 })
 
 test('delete_setup_record removes only the caller org row and replays idempotently', { skip: !DB }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tool = applicationTool('delete_setup_record')
     const create = applicationTool('create_setup_record')

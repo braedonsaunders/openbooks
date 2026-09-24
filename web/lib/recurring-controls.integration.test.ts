@@ -30,7 +30,7 @@ const request = (method: string, body?: unknown) => new Request("http://audit.lo
 
 for (const operation of ["list", "create by id", "create by number", "edit", "delete", "run", "enable posting", "coerced posting", "run posting", "coerced active", "reactivate posting", "reschedule posting", "invalid date", "invalid cron", "direct hidden", "direct no permission", "direct post denied", "empty scope", "subtree scope", "unrestricted scope", "authorized lifecycle", "intercompany list", "intercompany create", "intercompany edit", "intercompany run", "intercompany delete", "intercompany create race", "intercompany edit race", "intercompany run race"] as const) {
   test(`recurring controls: ${operation}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
       // Seed writes run under bypass: the route imports below trip the
       // process-wide request-org resolver, so ambient writes are RLS-enforced.

@@ -20,7 +20,7 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { loadReportDrillData } = await import('./report-drill-data')
 const { transactionDetail } = await import('./reports/transaction-detail')
@@ -40,7 +40,7 @@ async function seedRevenue(
   input: { number: string; subsidiaryId: string; total: string },
 ): Promise<string> {
   const entryId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => db.execute(sql`
     insert into journal_entries(
       id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
       status, origin, created_by, updated_by
@@ -48,8 +48,8 @@ async function seedRevenue(
       ${entryId}, ${org.orgId}, ${org.bookId}, ${input.subsidiaryId}, ${input.number},
       ${org.date}, ${org.periodId}, 'draft', 'manual', ${actorId}, ${actorId}
     )
-  `)
-  await db.execute(sql`
+  `))
+  await withBypassContext(() => db.execute(sql`
     insert into journal_lines(
       id, org_id, entry_id, line_number, account_id, subsidiary_id,
       is_open_item, amount, currency, txn_amount, fx_rate
@@ -58,8 +58,8 @@ async function seedRevenue(
        false, ${`-${input.total}`}, 'CAD', ${`-${input.total}`}, '1'),
       (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${input.subsidiaryId},
        false, ${input.total}, 'CAD', ${input.total}, '1')
-  `)
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
+  `))
+  await withBypassContext(() => db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`))
   return entryId
 }
 
@@ -70,14 +70,12 @@ test('a consolidated drill ties to its cell across the whole subtree', { skip: !
     const branchId = randomUUID()
     let rootEntry = ''
     let branchEntry = ''
-    await withBypass(async () => {
-      await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Drill branch', 'CAD', 'CA')
-      `)
-      rootEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-ROOT', subsidiaryId: scratch.subsidiaryId, total: '100' })
-      branchEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-BRANCH', subsidiaryId: branchId, total: '200' })
-    })
+      `))
+    rootEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-ROOT', subsidiaryId: scratch.subsidiaryId, total: '100' })
+    branchEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-BRANCH', subsidiaryId: branchId, total: '200' })
     const root = scratch.subsidiaryId
     const subtree = [root, branchId]
     const authz = {
@@ -136,14 +134,12 @@ test('a drill never widens a restricted caller past its allowlist', { skip: !env
   try {
     const branchId = randomUUID()
     let branchEntry = ''
-    await withBypass(async () => {
-      await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${branchId}, ${scratch.orgId}, ${scratch.subsidiaryId}, 'Drill branch', 'CAD', 'CA')
-      `)
-      await seedRevenue(scratch, actorId, { number: 'DRILL-ROOT', subsidiaryId: scratch.subsidiaryId, total: '100' })
-      branchEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-BRANCH', subsidiaryId: branchId, total: '200' })
-    })
+      `))
+    await seedRevenue(scratch, actorId, { number: 'DRILL-ROOT', subsidiaryId: scratch.subsidiaryId, total: '100' })
+    branchEntry = await seedRevenue(scratch, actorId, { number: 'DRILL-BRANCH', subsidiaryId: branchId, total: '200' })
     const root = scratch.subsidiaryId
     // A restricted caller who may see only the root, handed a target whose
     // embedded entity set (and picker node) point at the hidden branch.

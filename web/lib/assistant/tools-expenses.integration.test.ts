@@ -99,7 +99,7 @@ async function seedExpenses(org: {
 }
 
 test('expense assistant reads: list, detail, overview, approvals', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   await enableFeature(org.orgId, 'expenses');
   try {
     const seed = await seedExpenses(org);
@@ -165,8 +165,8 @@ test('expense assistant reads: list, detail, overview, approvals', { skip: !proc
 });
 
 test('expense assistant reads isolate orgs and honor the feature flag', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg();
-  const orgB = await createScratchOrg();
+  const orgA = await withBypassContext(() => (createScratchOrg()));
+  const orgB = await withBypassContext(() => (createScratchOrg()));
   await enableFeature(orgA.orgId, 'expenses');
   await enableFeature(orgB.orgId, 'expenses');
   try {

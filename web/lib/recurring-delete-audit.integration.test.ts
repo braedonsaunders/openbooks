@@ -51,7 +51,7 @@ type Seed = {
 };
 
 async function seedSchedule(withOccurrence: boolean): Promise<Seed> {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   const seed = await withBypassContext(async () => {
     const actor = await createScratchUser(org.orgId, "Recurring manager", "recurring_manager");
     await db.execute(sql`update app_roles set permissions='["documents.manage","gl.post"]'::jsonb

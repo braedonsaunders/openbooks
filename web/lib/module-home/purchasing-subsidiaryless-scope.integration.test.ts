@@ -28,7 +28,7 @@ async function seedPostedBill(
 ) {
   const documentId = randomUUID()
   const entryId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into documents(
       id, org_id, kind, document_number, party_id, subsidiary_id, document_date,
       posting_date, currency, fx_rate, status, subtotal, tax_total, total
@@ -37,8 +37,8 @@ async function seedPostedBill(
       ${input.subsidiaryId}, '2026-07-14', '2026-07-14', 'CAD',
       '1', 'draft', ${input.total}, 0, ${input.total}
     )
-  `)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`
     insert into journal_entries(
       id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
       status, origin, source_document_id
@@ -46,8 +46,8 @@ async function seedPostedBill(
       ${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${input.number},
       '2026-07-14', ${org.periodId}, 'draft', 'manual', ${documentId}
     )
-  `)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`
     insert into journal_lines(
       id, org_id, entry_id, line_number, account_id, subsidiary_id, party_id,
       is_open_item, amount, currency, txn_amount, fx_rate
@@ -56,13 +56,13 @@ async function seedPostedBill(
        ${org.vendorId}, true, ${`-${input.total}`}, 'CAD', ${`-${input.total}`}, '1'),
       (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.cogs}, ${org.subsidiaryId},
        ${org.vendorId}, false, ${input.total}, 'CAD', ${input.total}, '1')
-  `)
-  await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)
-  await db.execute(sql`
+  `)))
+  await withBypassContext(() => (db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`)))
+  await withBypassContext(() => (db.execute(sql`
     update documents
        set status = 'posted', posted_entry_id = ${entryId}, posting_period_id = ${org.periodId}
      where id = ${documentId} and org_id = ${org.orgId}
-  `)
+  `)))
 }
 
 test('restricted spend excludes subsidiary-less bills', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

@@ -7,7 +7,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 } })
 const { sql } = await import('drizzle-orm')
-const { db, env } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db, env } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { importStatement, startReconciliation } = await import('@openbooks/engine/src/banking/banking.ts')
 const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
@@ -36,20 +36,20 @@ interface Fixture {
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg()
-  const actor = (await seedFlowActors(org.orgId)).adminId
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const actor = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
   const subB = randomUUID()
-  await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-    values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`)
+  await withBypassContext(() => (db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', 'CAD', 'CA')`)))
   const bankB = randomUUID()
-  await db.execute(sql`insert into accounts
+  await withBypassContext(() => (db.execute(sql`insert into accounts
     (id, org_id, number, name, type, is_summary, is_active, eliminate,
      reconcilable, required_dimensions, custom, subsidiary_include_children,
      subsidiary_id, currency_restriction)
     values (${bankB}, ${org.orgId}, '1011', 'Second entity bank', 'asset_bank',
-     false, true, false, true, '[]'::jsonb, '{}'::jsonb, true, ${subB}, 'CAD')`)
-  await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD',
-    subsidiary_id = ${org.subsidiaryId} where id = ${org.accounts.bank} and org_id = ${org.orgId}`)
+     false, true, false, true, '[]'::jsonb, '{}'::jsonb, true, ${subB}, 'CAD')`)))
+  await withBypassContext(() => (db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD',
+    subsidiary_id = ${org.subsidiaryId} where id = ${org.accounts.bank} and org_id = ${org.orgId}`)))
   const nonce = randomUUID().slice(0, 8)
   await importStatement(
     {
@@ -76,11 +76,11 @@ async function fixture(): Promise<Fixture> {
 
 async function seedExcludeRule(orgId: string, actor: string): Promise<string> {
   const ruleId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into bank_match_rules (id, org_id, name, criteria, outcome, priority, is_active, created_by)
     values (${ruleId}, ${orgId}, 'Scope probe excluder',
       '{"version":2,"match":{"combinator":"and","rules":[{"field":"description","op":"contains","value":"Scope probe"}]}}'::jsonb,
-      '{"action":"exclude"}'::jsonb, 100, true, ${actor})`)
+      '{"action":"exclude"}'::jsonb, 100, true, ${actor})`)))
   return ruleId
 }
 

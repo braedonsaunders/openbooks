@@ -161,7 +161,7 @@ test('explicit invalid or unavailable books never fall back to the primary book'
   // it does not join the surrounding tenant transaction.
   const foreign = await withBypassContext(() => createScratchOrg())
   try {
-    await db.execute(sql`update accounting_books set is_active=false where id=${book} and org_id=${org.orgId}`)
+    await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=false where id=${book} and org_id=${org.orgId}`)))
     for (const selected of ['', 'invalid', randomUUID(), foreign.bookId, book]) {
       const sp = params(org, selected)
       for (const kind of ['pnl', 'balance-sheet'] as const) {
@@ -177,17 +177,17 @@ test('explicit invalid or unavailable books never fall back to the primary book'
 }))
 
 test('budget Actual drills use the scenario book even after that book is retired', enabled, async () => fixture(async (org, book) => {
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)
+  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"budgets":true}'::jsonb) where id=${org.orgId}`)))
   const scenario = randomUUID()
-  await db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name)
-    select ${scenario},${org.orgId},${book},fiscal_year,'Selected-book plan' from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`)
+  await withBypassContext(() => (db.execute(sql`insert into budget_scenarios(id,org_id,book_id,fiscal_year,name)
+    select ${scenario},${org.orgId},${book},fiscal_year,'Selected-book plan' from accounting_periods where id=${org.periodId} and org_id=${org.orgId}`)))
   const target = buildDrillTarget({ accountId: org.accounts.revenue, column: { kind: 'amount', from: org.date, to: org.date },
     mode: 'flow', reportDims: {}, basis: 'accrual', label: 'Actual revenue', budgetScenarioId: scenario })
   assert.equal(target?.kind, 'budget', 'the scenario remains the authority for its Actual column')
   if (target?.kind !== 'budget') assert.fail('budget target required')
   assert.equal(target.scope, 'actual')
   for (const active of [true, false]) {
-    await db.execute(sql`update accounting_books set is_active=${active} where id=${book} and org_id=${org.orgId}`)
+    await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=${active} where id=${book} and org_id=${org.orgId}`)))
     const response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
     assert.equal(response.status, 200, await response.clone().text())
     const body = await response.text()

@@ -104,15 +104,15 @@ async function seedOpportunity(orgId: string, actor: string, date: string) {
   const id = randomUUID()
   // Header 10%: line 1 carries an explicit 100% override, line 2 inherits
   // (null), line 3 is a legacy row whose stored probability equals the header.
-  await db.execute(
+  await withBypassContext(() => (db.execute(
     sql`insert into crm_opportunities(id,org_id,opportunity_number,title,status_id,probability,currency,projected_amount,weighted_amount,expected_close_date,created_by,updated_by) values (${id},${orgId},${id},'Weighted opportunity',${status},10,'CAD','2500','1150',${date},${actor},${actor})`,
-  )
-  await db.execute(
+  )))
+  await withBypassContext(() => (db.execute(
     sql`insert into crm_opportunity_lines(org_id,opportunity_id,line_number,description,quantity,unit_price,amount,probability,expected_amount,created_by,updated_by) values
       (${orgId},${id},1,'Override line','1','1000','1000',100,'1000',${actor},${actor}),
       (${orgId},${id},2,'Inherited line','1','1000','1000',null,'100',${actor},${actor}),
       (${orgId},${id},3,'Legacy inherited line','1','500','500',10,'50',${actor},${actor})`,
-  )
+  )))
   return { id, status }
 }
 
@@ -505,7 +505,7 @@ test('activity draft waits on a subject rehome in flight instead of racing it', 
     await writer.query('begin')
     await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
-    await writer.query('update documents set subsidiary_id=$1 where id=$2 and org_id=$3', [hidden, moving, org.orgId])
+    await withBypassContext(() => (writer.query('update documents set subsidiary_id=$1 where id=$2 and org_id=$3', [hidden, moving, org.orgId])))
     pending = withOrgContext(org.orgId, () => activityDraft(
       new NextRequest('http://crm.local', { method: 'POST', body: JSON.stringify({ kind: 'task', subjectKind: 'document', subjectId: moving }) }),
     ))
@@ -547,7 +547,7 @@ test('activity PATCH refuses a token predating a concurrent commit and preserves
       await writer.query('begin')
       await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
       const pid = (await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid
-      await writer.query('update crm_activities set subject=$1, updated_at=now() where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])
+      await withBypassContext(() => (writer.query('update crm_activities set subject=$1, updated_at=now() where id=$2 and org_id=$3',['Concurrent predecessor',id,org.orgId])))
       pending = withOrgContext(org.orgId, () => activityEdit(request({subject:'Final save',participants:[{userId:actor}],expectedUpdatedAt:stale}),params(id)))
       let blocked=false
       for(let n=0;n<200;n++) {

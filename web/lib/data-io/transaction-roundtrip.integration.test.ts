@@ -42,7 +42,7 @@ interface Fixture {
  * as soon as the first test ends.
  */
 async function fixture(): Promise<Fixture> {
-  const o = await createScratchOrg()
+  const o = await withBypassContext(() => (createScratchOrg()))
   const revenueNo = (
     await withOrgContext(o.orgId, () =>
       db.execute<{ number: string }>(

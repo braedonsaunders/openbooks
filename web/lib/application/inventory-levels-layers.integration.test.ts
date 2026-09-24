@@ -17,7 +17,7 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -48,10 +48,10 @@ function ctxFor(orgId: string): ApplicationContext {
 }
 
 test("levels value follows layers through a writedown and a landed-cost adjustment", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
-    await db.execute(sql`
-      update orgs set settings = settings || '{"features":{"inventory":true}}'::jsonb where id = ${org.orgId}`);
+    await withBypassContext(() => (db.execute(sql`
+      update orgs set settings = settings || '{"features":{"inventory":true}}'::jsonb where id = ${org.orgId}`)));
     const position = {
       itemId: org.items.fifo, stockLocationId: org.stockLocationId,
       subsidiaryId: org.subsidiaryId, date: org.date,
@@ -92,10 +92,10 @@ test("levels value follows layers through a writedown and a landed-cost adjustme
 });
 
 test("inventory levels refuse while the inventory feature is off with the Features-page remedy", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
-    await db.execute(sql`
-      update orgs set settings = settings || '{"features":{"inventory":false}}'::jsonb where id = ${org.orgId}`);
+    await withBypassContext(() => (db.execute(sql`
+      update orgs set settings = settings || '{"features":{"inventory":false}}'::jsonb where id = ${org.orgId}`)));
     await assert.rejects(
       listApplicationInventoryLevels(ctxFor(org.orgId), {}),
       (error: unknown) => error instanceof ApplicationError

@@ -21,9 +21,9 @@ function context(orgId: string, permission: string, allowedSubsidiaryIds: Set<st
 }
 
 test('admin user results expose profile data but no stored credential material', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
-    const actor = (await seedFlowActors(org.orgId)).adminId
+    const actor = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
     await withBypassContext(() => db.execute(sql`update users set password_hash = 'CREDENTIAL_SENTINEL' where id = ${actor} and org_id = ${org.orgId}`))
     await withOrgContext(org.orgId, async () => {
       const result = await listApplicationUsers(context(org.orgId,'admin.users.manage',null),{status:'all'})
@@ -37,7 +37,7 @@ test('admin user results expose profile data but no stored credential material',
 })
 
 test('a subsidiary-restricted reader receives the organization-wide audit refusal', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
     await withOrgContext(org.orgId, async () => {
       await assert.rejects(

@@ -38,26 +38,26 @@ async function request(f: Fixture, amount?: string) {
   return createBillingRequest(f.org.orgId, f.actor, { projectId: f.project, basis: amount === undefined ? 'date_range' : 'draw_amount', drawAmount: amount, cutoffDate: f.org.date, backupRequired: false })
 }
 async function configure(f: Fixture, profile: Record<string, unknown>) {
-  await db.execute(sql`update projects set invoicing_profile=${JSON.stringify(profile)}::jsonb where org_id=${f.org.orgId} and id=${f.project}`)
+  await withBypassContext(() => (db.execute(sql`update projects set invoicing_profile=${JSON.stringify(profile)}::jsonb where org_id=${f.org.orgId} and id=${f.project}`)))
 }
 async function capProject(f: Fixture, cap: string) {
   const tm = BUILTIN_PROJECT_TYPES.find(t => t.key === 'time_and_materials')!
   const type = randomUUID()
-  await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
-    values(${type},${f.org.orgId},'accounting_cap','Accounting cap','time_and_materials',${JSON.stringify({ ...tm.invoicingProfile, notToExceed: true })}::jsonb,${JSON.stringify(tm.backupProfile)}::jsonb)`)
-  await db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
-    values(${f.org.orgId},${type},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'accounting concurrency fixture')`)
-  await db.execute(sql`update projects set project_type_id=${type},contract_value=${cap} where org_id=${f.org.orgId} and id=${f.project}`)
+  await withBypassContext(() => (db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+    values(${type},${f.org.orgId},'accounting_cap','Accounting cap','time_and_materials',${JSON.stringify({ ...tm.invoicingProfile, notToExceed: true })}::jsonb,${JSON.stringify(tm.backupProfile)}::jsonb)`)))
+  await withBypassContext(() => (db.execute(sql`insert into project_financial_profile_versions(org_id,project_type_id,effective_from,financial_profile,reason)
+    values(${f.org.orgId},${type},'2000-01-01',${JSON.stringify(tm.financialProfile)}::jsonb,'accounting concurrency fixture')`)))
+  await withBypassContext(() => (db.execute(sql`update projects set project_type_id=${type},contract_value=${cap} where org_id=${f.org.orgId} and id=${f.project}`)))
 }
 async function source(f: Fixture, accountId: string | null, amount = '100', taxCodeId: string | null = null, reuseItem?: string, approve = true) {
   const item = reuseItem ?? randomUUID(), doc = randomUUID(), line = randomUUID()
-  if (!reuseItem) await db.execute(sql`insert into items(id,org_id,kind,name,income_account_id,tax_code_id,is_active)
-    values(${item},${f.org.orgId},'service',${'Service '+item},${accountId},${taxCodeId},true)`)
-  await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
-    values(${doc},${f.org.orgId},'vendor_bill',${'COST-'+doc},${f.org.vendorId},${f.org.subsidiaryId},${f.project},${f.org.date},${f.org.date},'CAD',1,'draft',${amount},0,${amount})`)
-  await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable)
-    values(${line},${f.org.orgId},${doc},1,${item},${f.org.accounts.cogs},'Billable service',1,${amount},${amount},true)`)
-  if (approve) await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${doc}`)
+  if (!reuseItem) await withBypassContext(() => (db.execute(sql`insert into items(id,org_id,kind,name,income_account_id,tax_code_id,is_active)
+    values(${item},${f.org.orgId},'service',${'Service '+item},${accountId},${taxCodeId},true)`)))
+  await withBypassContext(() => (db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total)
+    values(${doc},${f.org.orgId},'vendor_bill',${'COST-'+doc},${f.org.vendorId},${f.org.subsidiaryId},${f.project},${f.org.date},${f.org.date},'CAD',1,'draft',${amount},0,${amount})`)))
+  await withBypassContext(() => (db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable)
+    values(${line},${f.org.orgId},${doc},1,${item},${f.org.accounts.cogs},'Billable service',1,${amount},${amount},true)`)))
+  if (approve) await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${doc}`)))
   return { item, doc, line }
 }
 async function snapshot(f: Fixture) {
@@ -79,11 +79,11 @@ for (const mode of ['missing', 'inactive', 'summary', 'foreign', 'nonexistent'] 
     try {
       if (mode === 'missing') account = null
       if (mode === 'nonexistent') account = randomUUID()
-      if (mode === 'foreign') { foreign = await createScratchOrg(); account = foreign.accounts.revenue }
-      if (mode === 'inactive') await db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${account}`)
-      if (mode === 'summary') await db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${account}`)
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',(settings->'controlAccounts')-${'projectRevenue'}) where id=${f.org.orgId}`)
-      if (account) await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,projectRevenue}',to_jsonb(${account}::text)) where id=${f.org.orgId}`)
+      if (mode === 'foreign') { foreign = await withBypassContext(() => (createScratchOrg())); account = foreign.accounts.revenue }
+      if (mode === 'inactive') await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${account}`)))
+      if (mode === 'summary') await withBypassContext(() => (db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${account}`)))
+      await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',(settings->'controlAccounts')-${'projectRevenue'}) where id=${f.org.orgId}`)))
+      if (account) await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,projectRevenue}',to_jsonb(${account}::text)) where id=${f.org.orgId}`)))
       await source(f, null)
       const req = await request(f)
       const before = await snapshot(f)
@@ -95,7 +95,7 @@ for (const mode of ['missing', 'inactive', 'summary', 'foreign', 'nonexistent'] 
 for (const policy of ['item_income', 'fixed', 'unbilled_receivable'] as const) {
   test(`project billing honors explicit ${policy} destination including non-income posting accounts`, enabled, async () => fixture(async f => {
     await configure(f, { revenueAccount: policy })
-    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,unbilledReceivable}',to_jsonb(${f.org.accounts.invAsset}::text)) where id=${f.org.orgId}`)
+    await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,unbilledReceivable}',to_jsonb(${f.org.accounts.invAsset}::text)) where id=${f.org.orgId}`)))
     await source(f, f.org.accounts.deferred)
     const inv = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
     const expected = policy === 'item_income' ? f.org.accounts.deferred : policy === 'fixed' ? f.org.accounts.recognized : f.org.accounts.invAsset
@@ -105,8 +105,8 @@ for (const policy of ['item_income', 'fixed', 'unbilled_receivable'] as const) {
 for (const invalid of ['inactive', 'summary'] as const) {
   test(`project billing refuses ${invalid} item destination rather than replacing it with the configured fallback`, enabled, async () => fixture(async f => {
     await source(f, f.org.accounts.revenue)
-    if (invalid === 'inactive') await db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)
-    else await db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)
+    if (invalid === 'inactive') await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
+    else await withBypassContext(() => (db.execute(sql`update accounts set is_summary=true where org_id=${f.org.orgId} and id=${f.org.accounts.revenue}`)))
     const req = await request(f)
     const before = await snapshot(f)
     await assert.rejects(generateInvoiceFromBillingRequest(f.org.orgId, f.actor, req.id), /account/i)
@@ -114,7 +114,7 @@ for (const invalid of ['inactive', 'summary'] as const) {
   }))
 }
 test('project item income needs no organization fallback when the item explicitly supplies a valid account', enabled, async () => fixture(async f => {
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',(settings->'controlAccounts')-'projectRevenue') where id=${f.org.orgId}`)
+  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',(settings->'controlAccounts')-'projectRevenue') where id=${f.org.orgId}`)))
   await source(f, f.org.accounts.revenue)
   const inv = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await accounts(f, inv.id), [{ account_id: f.org.accounts.revenue, amount: '100.0000' }])
@@ -150,9 +150,9 @@ test('project grouped presentation retains item accounts and source-to-invoice l
 test('project billing computes tax within the net contract cap and posts its frozen component evidence', enabled, async () => fixture(async f => {
   await capProject(f, '100')
   const tax = randomUUID()
-  await db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
-    values(${tax},${f.org.orgId},'PROJECT-5','Project tax 5%',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)
-  await db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},'5','2026-01-01')`)
+  await withBypassContext(() => (db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
+    values(${tax},${f.org.orgId},'PROJECT-5','Project tax 5%',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)))
+  await withBypassContext(() => (db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},'5','2026-01-01')`)))
   await source(f, f.org.accounts.revenue, '100', tax)
   const expected = computeBillTotals([{ accountId: f.org.accounts.revenue, amount: '100', taxCodeId: tax }], await taxProfileMap(f.org.orgId, f.org.date))
   assert.equal(expected.taxTotal, '5.0000')
@@ -166,7 +166,7 @@ test('project billing computes tax within the net contract cap and posts its fro
     from document_line_tax_components c join document_lines l on l.id=c.document_line_id and l.org_id=c.org_id
     where l.org_id=${f.org.orgId} and l.document_id=${inv.id}`)).rows
   assert.deepEqual(components, [{ tax_code_id: tax, rate_percent: '5.0000', taxable_amount: '100.0000', tax_amount: '5.0000', collected_account_id: f.org.accounts.taxOutput }])
-  const approver = await createScratchUser(f.org.orgId, 'Project invoice poster', 'admin')
+  const approver = await withBypassContext(() => (createScratchUser(f.org.orgId, 'Project invoice poster', 'admin')))
   assert.equal((await submitAndReleaseIfUngated('customer_invoice', inv.id, f.actor)).autoApproved, true)
   await postDocument(inv.id, { control: { ar: f.org.accounts.ar, ap: f.org.accounts.ap, bank: f.org.accounts.bank } }, { audit: { actorId: approver, source: 'test' } })
   const ledger = (await db.execute<{ account_id: string; amount: string }>(sql`select l.account_id,sum(l.amount)::text as amount
@@ -182,10 +182,10 @@ test('project billing computes tax within the net contract cap and posts its fro
 for (const state of ['inactive', 'unrated', 'lapsed'] as const) {
   test(`project billing refuses ${state} tax instead of consuming work with zero tax`, enabled, async () => fixture(async f => {
     const tax = randomUUID()
-    await db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
-      values(${tax},${f.org.orgId},'INVALID-PROJECT-TAX','Invalid project tax',${state !== 'inactive'},${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)
-    if (state !== 'unrated') await db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from,effective_to)
-      values(${f.org.orgId},${tax},'5','2026-01-01',${state === 'lapsed' ? '2026-06-30' : null})`)
+    await withBypassContext(() => (db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
+      values(${tax},${f.org.orgId},'INVALID-PROJECT-TAX','Invalid project tax',${state !== 'inactive'},${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)))
+    if (state !== 'unrated') await withBypassContext(() => (db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from,effective_to)
+      values(${f.org.orgId},${tax},'5','2026-01-01',${state === 'lapsed' ? '2026-06-30' : null})`)))
     await source(f, f.org.accounts.revenue, '100', tax)
     const req = await request(f)
     const before = await snapshot(f)
@@ -197,9 +197,9 @@ for (const state of ['inactive', 'unrated', 'lapsed'] as const) {
 test('project billing refuses taxable over-cap work before consuming sources or numbering', enabled, async () => fixture(async f => {
   await capProject(f, '50')
   const tax = randomUUID()
-  await db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
-    values(${tax},${f.org.orgId},'CAP-TAX','Taxable capped work',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)
-  await db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},'5','2026-01-01')`)
+  await withBypassContext(() => (db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id)
+    values(${tax},${f.org.orgId},'CAP-TAX','Taxable capped work',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput})`)))
+  await withBypassContext(() => (db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},'5','2026-01-01')`)))
   await source(f, f.org.accounts.revenue, '100', tax)
   const req = await request(f)
   const before = await snapshot(f)
@@ -251,9 +251,9 @@ test('competing project billing requests serialize their not-to-exceed capacity 
 
 async function fivePercentTax(f: Fixture, inclusive = false) {
   const tax = randomUUID()
-  await db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id,price_includes_tax)
-    values(${tax},${f.org.orgId},${'TAX-'+tax},'Five percent',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput},${inclusive})`)
-  await db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},5,'2026-01-01')`)
+  await withBypassContext(() => (db.execute(sql`insert into tax_codes(id,org_id,code,name,is_active,collected_account_id,paid_account_id,price_includes_tax)
+    values(${tax},${f.org.orgId},${'TAX-'+tax},'Five percent',true,${f.org.accounts.taxOutput},${f.org.accounts.taxInput},${inclusive})`)))
+  await withBypassContext(() => (db.execute(sql`insert into tax_rates(org_id,tax_code_id,rate_percent,effective_from) values(${f.org.orgId},${tax},5,'2026-01-01')`)))
   return tax
 }
 async function totals(f: Fixture, invoice: string) {
@@ -277,7 +277,7 @@ for (const amount of ['105', '106.05']) {
 
 test('taxable lump-sum markup refuses atomically and embedded recovery taxes the full marked-up amount', enabled, async () => fixture(async f => {
   await configure(f, { markupPresentation: 'lump_sum' })
-  await db.execute(sql`update projects set custom='{"markupPercent":"10"}'::jsonb where org_id=${f.org.orgId} and id=${f.project}`)
+  await withBypassContext(() => (db.execute(sql`update projects set custom='{"markupPercent":"10"}'::jsonb where org_id=${f.org.orgId} and id=${f.project}`)))
   await source(f, f.org.accounts.revenue, '100', await fivePercentTax(f))
   const req = await request(f)
   const before = await snapshot(f)
@@ -290,14 +290,14 @@ test('taxable lump-sum markup refuses atomically and embedded recovery taxes the
 
 test('untaxed lump-sum markup preserves each source revenue account and department', enabled, async () => fixture(async f => {
   await configure(f, { markupPresentation: 'lump_sum' })
-  await db.execute(sql`update projects set custom='{"markupPercent":"10"}'::jsonb where org_id=${f.org.orgId} and id=${f.project}`)
+  await withBypassContext(() => (db.execute(sql`update projects set custom='{"markupPercent":"10"}'::jsonb where org_id=${f.org.orgId} and id=${f.project}`)))
   const expected = []
   for (const account of [f.org.accounts.revenue, f.org.accounts.deferred]) {
     const department = randomUUID()
-    await db.execute(sql`insert into departments(id,org_id,name) values(${department},${f.org.orgId},${department})`)
+    await withBypassContext(() => (db.execute(sql`insert into departments(id,org_id,name) values(${department},${f.org.orgId},${department})`)))
     const charge = await source(f, account, '100', null, undefined, false)
-    await db.execute(sql`update document_lines set department_id=${department} where id=${charge.line} and org_id=${f.org.orgId}`)
-    await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)
+    await withBypassContext(() => (db.execute(sql`update document_lines set department_id=${department} where id=${charge.line} and org_id=${f.org.orgId}`)))
+    await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
     expected.push({ account_id: account, department_id: department, amount: '110.0000' })
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
@@ -325,9 +325,9 @@ test('per-item grouping retains eight-decimal project-charge quantities', enable
   const first = await source(f, f.org.accounts.revenue, '1', null, undefined, false)
   const second = await source(f, f.org.accounts.revenue, '1', null, first.item, false)
   for (const charge of [first, second]) {
-    await db.execute(sql`update documents set kind='project_charge' where id=${charge.doc} and org_id=${f.org.orgId}`)
-    await db.execute(sql`update document_lines set quantity='0.12345678',bill_rate='8.10',bill_amount='1' where id=${charge.line} and org_id=${f.org.orgId}`)
-    await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)
+    await withBypassContext(() => (db.execute(sql`update documents set kind='project_charge' where id=${charge.doc} and org_id=${f.org.orgId}`)))
+    await withBypassContext(() => (db.execute(sql`update document_lines set quantity='0.12345678',bill_rate='8.10',bill_amount='1' where id=${charge.line} and org_id=${f.org.orgId}`)))
+    await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   const lines = (await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`)).rows
@@ -343,20 +343,20 @@ for (const dimension of ['department', 'unit', 'equipment', 'rate_version'] as c
     for (const charge of [first, second]) {
       const value = dimension === 'unit' ? 'Unit '+charge.line : randomUUID()
       if (dimension === 'department') {
-        await db.execute(sql`insert into departments(id,org_id,name) values(${value},${f.org.orgId},${value})`)
-        await db.execute(sql`update document_lines set department_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)
+        await withBypassContext(() => (db.execute(sql`insert into departments(id,org_id,name) values(${value},${f.org.orgId},${value})`)))
+        await withBypassContext(() => (db.execute(sql`update document_lines set department_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)))
       } else if (dimension === 'unit') {
-        await db.execute(sql`update document_lines set unit=${value} where org_id=${f.org.orgId} and id=${charge.line}`)
+        await withBypassContext(() => (db.execute(sql`update document_lines set unit=${value} where org_id=${f.org.orgId} and id=${charge.line}`)))
       } else if (dimension === 'equipment') {
-        await db.execute(sql`insert into equipment_units(id,org_id,subsidiary_id,unit_number,name) values(${value},${f.org.orgId},${f.org.subsidiaryId},${value},${value})`)
-        await db.execute(sql`update document_lines set equipment_unit_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)
+        await withBypassContext(() => (db.execute(sql`insert into equipment_units(id,org_id,subsidiary_id,unit_number,name) values(${value},${f.org.orgId},${f.org.subsidiaryId},${value},${value})`)))
+        await withBypassContext(() => (db.execute(sql`update document_lines set equipment_unit_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)))
       } else {
         const book = randomUUID()
-        await db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency) values(${book},${f.org.orgId},${book},${book},'CAD')`)
-        await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from) values(${value},${f.org.orgId},${book},'2026-01-01')`)
-        await db.execute(sql`update document_lines set rate_version_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)
+        await withBypassContext(() => (db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency) values(${book},${f.org.orgId},${book},${book},'CAD')`)))
+        await withBypassContext(() => (db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from) values(${value},${f.org.orgId},${book},'2026-01-01')`)))
+        await withBypassContext(() => (db.execute(sql`update document_lines set rate_version_id=${value} where org_id=${f.org.orgId} and id=${charge.line}`)))
       }
-      await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)
+      await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
       expected.push({ source_id: charge.line, value })
     }
     const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
@@ -376,22 +376,22 @@ test('per-item presentation prices each department under its own negotiated surc
   const first = await source(f, f.org.accounts.revenue, '100', null, undefined, false)
   const second = await source(f, f.org.accounts.revenue, '100', null, first.item, false)
   const surchargeItem = randomUUID()
-  await db.execute(sql`insert into items(id,org_id,kind,name,income_account_id,is_active)
-    values(${surchargeItem},${f.org.orgId},'service','Department surcharge',${f.org.accounts.recognized},true)`)
+  await withBypassContext(() => (db.execute(sql`insert into items(id,org_id,kind,name,income_account_id,is_active)
+    values(${surchargeItem},${f.org.orgId},'service','Department surcharge',${f.org.accounts.recognized},true)`)))
   for (const [index, charge] of [first, second].entries()) {
     const department = randomUUID(), book = randomUUID(), version = randomUUID(), adjustment = randomUUID()
-    await db.execute(sql`insert into departments(id,org_id,name) values(${department},${f.org.orgId},${department})`)
-    await db.execute(sql`update document_lines set department_id=${department} where org_id=${f.org.orgId} and id=${charge.line}`)
-    await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)
-    await db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency) values(${book},${f.org.orgId},${book},${book},'CAD')`)
-    await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from,status) values(${version},${f.org.orgId},${book},'2026-01-01','draft')`)
-    await db.execute(sql`insert into item_rate_book_assignments(org_id,rate_book_id,project_id,department_id,effective_from)
-      values(${f.org.orgId},${book},${f.project},${department},'2026-01-01')`)
-    await db.execute(sql`insert into labor_rate_adjustments(id,org_id,version_id,code,name,category,calculation,value,presentation,item_id)
-      values(${adjustment},${f.org.orgId},${version},'DEPT','Department surcharge','surcharge','percent',${index === 0 ? '10' : '20'},'separate',${surchargeItem})`)
-    await db.execute(sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id)
-      values(${f.org.orgId},${adjustment},'department',${department})`)
-    await db.execute(sql`update item_rate_versions set status='active' where org_id=${f.org.orgId} and id=${version}`)
+    await withBypassContext(() => (db.execute(sql`insert into departments(id,org_id,name) values(${department},${f.org.orgId},${department})`)))
+    await withBypassContext(() => (db.execute(sql`update document_lines set department_id=${department} where org_id=${f.org.orgId} and id=${charge.line}`)))
+    await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency) values(${book},${f.org.orgId},${book},${book},'CAD')`)))
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from,status) values(${version},${f.org.orgId},${book},'2026-01-01','draft')`)))
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_book_assignments(org_id,rate_book_id,project_id,department_id,effective_from)
+      values(${f.org.orgId},${book},${f.project},${department},'2026-01-01')`)))
+    await withBypassContext(() => (db.execute(sql`insert into labor_rate_adjustments(id,org_id,version_id,code,name,category,calculation,value,presentation,item_id)
+      values(${adjustment},${f.org.orgId},${version},'DEPT','Department surcharge','surcharge','percent',${index === 0 ? '10' : '20'},'separate',${surchargeItem})`)))
+    await withBypassContext(() => (db.execute(sql`insert into labor_rate_adjustment_targets(org_id,adjustment_id,target_type,target_value_id)
+      values(${f.org.orgId},${adjustment},'department',${department})`)))
+    await withBypassContext(() => (db.execute(sql`update item_rate_versions set status='active' where org_id=${f.org.orgId} and id=${version}`)))
   }
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await totals(f, invoice.id), { subtotal: '230.0000', tax_total: '0.0000', total: '230.0000' })
@@ -404,12 +404,12 @@ test('per-item presentation prices each department under its own negotiated surc
 test('project-charge component billing preserves large exact decimals through JSON aggregation', enabled, async () => fixture(async f => {
   const amount = '123456789012345.1250'
   const charge = await source(f, f.org.accounts.revenue, amount, null, undefined, false)
-  await db.execute(sql`update documents set kind='project_charge' where org_id=${f.org.orgId} and id=${charge.doc}`)
-  await db.execute(sql`update document_lines set rate_presentation='rate_components',bill_amount=${amount},bill_rate=${amount}
-    where org_id=${f.org.orgId} and id=${charge.line}`)
-  await db.execute(sql`insert into charge_rate_components(org_id,document_line_id,role,unit_code,unit_name,quantity,rate,amount,sequence)
-    values(${f.org.orgId},${charge.line},'bill','each','Each',1,${amount},${amount},1)`)
-  await db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)
+  await withBypassContext(() => (db.execute(sql`update documents set kind='project_charge' where org_id=${f.org.orgId} and id=${charge.doc}`)))
+  await withBypassContext(() => (db.execute(sql`update document_lines set rate_presentation='rate_components',bill_amount=${amount},bill_rate=${amount}
+    where org_id=${f.org.orgId} and id=${charge.line}`)))
+  await withBypassContext(() => (db.execute(sql`insert into charge_rate_components(org_id,document_line_id,role,unit_code,unit_name,quantity,rate,amount,sequence)
+    values(${f.org.orgId},${charge.line},'bill','each','Each',1,${amount},${amount},1)`)))
+  await withBypassContext(() => (db.execute(sql`update documents set status='approved' where org_id=${f.org.orgId} and id=${charge.doc}`)))
   const invoice = await generateInvoiceFromBillingRequest(f.org.orgId, f.actor, (await request(f)).id)
   assert.deepEqual(await totals(f, invoice.id), { subtotal: '123456789012345.1300', tax_total: '0.0000', total: '123456789012345.1300' })
   const rows = (await db.execute(sql`select quantity::text,amount::text from document_lines where org_id=${f.org.orgId} and document_id=${invoice.id}`)).rows

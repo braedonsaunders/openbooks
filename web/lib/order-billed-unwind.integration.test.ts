@@ -31,7 +31,7 @@ async function seedOrder(
 ): Promise<string> {
   const id = randomUUID();
   const amount = String(Number(quantity) * 100);
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
        document_date, currency, status, subtotal, tax_total, total,
@@ -41,8 +41,8 @@ async function seedOrder(
       ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', ${amount}, '0', ${amount},
       ${actorId}, ${actorId}
     )
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into document_lines
       (org_id, document_id, line_number, account_id, quantity,
        quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -51,11 +51,11 @@ async function seedOrder(
       ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, ${quantity},
       '0', '0', '100', ${amount}, ${amount}, '0', ${actorId}, ${actorId}
     )
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
      where id = ${id} and org_id = ${org.orgId}
-  `);
+  `)));
   return id;
 }
 
@@ -125,7 +125,7 @@ async function seedServicePO(
   const amount = String(Number(quantity) * 100);
   const poId = randomUUID();
   const lineId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into documents
       (id, org_id, kind, document_number, party_id, subsidiary_id,
        document_date, currency, status, subtotal, tax_total, total,
@@ -135,8 +135,8 @@ async function seedServicePO(
       ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', ${amount}, '0', ${amount},
       ${actorId}, ${actorId}
     )
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into document_lines
       (id, org_id, document_id, line_number, account_id, quantity,
        quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -145,15 +145,15 @@ async function seedServicePO(
       ${lineId}, ${org.orgId}, ${poId}, 1, ${org.accounts.adjustment}, ${quantity},
       '0', '0', '100', ${amount}, ${amount}, '0', ${actorId}, ${actorId}
     )
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
      where id = ${poId} and org_id = ${org.orgId}
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into vendor_roles (org_id, party_id, created_by, updated_by)
     values (${org.orgId}, ${org.vendorId}, ${actorId}, ${actorId})
-  `);
+  `)));
   return { poId, lineId };
 }
 
@@ -170,15 +170,15 @@ async function seedCaptureItem(
 ): Promise<string> {
   const amount = String(Number(input.quantity) * 100);
   const folderId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into folders (id, org_id, name, created_by, updated_by)
     values (${folderId}, ${org.orgId}, 'AP capture', ${actorId}, ${actorId})
-  `);
+  `)));
   const fileId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into files (id, org_id, folder_id, name, content_type, size_bytes, created_by, updated_by)
     values (${fileId}, ${org.orgId}, ${folderId}, 'capture.pdf', 'application/pdf', 10, ${actorId}, ${actorId})
-  `);
+  `)));
   const itemId = randomUUID();
   const normalized = {
     vendorName: "Acme Vendor",
@@ -206,14 +206,14 @@ async function seedCaptureItem(
       confidence: null,
     }],
   };
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into ap_capture_items
       (id, org_id, file_id, status, original_filename, content_hash, document_kind,
        normalized, vendor_candidate_id, purchase_order_id, created_by, updated_by)
     values (${itemId}, ${org.orgId}, ${fileId}, 'ready', 'capture.pdf',
       ${randomUUID().replace(/-/g, "")}, ${input.kind}, ${JSON.stringify(normalized)}::jsonb,
       ${org.vendorId}, ${input.poId}, ${actorId}, ${actorId})
-  `);
+  `)));
   return itemId;
 }
 

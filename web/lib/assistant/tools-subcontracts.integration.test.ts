@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 
@@ -44,7 +44,7 @@ function reader(orgId: string, subsidiaryIds: Set<string> | null, perms: string[
 }
 
 test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   const hidden = randomUUID();
   const projectId = randomUUID();
   const hiddenProjectId = randomUUID();
@@ -132,7 +132,7 @@ test('subcontract and wip reads: commitments, pay apps, prebills, isolation', { 
 });
 
 test('subcontract and wip reads refuse while their features are off', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"projects":true,"subcontracts":false,"wipBilling":false}'::jsonb) where id=${org.orgId}`);

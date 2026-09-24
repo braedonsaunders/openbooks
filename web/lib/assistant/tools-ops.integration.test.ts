@@ -20,7 +20,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { executeAssistantTool } = await import('./registry')
 
@@ -37,7 +37,7 @@ function authzFor(orgId: string, permissions: string[]): Authz {
 const READER = ['assistant.use', 'data.export', 'data.import', 'gl.read', 'reports.read', 'admin.setup.manage', 'admin.sandboxes.manage', 'admin.customization.manage']
 
 test('assistant data-io tools list resources and import runs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
     await withOrgContext(org.orgId, async () => {
       const authz = authzFor(org.orgId, READER)
@@ -59,8 +59,8 @@ test('assistant data-io tools list resources and import runs', { skip: !env.OPEN
 })
 
 test('assistant sync connections list runs with last-run evidence, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const connId = randomUUID()
     await withOrgContext(orgA.orgId, async () => {
@@ -96,8 +96,8 @@ test('assistant sync connections list runs with last-run evidence, isolated per 
 })
 
 test('assistant environments list sandboxes with refresh status, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const sbId = randomUUID()
     await withOrgContext(orgA.orgId, async () => {
@@ -128,8 +128,8 @@ test('assistant environments list sandboxes with refresh status, isolated per or
 })
 
 test('assistant pdf templates list without bodies and get truncates, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const tplId = randomUUID()
     const disabledTplId = randomUUID()
@@ -176,8 +176,8 @@ test('assistant pdf templates list without bodies and get truncates, isolated pe
 })
 
 test('assistant report runs and deliveries surface with visibility filtering, isolated per org', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const runId = randomUUID()
     const { ensureReportDefinitions } = await import('@openbooks/engine/src/reports/ensure-report-definitions.ts')
@@ -232,7 +232,7 @@ test('assistant report runs and deliveries surface with visibility filtering, is
 })
 
 test('assistant data-io tools refuse without their permission', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
     await withOrgContext(org.orgId, async () => {
       const authz = authzFor(org.orgId, ['assistant.use'])
@@ -245,8 +245,8 @@ test('assistant data-io tools refuse without their permission', { skip: !env.OPE
 })
 
 test('assistant import runs never leak across orgs', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const orgA = await createScratchOrg()
-  const orgB = await createScratchOrg()
+  const orgA = await withBypassContext(() => (createScratchOrg()))
+  const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     await withOrgContext(orgA.orgId, async () => {
       await db.execute(sql`insert into import_jobs (org_id, resource_key, resource_label, format, status, total_rows, created_count, updated_count, failed_count)

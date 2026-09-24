@@ -175,7 +175,7 @@ test("journal posting rechecks subsidiary scope after waiting for the document r
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
     assert.equal(waiting, true, "application posting reached the locked document reread");
-    await holder.query("update documents set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, journalId, org.orgId]);
+    await withBypassContext(() => (holder.query("update documents set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, journalId, org.orgId])));
     await holder.query("commit");
     await holder.end();
     holderOpen = false;
