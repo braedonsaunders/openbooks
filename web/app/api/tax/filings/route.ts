@@ -6,7 +6,7 @@ import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { buildTaxFilingSnapshot, TAX_FILING_SNAPSHOT_VERSION } from '@openbooks/engine/src/tax-returns/filing.ts'
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from '../../../../lib/authz'
 import { parseReturnScopeBody, returnScopeOpts } from '@/lib/tax-return-scope'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 
@@ -80,8 +80,8 @@ export async function POST(req: Request) {
   // The filing scope parses with the SAME shared parser the preview GET
   // uses, so a scoped preview can always be frozen as prepared. An
   // explicitly scoped prepare stays inside the caller's allowed
-  // subsidiaries; the org-wide return keeps the historical denial for
-  // restricted callers.
+  // subsidiaries; freezing the org-wide return is an org-wide write
+  // (canonical shape 2), so restricted callers get the named 403.
   const parsedScope = parseReturnScopeBody({ filingEntity: body.filingEntity, translation: body.translation })
   if (parsedScope.error || !parsedScope.scope) {
     return NextResponse.json({ error: parsedScope.error ?? 'invalid scope' }, { status: 422 })
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
       if (denied) return denied
     }
   } else {
-    const scopeDenied = guardSubsidiaryScope(gate, null)
+    const scopeDenied = guardUnrestrictedScope(gate)
     if (scopeDenied) return scopeDenied
   }
 

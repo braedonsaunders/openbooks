@@ -49,6 +49,10 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
     `,
   ],
   [
@@ -114,13 +118,13 @@ function patch(body: string): Promise<Response> {
   )
 }
 
-test('a subsidiary-restricted filer cannot certify the organization-wide snapshot', async () => {
+test('a subsidiary-restricted filer gets the named 403 instead of certifying the organization-wide snapshot', async () => {
   reset(new Set(['00000000-0000-4000-8000-00000000a001']))
 
   const response = await patch('this is deliberately not JSON')
 
-  assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
   assert.equal(routeState.parseCalls, 0, 'scope denial settles before request-body parsing')
   assert.deepEqual(routeState.engineCalls, [], 'scope denial never reaches markTaxFilingFiled')
 })

@@ -82,6 +82,10 @@ const mockSources = new Map<string, string>([
         if (subsidiaryId !== null && subsidiaryId !== undefined && allowed.has(subsidiaryId)) return null
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
+      export function guardUnrestrictedScope(authz) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        return NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
       export async function guardPermission(permission) {
         state.permissionChecks.push(permission)
         if (!state.permissions.has(permission)) {
@@ -343,7 +347,8 @@ test('POST prepare keeps restricted callers inside their allowed subsidiaries', 
   assert.equal(foreign.status, 404)
 
   const orgWide = await post()
-  assert.equal(orgWide.status, 404, 'the org-wide return keeps its historical denial')
+  assert.equal(orgWide.status, 403, 'freezing the org-wide return is an org-wide write: restricted callers get the named remedy')
+  assert.deepEqual(await orgWide.json(), { error: 'requires unrestricted subsidiary access' })
   assert.equal(routeState.engineCalls.length, 1, 'only the in-scope prepare reached the engine')
 })
 

@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../../lib/tax-filing-permission'
 
@@ -14,14 +14,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // A tax filing snapshot is an organization-wide statutory position: the
-  // engine recomputes every subsidiary's ledger before certifying it. A
-  // subsidiary-restricted caller therefore cannot safely reach this
-  // irreversible transition, even when they hold compliance.file. Keep the
-  // denial indistinguishable from a missing filing and settle it before any
+  // engine recomputes every subsidiary's ledger before certifying it. That
+  // makes this an org-wide write (canonical shape 2 in
+  // engine/src/organization/subsidiary-scope.ts), so a
+  // subsidiary-restricted caller gets the named 403 — settled before any
   // body parsing or engine call.
-  if (gate.allowedSubsidiaryIds !== null) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
-  }
+  const scope = guardUnrestrictedScope(gate)
+  if (scope) return scope
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { filingReference?: unknown }
