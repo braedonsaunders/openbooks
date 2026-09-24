@@ -1695,3 +1695,37 @@ test("the claim commits the cursor advance with its ledger row before any execut
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("the scheduler sweep routes allocation_run rows to the allocation processor", { skip: !DB }, async () => {
+  // Production path: the tick calls processDueSchedulerOutbox with the real
+  // runner, never the per-kind processor directly. A malformed allocation
+  // payload must fail LOUDLY with the allocation contract named — proving
+  // the row reached processAllocationRunOutboxRow. If the dispatch branch
+  // regressed, the row would fall through to the escalation path instead
+  // ("approval escalation is missing its gate").
+  const org = await createScratchOrg();
+  const occurrenceKey = `allocation-dispatch-probe-${randomUUID()}`;
+  try {
+    const inserted = (await db.execute<{ id: string }>(sql`
+      insert into scheduler_outbox (org_id, kind, subject_id, occurrence_key, status, next_attempt_at, payload)
+      values (${org.orgId}, 'allocation_run', ${randomUUID()}, ${occurrenceKey}, 'pending',
+              ${new Date(Date.now() - 1_000)}, '{}'::jsonb)
+      returning id
+    `)).rows[0]!;
+    const rowId = inserted.id;
+
+    const result = await processDueSchedulerOutbox(new Date());
+    assert.equal(result.failed, 1, `expected the probe row to fail, got ${JSON.stringify(result)}`);
+
+    const failed = (await listFailedSchedulerOutbox()).find((row) => row.id === rowId);
+    assert.ok(failed, "the probe row stays visible as failed");
+    assert.match(
+      failed.error ?? "",
+      /allocation_run payload requires ruleId, periodId, and bookId/,
+      "the failure names the allocation payload contract, not the escalation fallthrough",
+    );
+  } finally {
+    await db.execute(sql`delete from scheduler_outbox where occurrence_key = ${occurrenceKey}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
