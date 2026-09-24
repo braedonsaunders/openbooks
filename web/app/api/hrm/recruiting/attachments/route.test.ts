@@ -107,29 +107,16 @@ function jsonRequest(url: string, method: string, body: unknown): Request {
 // F3-62: the attach route makes ONE service call that stores the prospect
 // and the candidacy together — the island never splits them across POSTs.
 // The error mapping runs for real: only authz and the service are doubled.
-test("attach refuses without the manage grant before the service runs", async () => {
+test("attach refuses without the manage grant or with the feature off before the service runs", async () => {
+  const body = { requisitionId: REQUISITION_ID, displayName: "Ada" };
+  const url = "http://openbooks.test/api/hrm/recruiting/attachments";
   reset();
   routeState.denied = true;
-  const response = await attachRoute!.POST(
-    jsonRequest("http://openbooks.test/api/hrm/recruiting/attachments", "POST", {
-      requisitionId: REQUISITION_ID,
-      displayName: "Ada",
-    }),
-  );
-  assert.equal(response.status, 403);
+  assert.equal((await attachRoute!.POST(jsonRequest(url, "POST", body))).status, 403);
   assert.deepEqual(routeState.calls, []);
-});
-
-test("attach 404s with the feature off before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  const response = await attachRoute!.POST(
-    jsonRequest("http://openbooks.test/api/hrm/recruiting/attachments", "POST", {
-      requisitionId: REQUISITION_ID,
-      displayName: "Ada",
-    }),
-  );
-  assert.equal(response.status, 404);
+  assert.equal((await attachRoute!.POST(jsonRequest(url, "POST", body))).status, 404);
   assert.deepEqual(routeState.calls, []);
 });
 
