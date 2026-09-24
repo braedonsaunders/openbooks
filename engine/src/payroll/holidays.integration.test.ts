@@ -3,29 +3,17 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { resolveStatutoryHolidayPay } from "./holidays.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
-/**
- * The British Columbia defect, end to end against the database.
- *
- * `engine/src/payroll/holidays.test.ts` proves the arithmetic with no database
- * at all. What it cannot prove is the half that reads the tenant: that "days on
- * which the employee worked OR EARNED WAGES" is actually assembled from
- * committed stubs, the observed calendar and the work schedule, and not from
- * `time_entries` alone as it was.
- *
- * The scenario is the one that was wrong in production terms: an employee on
- * PAID VACATION for the whole fortnight before Canada Day. The leave is drawn
- * from an entitlement bank and paid on the stub, so there is not one
- * `time_entries` row in the thirty days before the holiday — and BC ESA s. 44
- * refused them statutory holiday pay for it.
- */
+/** End-to-end coverage for paid-leave evidence and effective-dated employer facts. */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 interface Fixture {
   orgId: string;
+  subsidiaryId: string;
   actorId: string;
   employeeId: string;
   vacationComponentId: string;
@@ -141,7 +129,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
             2026, 'calculated', ${actorId}, ${actorId})`);
 
   return {
-    orgId: org.orgId, actorId, employeeId, vacationComponentId,
+    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, employeeId, vacationComponentId,
     holidayComponentId, premiumComponentId, currentRunId,
   };
 }
@@ -189,6 +177,16 @@ test(
       assert.equal(holidayPay.holidayDate, "2026-07-01");
       // Not worked, so no premium line.
       assert.equal(lines.some((line) => line.componentId === fx.premiumComponentId), false);
+      await upsertPayrollEmployerFact({
+        orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId,
+        country: "CA", factKey: "work_week_start", effectiveFrom: "2026-01-01",
+        value: "1", changeReason: "Ontario ESA work-week election",
+      });
+      const ontario = await resolveStatutoryHolidayPay(db, {
+        ...holidayInput(fx), country: "CA", subsidiaryId: fx.subsidiaryId,
+        jurisdiction: "CA-ON", absentWithoutConsent: false,
+      });
+      assert.equal(ontario.find((line) => line.componentId === fx.holidayComponentId)?.amount, "200.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

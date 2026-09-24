@@ -1146,14 +1146,14 @@ export type PayrollHolidayDayCounting =
  *    holiday"), Yukon s. 30(2) and the two territories are all worded this way.
  *
  * The two differ by up to six days of earnings, and for anyone whose pay varies
- * that difference is money. `weekStartsOn` is the statute's own week: 0 is
- * Sunday, which is what the Canada Labour Code fixes (s. 166, midnight Saturday
- * to midnight Saturday) and what Ontario's ESA falls back to when an employer
- * has selected no work week of its own.
+ * that difference is money. `weekStartsOn` is the statute's default week: 0 is
+ * Sunday, which the Canada Labour Code fixes (s. 166) and Ontario uses when no
+ * employer work week is selected. A pack may name its effective-dated employer
+ * fact for an employer-selected boundary.
  */
 export type PayrollHolidayLookbackBoundary =
   | { kind: "day_before" }
-  | { kind: "week_before"; weekStartsOn: number };
+  | { kind: "week_before"; weekStartsOn: number; employerWeekStartsOnFact?: string };
 
 /**
  * How a day's statutory holiday pay is computed from prior earnings. This is a
