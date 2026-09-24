@@ -7,6 +7,7 @@ import {
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
+import { canonicalDecimal, compareDecimal } from "../../money/exact-decimal.ts";
 
 /**
  * Job architecture (HR-12, 0221): families and levels plus the
@@ -49,7 +50,7 @@ export interface CompensationSettings {
   /** Declared party custom-field key naming the two comparison groups. Null = not configured (gap snapshots refuse by name). */
   readonly comparisonAttributeKey: string | null;
   /** Unexplained-gap percent at or above which a category flags joint assessment due. Default 5. */
-  readonly gapThresholdPct: number;
+  readonly gapThresholdPct: string;
   /** Days after request when a pay-information answer is due. Null = required setting missing. */
   readonly responseDays: number | null;
   readonly fteRounding: FteRounding;
@@ -59,7 +60,7 @@ export interface CompensationSettings {
 
 export const DEFAULT_COMPENSATION_SETTINGS: CompensationSettings = {
   comparisonAttributeKey: null,
-  gapThresholdPct: 5,
+  gapThresholdPct: "5",
   responseDays: null,
   fteRounding: "up_to_whole",
   burdenRate: null,
@@ -76,10 +77,21 @@ export async function compensationSettings(orgId: string): Promise<CompensationS
   const rounding = c.fteRounding;
   const burden = c.burdenRate;
   const comparison = c.comparisonAttributeKey;
+  let gapThresholdPct = "5";
+  if (gap !== undefined && gap !== null) {
+    const exact = canonicalDecimal(gap, 6);
+    if (exact === null || compareDecimal(exact, "0") < 0) {
+      throw new CompensationError(
+        "INVALID_INPUT",
+        "the stored compensation gap threshold is not exact decimal text — resave it as a decimal string in Compensation settings",
+      );
+    }
+    gapThresholdPct = exact;
+  }
   return {
     comparisonAttributeKey:
       typeof comparison === "string" && comparison.trim().length > 0 ? comparison.trim() : null,
-    gapThresholdPct: typeof gap === "number" && Number.isFinite(gap) && gap >= 0 ? gap : 5,
+    gapThresholdPct,
     responseDays:
       typeof days === "number" && Number.isInteger(days) && days > 0 ? days : null,
     fteRounding:
@@ -384,4 +396,3 @@ export async function listJobLevels(query: {
 export async function actorCanReadCompensation(exec: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
   return actorHasPermission(exec, orgId, actorId, "hrm.compensation.read");
 }
-

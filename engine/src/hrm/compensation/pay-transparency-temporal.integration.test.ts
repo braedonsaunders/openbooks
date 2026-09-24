@@ -221,7 +221,7 @@ async function setupHarness(workerAssignmentTo?: string): Promise<Harness> {
   await linkPerson(org.orgId, hrId);
   await setCompensationSettings(org.orgId, {
     comparisonAttributeKey: "eeo_group",
-    gapThresholdPct: 5,
+    gapThresholdPct: "5",
     responseDays: 30,
   });
   const { ic3Id, ic4Id } = await seedLevels(org.orgId, hrId);

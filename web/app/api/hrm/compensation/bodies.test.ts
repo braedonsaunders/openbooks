@@ -6,6 +6,7 @@ process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
 const { createBandBody, proposeLineBody } = await import("./bodies.ts");
+const { COMPENSATION_PERCENTAGE_INPUTS } = await import("./percentage-inputs.ts");
 
 const BAND = {
   levelId: "11111111-1111-4111-8111-111111111111",
@@ -60,4 +61,14 @@ test("proposed percentages preserve exact decimal strings and refuse JSON number
   const exact = proposeLineBody.safeParse({ proposedPct: "9007199254.000001" });
   if (!exact.success) assert.fail(JSON.stringify(exact.error.issues));
   assert.equal(exact.data.proposedPct, "9007199254.000001");
+});
+
+test("every registered compensation percentage input preserves text and refuses JSON numbers", () => {
+  for (const [field, schema] of Object.entries(COMPENSATION_PERCENTAGE_INPUTS)) {
+    const exact = schema.safeParse("9007199254.000001");
+    if (!exact.success) assert.fail(`${field}: ${JSON.stringify(exact.error.issues)}`);
+    assert.equal(exact.data, "9007199254.000001", `${field} keeps the exact decimal spelling`);
+    const numeric = schema.safeParse(9007199254.000001 as never);
+    assert.equal(numeric.success, false, `${field} refuses an already-rounded JSON number`);
+  }
 });

@@ -94,7 +94,7 @@ async function setupHarness(): Promise<Harness> {
   const hrId = await createScratchUser(org.orgId, "FX HR", "fx_hr");
   await grantPermissions(org.orgId, hrId, ["hrm.compensation.read", "hrm.compensation.manage"]);
   await linkPerson(org.orgId, hrId);
-  await setCompensationSettings(org.orgId, { comparisonAttributeKey: "eeo_group", gapThresholdPct: 5 });
+  await setCompensationSettings(org.orgId, { comparisonAttributeKey: "eeo_group", gapThresholdPct: "5" });
   return { org, hrId };
 }
 

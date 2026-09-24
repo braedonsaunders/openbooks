@@ -166,7 +166,7 @@ function validSnapshot() {
     asOf: "2026-09-01",
     metrics: {
       comparisonAttributeKey: "group",
-      thresholdPct: 5,
+      thresholdPct: "5",
       groupA: "a",
       groupB: "b",
       meanGapPct: 2.5,
