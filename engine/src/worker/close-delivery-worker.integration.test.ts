@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { startCloseRun } from "../close/run-start.ts";
 import { db } from "../platform/db.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { processCloseDeliveryJobData } from "./close-delivery-worker.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
@@ -131,6 +132,66 @@ test("close package renders through a minted report run and delivers", { skip: !
     assert.equal(events.length, 1, "delivery must record its event");
     assert.equal((events[0]!.payload as { reports: number }).reports, 1);
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a retry after email enqueue reuses the same identity for an unbound close run", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  let failureTriggerInstalled = false;
+  try {
+    const sender = await createScratchUser(org.orgId, "Retry sender", "sender");
+    const { packageId, runId } = await seedReportablePackage(org.orgId, sender);
+    await db.execute(sql`
+      create function test_fail_close_delivery_event() returns trigger
+      language plpgsql as $$
+      begin
+        if new.event_type = 'package.delivered' then
+          raise exception 'forced close delivery event failure';
+        end if;
+        return new;
+      end $$
+    `);
+    await db.execute(sql`
+      create trigger test_fail_close_delivery_event
+      before insert on close_events
+      for each row execute function test_fail_close_delivery_event()
+    `);
+    failureTriggerInstalled = true;
+
+    const acceptedJobs = new Set<string>();
+    const attempts: string[] = [];
+    const deps = {
+      renderReport: async () => Buffer.from("%PDF-1.4 close-probe\n%%EOF"),
+      enqueueEmail: async (_data: unknown, options: { jobId?: string }) => {
+        const jobId = options.jobId ?? "missing-job-id";
+        attempts.push(jobId);
+        acceptedJobs.add(jobId);
+        return [{ id: jobId }];
+      },
+    };
+
+    await assert.rejects(
+      processCloseDeliveryJobData({ orgId: org.orgId, packageId, runId, senderId: sender }, deps),
+      (error: unknown) => errorChainMatches(error, /forced close delivery event failure/),
+    );
+    await db.execute(sql`drop trigger test_fail_close_delivery_event on close_events`);
+    await db.execute(sql`drop function test_fail_close_delivery_event()`);
+    failureTriggerInstalled = false;
+
+    await processCloseDeliveryJobData(
+      { orgId: org.orgId, packageId, runId, senderId: sender },
+      deps,
+    );
+
+    assert.equal(attempts.length, 2, "BullMQ's retry must traverse the worker again");
+    assert.equal(acceptedJobs.size, 1, "the mail queue must accept one delivery for the retried publication");
+    assert.equal(attempts[0], attempts[1], "the retry must reuse the run's durable delivery identity");
+  } finally {
+    if (failureTriggerInstalled) {
+      await db.execute(sql`drop trigger if exists test_fail_close_delivery_event on close_events`).catch(() => undefined);
+      await db.execute(sql`drop function if exists test_fail_close_delivery_event()`).catch(() => undefined);
+    }
     await dropScratchOrg(org.orgId);
   }
 });

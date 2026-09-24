@@ -5,7 +5,6 @@ import {
   closeDeliveryManualEmailIntentKey,
   enqueueEmail,
   getBlockingConnection,
-  newEmailIntentKey,
   type CloseDeliveryJobData,
   type EnqueueEmailData,
   type EnqueueEmailOptions,
@@ -380,8 +379,10 @@ export async function processCloseDeliveryJobData(
       // Redis reset and would align new mail with old sent-log rows. The
       // binder hash identifies the published content: a parent retry
       // collapses onto the same delivery, while a corrected re-publication
-      // mints a new binder and therefore new mail. Manual "send now" runs
-      // carry the request's client key instead of a content revision.
+      // mints a new binder and therefore new mail. Legacy/unbound runs use
+      // their durable run id as the revision identity, so retries cannot
+      // mint a different email job. Manual "send now" runs carry the
+      // request's client key instead of a content revision.
       let emailIntentKey: string;
       if (runId) {
         const binder = await db.execute<{ binder_hash: string | null }>(sql`
@@ -390,7 +391,7 @@ export async function processCloseDeliveryJobData(
         const binderHash = binder.rows[0]?.binder_hash;
         emailIntentKey = binderHash
           ? `close-package|${orgId}|${runId}|${binderHash}`
-          : newEmailIntentKey(`close-package|${orgId}|${runId}`);
+          : `close-package|${orgId}|${runId}|unbound`;
       } else if (data.idempotencyKey) {
         // Manual "Send now": the intent key comes from the request, never
         // from the worker — a double-click or retried send reuses the
