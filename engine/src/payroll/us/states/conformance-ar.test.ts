@@ -46,22 +46,22 @@ test("AR printed percents, midrange lookup, and dollar rounding", () => {
   );
 });
 
-test("AR formula example — $2,127 monthly, 2 exemptions: $36.50", () => {
+test("AR formula example adds the AR4EC per-paycheck amount", () => {
   // Annualize $2,127 × 12 = $25,524.
   // Standard deduction $2,470 → net taxable $23,054 → midrange $23,050.
   // $23,050 × 3.4% − $287.97 = $495.73, rounded to $496.00.
-  // Personal credits 2 × $29 = $58. Annual net $438. $438 ÷ 12 = $36.50.
+  // Personal credits 2 × $29 = $58. Annual net $438; $36.50 + $25 = $61.50.
   const result = AR_WITHHOLDING.compute({
     payDate: "2026-03-15", periodsPerYear: 12, wages: "2127.00",
-    basis: "resident", certificate: cert({ exemptions: "2" }),
+    basis: "resident", certificate: cert({ exemptions: "2", additional_per_period: "25.00" }),
   });
   assert.equal(result.factors.AR_ANNUAL_WAGES, money("25524"));
   assert.equal(result.factors.AR_NET_TAXABLE, money("23054"));
   assert.equal(result.factors.AR_MIDRANGE, money("23050"));
-  assert.equal(result.factors.AR_ANNUAL_GROSS_TAX, money("496"));
+  assert.equal(result.factors.AR_ADDITIONAL_WITHHOLDING, money("25"));
   assert.equal(result.factors.AR_PERSONAL_CREDITS, money("58"));
   assert.equal(result.factors.AR_ANNUAL_NET_TAX, money("438"));
-  assert.equal(result.tax, money("36.50"));
+  assert.equal(result.tax, money("61.50"));
 });
 
 test("AR no AR4EC withholds at zero exemptions", () => {

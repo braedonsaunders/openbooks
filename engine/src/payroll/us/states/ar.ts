@@ -21,7 +21,7 @@ import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, rate6, U } from "../../canada/decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateCount, certificateFlag, type PayrollCertificate,
+  certificateAmount, certificateCount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -163,12 +163,15 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   trace("AR_ANNUAL_NET_TAX", annualNet);
 
   const periodTax = divIntCents(annualNet, P);
-  trace("AR_WITHHELD", periodTax);
+  const additional = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  trace("AR_ADDITIONAL_WITHHOLDING", additional);
+  const withheld = periodTax + additional;
+  trace("AR_WITHHELD", withheld);
 
   return {
     state: "AR",
     year: rates.year,
-    tax: D(periodTax),
+    tax: D(withheld),
     taxSupplemental: D(0n),
     factors,
   };
@@ -187,6 +190,7 @@ export const AR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AR_ANNUAL_GROSS_TAX: "Arkansas gross tax (annual)",
   AR_PERSONAL_CREDITS: "Arkansas personal tax credits",
   AR_ANNUAL_NET_TAX: "Arkansas net tax (annual)",
+  AR_ADDITIONAL_WITHHOLDING: "Additional Arkansas withholding per paycheck",
   AR_WITHHELD: "Arkansas tax withheld this period",
 };
 
@@ -239,6 +243,15 @@ export const AR_CERTIFICATE: PayrollCertificate = {
         "Each exemption is a $29.00 annual personal tax credit subtracted AFTER "
         + "the rounded annual gross tax. Default zero is a blank AR4EC — the "
         + "publication multiplies exemptions claimed, and none claimed is zero.",
+    },
+    {
+      key: "additional_per_period",
+      label: "Line 4 — Additional amount to deduct from each paycheck",
+      kind: "amount",
+      decimals: 4,
+      min: "0",
+      default: "0",
+      help: "Optional dollar amount from Form AR4EC line 4, added after formula withholding.",
     },
     {
       key: "exempt",
