@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
+  certificateAnswersProblem, certificateDeclarationProblem, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
 import "../../packs.ts";
 import { D, mulRateCents, U } from "../../canada/decimal.ts";
@@ -47,6 +47,28 @@ test("HI Booklet A example — $500 weekly, single, 3 allowances: $9.58", () => 
   assert.equal(result.factors.HI_TAXABLE, money("18218"));
   assert.equal(result.factors.HI_ANNUAL_TAX, money("497.99"));
   assert.equal(result.tax, money("9.58"));
+});
+
+test("HI married employees can elect withholding at the higher Single rate", () => {
+  // HW-4 (Rev. 2022) distinct status; Booklet A's 2026 annualized schedules.
+  const answers = { filing_status: "married_single_rate" };
+  assert.equal(certificateAnswersProblem(HI_CERTIFICATE, answers), null);
+  const single = HI_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
+    basis: "resident", certificate: cert({ filing_status: "single" }),
+  });
+  const elected = HI_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
+    basis: "resident", certificate: cert(answers),
+  });
+  const married = HI_WITHHOLDING.compute({
+    payDate: "2026-03-15", periodsPerYear: 52, wages: "500.00",
+    basis: "resident", certificate: cert({ filing_status: "married" }),
+  });
+  assert.equal(elected.tax, money("13.63"));
+  assert.equal(elected.tax, single.tax);
+  assert.equal(married.tax, money("6.68"));
+  assert.ok(U(elected.tax) > U(married.tax));
 });
 
 test("HI no HW-4 withholds as single with zero allowances", () => {

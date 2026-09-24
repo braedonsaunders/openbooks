@@ -37,6 +37,7 @@ const RATES_MODULE = "engine/src/payroll/us/states/hi.ts";
 export type HiFilingStatus =
   | "single"
   | "married"
+  | "married_single_rate"
   | "certified_disabled"
   | "nonresident_military_spouse";
 
@@ -244,12 +245,14 @@ export const HI_CERTIFICATE: PayrollCertificate = {
       choices: [
         { value: "single", label: "Single (including unmarried heads of household)" },
         { value: "married", label: "Married" },
+        { value: "married_single_rate", label: "Married, but withhold at the higher Single rate" },
         { value: "certified_disabled", label: "Certified disabled person (not subject to withholding)" },
         { value: "nonresident_military_spouse", label: "Nonresident military spouse (not subject to withholding)" },
       ],
       help:
-        "Booklet A treats head of household as single. Default Single is the "
-        + "publication's own rule when no HW-4 is on file.",
+        "Booklet A treats head of household as single and separately permits married employees "
+        + "to choose the higher Single rate. Default Single is the publication's own rule when "
+        + "no HW-4 is on file.",
     },
     {
       key: "allowances",
