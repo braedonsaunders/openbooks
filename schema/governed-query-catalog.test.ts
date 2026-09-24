@@ -1,3 +1,4 @@
+// source-pin-contract: governed query catalog secrecy and tenant-filter invariant; every view swept is derived by parsing 0001_baseline.sql, secret/curated/global names are reviewed rule parameters
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
