@@ -53,6 +53,7 @@ async function scopedDraft(
       effectiveFrom: "2026-01-01",
       dimensionFilters: { subsidiaryIds: over.sources ?? [subA] },
       targets: [{ fixedPercent: "100", subsidiaryId: over.targetSub === undefined ? subA : over.targetSub }],
+      allowedSubsidiaryIds: null,
     },
     AUDIT,
   );
@@ -167,7 +168,7 @@ test("org-wide rules need unrestricted scope", { skip: !DB }, async () => {
     );
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId: scratch.orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
+      { orgId: scratch.orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }], allowedSubsidiaryIds: null },
       AUDIT,
     );
     assert.equal(

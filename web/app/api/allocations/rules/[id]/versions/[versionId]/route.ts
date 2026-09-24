@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { getRuleVersion, updateDraftVersion } from '../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../lib/allocations-gate'
-import { allocationErrorResponse, allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
+import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
 
 export const runtime = 'nodejs'
 
@@ -48,13 +48,13 @@ export async function GET(
   const versionParam = requireRuleId(versionId)
   if (versionParam instanceof NextResponse) return versionParam
   try {
-    const found = await getRuleVersion(gate.user.orgId, versionParam)
+    const found = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (found.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     return NextResponse.json(found)
   } catch (error) {
-    return allocationErrorResponse(error)
+    return allocationWriteErrorResponse(error)
   }
 }
 
@@ -84,7 +84,7 @@ export async function PATCH(
     if (body[key] !== undefined) patch[key] = body[key]
   }
   try {
-    const current = await getRuleVersion(gate.user.orgId, versionParam)
+    const current = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (current.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }

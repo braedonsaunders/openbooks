@@ -40,6 +40,7 @@ async function publishedRule(
   const draft = await createDraftVersion(
     created.rule.id,
     {
+      allowedSubsidiaryIds: null,
       orgId,
       effectiveFrom: over.effectiveFrom ?? "2026-01-01",
       effectiveTo: over.effectiveTo ?? null,
@@ -103,6 +104,7 @@ test("publish refuses a stepped basis by name", { skip: !process.env.OPENBOOKS_D
     const draft = await createDraftVersion(
       created.rule.id,
       {
+        allowedSubsidiaryIds: null,
         orgId,
         effectiveFrom: "2026-01-01",
         effectiveTo: null,
@@ -139,13 +141,13 @@ test("publish refuses overlapping windows and advances the current pointer", { s
     const rule = created.rule;
     const v1 = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await publishVersion(v1.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     const overlapping = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-06-30", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await assert.rejects(publishVersion(overlapping.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }), (error: unknown) => {
@@ -155,7 +157,7 @@ test("publish refuses overlapping windows and advances the current pointer", { s
     });
     const successor = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-07-01", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-07-01", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     const published = await publishVersion(successor.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
@@ -178,7 +180,7 @@ test("listRulesInEffect honours window, status and activity in one ordered query
     await createRule({ orgId, key: "draft-rule", name: "Draft", mode: "period", sortOrder: 1 }, AUDIT);
     // Inactive rule stays invisible.
     const quiet = await createRule({ orgId, key: "quiet-rule", name: "Quiet", mode: "period", sortOrder: 2 }, AUDIT);
-    const quietDraft = await createDraftVersion(quiet.rule.id, { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
+    const quietDraft = await createDraftVersion(quiet.rule.id, { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
     await publishVersion(quietDraft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     await updateRule(quiet.rule.id, { orgId, isActive: false, allowedSubsidiaryIds: null }, AUDIT);
     // Expired window stays invisible on later dates.
@@ -203,7 +205,7 @@ test("book_scope books is refused for unknown books and honoured by the listing"
     const rule = created.rule;
     const ghost = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: ["00000000-0000-0000-0000-000000000000"], targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: ["00000000-0000-0000-0000-000000000000"], targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await assert.rejects(publishVersion(ghost.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null }), (error: unknown) => {
@@ -213,7 +215,7 @@ test("book_scope books is refused for unknown books and honoured by the listing"
     });
     const live = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: [bookId], targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", bookScope: "books", bookIds: [bookId], targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await publishVersion(live.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
@@ -238,11 +240,11 @@ test("new version from current copies the definition for editing", { skip: !proc
     const rule = created.rule;
     const first = await createDraftVersion(
       rule.id,
-      { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "60" }, { fixedPercent: "40" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "60" }, { fixedPercent: "40" }] },
       AUDIT,
     );
     await publishVersion(first.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
-    const next = await createDraftVersion(rule.id, { orgId, fromVersionId: first.version.id }, AUDIT);
+    const next = await createDraftVersion(rule.id, { orgId, fromVersionId: first.version.id, allowedSubsidiaryIds: null }, AUDIT);
     assert.equal(next.version.versionNo, 2);
     assert.equal(next.version.status, "draft");
     assert.deepEqual(
@@ -269,7 +271,7 @@ test("retire clears the current pointer and audit evidence records every transit
   try {
     const created = await createRule({ orgId, key: "retire-sweep", name: "Sweep", mode: "period" }, AUDIT);
     const rule = created.rule;
-    const draft = await createDraftVersion(rule.id, { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
+    const draft = await createDraftVersion(rule.id, { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] }, AUDIT);
     const published = await publishVersion(draft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
     await retireVersion(published.version.id, { orgId, actorId: null, reason: "superseded", allowedSubsidiaryIds: null });
     const live = await listRulesInEffect({ orgId, mode: "period", onDate: "2026-07-15" });
@@ -325,7 +327,7 @@ test("mutations return revision tokens that guard stale writes", { skip: !proces
     // The drawer flow works the same on versions and targets.
     const draft = await createDraftVersion(
       created.rule.id,
-      { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     assert.match(draft.revision, REVISION_PATTERN);
@@ -356,7 +358,7 @@ test("listRuleHeads filters and summarizes current versions", { skip: !process.e
     const quiet = await createRule({ orgId, key: "heads-quiet", name: "Quiet", mode: "period", sortOrder: 1 }, AUDIT);
     const quietDraft = await createDraftVersion(
       quiet.rule.id,
-      { orgId, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await publishVersion(quietDraft.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
@@ -390,13 +392,13 @@ test("getRuleDetail returns the head with its version timeline", { skip: !proces
     const created = await createRule({ orgId, key: "detail-rule", name: "Detail", mode: "period" }, AUDIT);
     const first = await createDraftVersion(
       created.rule.id,
-      { orgId, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
+      { orgId, allowedSubsidiaryIds: null, effectiveFrom: "2026-01-01", effectiveTo: "2026-06-30", targets: [{ fixedPercent: "100" }] },
       AUDIT,
     );
     await publishVersion(first.version.id, { orgId, ...AUDIT, allowedSubsidiaryIds: null });
-    await createDraftVersion(created.rule.id, { orgId, fromVersionId: first.version.id }, AUDIT);
+    await createDraftVersion(created.rule.id, { orgId, fromVersionId: first.version.id, allowedSubsidiaryIds: null }, AUDIT);
 
-    const detail = await getRuleDetail(orgId, created.rule.id);
+    const detail = await getRuleDetail(orgId, created.rule.id, null);
     assert.equal(detail.rule.key, "detail-rule");
     assert.match(detail.revision, REVISION_PATTERN);
     assert.deepEqual(detail.versions.map((v) => v.version.versionNo), [1, 2]);
@@ -404,7 +406,7 @@ test("getRuleDetail returns the head with its version timeline", { skip: !proces
     assert.deepEqual(detail.versions.map((v) => v.targetCount), [1, 1]);
     for (const entry of detail.versions) assert.match(entry.revision, REVISION_PATTERN);
 
-    await assert.rejects(getRuleDetail(orgId, randomUUID()), AllocationRuleError);
+    await assert.rejects(getRuleDetail(orgId, randomUUID(), null), AllocationRuleError);
   } finally {
     await dropScratchOrg(orgId);
   }
@@ -414,12 +416,12 @@ test("getRuleVersion returns the version with its targets and revision", { skip:
   const { orgId } = await org();
   try {
     const { versionId } = await publishedRule(orgId, { key: "version-rule" });
-    const found = await getRuleVersion(orgId, versionId);
+    const found = await getRuleVersion(orgId, versionId, null);
     assert.equal(found.version.id, versionId);
     assert.equal(found.version.status, "published");
     assert.deepEqual(found.targets.map((t) => t.fixedPercent), ["60.0000", "40.0000"]);
     assert.match(found.revision, REVISION_PATTERN);
-    await assert.rejects(getRuleVersion(orgId, randomUUID()), AllocationRuleError);
+    await assert.rejects(getRuleVersion(orgId, randomUUID(), null), AllocationRuleError);
   } finally {
     await dropScratchOrg(orgId);
   }

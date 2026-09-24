@@ -61,7 +61,7 @@ export async function PUT(
     targets.push(target)
   }
   try {
-    const current = await getRuleVersion(gate.user.orgId, versionParam)
+    const current = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (current.version.ruleId !== ruleId) {
       return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
