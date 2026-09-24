@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test, { type TestContext } from "node:test";
 import {
   SubcontractError,
@@ -14,12 +13,13 @@ import {
   parseSubcontractTransitionAction,
   releaseVendorRetainage,
   revisedSubcontractSovValue,
+  transitionSubcontract,
   updateDraftSubcontract,
   updateVendorPayApplicationLines,
 } from "./subcontracts.ts";
 import { db } from "../platform/db.ts";
 
-test("subcontract transition parser is strict and runs before transaction work", () => {
+test("subcontract transition parser accepts only its three domain actions", () => {
   for (const action of ["substantially_complete", "close", "void"] as const) {
     assert.equal(parseSubcontractTransitionAction(action), action);
   }
@@ -39,16 +39,22 @@ test("subcontract transition parser is strict and runs before transaction work",
       (error) => error instanceof SubcontractError && error.message === "Invalid subcontract transition action",
     );
   }
+});
 
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const transitionStart = source.indexOf("export async function transitionSubcontract");
-  const transactionStart = source.indexOf("await db.transaction", transitionStart);
-  const parserStart = source.indexOf(
-    "const action = parseSubcontractTransitionAction(input.action)",
-    transitionStart,
+test("invalid subcontract transition is refused before database work", async (t) => {
+  let transactionOpened = false;
+  const transactionDb = db as unknown as { transaction(callback: unknown): Promise<unknown> };
+  t.mock.method(transactionDb, "transaction", async () => {
+    transactionOpened = true;
+    throw new Error("database work must not start for an invalid transition");
+  });
+
+  await assert.rejects(
+    transitionSubcontract({ orgId: "org-1", userId: "user-1", id: "sub-1", action: "approve" as never }),
+    (error: unknown) =>
+      error instanceof SubcontractError && error.message === "Invalid subcontract transition action",
   );
-  assert.ok(transitionStart >= 0, "transitionSubcontract is defined");
-  assert.ok(parserStart >= 0 && parserStart < transactionStart, "transition validation precedes transaction work");
+  assert.equal(transactionOpened, false);
 });
 
 test("vendor application treats stored materials as a cumulative balance", () => {

@@ -25,7 +25,6 @@
     "engine/src/projects/labor-costing.test.ts": 1,
     "engine/src/projects/merge.integration.test.ts": 1,
     "engine/src/projects/overhead-adjustments.test.ts": 1,
-    "engine/src/projects/subcontracts.test.ts": 1,
     "engine/src/projects/types.test.ts": 3,
     "engine/src/property/management.test.ts": 1,
     "engine/src/provisioning/bootstrap-safety.test.ts": 4,
