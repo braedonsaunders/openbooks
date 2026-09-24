@@ -159,6 +159,24 @@ export async function POST(req: Request) {
       { status: 400 },
     )
   }
+  const sourceHeaders = new Set(
+    rawRows.flatMap((row) => Object.keys(row)).filter((key) => key !== CELL_PROVENANCE_KEY),
+  )
+  const enabledTargets = new Set((await resource.fields()).map((field) => field.key))
+  for (const [source, target] of Object.entries(mapping)) {
+    if (!sourceHeaders.has(source)) {
+      return NextResponse.json(
+        { error: `source column "${source}" is not present in the imported rows — parse the file again before previewing or committing` },
+        { status: 400 },
+      )
+    }
+    if (target && !enabledTargets.has(target)) {
+      return NextResponse.json(
+        { error: `target field "${target}" is not available for resource ${resource.descriptor.key}` },
+        { status: 400 },
+      )
+    }
+  }
   const importMode: ImportMode = body.importMode ?? 'upsert'
   const mappedRows = rawRows.map((raw) => applyMapping(raw, mapping))
 
