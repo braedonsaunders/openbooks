@@ -153,6 +153,8 @@ export async function computeUsNexusStatus(
     entity.subsidiaryIds === null
       ? sql``
       : sql`and d.subsidiary_id in (${sql.join(entity.subsidiaryIds.map((id) => sql`${id}`), sql`, `)})`
+  const resolvedCountry = sql`coalesce(nullif(trim(d.ship_to_country), ''), nullif(trim(q.country), ''), '')`
+  const resolvedRegion = sql`coalesce(nullif(trim(d.ship_to_region), ''), nullif(trim(q.region), ''), '')`
   const rows = (await db.execute<{
     state: string
     currency: string
@@ -162,8 +164,8 @@ export async function computeUsNexusStatus(
     is_invoice: number
     as_of: string
   }>(sql`
-    select case when upper(trim(coalesce(d.ship_to_country, q.country, ''))) = 'US'
-                then coalesce(d.ship_to_region, q.region, '') else '' end as state,
+    select case when upper(${resolvedCountry}) = 'US'
+                then ${resolvedRegion} else '' end as state,
            d.currency,
            d.fx_rate::text as fx_rate,
            o.base_currency,
@@ -199,8 +201,8 @@ export async function computeUsNexusStatus(
        -- — and nothing here reads the live address book, so editing an
        -- address can never move already-posted sales across states.
        and (
-         nullif(trim(coalesce(d.ship_to_country, q.country, '')), '') is null
-         or upper(trim(coalesce(d.ship_to_country, q.country, ''))) = 'US'
+         nullif(${resolvedCountry}, '') is null
+         or upper(${resolvedCountry}) = 'US'
        )
   `))
 

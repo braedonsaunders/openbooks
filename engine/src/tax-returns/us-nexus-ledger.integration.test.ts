@@ -197,12 +197,15 @@ test("sales with no captured destination stay unattributed when an address appea
   }
 });
 
-// Rows posted before the stamp existed attribute through the surviving
+// Rows whose captured destination is blank attribute through the surviving
 // provider-quote evidence: the destination the line's tax was computed for.
-test("pre-stamp sales attribute through provider-quote evidence", { skip: !DB }, async () => {
+test("blank ship-to stamps fall back to provider-quote nexus evidence", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await seedUsdOrgWithCaCustomer(org);
+    await db.execute(sql`
+      update addresses set country = 'US', region = 'NY'
+       where org_id = ${org.orgId} and party_id = ${org.customerId}`);
     const lineId = randomUUID();
     const entryId = randomUUID();
     const documentId = randomUUID();
@@ -214,10 +217,11 @@ test("pre-stamp sales attribute through provider-quote evidence", { skip: !DB },
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
-         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
+         document_date, posting_date, currency, fx_rate, subtotal, tax_total, total,
+         ship_to_country, ship_to_region)
       values (${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'NEXUS-EV-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${org.date},
-              'USD', '1', '25000.0000', '0.0000', '25000.0000')`);
+              'USD', '1', '25000.0000', '0.0000', '25000.0000', '', '')`);
     await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, amount, tax_input_amount,
@@ -237,15 +241,16 @@ test("pre-stamp sales attribute through provider-quote evidence", { skip: !DB },
         (id, org_id, provider_config_id, provider, quoted_on, currency, ship_from, ship_to,
          taxable_amount, tax_amount, components, document_line_id, created_by, updated_by)
       values (${randomUUID()}, ${org.orgId}, ${configId}, 'taxjar', ${org.date}, 'USD',
+              '{"country": "US", "region": "NY"}'::jsonb,
               '{"country": "US", "region": "CA"}'::jsonb,
-              '{"country": "US", "region": "TX"}'::jsonb,
               '25000.0000', '0.0000', '[]'::jsonb, ${lineId}, null, null)`);
 
-    // The stamp column is NULL (pre-stamp row) and the customer's live
-    // address says CA: the quote evidence (TX) must win over the address.
+    // The stamp columns are blank and the customer's live address says NY:
+    // quote evidence remains the frozen destination and fills the blank stamp.
     const result = await computeUsNexusStatus(org.orgId, "2026-07-01", "2026-07-31");
-    assert.equal(stateOf(result, "TX")?.salesUsd, "25000.0000");
-    assert.equal(stateOf(result, "CA"), undefined);
+    assert.equal(stateOf(result, "CA")?.salesUsd, "25000.0000");
+    assert.equal(stateOf(result, "NY"), undefined);
+    assert.equal(result.unattributed.txnCount, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
