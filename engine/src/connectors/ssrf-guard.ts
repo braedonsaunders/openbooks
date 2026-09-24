@@ -74,7 +74,7 @@ function parseIpv4(ip: string): [number, number, number, number] | null {
   return [octets[0]!, octets[1]!, octets[2]!, octets[3]!];
 }
 
-type AddressRange = { cidr: string; globallyReachable: boolean };
+type AddressRange = { cidr: string; globallyReachable: boolean; registry: string };
 
 /**
  * Derived from IANA's IPv4/IPv6 Special-Purpose Address Registries
@@ -85,49 +85,67 @@ type AddressRange = { cidr: string; globallyReachable: boolean };
  * (notably 192.0.0.9/.10 and the registered 2001::/23 anycasts). The
  * surrounding special-purpose allocations remain refused.
  */
-const IPV4_SPECIAL_PURPOSE: readonly AddressRange[] = [
-  { cidr: "0.0.0.0/8", globallyReachable: false },
-  { cidr: "10.0.0.0/8", globallyReachable: false },
-  { cidr: "100.64.0.0/10", globallyReachable: false },
-  { cidr: "127.0.0.0/8", globallyReachable: false },
-  { cidr: "169.254.0.0/16", globallyReachable: false },
-  { cidr: "172.16.0.0/12", globallyReachable: false },
-  { cidr: "192.0.0.0/24", globallyReachable: false },
-  { cidr: "192.0.0.9/32", globallyReachable: true },
-  { cidr: "192.0.0.10/32", globallyReachable: true },
-  { cidr: "192.0.2.0/24", globallyReachable: false },
-  { cidr: "192.88.99.0/24", globallyReachable: false },
-  { cidr: "192.168.0.0/16", globallyReachable: false },
-  { cidr: "198.18.0.0/15", globallyReachable: false },
-  { cidr: "198.51.100.0/24", globallyReachable: false },
-  { cidr: "203.0.113.0/24", globallyReachable: false },
-  { cidr: "224.0.0.0/4", globallyReachable: false },
-  { cidr: "240.0.0.0/4", globallyReachable: false },
-  { cidr: "255.255.255.255/32", globallyReachable: false },
+export const IPV4_SPECIAL_PURPOSE: readonly AddressRange[] = [
+  { cidr: "0.0.0.0/8", globallyReachable: false, registry: "IPv4:93 (This network)" },
+  { cidr: "0.0.0.0/32", globallyReachable: false, registry: "IPv4:94 (This host on this network)" },
+  { cidr: "10.0.0.0/8", globallyReachable: false, registry: "IPv4:95 (Private-Use)" },
+  { cidr: "100.64.0.0/10", globallyReachable: false, registry: "IPv4:96 (Shared Address Space)" },
+  { cidr: "127.0.0.0/8", globallyReachable: false, registry: "IPv4:97 (Loopback)" },
+  { cidr: "169.254.0.0/16", globallyReachable: false, registry: "IPv4:98 (Link Local)" },
+  { cidr: "172.16.0.0/12", globallyReachable: false, registry: "IPv4:99 (Private-Use)" },
+  { cidr: "192.0.0.0/24", globallyReachable: false, registry: "IPv4:100 (IETF Protocol Assignments)" },
+  { cidr: "192.0.0.0/29", globallyReachable: false, registry: "IPv4:101 (IPv4 Service Continuity Prefix)" },
+  { cidr: "192.0.0.8/32", globallyReachable: false, registry: "IPv4:102 (IPv4 dummy address)" },
+  { cidr: "192.0.0.9/32", globallyReachable: true, registry: "IPv4:103 (Port Control Protocol Anycast)" },
+  { cidr: "192.0.0.10/32", globallyReachable: true, registry: "IPv4:104 (Traversal Using Relays around NAT Anycast)" },
+  { cidr: "192.0.0.170/32", globallyReachable: false, registry: "IPv4:105 (NAT64/DNS64 Discovery)" },
+  { cidr: "192.0.0.171/32", globallyReachable: false, registry: "IPv4:105 (NAT64/DNS64 Discovery)" },
+  { cidr: "192.0.2.0/24", globallyReachable: false, registry: "IPv4:106 (Documentation TEST-NET-1)" },
+  { cidr: "192.31.196.0/24", globallyReachable: true, registry: "IPv4:107 (AS112-v4)" },
+  { cidr: "192.52.193.0/24", globallyReachable: true, registry: "IPv4:108 (AMT)" },
+  { cidr: "192.88.99.0/24", globallyReachable: false, registry: "IPv4:109 (Deprecated 6to4 Relay Anycast)" },
+  { cidr: "192.88.99.2/32", globallyReachable: false, registry: "IPv4:110 (6a44-relay anycast address)" },
+  { cidr: "192.168.0.0/16", globallyReachable: false, registry: "IPv4:111 (Private-Use)" },
+  { cidr: "192.175.48.0/24", globallyReachable: true, registry: "IPv4:112 (Direct Delegation AS112 Service)" },
+  { cidr: "198.18.0.0/15", globallyReachable: false, registry: "IPv4:113 (Benchmarking)" },
+  { cidr: "198.51.100.0/24", globallyReachable: false, registry: "IPv4:114 (Documentation TEST-NET-2)" },
+  { cidr: "203.0.113.0/24", globallyReachable: false, registry: "IPv4:115 (Documentation TEST-NET-3)" },
+  { cidr: "240.0.0.0/4", globallyReachable: false, registry: "IPv4:116 (Reserved)" },
+  { cidr: "255.255.255.255/32", globallyReachable: false, registry: "IPv4:117 (Limited Broadcast)" },
+  // Not listed in the IANA special-purpose registry; retained as protocol
+  // exclusions because multicast is not a public-unicast destination.
+  { cidr: "224.0.0.0/4", globallyReachable: false, registry: "protocol exclusion (IPv4 multicast)" },
 ].map((range) => ({ ...range, bits: Number(range.cidr.split("/")[1]) })) as readonly AddressRange[];
 
-const IPV6_SPECIAL_PURPOSE: readonly AddressRange[] = [
-  { cidr: "::/128", globallyReachable: false },
-  { cidr: "::1/128", globallyReachable: false },
-  { cidr: "::ffff:0:0/96", globallyReachable: false },
-  { cidr: "64:ff9b:1::/48", globallyReachable: false },
-  { cidr: "100::/64", globallyReachable: false },
-  { cidr: "100:0:0:1::/64", globallyReachable: false },
-  { cidr: "2001::/23", globallyReachable: false },
-  { cidr: "2001:1::1/128", globallyReachable: true },
-  { cidr: "2001:1::2/128", globallyReachable: true },
-  { cidr: "2001:1::3/128", globallyReachable: true },
-  { cidr: "2001:3::/32", globallyReachable: true },
-  { cidr: "2001:4:112::/48", globallyReachable: true },
-  { cidr: "2001:20::/28", globallyReachable: true },
-  { cidr: "2001:30::/28", globallyReachable: true },
-  { cidr: "2001:db8::/32", globallyReachable: false },
-  { cidr: "2002::/16", globallyReachable: false },
-  { cidr: "3fff::/20", globallyReachable: false },
-  { cidr: "5f00::/16", globallyReachable: false },
-  { cidr: "fc00::/7", globallyReachable: false },
-  { cidr: "fe80::/10", globallyReachable: false },
-  { cidr: "ff00::/8", globallyReachable: false },
+export const IPV6_SPECIAL_PURPOSE: readonly AddressRange[] = [
+  { cidr: "::1/128", globallyReachable: false, registry: "IPv6:85 (Loopback Address)" },
+  { cidr: "::/128", globallyReachable: false, registry: "IPv6:86 (Unspecified Address)" },
+  { cidr: "::ffff:0:0/96", globallyReachable: false, registry: "IPv6:87 (IPv4-mapped Address)" },
+  { cidr: "64:ff9b::/96", globallyReachable: true, registry: "IPv6:88 (IPv4-IPv6 Translation)" },
+  { cidr: "64:ff9b:1::/48", globallyReachable: false, registry: "IPv6:89 (IPv4-IPv6 Translation)" },
+  { cidr: "100::/64", globallyReachable: false, registry: "IPv6:90 (Discard-Only Address Block)" },
+  { cidr: "100:0:0:1::/64", globallyReachable: false, registry: "IPv6:91 (Dummy IPv6 Prefix)" },
+  { cidr: "2001::/23", globallyReachable: false, registry: "IPv6:92 (IETF Protocol Assignments)" },
+  { cidr: "2001::/32", globallyReachable: false, registry: "IPv6:93 (Teredo; registry reachability is N/A, refused here)" },
+  { cidr: "2001:1::1/128", globallyReachable: true, registry: "IPv6:94 (Port Control Protocol Anycast)" },
+  { cidr: "2001:1::2/128", globallyReachable: true, registry: "IPv6:95 (Traversal Using Relays around NAT Anycast)" },
+  { cidr: "2001:1::3/128", globallyReachable: true, registry: "IPv6:96 (DNS-SD Service Registration Protocol Anycast)" },
+  { cidr: "2001:2::/48", globallyReachable: false, registry: "IPv6:97 (Benchmarking)" },
+  { cidr: "2001:3::/32", globallyReachable: true, registry: "IPv6:98 (AMT)" },
+  { cidr: "2001:4:112::/48", globallyReachable: true, registry: "IPv6:99 (AS112-v6)" },
+  { cidr: "2001:10::/28", globallyReachable: false, registry: "IPv6:100 (Deprecated ORCHID)" },
+  { cidr: "2001:20::/28", globallyReachable: true, registry: "IPv6:101 (ORCHIDv2)" },
+  { cidr: "2001:30::/28", globallyReachable: true, registry: "IPv6:102 (Drone Remote ID Protocol Entity Tags)" },
+  { cidr: "2001:db8::/32", globallyReachable: false, registry: "IPv6:103 (Documentation)" },
+  { cidr: "2002::/16", globallyReachable: false, registry: "IPv6:104 (6to4; registry reachability is N/A, refused here)" },
+  { cidr: "2620:4f:8000::/48", globallyReachable: true, registry: "IPv6:105 (Direct Delegation AS112 Service)" },
+  { cidr: "3fff::/20", globallyReachable: false, registry: "IPv6:106 (Documentation)" },
+  { cidr: "5f00::/16", globallyReachable: false, registry: "IPv6:107 (Segment Routing SIDs)" },
+  { cidr: "fc00::/7", globallyReachable: false, registry: "IPv6:108 (Unique-Local)" },
+  { cidr: "fe80::/10", globallyReachable: false, registry: "IPv6:109 (Link-Local Unicast)" },
+  // Not listed in IANA's special-purpose registry; retained because multicast
+  // is never a public-unicast destination.
+  { cidr: "ff00::/8", globallyReachable: false, registry: "protocol exclusion (IPv6 multicast)" },
 ].map((range) => ({ ...range, bits: Number(range.cidr.split("/")[1]) })) as readonly AddressRange[];
 
 function ipv4Value(ip: string): bigint | null {
@@ -197,6 +215,19 @@ function expandIpv6(host: string): number[] | null {
 function isPublicUnicastIpv6(host: string): boolean {
   const groups = expandIpv6(host);
   if (!groups) return false;
+  // The IANA globally reachable 64:ff9b::/96 translation prefix embeds the
+  // actual IPv4 destination in its low 32 bits. Classify that destination as
+  // well, or a private IPv4 target could bypass the IPv4 special-purpose set.
+  if (
+    groups[0] === 0x64 && groups[1] === 0xff9b &&
+    groups.slice(2, 6).every((group) => group === 0)
+  ) {
+    const high = groups[6]!;
+    const low = groups[7]!;
+    return isPublicUnicastIpv4(
+      `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`,
+    );
+  }
   const first = groups[0]!;
   const registryDecision = registeredRangeDecision(host, IPV6_SPECIAL_PURPOSE, 128);
   if (registryDecision !== null) return registryDecision;
