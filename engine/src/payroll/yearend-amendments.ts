@@ -322,13 +322,15 @@ export function diffReported(
  *  - `unchanged`   — issued, and every field still matches.
  *  - `changed`     — issued, and the ledger now says something different.
  *  - `absent`      — issued, and the ledger no longer produces the row at all.
+ *  - `unavailable` — population recomputation refused, so current status is
+ *    unknown and no correction decision is safe.
  *  - `withdrawn`   — cancelled, and the ledger agrees it should not exist.
  *  - `resurrected` — CANCELLED, and the ledger still produces it. A slip was
  *    withdrawn without correcting the data underneath; the disagreement is
  *    named rather than quietly re-filed.
  */
 export type PayrollFilingRowStatus =
-  | "unfiled" | "unchanged" | "changed" | "absent" | "withdrawn" | "resurrected";
+  | "unfiled" | "unchanged" | "changed" | "absent" | "unavailable" | "withdrawn" | "resurrected";
 
 export interface PayrollFilingRowReview {
   rowId: string;
@@ -437,7 +439,9 @@ export async function filingLifecycle(
     rows.push({
       rowId,
       label: previous.slip.label,
-      status: previous.slip.revision === "cancelled" ? "withdrawn" : "absent",
+      status: populationRefusal
+        ? "unavailable"
+        : previous.slip.revision === "cancelled" ? "withdrawn" : "absent",
       lastRevision: previous.slip.revision,
       lastIssuedAt: previous.submission.issuedAt,
       changes: [],
@@ -781,9 +785,9 @@ async function issueCorrection(
   // blanket authorization would refuse an in-scope correction whenever an
   // unrelated out-of-scope row exists in the population.
   const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, input.scope);
-  if (lifecycle.populationRefusal && revision === "amended") {
+  if (lifecycle.populationRefusal) {
     throw new PayrollError(
-      `${filing.label} for ${taxYear} cannot be recomputed, so no amendment can be built: `
+      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} can be issued: `
       + lifecycle.populationRefusal,
     );
   }
@@ -1056,6 +1060,12 @@ export async function filingCorrectionSlip(
     );
   }
   const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, scope);
+  if (lifecycle.populationRefusal) {
+    throw new PayrollError(
+      `${filing.label} for ${taxYear} has an unavailable population, so no ${revision} preview can be built: `
+      + lifecycle.populationRefusal,
+    );
+  }
   const review = lifecycle.rows.find((row) => row.rowId === rowId);
   const data = lifecycle.populationRefusal
     ? { rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData
