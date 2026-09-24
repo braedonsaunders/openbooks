@@ -1247,6 +1247,7 @@ export async function saveEmployerLevyOpening(input: {
   actorId: string;
   taxYear: number;
   rows: EmployerLevyOpeningWrite[];
+  mode?: "insert" | "upsert";
 }): Promise<EmployerLevyOpeningSaveResult> {
   const year = assertTaxYear(input.taxYear);
   const result: EmployerLevyOpeningSaveResult = { created: 0, updated: 0, deleted: 0, errors: [] };
@@ -1346,6 +1347,14 @@ export async function saveEmployerLevyOpening(input: {
          for update
       `));
       const before = existing.rows[0];
+      if (before && input.mode === "insert") {
+        result.errors.push({
+          levyKey: row.levyKey,
+          region: row.region,
+          message: `a carry-in for ${row.country} ${row.levyKey}${row.region ? ` (${row.region})` : ""} already exists — choose upsert to replace it`,
+        });
+        throw new EmployerLevyOpeningSaveError(result);
+      }
       if (row.base === null) {
         if (before) {
           await tx.execute(sql`

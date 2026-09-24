@@ -61,6 +61,29 @@ export interface WriteCtx {
   allowedSubsidiaryIds?: ReadonlySet<string> | null
 }
 
+/**
+ * Resolve batch collisions by natural key before any resource starts writing.
+ * Every occurrence of a repeated key is returned: silently selecting the last
+ * imported row makes outcome depend on file order and can replace financial
+ * evidence without an explicit upsert decision.
+ */
+export function duplicateImportRowIndexes(keys: readonly (string | null)[]): Set<number> {
+  const rowsByKey = new Map<string, number[]>()
+  keys.forEach((key, index) => {
+    if (key === null) return
+    const indexes = rowsByKey.get(key) ?? []
+    indexes.push(index)
+    rowsByKey.set(key, indexes)
+  })
+  return new Set([...rowsByKey.values()].filter((indexes) => indexes.length > 1).flat())
+}
+
+/** One consistent preview/write decision for the resource contract's modes. */
+export function importRowAction(mode: ImportMode, exists: boolean): 'create' | 'update' | 'conflict' {
+  if (!exists) return 'create'
+  return mode === 'insert' ? 'conflict' : 'update'
+}
+
 export interface DataResource {
   descriptor: ResourceDescriptor
   /** Import target fields (what a file column can map onto). */
