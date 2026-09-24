@@ -288,3 +288,26 @@ test("amend-delete in a soft_closed period is refused like an amend-update", { s
     assert.equal(await statusOf(entry), "posted");
   });
 });
+
+test("amend-path book rehome moves GL monthly activity between buckets", { skip: !DB }, async () => {
+  // G6: the entry trigger watched status and posting_date only, so a
+  // book_id rehome under amend left the old book holding the amounts and
+  // the new book empty. After the rehome, both book buckets must equal a
+  // from-scratch rebuild — asserted through the sanctioned verifier, which
+  // compares the live aggregate against the ledger (ignoring the zeroed
+  // rows trigger maintenance legitimately leaves behind).
+  await fixture(async (org) => {
+    const secondBook = randomUUID();
+    await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+      values (${secondBook}, ${org.orgId}, 'SECOND', 'Second book', false, true, true)`);
+    const entry = await postBalanced(org, "GUARD-BOOK-REHOME");
+    const drift = async () =>
+      (await db.execute(sql`select * from openbooks_gl_activity_verify(${org.orgId})`)).rows;
+    assert.deepEqual(await drift(), [], "a fresh posting must verify clean");
+    await withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+      await db.execute(sql`update journal_entries set book_id = ${secondBook} where id = ${entry}`);
+    });
+    assert.deepEqual(await drift(), [], "the rehome must move activity between book buckets");
+  });
+});
