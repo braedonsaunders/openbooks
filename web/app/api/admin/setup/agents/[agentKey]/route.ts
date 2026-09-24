@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { saveSetupAgentPolicy } from '../../../../../../lib/setup/agents'
 
 export const dynamic = 'force-dynamic'
@@ -14,6 +14,8 @@ export const dynamic = 'force-dynamic'
 export async function PUT(request: Request, { params }: { params: Promise<{ agentKey: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const { agentKey } = await params
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

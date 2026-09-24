@@ -1,6 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../lib/assistant/client";
 import {
   clearOrgAiKey,
@@ -24,6 +24,8 @@ export async function GET() {
 export async function PUT(req: Request) {
   const gate = await guardPermission("admin.ai.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   let body: Partial<AiSettingsInput> & { provider?: string };
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);
@@ -73,6 +75,8 @@ export async function PUT(req: Request) {
 export async function DELETE() {
   const gate = await guardPermission("admin.ai.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   await clearOrgAiKey(gate.user.orgId, gate.user.id);
   return NextResponse.json(await getOrgAiSettings(gate.user.orgId));
 }

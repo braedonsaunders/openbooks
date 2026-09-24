@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { CONTINUOUS_CLOSE_DISABLED_REMEDY, saveOrgAiAgentSettings } from '../../../../../../lib/assistant/ai-config'
 
 export const runtime = 'nodejs'
@@ -10,6 +10,8 @@ export const runtime = 'nodejs'
 export async function PUT(request: Request, { params }: { params: Promise<{ agentKey: string }> }) {
   const gate = await guardPermission('admin.ai.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const { agentKey } = await params
   if (!isContinuousCloseAgentKey(agentKey)) {
     return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
