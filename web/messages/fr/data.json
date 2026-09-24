@@ -55,6 +55,7 @@
     "commit": "Importer {n} lignes",
     "committing": "Importation…",
     "commitFailed": "L’importation n’a pas pu être effectuée.",
+    "commitPersistenceFailed": "Ce navigateur n’a pas pu enregistrer la clé de nouvelle tentative ; aucune importation n’a donc été envoyée. Activez le stockage de session ou utilisez un navigateur qui l’autorise, puis réessayez.",
     "commitConflict": "Cette importation est en conflit avec une tentative précédente. Consultez d’abord l’historique des importations. Si vous avez modifié le fichier ou le mappage, prévisualisez puis envoyez l’importation mise à jour ; recharger avec les mêmes données réessaie sans risque la demande précédente.",
     "row": "Ligne",
     "status": "Statut",

@@ -13,6 +13,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import { exportCsv } from '../../analytics/_ui/exportCsv'
 import {
   forgetImportCommitIdentity,
+  ImportIdentityPersistenceError,
   resolveImportCommitIdentity,
   type ImportCommitIdentity,
 } from './commit-identity'
@@ -284,7 +285,7 @@ export function ImportWizard() {
       try {
         storage = window.sessionStorage
       } catch {
-        // In-memory retries still work where session storage is unavailable.
+        throw new ImportIdentityPersistenceError()
       }
       const identity = await resolveImportCommitIdentity(
         { resource, format, rows, mapping, importMode, fileName, post },
@@ -308,7 +309,7 @@ export function ImportWizard() {
       forgetImportCommitIdentity(identity, storage)
       commitIdentity.current = null
     } catch (e) {
-      toast.error((e as Error).message)
+      toast.error(e instanceof ImportIdentityPersistenceError ? t('import.commitPersistenceFailed') : (e as Error).message)
     } finally {
       setBusy(false)
     }

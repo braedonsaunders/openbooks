@@ -55,6 +55,7 @@
     "commit": "Importar {n} filas",
     "committing": "Importando…",
     "commitFailed": "No se pudo completar la importación.",
+    "commitPersistenceFailed": "Este navegador no pudo guardar la clave para reintentar la importación, así que no se envió ninguna solicitud. Activa el almacenamiento de sesión o usa un navegador que lo permita e inténtalo de nuevo.",
     "commitConflict": "Esta importación entra en conflicto con un intento anterior. Comprueba primero el historial de importaciones. Si cambiaste el archivo o el mapeo, vuelve a previsualizar y enviar la importación actualizada; al recargar con los mismos datos se reintenta de forma segura la solicitud anterior.",
     "row": "Fila",
     "status": "Estado",

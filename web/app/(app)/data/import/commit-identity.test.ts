@@ -62,3 +62,22 @@ test('changing a commit input gets a new key while preserving the old payload id
   assert.notEqual(changed.key, first.key)
   assert.equal(oldPayloadRetry.key, first.key)
 })
+
+test('commit identity refuses to proceed when durable session storage is unavailable', async () => {
+  await assert.rejects(
+    resolveImportCommitIdentity(input, null, null, () => 'memory-only-key'),
+    /Import retry information could not be saved; no import request was sent/,
+  )
+})
+
+test('commit identity refuses when session storage cannot confirm the saved key', async () => {
+  const unavailable = {
+    getItem: () => null,
+    setItem: () => undefined,
+    removeItem: () => undefined,
+  }
+  await assert.rejects(
+    resolveImportCommitIdentity(input, null, unavailable, () => 'unretained-key'),
+    /Import retry information could not be saved; no import request was sent/,
+  )
+})
