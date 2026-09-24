@@ -95,9 +95,11 @@ async function multiCurrencyFeatureEnabled(orgId: string): Promise<boolean> {
 export async function readFxProviderConfig(
   orgId: string,
   runner: Pick<typeof db, "execute"> = db,
+  lock = false,
 ): Promise<FxProviderConfigRow | null> {
   const r = (await runner.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs where org_id = ${orgId} limit 1
+    ${lock ? sql`for update` : sql``}
   `));
   return r.rows[0] ?? null;
 }
@@ -177,7 +179,14 @@ export async function saveFxProviderConfig(
   // route wrote the audit in a separate statement after the upsert had
   // already committed, and recorded no before-state at all).
   return db.transaction(async (tx) => {
-    const existing = await readFxProviderConfig(orgId, tx);
+    // Serialize saves even when no row exists yet; the row lock then protects
+    // the observed before-state for updates. Without both, concurrent first
+    // saves can mislabel an upsert as an insert and update audits can share a
+    // stale snapshot.
+    await tx.execute(sql`
+      select pg_advisory_xact_lock(hashtextextended(${'fx-provider-config:' + orgId}, 0))
+    `);
+    const existing = await readFxProviderConfig(orgId, tx, true);
     let sealed = existing?.secrets ?? null;
     if (input.apiKey === null || input.provider !== "open_exchange_rates") sealed = null;
     if (typeof input.apiKey === "string" && input.apiKey.trim()) sealed = sealJson({ apiKey: input.apiKey.trim() });
@@ -776,7 +785,16 @@ export async function runFxProvider(
         update fx_provider_configs set
           last_success_at = ${trigger === "test" ? sql`last_success_at` : sql`now()`},
           last_observation_date = ${trigger === "test" ? sql`last_observation_date` : latestObservationDate},
-          last_error = null, next_sync_at = ${trigger === "test" ? sql`next_sync_at` : next}, updated_at = now()
+          last_error = null,
+          next_sync_at = case
+            when schedule = ${config.schedule}
+             and sync_hour_utc = ${config.syncHourUtc}
+             and is_enabled = ${config.isEnabled}
+             and next_sync_at is not distinct from ${config.nextSyncAt}
+              then ${trigger === "test" ? sql`next_sync_at` : next}
+            else next_sync_at
+          end,
+          updated_at = now()
          where id = ${config.id} and org_id = ${orgId}
       `);
     });
@@ -798,7 +816,14 @@ export async function runFxProvider(
         if (!stamped.rowCount) return;
         await tx.execute(sql`
           update fx_provider_configs set last_error = ${message.slice(0, 1000)},
-                 next_sync_at = ${trigger === "test" ? sql`next_sync_at` : retryAt},
+                 next_sync_at = case
+                   when schedule = ${config.schedule}
+                    and sync_hour_utc = ${config.syncHourUtc}
+                    and is_enabled = ${config.isEnabled}
+                    and next_sync_at is not distinct from ${config.nextSyncAt}
+                     then ${trigger === "test" ? sql`next_sync_at` : retryAt}
+                   else next_sync_at
+                 end,
                  updated_at = now() where id = ${config.id} and org_id = ${orgId}
         `);
       });
