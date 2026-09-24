@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "Principal",
     "more": "Más",
-    "itemsWaiting": "{count, plural, one {# elemento en espera} other {# elementos en espera}}"
+    "itemsWaiting": "{count, plural, one {# elemento en espera} other {# elementos en espera}}",
+    "itemsWaitingPartial": "{count, plural, one {# elemento en espera – algunas fuentes no se pudieron cargar} other {# elementos en espera – algunas fuentes no se pudieron cargar}}",
+    "partialSourcesTitle": "Algunas fuentes no se pudieron cargar – el recuento puede ser inferior al real"
   },
   "apps": {
     "ariaLabel": "Abrir aplicaciones",

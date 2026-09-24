@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "Primär",
     "more": "Mehr",
-    "itemsWaiting": "{count, plural, one {# wartender Eintrag} other {# wartende Einträge}}"
+    "itemsWaiting": "{count, plural, one {# wartender Eintrag} other {# wartende Einträge}}",
+    "itemsWaitingPartial": "{count, plural, one {# wartender Eintrag – einige Quellen konnten nicht geladen werden} other {# wartende Einträge – einige Quellen konnten nicht geladen werden}}",
+    "partialSourcesTitle": "Einige Quellen konnten nicht geladen werden – die Anzahl ist möglicherweise zu niedrig"
   },
   "apps": {
     "ariaLabel": "Apps öffnen",

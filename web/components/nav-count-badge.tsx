@@ -15,6 +15,7 @@ const POLL_MS = 60_000
 export function NavCountBadge({ source }: { source: string }) {
   const t = useTranslations('shell.topNav')
   const [count, setCount] = useState<number | null>(null)
+  const [partial, setPartial] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -24,7 +25,10 @@ export function NavCountBadge({ source }: { source: string }) {
         if (!res.ok) return
         const data = await res.json().catch(() => null)
         const next = typeof data?.count === 'number' ? data.count : null
-        if (alive && next !== null) setCount(next)
+        if (alive && next !== null) {
+          setCount(next)
+          setPartial(data?.partial === true)
+        }
       } catch {
         // Unreachable route: stay silent rather than badge a guess.
       }
@@ -38,12 +42,17 @@ export function NavCountBadge({ source }: { source: string }) {
   }, [source])
 
   if (count === null || count <= 0) return null
+  // A partial count names a source that failed to load: the badge keeps
+  // the number but marks itself degraded instead of passing a low count
+  // as exact.
+  const shown = count > 99 ? '99+' : String(count)
   return (
     <span
-      aria-label={t('itemsWaiting', { count })}
+      aria-label={partial ? t('itemsWaitingPartial', { count }) : t('itemsWaiting', { count })}
+      title={partial ? t('partialSourcesTitle') : undefined}
       className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-teal-700 px-1.5 text-[11px] font-semibold tabular-nums text-white dark:bg-teal-400 dark:text-teal-950"
     >
-      {count > 99 ? '99+' : count}
+      {partial ? `${shown}!` : shown}
     </span>
   )
 }

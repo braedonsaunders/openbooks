@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "主要",
     "more": "更多",
-    "itemsWaiting": "{count, plural, one {# 个待处理} other {# 个待处理}}"
+    "itemsWaiting": "{count, plural, one {# 个待处理} other {# 个待处理}}",
+    "itemsWaitingPartial": "{count, plural, one {# 个待处理（部分来源加载失败）} other {# 个待处理（部分来源加载失败）}}",
+    "partialSourcesTitle": "部分来源加载失败 – 数量可能偏少"
   },
   "apps": {
     "ariaLabel": "打开应用",

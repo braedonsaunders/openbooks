@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "Primário",
     "more": "Mais",
-    "itemsWaiting": "{count, plural, one {# item em espera} other {# itens em espera}}"
+    "itemsWaiting": "{count, plural, one {# item em espera} other {# itens em espera}}",
+    "itemsWaitingPartial": "{count, plural, one {# item em espera – algumas fontes não puderam ser carregadas} other {# itens em espera – algumas fontes não puderam ser carregadas}}",
+    "partialSourcesTitle": "Algumas fontes não puderam ser carregadas – a contagem pode estar incompleta"
   },
   "apps": {
     "ariaLabel": "Abrir apps",

@@ -51,7 +51,9 @@
   "topNav": {
     "ariaLabel": "Primary",
     "more": "More",
-    "itemsWaiting": "{count, plural, one {# item waiting} other {# items waiting}}"
+    "itemsWaiting": "{count, plural, one {# item waiting} other {# items waiting}}",
+    "itemsWaitingPartial": "{count, plural, one {# item waiting — some sources failed to load} other {# items waiting — some sources failed to load}}",
+    "partialSourcesTitle": "Some inbox sources failed to load — the count may be low"
   },
   "apps": {
     "ariaLabel": "Open apps",
