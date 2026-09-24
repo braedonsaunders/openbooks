@@ -132,10 +132,13 @@ test('assistant pdf templates list without bodies and get truncates, isolated pe
   const orgB = await createScratchOrg()
   try {
     const tplId = randomUUID()
+    const disabledTplId = randomUUID()
     const bigHtml = `<div>${'x'.repeat(9000)}</div>`
     await withOrgContext(orgA.orgId, async () => {
       await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
         values (${tplId}, ${orgA.orgId}, 'customer_invoice', 'Probe Template', ${bigHtml}, ${bigHtml})`)
+      await db.execute(sql`insert into pdf_templates (id, org_id, record_type, name, source_html, compiled_html)
+        values (${disabledTplId}, ${orgA.orgId}, 'field_ticket', 'Disabled Field Ticket Template', '<div>hidden</div>', '<div>hidden</div>')`)
     })
     await withOrgContext(orgB.orgId, async () => {
       const other = await executeAssistantTool(authzFor(orgB.orgId, READER), 'list_pdf_templates', {})
@@ -152,6 +155,7 @@ test('assistant pdf templates list without bodies and get truncates, isolated pe
       const items = (listed.data as { items: Record<string, unknown>[] }).items
       assert.equal(items.length, 1)
       assert.equal(items[0]!['name'], 'Probe Template')
+      assert.deepEqual(await executeAssistantTool(authzFor(orgA.orgId, READER), 'get_pdf_template', { id: disabledTplId }), { ok: false, error: 'template_not_found' })
       assert.ok(!('sourceHtml' in items[0]!), 'list rows must not carry HTML bodies')
       const one = await executeAssistantTool(authzFor(orgA.orgId, READER), 'get_pdf_template', { id: tplId })
       assert.equal(one.ok, true, JSON.stringify(one))

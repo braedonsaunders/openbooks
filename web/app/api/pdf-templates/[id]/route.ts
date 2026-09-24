@@ -8,7 +8,7 @@ import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
-import { getPdfTemplate } from "../../../../lib/pdf-templates/store";
+import { getPdfTemplate, getVisiblePdfTemplate } from "../../../../lib/pdf-templates/store";
 
 export const runtime = "nodejs";
 
@@ -22,11 +22,8 @@ export async function GET(_req: Request, { params }: Params) {
   // A malformed id is indistinguishable from a missing template and never
   // reaches the uuid column.
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const row = await getPdfTemplate(gate.user.orgId, id);
+  const row = await getVisiblePdfTemplate(gate.user.orgId, id);
   if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
-  if (!(await isDocKindEnabled(gate.user.orgId, row.recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
   return NextResponse.json({ row });
 }
 

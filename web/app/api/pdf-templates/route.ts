@@ -5,11 +5,11 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { guardPermission } from "../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../lib/setup/coerce";
-import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
+import { isDocKindEnabled } from "../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
 import { starterTemplate } from "../../../lib/pdf-templates/starters";
-import { listPdfTemplates, type PdfTemplateRow } from "../../../lib/pdf-templates/store";
+import { listVisiblePdfTemplates, type PdfTemplateRow } from "../../../lib/pdf-templates/store";
 
 export const runtime = "nodejs";
 
@@ -24,9 +24,7 @@ export async function GET(req: Request) {
   if (recordType && !(await isDocKindEnabled(user.orgId, recordType))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
-  const hidden = new Set(await disabledDocKinds(user.orgId));
-  const rows = (await listPdfTemplates(user.orgId, recordType))
-    .filter((row) => !hidden.has(row.recordType));
+  const rows = await listVisiblePdfTemplates(user.orgId, recordType);
   // The list payload doesn't need the (potentially large) HTML bodies.
   return NextResponse.json({
     rows: rows.map((row): Omit<PdfTemplateRow, "sourceHtml" | "compiledHtml"> => ({

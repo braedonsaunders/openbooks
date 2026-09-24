@@ -5,7 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../pdf-templates/catalog";
-import { getPdfTemplate, listPdfTemplates } from "../pdf-templates/store";
+import { getVisiblePdfTemplate, listVisiblePdfTemplates } from "../pdf-templates/store";
 import { loadReportDefinition } from "../custom-reports";
 import { canAccessReportArtifact, canAccessReportDefinition } from "../report-execution-context";
 import { can } from "../authz";
@@ -274,7 +274,7 @@ const listPdfTemplatesTool: AssistantToolDef = {
     if (a.recordType && !PDF_RECORD_TYPE_BY_KEY[a.recordType]) {
       return { ok: false, error: "unknown_record_type" };
     }
-    const rows = await listPdfTemplates(authz.user.orgId, a.recordType);
+    const rows = await listVisiblePdfTemplates(authz.user.orgId, a.recordType);
     const { items, truncated } = capList(
       rows.map((row) => ({
         id: row.id,
@@ -305,7 +305,7 @@ const getPdfTemplateTool: AssistantToolDef = {
   inputSchema: z.object({ id: uuidInput }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { id: string };
-    const row = await getPdfTemplate(authz.user.orgId, a.id);
+    const row = await getVisiblePdfTemplate(authz.user.orgId, a.id);
     if (!row) return { ok: false, error: "template_not_found" };
     return {
       ok: true,
