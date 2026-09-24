@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isDunnableDocumentKind } from "@openbooks/engine/src/receivables/dunning.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { isValidEmailAddress } from "@openbooks/emails";
 
@@ -90,6 +90,12 @@ function parseGracePeriodDays(raw: unknown): number | null {
 export async function GET() {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
+  // The policy and its stages carry no subsidiary lineage yet apply to every
+  // entity's open items, and stage templates can hold entity-specific copy —
+  // so the read itself discloses cross-entity material and needs unrestricted
+  // scope, like the writes below.
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   const policies = (await db.execute<Record<string, unknown>>(sql`
     select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
            min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive"
@@ -113,6 +119,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
+  // Org-wide collections policy: an A-only caller must never write the
+  // ladder that chases B's debtors. Named 403 before any parsing or write.
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
