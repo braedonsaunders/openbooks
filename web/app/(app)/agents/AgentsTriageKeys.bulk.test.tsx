@@ -104,6 +104,16 @@ async function press(key: string) {
   await tick();
 }
 
+async function pressOn(target: Element, key: string) {
+  let event: KeyboardEvent | undefined
+  await act(async () => {
+    event = new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    target.dispatchEvent(event);
+    await tick();
+  });
+  return event?.defaultPrevented ?? false;
+}
+
 const ROWS = [
   { id: "r1", href: "/agents?finding=r1", hasProposal: false, status: "open" },
   { id: "r2", href: "/agents?finding=r2", hasProposal: false, status: "open" },
@@ -188,4 +198,14 @@ test("a refused middle row does not stop the bulk and stays accounted", async (t
     "the pinned refusal must carry the translated invalid_transition reason",
   );
   assert.match(document.body.textContent ?? "", /1 selected/, "exactly the refused row must stay selected");
+});
+
+test("document shortcuts leave Enter on an interactive button to native activation", async (t) => {
+  const ui = await renderKeys();
+  t.after(ui.unmount);
+  const button = document.createElement("button");
+  document.body.appendChild(button);
+  t.after(() => button.remove());
+  assert.equal(await pressOn(button, "Enter"), false);
+  assert.deepEqual(globalThis.__triagePushed ?? [], []);
 });

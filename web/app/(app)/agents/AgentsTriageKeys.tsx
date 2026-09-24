@@ -173,7 +173,9 @@ export function AgentsTriageKeys({
     function onKey(event: KeyboardEvent) {
       if (event.ctrlKey || event.metaKey || event.altKey) return
       const target = event.target as HTMLElement | null
-      if (target?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (target?.closest(
+        'input, textarea, select, button, a[href], summary, [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
+      )) return
       const current = rows
       const writable = canWrite
       const at = cursor
