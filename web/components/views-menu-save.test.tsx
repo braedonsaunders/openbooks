@@ -72,6 +72,7 @@ const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
+const messagesFr = (await import("../messages/fr")).default;
 const { ViewsMenu } = await import("./views-menu");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -80,18 +81,23 @@ const FAILED = (messages as { customization: { views: { setDefaultFailed: string
 const SET_DEFAULT = (messages as { customization: { views: { setDefault: string } } }).customization.views
   .setDefault;
 
-function provider(children: React.ReactElement) {
+function provider(children: React.ReactElement, locale = "en", catalog = messages) {
   /* eslint-disable react/no-children-prop */
   return React.createElement(NextIntlClientProvider, {
-    locale: "en",
-    messages,
+    locale,
+    messages: catalog,
     timeZone: "UTC",
     children,
   });
   /* eslint-enable react/no-children-prop */
 }
 
-async function mountMenu(): Promise<{ root: { unmount: () => void } }> {
+async function mountMenu(options: {
+  locale?: string
+  catalog?: typeof messages
+  available?: Array<{ id: string; name: string; recordType: string; scope: "org" | "user"; ownerId: string | null; isDefault: boolean; isActive: boolean }>
+  currentName?: string
+} = {}): Promise<{ root: { unmount: () => void } }> {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -100,16 +106,18 @@ async function mountMenu(): Promise<{ root: { unmount: () => void } }> {
     root.render(
       provider(
         React.createElement(ViewsMenu, {
-          available: [
+          available: options.available ?? [
             { id: "v1", name: "V One", recordType: "customer", scope: "user", ownerId: null, isDefault: false, isActive: true },
           ],
           currentId: "v1",
-          currentName: "V One",
+          currentName: options.currentName ?? "V One",
           recordType: "customer",
           basePath: "/customers",
           currentParams: {},
           canManage: false,
         }),
+        options.locale ?? "en",
+        options.catalog ?? messages,
       ),
     );
     await tick();
@@ -125,6 +133,23 @@ async function mountMenu(): Promise<{ root: { unmount: () => void } }> {
   });
   return { root };
 }
+
+test("an unrenamed seeded view stays translated in the French dropdown", async () => {
+  const { root } = await mountMenu({
+    locale: "fr",
+    catalog: messagesFr,
+    currentName: "Vue par défaut",
+    available: [
+      { id: "v1", name: "Default view", recordType: "customer", scope: "user", ownerId: null, isDefault: false, isActive: true },
+    ],
+  });
+  const defaultView = [...document.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent?.includes("Vue par défaut"));
+  assert.ok(defaultView, 'the seeded "Default view" row must use its French label after opening the menu');
+  assert.doesNotMatch(defaultView.textContent ?? "", /Default view/);
+  await act(async () => {
+    root.unmount();
+  });
+});
 
 async function clickSetDefault(): Promise<void> {
   const action = [...document.querySelectorAll('button[role="menuitem"]')].find(
