@@ -73,6 +73,8 @@ export interface ApplicationToolDefinition {
   description: string;
   inputSchema: ZodTypeAny;
   readOnly: boolean;
+  /** Mutation execution is wrapped by executeIdempotent in definition(). */
+  mutationProtection: "none" | "execute-idempotent";
   destructive: boolean;
   openWorld: boolean;
   assistantConfirmation: ApplicationToolConfirmation;
@@ -287,7 +289,7 @@ const setupActor = (context: ApplicationContext) => ({
 const visible = (): boolean => true;
 const documentActor = anyPermission("gl.post", "ap.create", "ap.post", "ar.create", "ar.post", "ap.pay", "ar.pay");
 
-function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, "execute" | "inputSchema"> & {
+function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, "execute" | "inputSchema" | "mutationProtection"> & {
   inputSchema: T;
   execute: (context: ApplicationContext, input: z.infer<T>) => Promise<Record<string, unknown>>;
 }): ApplicationToolDefinition {
@@ -295,7 +297,27 @@ function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, 
   return {
     ...metadata,
     inputSchema,
-    execute: (context, input) => execute(context, inputSchema.parse(input)),
+    mutationProtection: metadata.readOnly ? "none" : "execute-idempotent",
+    execute: async (context, input) => {
+      const parsed = inputSchema.parse(input);
+      if (metadata.readOnly) return execute(context, parsed);
+
+      const idempotencyKey = (parsed as Record<string, unknown>).idempotencyKey;
+      if (typeof idempotencyKey !== "string") {
+        throw invalidInput(`${metadata.name} requires an idempotencyKey`);
+      }
+      const outcome = await executeIdempotent({
+        context,
+        operation: `mcp.${metadata.name}`,
+        idempotencyKey,
+        request: parsed,
+        // The outer catalog claim owns API-key execution evidence. Nested
+        // domain idempotency still runs in this same transaction, but must not
+        // attempt to write a second transport event for the same command.
+        execute: () => execute({ ...context, apiKeyId: null, requestAudit: undefined }, parsed),
+      });
+      return { ...outcome.value, replayed: outcome.replayed };
+    },
   };
 }
 
@@ -404,6 +426,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       spec: LAYOUT_SPEC,
       params: z.record(z.string(), z.string()).optional()
         .describe("Values for the route's dynamic segments, e.g. { key: \"inventory\" } for /apps/[key]."),
+      idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -412,7 +435,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "set_page_layout", title: "Set Page Layout",
     description: "Replace what a route renders (org-wide, or just you with scope user). Binds only fields the loader resolved. Rejections return errors, never store.",
-    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, note: z.string().max(500).optional()
+    inputSchema: z.object({ route: ROUTE, spec: LAYOUT_SPEC, idempotencyKey: IDEMPOTENCY_KEY, note: z.string().max(500).optional()
         .describe("Human-readable reason for this layout change, stored in history"), scope: z.enum(["org", "user"]).optional()
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: false, openWorld: false,
@@ -430,7 +453,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "restore_page_layout", title: "Restore Page Layout",
     description: "Republish a past layout version by history id. Appends a new active version; history stays a true live-record.",
-    inputSchema: z.object({ route: ROUTE, versionId: UUID }),
+    inputSchema: z.object({ route: ROUTE, versionId: UUID, idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
     execute: async (context, input) => ({ ok: true, ...await restoreLayout(context, input as never) }),
@@ -438,7 +461,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "clear_page_layout", title: "Clear Page Layout",
     description: "Drop a layout for a route so the page returns to what it would otherwise render. The stored layout is deactivated, not destroyed.",
-    inputSchema: z.object({ route: ROUTE, scope: z.enum(["org", "user"]).optional()
+    inputSchema: z.object({ route: ROUTE, idempotencyKey: IDEMPOTENCY_KEY, scope: z.enum(["org", "user"]).optional()
         .describe("org (default) changes the page for everyone; user stores it for you alone.") }),
     readOnly: false, destructive: true, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,
@@ -467,6 +490,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({
       bundle: z.unknown().describe("Complete app package bundle: owned definitions and files the draft installs."),
       reason: z.string().trim().min(1).max(2000).describe("Honest human-readable reason for this draft"),
+      idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -495,6 +519,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({
       draftId: UUID,
       contentHash: z.string().regex(/^[a-f0-9]{64}$/).describe("Exact content hash the draft call returned; guards against stale-base activation"),
+      idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "never", visibleTo: visible,
@@ -507,6 +532,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     inputSchema: z.object({
       draftId: UUID,
       contentHash: z.string().regex(/^[a-f0-9]{64}$/).describe("Exact content hash the draft call returned; guards against stale-base activation"),
+      idempotencyKey: IDEMPOTENCY_KEY,
     }),
     readOnly: false, destructive: false, openWorld: false,
     assistantConfirmation: "always", visibleTo: visible,

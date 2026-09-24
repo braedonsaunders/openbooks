@@ -28,6 +28,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 const layouts = await import('./page-layouts')
+const { applicationTool, executeApplicationTool } = await import('./tool-catalog')
 
 type Ctx = Parameters<typeof layouts.listLayouts>[0]
 
@@ -240,5 +241,47 @@ test('page layouts are org-scoped, permission-gated and audited', async (t) => {
       ],
       'every save, every restore and every clear is recorded, with its supersession',
     )
+  })
+})
+
+test('MCP page-layout mutations replay their committed outcomes after a lost response', async (t) => {
+  const { orgId, userId } = await withBypassContext(async () => {
+    const org = await createScratchOrg()
+    return { orgId: org.orgId, userId: await createScratchUser(org.orgId, 'Layout MCP Admin', 'layout_admin') }
+  })
+  t.after(() => withBypassContext(() => dropScratchOrg(orgId)))
+
+  const context = contextFor(orgId, userId, ['admin.customization.manage'])
+  const call = async (name: string, input: Record<string, unknown>) => {
+    const tool = applicationTool(name)
+    assert.ok(tool, `${name} must be registered`)
+    return executeApplicationTool(tool, context, input)
+  }
+
+  await withOrgContext(orgId, async () => {
+    const prior = await layouts.setLayout(context, { route: '/banking', spec: validSpec('/banking') })
+    assert.equal(prior.stored, true)
+
+    const setInput = { route: '/banking', spec: validSpec('/banking'), idempotencyKey: 'layout-set-retry-001' }
+    const setFirst = await call('set_page_layout', setInput)
+    const setReplay = await call('set_page_layout', setInput)
+    assert.equal(setReplay.replayed, true, 'a lost response must replay the original set result')
+    assert.equal(setReplay.id, setFirst.id)
+    assert.equal((await layouts.listLayoutHistory(context, { route: '/banking' })).versions.length, 2);
+
+    const restoreInput = { route: '/banking', versionId: prior.id!, idempotencyKey: 'layout-restore-retry-001' }
+    const restoreFirst = await call('restore_page_layout', restoreInput)
+    const restoreReplay = await call('restore_page_layout', restoreInput)
+    assert.equal(restoreReplay.replayed, true, 'a replay must return the successful restore result')
+    assert.equal(restoreReplay.id, restoreFirst.id)
+    assert.equal((await layouts.listLayoutHistory(context, { route: '/banking' })).versions.length, 3);
+
+    const clearInput = { route: '/banking', idempotencyKey: 'layout-clear-retry-001' }
+    const clearFirst = await call('clear_page_layout', clearInput)
+    const clearReplay = await call('clear_page_layout', clearInput)
+    assert.equal(clearReplay.replayed, true, 'a replay must return the original clear count')
+    assert.equal(clearReplay.cleared, clearFirst.cleared)
+    assert.equal((clearFirst as { cleared: number }).cleared, 1);
+    assert.deepEqual((await layouts.listLayouts(context)).layouts, []);
   })
 })
