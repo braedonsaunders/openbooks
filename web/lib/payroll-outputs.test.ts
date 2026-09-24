@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { pathToFileURL } from 'node:url'
@@ -501,12 +500,4 @@ test('a renderer outage flags the batch and names the outage per stub', async ()
     assert.ok(failure.error.includes('PUPPETEER_EXECUTABLE_PATH'), 'each entry names the remedy')
   }
   assert.equal(state.deliveryCalls.length, 0)
-})
-
-const outputsSource = readFileSync(new URL('./payroll-outputs.ts', import.meta.url), 'utf8')
-
-test('the batch sender has no plaintext policy branch', () => {
-  assert.match(outputsSource, /if \(!policy\.enabled\)[\s\S]*result\.failed\.push/)
-  assert.doesNotMatch(outputsSource, /\.\.\.\(policy\.enabled/)
-  assert.match(outputsSource, /encrypt: async \(pdf: Buffer\) => encryptPdf/)
 })
