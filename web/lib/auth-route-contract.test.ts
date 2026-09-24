@@ -6,11 +6,6 @@ import test from "node:test";
 import { NextRequest, NextResponse } from "next/server";
 import { isPublicPath } from "./proxy-policy";
 
-// The public surface of the proxy policy is derived from the registry file
-// itself (enumeration only — every assertion below is on a live proxy or
-// route response, never on the file text), so a newly listed surface is
-// exercised the moment it ships. Reformatting the registry without changing
-// its entries keeps every test green.
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "server-only") {
@@ -41,6 +36,13 @@ function get(path: string): Promise<NextResponse> {
   return proxy(new NextRequest(`http://openbooks.test${path}`));
 }
 
+const priorSessionSecret = process.env.SESSION_SECRET;
+test.before(() => { process.env.SESSION_SECRET = randomBytes(32).toString("hex"); });
+test.after(() => {
+  if (priorSessionSecret === undefined) delete process.env.SESSION_SECRET;
+  else process.env.SESSION_SECRET = priorSessionSecret;
+});
+
 test("every listed public surface passes the proxy without a session", async () => {
   const exact = listedPaths("EXACT_PUBLIC_PATHS");
   const roots = listedPaths("PUBLIC_SEGMENT_ROOTS");
@@ -55,8 +57,6 @@ test("every listed public surface passes the proxy without a session", async () 
       `${path} must not redirect a sessionless caller to login`,
     );
   }
-  // Controls: the harness really gates. A private API path refuses 401 JSON
-  // and a private page redirects to login when no session rides along.
   const apiControl = await get("/api/gl/accounts");
   assert.equal(apiControl.status, 401);
   const pageControl = await get("/journal");
