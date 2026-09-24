@@ -286,13 +286,13 @@ test("F02 hourly raises freeze the wage row's annual-hours at open", { skip: !DB
     // $1500 against the $1000 envelope: the budget control — not the
     // guideline — must refuse it. The old math paced $0.75/$1000 = 0.1%.
     await assert.rejects(
-      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3 }),
+      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3" }),
       /over-budget pacing needs a reason/,
     );
     const untouched = await storedLine(org.orgId, line!.id);
     assert.equal(untouched.status, "pending");
     // With a reason the same proposal lands, paced at 150%.
-    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3, reason: "hourly merit" });
+    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "hourly merit" });
     assert.equal(proposed.proposedRate, "25.7500");
     assert.equal((await storedLine(org.orgId, line!.id)).proposed_pct, "3.000000");
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
@@ -318,8 +318,8 @@ test("F02 mixed hourly/annual bases pace in one annual envelope", { skip: !DB },
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const hourlyLine = lines.find((l) => l.employmentId === hourly.employmentId)!;
     const annualLine = lines.find((l) => l.employmentId === annual.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: hourlyLine.id, proposedPct: 4, reason: "hourly merit" });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: annualLine.id, proposedPct: 3, reason: "annual merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: hourlyLine.id, proposedPct: "4", reason: "hourly merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: annualLine.id, proposedPct: "3", reason: "annual merit" });
     // $1 × 2000h = $2000 plus $2700 = $4700 of a $5000 envelope: 94%.
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
     assert.ok(pacing.totalPct !== null && Math.abs(pacing.totalPct - 94) < 1e-9, `expected 94%, got ${pacing.totalPct}`);
@@ -348,7 +348,7 @@ test("F02 cross-currency lines freeze the oriented quote at open", { skip: !DB }
     assert.equal(frozen.budget_fx_source, "bank");
     assert.equal(frozen.budget_fx_inverse, "false");
     // +10% = $10000 USD × 1.35 = $13500 CAD of a $10000 envelope: 135%.
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 10, reason: "us merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "10", reason: "us merit" });
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
     assert.ok(pacing.totalPct !== null && Math.abs(pacing.totalPct - 135) < 1e-9, `expected 135%, got ${pacing.totalPct}`);
     assert.equal(pacing.overBudget, true);
@@ -373,8 +373,8 @@ test("F02 frozen evidence survives same-date rewrites, late rows, supersession",
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const hourlyLine = lines.find((l) => l.employmentId === hourly.employmentId)!;
     const usdLine = lines.find((l) => l.employmentId === usd.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: hourlyLine.id, proposedPct: 4, reason: "hourly merit" });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: usdLine.id, proposedPct: 10, reason: "us merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: hourlyLine.id, proposedPct: "4", reason: "hourly merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: usdLine.id, proposedPct: "10", reason: "us merit" });
     // $2000 + $13500 = $15500 of $20000: 77.5%.
     const before = await cyclePacing(org.orgId, h.hrId, cycle.id);
     assert.ok(before.totalPct !== null && Math.abs(before.totalPct - 77.5) < 1e-9, `expected 77.5%, got ${before.totalPct}`);
@@ -429,7 +429,7 @@ test("F02 inverse quotes freeze oriented; unconfigured currency fails the open",
     assert.equal(frozen.budget_fx_rate, "0.7407407407");
     assert.equal(frozen.budget_fx_inverse, "true");
     assert.equal(frozen.budget_fx_source, "bank");
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3, reason: "cad merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "cad merit" });
     // $2700 CAD × 0.7407407407 = $2000 USD of a $10000 envelope: 20%.
     // (The oriented factor multiplies once — never inverted again.)
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
@@ -526,7 +526,7 @@ test("F02 frozen inputs and headers cannot be rewritten; reopen does not reprice
     });
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 4, reason: "hourly merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "4", reason: "hourly merit" });
     // A draft header still corrects freely; the freeze engages at open.
     const draftCycle = await createCycle({
       orgId: org.orgId, actorId: h.hrId, name: "Draft fix", kind: "merit",
@@ -637,7 +637,7 @@ test("F03 a zero envelope is real: positive increases are over with no percentag
     assert.equal(empty.totalPct, null);
     assert.equal(empty.overBudget, false);
     // A raise without a reason refuses with a usable numberless remedy.
-    const refusal = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3 }).then(
+    const refusal = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3" }).then(
       () => { throw new Error("expected the zero-envelope proposal to refuse"); },
       (e: unknown) => String((e as { message?: unknown }).message ?? e),
     );
@@ -647,7 +647,7 @@ test("F03 a zero envelope is real: positive increases are over with no percentag
     const rolledBack = await storedLine(org.orgId, line!.id);
     assert.equal(rolledBack.status, "pending");
     // With a reason it lands, paced over with no defined ratio.
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3, reason: "zero-envelope merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3", reason: "zero-envelope merit" });
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
     assert.equal(pacing.totalPct, null);
     assert.equal(pacing.overBudget, true);
@@ -672,7 +672,7 @@ test("F03 a null envelope is absence: never over, even for large raises", { skip
     assert.equal(frozen.budget_envelope, null);
     assert.equal(frozen.budget_annual_hours, null);
     assert.equal(frozen.budget_fx_rate, null);
-    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 50, reason: "big merit" });
+    const proposed = await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "50", reason: "big merit" });
     assert.equal(proposed.status, "proposed");
     const pacing = await cyclePacing(org.orgId, h.hrId, cycle.id);
     assert.equal(pacing.totalPct, null);
@@ -694,7 +694,7 @@ test("F02/F03 exact comparison at large boundary values", { skip: !DB }, async (
     await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const line = lines.find((l) => l.employmentId === emp.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line.id, proposedPct: 10, reason: "large merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line.id, proposedPct: "10", reason: "large merit" });
     const stored = await storedLine(org.orgId, line.id);
     assert.equal(stored.proposed_rate, "1100000000000.0000");
     assert.equal(stored.proposed_pct, "10.000000");
@@ -720,11 +720,22 @@ test("F11 six-decimal percents store consistent rate evidence; deeper refuses", 
     const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     // 6dp is accepted and the stored rate recomputes from the stored
     // percent through the shared primitive (90000 × 1.03123456).
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: 3.123456, reason: "fine merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line!.id, proposedPct: "3.123456", reason: "fine merit" });
     const stored = await storedLine(org.orgId, line!.id);
     assert.equal(stored.proposed_pct, "3.123456");
     assert.equal(stored.proposed_rate, "92811.1104");
     assert.equal(mulDecimal("90000.0000", "1.03123456"), stored.proposed_rate);
+    await assert.rejects(
+      proposeLine({
+        orgId: org.orgId,
+        actorId: h.hrId,
+        lineId: line!.id,
+        proposedPct: 3.5 as unknown as string,
+        reason: "number boundary regression",
+      }),
+      /proposedPct must be supplied as a decimal string/,
+    );
+    assert.equal((await storedLine(org.orgId, line!.id)).proposed_pct, stored.proposed_pct);
     // 7 meaningful places refuse with a usable remedy, never a silent
     // rounding of one evidence against the other.
     const emp2 = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
@@ -738,7 +749,7 @@ test("F11 six-decimal percents store consistent rate evidence; deeper refuses", 
     const line2 = lines2.find((l) => l.employmentId === emp2.employmentId)!;
     const before = await storedLine(org.orgId, line2.id);
     await assert.rejects(
-      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line2.id, proposedPct: 3.1234567, reason: "too fine" }),
+      proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: line2.id, proposedPct: "3.1234567", reason: "too fine" }),
       /at most 6 decimal places/,
     );
     const untouched = await storedLine(org.orgId, line2.id);
@@ -840,13 +851,13 @@ test("F11 proposal wages round once, exactly, and the push carries them", { skip
     const pennyLine = lines.find((l) => l.employmentId === penny.employmentId)!;
     const heavyLine = lines.find((l) => l.employmentId === heavy.employmentId)!;
     // 100.0050 × 1.01 = 101.00505 → 101.0051 (float math stored 101.0050).
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pennyLine.id, proposedPct: 1, reason: "penny merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: pennyLine.id, proposedPct: "1", reason: "penny merit" });
     const pennyStored = await storedLine(org.orgId, pennyLine.id);
     assert.equal(pennyStored.proposed_rate, "101.0051");
     assert.equal(pennyStored.proposed_pct, "1.000000");
     assert.equal(mulDecimal("100.0050", "1.01000000"), pennyStored.proposed_rate);
     // 60000.0001 × 1.5 = 90000.00015 → 90000.0002 (float math stored …001).
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: heavyLine.id, proposedPct: 50, reason: "heavy merit" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: heavyLine.id, proposedPct: "50", reason: "heavy merit" });
     const heavyStored = await storedLine(org.orgId, heavyLine.id);
     assert.equal(heavyStored.proposed_rate, "90000.0002");
     assert.equal(heavyStored.proposed_pct, "50.000000");
@@ -974,8 +985,8 @@ test("F02/F03 the public read stays lens-scoped while the write control sees the
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     const lineA = lines.find((l) => l.employmentId === empA.employmentId)!;
     const lineB = lines.find((l) => l.employmentId === empB.employmentId)!;
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: 3, reason: "scope test" });
-    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: 3, reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineA.id, proposedPct: "3", reason: "scope test" });
+    await proposeLine({ orgId: org.orgId, actorId: h.hrId, lineId: lineB.id, proposedPct: "3", reason: "scope test" });
     // Whole cycle paces $5700/$5000 = 114% (over); the A-scoped read
     // fences to A's $2700/$5000 = 54% without leaking B's increase.
     const full = await cyclePacing(org.orgId, h.hrId, cycle.id);

@@ -5,7 +5,7 @@ import test from "node:test";
 process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
-const { createBandBody } = await import("./bodies.ts");
+const { createBandBody, proposeLineBody } = await import("./bodies.ts");
 
 const BAND = {
   levelId: "11111111-1111-4111-8111-111111111111",
@@ -52,4 +52,14 @@ test("band amounts refuse zero, negatives, and non-scalars", () => {
     const parsed = createBandBody.safeParse({ ...BAND, min: min as never });
     if (parsed.success) assert.fail(`min ${String(min)} must be refused`);
   }
+});
+
+test("proposed percentages preserve exact decimal strings and refuse JSON numbers", () => {
+  const numeric = proposeLineBody.safeParse({ proposedPct: 0.12345600000000001 });
+  assert.equal(numeric.success, false);
+  if (!numeric.success) assert.match(numeric.error.issues[0]!.message, /decimal string/);
+
+  const exact = proposeLineBody.safeParse({ proposedPct: "9007199254.000001" });
+  if (!exact.success) assert.fail(JSON.stringify(exact.error.issues));
+  assert.equal(exact.data.proposedPct, "9007199254.000001");
 });
