@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { mulDecimal, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
+import { add, mulDecimal, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { statementBookExpr } from "../../../../../lib/gl-summary";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
@@ -53,35 +53,40 @@ export async function GET(req: Request) {
   const settlementKinds = side === "ar" ? sql`'customer_payment', 'deposit'` : sql`'vendor_payment', 'check'`;
 
   const [pay, partyOpen, recent] = await Promise.all([
-    // Avg days-to-pay + total paid over the trailing 12 months, per distinct
-    // source payment document: one payment split across two bills is one
-    // payment, with days amount-weighted across its applications.
+    // Payment legs over the trailing 12 months, grouped per source payment
+    // document (one payment split across two bills is one payment, with days
+    // amount-weighted across its applications). Each group carries its own
+    // functional frame and source date: applications.amount is a ledger
+    // amount in the payment line's functional currency, so groups settle in
+    // different frames for multi-subsidiary parties and must translate
+    // per group — never summed raw. Count, average days and the translated
+    // total are aggregated in JS below over these rows.
     (db.execute(sql`
-      select count(*) as payment_count, avg(t.days) as avg_days,
-        coalesce(sum(t.paid), 0) as total_paid
-      from (
-        select pe.source_document_id as pid,
-          sum(ap.amount * (pe.posting_date - be.posting_date))
-            / nullif(sum(ap.amount), 0) as days,
-          sum(ap.amount) as paid
-        from applications ap
-        join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
-        join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
-        join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
-        join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
-        join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
-        join documents sp on sp.id = pe.source_document_id and sp.org_id = ap.org_id
-        where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
-          and bl.party_id = ${party}
-          and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
-          and sp.kind in (${settlementKinds})
-          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
-          ${subsidiaryVisibleFilter(sql`sp.subsidiary_id`, gate.allowedSubsidiaryIds)}
-        group by pe.source_document_id
-      ) t
+      select pe.source_document_id as pid,
+        sum(ap.amount * (pe.posting_date - be.posting_date))
+          / nullif(sum(ap.amount), 0) as days,
+        sum(ap.amount) as paid,
+        coalesce(psub.base_currency, o.base_currency) as func,
+        pe.posting_date::text as date
+      from applications ap
+      join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ap.org_id
+      join journal_entries be on be.id = bl.entry_id and be.org_id = ap.org_id
+      join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
+      join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ap.org_id
+      join accounts ba on ba.id = bl.account_id and ba.org_id = ap.org_id
+      join documents sp on sp.id = pe.source_document_id and sp.org_id = ap.org_id
+      left join subsidiaries psub on psub.id = pl.subsidiary_id and psub.org_id = ap.org_id
+      join orgs o on o.id = ap.org_id
+      where ap.org_id = ${user.orgId} and ba.type = ${acctType} and ap.unapplied_at is null
+        and bl.party_id = ${party}
+        and pe.posting_date >= ${today}::date - interval '12 months' and pe.posting_date <= ${today}
+        and sp.kind in (${settlementKinds})
+        ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`be.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`pl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`pe.subsidiary_id`, gate.allowedSubsidiaryIds)}
+        ${subsidiaryVisibleFilter(sql`sp.subsidiary_id`, gate.allowedSubsidiaryIds)}
+      group by pe.source_document_id, coalesce(psub.base_currency, o.base_currency), pe.posting_date
     `)),
     // Open items with days-overdue — off the shared cash-engine reader, not
     // a bespoke aggregate (F-t03-010). The old query joined reversed entries
@@ -120,13 +125,32 @@ export async function GET(req: Request) {
     `)),
   ]);
 
-  // Recent amounts translate to presentation at each document's date through
-  // the flow path — a USD 100 vendor payment in a CAD org reads CAD 135,
-  // never CAD 100.
-  const fxResult = await flowRates(user.orgId, recent.rows.map((r) => ({
-    func: typeof r.func === "string" ? r.func : null,
-    date: String(r.date ?? today).slice(0, 10),
-  }))).then(
+  // Payment legs aggregate in JS over the grouped rows: distinct source
+  // documents count, days average like SQL avg (nulls ignored), and the paid
+  // total translates per group — never summed across functional frames raw.
+  const legs = (pay.rows ?? []) as Array<{ pid: unknown; days: unknown; paid: unknown; func: unknown; date: unknown }>;
+  const paymentCount = new Set(legs.map((l) => String(l.pid))).size;
+  const dayValues = legs
+    .map((l) => l.days)
+    .filter((d): d is string | number => d !== null && d !== undefined)
+    .map(Number)
+    .filter((n) => Number.isFinite(n));
+  const avgDays = dayValues.length > 0 ? Math.round(dayValues.reduce((a, b) => a + b, 0) / dayValues.length) : null;
+
+  // Recent amounts AND the paid total translate to presentation at each
+  // source date through the one flow context — a USD 100 payment in a CAD
+  // org reads CAD 135, never CAD 100, in both the payment list and the
+  // 12-month total. Missing coverage refuses 422 by name for either.
+  const fxResult = await flowRates(user.orgId, [
+    ...recent.rows.map((r) => ({
+      func: typeof r.func === "string" ? r.func : null,
+      date: String(r.date ?? today).slice(0, 10),
+    })),
+    ...legs.map((l) => ({
+      func: typeof l.func === "string" ? l.func : null,
+      date: String(l.date ?? today).slice(0, 10),
+    })),
+  ]).then(
     (rates) => ({ ok: true as const, rates }),
     (error: unknown) => ({ ok: false as const, error }),
   );
@@ -138,9 +162,14 @@ export async function GET(req: Request) {
   }
   const fx = fxResult.rates;
   let recentAmounts: string[];
+  let totalPaid: string;
   try {
     recentAmounts = recent.rows.map((r) =>
       mulDecimal(String(r.func_amount ?? "0"), fx.rateAt(typeof r.func === "string" ? r.func : null, String(r.date ?? today).slice(0, 10))));
+    totalPaid = normalizeMoney(legs.reduce(
+      (total, l) => add(total, mulDecimal(String(l.paid ?? "0"), fx.rateAt(typeof l.func === "string" ? l.func : null, String(l.date ?? today).slice(0, 10)))),
+      "0",
+    ));
   } catch (error) {
     return NextResponse.json(
       { error: "missing exchange rate", message: error instanceof Error ? error.message : String(error) },
@@ -148,10 +177,6 @@ export async function GET(req: Request) {
     );
   }
   const currency = fx.base || await presentationCurrency(user.orgId);
-
-  const avgDays = pay.rows[0]?.avg_days === null || pay.rows[0]?.avg_days === undefined ? null : Math.round(Number(pay.rows[0].avg_days));
-  const totalPaid = normalizeMoney(String(pay.rows[0]?.total_paid ?? "0"));
-  const paymentCount = Number(pay.rows[0]?.payment_count ?? 0);
   const rows = partyOpen.map((item) => {
     const due = item.dueDate ? toISO(item.dueDate) : null;
     const overdue = due !== null && due < today;

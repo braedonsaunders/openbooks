@@ -7,12 +7,16 @@ interface RouteState {
   allowedSubsidiaryIds: Set<string> | null;
   partySubsidiaryId: string | null;
   calls: string[];
+  payLegs: Array<{ pid: string; days: string | null; paid: string; func: string | null; date: string }>;
+  fxRows: Array<{ as_of: string; rate: string }>;
 }
 
 const routeState: RouteState = {
   allowedSubsidiaryIds: new Set(["sub-allowed"]),
   partySubsidiaryId: null,
   calls: [],
+  payLegs: [{ pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" }],
+  fxRows: [],
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -56,7 +60,8 @@ const mockSources = new Map<string, string>([
             tran_date: '2026-08-02', due_date: '2026-08-20', remaining: '0.1250', func: null,
           }] })
           if (text.includes('from orgs')) return Promise.resolve({ rows: [{ baseCurrency: 'USD' }] })
-          if (text.includes('from applications')) return Promise.resolve({ rows: [{ avg_days: '12.5', total_paid: '999999999999999.9999', payment_count: '1' }] })
+          if (text.includes('from fx_rates')) return Promise.resolve({ rows: state.fxRows })
+          if (text.includes('from applications')) return Promise.resolve({ rows: state.payLegs })
           if (text.includes('from documents d')) return Promise.resolve({ rows: [{
             doc_id: 'doc-payment', doc_kind: 'customer_payment', entry_id: 'entry-payment', document_number: 'PAY-1',
             date: '2026-08-12', func_amount: '999999999999999.9999', func: 'USD',
@@ -146,6 +151,8 @@ function reset(): void {
   routeState.allowedSubsidiaryIds = new Set(["sub-allowed"]);
   routeState.partySubsidiaryId = null;
   routeState.calls.length = 0;
+  routeState.payLegs = [{ pid: "pay-1", days: "12.5", paid: "999999999999999.9999", func: null, date: "2026-08-12" }];
+  routeState.fxRows = [];
 }
 
 function request(): Request {
@@ -214,6 +221,41 @@ test("entity drills scope every transaction leg and preserve exact money", async
   assert.match(recentQuery, /je\.book_id =/);
   assert.ok(!recentQuery.includes("left join journal_entries"));
   assert.equal(body.currency, "USD");
+});
+
+test("entity totalPaid translates each payment leg to presentation currency", async () => {
+  // A two-frame party (USD base + CAD leg): 100 USD + 100 CAD at 0.74 reads
+  // 174 USD, never 200. Driven through the route with an independent
+  // expected value — no source or SQL text is asserted.
+  reset();
+  routeState.payLegs = [
+    { pid: "pay-usd", days: "9", paid: "100", func: "USD", date: "2026-08-10" },
+    { pid: "pay-cad", days: "7", paid: "100", func: "CAD", date: "2026-08-12" },
+  ];
+  routeState.fxRows = [{ as_of: "2026-08-01", rate: "0.7400" }];
+
+  const response = await GET(request());
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  assert.equal(body.currency, "USD");
+  assert.equal(body.paymentCount, 2);
+  assert.equal(body.avgDays, 8);
+  assert.equal(body.totalPaid, "174.0000");
+});
+
+test("entity totalPaid refuses when a payment leg has no exchange rate", async () => {
+  reset();
+  routeState.payLegs = [
+    { pid: "pay-cad", days: "7", paid: "100", func: "CAD", date: "2026-08-12" },
+  ];
+  routeState.fxRows = [];
+
+  const response = await GET(request());
+  assert.equal(response.status, 422);
+  const body = await response.json();
+  assert.equal(body.error, "missing exchange rate");
+  assert.match(body.message, /no spot rate for CAD→USD/);
 });
 
 // F-t03-010: the drill's own live aggregate joined reversed entries without
