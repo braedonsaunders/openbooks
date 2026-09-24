@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
 import { isUuid } from "../../../lib/list-params";
-import { requireSuperAdmin } from "../../../lib/super-admin";
+import { lockSuperAdminActor, requireSuperAdmin } from "../../../lib/super-admin";
 import { enterOrg } from "../../../lib/sandbox-session";
 
 function assertUuid(value: string, label: string): void {
@@ -61,6 +61,7 @@ export async function setSuperAdminAction(
   }
 
   await withBypass(async () => {
+    await lockSuperAdminActor(db, authz.user.homeUserId);
     // Serialize every platform-wide super-admin grant/revoke. The active
     // quorum check below reads other administrators' rows, which this
     // transaction does not lock; without one serialization point, two
@@ -141,6 +142,7 @@ export async function grantAccessAction(formData: FormData): Promise<void> {
   assertUuid(actingUserId, "Acting user");
 
   await withBypass(async () => {
+    await lockSuperAdminActor(db, authz.user.homeUserId);
     const validation = (await db.execute(sql`
       select m.org_id as "memberOrgId", mo.env_kind as "memberEnvKind",
              au.org_id as "actingOrgId", au.is_active as "actingActive",
@@ -237,6 +239,7 @@ export async function revokeAccessAction(accessId: string): Promise<void> {
   let memberUserId: string | null = null;
 
   await withBypass(async () => {
+    await lockSuperAdminActor(db, authz.user.homeUserId);
     const beforeResult = (await db.execute(sql`
       select id, org_id as "orgId", member_user_id as "memberUserId",
              acting_user_id as "actingUserId", is_active as "isActive"
