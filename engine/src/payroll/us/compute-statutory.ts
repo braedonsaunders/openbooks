@@ -325,6 +325,12 @@ export async function computeUsStatutory(
       // explicitly through taxQualifiedDeductions (the Nebraska minimum).
       wages: income,
       federalFilingStatus: filingStatus,
+      federalLegacyW4: bool(empFact("US", emp, "w4_pre_2020"))
+        ? {
+          status: filingStatus === "married_joint" ? "married" : "single",
+          allowances: Number(empFact("US", emp, "w4_allowances") ?? 0),
+        }
+        : undefined,
       federalTaxExempt: bool(empFact("US", emp, "tax_exempt")),
       supplemental: nonPeriodic,
       supplementalPaymentTiming,

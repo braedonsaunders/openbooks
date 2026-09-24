@@ -455,11 +455,18 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // DE 4: an employee who has filed no certificate is withheld at "Single with
   // Zero withholding allowance" — a statutory default, declared on the
   // certificate's own fields, not assumed here.
-  const status = (certificateChoice(input.certificate, "filing_status")
-    ?? "single_or_dual") as CaFilingStatus;
-  const regular = certificateCount(input.certificate, "regular_allowances") ?? 0;
-  const estimated = certificateCount(input.certificate, "estimated_deduction_allowances") ?? 0;
+  // EDD permits a pre-2020 federal W-4 to remain effective when no DE 4 has
+  // replaced it. Only that case inherits its marital status and allowances.
+  const legacyW4 = input.certificate.onFile ? undefined : input.federalLegacyW4;
+  const status = (legacyW4
+    ? legacyW4.status === "married" ? "married_one_income" : "single_or_dual"
+    : certificateChoice(input.certificate, "filing_status") ?? "single_or_dual") as CaFilingStatus;
+  const regular = legacyW4?.allowances
+    ?? certificateCount(input.certificate, "regular_allowances") ?? 0;
+  const estimated = legacyW4 ? 0
+    : certificateCount(input.certificate, "estimated_deduction_allowances") ?? 0;
   const total = regular + estimated;
+  if (legacyW4) trace("CA_LEGACY_W4", 1n);
 
   if (certificateFlag(input.certificate, "exempt")
     || certificateFlag(input.certificate, "military_spouse_exempt")) {
