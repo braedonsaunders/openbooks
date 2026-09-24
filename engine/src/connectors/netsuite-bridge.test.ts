@@ -1,3 +1,4 @@
+// source-pin-contract: the shipped netsuite-bridge package omits defaultAuthId so no account credential ships; checked on the parsed integrations/netsuite-bridge/project.json
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
