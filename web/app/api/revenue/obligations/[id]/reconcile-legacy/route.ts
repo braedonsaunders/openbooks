@@ -5,6 +5,7 @@ import {
   reconcileLegacyObligationProvenance,
   RevenueRecognitionError,
 } from '@openbooks/engine/src/revenue/recognition.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
@@ -32,7 +33,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!parsed.ok) return parsed.response
   try {
     await db.transaction(async (tx) => {
-      await reconcileLegacyObligationProvenance(tx, gate.user.orgId, id, gate.user.id, parsed.data.reason)
+      // The attestation writes another entity's policy state, so the
+      // obligation's entity must be inside the caller's scope: the engine
+      // refuses out-of-scope exactly like missing, under the obligation lock.
+      await reconcileLegacyObligationProvenance(
+        tx, gate.user.orgId, id, gate.user.id, parsed.data.reason, gate.allowedSubsidiaryIds,
+      )
       await auditSetupChange(
         {
           orgId: gate.user.orgId,
@@ -51,6 +57,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
+    if (e instanceof ScopeNotFoundError) {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
     if (e instanceof RevenueRecognitionError) {
       return NextResponse.json({ error: e.message }, { status: 422 })
     }

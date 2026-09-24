@@ -854,12 +854,71 @@ export async function legacyRebuildBlock(
   };
 }
 
+export interface ObligationAttribution {
+  reconciledAt: string | null;
+  subsidiaryId: string | null;
+}
+
+/**
+ * An obligation's entity for scope decisions: its contract's subsidiary,
+ * falling back through the source line, source document and project to the
+ * posting fallback root. The subsidiary leg mirrors
+ * recognitionObligationScope exactly, so reconcile, preview-by-id and the
+ * run/postings agree on which entity an obligation belongs to. Null when the
+ * obligation is missing or cross-org. Pass forUpdate inside a writer's
+ * transaction to hold the obligation row while the caller asserts scope.
+ */
+export async function obligationAttribution(
+  runner: SqlExecutor,
+  orgId: string,
+  obligationId: string,
+  forUpdate = false,
+): Promise<ObligationAttribution | null> {
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(runner, orgId));
+  const lock = forUpdate ? sql` for update of o` : sql``;
+  const row = (await runner.execute<{ reconciled_at: string | null; subsidiary_id: string | null }>(sql`
+    select o.legacy_reconciled_at::text as reconciled_at,
+           coalesce(c.subsidiary_id, dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId}) as subsidiary_id
+      from performance_obligations o
+      join revenue_contracts c on c.id = o.contract_id and c.org_id = o.org_id
+      left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+      left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
+      left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
+     where o.id = ${obligationId} and o.org_id = ${orgId}${lock}`)).rows[0];
+  return row ? { reconciledAt: row.reconciled_at, subsidiaryId: row.subsidiary_id } : null;
+}
+
+/**
+ * A bare contract's entity for scope decisions: its own subsidiary, falling
+ * back through its project to the posting fallback root. Null when the
+ * contract is missing or cross-org.
+ */
+export async function revenueContractAttribution(
+  runner: SqlExecutor,
+  orgId: string,
+  contractId: string,
+): Promise<{ subsidiaryId: string | null } | null> {
+  const fallbackSubsidiaryId = defaultPostingSubsidiaryId(await loadSubsidiaryContext(runner, orgId));
+  const row = (await runner.execute<{ subsidiary_id: string | null }>(sql`
+    select coalesce(c.subsidiary_id, prj.subsidiary_id, ${fallbackSubsidiaryId}) as subsidiary_id
+      from revenue_contracts c
+      left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
+     where c.id = ${contractId} and c.org_id = ${orgId}`)).rows[0];
+  return row ? { subsidiaryId: row.subsidiary_id } : null;
+}
+
 /**
  * Record the operator's attestation that an obligation's existing schedule
  * matches the policy actually in force at its creation, lifting the
  * legacy-rebuild refusal for that obligation only (0328). Reconciliation is
  * per obligation because one legacy rule can pin obligations built under
  * different policies — clearing the rule would re-open the still-wrong one.
+ *
+ * Attesting is a cross-subsidiary write: the caller's scope is REQUIRED
+ * (null is the explicit unrestricted sentinel) and is asserted against the
+ * obligation's entity under the obligation lock, so a concurrent rehome
+ * cannot move the attestation onto another entity's obligation. A denied
+ * obligation answers exactly like a missing one.
  */
 export async function reconcileLegacyObligationProvenance(
   runner: SqlExecutor,
@@ -867,6 +926,7 @@ export async function reconcileLegacyObligationProvenance(
   obligationId: string,
   actorId: string | null,
   reason: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
   const clean = reason.trim();
   if (clean.length < 5 || clean.length > 500) {
@@ -875,13 +935,10 @@ export async function reconcileLegacyObligationProvenance(
     );
   }
   await lockObligationContract(runner, orgId, obligationId);
-  const o = (await runner.execute<{ reconciled_at: string | null }>(sql`
-    select legacy_reconciled_at::text as reconciled_at
-      from performance_obligations
-     where id = ${obligationId} and org_id = ${orgId}
-     for update of performance_obligations`)).rows[0];
-  if (!o) throw new Error("obligation not found");
-  if (o.reconciled_at) {
+  const o = await obligationAttribution(runner, orgId, obligationId, true);
+  if (!o || !subsidiaryScopeAllows(allowedSubsidiaryIds, o.subsidiaryId)) throw new ScopeNotFoundError();
+  const reconciledAt = o.reconciledAt;
+  if (reconciledAt) {
     throw new RevenueRecognitionError("this obligation is already reconciled — its rebuild refusal is lifted");
   }
   const block = await legacyRebuildBlock(runner, orgId, obligationId);

@@ -2,7 +2,12 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { previewRevenueRecognition } from '@openbooks/engine/src/revenue/recognition.ts'
+import {
+  obligationAttribution,
+  previewRevenueRecognition,
+  revenueContractAttribution,
+} from '@openbooks/engine/src/revenue/recognition.ts'
+import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
@@ -30,16 +35,34 @@ function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
 }
 
-/** A scope id must name a row THIS org owns, or the scope refuses by name
- *  rather than silently widening to everything. */
+/**
+ * A scope id must name a row THIS org owns AND inside the caller's
+ * subsidiary scope, or the lookup refuses exactly like a missing id rather
+ * than confirming the row exists to an out-of-scope caller. Obligations and
+ * contracts resolve through the same entity attribution the run uses, so a
+ * preview-by-id can never name what the scoped run would refuse. Books and
+ * periods carry no subsidiary lineage (and the preview rows themselves are
+ * scope-filtered), so they stay org-checked.
+ */
 async function ownedId(
   orgId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   raw: string | null | undefined,
   table: 'accounting_books' | 'accounting_periods' | 'performance_obligations' | 'revenue_contracts',
 ): Promise<{ ok: true; id: string | null } | { ok: false }> {
   const id = raw?.trim().toLowerCase() || null
   if (!id) return { ok: true, id: null }
   if (!isUuid(id)) return { ok: false }
+  if (table === 'performance_obligations') {
+    const attribution = await obligationAttribution(db, orgId, id)
+    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId)) return { ok: false }
+    return { ok: true, id }
+  }
+  if (table === 'revenue_contracts') {
+    const attribution = await revenueContractAttribution(db, orgId, id)
+    if (!attribution || !subsidiaryScopeAllows(allowedSubsidiaryIds, attribution.subsidiaryId)) return { ok: false }
+    return { ok: true, id }
+  }
   const found = await db.execute(sql`
     select 1 from ${sql.identifier(table)} where id = ${id} and org_id = ${orgId}`)
   return found.rows[0] ? { ok: true, id } : { ok: false }
@@ -66,13 +89,13 @@ export async function POST(request: Request) {
   const asOfDate = body.asOfDate?.trim() || (await businessToday(user.orgId))
   if (!isIsoCalendarDate(asOfDate)) return bad('invalid_as_of_date', 'asOfDate')
 
-  const book = await ownedId(user.orgId, body.bookId, 'accounting_books')
+  const book = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.bookId, 'accounting_books')
   if (!book.ok) return bad('book_not_found', 'bookId')
-  const period = await ownedId(user.orgId, body.periodId, 'accounting_periods')
+  const period = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.periodId, 'accounting_periods')
   if (!period.ok) return bad('period_not_found', 'periodId')
-  const obligation = await ownedId(user.orgId, body.obligationId, 'performance_obligations')
+  const obligation = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.obligationId, 'performance_obligations')
   if (!obligation.ok) return bad('obligation_not_found', 'obligationId')
-  const contract = await ownedId(user.orgId, body.contractId, 'revenue_contracts')
+  const contract = await ownedId(user.orgId, gate.allowedSubsidiaryIds, body.contractId, 'revenue_contracts')
   if (!contract.ok) return bad('contract_not_found', 'contractId')
 
   // A restricted caller with no permitted legal entity previews nothing —

@@ -132,12 +132,13 @@ test("reconciling a legacy obligation lifts the refusal for that obligation only
     // The remedy exists and is guarded: short reasons refuse, and there is
     // nothing to reconcile on a current rule.
     await assert.rejects(
-      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "ok"),
+      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "ok", null),
       /5 to 500 characters/,
     );
     await reconcileLegacyObligationProvenance(
       db, org.orgId, obligationId, actorId,
       "January schedule verified against the signed straight-line policy memo; February point-in-time edit postdates it",
+      null,
     );
     const recorded = (await db.execute<{ at: string | null; reason: string | null }>(sql`
       select legacy_reconciled_at::text as at, legacy_reconciliation_reason as reason
@@ -145,7 +146,7 @@ test("reconciling a legacy obligation lifts the refusal for that obligation only
     assert.ok(recorded.at);
     assert.match(recorded.reason!, /straight-line policy memo/);
     await assert.rejects(
-      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "a second attestation"),
+      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "a second attestation", null),
       /already reconciled/,
     );
 
@@ -167,7 +168,7 @@ test("a current rule rebuilds without reconciliation", { skip: !DB }, async () =
   try {
     assert.equal(await legacyRebuildBlock(db, org.orgId, obligationId), null);
     await assert.rejects(
-      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "nothing is wrong here"),
+      reconcileLegacyObligationProvenance(db, org.orgId, obligationId, actorId, "nothing is wrong here", null),
       /nothing to reconcile/,
     );
     const build = await buildRecognitionSchedule(obligationId, org.orgId, actorId);

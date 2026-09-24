@@ -42,6 +42,11 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.recognition-preview-route-test')]
       export class RevenueRecognitionError extends Error {}
       export class StaleRecognitionPreviewError extends Error {}
+      // Scope attribution surface used by ownedId; these tests never pass
+      // ids, so the lookups below never run — the stubs only satisfy the
+      // static import.
+      export async function obligationAttribution() { return null }
+      export async function revenueContractAttribution() { return null }
       export async function previewRevenueRecognition(_orgId, _input) {
         if (state.previewError) {
           if (state.previewError.kind === 'domain') throw new RevenueRecognitionError(state.previewError.message)
