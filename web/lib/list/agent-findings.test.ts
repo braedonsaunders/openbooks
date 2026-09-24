@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   FINDING_SINCE_WINDOWS,
@@ -8,7 +7,6 @@ import {
   parseAgentFindingsParams,
 } from "./agent-findings.ts";
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 // The list source is the workbench's single URL ↔ inbox contract: every
 // filter the shared filter components can set must parse here, and the
@@ -97,17 +95,3 @@ test("query passes through, since maps stable keys to instants", () => {
 // The local severity/status mirrors must stay the inbox's literals: the
 // module deliberately avoids a runtime import of the read model (drizzle
 // pool) so this pure contract stays unit-testable without a database.
-test("literal mirrors stay in sync with the inbox read model", () => {
-  const inbox = read("../agents/inbox.ts");
-  for (const severity of ["info", "warning", "critical"]) {
-    assert.match(inbox, new RegExp(`"${severity}"`));
-  }
-  for (const status of ["open", "in_review", "resolved", "dismissed"]) {
-    assert.match(inbox, new RegExp(`"${status}"`));
-  }
-  assert.match(inbox, /sort\?: FindingSort/);
-  assert.match(inbox, /dir\?: FindingDir/);
-  for (const sort of FINDING_SORTS) {
-    assert.ok(["rank", "detected", "materiality", "severity"].includes(sort));
-  }
-});

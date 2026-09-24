@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-const source = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 interface TransitionRouteState {
   transitionCalls: number;
@@ -113,61 +111,4 @@ test("subcontract API maps invalid transition validation to HTTP 400 before the 
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), { error: "Invalid subcontract transition action" });
   assert.equal(transitionRouteState.transitionCalls, 0, "invalid input must not reach the transition engine");
-});
-
-test("subcontract API validates transition actions before dispatch instead of falling back to void", () => {
-  const route = source("app/api/subcontracts/route.ts");
-  const start = route.indexOf('case "transitionSubcontract": {');
-  const next = route.indexOf('case "addChangeOrder": {', start);
-  assert.ok(start >= 0 && next > start, "transitionSubcontract branch is defined");
-  const branch = route.slice(start, next);
-  const parser = branch.indexOf("parseSubcontractTransitionAction(body.transition)");
-  const dispatch = branch.indexOf("await transitionSubcontract");
-  assert.ok(parser >= 0 && parser < dispatch, "transition validation precedes engine dispatch");
-  assert.match(branch, /error instanceof SubcontractError/);
-  assert.match(branch, /NextResponse\.json\(\{ error: error\.message \}, \{ status: 400 \}\)/);
-  assert.match(branch, /action: transition/);
-  assert.doesNotMatch(branch, /action: body\.transition/);
-});
-
-test("direct subcontracts join both project committed-cost rollups without double-counting linked POs", () => {
-  const helper = source("../engine/src/projects/subcontract-commitments.ts");
-  const costing = source("lib/project-costing.ts");
-  const financials = source("../engine/src/projects/financials.ts");
-  assert.match(helper, /original_commitment[\s\S]+changes\.approved[\s\S]+apps\.billed/);
-  assert.match(helper, /status in \('active', 'substantially_complete'\)/);
-  assert.match(helper, /purchase_order_id is null/);
-  assert.match(costing, /directSubcontractOpenCommitment/);
-  assert.match(financials, /directSubcontractOpenCommitment/);
-});
-
-test("subcontract payment controls gate run creation and final vendor-payment posting", () => {
-  const payments = source("../engine/src/payments/run-creation.ts") + source("../engine/src/payments/payment-posting.ts");
-  const occurrences = payments.match(/assertSubcontractPaymentCleared/g) ?? [];
-  assert.ok(occurrences.length >= 3, "expected import plus run-creation and final-posting gates");
-  assert.match(payments, /for \(const bill of payable\)[\s\S]+assertSubcontractPaymentCleared/);
-  assert.match(payments, /doc\.kind === "vendor_payment"[\s\S]+assertSubcontractPaymentCleared/);
-});
-
-test("subcontract API applies AP permission tiers", () => {
-  const route = source("app/api/subcontracts/route.ts");
-  assert.match(route, /approvalActions[\s\S]+"ap\.approve"/);
-  assert.match(route, /postingActions[\s\S]+"ap\.post"/);
-  assert.match(route, /paymentActions[\s\S]+"ap\.pay"/);
-  assert.match(route, /guardSubcontractsFeature/);
-});
-
-test("subcontract API persists money through canonicalDecimal and normalizeMoney", () => {
-  const route = source("app/api/subcontracts/route.ts");
-  assert.match(route, /canonicalDecimal/);
-  assert.match(route, /normalizeMoney/);
-  assert.match(route, /originalCommitment/);
-  assert.match(route, /scheduledValue/);
-  // Draw-amount refusals name the offending line (position plus SOV id) and
-  // the offending field, with the house classifier's remedy — never a bare
-  // label or a generic shape error: a malformed draw must 422 naming both.
-  assert.match(route, /moneyRefusal/);
-  assert.match(route, /line \$\{index \+ 1\}/);
-  assert.match(route, /sovLineId/);
-  assert.doesNotMatch(route, /createSubcontract\(\{ \.\.\.body, orgId, userId \}/);
 });

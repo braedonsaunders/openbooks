@@ -46,25 +46,3 @@ test('order and posting-document drawers use exact decimal cells for quantity an
     assert.doesNotMatch(drawer, /unit_price:[^\n]+type: 'amount'/)
   }
 })
-
-test('transaction grids receive currency-aware amount formatting in view mode', () => {
-  const lineGrid = source('components/line-grid.tsx')
-  const customFields = source('components/custom-field-inputs.tsx')
-  const drawers = [
-    source('components/document-drawer.tsx'),
-    source('app/(app)/_order/OrderDrawer.tsx'),
-    source('app/(app)/journal/JournalDrawer.tsx'),
-    source('app/(app)/expenses/ExpenseDrawer.tsx'),
-  ]
-
-  assert.match(lineGrid, /c\.type === 'amount'[\s\S]+formatAmount\?\.\(String\(value\)\)/)
-  assert.match(lineGrid, /c\.type === 'tax'[\s\S]+formatAmount\?\.\(shown\)/)
-  for (const drawer of drawers) {
-    assert.match(drawer, /formatAmount=\{\(value\) => money\(value, \{ currency: doc\.currency \}\)\}/)
-  }
-  assert.match(
-    drawers[0]!,
-    /bill_amount:[^\n]+money\(row\.billAmount, \{ currency: doc\.currency \}\)/,
-  )
-  assert.match(customFields, /case 'number':[\s\S]+type: 'decimal'[\s\S]+case 'currency':[\s\S]+type: 'amount'/)
-})

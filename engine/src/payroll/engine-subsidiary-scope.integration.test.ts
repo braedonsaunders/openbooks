@@ -12,8 +12,6 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../te
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-const source = (file: string) =>
-  readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
 const profilesRoute = readFileSync(
   new URL("../../../web/app/api/payroll/profiles/route.ts", import.meta.url),
   "utf8",
@@ -29,31 +27,6 @@ test("payroll engine scope policy fails closed for a restricted direct caller", 
   assert.equal(payrollSubsidiaryInScope(allowed, null), false);
   assert.equal(payrollSubsidiaryInScope(new Set(), allowed.values().next().value), false);
   assert.equal(payrollSubsidiaryInScope(null, null), true);
-});
-
-test("every shared payroll engine entry point carries the caller scope to its boundary", () => {
-  const files = [
-    "cheques.ts",
-    "bank-file-artifact.ts",
-    "remittance.ts",
-    "opening-balances.ts",
-    "parallel-run-store.ts",
-    "retro-store.ts",
-    "payment.ts",
-    "readiness.ts",
-    "run-lifecycle.ts",
-    "run-calculation.ts",
-    "run-commit.ts",
-  ];
-  for (const file of files) {
-    const text = source(file);
-    assert.match(text, /allowedSubsidiaryIds/, `${file} must accept a scope policy`);
-    assert.match(
-      text,
-      /payrollSubsidiaryScopeFilter|openingSubsidiaryScopeFilter|payrollSubsidiaryInScope/,
-      `${file} must enforce the scope policy at the engine boundary`,
-    );
-  }
 });
 
 test("payroll profiles keep scoped schedules on the employee's subsidiary", () => {

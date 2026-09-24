@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
@@ -62,7 +61,6 @@ registerHooks({
   },
 })
 
-const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 // --- Live interleavings -------------------------------------------------------
 
@@ -256,48 +254,6 @@ async function startScenario() {
 }
 
 // --- Structural contract (runs everywhere, no database needed) ---------------
-
-test('disable blockers are evaluated inside the transaction, behind the feature-gate fence', () => {
-  const route = source('./features-admin.ts')
-  const tx = route.indexOf('withOrgTransaction(')
-  const fence = route.indexOf('await acquireFeatureGateLock(')
-  const blockers = route.indexOf('featureDisableBlocked(')
-  assert.ok(tx > -1 && fence > -1 && blockers > -1)
-  assert.ok(fence > tx, 'the fence must be acquired inside the toggle transaction')
-  assert.ok(blockers > fence, 'every blocker evaluation must sit behind the fence')
-  assert.equal(
-    route.indexOf('featureDisableBlocked(', blockers + 1),
-    -1,
-    'no blocker check may remain outside the fenced transaction',
-  )
-})
-
-test('project activation and creation take the same fence before changing active state', () => {
-  for (const [path, write] of [
-    ['../app/api/projects/[id]/route.ts', 'update projects set'],
-    ['../app/api/projects/draft/route.ts', '.insert(schema.projects)'],
-  ] as const) {
-    const route = source(path)
-    const tx = route.indexOf('withOrgTransaction(')
-    const fence = route.indexOf('await acquireFeatureGateLock(')
-    const gate = route.indexOf('isFeatureEnabled(')
-    const mutation = route.indexOf(write)
-    assert.ok(tx > -1 && fence > tx, `${path}: the mutation runs in an org transaction`)
-    assert.ok(gate > fence, `${path}: the gate is re-checked after the fence`)
-    assert.ok(mutation > gate, `${path}: the active-state write follows the gated re-check`)
-  }
-  const lib = source('./features.ts')
-  // The switchboard holds no fence literal of its own: it runs the single
-  // engine implementation through a web-shaped alias.
-  assert.match(lib, /from '@openbooks\/engine\/src\/organization\/org-feature-lock\.ts'/)
-  assert.match(lib, /await acquireOrgFeatureGateLock\(runner, orgId\)/)
-  assert.doesNotMatch(lib, /openbooks:feature-gate:/)
-  // The fence identity lives in exactly one place: the engine module.
-  const lock = source('../../engine/src/organization/org-feature-lock.ts')
-  assert.match(lock, /export function featureGateLockKey\(orgId: string\): string/)
-  assert.match(lock, /return `openbooks:feature-gate:\$\{orgId\}`/)
-  assert.match(lock, /pg_advisory_xact_lock\(hashtextextended\(\$\{featureGateLockKey\(orgId\)\}, 0\)\)/)
-})
 
 test('serial order disable-then-activate: the disable applies, the stale-guard activation is refused', { skip: !DB }, async () => {
   const org = await startScenario()

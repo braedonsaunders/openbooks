@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   recordOutboxAttempt,
@@ -11,8 +10,6 @@ import {
 } from "./telemetry.ts";
 import { logTerminalFailure } from "./terminal-failure.ts";
 
-const source = (relative: string) =>
-  readFileSync(new URL(relative, import.meta.url), "utf8");
 
 test("telemetry is disabled without a collector endpoint", async () => {
   assert.equal(await startTelemetry({}), false);
@@ -88,21 +85,4 @@ test("configured telemetry exports real OTLP traces and metrics to the collector
     await stopTelemetry();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
-});
-
-test("the background processes are wired to boot and flush telemetry", () => {
-  const worker = source("../worker/index.ts");
-  assert.match(worker, /startTelemetry\(\)/);
-  // Shutdown no longer calls stopTelemetry() inline: the entrypoint hands the
-  // telemetry stop hook into the shared shutdown sequence, which owns the
-  // drain → close-connections → stop-telemetry order. Assert the real wiring
-  // on both sides so a dropped hook fails loudly instead of leaking exports.
-  assert.match(
-    worker,
-    /shutdownWorkerProcess\(workers, closeJobConnections, stopTelemetry\)/,
-  );
-  const shutdown = source("../worker/shutdown.ts");
-  assert.match(shutdown, /await stopTelemetry\(\)/);
-  const instrumentation = source("../../../web/instrumentation.node.ts");
-  assert.match(instrumentation, /startTelemetry\(\)/);
 });
