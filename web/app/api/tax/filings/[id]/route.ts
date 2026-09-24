@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { TAX_FILING_WRITE_PERMISSION } from '../route'
+import { TAX_FILING_WRITE_PERMISSION } from '../../../../../lib/tax-filing-permission'
 
 export const runtime = 'nodejs'
 

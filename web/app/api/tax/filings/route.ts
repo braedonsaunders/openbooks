@@ -8,6 +8,7 @@ import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { parseReturnScopeBody, returnScopeOpts } from '@/lib/tax-return-scope'
+import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 
 export const runtime = 'nodejs'
 
@@ -18,7 +19,6 @@ export const runtime = 'nodejs'
  * so a grant that can file always sees the action and one that cannot never
  * does.
  */
-export const TAX_FILING_WRITE_PERMISSION = 'compliance.file' as const
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 

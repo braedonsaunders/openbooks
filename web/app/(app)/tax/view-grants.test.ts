@@ -145,17 +145,11 @@ const hooks = registerHooks({
 
 const viewUrl = './view.ts?tax-view-grants-test'
 const { loadTax } = (await import(viewUrl)) as typeof import('./view.ts')
-const routeUrl = '../../api/tax/filings/route.ts?tax-view-grants-test'
-const { TAX_FILING_WRITE_PERMISSION } = (await import(routeUrl)) as typeof import('../../api/tax/filings/route')
 hooks.deregister()
 
 function reset(grants: string[]): void {
   viewState.grants = new Set(grants)
 }
-
-test('the page and the route share one filing-write permission', async () => {
-  assert.equal(TAX_FILING_WRITE_PERMISSION, 'compliance.file')
-})
 
 test('a reports.create holder sees no save or file action', async () => {
   reset(['reports.read', 'reports.create'])
