@@ -16,7 +16,7 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
-import type { SessionUser } from '../../../../lib/auth'
+import type { SessionUser } from '../../../lib/auth'
 
 const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
