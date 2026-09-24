@@ -17,6 +17,7 @@
 
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../../platform/db.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import type { InboxAdapter, InboxPage } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId } from "../types.ts";
@@ -120,6 +121,35 @@ function clampWindow(page: InboxPage | undefined): { limit: number; offset: numb
 
 export const notificationAdapter: InboxAdapter = {
   kind: "notification",
+  /**
+   * Resolve one notice BY ID through the same self-scoped unread
+   * predicate the list applies (org + user + unread) — never a wider
+   * read. A malformed id resolves to null (404), never a cast error.
+   */
+  async lookup(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null> {
+    if (!isUuid(sourceId)) return null;
+    const rows = (await db.execute<NoticeRow>(sql`
+      select id::text as id, kind, title, body, href, created_at::text as created_at
+        from notifications
+       where org_id = ${ctx.orgId} and user_id = ${ctx.actorId} and read_at is null
+         and id = ${sourceId}::uuid
+       limit 1
+    `)).rows;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: inboxItemId("notification", row.id),
+      kind: "notification",
+      title: row.title,
+      subtitle: row.body,
+      dueAt: null,
+      createdAt: new Date(row.created_at).toISOString(),
+      priority: "normal" as const,
+      subjectHref: row.href ?? "/notifications",
+      actions: [{ key: "mark-read", label: "Mark read", style: "secondary" as const, needsReason: false }],
+      source: { kind: "notification", id: row.id },
+    };
+  },
   async list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]> {
     // Newest first through the bounded window (default 100): the bell,
     // widgets, and the merged list render from here, callers that need

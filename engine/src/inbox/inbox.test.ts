@@ -367,3 +367,79 @@ describe("adapter isolation (OM-10)", () => {
     }
   });
 });
+
+describe("inbox act by id (B-INB-2)", () => {
+  const approvable = (id: string): InboxItem =>
+    item({
+      id,
+      actions: [{ key: "approve", label: "Approve", style: "primary", needsReason: false }],
+    });
+
+  it("prefers the adapter lookup, so an item outside the list window stays actionable", async () => {
+    const acts: string[] = [];
+    const windowed = [approvable("flows_approval:g1"), approvable("flows_approval:g2")];
+    const beyond = approvable("flows_approval:g3");
+    let listCalls = 0;
+    const adapter: InboxAdapter = {
+      kind: "flows_approval",
+      async list() {
+        listCalls++;
+        return windowed;
+      },
+      async lookup(_ctx, sourceId) {
+        return sourceId === "g3" ? beyond : windowed.find((i) => i.source.id === sourceId) ?? null;
+      },
+      async act(_ctx, sourceId, actionKey) {
+        acts.push(`${sourceId}:${actionKey}`);
+      },
+    };
+    __testResetInboxAdapters([adapter]);
+    try {
+      await actOnInboxItem(CTX, "flows_approval:g3", "approve");
+      assert.deepEqual(acts, ["g3:approve"]);
+      assert.equal(listCalls, 0, "acting by id must not re-list a window");
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("a lookup miss is NOT_FOUND, never a leak", async () => {
+    const adapter: InboxAdapter = {
+      kind: "flows_approval",
+      async list() {
+        return [];
+      },
+      async lookup() {
+        return null;
+      },
+      async act() {
+        throw new Error("must not act on an invisible item");
+      },
+    };
+    __testResetInboxAdapters([adapter]);
+    try {
+      await assert.rejects(actOnInboxItem(CTX, "flows_approval:hidden", "approve"), (error: unknown) => {
+        assert.ok(error instanceof InboxError);
+        assert.equal((error as InboxError).code, "NOT_FOUND");
+        return true;
+      });
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+
+  it("without a lookup the list window still arbitrates (fallback)", async () => {
+    const acts: string[] = [];
+    __testResetInboxAdapters([fakeAdapter([approvable("flows_approval:g1")], acts)]);
+    try {
+      await actOnInboxItem(CTX, "flows_approval:g1", "approve");
+      assert.deepEqual(acts, ["g1:approve"]);
+      await assert.rejects(actOnInboxItem(CTX, "flows_approval:g9", "approve"), (error: unknown) => {
+        assert.ok(error instanceof InboxError);
+        return true;
+      });
+    } finally {
+      __testResetInboxAdapters([]);
+    }
+  });
+});

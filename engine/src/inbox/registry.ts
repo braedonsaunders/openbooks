@@ -29,6 +29,15 @@ export interface InboxAdapter {
   /** Fail-closed reads: only rows the actor may already see. */
   list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]>;
   /**
+   * Resolve ONE item by its source id through the source's own gate —
+   * the same visibility predicate the list applies, never a wider read.
+   * Absent means the registry re-resolves through the list window, so an
+   * item outside a windowed source's first page is unactionable until the
+   * source implements this. Sources with a bounded default window must
+   * implement it, or counted items stay visible nowhere and unactionable.
+   */
+  lookup?(ctx: InboxListContext, sourceId: string): Promise<InboxItem | null>;
+  /**
    * The badge count without materializing rows. Absent means the list
    * length — sources whose list is windowed must implement this, or the
    * badge undercounts past the window.
@@ -122,10 +131,9 @@ export async function listInbox(
       continue;
     }
     // A paged read is a window, not the working list: it bypasses the
-    // cache and is never reused for acting. Acting re-resolves the acted
-    // id through the same bounded window the list renders (unpaged means
-    // the source default, not the whole table), so an item outside the
-    // window 404s with a reload instead of deciding blind.
+    // cache and is never reused for acting. Acting prefers the source's
+    // direct lookup and only falls back to the bounded window the list
+    // renders (unpaged means the source default, not the whole table).
     if (opts?.page) {
       try {
         out.push(...(await adapter.list(ctx, opts.page)));
@@ -201,9 +209,12 @@ export async function actOnInboxItem(
   if (!adapter) throw new InboxError("NOT_FOUND", "inbox item not found");
   // Re-resolve the item through the source's own gate: an item the actor
   // cannot see (or that already resolved) is NOT_FOUND, never a leak.
-  // Matched on the stable item id (kind + source pointer).
-  const visible = await adapter.list(ctx);
-  const item = visible.find((candidate) => candidate.id === itemId);
+  // Matched on the stable item id (kind + source pointer). A source with
+  // a direct lookup resolves BY ID, so an item outside the list's bounded
+  // window stays actionable; without one the first window arbitrates.
+  const item = adapter.lookup
+    ? await adapter.lookup(ctx, sourceId)
+    : (await adapter.list(ctx)).find((candidate) => candidate.id === itemId) ?? null;
   if (!item) throw new InboxError("NOT_FOUND", "inbox item not found — it may already be decided or outside your scope");
   if (!item.actions.some((action) => action.key === actionKey)) {
     throw new InboxError(

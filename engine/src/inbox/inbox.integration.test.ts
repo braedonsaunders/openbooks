@@ -433,3 +433,43 @@ test("notices: the badge counts past the list window and pages read through it",
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("B-INB-2: with 101 unread notices the oldest is listed on the next page and stays actionable", { skip: !DB }, async () => {
+  const org: ScratchOrg = await createScratchOrg();
+  try {
+    const userId = await createScratchUser(org.orgId, "Inbox Crowded", "inbox_crowded");
+    const ctx = { orgId: org.orgId, actorId: userId, asOf: nowIso() };
+    const firstId = await writeNotification(db, {
+      orgId: org.orgId,
+      userId,
+      kind: "general",
+      title: "notice-oldest",
+    });
+    for (let n = 1; n < 101; n++) {
+      await writeNotification(db, {
+        orgId: org.orgId,
+        userId,
+        kind: "general",
+        title: `notice-${String(n).padStart(3, "0")}`,
+      });
+    }
+    // Force a total created_at order: the first-written notice is the
+    // oldest, so the default newest-100 window provably excludes it.
+    await db.execute(sql`
+      update notifications set created_at = now() - interval '1 day', updated_at = now() - interval '1 day'
+       where id = ${firstId}
+    `);
+    assert.equal(await countInbox(ctx, { kinds: ["notification"] }), 101);
+    const first = await listInbox(ctx, { kinds: ["notification"] });
+    assert.equal(first.length, 100);
+    assert.ok(!first.some((entry) => entry.source.id === firstId), "the default window excludes the oldest");
+    const second = await listInbox(ctx, { kinds: ["notification"], page: { limit: 100, offset: 100 } });
+    assert.equal(second.length, 1);
+    assert.equal(second[0]!.source.id, firstId);
+    // Acting resolves by id, not by re-listing the window that misses it.
+    await actOnInboxItem(ctx, second[0]!.id, "mark-read");
+    assert.equal(await countInbox(ctx, { kinds: ["notification"] }), 100);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

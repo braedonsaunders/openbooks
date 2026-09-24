@@ -29,7 +29,7 @@ import {
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { toWorklistScope } from "../guard.ts";
 import { parseDelegationReason } from "../delegation.ts";
-import type { InboxAdapter } from "../registry.ts";
+import type { InboxAdapter, InboxPage } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
 
@@ -93,9 +93,14 @@ function documentItem(
 
 export const flowsApprovalAdapter: InboxAdapter = {
   kind: "flows_approval",
-  async list(ctx: InboxListContext): Promise<InboxItem[]> {
+  async list(ctx: InboxListContext, page?: InboxPage): Promise<InboxItem[]> {
     const scope = ctx.scope;
-    const page = await worklistApprovalsPage(
+    // Honor the caller's window so every counted item is reachable by
+    // paging; absent means the bounded default, never the whole table.
+    const window = page
+      ? { offset: page.offset ?? 0, limit: page.limit ?? INBOX_UNION_WINDOW.limit }
+      : { ...INBOX_UNION_WINDOW };
+    const approvals = await worklistApprovalsPage(
       ctx.orgId,
       ctx.actorId,
       {
@@ -107,10 +112,10 @@ export const flowsApprovalAdapter: InboxAdapter = {
         ...(scope?.includePayRuns !== undefined ? { includePayRuns: scope.includePayRuns } : {}),
         ...(scope?.payDirections ? { payDirections: [...scope.payDirections] } : {}),
       },
-      { ...INBOX_UNION_WINDOW },
+      window,
     );
     const out: InboxItem[] = [];
-    for (const item of page.items) {
+    for (const item of approvals.items) {
       if (item.kind === "flow_gate") {
         const mapped = gateItem(item.gate, ctx);
         if (mapped) out.push(mapped);
