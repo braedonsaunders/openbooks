@@ -1,7 +1,7 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
-import { evaluateLogicRule, type EvalContext } from '@openbooks/forms-core'
+import { evaluateLogicRule, planAutomation, type EvalContext } from '@openbooks/forms-core'
 import { db, schema, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import {
   dispatchFailureReason,
@@ -10,6 +10,7 @@ import {
   runRecordFlows,
 } from '@openbooks/engine/src/flows/index.ts'
 import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
+import { canReadFlowSubject, manualButtonPermission } from '../../../../lib/flow-subject-authz'
 import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -44,6 +45,11 @@ async function availableButtons(
   const adapter = getFlowAdapter(subjectKind)
   if (!adapter) return NextResponse.json({ error: 'unknown subject kind' }, { status: 400 })
 
+  // Domain read before anything about the record is disclosed: without the
+  // subject kind's read grant the record answers exactly as if missing.
+  if (!canReadFlowSubject(authz, subjectKind)) {
+    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  }
   // Manual flows can mutate their subject. Resolve its legal entity before
   // loading any values or evaluating buttons so a restricted caller cannot
   // use a forged id to run an action on a hidden subsidiary's record.
@@ -102,6 +108,17 @@ async function availableButtons(
       if (seen.has(td.buttonId)) continue
       if (td.requirePermission && !can(authz, td.requirePermission)) continue
       if (td.showIf && !evaluateLogicRule(td.showIf, evalCtx)) continue
+      // Subject action authority, independent of the trigger's optional
+      // requirePermission: the button's own planned effects decide the
+      // grant — edit for field sets, post/approve for status transitions
+      // and posts. A button the caller may not run stays hidden, exactly
+      // like a failed requirePermission, so POST meets the same
+      // unavailability refusal for it.
+      const required = manualButtonPermission(
+        subjectKind,
+        planAutomation(graph, { kind: 'manual', buttonId: td.buttonId }, evalCtx),
+      )
+      if (!required || !can(authz, required)) continue
       seen.add(td.buttonId)
       buttons.push({ buttonId: td.buttonId, label: td.label, confirm: td.confirm })
     }
