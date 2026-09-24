@@ -44,7 +44,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await previewRules(user.orgId, accountId, { draftRule, windowDays, onlyUnmatched, limit })
+    const result = await previewRules(user.orgId, accountId, {
+      draftRule,
+      windowDays,
+      onlyUnmatched,
+      limit,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json(result)
   } catch (e) {
     return bankingErrorResponse(e)

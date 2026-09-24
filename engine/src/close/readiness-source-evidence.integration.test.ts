@@ -124,7 +124,7 @@ test("a source-evidenced sign-off satisfies readiness like a statement one", { s
       },
     ]);
     await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor });
+    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
     assert.equal(signed.signed, true);
     const runId = await startCloseRun({ orgId: org.orgId, periodId: org.periodId, bookId: org.bookId, actorId: actor });
     assert.equal(await bankException(org.orgId, runId), null);
@@ -141,7 +141,7 @@ test("readiness returns to statement-only when the policy is off", { skip: !enab
       { entryId: entry, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: endsOn }] },
     ]);
     await refreshSourceReconciliationState(org.orgId, "test-connector");
-    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor });
+    const signed = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
     assert.equal(signed.signed, true);
     await ensureCloseDefaults(org.orgId, actor);
     await db.execute(sql`

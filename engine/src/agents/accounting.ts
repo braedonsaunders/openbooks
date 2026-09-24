@@ -113,7 +113,7 @@ export async function accountingFindings(
     `));
 
     for (const record of reconciliations.rows) {
-      const { difference } = await reconciliationTotals(record.id, { orgId, userId: SYSTEM_ACTOR_ID });
+      const { difference } = await reconciliationTotals(record.id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
       const row = { ...record, difference };
       if (toUnits(row.difference) === 0n) continue;
     const materiality = moneyAbs(row.difference);

@@ -67,7 +67,7 @@ for (const scenario of ["manual parallel books", "automatic secondary book", "cl
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Bank reviewer", "admin");
-      const ctx = { orgId: org.orgId, userId: actor };
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const secondary = randomUUID();
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${org.orgId},'TAX','Tax',false,true,true)`);
@@ -119,7 +119,7 @@ test("a refused journal factory rolls back within an ambient transaction", { ski
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Bank operator", "admin");
-    const ctx = { orgId: org.orgId, userId: actor };
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
     await importStatement({ accountId: org.accounts.bank, source: "manual", currency: "CAD", statementDate: org.date,
       lines: [{ postedOn: org.date, amount: "100", description: "Deposit", bankTransactionId: "ambient-deposit" }] }, ctx);
@@ -145,7 +145,7 @@ for (const policy of ["inactive", "nonposting", "ambiguous"] as const) {
     const org = await createScratchOrg();
     try {
       const actor = await createScratchUser(org.orgId, "Bank operator", "admin");
-      const ctx = { orgId: org.orgId, userId: actor };
+      const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
       await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
       const recon = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "0" }, ctx);
       if (policy === "ambiguous") await db.transaction(async tx => {

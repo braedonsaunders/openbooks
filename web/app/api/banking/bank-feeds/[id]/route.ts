@@ -10,6 +10,7 @@ import {
 } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
+import { guardSubsidiaryScope, type Authz } from "../../../../../lib/authz";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,24 @@ async function loadRow(orgId: string, id: string): Promise<Record<string, unknow
     select * from bank_feed_connections where id = ${id} and org_id = ${orgId}
   `));
   return r.rows[0] ?? null;
+}
+
+/**
+ * Scope-gate a connection by its bound bank account's owning subsidiary.
+ * Returns null when access may proceed, or the uniform not-found response
+ * when the bound account sits outside the caller's subsidiary scope (a
+ * deleted account fails closed the same way). Missing connections stay the
+ * caller's own 404 — callers check existence first.
+ */
+async function requireConnectionScope(
+  authz: Authz,
+  connection: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts
+     where id = ${connection.account_id as string} and org_id = ${authz.user.orgId}
+  `));
+  return guardSubsidiaryScope(authz, acct.rows[0]?.subsidiary_id ?? null);
 }
 
 async function audit(
@@ -59,6 +78,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!before) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  const scoped = await requireConnectionScope(authz, before);
+  if (scoped) return scoped;
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
@@ -116,6 +137,12 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!isUuid(id)) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  const target = await loadRow(authz.user.orgId, id);
+  if (!target) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const deleteScoped = await requireConnectionScope(authz, target);
+  if (deleteScoped) return deleteScoped;
   await db.transaction(async (tx) => {
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
@@ -144,6 +171,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!existing) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
+  // Probing the connection (test) and pulling its statements (sync) both
+  // touch another entity's account when out of scope: uniform not-found.
+  const actionScoped = await requireConnectionScope(authz, existing);
+  if (actionScoped) return actionScoped;
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as { action?: string };
@@ -180,7 +211,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // The interactive operator is the audit actor for everything this sync
     // imports; dropping user.id here would persist system provenance for a
     // human-triggered import.
-    const outcome = await syncBankFeedNow(id, { orgId: authz.user.orgId, userId: authz.user.id });
+    const outcome = await syncBankFeedNow(id, {
+      orgId: authz.user.orgId,
+      userId: authz.user.id,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    });
     return NextResponse.json(outcome, { status: outcome.error ? 422 : 200 });
   }
   return NextResponse.json({ error: "unknown action" }, { status: 400 });

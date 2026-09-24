@@ -39,7 +39,7 @@ async function fixture() {
     values(${org.orgId},${entryId},1,${org.accounts.bank},${org.subsidiaryId},100,'CAD',100,1),
       (${org.orgId},${entryId},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'CAD',-100,1)`)
   await db.execute(sql`update journal_entries set status='posted',posted_at=now() where org_id=${org.orgId} and id=${entryId}`)
-  const ctx = { orgId: org.orgId, userId: actorId }
+  const ctx = { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null }
   await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'CAD',
     lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'deposit' }] }, ctx)
   const reconciliation = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '100' }, ctx)

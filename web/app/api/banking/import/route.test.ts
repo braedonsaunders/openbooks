@@ -18,6 +18,7 @@ interface ImportCall {
   context: {
     orgId: string
     userId: string
+    allowedSubsidiaryIds: ReadonlySet<string> | null
   }
 }
 
@@ -44,7 +45,7 @@ const mockSources = new Map<string, string>([
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
   ],
@@ -207,7 +208,7 @@ test('preview mode invokes the importer in dry-run mode', async () => {
   assert.equal(response.status, 200)
   assert.equal(importState.calls.length, 1)
   assert.equal(importState.calls[0]?.options.dryRun, true)
-  assert.deepEqual(importState.calls[0]?.context, { orgId: 'org-1', userId: 'user-1' })
+  assert.deepEqual(importState.calls[0]?.context, { orgId: 'org-1', userId: 'user-1', allowedSubsidiaryIds: null })
   assert.equal((await response.json()).statementId, null)
 })
 

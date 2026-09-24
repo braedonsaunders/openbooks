@@ -86,7 +86,12 @@ const mockSources = new Map<string, string>([
       export const schema = {}
       export const inDbTransaction = work => db.transaction(work)
       export const withOrgTransaction = (_orgId, work) => work()
+      export const withBypass = (work) => work()
       export const withTransactionSavepoint = (_tx, work) => work()
+      export const withBypassContext = (work) => work()
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
+      export const ambientTenantOrgId = () => null
       export const db = {
         transaction: async (work) => {
           const transactionId = state.nextTransactionId++
@@ -103,7 +108,7 @@ const mockSources = new Map<string, string>([
               if (text.includes('as cleared')) {
                 return { rows: [{ cleared: '0', matched_journal: '0', matched_stmt: '0', unmatched_stmt: '0' }] }
               }
-              if (text.includes('select id, org_id, through_date, statement_balance')) {
+              if (text.includes('select r.id, r.org_id, r.through_date, r.statement_balance')) {
                 if (text.includes('for update')) {
                   const waitForPrevious = state.lockTail
                   let resolveLock
@@ -120,6 +125,7 @@ const mockSources = new Map<string, string>([
                     through_date: before.throughDate,
                     statement_balance: before.statementBalance,
                     account_id: 'account-1', currency: 'CAD', status: 'in_progress',
+                    subsidiary_id: null,
                   }],
                 }
               }
@@ -155,7 +161,7 @@ const mockSources = new Map<string, string>([
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' } }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
   ],

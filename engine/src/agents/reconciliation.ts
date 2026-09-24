@@ -263,7 +263,7 @@ async function loadStaleSessions(orgId: string, cutoff: string): Promise<StaleRe
   `));
   const out: StaleReconRow[] = [];
   for (const row of rows.rows) {
-    const { difference } = await reconciliationTotals(row.reconciliation_id, { orgId, userId: SYSTEM_ACTOR_ID });
+    const { difference } = await reconciliationTotals(row.reconciliation_id, { orgId, userId: SYSTEM_ACTOR_ID, allowedSubsidiaryIds: null });
     out.push({
       reconciliationId: row.reconciliation_id,
       accountId: row.account_id,

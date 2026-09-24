@@ -89,6 +89,9 @@ const getBankReconciliation: AssistantToolDef = {
     const totals = await reconciliationTotals(a.reconciliationId, {
       orgId: authz.user.orgId,
       userId: authz.user.id,
+      // The row above already passed the account-subsidiary filter; thread
+      // the scope so the totals reader enforces the same boundary itself.
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     });
     return {
       ok: true,

@@ -250,7 +250,9 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
   // ({@link SYSTEM_ACTOR_ID} is the documented non-user engine actor). The
   // schedule identity travels on ctx.requestId so each audit row stays
   // traceable back to the exact run/schedule that imported it.
-  const ctx: BankingContext = { orgId: s.org_id, userId: SYSTEM_ACTOR_ID, requestId: sftpImportAuditSource(s.id) };
+  // System-initiated: the daemon runs with explicit unrestricted scope, so
+  // scheduled imports keep working exactly as before scoped callers existed.
+  const ctx: BankingContext = { orgId: s.org_id, userId: SYSTEM_ACTOR_ID, requestId: sftpImportAuditSource(s.id), allowedSubsidiaryIds: null };
   const result: ScheduleRun = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [], files: [] };
   let entries: { name: string; isDir: boolean }[] = [];
   try { entries = await backend.list(s.folder); } catch (e) { result.errors.push(`list ${s.folder}: ${(e as Error).message}`); return result; }

@@ -4,6 +4,7 @@ import { db, inDbTransaction, schema, type SqlExecutor, withOrgTransaction, with
 import { utcDateFromParts } from "../platform/business-date.ts";
 import { fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 /**
  * Banking: statement parsing (OFX / CSV) → import with dedupe → auto/manual
@@ -105,8 +106,34 @@ export interface BankingContext {
    * people stays on `userId`.
    */
   requestId?: string | null;
+  /**
+   * Subsidiaries the caller may see, using the canonical subsidiary-scope
+   * module's contract: REQUIRED, explicit null only, never omission. Null
+   * means unrestricted (system-initiated work such as the SFTP daemon and
+   * scheduled feed syncs). A present set — even empty — restricts: an empty
+   * set sees nothing, failing closed. Bank accounts are scoped by their
+   * owning `accounts.subsidiary_id`; a null (shared) account is visible
+   * only to unrestricted callers, and journal-line claims are additionally
+   * filtered to the caller's own subsidiaries.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   // prevents accidental structural-typing mixups with other {orgId,userId} bags
   [CTX]?: never;
+}
+
+/**
+ * SQL fragment restricting a subsidiary column to the caller's scope —
+ * used both for a bank account's owning subsidiary and for journal-line
+ * subsidiaries. A null (shared) subsidiary never matches, so restricted
+ * callers fail closed exactly like subsidiaryVisibleFilter without
+ * orgWideNull; an empty set reads zero rows.
+ */
+function subsidiaryScopeSql(
+  scope: ReadonlySet<string> | null,
+  column: ReturnType<typeof sql>,
+): ReturnType<typeof sql> {
+  if (scope == null) return sql``;
+  return sql` and ${column} = any(${`{${[...scope].join(",")}}`}::uuid[])`;
 }
 
 /**
@@ -1090,15 +1117,24 @@ type ReconcilableAccount = {
   currency: string;
 };
 
-async function loadReconcilableAccount(orgId: string, accountId: string): Promise<ReconcilableAccount> {
-  const r = (await db.execute<ReconcilableAccount>(sql`
-    select a.id, a.name, a.number, a.currency_restriction as currency
+async function loadReconcilableAccount(
+  orgId: string,
+  accountId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<ReconcilableAccount> {
+  const r = (await db.execute<ReconcilableAccount & { subsidiary_id: string | null }>(sql`
+    select a.id, a.name, a.number, a.currency_restriction as currency, a.subsidiary_id
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId}
        and a.reconcilable and a.is_active and not a.is_summary
   `));
   const account = r.rows[0];
   if (!account) throw new BankingError("Account not found or not reconcilable");
+  // Scope before eligibility: an out-of-scope account reads exactly like a
+  // missing one, never as "exists but ineligible".
+  if (!subsidiaryScopeAllows(scope, account.subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
   if (!account.currency) {
     throw new BankingError(
       "Reconcilable accounts require an explicit currency before statement import or reconciliation",
@@ -1408,7 +1444,7 @@ export async function importStatement(
   // ctx.userId, so a no-actor placeholder arriving here would sink into all
   // three evidence surfaces. Fail closed before any write.
   requireActorId(ctx.userId);
-  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
+  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
   const currency = (opts.currency ?? account.currency).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) {
     throw new BankingError("Statement currency must be a three-letter ISO currency code");
@@ -1612,15 +1648,83 @@ type ReconciliationRow = {
   status: "in_progress" | "balanced" | "signed_off";
 };
 
-async function loadReconciliation(orgId: string, reconciliationId: string): Promise<ReconciliationRow> {
+async function loadReconciliation(
+  orgId: string,
+  reconciliationId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<ReconciliationRow> {
   const r = (await db.execute<ReconciliationRow>(sql`
-    select id, account_id, through_date, currency, statement_balance, status
-      from reconciliations
-     where id = ${reconciliationId} and org_id = ${orgId}
+    select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status
+      from reconciliations r
+      join accounts a on a.id = r.account_id and a.org_id = r.org_id
+     where r.id = ${reconciliationId} and r.org_id = ${orgId}
+       ${subsidiaryScopeSql(scope, sql`a.subsidiary_id`)}
   `));
   const recon = r.rows[0];
-  if (!recon) throw new BankingError("Reconciliation not found");
+  // Missing and out-of-scope sessions refuse identically (uniform not-found).
+  if (!recon) throw new ScopeNotFoundError();
   return recon;
+}
+
+/**
+ * Gate a locked session row by its bank account's owning subsidiary.
+ * Missing and out-of-scope sessions refuse identically (uniform not-found),
+ * so a restricted caller can never distinguish "no such session" from "a
+ * session on another entity's account". Call on the locked row so the gate
+ * and the verb serialize on the same lock.
+ */
+function requireSessionRowInScope<T extends { subsidiary_id: string | null }>(
+  row: T | undefined,
+  scope: ReadonlySet<string> | null,
+): asserts row is T {
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
+}
+
+/**
+ * Gate a bank account by its owning subsidiary. Missing and out-of-scope
+ * accounts refuse identically through the canonical uniform not-found, so a
+ * restricted caller can never distinguish "no such account" from "another
+ * entity's account". Exported for the feed sync engine, which re-loads its
+ * connection inside the call.
+ */
+export async function requireBankAccountInScope(
+  executor: BankingSqlExecutor,
+  orgId: string,
+  accountId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<void> {
+  const row = (await executor.execute<{ subsidiary_id: string | null }>(sql`
+    select a.subsidiary_id
+      from accounts a
+     where a.id = ${accountId} and a.org_id = ${orgId}
+  `)).rows[0];
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
+}
+
+/**
+ * Gate a statement line by its bank account's owning subsidiary. Statement
+ * lines carry no subsidiary of their own; their account does.
+ */
+async function requireStatementLineAccountInScope(
+  executor: BankingSqlExecutor,
+  orgId: string,
+  statementLineId: string,
+  scope: ReadonlySet<string> | null,
+): Promise<{ account_id: string }> {
+  const row = (await executor.execute<{ account_id: string; subsidiary_id: string | null }>(sql`
+    select l.account_id, a.subsidiary_id
+      from bank_statement_lines l
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+     where l.id = ${statementLineId} and l.org_id = ${orgId}
+  `)).rows[0];
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiary_id)) {
+    throw new ScopeNotFoundError();
+  }
+  return { account_id: row.account_id };
 }
 
 function validateReconciliationDate(value: string): void {
@@ -1667,7 +1771,7 @@ export async function startReconciliation(
   opts: { accountId: string; throughDate: string; statementBalance: string },
   ctx: BankingContext,
 ): Promise<{ id: string }> {
-  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
+  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
   validateReconciliationDate(opts.throughDate);
   const statementBalance = normalizeAmount(opts.statementBalance, "Statement balance");
   return db.transaction(async (tx) => {
@@ -1876,7 +1980,7 @@ export async function reconciliationTotals(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   return withOrgTransaction(ctx.orgId, async () => {
-    const recon = await loadReconciliation(ctx.orgId, reconciliationId);
+    const recon = await loadReconciliation(ctx.orgId, reconciliationId, ctx.allowedSubsidiaryIds);
     return reconciliationTotalsUsing(db, recon, ctx);
   });
 }
@@ -1916,13 +2020,19 @@ export async function adjustReconciliation(
     `)).rows[0];
     if (!account) return null;
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const before = (await tx.execute<ReconciliationRow>(sql`
-      select id, org_id, through_date, statement_balance, account_id, currency, status
-        from reconciliations
-       where id = ${reconciliationId} and org_id = ${ctx.orgId} and status <> 'signed_off'
-       for update
+    const before = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.org_id, r.through_date, r.statement_balance, r.account_id, r.currency, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId} and r.status <> 'signed_off'
+       for update of r
     `)).rows[0];
     if (!before) return null;
+    // A missing session stays a null (the route's 404); an out-of-scope one
+    // refuses the same uniform not-found as every other session verb.
+    if (!subsidiaryScopeAllows(ctx.allowedSubsidiaryIds, before.subsidiary_id)) {
+      throw new ScopeNotFoundError();
+    }
     const throughDate = opts.throughDate ?? before.through_date;
     await requireCutoffAfterSignedHistory(tx, ctx.orgId, before.account_id, throughDate);
     const stranded = (await tx.execute<{ id: string }>(sql`
@@ -1986,14 +2096,15 @@ export interface AutoMatchResult {
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
     const bookId = await reconciliationBookId(tx, ctx.orgId);
-    const reconResult = (await tx.execute<ReconciliationRow>(sql`
-      select id, account_id, through_date, currency, statement_balance, status
-        from reconciliations
-       where id = ${reconciliationId} and org_id = ${ctx.orgId}
-       for update
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+       for update of r
     `));
     const recon = reconResult.rows[0];
-    if (!recon) throw new BankingError("Reconciliation not found");
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
     // Lines covered by a proven statement opening are cleared by the carry,
     // not by matching: claiming one would double-count the opening.
@@ -2020,6 +2131,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and (${carryStart}::date is null or je.posting_date >= ${carryStart}::date)
          and jl.reconciled_at is null
          and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
+         ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`jl.subsidiary_id`)}
        order by je.posting_date, jl.line_number
        for update of jl
     `));
@@ -2127,14 +2239,15 @@ async function createMatchInTransaction(
   matchedBy: MatchOrigin,
 ): Promise<ReconciliationTotals> {
   const bookId = await reconciliationBookId(tx, ctx.orgId);
-  const reconResult = (await tx.execute<ReconciliationRow>(sql`
-    select id, account_id, through_date, currency, statement_balance, status
-      from reconciliations
-     where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
-     for update
+  const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+    select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+      from reconciliations r
+      join accounts a on a.id = r.account_id and a.org_id = r.org_id
+     where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId}
+     for update of r
   `));
   const recon = reconResult.rows[0];
-  if (!recon) throw new BankingError("Reconciliation not found");
+  requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
   if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
   const stmt = (await tx.execute<{ id: string; amount: string; currency: string; possible_duplicate_of: string | null }>(sql`
@@ -2179,6 +2292,7 @@ async function createMatchInTransaction(
        and not exists (
          select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
        )
+       ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`jl.subsidiary_id`)}
      order by jl.id
      for update of jl
   `));
@@ -2277,14 +2391,15 @@ export async function unmatchStatementLine(
   ctx: BankingContext,
 ): Promise<ReconciliationTotals> {
   return db.transaction(async (tx) => {
-    const reconResult = (await tx.execute<ReconciliationRow>(sql`
-      select id, account_id, through_date, currency, statement_balance, status
-        from reconciliations
-       where id = ${opts.reconciliationId} and org_id = ${ctx.orgId}
-       for update
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${opts.reconciliationId} and r.org_id = ${ctx.orgId}
+       for update of r
     `));
     const recon = reconResult.rows[0];
-    if (!recon) throw new BankingError("Reconciliation not found");
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") throw new BankingError("Reconciliation is already signed off");
 
     const deleted = (await tx.execute<{ id: string; journal_line_id: string }>(sql`
@@ -2337,6 +2452,7 @@ export async function excludeStatementLine(
   if (reason.length < 5 || reason.length > 500) {
     throw new BankingError("Exclusion reason must be between 5 and 500 characters");
   }
+  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
     const res = (await tx.execute<{ id: string }>(sql`
       update bank_statement_lines l
@@ -2379,6 +2495,9 @@ export async function clearPossibleDuplicateFlag(
   statementLineId: string,
   ctx: BankingContext,
 ): Promise<void> {
+  // Clearing the flag mutates another entity's evidence when out of scope:
+  // uniform not-found before any read or write, like exclude/restore.
+  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
     // Read the evidence first: UPDATE ... RETURNING would hand back the NEW
     // (nulled) flag, not the before-image the audit row must record.
@@ -2430,6 +2549,10 @@ export async function excludePossibleDuplicates(
   if (reason.length < 5 || reason.length > 500) {
     throw new BankingError("Exclusion reason must be between 5 and 500 characters");
   }
+  // Bulk-excluding another entity's flagged lines is the same cross-boundary
+  // write as excluding them one by one: gate the account up front so an
+  // out-of-scope account refuses before any line is touched.
+  await requireBankAccountInScope(db, ctx.orgId, accountId, ctx.allowedSubsidiaryIds);
   return db.transaction(async (tx) => {
     const rows = (await tx.execute<{ id: string; possible_duplicate_of: string }>(sql`
       update bank_statement_lines l
@@ -2468,6 +2591,7 @@ export async function excludePossibleDuplicates(
 
 /** Restore an excluded statement line back to the unmatched queue. */
 export async function restoreStatementLine(statementLineId: string, ctx: BankingContext): Promise<void> {
+  await requireStatementLineAccountInScope(db, ctx.orgId, statementLineId, ctx.allowedSubsidiaryIds);
   await db.transaction(async (tx) => {
     const candidateResult = (await tx.execute<{
         id: string;
@@ -2551,14 +2675,15 @@ export async function restoreStatementLine(statementLineId: string, ctx: Banking
  */
 export async function discardReconciliation(reconciliationId: string, ctx: BankingContext): Promise<void> {
   await db.transaction(async (tx) => {
-    const reconResult = (await tx.execute<ReconciliationRow>(sql`
-      select id, account_id, through_date, currency, statement_balance, status
-        from reconciliations
-       where id = ${reconciliationId} and org_id = ${ctx.orgId}
-       for update
+    const reconResult = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+       for update of r
     `));
     const recon = reconResult.rows[0];
-    if (!recon) throw new BankingError("Reconciliation not found");
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") {
       throw new BankingError("Signed-off reconciliations cannot be discarded");
     }
@@ -2619,10 +2744,16 @@ export async function markReconciled(
   ctx: BankingContext,
 ): Promise<{ journalLinesReconciled: number }> {
   return db.transaction(async (tx) => {
-    const account = (await tx.execute<{ account_id: string; status: string }>(sql`
-      select account_id, status from reconciliations where id = ${reconciliationId} and org_id = ${ctx.orgId}
+    const account = (await tx.execute<{ account_id: string; status: string; subsidiary_id: string | null }>(sql`
+      select r.account_id, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
     `)).rows[0];
-    if (!account) throw new BankingError("Reconciliation not found");
+    // Gate before the idempotent-retry early return: the retry reports the
+    // session's line counts, which a restricted caller must never observe
+    // for another entity's account.
+    requireSessionRowInScope(account, ctx.allowedSubsidiaryIds);
     // A completed sign-off is immutable evidence. Retrying it does not create
     // a new accounting action or require today's book configuration to remain active.
     if (account.status === "signed_off") {
@@ -2634,14 +2765,15 @@ export async function markReconciled(
     }
     const bookId = await reconciliationBookId(tx, ctx.orgId);
     await lockReconciliationAccount(tx, ctx.orgId, account.account_id);
-    const r = (await tx.execute<ReconciliationRow>(sql`
-      select id, account_id, through_date, currency, statement_balance, status
-        from reconciliations
-       where id = ${reconciliationId} and org_id = ${ctx.orgId}
-       for update
+    const r = (await tx.execute<ReconciliationRow & { subsidiary_id: string | null }>(sql`
+      select r.id, r.account_id, r.through_date, r.currency, r.statement_balance, r.status, a.subsidiary_id
+        from reconciliations r
+        join accounts a on a.id = r.account_id and a.org_id = r.org_id
+       where r.id = ${reconciliationId} and r.org_id = ${ctx.orgId}
+       for update of r
     `));
     const recon = r.rows[0];
-    if (!recon) throw new BankingError("Reconciliation not found");
+    requireSessionRowInScope(recon, ctx.allowedSubsidiaryIds);
     if (recon.status === "signed_off") {
       const existing = (await tx.execute<{ count: number }>(sql`
         select count(*)::int as count
@@ -2729,6 +2861,9 @@ export async function markReconciled(
           or bool_or(je.posting_date > ${recon.through_date})
           or bool_or(jl.reconciled_at is not null)
           or sum(jl.txn_amount) <> l.amount
+          ${ctx.allowedSubsidiaryIds == null
+            ? sql``
+            : sql`or bool_or(not (jl.subsidiary_id = any(${`{${[...ctx.allowedSubsidiaryIds].join(",")}}`}::uuid[])))`}
        limit 1
     `));
     if (invalidMatches.rows[0]) {
@@ -3026,7 +3161,7 @@ export async function signOffFromSourceEvidence(
   if (!(await sourceEvidencePolicyActive(ctx.orgId))) {
     return { signed: false, reason: "policy-disabled", throughDate: null, clearedLines: 0, unclearedLines: 0 };
   }
-  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId);
+  const account = await loadReconcilableAccount(ctx.orgId, opts.accountId, ctx.allowedSubsidiaryIds);
   const state = (await db.execute<{ connector: string; reconciled_through: string }>(sql`
     select connector, reconciled_through::text
       from source_reconciliation_state

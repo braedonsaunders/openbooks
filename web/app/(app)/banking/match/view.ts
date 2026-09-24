@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking/banking.ts'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../../lib/authz'
+import { requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { listReconcilableBankAccounts, openingCarryStartDate } from '../../../../lib/banking-accounts'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
 import type { MatchWorkspace } from './MatchWorkspace'
@@ -91,7 +91,10 @@ export async function loadMatch(
   ]))
 
   const unmatchedByAccount = new Map(unmatchedRes.rows.map((r) => [r.id, Number(r.unmatched)]))
-  const accounts = accountRefs.map((a) => ({
+  // The picker names only the caller's own subsidiaries' accounts: a shared
+  // account (or another entity's) is not offered, so it cannot be selected.
+  const visibleRefs = accountRefs.filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
+  const accounts = visibleRefs.map((a) => ({
     id: a.id,
     label: [a.number, a.name].filter(Boolean).join(' · '),
     unmatched: unmatchedByAccount.get(a.id) ?? 0,
@@ -101,7 +104,7 @@ export async function loadMatch(
     label: [a.number, a.name].filter(Boolean).join(' · '),
   }))
 
-  const account = accountId && isUuid(accountId) ? accountRefs.find((a) => a.id === accountId) : null
+  const account = accountId && isUuid(accountId) ? visibleRefs.find((a) => a.id === accountId) : null
 
   // No account selected → the workspace renders just its picker, so the
   // loader stops here rather than querying for a session that cannot exist.
@@ -131,7 +134,11 @@ export async function loadMatch(
   let data = null
   let totals = null
   if (session) {
-    const ctx = { orgId, userId: authz.user.id }
+    const ctx = {
+      orgId,
+      userId: authz.user.id,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    }
     totals = await reconciliationTotals(session.id, ctx)
     const bookId = await reconciliationBookId(db, orgId)
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -9,6 +10,10 @@ export const runtime = 'nodejs'
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
+  // Deleting a rule disables auto-categorization for every account it
+  // covers, so like create/update it requires unrestricted scope (403).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

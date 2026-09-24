@@ -65,7 +65,7 @@ test(
             description: "Concurrent bank-rule transaction",
             bankTransactionId: "bank-rule-concurrent-1",
           }],
-        }, { orgId: org.orgId, userId: actorId });
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null });
         assert.equal(imported.imported, 1);
         const statementLineId = (await db.execute(sql\`
           select id
@@ -79,7 +79,7 @@ test(
           accountId: org.accounts.bank,
           throughDate: org.date,
           statementBalance: "125.2500",
-        }, { orgId: org.orgId, userId: actorId })).id;
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null })).id;
 
         const ruleId = randomUUID();
         await db.execute(sql\`
@@ -109,12 +109,12 @@ test(
             statementLineId,
             ruleId,
             reconciliationId,
-          }),
+          }, null),
           applyRuleToLine(org.orgId, actorId, {
             statementLineId,
             ruleId,
             reconciliationId,
-          }),
+          }, null),
         ]);
         assert.equal(
           attempts.filter((result) => result.status === "fulfilled").length,
@@ -200,7 +200,7 @@ test(
             description: "Inactive rule transaction",
             bankTransactionId: "bank-rule-inactive-1",
           }],
-        }, { orgId: org.orgId, userId: actorId });
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null });
         assert.equal(imported.imported, 1);
         const statementLineId = (await db.execute(sql\`
           select id
@@ -214,7 +214,7 @@ test(
           accountId: org.accounts.bank,
           throughDate: org.date,
           statementBalance: "75.0000",
-        }, { orgId: org.orgId, userId: actorId })).id;
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null })).id;
 
         const ruleId = randomUUID();
         await db.execute(sql\`
@@ -244,7 +244,7 @@ test(
             statementLineId,
             ruleId,
             reconciliationId,
-          }),
+          }, null),
           /not active|disabled|inactive/,
         );
 
@@ -314,7 +314,7 @@ test(
             description: "Equal priority tug of war",
             bankTransactionId: "bank-rule-priority-1",
           }],
-        }, { orgId: org.orgId, userId: actorId });
+        }, { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null });
         assert.equal(imported.imported, 1);
 
         await db.execute(sql\`

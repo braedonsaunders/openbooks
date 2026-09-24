@@ -11,8 +11,9 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
+import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { listReconcilableBankAccounts } from '../../../../lib/banking-accounts'
+import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 import { mapBankFeedRows } from './sections'
 
@@ -91,7 +92,12 @@ export async function loadBankingImports(
   // account context as a picker over the ONE reconcilable-membership read
   // every banking surface agrees on — never a second account query.
   const canImport = can(authz, 'banking.reconcile')
-  const reconAccounts = canImport ? await listReconcilableBankAccounts(authz.user.orgId) : []
+  // The import picker and the operational panel name only the caller's own
+  // subsidiaries' accounts, mirroring the feed API's list filter.
+  const reconAccounts = canImport
+    ? (await listReconcilableBankAccounts(authz.user.orgId))
+        .filter((a) => subsidiaryScopeAllows(authz.allowedSubsidiaryIds, a.subsidiaryId))
+    : []
   const feeds = feedsEnabled
     ? ((await db.execute<FeedRow>(sql`
         select c.name, c.provider, c.status, c.last_sync_at, c.last_attempt_at, c.last_error, c.is_active,
@@ -99,6 +105,7 @@ export async function loadBankingImports(
           from bank_feed_connections c
           join accounts a on a.id = c.account_id and a.org_id = c.org_id
          where c.org_id = ${authz.user.orgId} and c.provider in ('plaid','gocardless','truelayer')
+           ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
          order by c.created_at desc
       `))).rows
     : []

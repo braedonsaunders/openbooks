@@ -41,7 +41,7 @@ for (const scenario of ["new session", "cutoff extension"] as const) {
       const org = await createScratchOrg();
       try {
         const actor = await createScratchUser(org.orgId, "Restore race auditor", "admin");
-        const ctx = { orgId: org.orgId, userId: actor };
+        const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
         await db.execute(sql`
           update accounts set reconcilable = true, currency_restriction = 'CAD'
            where org_id = ${org.orgId} and id = ${org.accounts.bank}

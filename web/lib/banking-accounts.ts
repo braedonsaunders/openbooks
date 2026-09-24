@@ -23,6 +23,8 @@ export interface ReconcilableBankAccount {
   number: string | null
   name: string
   type: string
+  /** Owning subsidiary; null = shared. Scoping stays each query's decision. */
+  subsidiaryId: string | null
 }
 
 interface ReconcilableBankAccountRow extends Record<string, unknown> {
@@ -30,6 +32,7 @@ interface ReconcilableBankAccountRow extends Record<string, unknown> {
   number: string | null
   name: string
   type: string
+  subsidiaryId: string | null
 }
 
 /**
@@ -43,12 +46,12 @@ export function reconcilableBankMembership() {
 /** Every reconcilable bank/card account in the org, by number. */
 export async function listReconcilableBankAccounts(orgId: string): Promise<ReconcilableBankAccount[]> {
   const res = await db.execute<ReconcilableBankAccountRow>(sql`
-    select a.id, a.number, a.name, a.type
+    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId"
       from accounts a
      where a.org_id = ${orgId} and ${reconcilableBankMembership()}
      order by a.number nulls last
   `)
-  return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type }))
+  return res.rows.map((a) => ({ id: a.id, number: a.number, name: a.name, type: a.type, subsidiaryId: a.subsidiaryId }))
 }
 
 /** Membership guard for the per-account page: null reads as a 404. */
@@ -57,12 +60,12 @@ export async function reconcilableBankAccount(
   accountId: string,
 ): Promise<ReconcilableBankAccount | null> {
   const res = await db.execute<ReconcilableBankAccountRow>(sql`
-    select a.id, a.number, a.name, a.type
+    select a.id, a.number, a.name, a.type, a.subsidiary_id as "subsidiaryId"
       from accounts a
      where a.id = ${accountId} and a.org_id = ${orgId} and ${reconcilableBankMembership()}
   `)
   const a = res.rows[0]
-  return a ? { id: a.id, number: a.number, name: a.name, type: a.type } : null
+  return a ? { id: a.id, number: a.number, name: a.name, type: a.type, subsidiaryId: a.subsidiaryId } : null
 }
 
 interface OpeningCarryRow extends Record<string, unknown> {

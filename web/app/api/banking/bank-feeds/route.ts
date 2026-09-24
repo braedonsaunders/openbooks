@@ -5,6 +5,8 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { resolveFeedSyncOverlapDays, sealCredentials } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
+import { guardSubsidiaryScope } from "../../../../lib/authz";
+import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 
 export const runtime = "nodejs";
 
@@ -38,6 +40,7 @@ export async function GET() {
       from bank_feed_connections c
       join accounts a on a.id = c.account_id and a.org_id = c.org_id
      where c.org_id = ${authz.user.orgId}
+       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
      order by c.created_at desc
   `));
   return NextResponse.json({ connections: rows.rows });
@@ -91,11 +94,16 @@ export async function POST(req: Request) {
   // reconcilable-bank membership every banking picker reads (F-t06-001). An
   // inactive or non-bank account would strand imports where no banking
   // surface can match them (F-t11-005).
-  const acct = (await db.execute(sql`
-    select id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
+  const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
+    select subsidiary_id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
       and reconcilable and is_active and not is_summary and type in ('asset_bank', 'liability_card')
   `));
   if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
+  // A feed imports that account's statements, so binding it to another
+  // entity's account (or a shared one, for a restricted caller) is uniform
+  // not-found — never a 400 naming the account as usable.
+  const scoped = guardSubsidiaryScope(authz, acct.rows[0]!.subsidiary_id);
+  if (scoped) return scoped;
 
   const isApi = API_PROVIDERS.has(body.provider);
   const sealed = isApi && body.credentials ? sealCredentials(body.credentials) : null;

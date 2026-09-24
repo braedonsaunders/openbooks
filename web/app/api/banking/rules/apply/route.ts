@@ -20,7 +20,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
   }
   try {
-    const result = await applyRulesToAccount(user.orgId, user.id, body.accountId)
+    const result = await applyRulesToAccount(
+      user.orgId,
+      user.id,
+      body.accountId,
+      gate.allowedSubsidiaryIds,
+    )
     return NextResponse.json(result)
   } catch (e) {
     if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })

@@ -179,7 +179,7 @@ test("signOffFromSourceEvidence signs off fully-cleared accounts without stateme
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
-    const ctx = { orgId: org.orgId, userId: actor };
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const entry = await postBankJournal(org, actor, ["308", "21"], "aug");
     await applySourceLineEvidence(org.orgId, "test-connector", [
@@ -232,7 +232,7 @@ test("partially-cleared accounts stay open with exact counts", { skip: !process.
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
-    const ctx = { orgId: org.orgId, userId: actor };
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const cleared = await postBankJournal(org, actor, ["100"], "cleared");
     await postBankJournal(org, actor, ["25"], "open");
@@ -262,7 +262,7 @@ test("source sign-off advances through later dates and yields to open sessions",
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
-    const ctx = { orgId: org.orgId, userId: actor };
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     const entry = await postBankJournal(org, actor, ["100"], "first");
     await applySourceLineEvidence(org.orgId, "test-connector", [
@@ -298,7 +298,7 @@ test("source sign-off refuses without evidence and when the policy is off", { sk
   const org = await createScratchOrg();
   try {
     const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
-    const ctx = { orgId: org.orgId, userId: actor };
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
     await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
     await postBankJournal(org, actor, ["100"], "unstamped");
     const noEvidence = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, ctx);

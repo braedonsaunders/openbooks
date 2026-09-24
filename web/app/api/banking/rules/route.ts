@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
 
@@ -31,6 +32,11 @@ function priority(body: Record<string, unknown>): { error: string } | { priority
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
+  // Bank rules are org-wide automation: one rule can exclude or categorize
+  // any account's lines, so only unrestricted callers may define them
+  // (canonical org-wide-policy shape: 403 naming the remedy).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { user } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -66,6 +72,10 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const gate = await guardFeaturePermission('banking.reconcile', 'banking')
   if (gate instanceof NextResponse) return gate
+  // Same org-wide-automation rule as POST: editing a rule can redirect any
+  // account's auto-categorization (canonical org-wide-policy 403).
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
   const { user } = gate
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;

@@ -149,7 +149,7 @@ for (const method of ['POST','PATCH'] as const) {
    const actorId=await authenticate(org);
    const {startReconciliation}=await import('@openbooks/engine/src/banking/banking.ts');
    await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
-   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'100'},{orgId:org.orgId,userId:actorId});
+   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'100'},{orgId:org.orgId,userId:actorId, allowedSubsidiaryIds: null });
    const body={code:'NEW_PRIMARY',name:'New primary',isPrimary:true,isActive:true};
    let id: string | undefined;
    if(method==='PATCH') {
@@ -172,7 +172,7 @@ test('book-switch preview enforces history while renaming the current primary re
   const {saveSetupBook}=await import('./setup/books');
   const {SETUP_ENTITY_BY_KEY}=await import('./setup/registry');
   await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
-  await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId});
+  await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId, allowedSubsidiaryIds: null });
   await assert.rejects(withOrgTransaction(org.orgId,()=>saveSetupBook(SETUP_ENTITY_BY_KEY.get('accounting-books')!,org.orgId,actorId,
    {code:'PREVIEW',name:'Preview',isPrimary:true,isActive:true},db,{dryRun:true,source:'import'})),/controlled book conversion/);
   const response=await send('PATCH','accounting-books',{id:org.bookId,code:'PRIMARY',name:'Renamed primary',isPrimary:true,isActive:true});
@@ -193,7 +193,7 @@ test('the first reconciliation and primary reassignment serialize on the shared 
   const started=new Promise<void>(resolve=>{ready=resolve;});
   const finish=new Promise<void>(resolve=>{release=resolve;});
   holding=withOrgTransaction(org.orgId,async()=>{
-   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId});
+   await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'0'},{orgId:org.orgId,userId:actorId, allowedSubsidiaryIds: null });
    ready();await finish;
   });
   await Promise.race([started,holding.then(()=>{throw new Error('first transaction ended before the fence probe');})]);

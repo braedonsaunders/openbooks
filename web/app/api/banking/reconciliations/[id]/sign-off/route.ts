@@ -14,7 +14,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   try {
-    const result = await markReconciled(id, { orgId: user.orgId, userId: user.id })
+    const result = await markReconciled(id, {
+      orgId: user.orgId,
+      userId: user.id,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
     return bankingErrorResponse(e)
