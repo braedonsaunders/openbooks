@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assertQbdResponsePayload, assertSoapEnvelopeComplexity, buildCapturePlan, calendarMonths, continueRequestXml, identifyQbdSoapCall, negotiateQbxmlVersion, parseQbdReportDate, parseReportRows, parseXml, QBD_PREAUTH_MAX_BYTES, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
+import { assertQbdResponsePayload, assertSoapEnvelopeComplexity, assertUniformReportLocale, buildCapturePlan, calendarMonths, continueRequestXml, identifyQbdSoapCall, negotiateQbxmlVersion, parseQbdReportAmount, parseQbdReportDate, parseReportRows, parseXml, QBD_PREAUTH_MAX_BYTES, requestElementName, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, xmlEscape } from "./qbxml.ts";
 
 test("capture plan splits the ledger into bounded calendar months", () => {
   const through = new Date("2024-03-12T19:20:00Z");
@@ -51,6 +51,59 @@ test("report dates normalize from QuickBooks display format to ISO", () => {
 
 test("parser rejects DTD and entity declarations", () => {
   assert.throws(() => parseXml('<!DOCTYPE x [<!ENTITY y "z">]><x>&y;</x>'), /may not define/);
+});
+
+test("report amounts parse in either locale without silent rescaling", () => {
+  // US company file: commas are grouping, unchanged from the old behavior.
+  assert.deepEqual(parseQbdReportAmount("1,234.56"), { text: "1234.56", decimal: ".", grouping: "," });
+  assert.deepEqual(parseQbdReportAmount("1,234.5678"), { text: "1234.5678", decimal: ".", grouping: "," });
+  // German company file: the comma is the decimal mark — stripping it would
+  // overstate twelve-thirty-four as 1234 (100x).
+  assert.deepEqual(parseQbdReportAmount("12,34"), { text: "12.34", decimal: ",", grouping: null });
+  assert.deepEqual(parseQbdReportAmount("1.234,56"), { text: "1234.56", decimal: ",", grouping: "." });
+  assert.deepEqual(parseQbdReportAmount("-1.234,56"), { text: "-1234.56", decimal: ",", grouping: "." });
+  // Unmarked and grouped-only values pin no decimal separator.
+  assert.deepEqual(parseQbdReportAmount("25.00"), { text: "25.00", decimal: ".", grouping: null });
+  assert.deepEqual(parseQbdReportAmount("1,234,567"), { text: "1234567", decimal: null, grouping: "," });
+  assert.deepEqual(parseQbdReportAmount("1.234.567"), { text: "1234567", decimal: null, grouping: "." });
+  // Empty cells (headings/blanks) stay zero; zeros never refuse over format.
+  assert.deepEqual(parseQbdReportAmount(""), { text: "0", decimal: null, grouping: null });
+  assert.deepEqual(parseQbdReportAmount("0.000"), { text: "0", decimal: null, grouping: null });
+  assert.deepEqual(parseQbdReportAmount("0,000"), { text: "0", decimal: null, grouping: null });
+});
+
+test("ambiguous report amounts refuse by name with both readings", () => {
+  // A REALISTIC collision, not a synthetic duplicate: the message must tell
+  // a US operator apart from a German one, naming both readings.
+  assert.throws(
+    () => parseQbdReportAmount("12,345", "trial balance"),
+    /QuickBooks amount "12,345" in trial balance is ambiguous: it reads as 12345 with US thousands separators and as 12\.345 with a European decimal comma/,
+  );
+  assert.throws(
+    () => parseQbdReportAmount("1.234", "trial balance"),
+    /QuickBooks amount "1\.234" in trial balance is ambiguous: it reads as 1\.234 with a US decimal point and as 1234 with European thousands separators/,
+  );
+  // Misplaced grouping (Indian-style, stray separators) refuses too.
+  assert.throws(() => parseQbdReportAmount("1,00,000"), /misplaced separators/);
+  assert.throws(() => parseQbdReportAmount("12,34.56"), /misplaced separators/);
+  assert.throws(() => parseQbdReportAmount("1 234,56"), /not a recognized number/);
+});
+
+test("a report mixing US and European formats refuses as a locale mismatch", () => {
+  const us = [parseQbdReportAmount("1,234.56"), parseQbdReportAmount("12.34")];
+  const german = [parseQbdReportAmount("1.234,56"), parseQbdReportAmount("12,34")];
+  assert.doesNotThrow(() => assertUniformReportLocale(us, "trial balance"));
+  assert.doesNotThrow(() => assertUniformReportLocale(german, "trial balance"));
+  // The cross case: US grouping beside a European decimal mark.
+  const crossed = [parseQbdReportAmount("1,234,567"), parseQbdReportAmount("12,34")];
+  assert.throws(
+    () => assertUniformReportLocale([...us, ...german], "trial balance"),
+    /mixes US-style \(1,234\.56\) and European-style \(1\.234,56\) number formats/,
+  );
+  assert.throws(
+    () => assertUniformReportLocale(crossed, "trial balance"),
+    /mixes US-style \(1,234\.56\) and European-style \(1\.234,56\) number formats/,
+  );
 });
 
 test("request version is negotiated down to the QuickBooks-supported qbXML version", () => {

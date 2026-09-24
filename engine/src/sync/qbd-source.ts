@@ -3,7 +3,7 @@ import { businessToday, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { latestWebConnectorHeartbeat, prepareCapture, releaseCapture, waitForCapture, type CaptureResponse } from "../qbd/bridge.ts";
-import { assertQbdResponsePayload, nodes, parseQbdReportDate, parseReportRows, parseXml } from "../qbd/qbxml.ts";
+import { assertQbdResponsePayload, assertUniformReportLocale, nodes, parseQbdReportAmount, parseQbdReportDate, parseReportRows, parseXml, type QbdReportAmount } from "../qbd/qbxml.ts";
 import type { NativeContext } from "./native.ts";
 import { allModules, fiscalYearsForRange, monthlySourcePeriods } from "./periods.ts";
 import { buildQbdLedgerDocuments } from "./qbd-native.ts";
@@ -65,9 +65,16 @@ function findDeep(value: unknown, key: string): unknown {
   return undefined;
 }
 
-function cleanAmount(value: string | undefined): string {
-  const normalized = String(value ?? "").replaceAll(",", "").trim();
-  return normalized === "" ? "0" : normalized;
+/**
+ * Parse a report amount cell through the locale-aware parser (never by
+ * stripping commas: a German `12,34` is twelve-thirty-four, not 1234) and
+ * remember its locale evidence so the caller can refuse a report that mixes
+ * US and European number formats.
+ */
+function reportAmount(into: QbdReportAmount[], value: string | undefined, scope: string): string {
+  const parsed = parseQbdReportAmount(value, scope);
+  into.push(parsed);
+  return parsed.text;
 }
 
 export class QbdSource implements MigrationSource {
@@ -245,9 +252,21 @@ export class QbdSource implements MigrationSource {
     // any deletion inference. Zero-amount TxnID-less rows (headings, blanks)
     // carry no balance and stay skippable downstream.
     const month = family.startsWith("ledger:") ? family.slice("ledger:".length) : family;
-    rows.forEach((row, index) => {
+    const scope = `GeneralLedger response for month ${month}`;
+    const locales: QbdReportAmount[] = [];
+    const parsed = rows.map((row) => ({
+      row,
+      debit: reportAmount(locales, row.columns.Debit, scope),
+      credit: reportAmount(locales, row.columns.Credit, scope),
+    }));
+    // A report mixing US and European number formats would import half its
+    // amounts at 100x while the TB-vs-GL verification — parsing both sides
+    // the same way — stayed green. Refuse the locale mismatch by name here,
+    // before any deletion inference or document building.
+    assertUniformReportLocale(locales, scope);
+    parsed.forEach(({ row, debit, credit }, index) => {
       if (row.columns.TxnID) return;
-      const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+      const amount = toUnits(debit) - toUnits(credit);
       if (amount !== 0n) {
         throw new Error(`QuickBooks GeneralLedger response for month ${month} contains a nonzero row without a TxnID (row ${index + 1}, account "${row.columns.Account ?? ""}", debit "${row.columns.Debit ?? ""}", credit "${row.columns.Credit ?? ""}"); the sync is refused before any deletion inference`);
       }
@@ -315,10 +334,11 @@ export class QbdSource implements MigrationSource {
       const id = text(a.ListID);
       return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
     }));
-    return parseReportRows(response.responseXml).flatMap((row) => {
+    const locales: QbdReportAmount[] = [];
+    const out = parseReportRows(response.responseXml).flatMap((row) => {
       if (row.rowType !== "DataRow") return [];
       const accountRef = byName.get(row.columns.Account ?? "");
-      const balance = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+      const balance = toUnits(reportAmount(locales, row.columns.Debit, "trial balance")) - toUnits(reportAmount(locales, row.columns.Credit, "trial balance"));
       if (!accountRef) {
         // A nonzero source balance with no ListID mapping must REFUSE
         // verification by name: silently dropping it makes the account
@@ -332,6 +352,8 @@ export class QbdSource implements MigrationSource {
       }
       return [{ accountRef, balance: fromUnits(balance) }];
     });
+    assertUniformReportLocale(locales, "trial balance");
+    return out;
   }
 
   /**
@@ -355,12 +377,14 @@ export class QbdSource implements MigrationSource {
       return id ? [[text(a.FullName), id] as const, [text(a.Name), id] as const] : [];
     }));
     const openingDate = this.config.historyStartDate;
-    return responses.flatMap((response) => {
+    const scope = `opening trial balance as of ${asOf}`;
+    const locales: QbdReportAmount[] = [];
+    const out = responses.flatMap((response) => {
       assertQbdResponsePayload({ family: "opening-trial-balance", requestKind: "TrialBalance", expectedRs: "GeneralSummaryReportQueryRs", responseXml: response.responseXml });
       return parseReportRows(response.responseXml).flatMap((row) => {
         if (row.rowType !== "DataRow") return [];
         const accountRef = byName.get(row.columns.Account ?? "");
-        const balance = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+        const balance = toUnits(reportAmount(locales, row.columns.Debit, scope)) - toUnits(reportAmount(locales, row.columns.Credit, scope));
         if (!accountRef) {
           if (balance !== 0n) {
             throw new Error(`QuickBooks opening trial balance as of ${asOf} reports ${fromUnits(balance)} for unmapped account "${row.columns.Account ?? ""}"; map the account before sync can proceed`);
@@ -371,6 +395,8 @@ export class QbdSource implements MigrationSource {
         return [{ accountRef, openingDate, amount: fromUnits(balance) }];
       });
     });
+    assertUniformReportLocale(locales, scope);
+    return out;
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
@@ -388,7 +414,10 @@ export class QbdSource implements MigrationSource {
         // require ISO. Fail closed on an unparseable date rather than
         // bucketing source truth into a garbage month.
         const month = parseQbdReportDate(row.columns.Date).slice(0, 7);
-        const amount = toUnits(cleanAmount(row.columns.Debit)) - toUnits(cleanAmount(row.columns.Credit));
+        // Locale uniformity was already refused per family inside ledgerRows;
+        // here each cell still parses through the locale-aware parser so no
+        // amount reaches the true-up through comma-stripping.
+        const amount = toUnits(parseQbdReportAmount(row.columns.Debit, family).text) - toUnits(parseQbdReportAmount(row.columns.Credit, family).text);
         if (!accountRef) {
           // Same fail-closed rule as trialBalance above: nonzero source
           // activity with no ListID mapping refuses by name (account, month,

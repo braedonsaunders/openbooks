@@ -184,6 +184,140 @@ function isCalendarDate(year: number, month: number, day: number): boolean {
   return Number.isInteger(day) && day >= 1 && day <= days;
 }
 
+export interface QbdReportAmount {
+  /** Canonical decimal text: no grouping, `.` decimal, sign preserved. */
+  text: string;
+  /** Inferred decimal separator, or null when the value pins none. */
+  decimal: "." | "," | null;
+  /** Grouping separator present, or null when none. */
+  grouping: "." | "," | null;
+}
+
+/**
+ * Locale-aware parse of a QuickBooks report amount cell into canonical
+ * decimal text for `toUnits`. Every QBD amount consumer must read through
+ * this — never by stripping commas.
+ *
+ * CompanyQuery/PreferencesQuery expose no number-format field (the only
+ * preferences value read anywhere is ClosingDate), so the company file's
+ * separators cannot be looked up and must be inferred per value. The
+ * previous shared helper stripped every comma unconditionally, so a
+ * German-locale company file's `12,34` (twelve-thirty-four) imported as
+ * 1234 — a silent 100x overstatement on small amounts — while `1.234,56`
+ * threw: small amounts corrupted while large ones refused.
+ *
+ * Inference rules (strict; anything else refuses by name):
+ * - Both `.` and `,`: the LAST one is the decimal separator (US `1,234.56`
+ *   and German `1.234,56` agree on this); the other may only appear as valid
+ *   thousands grouping (first group 1–3 digits, the rest exactly 3).
+ * - One separator kind: a single mark with a 3-digit tail (`12,345`,
+ *   `1.234`) is genuinely ambiguous (US thousands vs European decimal) and
+ *   refuses naming both readings. Repeated marks must be valid grouping; a
+ *   lone mark with any other tail length is that locale's decimal mark.
+ * - All-zero values (`0.000`, `0,000`) are zero in every locale and stay
+ *   locale-neutral. Empty cells are zero (headings/blanks).
+ * - Anything else (spaces, apostrophes, Indian-style `1,00,000`, misplaced
+ *   grouping) refuses by name rather than guessing.
+ */
+export function parseQbdReportAmount(value: unknown, scope = "QuickBooks report"): QbdReportAmount {
+  const raw = String(value ?? "").trim();
+  if (raw === "") return { text: "0", decimal: null, grouping: null };
+  let sign = "";
+  let body = raw;
+  if (body[0] === "-" || body[0] === "+") {
+    if (body[0] === "-") sign = "-";
+    body = body.slice(1);
+  }
+  const fail = (reason: string): never => {
+    throw new Error(`QuickBooks amount ${JSON.stringify(raw)} in ${scope} ${reason}`);
+  };
+  const remedy = "confirm the company file's regional number format and re-run the capture";
+  if (body === "" || !/^[0-9]/.test(body) || /[^0-9.,]/.test(body)) {
+    fail(`is not a recognized number — ${remedy}`);
+  }
+  // Zero in every locale: the separators cannot change the value, so no
+  // locale is pinned and zero-shaped rows never refuse over formatting.
+  if (/^0+$/.test(body.replaceAll(".", "").replaceAll(",", ""))) {
+    return { text: "0", decimal: null, grouping: null };
+  }
+  const finish = (text: string, decimal: "." | "," | null, grouping: "." | "," | null): QbdReportAmount =>
+    ({ text: `${sign}${text}`, decimal, grouping });
+  const validGrouping = (int: string, sep: "." | ","): boolean => {
+    if (!int.includes(sep)) return false;
+    const groups = int.split(sep);
+    return groups.length > 1 && /^\d{1,3}$/.test(groups[0]!) && groups.slice(1).every((g) => /^\d{3}$/.test(g));
+  };
+  const dots = (body.match(/\./g) ?? []).length;
+  const commas = (body.match(/,/g) ?? []).length;
+  if (dots > 0 && commas > 0) {
+    const decimal: "." | "," = body.lastIndexOf(".") > body.lastIndexOf(",") ? "." : ",";
+    const grouping: "." | "," = decimal === "." ? "," : ".";
+    const cut = body.lastIndexOf(decimal);
+    const int = body.slice(0, cut);
+    const frac = body.slice(cut + 1);
+    if (!/^\d+$/.test(frac) || !validGrouping(int, grouping)) {
+      fail(`has misplaced separators — ${remedy}`);
+    }
+    return finish(`${int.replaceAll(grouping, "")}.${frac}`, decimal, grouping);
+  }
+  if (commas > 0) {
+    if (commas > 1) {
+      if (!/^\d{1,3}(,\d{3})+$/.test(body)) fail(`has misplaced separators — ${remedy}`);
+      return finish(body.replaceAll(",", ""), null, ",");
+    }
+    const [int = "", frac = ""] = body.split(",");
+    if (!/^\d+$/.test(int) || !/^\d+$/.test(frac)) fail(`is not a recognized number — ${remedy}`);
+    if (frac.length === 3) {
+      fail(
+        `is ambiguous: it reads as ${int}${frac} with US thousands separators and as ${int}.${frac} with a European decimal comma — ${remedy}`,
+      );
+    }
+    return finish(`${int}.${frac}`, ",", null);
+  }
+  if (dots > 0) {
+    if (dots > 1) {
+      if (!/^\d{1,3}(\.\d{3})+$/.test(body)) fail(`has misplaced separators — ${remedy}`);
+      return finish(body.replaceAll(".", ""), null, ".");
+    }
+    const [int = "", frac = ""] = body.split(".");
+    if (!/^\d+$/.test(int) || !/^\d+$/.test(frac)) fail(`is not a recognized number — ${remedy}`);
+    if (frac.length === 3) {
+      fail(
+        `is ambiguous: it reads as ${int}.${frac} with a US decimal point and as ${int}${frac} with European thousands separators — ${remedy}`,
+      );
+    }
+    return finish(body, ".", null);
+  }
+  return finish(body, null, null);
+}
+
+/**
+ * A single company file formats every amount one way. When one report
+ * carries both US-shaped (`1,234.56`) and European-shaped (`1.234,56`)
+ * evidence — including the cross case of US grouping beside a European
+ * decimal mark — the capture is refused by name instead of importing half
+ * its amounts at 100x. This is what lets the trial-balance verification
+ * catch a locale scale error rather than staying green on two
+ * identically-misparsed sides.
+ */
+export function assertUniformReportLocale(
+  amounts: ReadonlyArray<Pick<QbdReportAmount, "decimal" | "grouping">>,
+  scope: string,
+): void {
+  const decimals = new Set(amounts.map((a) => a.decimal).filter((d) => d !== null));
+  const groupings = new Set(amounts.map((a) => a.grouping).filter((g) => g !== null));
+  const mixed =
+    decimals.size > 1 ||
+    groupings.size > 1 ||
+    [...decimals].some((d) => groupings.has(d)) ||
+    [...groupings].some((g) => decimals.has(g));
+  if (mixed) {
+    throw new Error(
+      `QuickBooks ${scope} mixes US-style (1,234.56) and European-style (1.234,56) number formats — confirm the company file's regional number format and re-run the capture`,
+    );
+  }
+}
+
 /**
  * Pre-authentication bound for the Web Connector SOAP endpoint. Every method
  * except a ticket-authenticated receiveResponseXML must fit inside this head:

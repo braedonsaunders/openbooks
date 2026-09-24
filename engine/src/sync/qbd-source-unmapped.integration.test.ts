@@ -106,6 +106,48 @@ test("a nonzero trial-balance row for an unmapped account refuses verification b
   }
 });
 
+test("a German-locale trial balance parses decimal commas without rescaling", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const connectionId = await createConnection(org.orgId);
+  try {
+    const source = await seedCapture(org.orgId, connectionId, [
+      { family: "account", requestKind: "AccountQuery", responseXml: accountListXml() },
+      {
+        family: "trial-balance",
+        requestKind: "TrialBalance",
+        responseXml: trialBalanceXml([
+          { account: "Cash", debit: "1.234,56", credit: "" },
+          { account: "Opening Equity", debit: "", credit: "1.234,56" },
+        ]),
+      },
+    ]);
+    assert.deepEqual(await source.trialBalance(), [
+      { accountRef: "CASH-1", balance: "1234.5600" },
+      { accountRef: "EQ-1", balance: "-1234.5600" },
+    ]);
+
+    // A mixed-locale trial balance refuses as a locale mismatch instead of
+    // importing half its rows at 100x while verification stays green.
+    const mixed = await seedCapture(org.orgId, connectionId, [
+      { family: "account", requestKind: "AccountQuery", responseXml: accountListXml() },
+      {
+        family: "trial-balance",
+        requestKind: "TrialBalance",
+        responseXml: trialBalanceXml([
+          { account: "Cash", debit: "1,234.56", credit: "" },
+          { account: "Opening Equity", debit: "", credit: "1.234,56" },
+        ]),
+      },
+    ]);
+    await assert.rejects(() => mixed.trialBalance(), /mixes US-style/);
+  } finally {
+    await db.execute(sql`delete from qbd_requests where connection_id = ${connectionId}`);
+    await db.execute(sql`delete from qbd_captures where connection_id = ${connectionId}`);
+    await db.execute(sql`delete from connections where id = ${connectionId}`);
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("the opening trial balance returns carried balances dated at the history start", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const connectionId = await createConnection(org.orgId);
