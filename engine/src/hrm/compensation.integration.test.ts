@@ -11,6 +11,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
+import { revisePosition } from "./positions.ts";
 import { decideGate } from "../flows/gates.ts";
 import { CompensationError } from "./compensation/errors.ts";
 import {
@@ -664,6 +665,64 @@ test("HR-12 headcount plan lines cost from bands and approve into requisitions",
       basis: "band_target", annual_target: "100000.0000", planned_fte: "1",
       burden_rate: "0.20", burden_source: "compensation_settings",
     });
+    // Backfill placement is owned by the position version effective on the
+    // planned start. Caller-supplied placement cannot price a different
+    // level/entity, and omitted optional placement fields derive from P.
+    const subB = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+      select ${subB}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', base_currency, country
+        from subsidiaries where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+    const departmentB = randomUUID();
+    await db.execute(sql`
+      insert into departments (id, org_id, name, subsidiary_id)
+      values (${departmentB}, ${org.orgId}, 'Second entity engineering', ${subB})`);
+    const otherLevel = await createJobLevel({
+      orgId: org.orgId, actorId: h.hrId, familyId: level.familyId,
+      code: "IC5", name: "Engineer V", rank: 5,
+      equalValueCriteria: [{ criterion: "skills", weight: "1" }],
+    });
+    await createPayBand({
+      orgId: org.orgId, actorId: h.hrId,
+      scope: {
+        familyId: level.familyId, levelId: otherLevel.id,
+        employerSubsidiaryId: org.subsidiaryId, locationId: null,
+      },
+      currency: "CAD", basis: "annual", min: "180000", target: "200000", max: "220000",
+      effectiveFrom: "2020-01-01", reason: "distinct entity and level for position-scope regression",
+    });
+    const positioned = await seedPositionedEmployment(org.orgId, subB, {
+      levelId: level.id, departmentId: departmentB, positionCode: "PLAN-BACKFILL",
+    });
+    const positionId = positioned.positionId!;
+    await assert.rejects(
+      createPlanLine({
+        orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "backfill", positionId,
+        title: "Engineer III", employerSubsidiaryId: org.subsidiaryId, jobLevelId: otherLevel.id,
+        departmentId: null, plannedFte: "1", startOn: "2026-10-01", currency: "CAD",
+      }),
+      /belongs to employer subsidiary .* not .* use the position's employer/,
+    );
+    const positionLine = await createPlanLine({
+      orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "backfill", positionId,
+      title: "Engineer III", employerSubsidiaryId: subB,
+      plannedFte: "1", startOn: "2026-10-01", currency: "CAD",
+    });
+    assert.equal(positionLine.employerSubsidiaryId, subB);
+    assert.equal(positionLine.departmentId, departmentB);
+    assert.equal(positionLine.jobLevelId, level.id);
+    const requisitionsBeforeStaleApprove = Number((await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`)).rows[0]?.n ?? "0");
+    await grantPermissions(org.orgId, h.hrId, ["hrm.position.manage"]);
+    await revisePosition({
+      orgId: org.orgId, actorId: h.hrId, positionId,
+      departmentId: null,
+      effectiveFrom: "2026-10-01", reason: "position changed after the plan line was costed",
+    });
+    await assert.rejects(approvePlanLine({ orgId: org.orgId, actorId: h.hrId, lineId: positionLine.id }),
+      /belongs to department none, not .* use the position's department/);
+    assert.equal(Number((await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from hrm_requisitions where org_id = ${org.orgId}`)).rows[0]?.n ?? "0"), requisitionsBeforeStaleApprove);
     // A create line with a position is refused at the gate.
     await assert.rejects(
       createPlanLine({
