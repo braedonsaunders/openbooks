@@ -12,7 +12,7 @@ import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockIn
 import { consumeLayers, recordConsumptions } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
 import { loadDocumentInventoryLines, inventoryPostingEffectKey, UUID_RE, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
-import { postedReturnQuantity } from "./return-quantities.ts";
+import { liveReceiptQuantity, postedReturnQuantity } from "./return-quantities.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "./documents-purchasing.ts";
 
 export interface VendorCreditInventoryReturnSelection {
@@ -121,7 +121,6 @@ interface SourceReceiptEvidence extends Record<string, unknown> {
   status: string;
   source_document_kind: string | null;
   source_vendor_id: string | null;
-  is_reversed: boolean;
 }
 
 async function validateVendorReturnSource(
@@ -137,12 +136,7 @@ async function validateVendorReturnSource(
            movement.stock_location_id, movement.lot_id, movement.serial_id,
            movement.quantity, movement.kind, movement.status,
            source_document.kind as source_document_kind,
-           source_document.party_id as source_vendor_id,
-           exists (
-             select 1 from inventory_movements reversal
-              where reversal.org_id = movement.org_id
-                and reversal.reverses_movement_id = movement.id
-           ) as is_reversed
+           source_document.party_id as source_vendor_id
       from inventory_movements movement
       left join document_lines source_line
         on source_line.id = movement.document_line_id
@@ -160,7 +154,11 @@ async function validateVendorReturnSource(
       `${label} must reference a posted receipt movement`,
     );
   }
-  if (source.is_reversed) {
+  // Liveness reads through the helper the bill-coverage path shares: any
+  // posted, unreversed reversal nets the receipt down, and a fully reversed
+  // receipt is dead here exactly when the bill treats it as unreceived.
+  const live = await liveReceiptQuantity(runner, orgId, source.id);
+  if (cmp(live.quantity, source.quantity) !== 0) {
     throw new InventoryError(`${label} references a reversed receipt`);
   }
   if (

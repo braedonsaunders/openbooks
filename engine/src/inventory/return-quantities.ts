@@ -41,6 +41,51 @@ export function postedReturnEvidenceScope(input: {
 }
 
 /**
+ * Live quantity and value of one receipt movement: its own quantity and
+ * total value net of posted, unreversed reversals pointing at it.
+ * Reversals carry negated quantities and values under
+ * `reverses_movement_id`, so a fully reversed receipt nets to zero and a
+ * partially reversed one to its remainder; a reversal that was itself
+ * reversed restores the stock and nets back, matching the returnable-source
+ * picker's rule. Shared by goods-receipt coverage
+ * (./documents-purchasing.ts) and the vendor-return source guard
+ * (./documents-vendor-credits.ts) so a reversed receipt is dead for both:
+ * the bill must receive it into layers exactly when the return flow
+ * treats it as dead.
+ */
+export type LiveReceiptQuantity = {
+  quantity: string;
+  value: string;
+};
+
+export async function liveReceiptQuantity(
+  runner: SqlExecutor,
+  orgId: string,
+  movementId: string,
+): Promise<LiveReceiptQuantity> {
+  const rows = (await runner.execute<LiveReceiptQuantity>(sql`
+    select (coalesce((select m.quantity from inventory_movements m
+                      where m.org_id = ${orgId} and m.id = ${movementId}), 0)
+            + coalesce((select sum(r.quantity) from inventory_movements r
+                         where r.org_id = ${orgId} and r.reverses_movement_id = ${movementId}
+                           and r.status = 'posted'
+                           and not exists (
+                             select 1 from inventory_movements r2
+                              where r2.org_id = r.org_id and r2.reverses_movement_id = r.id
+                           )), 0))::text as quantity,
+           (coalesce((select m.total_value from inventory_movements m
+                      where m.org_id = ${orgId} and m.id = ${movementId}), 0)
+            + coalesce((select sum(r.total_value) from inventory_movements r
+                         where r.org_id = ${orgId} and r.reverses_movement_id = ${movementId}
+                           and r.status = 'posted'
+                           and not exists (
+                             select 1 from inventory_movements r2
+                              where r2.org_id = r.org_id and r2.reverses_movement_id = r.id
+                           )), 0))::text as value`)).rows;
+  return rows[0] ?? { quantity: "0", value: "0" };
+}
+
+/**
  * Absolute quantity already returned against one source movement by posted,
  * unreversed credit lines. Absolute values so the purchase side (negative
  * `return` movements) and the sales side (positive `receipt` movements)
