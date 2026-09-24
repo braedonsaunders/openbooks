@@ -254,20 +254,27 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
 
 function RecurringPanel() {
   const [rows, setRows] = useState<Schedule[]>([]);
+  const [loadState, setLoadState] = useState<"loading" | "loaded" | "failed">("loading");
   const [busy, setBusy] = useState(false);
   const [form, setForm] = useState({ templateDocumentNumber: "", cadence: "monthly", cron: "", nextRunOn: "", autoPost: false });
   const [error, setError] = useState<string | null>(null);
   const t = useTranslations("ar.collections.recurring");
   const tErrors = useTranslations("ar.collections.errors");
+  const common = useTranslations("common");
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
   const load = () => {
-    return fetch("/api/recurring").then((r) => {
-      if (r.ok) return r.json().then((body) => setRows(body.schedules ?? []));
-    });
+    setLoadState("loading");
+    setRows([]);
+    return fetch("/api/recurring").then(async (r) => {
+      if (!r.ok) throw new Error(common("feedback.loadFailed"));
+      const body = await r.json();
+      setRows(body.schedules ?? []);
+      setLoadState("loaded");
+    }).catch(() => setLoadState("failed"));
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void Promise.resolve().then(load); }, []);
 
   const create = async () => {
     setError(null);
@@ -359,6 +366,8 @@ function RecurringPanel() {
             </tr>
           </thead>
           <tbody>
+            {loadState === "loading" && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground" role="status">{common("feedback.loading")}</td></tr>}
+            {loadState === "failed" && <tr><td colSpan={8} className="py-6 text-center text-destructive" role="alert"><span>{common("feedback.loadFailed")}</span> <Button size="sm" variant="outline" onClick={() => { void load(); }}>{common("actions.retry")}</Button></td></tr>}
             {rows.map((s) => (
               <tr key={s.id} className="border-t">
                 <td className="whitespace-nowrap px-3 py-2 font-medium">{s.templateNumber}</td>
@@ -377,7 +386,7 @@ function RecurringPanel() {
                 </td>
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</td></tr>}
+            {loadState === "loaded" && rows.length === 0 && <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">{t("noneYet")}</td></tr>}
           </tbody>
         </table>
       </div>

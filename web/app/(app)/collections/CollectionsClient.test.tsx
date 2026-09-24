@@ -34,6 +34,8 @@ if (typeof window.matchMedia !== 'function') {
 const script = {
   deletes: [] as string[],
   loads: 0,
+  recurringLoads: 0,
+  recurringFailFirst: false,
 }
 Object.assign(globalThis, {
   __collectionsTestRouter: {
@@ -86,14 +88,16 @@ const POLICY = {
   ],
 }
 
-async function mount(t: TestContext, deleteResponder: () => Response): Promise<void> {
+async function mount(t: TestContext, deleteResponder: () => Response, recurringFailFirst = false): Promise<void> {
   script.deletes = []
   script.loads = 0
+  script.recurringLoads = 0
+  script.recurringFailFirst = recurringFailFirst
   const prior = globalThis.fetch
   globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
     const url = String(input)
     const method = init?.method ?? 'GET'
-    if (url === '/api/recurring') return Response.json({ schedules: [] })
+    if (url === '/api/recurring') return ++script.recurringLoads === 1 && script.recurringFailFirst ? Response.json({}, { status: 503 }) : Response.json({ schedules: [] })
     if (url === '/api/dunning' && method === 'GET') {
       script.loads += 1
       return Response.json({ policies: [POLICY] })
@@ -168,4 +172,12 @@ test('a successful delete reloads the list', async (t) => {
   await click(del)
   assert.equal(document.querySelector('[role="alert"]'), null, 'no refusal renders on success')
   assert.equal(script.loads, 2, 'a confirmed delete reloads the list')
+})
+
+test('a failed recurring-schedule read shows retry instead of none yet', async (t) => {
+  await mount(t, () => Response.json({ ok: true }), true)
+  assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes('Failed to load'))
+  assert.ok(!document.body.textContent?.includes('No recurring schedules yet.'))
+  await click(findButton('Retry')!)
+  assert.ok(script.recurringLoads === 2 && document.body.textContent?.includes('No recurring schedules yet.'))
 })
