@@ -197,3 +197,27 @@ test("the retired lumped domicile refuses with the re-affirmation remedy", async
   } as never;
   await assert.rejects(computeFrStatutory(ctx), /re-affirm domicile/);
 });
+
+test("2026 RGDU eligible SMIC payroll refuses until its reduction can be priced", async () => {
+  // URSSAF's 2026 RGDU applies to eligible remuneration below 3×SMIC and
+  // needs employee/contract history plus employer-size and hours inputs.
+  // The pack currently lacks those facts, so it must stop before posting the
+  // unreduced employer contributions as a complete calculation.
+  // Sources: CSS art. L.241-13 (https://www.legifrance.gouv.fr/codes/id/LEGIARTI000006742355/2026-03-19)
+  // and URSSAF RGDU rules (https://www.urssaf.fr/accueil/employeur/beneficier-exonerations/reduction-generale-cotisation.html).
+  const pushed: unknown[] = [];
+  const ctx = {
+    taxYear: 2026,
+    region: "FR",
+    run: { pay_date: "2026-06-30" },
+    income: "1823.03",
+    nonPeriodic: "0.0000",
+    periodsPerYear: 12,
+    employerEmployeeCount: 12,
+    certificateFor: () => ({ answers: { domicile: "metropole" } }),
+    pushStatutory: (...args: unknown[]) => pushed.push(args),
+  } as never;
+
+  await assert.rejects(computeFrStatutory(ctx), /RGDU.*not calculated/);
+  assert.deepEqual(pushed, [], "no statutory line is emitted after the refusal");
+});

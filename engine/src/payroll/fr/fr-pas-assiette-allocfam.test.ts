@@ -131,12 +131,11 @@ test("DEFECT 1: PAS prices the net imposable, not the brut (3 400 €, transmis 
   assert.equal(statutory.pas, "139.4200");
 });
 
-test("DEFECT 1: adapter withholds 139,42 € (not 170,00 €) on 3 400 € + 5 %", async () => {
-  const result = await FR_PAYROLL_PACK.computeStatutory(ctxFor("3400.00", "5"));
-  assert.equal(result["BRUT"], "3400.0000");
-  assert.equal(result["NET_IMPOSABLE"], "2788.3800");
-  assert.equal(result["PAS"], "139.4200");
-  assert.equal(result["TAUX_PAS"], "5.0000");
+test("adapter does not publish a complete payslip before unsupported RGDU is priced", async () => {
+  await assert.rejects(
+    FR_PAYROLL_PACK.computeStatutory(ctxFor("3400.00", "5")),
+    /FR RGDU.*2026 reduction générale dégressive unifiée.*not calculated/,
+  );
 });
 
 test("PAS assiette: CSG add-back identity holds below and above the PASS", () => {
