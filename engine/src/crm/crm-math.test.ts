@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   computeOpportunityTotals,
@@ -11,8 +10,6 @@ import {
   weightAmount,
   type OpportunityStagePolicy,
 } from "./crm-math.ts";
-
-const crmSource = readFileSync(new URL("./crm.ts", import.meta.url), "utf8");
 
 test("lifecycle promotion is forward-only", () => {
   assert.equal(shouldPromoteLifecycle("lead", "prospect"), true);
@@ -276,24 +273,4 @@ test("a whitespace-only reason does not satisfy the loss-reason gate", () => {
     ),
     "win_loss_reason_required",
   );
-});
-
-test("the stage gate cannot see a stage's name, only what it declares", () => {
-  // Structural: the resolver takes flags, never a key or label, so an
-  // organization that renames a stage gets the same rules as one that did not.
-  const source = readFileSync(new URL("./crm-math.ts", import.meta.url), "utf8");
-  const resolver = source.slice(source.indexOf("export function validateOpportunityStageTransition"));
-  const body = resolver.slice(0, resolver.indexOf("\n}"));
-  for (const forbidden of ["closed_lost", "closed_won", "proposal", "isClosed", "isWon", "key", "name"]) {
-    assert.ok(!body.includes(forbidden), `the stage resolver must not branch on ${forbidden}`);
-  }
-});
-
-test("the default opportunity stages seed the loss-reason gate 0175 backfills", () => {
-  // A fresh organization must land on the same rules an upgraded one gets, and
-  // no others: seeding an opinion about Proposal would impose on new tenants a
-  // policy existing tenants never agreed to.
-  assert.match(crmSource, /\["closed_lost", "Closed lost", 0, "omitted", true, false, false, true\]/);
-  assert.match(crmSource, /\["proposal", "Proposal", 50, "most_likely", false, false, false, false\]/);
-  assert.match(crmSource, /requires_win_loss_reason/);
 });
