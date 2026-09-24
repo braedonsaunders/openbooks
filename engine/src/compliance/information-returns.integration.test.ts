@@ -327,6 +327,29 @@ test("ensureFiling denominates in the subsidiary-functional currency, never the 
   }
 });
 
+test("concurrent ensureFiling opens yield one filing with the same id", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    // Two POSTs for the same (year, form, entity) used to race past the
+    // SELECT: the second INSERT died on the 0071 unique index and the route
+    // reported 500 for a filing that now exists. Every concurrent open must
+    // return the same filing, with exactly one row in storage.
+    const filings = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        ensureFiling({ orgId: org.orgId, taxYear: 2033, formType: "1099-NEC", currency: "USD", actorId })),
+    );
+    const ids = new Set(filings.map((filing) => filing.id));
+    assert.equal(ids.size, 1);
+    const count = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from information_return_filings
+       where org_id = ${org.orgId} and tax_year = 2033 and form_type = '1099-NEC'`)).rows[0]!.n;
+    assert.equal(count, 1);
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
 test("finalize refuses a material reportable vendor with no form assignment", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
