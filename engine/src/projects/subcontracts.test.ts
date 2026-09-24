@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test, { type TestContext } from "node:test";
 import {
@@ -7,11 +8,14 @@ import {
   approveSubcontractChangeOrder,
   computeVendorApplication,
   createSubcontract,
+  createSubcontractChangeOrder,
   createSubcontractPaymentControl,
   createVendorPayApplication,
   parseSubcontractTransitionAction,
   releaseVendorRetainage,
   revisedSubcontractSovValue,
+  updateDraftSubcontract,
+  updateVendorPayApplicationLines,
 } from "./subcontracts.ts";
 import { db } from "../platform/db.ts";
 
@@ -131,314 +135,6 @@ test("vendor application prevents stored-material double pay and overbilling", (
     materialsStoredCurrent: "0",
     retainagePercent: "10",
   }]), /exceeds the revised SOV value/);
-});
-
-test("createSubcontract persists originalCommitment through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractOriginalCommitment");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractOriginalCommitment helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function createSubcontract");
-  const next = source.indexOf("export async function updateDraftSubcontract");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.originalCommitment\)/);
-  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent \?\? "10"\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent/);
-});
-
-test("createSubcontract persists defaultRetainagePercent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractDefaultRetainage");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractDefaultRetainage helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function createSubcontract");
-  const next = source.indexOf("export async function updateDraftSubcontract");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent \?\? "10"\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent/);
-});
-
-test("updateDraftSubcontract persists originalCommitment through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const start = source.indexOf("export async function updateDraftSubcontract");
-  const next = source.indexOf("export async function addSubcontractSovLine");
-  const body = source.slice(start, next);
-  assert.ok(start >= 0 && next > start, "updateDraftSubcontract persist is defined");
-  assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.originalCommitment\)/);
-  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent\)/);
-});
-
-test("updateDraftSubcontract persists defaultRetainagePercent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const start = source.indexOf("export async function updateDraftSubcontract");
-  const next = source.indexOf("export async function addSubcontractSovLine");
-  const body = source.slice(start, next);
-  assert.ok(start >= 0 && next > start, "updateDraftSubcontract retainage persist is defined");
-  assert.match(body, /persistSubcontractDefaultRetainage\(input\.defaultRetainagePercent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.defaultRetainagePercent\)/);
-  assert.match(body, /persistSubcontractOriginalCommitment\(input\.originalCommitment\)/);
-});
-
-test("addSubcontractSovLine persists scheduledValue through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractSovScheduledValue");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractSovScheduledValue helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function addSubcontractSovLine");
-  const next = source.indexOf("export async function removeSubcontractSovLine");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractSovScheduledValue\(input\.scheduledValue\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.scheduledValue\)/);
-});
-
-test("addSubcontractSovLine persists retainagePercent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractSovRetainage");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractSovRetainage helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function addSubcontractSovLine");
-  const next = source.indexOf("export async function removeSubcontractSovLine");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractSovRetainage\(input\.retainagePercent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.retainagePercent\)/);
-  assert.match(body, /persistSubcontractSovScheduledValue\(input\.scheduledValue\)/);
-});
-
-test("createSubcontractChangeOrder persists amount through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractChangeOrderAmount");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractChangeOrderAmount helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function createSubcontractChangeOrder");
-  const next = source.indexOf("export async function approveSubcontractChangeOrder");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractChangeOrderAmount\(input\.amount\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.amount\)/);
-});
-
-test("releaseVendorRetainage persists amount through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractRetainageReleaseAmount");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractRetainageReleaseAmount helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function releaseVendorRetainage");
-  const next = source.indexOf("export async function createSubcontractPaymentControl");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractRetainageReleaseAmount\(input\.amount\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.amount\)/);
-});
-
-test("createSubcontractPaymentControl persists amountLimit through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistSubcontractPaymentControlAmountLimit");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSubcontractPaymentControlAmountLimit helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function createSubcontractPaymentControl");
-  const next = source.indexOf("export async function releaseSubcontractPaymentControl");
-  const body = source.slice(start, next);
-  assert.match(body, /persistSubcontractPaymentControlAmountLimit\(input\.amountLimit\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.amountLimit\)/);
-});
-
-test("computeVendorApplication persists previousEarned through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationPreviousEarned");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationPreviousEarned helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export function computeVendorApplication");
-  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationPreviousEarned\(input\.previousEarned\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.previousEarned\)/);
-});
-
-test("computeVendorApplication persists previousMaterialsStored through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationPreviousMaterialsStored");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationPreviousMaterialsStored helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export function computeVendorApplication");
-  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationPreviousMaterialsStored\(input\.previousMaterialsStored\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.previousMaterialsStored\)/);
-});
-
-test("computeVendorApplication persists workCompletedThisPeriod through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationWorkCompletedThisPeriod");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationWorkCompletedThisPeriod helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export function computeVendorApplication");
-  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationWorkCompletedThisPeriod\(input\.workCompletedThisPeriod\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.workCompletedThisPeriod\)/);
-});
-
-test("computeVendorApplication persists materialsStoredCurrent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationMaterialsStoredCurrent");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationMaterialsStoredCurrent helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export function computeVendorApplication");
-  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationMaterialsStoredCurrent\(input\.materialsStoredCurrent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.materialsStoredCurrent\)/);
-});
-
-test("computeVendorApplication persists retainagePercent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationRetainagePercent");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationRetainagePercent helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export function computeVendorApplication");
-  const next = source.indexOf("/** Deductive changes may never reduce a line below earned-to-date. */");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationRetainagePercent\(input\.retainagePercent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(input\.retainagePercent\)/);
-});
-
-test("updateVendorPayApplicationLines persists workCompletedThisPeriod through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationWorkCompletedThisPeriod");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationWorkCompletedThisPeriod helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function updateVendorPayApplicationLines");
-  const next = source.indexOf("async function computeApplicationTx");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationWorkCompletedThisPeriod\(update\.workCompletedThisPeriod\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(update\.workCompletedThisPeriod\)/);
-});
-
-test("updateVendorPayApplicationLines persists materialsStoredCurrent through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorPayApplicationMaterialsStoredCurrent");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorPayApplicationMaterialsStoredCurrent helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function updateVendorPayApplicationLines");
-  const next = source.indexOf("async function computeApplicationTx");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorPayApplicationMaterialsStoredCurrent\(update\.materialsStoredCurrent\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(update\.materialsStoredCurrent\)/);
-});
-
-test("generateVendorPayApplicationBill persists line.gross through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  const helperStart = source.indexOf("function persistVendorBillLineGross");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistVendorBillLineGross helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /SubcontractError/);
-
-  const start = source.indexOf("export async function generateVendorPayApplicationBill");
-  const next = source.indexOf("export async function releaseVendorRetainage");
-  const body = source.slice(start, next);
-  assert.match(body, /persistVendorBillLineGross\(line\.gross\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(line\.gross\)/);
-});
-
-test("revisedSubcontractSovValue persists inputs through canonicalDecimal then normalizeMoney", () => {
-  const source = readFileSync(new URL("./subcontracts.ts", import.meta.url), "utf8");
-  for (const helper of [
-    "persistRevisedSubcontractSovCurrentScheduledValue",
-    "persistRevisedSubcontractSovChangeAmount",
-    "persistRevisedSubcontractSovEarnedToDate",
-  ] as const) {
-    const helperStart = source.indexOf(`function ${helper}`);
-    const helperEnd = source.indexOf("\n}", helperStart);
-    assert.ok(helperStart >= 0 && helperEnd > helperStart, `${helper} helper is defined`);
-    const body = source.slice(helperStart, helperEnd + 2);
-    assert.match(body, /canonicalDecimal\(value, 4\)/);
-    assert.match(body, /normalizeMoney\(exact\)/);
-    assert.match(body, /SubcontractError/);
-  }
-
-  const start = source.indexOf("export function revisedSubcontractSovValue");
-  const next = source.indexOf("async function assertFeatureEnabled");
-  const fnBody = source.slice(start, next);
-  assert.match(fnBody, /persistRevisedSubcontractSovCurrentScheduledValue\(currentScheduledValue\)/);
-  assert.match(fnBody, /persistRevisedSubcontractSovChangeAmount\(changeAmount\)/);
-  assert.match(fnBody, /persistRevisedSubcontractSovEarnedToDate\(earnedToDate\)/);
-  assert.doesNotMatch(fnBody, /normalizeMoney\(currentScheduledValue\)/);
-  assert.doesNotMatch(fnBody, /normalizeMoney\(changeAmount\)/);
-  assert.doesNotMatch(fnBody, /normalizeMoney\(earnedToDate\)/);
 });
 
 test("deductive change cannot erase earned work", () => {
@@ -617,4 +313,196 @@ test("addSubcontractSovLine shares the same fenced gate", async (t) => {
   assert.ok(seen.length >= 2);
   assert.match(seen[0]!, /pg_advisory_xact_lock/);
   assert.match(seen[1]!, /for share/);
+});
+
+/* ------------------------------------------------------------------ */
+/* Money inputs fail closed before any database work                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Every subcontract money input runs through canonicalDecimal then
+ * normalizeMoney and refuses unreadable values with a field-naming
+ * SubcontractError before any transaction opens. The tables below drive
+ * the real entry points: malformed values never reach the mocked
+ * transaction, while valid ones sail through the money gate and die at
+ * the disabled feature gate instead.
+ */
+
+/** Values canonicalDecimal(4) refuses: separators, symbols, scale, science, blanks, nullish. */
+const MALFORMED_MONEY: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "", "   ", null, undefined];
+/** Optional fields that default on nullish (never reach the parser). */
+const MALFORMED_MONEY_PRESENT: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "", "   "];
+/** Optional fields that also skip on blank (never reach the parser). */
+const MALFORMED_MONEY_NONBLANK: unknown[] = ["12,34", "1,234", "1.23456", "$100", "\u20ac50", "1e3", "abc", "   "];
+
+/** Valid money passes the money gate and dies at the disabled feature gate. */
+async function passesMoneyGate(promise: Promise<unknown>): Promise<void> {
+  await assert.rejects(
+    promise,
+    (error: unknown) => error instanceof SubcontractError && error.message === "Projects feature is disabled",
+  );
+}
+
+test("createSubcontract refuses unreadable commitment money before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      createSubcontract({ ...subcontractInput, originalCommitment: bad as string }),
+      /original commitment must be an exact decimal/,
+      `commitment ${String(bad)}`,
+    );
+  }
+  for (const bad of MALFORMED_MONEY_PRESENT) {
+    await assert.rejects(
+      createSubcontract({ ...subcontractInput, defaultRetainagePercent: bad as string }),
+      /default retainage percent must be an exact decimal/,
+      `retainage ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(createSubcontract(subcontractInput));
+});
+
+test("updateDraftSubcontract refuses unreadable commitment money before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const base = { orgId: "org-1", userId: "user-1", id: "s-1", title: "Roofing", originalCommitment: "1000", defaultRetainagePercent: "10" };
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      updateDraftSubcontract({ ...base, originalCommitment: bad as string }),
+      /original commitment must be an exact decimal/,
+      `commitment ${String(bad)}`,
+    );
+  }
+  for (const bad of MALFORMED_MONEY_PRESENT) {
+    await assert.rejects(
+      updateDraftSubcontract({ ...base, defaultRetainagePercent: bad as string }),
+      /default retainage percent must be an exact decimal/,
+      `retainage ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(updateDraftSubcontract(base));
+});
+
+test("addSubcontractSovLine refuses unreadable line money before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", description: "Demolition", scheduledValue: "500" };
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      addSubcontractSovLine({ ...base, scheduledValue: bad as string }),
+      /scheduled value must be an exact decimal/,
+      `scheduled ${String(bad)}`,
+    );
+  }
+  for (const bad of MALFORMED_MONEY_NONBLANK) {
+    await assert.rejects(
+      addSubcontractSovLine({ ...base, retainagePercent: bad as string }),
+      /retainage percent must be an exact decimal/,
+      `retainage ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(addSubcontractSovLine(base));
+});
+
+test("createSubcontractChangeOrder refuses unreadable amounts before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", number: "CO-1", amount: "500" };
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      createSubcontractChangeOrder({ ...base, amount: bad as string }),
+      /change order amount must be an exact decimal/,
+      `amount ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(createSubcontractChangeOrder(base));
+});
+
+test("releaseVendorRetainage refuses unreadable amounts before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const base = { orgId: "org-1", userId: "user-1", subcontractId: "s-1", periodEnd: "2026-07-31", amount: "100" };
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      releaseVendorRetainage({ ...base, amount: bad as string }),
+      /retainage release amount must be an exact decimal/,
+      `amount ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(releaseVendorRetainage(base));
+});
+
+test("createSubcontractPaymentControl refuses unreadable limits before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const base = {
+    orgId: "org-1", userId: "user-1", subcontractId: "s-1",
+    controlType: "payment_hold" as const, reason: "Hold", effectiveOn: "2026-07-31", amountLimit: "500",
+  };
+  for (const bad of MALFORMED_MONEY_NONBLANK) {
+    await assert.rejects(
+      createSubcontractPaymentControl({ ...base, amountLimit: bad as string }),
+      /amount limit must be an exact decimal/,
+      `limit ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(createSubcontractPaymentControl(base));
+});
+
+test("computeVendorApplication refuses unreadable line money", () => {
+  const line = {
+    sovLineId: "line-1", scheduledValue: "10000", previousEarned: "0",
+    previousMaterialsStored: "0", workCompletedThisPeriod: "3333.33",
+    materialsStoredCurrent: "0", retainagePercent: "10",
+  };
+  const cases: Array<{ field: string; message: RegExp }> = [
+    { field: "previousEarned", message: /previous earned must be an exact decimal/ },
+    { field: "previousMaterialsStored", message: /previous materials stored must be an exact decimal/ },
+    { field: "workCompletedThisPeriod", message: /work completed this period must be an exact decimal/ },
+    { field: "materialsStoredCurrent", message: /materials stored current must be an exact decimal/ },
+    { field: "retainagePercent", message: /retainage percent must be an exact decimal/ },
+  ];
+  for (const { field, message } of cases) {
+    for (const bad of MALFORMED_MONEY) {
+      assert.throws(
+        () => computeVendorApplication([{ ...line, [field]: bad as string }]),
+        (error: unknown) => error instanceof SubcontractError && message.test(error.message),
+        `${field} ${String(bad)}`,
+      );
+    }
+  }
+});
+
+test("updateVendorPayApplicationLines refuses unreadable line money before any database work", async (t) => {
+  mockTransaction(t, { projects: false }, []);
+  const line = (work: unknown, stored: unknown) => ({
+    sovLineId: randomUUID(), workCompletedThisPeriod: work as string, materialsStoredCurrent: stored as string,
+  });
+  const base = { orgId: "org-1", userId: "user-1", payApplicationId: "app-1", expectedRevision: 1 };
+  for (const bad of MALFORMED_MONEY) {
+    await assert.rejects(
+      updateVendorPayApplicationLines({ ...base, lines: [line(bad, "0")] }),
+      /work completed this period must be an exact decimal/,
+      `work ${String(bad)}`,
+    );
+    await assert.rejects(
+      updateVendorPayApplicationLines({ ...base, lines: [line("100", bad)] }),
+      /materials stored current must be an exact decimal/,
+      `stored ${String(bad)}`,
+    );
+  }
+  await passesMoneyGate(updateVendorPayApplicationLines({ ...base, lines: [line("100", "0")] }));
+});
+
+test("revisedSubcontractSovValue refuses unreadable inputs", () => {
+  const cases: Array<{ args: (bad: unknown) => [unknown, unknown, unknown]; message: RegExp; label: string }> = [
+    { args: (bad) => [bad, "-200", "750"], message: /current scheduled value must be an exact decimal/, label: "scheduled" },
+    { args: (bad) => ["1000", bad, "750"], message: /change amount must be an exact decimal/, label: "change" },
+    { args: (bad) => ["1000", "-200", bad], message: /earned to date must be an exact decimal/, label: "earned" },
+  ];
+  for (const { args, message, label } of cases) {
+    for (const bad of MALFORMED_MONEY) {
+      const [a, b, c] = args(bad);
+      assert.throws(
+        () => revisedSubcontractSovValue(a as string, b as string, c as string),
+        (error: unknown) => error instanceof SubcontractError && message.test(error.message),
+        `${label} ${String(bad)}`,
+      );
+    }
+  }
 });
