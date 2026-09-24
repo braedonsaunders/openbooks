@@ -283,7 +283,6 @@
     "web/lib/account-register-export-calendar.test.ts": 2,
     "web/lib/analytics/cashflow-data.test.ts": 2,
     "web/lib/api-auth.test.ts": 2,
-    "web/lib/api/financial-boundary.test.ts": 2,
     "web/lib/api/v1-records.test.ts": 1,
     "web/lib/api/validate.test.ts": 1,
     "web/lib/application/admin-read.test.ts": 2,
