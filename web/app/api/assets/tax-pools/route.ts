@@ -82,6 +82,12 @@ export async function POST(req: Request) {
   const yearStart = isIsoCalendarDate(body.yearStart) ? body.yearStart : `${taxYear}-01-01`
   const yearEnd = isIsoCalendarDate(body.yearEnd) ? body.yearEnd : `${taxYear}-12-31`
   if (yearStart > yearEnd) return NextResponse.json({ error: 'year start must not follow year end' }, { status: 422 })
+  if (yearStart !== `${taxYear}-01-01` || yearEnd !== `${taxYear}-12-31`) {
+    return NextResponse.json(
+      { error: 'short tax-year windows are not supported; run the full calendar tax year because no regime-specific short-year factor is configured' },
+      { status: 422 },
+    )
+  }
 
   let bookId: string | null
   if (body.bookId !== undefined) {
