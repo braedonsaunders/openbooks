@@ -43,6 +43,7 @@ test("every simulator-provisioned sample company template clones with matching t
   assert.equal(ordinaryHistory.n, 1, "ordinary active-level creation opens one history period");
   assert.ok(ordinaryHistory.openedAt, "ordinary active-level history retains its opening instant");
   const catalog = await loadCatalog();
+  assert.ok(catalog.tables.length > 0, "sandbox catalog must contain tables to verify");
   const created: string[] = [];
   try {
     for (const template of templates) {
