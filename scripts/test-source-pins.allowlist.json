@@ -116,7 +116,6 @@
     "web/app/(app)/banking/psp-settlements/psp-settlements-catalog.test.ts": 1,
     "web/app/(app)/banking/view.banner.test.ts": 2,
     "web/app/(app)/collections/collections-worklist.test.ts": 3,
-    "web/app/(app)/compliance/vendors/Vendors.scope.test.ts": 1,
     "web/app/(app)/crm/OpportunityDrawer.test.ts": 3,
     "web/app/(app)/crm/forecasts/sections.test.tsx": 3,
     "web/app/(app)/customers/view.banner.test.ts": 2,
