@@ -58,6 +58,7 @@ async function seedSourceAndCommittedTopUp() {
     actorId: fx.actorId,
     payScheduleId: fx.scheduleId,
     payDate: "2026-08-20",
+    allowedSubsidiaryIds: null,
   });
   assert.equal(
     proposal.periods.filter((p) => p.outcome === "payable").length,
@@ -70,6 +71,7 @@ async function seedSourceAndCommittedTopUp() {
     actorId: fx.actorId,
     payScheduleId: fx.scheduleId,
     payDate: "2026-08-20",
+    allowedSubsidiaryIds: null,
   });
   assert.deepEqual((await calculatePayRun({
     orgId: fx.orgId,
@@ -164,6 +166,7 @@ test(
         actorId: fx.actorId,
         payScheduleId: fx.scheduleId,
         payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       await requestDocumentVoid({
         orgId: fx.orgId,
@@ -201,6 +204,7 @@ test(
         actorId: fx.actorId,
         payScheduleId: fx.scheduleId,
         payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.deepEqual((await calculatePayRun({
         orgId: fx.orgId,

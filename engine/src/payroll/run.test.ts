@@ -244,10 +244,12 @@ test('a retro run settles quantified back pay; a regular run never does', { skip
               ${actorId}, ${actorId})`)
     const proposal = await proposeRetroPay({
       orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: '2026-08-20',
+      allowedSubsidiaryIds: null,
     })
     assert.equal(proposal.payableTotal, '24.0000')
     const retro = await createRetroPayRun({
       orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: '2026-08-20',
+      allowedSubsidiaryIds: null,
     })
     const calculated = await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId })
     assert.deepEqual(calculated.errors, [])

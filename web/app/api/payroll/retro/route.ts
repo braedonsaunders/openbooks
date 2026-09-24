@@ -196,6 +196,7 @@ export async function POST(req: Request) {
     payScheduleId: body.payScheduleId,
     payDate: body.payDate,
     employeePartyIds,
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
   }
 
   try {

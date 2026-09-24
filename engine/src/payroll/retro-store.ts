@@ -86,8 +86,8 @@ export interface DetectRetroInput {
   payScheduleId?: string;
   employeePartyIds?: readonly string[];
   executor?: Pick<typeof db, "execute">;
-  /** Caller role scope; null/undefined is unrestricted. */
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  /** Explicit caller lens; null is reserved for unrestricted system callers. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
 
 /**
@@ -331,7 +331,7 @@ export async function quantifyRetroCandidates(input: {
   orgId: string;
   actorId: string;
   candidates: readonly RetroCandidate[];
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<RetroQuantifiedPeriod[]> {
   const { orgId, actorId } = input;
   const bySourceRun = new Map<string, RetroCandidate[]>();
@@ -503,8 +503,8 @@ async function previouslySettledBuckets(
 /** The statutory year a pay date falls in for the SCHEDULE'S legal entity. */
 async function scheduleTaxYear(
   orgId: string, payScheduleId: string, payDate: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
   executor: Pick<typeof db, "execute"> = db,
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<number> {
   const rows = (await executor.execute<{ country: string | null; subsidiary_id: string | null }>(sql`
     select coalesce(sub.country, root.country) as country,
@@ -547,14 +547,15 @@ export async function proposeRetroPay(input: {
   /** The date the retro run will pay on; decides the statutory year in scope. */
   payDate: string;
   employeePartyIds?: readonly string[];
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  /** Explicit caller lens; null is reserved for unrestricted system callers. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<RetroProposal> {
   const taxYear = await scheduleTaxYear(
     input.orgId,
     input.payScheduleId,
     input.payDate,
-    db,
     input.allowedSubsidiaryIds,
+    db,
   );
   const candidates = await detectRetroCandidates({
     orgId: input.orgId,
@@ -606,8 +607,8 @@ export interface CreateRetroPayRunInput {
    * silently paid, and one they exclude here stays owed and is found again.
    */
   excludeSourcePayRunDocumentIds?: readonly string[];
-  /** Caller role scope; null/undefined is unrestricted. */
-  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  /** Explicit caller lens; null is reserved for unrestricted system callers. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
 
 export interface CreateRetroPayRunResult {
