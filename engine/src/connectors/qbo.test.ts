@@ -116,6 +116,44 @@ test("QBO token exchange, refresh, and API calls refuse redirects without forwar
   }
 });
 
+test("a 429 retries then succeeds; a persistent 5xx refuses by name after the bounded attempts", async () => {
+  let tokenRequests = 0;
+  let first429ThenOk = true;
+  const intuit = createServer((req, res) => {
+    tokenRequests += 1;
+    if (first429ThenOk) {
+      first429ThenOk = false;
+      res.writeHead(429, { "Retry-After": "0" });
+      res.end();
+      return;
+    }
+    if (tokenRequests <= 2) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ access_token: "at-retry", refresh_token: "rt-retry", expires_in: 3600 }));
+      return;
+    }
+    res.writeHead(500, { "content-type": "text/plain" });
+    res.end("intuit is down");
+  });
+  const intuitOrigin = await listen(intuit);
+  const originalFetch = globalThis.fetch;
+  remapIntuitOrigins(originalFetch, intuitOrigin);
+
+  try {
+    // 429 then 200: the exchange rides the retry and succeeds.
+    const exchanged = await exchangeCode(app, "auth-code");
+    assert.equal(exchanged.accessToken, "at-retry");
+    assert.equal(tokenRequests, 2, "one retry after the 429, then success");
+
+    // Persistent 500: four bounded attempts, then a named refusal.
+    await assert.rejects(refreshTokens(app, "rt-old"), /QBO token refresh HTTP 500/);
+    assert.equal(tokenRequests, 6, "four bounded attempts for the failing refresh, then refusal");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await close(intuit);
+  }
+});
+
 test("normal Intuit responses pass: token exchange, refresh rotation, and bearer API reads", async () => {
   interface SeenCall {
     path: string;
