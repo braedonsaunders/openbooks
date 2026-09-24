@@ -7,6 +7,7 @@ import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/sr
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { listReconcilableBankAccounts, openingCarryStartDate } from '../../../../lib/banking-accounts'
+import { listScopedAccountOptions } from '../../../../lib/scoped-options'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
 import type { MatchWorkspace } from './MatchWorkspace'
 import type { GlRow, ReviewRow, StatementRow } from './MatchWorkspace'
@@ -30,11 +31,6 @@ type MatchWorkspaceProps = Parameters<typeof MatchWorkspace>[0]
 interface UnmatchedRow extends Record<string, unknown> {
   id: string
   unmatched: string | number
-}
-interface OffsetAccountRow extends Record<string, unknown> {
-  id: string
-  number: string | null
-  name: string
 }
 interface ReconciliationRow extends Record<string, unknown> {
   id: string
@@ -72,7 +68,7 @@ export async function loadMatch(
   // account-page guard filter through — with per-account unmatched counts
   // grouped in one pass (statement lines in the account's own settlement
   // currency still awaiting a match).
-  const [accountRefs, unmatchedRes, offsetRes] = (await Promise.all([
+  const [accountRefs, unmatchedRes, offsetRefs] = (await Promise.all([
     listReconcilableBankAccounts(orgId),
     db.execute<UnmatchedRow>(sql`
       select s.account_id as id, count(*) as unmatched
@@ -83,11 +79,7 @@ export async function loadMatch(
          and l.currency = a.currency_restriction and l.match_status = 'unmatched'
        group by s.account_id
     `),
-    db.execute<OffsetAccountRow>(sql`
-      select id, number, name from accounts
-       where org_id = ${orgId} and is_active and not is_summary
-       order by number nulls last limit 2000
-    `),
+    listScopedAccountOptions(orgId, authz.allowedSubsidiaryIds, { activeOnly: true, postingOnly: true }),
   ]))
 
   const unmatchedByAccount = new Map(unmatchedRes.rows.map((r) => [r.id, Number(r.unmatched)]))
@@ -99,7 +91,7 @@ export async function loadMatch(
     label: [a.number, a.name].filter(Boolean).join(' · '),
     unmatched: unmatchedByAccount.get(a.id) ?? 0,
   }))
-  const offsetAccounts = offsetRes.rows.map((a) => ({
+  const offsetAccounts = offsetRefs.map((a) => ({
     id: a.id,
     label: [a.number, a.name].filter(Boolean).join(' · '),
   }))
