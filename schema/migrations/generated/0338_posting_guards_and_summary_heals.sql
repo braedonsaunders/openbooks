@@ -314,6 +314,59 @@ UPDATE public.documents d
    AND d.open_balance IS NULL;
 
 -- ---------------------------------------------------------------------------
+-- Section G10: line edits recompute the document cache.
+-- ---------------------------------------------------------------------------
+-- The amend branch of the journal-line guard fences only the period, with
+-- no column allowlist, so an amend-path edit can flip is_open_item (or
+-- amount, or the account) on a posted line while documents.open_balance
+-- keeps the old projection — the recompute fired only on application
+-- changes and document status/entry moves. The trigger below recomputes
+-- every posted document whose entry gains, loses, or economically changes
+-- a line, through the same locked recompute the other paths use.
+-- UPDATEs that touch none of the balance inputs (evidence stamps) never
+-- fire: the trigger watches only the entry key and the three balance
+-- columns, following the gl_activity_line precedent on this table.
+CREATE OR REPLACE FUNCTION public.trg_journal_line_open_balance() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_entries uuid[];
+  v_entry uuid;
+  v_doc uuid;
+  v_org uuid;
+begin
+  if tg_op = 'DELETE' then
+    v_entries := array[old.entry_id];
+    v_org := old.org_id;
+  elsif tg_op = 'INSERT' then
+    v_entries := array[new.entry_id];
+    v_org := new.org_id;
+  elsif new.entry_id is distinct from old.entry_id
+     or new.account_id is distinct from old.account_id
+     or new.amount is distinct from old.amount
+     or new.is_open_item is distinct from old.is_open_item then
+    v_entries := array[old.entry_id, new.entry_id];
+    v_org := new.org_id;
+  else
+    return new;
+  end if;
+  for v_entry in select distinct e from unnest(v_entries) as e loop
+    for v_doc in select d.id from public.documents d
+                  where d.org_id = v_org and d.posted_entry_id = v_entry loop
+      perform public.recompute_document_open_balance(v_doc);
+    end loop;
+  end loop;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end $$;
+
+DROP TRIGGER IF EXISTS journal_line_open_balance ON public.journal_lines;
+CREATE TRIGGER journal_line_open_balance AFTER INSERT OR DELETE OR UPDATE OF entry_id, account_id, amount, is_open_item ON public.journal_lines
+FOR EACH ROW EXECUTE FUNCTION public.trg_journal_line_open_balance();
+
+-- ---------------------------------------------------------------------------
 -- Section G9: the inactive-account refusal names the remedy.
 -- ---------------------------------------------------------------------------
 -- True-up residuals are ordinary postings, so they no longer run under the
