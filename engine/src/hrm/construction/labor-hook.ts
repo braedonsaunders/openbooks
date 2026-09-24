@@ -57,9 +57,23 @@ export async function prevailingWageForTimeEntry(input: {
   ).rows[0];
   if (!project) return null;
   const customLocation = (project.custom as Record<string, unknown> | null)?.location_id;
+  const departmentRows = (await db.execute<{ departmentId: string | null }>(sql`
+    select department_id::text as "departmentId"
+      from employment_assignment_versions
+     where org_id = ${input.orgId}::uuid and employment_id = ${employment.id}::uuid
+       and is_primary and recorded_until is null
+       and effective_from <= ${input.workedOn}::date
+       and (effective_to is null or effective_to > ${input.workedOn}::date)
+     order by version_no desc
+     limit 2
+  `)).rows;
+  if (departmentRows.length > 1) {
+    throw new HrmConstructionError(`Employment ${employment.id} has more than one primary department effective ${input.workedOn} — resolve the overlapping assignment versions before pricing.`);
+  }
   const target = {
     projectId: input.projectId,
     locationId: typeof customLocation === "string" ? customLocation : null,
+    departmentId: departmentRows[0]?.departmentId ?? null,
     subsidiaryId: employment.subsidiaryId ?? project.subsidiaryId,
   };
   const inScope = schedules.some((schedule) => scopeScore(schedule.appliesTo ?? {}, target) >= 0);
