@@ -1,7 +1,6 @@
 import { isCivilDate } from "../temporal.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
 import { add, cmp, isZero, mul, mulDecimal, normalizeDecimal, normalizeMoney } from "../../money/money.ts";
 import {
@@ -238,6 +237,75 @@ interface CostedLine {
   costBasis: Record<string, unknown>;
 }
 
+interface PositionPlanFacts {
+  employerSubsidiaryId: string;
+  departmentId: string | null;
+  jobLevelId: string | null;
+}
+
+/**
+ * Resolve the position version effective at the planned start while holding
+ * the same aggregate lock as position revision. A plan line may not choose
+ * its own legal employer, department, or level for an existing position.
+ */
+async function lockPositionPlanFacts(
+  orgId: string,
+  positionId: string,
+  startOn: string,
+): Promise<PositionPlanFacts> {
+  const position = (await db.execute<{ id: string }>(sql`
+    select id from positions where org_id = ${orgId} and id = ${positionId} for update
+  `)).rows[0];
+  if (!position) {
+    throw new CompensationError("NOT_FOUND", "position is not visible in this organization");
+  }
+  const version = (await db.execute<Record<string, unknown> & PositionPlanFacts & { status: string }>(sql`
+    select employer_subsidiary_id as "employerSubsidiaryId",
+           department_id as "departmentId", job_level_id as "jobLevelId", status
+      from position_versions
+     where org_id = ${orgId} and position_id = ${positionId}
+       and recorded_until is null
+       and effective_from <= ${startOn}::date
+       and (effective_to is null or effective_to > ${startOn}::date)
+  `)).rows[0];
+  if (!version || version.status === "closed") {
+    throw new CompensationError(
+      "REFUSED",
+      `position ${positionId} has no open version effective on ${startOn} — revise or reopen the position for the planned start before costing headcount`,
+    );
+  }
+  return {
+    employerSubsidiaryId: version.employerSubsidiaryId,
+    departmentId: version.departmentId,
+    jobLevelId: version.jobLevelId,
+  };
+}
+
+function requirePositionPlanFactsMatch(
+  positionId: string,
+  supplied: { employerSubsidiaryId: string; departmentId?: string | null; jobLevelId?: string | null },
+  actual: PositionPlanFacts,
+): void {
+  if (supplied.employerSubsidiaryId !== actual.employerSubsidiaryId) {
+    throw new CompensationError(
+      "REFUSED",
+      `position ${positionId} belongs to employer subsidiary ${actual.employerSubsidiaryId}, not ${supplied.employerSubsidiaryId} — use the position's employer before costing or approving this line`,
+    );
+  }
+  if ("departmentId" in supplied && supplied.departmentId !== actual.departmentId) {
+    throw new CompensationError(
+      "REFUSED",
+      `position ${positionId} belongs to department ${actual.departmentId ?? "none"}, not ${supplied.departmentId ?? "none"} — use the position's department before costing or approving this line`,
+    );
+  }
+  if ("jobLevelId" in supplied && supplied.jobLevelId !== actual.jobLevelId) {
+    throw new CompensationError(
+      "REFUSED",
+      `position ${positionId} has job level ${actual.jobLevelId ?? "none"}, not ${supplied.jobLevelId ?? "none"} — use the position's level before costing or approving this line`,
+    );
+  }
+}
+
 /**
  * Cost one line: the band target for the line's level scope (or the
  * incumbent payroll-side rate when no band covers it), scaled by
@@ -421,32 +489,46 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
              fiscal_period_to::text as fiscal_period_to, status, revision, scope
         from hrm_headcount_plans where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
     if (!plan) throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
-    // Adding a line staffs the plan: the plan's scope and the line's
-    // declared employer are rechecked under the plan lock, or an
-    // A-scoped actor plants B headcount.
-    await assertPlanWriteScope(orgId, actorId, plan.scope, [query.employerSubsidiaryId], "headcount plan");
+    // Existing positions own their placement. Resolve under the position
+    // aggregate lock, and refuse inconsistent supplied hints before the
+    // budget or requisition target can diverge from that establishment.
+    const positionFacts = query.positionId
+      ? await lockPositionPlanFacts(orgId, query.positionId, query.startOn)
+      : null;
+    if (query.positionId && positionFacts) {
+      requirePositionPlanFactsMatch(query.positionId, {
+        employerSubsidiaryId: query.employerSubsidiaryId,
+        ...(query.departmentId !== undefined ? { departmentId: query.departmentId } : {}),
+        ...(query.jobLevelId !== undefined ? { jobLevelId: query.jobLevelId } : {}),
+      }, positionFacts);
+    }
+    const employerSubsidiaryId = positionFacts?.employerSubsidiaryId ?? query.employerSubsidiaryId;
+    const departmentId = positionFacts?.departmentId ?? query.departmentId ?? null;
+    const jobLevelId = positionFacts?.jobLevelId ?? query.jobLevelId ?? null;
+    // Adding a line staffs the plan: the plan's scope and resolved employer
+    // are rechecked under both aggregate locks.
+    await assertPlanWriteScope(orgId, actorId, plan.scope, [employerSubsidiaryId], "headcount plan");
     if (plan.status !== "draft") {
       throw new CompensationError(
         "BAD_STATE",
         `a ${plan.status} plan takes no new lines — lines are drafted with the plan`,
       );
     }
-    const today = await businessToday(orgId);
     const costed = await costLine(orgId, {
-      jobLevelId: query.jobLevelId ?? null,
-      employerSubsidiaryId: query.employerSubsidiaryId,
-      departmentId: query.departmentId ?? null,
+      jobLevelId,
+      employerSubsidiaryId,
+      departmentId,
       locationId: null,
       plannedFte: query.plannedFte,
       currency: query.currency,
-      asOf: today,
+      asOf: query.startOn,
     });
     const row = (await db.execute<PlanLineRow>(sql`
       insert into hrm_headcount_plan_lines
         (org_id, plan_id, kind, position_id, title, department_id, employer_subsidiary_id, job_level_id,
          planned_fte, start_on, end_on, est_annual_cost, currency, cost_basis, reason, created_by, updated_by)
       values (${orgId}, ${planId}, ${query.kind}, ${query.positionId ?? null}, ${query.title.trim().slice(0, 200)},
-              ${query.departmentId ?? null}, ${query.employerSubsidiaryId}, ${query.jobLevelId ?? null},
+              ${departmentId}, ${employerSubsidiaryId}, ${jobLevelId},
               ${query.plannedFte}, ${query.startOn}, ${query.endOn ?? null}, ${costed.estAnnualCost},
               ${query.currency}, ${JSON.stringify(costed.costBasis)}::jsonb,
               ${query.reason?.trim().slice(0, 2000) ?? null}, ${actorId}, ${actorId})
@@ -473,12 +555,24 @@ export async function approvePlanLine(query: {
        where org_id = ${orgId} and id = ${lineId} for update`)).rows[0];
     if (!line) throw new CompensationError("NOT_FOUND", "plan line is not visible in this organization");
     // Approving a create/backfill line OPENS A REQUISITION for its
-    // employer: the line's employer and its plan's scope are rechecked
-    // under the line lock, or an A-scoped actor requisitions into B.
+    // employer. Resolve and lock the position after the plan lock, then
+    // recheck the persisted placement before opening that requisition.
     const planScope = (await db.execute<{ scope: PlanRow["scope"] }>(sql`
       select scope from hrm_headcount_plans
        where org_id = ${orgId} and id = ${line.plan_id} for update`)).rows[0]?.scope ?? null;
-    await assertPlanWriteScope(orgId, actorId, planScope, [line.employer_subsidiary_id], "plan line");
+    const positionFacts = line.position_id
+      ? await lockPositionPlanFacts(orgId, line.position_id, String(line.start_on).slice(0, 10))
+      : null;
+    if (line.position_id && positionFacts) {
+      requirePositionPlanFactsMatch(line.position_id, {
+        employerSubsidiaryId: line.employer_subsidiary_id,
+        departmentId: line.department_id,
+        jobLevelId: line.job_level_id,
+      }, positionFacts);
+    }
+    const employerSubsidiaryId = positionFacts?.employerSubsidiaryId ?? line.employer_subsidiary_id;
+    const departmentId = positionFacts?.departmentId ?? line.department_id;
+    await assertPlanWriteScope(orgId, actorId, planScope, [employerSubsidiaryId], "plan line");
     if (line.status !== "proposed") {
       throw new CompensationError(
         "BAD_STATE",
@@ -497,8 +591,8 @@ export async function approvePlanLine(query: {
         orgId,
         actorId,
         title: line.title,
-        employerSubsidiaryId: line.employer_subsidiary_id,
-        departmentId: line.department_id,
+        employerSubsidiaryId,
+        departmentId,
         positionId: line.position_id,
         headcount,
         targetStartOn: String(line.start_on).slice(0, 10),
