@@ -1,10 +1,11 @@
 import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { buildAllSchedules } from '@openbooks/engine/src/assets/depreciation.ts'
+import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/assets/depreciation.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal } from '../exact-decimal'
 import {
   enforceExportRowLimit,
@@ -109,19 +110,27 @@ function cell(src: Record<string, unknown>, key: string): string {
   return String(raw).trim()
 }
 
-function moneyCell(label: string, raw: string, opts?: { required?: boolean; allowNegative?: boolean }): string | null {
-  if (!raw) {
+function rawCell(src: Record<string, unknown>, key: string): unknown {
+  const raw = src[key]
+  return typeof raw === 'string' ? raw.trim() : raw
+}
+
+function isPresent(raw: unknown): boolean {
+  return raw !== null && raw !== undefined && !(typeof raw === 'string' && raw.trim() === '')
+}
+
+function moneyCell(label: string, raw: unknown, opts?: { required?: boolean; allowNegative?: boolean }): string | null {
+  if (!isPresent(raw)) {
     if (opts?.required) throw new Error(`${label} is required`)
     return null
   }
-  const cleaned = raw.replace(/[,$\s]/g, '')
-  const exact = canonicalDecimal(cleaned, 4)
-  if (exact === null) throw new Error(`${label} must be an exact decimal (got "${raw}")`)
+  const exact = canonicalDecimal(raw, 4)
+  if (exact === null) throw new Error(moneyRefusal(label, raw))
   let amount: string
   try {
     amount = normalizeMoney(exact)
   } catch {
-    throw new Error(`${label} must be an exact decimal (got "${raw}")`)
+    throw new Error(moneyRefusal(label, raw))
   }
   if (!opts?.allowNegative && cmp(amount, '0') < 0) throw new Error(`${label} must be non-negative`)
   return amount
@@ -223,13 +232,13 @@ async function parseRow(
       (() => { throw new Error(`unknown subsidiary "${subsidiaryRaw}"`) })())
     : (stored?.subsidiary_id ?? await rootSubsidiaryId(orgId))
 
-  const costRaw = cell(src, 'acquisitionCost')
-  const acquisitionCost = costRaw
+  const costRaw = rawCell(src, 'acquisitionCost')
+  const acquisitionCost = isPresent(costRaw)
     ? moneyCell('Acquisition cost', costRaw, { required: true })!
     : (stored ? String(stored.acquisition_cost) : null)
   if (!acquisitionCost) throw new Error('Acquisition cost is required')
-  const salvageRaw = cell(src, 'salvageValue')
-  const salvageValue = salvageRaw
+  const salvageRaw = rawCell(src, 'salvageValue')
+  const salvageValue = isPresent(salvageRaw)
     ? moneyCell('Salvage value', salvageRaw)!
     : (stored ? String(stored.salvage_value) : '0.0000')
   if (cmp(salvageValue, acquisitionCost) > 0) throw new Error('Salvage value cannot exceed acquisition cost')
@@ -274,12 +283,14 @@ async function parseRow(
   if (methodChanged && method !== 'manual' && method !== null && lifeMonths === null) {
     throw new Error('Useful life (months) is required when changing the depreciation method')
   }
-  const rateRaw = cell(src, 'ratePercent')
+  const rateRaw = rawCell(src, 'ratePercent')
   let ratePercent: string | null = null
-  if (rateRaw) {
-    const cleaned = rateRaw.replace(/[%,\s]/g, '')
-    const exact = canonicalDecimal(cleaned, 4)
-    if (exact === null) throw new Error('Declining rate must be an exact decimal')
+  if (isPresent(rateRaw)) {
+    // A trailing percent marker is notation; internal separators remain in
+    // the shared decimal validator so locale ambiguity is refused by name.
+    const rateText = typeof rateRaw === 'string' ? rateRaw.trim().replace(/%$/, '').trim() : rateRaw
+    const exact = canonicalDecimal(rateText, 4)
+    if (exact === null) throw new Error(moneyRefusal('Declining rate', rateText, 'a percentage'))
     ratePercent = normalizeMoney(exact)
     if (cmp(ratePercent, '0') <= 0 || cmp(ratePercent, '100') > 0) {
       throw new Error('Declining rate must be above 0 and at most 100')
@@ -295,9 +306,9 @@ async function parseRow(
     throw new Error(`Convention must be one of ${CONVENTIONS.join(', ')} (got "${cell(src, 'convention')}")`)
   }
   const convention = (conventionCell || stored?.depreciation_convention || 'full_month') as ParsedAsset['convention']
-  const unitsRaw = cell(src, 'unitsTotal')
+  const unitsRaw = rawCell(src, 'unitsTotal')
   let unitsTotal: string | null
-  if (unitsRaw) {
+  if (isPresent(unitsRaw)) {
     unitsTotal = moneyCell('Lifetime units', unitsRaw)!
   } else if (methodChanged || !stored) {
     unitsTotal = null
@@ -326,9 +337,9 @@ async function parseRow(
   // The mid-life carry-in: pre-cutover accumulated plus its as-of date, both
   // or neither, inside the depreciable basis, not before the in-service
   // month — the same contract the flyout API enforces.
-  const openingRaw = cell(src, 'openingAccumulated')
+  const openingRaw = rawCell(src, 'openingAccumulated')
   const asOfRaw = cell(src, 'openingAsOf')
-  const openingAccumulated = openingRaw
+  const openingAccumulated = isPresent(openingRaw)
     ? moneyCell('Opening accumulated depreciation', openingRaw)!
     : (stored?.opening_accumulated_depreciation ?? null)
   const openingAsOf = asOfRaw
@@ -380,6 +391,7 @@ async function parseRow(
 
 type StoredAsset = {
   id: string
+  asset_number: string
   status: string
   name: string
   description: string | null
@@ -402,9 +414,8 @@ type StoredAsset = {
   serial_number: string | null
 }
 
-async function findMatches(orgId: string, assetNumber: string): Promise<StoredAsset[]> {
-  return (await db.execute<StoredAsset>(sql`
-    select id, status, name, description, category_id, subsidiary_id,
+const STORED_ASSET_COLUMNS = sql`
+    id, asset_number, status, name, description, category_id, subsidiary_id,
            acquisition_cost, salvage_value, acquired_on::text, in_service_on::text,
            depreciation_method, useful_life_months, depreciation_rate_percent,
            depreciation_convention, depreciation_units_total,
@@ -412,14 +423,75 @@ async function findMatches(orgId: string, assetNumber: string): Promise<StoredAs
            depreciation_expense_account_id,
            opening_accumulated_depreciation::text as opening_accumulated_depreciation,
            opening_accumulated_as_of::text as opening_accumulated_as_of,
-           serial_number
+           serial_number`
+
+async function findMatches(
+  runner: SqlExecutor,
+  orgId: string,
+  assetNumber: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+): Promise<StoredAsset[]> {
+  return (await runner.execute<StoredAsset>(sql`
+    select ${STORED_ASSET_COLUMNS}
       from fixed_assets
-     where org_id = ${orgId} and lower(asset_number) = lower(${assetNumber}) limit 3`)).rows
+     where org_id = ${orgId} and lower(asset_number) = lower(${assetNumber})
+       ${subsidiaryReadFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
+     order by id limit 3 for update`)).rows
 }
 
 /** Posted lines or lifecycle events fix the figures a re-import may touch. */
-async function assetHasHistory(orgId: string, assetId: string): Promise<boolean> {
-  const rows = (await db.execute<{ n: string }>(sql`
+async function readStoredAsset(runner: SqlExecutor, orgId: string, assetId: string): Promise<StoredAsset> {
+  const row = (await runner.execute<StoredAsset>(sql`
+    select ${STORED_ASSET_COLUMNS} from fixed_assets where org_id = ${orgId} and id = ${assetId}`)).rows[0]
+  if (!row) throw new Error('fixed asset mutation did not return a row')
+  return row
+}
+
+function assetAuditSnapshot(asset: StoredAsset): Record<string, unknown> {
+  return {
+    assetNumber: asset.asset_number,
+    name: asset.name,
+    description: asset.description,
+    subsidiaryId: asset.subsidiary_id,
+    categoryId: asset.category_id,
+    status: asset.status,
+    acquisitionCost: asset.acquisition_cost,
+    salvageValue: asset.salvage_value,
+    acquiredOn: asset.acquired_on,
+    inServiceOn: asset.in_service_on,
+    depreciationMethod: asset.depreciation_method,
+    usefulLifeMonths: asset.useful_life_months,
+    depreciationRatePercent: asset.depreciation_rate_percent,
+    depreciationConvention: asset.depreciation_convention,
+    depreciationUnitsTotal: asset.depreciation_units_total,
+    assetAccountId: asset.asset_account_id,
+    accumulatedDepreciationAccountId: asset.accumulated_depreciation_account_id,
+    depreciationExpenseAccountId: asset.depreciation_expense_account_id,
+    openingAccumulatedDepreciation: asset.opening_accumulated_depreciation,
+    openingAccumulatedAsOf: asset.opening_accumulated_as_of,
+    serialNumber: asset.serial_number,
+  }
+}
+
+async function auditAssetImport(
+  runner: SqlExecutor,
+  ctx: WriteCtx,
+  action: 'insert' | 'update',
+  before: StoredAsset | null,
+  after: StoredAsset,
+): Promise<void> {
+  await runner.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${ctx.orgId}, 'fixed_assets', ${after.id}, ${action},
+      ${JSON.stringify({
+        source: 'import',
+        before: before ? assetAuditSnapshot(before) : null,
+        after: assetAuditSnapshot(after),
+      })}::jsonb, ${ctx.actorId})`)
+}
+
+async function assetHasHistory(runner: SqlExecutor, orgId: string, assetId: string): Promise<boolean> {
+  const rows = (await runner.execute<{ n: string }>(sql`
     select count(*)::text as n from depreciation_schedule_lines l
       join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
      where s.org_id = ${orgId} and s.asset_id = ${assetId} and l.posted_amount is not null
@@ -478,14 +550,19 @@ export function fixedAssetsResource(orgId: string): DataResource {
     async write(rows, mode, ctx: WriteCtx) {
       const outcome: WriteOutcome = { created: 0, updated: 0, failed: 0, errors: [] }
       const resolver = new RefResolver(orgId)
+      const allowedSubsidiaries = ctx.allowedSubsidiaryIds == null
+        ? ctx.allowedSubsidiaryIds
+        : [...ctx.allowedSubsidiaryIds]
 
       for (let index = 0; index < rows.length; index++) {
         const rowNo = index + 1
         const src = rows[index]!
         try {
+          await withOrgTransaction(ctx.orgId, () => withTransactionSavepoint(db, async () => {
+          const tx = db
           const numberCell = cell(src, 'assetNumber')
           if (!numberCell) throw new Error('Asset number is required')
-          const matches = await findMatches(ctx.orgId, numberCell)
+          const matches = await findMatches(tx, ctx.orgId, numberCell, ctx.allowedSubsidiaryIds)
           if (matches.length > 1) {
             throw new Error(`asset number "${numberCell}" matches more than one asset — disambiguate before importing`)
           }
@@ -498,10 +575,10 @@ export function fixedAssetsResource(orgId: string): DataResource {
           if (!stored) {
             if (ctx.dryRun) {
               outcome.created++
-              continue
+              return
             }
             const assetId = randomUUID()
-            await db.execute(sql`
+            const inserted = await tx.execute<{ id: string }>(sql`
               insert into fixed_assets
                 (id, org_id, subsidiary_id, category_id, asset_number, name, description, status,
                  acquired_on, in_service_on, acquisition_cost, salvage_value,
@@ -519,18 +596,22 @@ export function fixedAssetsResource(orgId: string): DataResource {
                       ${parsed.assetAccountId}, ${parsed.accumAccountId},
                       ${parsed.expenseAccountId},
                       ${parsed.openingAccumulated}, ${parsed.openingAsOf},
-                      ${parsed.serialNumber}, '{}'::jsonb, ${ctx.actorId}, ${ctx.actorId})`)
+                      ${parsed.serialNumber}, '{}'::jsonb, ${ctx.actorId}, ${ctx.actorId})
+              returning id`)
+            if (!inserted.rows[0]) throw new Error('fixed asset insert did not create a row')
             if (parsed.status === 'in_service') {
               try {
-                await buildAllSchedules(assetId, ctx.orgId, ctx.actorId)
+                await buildAllSchedulesWithRunner(tx, assetId, ctx.orgId, ctx.actorId, allowedSubsidiaries)
               } catch (error) {
                 throw new Error(
                   `schedule build failed: ${error instanceof Error ? error.message : 'unknown error'}`,
                 )
               }
             }
+            const after = await readStoredAsset(tx, ctx.orgId, assetId)
+            await auditAssetImport(tx, ctx, 'insert', null, after)
             outcome.created++
-            continue
+            return
           }
 
           // Update path. parseRow already resolved blank cells to the stored
@@ -541,7 +622,7 @@ export function fixedAssetsResource(orgId: string): DataResource {
           if (stored.status !== 'draft' && stored.status !== 'in_service') {
             throw new Error(`only draft or in-service assets can be updated by import (status is ${stored.status})`)
           }
-          const history = await assetHasHistory(ctx.orgId, stored.id)
+          const history = await assetHasHistory(tx, ctx.orgId, stored.id)
           const basisChanged =
             parsed.acquisitionCost !== String(stored.acquisition_cost) ||
             parsed.salvageValue !== String(stored.salvage_value) ||
@@ -564,10 +645,10 @@ export function fixedAssetsResource(orgId: string): DataResource {
           }
           if (ctx.dryRun) {
             outcome.updated++
-            continue
+            return
           }
           // Blank-keeps-stored: only overwrite a column when the file spoke.
-          await db.execute(sql`
+          const updated = await tx.execute<{ id: string }>(sql`
             update fixed_assets
                set name = ${parsed.name},
                    description = ${parsed.description},
@@ -590,17 +671,22 @@ export function fixedAssetsResource(orgId: string): DataResource {
                    opening_accumulated_as_of = ${parsed.openingAsOf},
                    serial_number = ${parsed.serialNumber},
                    updated_by = ${ctx.actorId}
-             where id = ${stored.id} and org_id = ${ctx.orgId}`)
+             where id = ${stored.id} and org_id = ${ctx.orgId}
+             returning id`)
+          if (!updated.rows[0]) throw new Error('fixed asset update did not affect a row')
           if (parsed.status === 'in_service' && !history) {
             try {
-              await buildAllSchedules(stored.id, ctx.orgId, ctx.actorId)
+              await buildAllSchedulesWithRunner(tx, stored.id, ctx.orgId, ctx.actorId, allowedSubsidiaries)
             } catch (error) {
               throw new Error(
                 `schedule build failed: ${error instanceof Error ? error.message : 'unknown error'}`,
               )
             }
           }
+          const after = await readStoredAsset(tx, ctx.orgId, stored.id)
+          await auditAssetImport(tx, ctx, 'update', stored, after)
           outcome.updated++
+          }))
         } catch (error) {
           outcome.failed++
           outcome.errors.push({
