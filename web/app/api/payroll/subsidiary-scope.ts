@@ -12,6 +12,20 @@ import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**
+ * The subsidiary-scope denial as a throwable, for guards that must run
+ * INSIDE a service transaction. The amendments service authorizes the exact
+ * ids it is about to persist/return after building them — a row committed
+ * between the route's pre-guard and the service's use must abort the issue,
+ * not ride a stale approval. The route catches this and returns the denial
+ * response; the service lets it propagate untouched (it is neither a
+ * PayrollError nor a concurrency fence), so the transaction rolls back with
+ * nothing persisted.
+ */
+export class FilingScopeDenied {
+  constructor(readonly response: Response) {}
+}
+
+/**
  * Current employee operations use party ownership. Historical payroll
  * aggregates use their original pay-run ownership; employee transfers cannot
  * move that history. Filing accounts have their own additional entity check.

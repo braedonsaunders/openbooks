@@ -382,6 +382,7 @@ export async function filingLifecycle(
   filingKey: string,
   taxYear: number,
   scope?: PayrollSubsidiaryScope,
+  authorizeRowIds?: (rowIds: readonly string[]) => Promise<void>,
 ): Promise<PayrollFilingLifecycle> {
   const filing = yearEndFiling(country, filingKey);
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
@@ -441,6 +442,14 @@ export async function filingLifecycle(
     });
   }
   rows.sort((a, b) => a.label.localeCompare(b.label) || a.rowId.localeCompare(b.rowId));
+
+  // Authorize what is actually RETURNED — the current rows plus the stored
+  // history — on the data just built, not on an earlier guard's snapshot. A
+  // row committed (or moved entities) after the caller's pre-guard is seen
+  // here, and the denial aborts before the caller can render it.
+  if (authorizeRowIds) {
+    await authorizeRowIds([...new Set([...issued.keys(), ...currentIds])]);
+  }
 
   return {
     country,
@@ -539,6 +548,18 @@ export interface RecordFilingIssueInput {
    * so a restricted actor's original is refused there, never half-filed.
    */
   scope?: PayrollSubsidiaryScope;
+  /**
+   * Authorize the EXACT row ids the service is about to persist (an
+   * original's whole population, a correction's requested rows), INSIDE the
+   * issue transaction — after the population is built, before anything is
+   * written. The route's pre-guard runs outside that transaction, so a row
+   * committed in between would otherwise be issued unchecked; this closure
+   * (the route's subsidiary-scope guard) sees it and throws the caller's
+   * denial, which propagates untouched and aborts the issue with nothing
+   * persisted. Absent for trusted internal callers, which authorize their
+   * own way in.
+   */
+  authorizeRowIds?: (rowIds: readonly string[]) => Promise<void>;
   note?: string | null;
   /**
    * The operator's explanation for a cancellation. The API requires this
@@ -675,6 +696,12 @@ async function issueOriginal(
       `${filing.label} has no rows for ${taxYear} — there is nothing to issue`,
     );
   }
+  // The barrier closer: the route guarded this population outside the issue
+  // transaction, so authorize the ids about to be persisted — inside it,
+  // before the file, the slips, or the submission exist.
+  if (input.authorizeRowIds) {
+    await input.authorizeRowIds(rows.map((row) => String(row[data.rowKey] ?? "")));
+  }
   let file: PayrollFilingFile | null = null;
   let fileRefusal: string | null = null;
   if (filing.download) {
@@ -741,6 +768,11 @@ async function issueCorrection(
     );
   }
 
+  // No authorize here: the lifecycle output below is validation scaffolding
+  // (labels and current values for the requested rows only), while the
+  // persisted set — exactly `requested` — is authorized separately below. A
+  // blanket authorization would refuse an in-scope correction whenever an
+  // unrelated out-of-scope row exists in the population.
   const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, input.scope);
   if (lifecycle.populationRefusal && revision === "amended") {
     throw new PayrollError(
@@ -794,6 +826,13 @@ async function issueCorrection(
         + gone.map((rowId) => byRow.get(rowId)?.label || rowId).join(", "),
       );
     }
+  }
+
+  // Re-authorize the requested rows inside the issue transaction: the
+  // route guarded these ids outside it, and an entity move in between must
+  // not ride a stale approval into a persisted correction.
+  if (input.authorizeRowIds) {
+    await input.authorizeRowIds(requested);
   }
 
   // The correction rows: what was reported, what is true now, and the delta —
