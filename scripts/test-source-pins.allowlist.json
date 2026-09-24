@@ -49,7 +49,6 @@
     "engine/src/validation/import-field-tickets.test.ts": 1,
     "engine/src/worker/backup-scheduler.test.ts": 14,
     "engine/src/worker/overhead-scheduler.test.ts": 1,
-    "web/app/(app)/accounting/changes/accounting-events-ui.test.ts": 2,
     "web/app/(app)/accounts/AccountDrawer.test.ts": 6,
     "web/app/(app)/agents/agents-moved-notice.test.ts": 1,
     "web/app/(app)/assets/asset-popover-triggers.test.ts": 5,
