@@ -22,8 +22,9 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 test(
   "the same NetSuite source imports into two tenants without sharing rows",
   { skip: !DB, timeout: 180_000 },
-  async (t) => {
-    t.mock.method(globalThis, "fetch", (async (input: RequestInfo | URL, init?: RequestInit) => {
+  async () => {
+    let customerStage = "customer";
+    const transport: typeof fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const target = String(input);
       if (target.includes("/query/v1/suiteql")) {
         const query = String(
@@ -33,7 +34,7 @@ test(
         if (query.includes("from entitystatus")) {
           items = [{ key: "17", name: "Customer", entitytype: "CUSTOMER" }];
         } else if (query.includes("from customer")) {
-          items = [{ id: "NS-CUST-1", stage: "customer", entitystatus: "17", datecreated: "01/15/2026" }];
+          items = [{ id: "NS-CUST-1", stage: customerStage, entitystatus: "17", datecreated: "01/15/2026" }];
         } else if (query.includes("from recentactivity")) {
           items = [{
             id: "1845",
@@ -51,7 +52,7 @@ test(
         return Response.json({ items: [], hasMore: false });
       }
       throw new Error(`unstubbed NetSuite URL ${target}`);
-    }) as typeof fetch);
+    };
 
     const orgA = await createScratchOrg();
     const orgB = await createScratchOrg();
@@ -79,13 +80,19 @@ test(
                   ${sealJson({ consumerKey: "ck", consumerSecret: "cs", tokenKey: "tk", tokenSecret: "ts" })})`);
       }
 
-      const first = await importNetSuiteCrm(orgA.orgId);
+      const first = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(first.accounts, 1);
       assert.equal(first.activities.recentActivityNote, 1);
-      const again = await importNetSuiteCrm(orgA.orgId);
+      const again = await importNetSuiteCrm(orgA.orgId, undefined, transport);
       assert.equal(again.accounts, 1);
       assert.equal(again.activities.recentActivityNote, 1);
-      const other = await importNetSuiteCrm(orgB.orgId);
+      customerStage = "prospect";
+      await Promise.all([
+        importNetSuiteCrm(orgA.orgId, undefined, transport),
+        importNetSuiteCrm(orgA.orgId, undefined, transport),
+      ]);
+      customerStage = "customer";
+      const other = await importNetSuiteCrm(orgB.orgId, undefined, transport);
       assert.equal(other.accounts, 1);
 
       const profiles = await db.execute<{ orgId: string; partyId: string; stage: string }>(sql`
@@ -94,10 +101,18 @@ test(
       assert.deepEqual(
         profiles.rows.sort((a, b) => a.orgId.localeCompare(b.orgId)),
         [
-          { orgId: orgA.orgId, partyId: parties[orgA.orgId], stage: "customer" },
+          { orgId: orgA.orgId, partyId: parties[orgA.orgId], stage: "prospect" },
           { orgId: orgB.orgId, partyId: parties[orgB.orgId], stage: "customer" },
         ].sort((a, b) => a.orgId.localeCompare(b.orgId)),
       );
+
+      const transition = await db.execute<{ fromStage: string | null; toStage: string }>(sql`
+        select e.from_stage as "fromStage", e.to_stage as "toStage"
+          from crm_account_stage_events e
+          join crm_account_profiles p on p.id = e.account_profile_id and p.org_id = e.org_id
+         where e.org_id = ${orgA.orgId} and p.party_id = ${parties[orgA.orgId]}
+           and e.to_stage = 'prospect' and e.source_kind = 'import'`);
+      assert.deepEqual(transition.rows, [{ fromStage: "customer", toStage: "prospect" }]);
 
       const activities = await db.execute<{ orgId: string; id: string; subject: string }>(sql`
         select org_id as "orgId", id, subject from crm_activities

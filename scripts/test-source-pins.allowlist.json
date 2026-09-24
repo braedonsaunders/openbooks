@@ -26,7 +26,7 @@
     "engine/src/scripting/custom-gl-lines.integration.test.ts": 3,
     "engine/src/scripting/permissions.integration.test.ts": 4,
     "engine/src/sim/saas-autopilot.test.ts": 2,
-    "engine/src/sync/netsuite-crm.test.ts": 2,
+    "engine/src/sync/netsuite-crm.test.ts": 1,
     "engine/src/sync/netsuite-fixed-assets.test.ts": 1,
     "engine/src/sync/source-deletions.test.ts": 6,
     "engine/src/tax/pack-provisioning.test.ts": 1,
