@@ -449,6 +449,35 @@ async function planMerge(
   if (baselineCollision !== "0") {
     throw new ProjectMergeError("both projects hold a primary schedule baseline; reconcile baselines first");
   }
+  // Pay applications number per project like change orders: the same
+  // application number on both sides would violate the per-project unique
+  // index on the move. Name the numbers, like the change-order guard.
+  const payAppCollision = (await runner.execute<{ number: string }>(sql`
+    select d.application_number as number from pay_applications d
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from pay_applications s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.application_number = d.application_number)
+     limit 5`)).rows;
+  if (payAppCollision.length > 0) {
+    throw new ProjectMergeError(
+      `pay application number ${payAppCollision.map((row) => row.number).join(", ")} exists on both projects`,
+    );
+  }
+  // One open pay application per project in storage: moving the duplicate's
+  // open application onto a survivor that already holds one would violate
+  // the partial unique index instead of merging. Refuse with the remedy.
+  const openPayAppCollision = (await runner.execute<{ n: string }>(sql`
+    select count(*)::text as n
+      from pay_applications d
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and d.status in ('draft', 'submitted', 'approved')
+       and exists (select 1 from pay_applications s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.status in ('draft', 'submitted', 'approved'))`)).rows[0]?.n;
+  if (openPayAppCollision !== "0") {
+    throw new ProjectMergeError("both projects hold an open pay application; reconcile pay applications first");
+  }
   const moved: MergePreview["moved"] = [];
   for (const [table, column] of PROJECT_REFS) {
     const count = (await runner.execute<{ n: string }>(sql`
