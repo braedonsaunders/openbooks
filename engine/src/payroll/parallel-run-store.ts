@@ -664,10 +664,19 @@ function asCount(raw: unknown): number {
   return Number.isFinite(value) ? Math.trunc(value) : 0;
 }
 
+/** A discard naming a register that is not there to discard. */
+export class PriorRegisterNotFoundError extends ParallelRunStoreError {}
+
 /**
  * Discard an imported register and every trace of it — comparisons, findings,
  * stubs, amounts — in one transaction with the deletion's own audit row, so a
  * discarded register can never survive as half-removed evidence.
+ *
+ * The register is resolved FIRST, in this org (and scope): a discard naming
+ * nothing used to match zero rows on all five deletes, still write the audit
+ * row, and answer `{ok: true}` — phantom audit evidence for a no-op. Now a
+ * missing register is a named refusal with no audit row, and the audit row
+ * lands only after the header delete actually removes the row.
  */
 export async function deletePriorRegister(
   orgId: string,
@@ -677,6 +686,15 @@ export async function deletePriorRegister(
 ): Promise<void> {
   await inDbTransaction(async (tx) => {
     await lockParallelRunInputs(tx, orgId);
+    const header = (await tx.execute<{ id: string }>(sql`
+      select id from payroll_prior_registers
+       where org_id = ${orgId} and id = ${registerId}
+       for update`));
+    if (!header.rows[0]) {
+      throw new PriorRegisterNotFoundError(
+        `prior register ${registerId} does not exist in this organization`,
+      );
+    }
     await assertPriorRegisterInScope(tx, orgId, registerId, allowedSubsidiaryIds);
     await tx.execute(sql`
       delete from payroll_parallel_findings
@@ -693,8 +711,17 @@ export async function deletePriorRegister(
           where org_id = ${orgId} and register_id = ${registerId})`);
     await tx.execute(sql`
       delete from payroll_prior_stubs where org_id = ${orgId} and register_id = ${registerId}`);
-    await tx.execute(sql`
-      delete from payroll_prior_registers where org_id = ${orgId} and id = ${registerId}`);
+    const removed = (await tx.execute<{ id: string }>(sql`
+      delete from payroll_prior_registers where org_id = ${orgId} and id = ${registerId}
+      returning id`));
+    // The write's own receipt: a header delete that matches zero rows — a
+    // concurrent discard that won the race — is a missing register, not a
+    // success, and writes no audit row.
+    if (removed.rows.length === 0) {
+      throw new PriorRegisterNotFoundError(
+        `prior register ${registerId} does not exist in this organization`,
+      );
+    }
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'payroll_prior_registers', ${registerId}, 'delete',

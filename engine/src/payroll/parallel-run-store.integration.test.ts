@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
   ParallelRunStoreError,
+  PriorRegisterNotFoundError,
   comparableSlots,
   deleteParallelTolerance,
   deletePriorRegister,
@@ -358,6 +359,33 @@ test("discarding a register removes every trace in one motion and audits the del
     // The deletion is audited; the history of what WAS there stays.
     const stubHistory = await tableCount(f.orgId, "audit_log", "table_name = 'payroll_prior_stubs'");
     assert.ok(stubHistory >= 1, "prior-stub audit history must survive the register's deletion");
+  } finally {
+    await dropScratchOrgReporting(f.orgId);
+  }
+});
+
+test("discarding an unknown register is a named refusal with no audit row", { skip: !DB }, async () => {
+  // The phantom-delete defect: all five deletes matched zero rows unchecked,
+  // the audit row still landed, and the route answered {ok:true}.
+  const f = await importFixture();
+  try {
+    const missing = randomUUID();
+    await assert.rejects(
+      deletePriorRegister(f.orgId, missing, f.actorId),
+      (error: unknown) => {
+        assert.ok(error instanceof PriorRegisterNotFoundError);
+        assert.match(error.message, /does not exist in this organization/);
+        return true;
+      },
+    );
+    const phantom = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from audit_log
+       where org_id = ${f.orgId} and table_name = 'payroll_prior_registers'
+         and row_id = ${missing} and action = 'delete'`));
+    assert.equal(phantom.rows[0]!.n, 0, "a refused discard must leave no audit evidence");
+
+    // And the untouched register is still fully there.
+    assert.equal(await tableCount(f.orgId, "payroll_prior_registers"), 1);
   } finally {
     await dropScratchOrgReporting(f.orgId);
   }
