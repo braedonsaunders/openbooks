@@ -32,12 +32,20 @@ registerHooks({
       return {
         format: "module",
         shortCircuit: true,
-        source: `const key = Symbol.for('openbooks.name-gate')
+        source: `import { subsidiaryScopeAllows } from '${engineScopeUrl}'
+          export { subsidiaryScopeAllows }
+          const key = Symbol.for('openbooks.name-gate')
           const gate = () => globalThis[key] ?? null
           export async function guardPermission() { return gate() }
           export async function getAuthz() { return gate() }
           export function can() { return true }
           export function guardSubsidiaryScope() { return null }
+          export function guardUnrestrictedScope(authz) {
+            if (authz && authz.allowedSubsidiaryIds) {
+              return new Response('{"error":"unrestricted scope required"}', { status: 403 })
+            }
+            return null
+          }
           export function subsidiariesInScope(authz, ids) { return ids }`,
       };
     }
@@ -46,6 +54,10 @@ registerHooks({
 });
 
 const gateKey = Symbol.for("openbooks.name-gate");
+const engineScopeUrl = new URL(
+  "../../../engine/src/organization/subsidiary-scope.ts",
+  import.meta.url,
+).href;
 const { env, withBypassContext: withBypass } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );
@@ -87,7 +99,7 @@ function call(
   return handler(req, ctx as never);
 }
 
-test("name-bearing routes refuse a non-string name with the field path", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("name-bearing routes refuse a non-string name with the field path", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {
@@ -169,7 +181,7 @@ test("name-bearing routes refuse a non-string name with the field path", { skip:
   }
 });
 
-test("name-bearing routes pass a valid name through the shared boundary", { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test("name-bearing routes pass a valid name through the shared boundary", async () => {
   const scratch = await withBypass(() => createScratchOrg());
   try {
     (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {
