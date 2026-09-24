@@ -12,7 +12,7 @@ const stateKey = Symbol.for("openbooks.payroll-settings-route-test");
 interface RouteState {
   authz: {
     user: { orgId: string; id: string };
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: ReadonlySet<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -131,10 +131,14 @@ const { PAYROLL_COUNTRY_PACKS, remittanceScheduleForFrequencyKey } =
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-function authorize(orgId: string, actorId: string): void {
+function authorize(
+  orgId: string,
+  actorId: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): void {
   routeState.authz = {
     user: { orgId, id: actorId },
-    allowedSubsidiaryIds: null,
+    allowedSubsidiaryIds,
   };
 }
 
@@ -1134,6 +1138,38 @@ test(
     } finally {
       routeState.authz = null;
       await dropScratchOrg(fixture.orgId);
+    }
+  },
+)
+
+test(
+  'settings GET includes active org-wide vendors for a subsidiary-scoped operator',
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(async () => {
+      const fixture = await createScratchOrg()
+      return {
+        ...fixture,
+        actorId: await createScratchUser(fixture.orgId, 'Scoped Payroll Admin', 'payroll_admin'),
+      }
+    })
+    try {
+      authorize(org.orgId, org.actorId, new Set([org.subsidiaryId]))
+      await withOrgContext(org.orgId, () => db.execute(sql`
+        insert into vendor_roles (org_id, party_id, is_active)
+        values (${org.orgId}, ${org.vendorId}, true)
+      `))
+
+      const response = await withOrgContext(org.orgId, () => GET())
+      assert.equal(response.status, 200, await response.clone().text())
+      const body = await response.json() as { vendors: Array<{ id: string; label: string }> }
+      assert.ok(
+        body.vendors.some((vendor) => vendor.id === org.vendorId && vendor.label === 'Acme Vendor'),
+        'a vendor with no subsidiary assignment is visible to every subsidiary-scoped payroll operator',
+      )
+    } finally {
+      routeState.authz = null
+      await dropScratchOrg(org.orgId)
     }
   },
 )
