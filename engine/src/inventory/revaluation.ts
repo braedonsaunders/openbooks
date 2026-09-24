@@ -256,6 +256,8 @@ export async function revalueLayerExactly(
       "landed cost is not exactly representable on a moving-average layer at current precision",
     );
   }
+  // The split below detaches exactly one whole unit; the basis relief
+  // behind it refuses by name when the layer holds less (original-cost.ts).
 
   const roundingQuantityUnits = scale; // exactly one base unit
   const mainQuantityUnits = quantityUnits - roundingQuantityUnits;
@@ -276,7 +278,7 @@ export async function revalueLayerExactly(
   const roundingDelta = shareUnits - mainDelta;
   const roundingRateUnits = oldRateUnits + roundingDelta;
   const splitLayerId = randomUUID();
-  const splitBasis = consumeOriginalCost(layer.remaining_original_cost, "1", layer.remaining_quantity);
+  const splitBasis = consumeOriginalCost(layer.remaining_original_cost, "1", layer.remaining_quantity, { layerId: layer.id });
   const mainBasis = layer.remaining_original_cost == null || splitBasis == null ? null
     : add(add(layer.remaining_original_cost, neg(splitBasis)), fromUnits(mainDelta));
   const roundingBasis = splitBasis == null ? null : add(splitBasis, fromUnits(roundingDelta));
