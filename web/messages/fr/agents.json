@@ -32,6 +32,7 @@
     "selected": "{count, plural, one {# sélectionné} other {# sélectionnés}}",
     "review": "Commencer l'examen",
     "resolve": "Résoudre",
+    "bulkPartial": "{applied} appliqués — {failed} refusés",
     "clear": "Effacer"
   },
   "empty": {
