@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
 import type { NetSuiteSource, NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
@@ -69,12 +70,12 @@ function doc(
   } as NativeDocument;
 }
 
-function stubSource(documents: NativeDocument[]): NetSuiteSource {
+function stubSource(documents: NativeDocument[], snapshot: NetSuiteFixedAssetSnapshot = EMPTY_SNAPSHOT): NetSuiteSource {
   return {
     name: "netsuite",
     refKey: "nsFamMoneyTest",
     baseCurrency: "CAD",
-    fixedAssets: async () => EMPTY_SNAPSHOT,
+    fixedAssets: async () => snapshot,
     fixedAssetTransactionIds: async () => [],
     fixedAssetAccountBalances: async () => [],
     nativeTransactionsByIds: async () => ({
@@ -86,6 +87,35 @@ function stubSource(documents: NativeDocument[]): NetSuiteSource {
     }),
   } as unknown as NetSuiteSource;
 }
+
+test(
+  "an invalid FAM extraction timestamp falls back to the organization's business day",
+  { skip: !DB, timeout: 180_000 },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      await db.execute(sql`
+        update orgs
+           set settings = settings || ${JSON.stringify({
+             timeZone: "Pacific/Auckland",
+             features: { fixedAssets: true },
+           })}::jsonb
+         where id = ${org.orgId}`);
+
+      await withSimClock("2028-09-30T11:30:00Z", async () => {
+        await assert.rejects(
+          syncNetSuiteFixedAssets(
+            stubSource([], { ...EMPTY_SNAPSHOT, extractedAt: "invalid timestamp" }),
+            { orgId: org.orgId, connectionId: randomUUID() },
+          ),
+          /no accounting period for the FAM snapshot 2028-10-01/,
+        );
+      });
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
 
 /**
  * FAM-sourced money fails closed at the document boundary.

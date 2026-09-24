@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { netSuiteFamDate, netSuiteFamPeriodForDate, netSuiteFamState } from "./netsuite-fixed-assets.ts";
 
-const source = readFileSync(new URL("./netsuite-fixed-assets.ts", import.meta.url), "utf8");
 
 test("NetSuite FAM dates remain date-only", () => {
   assert.equal(netSuiteFamDate("11/14/2021"), "2021-11-14");
@@ -41,13 +39,3 @@ test("NetSuite FAM state refuses a carrying value above cost", () => {
     /book value .* above current cost/,
   );
 });
-
-
-test("NetSuite FAM extractionDate NaN fallback uses the org calendar", () => {
-  const helperStart = source.indexOf("async function extractionDate");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "extractionDate helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /Number\.isNaN\(date\.getTime\(\)\) \? await businessToday\(orgId\) : date\.toISOString\(\)\.slice\(0, 10\)/);
-});
-
