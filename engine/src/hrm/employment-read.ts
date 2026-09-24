@@ -1261,6 +1261,11 @@ export async function loadEmploymentOptions(
     employerName: string;
     jobTitle: string | null;
   };
+  const employerScope = allowed === null
+    ? sql``
+    : allowed.size === 0
+      ? sql`and false`
+      : sql`and e.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
   const page = (await exec.execute<EmploymentOptionRow>(sql`
     select e.id::text as "employmentId",
            e.employer_subsidiary_id::text as "employerSubsidiaryId",
@@ -1282,11 +1287,10 @@ export async function loadEmploymentOptions(
       ) jt on true
      where e.org_id = ${orgId}::uuid
        and e.employer_subsidiary_id is not null
+       ${employerScope}
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by p.display_name, e.id
-     limit ${limit}`)).rows.filter(
-    (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
-  );
+     limit ${limit}`)).rows;
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown or out-of-scope
   // id stays absent rather than leaking existence.
@@ -1312,9 +1316,8 @@ export async function loadEmploymentOptions(
         ) jt on true
        where e.org_id = ${orgId}::uuid
          and e.id = ${includeId}::uuid
-         and e.employer_subsidiary_id is not null`)).rows.filter(
-        (row) => allowed === null || allowed.has(row.employerSubsidiaryId),
-      )[0] ?? null
+         and e.employer_subsidiary_id is not null
+         ${employerScope}`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.employmentId !== pinned.employmentId)] : page;
 
@@ -1379,42 +1382,39 @@ export async function loadPeopleOptions(
 
   type PeopleOptionRow = {
     partyId: string;
-    subsidiaryIds: string[];
     personName: string;
   };
-  // One holder, one row: the subsidiary list decides scope below — a
-  // holder with any in-scope employment is listed (uuid has no min(), so
-  // the scope projects as an array, never an aggregate).
-  const inScope = (row: PeopleOptionRow): boolean =>
-    allowed === null || row.subsidiaryIds.some((id) => allowed.has(id));
+  const employmentScope = allowed === null
+    ? sql`true`
+    : allowed.size === 0
+      ? sql`false`
+      : sql`e.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
   const page = (await exec.execute<PeopleOptionRow>(sql`
     select p.id::text as "partyId",
-           array_agg(distinct e.employer_subsidiary_id::text) as "subsidiaryIds",
            p.display_name as "personName"
       from parties p
       join worker_employments e
-        on e.org_id = p.org_id and e.worker_party_id = p.id
+        on e.org_id = p.org_id and e.worker_party_id = p.id and ${employmentScope}
      where p.org_id = ${orgId}::uuid
        and e.employer_subsidiary_id is not null
        ${fragment ? sql`and p.display_name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      group by p.id, p.display_name
      order by p.display_name
-     limit ${limit}`)).rows.filter(inScope);
+     limit ${limit}`)).rows;
   // The pinned stored value is read by id, never by page position: it
   // leads even when it falls outside the bounded page. An unknown or
   // out-of-scope id stays absent rather than leaking existence.
   const pinned = includeId
     ? (await exec.execute<PeopleOptionRow>(sql`
       select p.id::text as "partyId",
-             array_agg(distinct e.employer_subsidiary_id::text) as "subsidiaryIds",
              p.display_name as "personName"
         from parties p
         join worker_employments e
-          on e.org_id = p.org_id and e.worker_party_id = p.id
+          on e.org_id = p.org_id and e.worker_party_id = p.id and ${employmentScope}
        where p.org_id = ${orgId}::uuid
          and p.id = ${includeId}::uuid
          and e.employer_subsidiary_id is not null
-       group by p.id, p.display_name`)).rows.filter(inScope)[0] ?? null
+       group by p.id, p.display_name`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.partyId !== pinned.partyId)] : page;
 
@@ -1477,16 +1477,20 @@ export async function loadLocationOptions(
     name: string;
     subsidiaryId: string | null;
   };
+  const locationScope = allowed === null
+    ? sql``
+    : allowed.size === 0
+      ? sql`and subsidiary_id is null`
+      : sql`and (subsidiary_id is null or subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)}))`;
   const page = (await exec.execute<LocationOptionRow>(sql`
     select id::text as "locationId", code, name, subsidiary_id::text as "subsidiaryId"
       from locations
      where org_id = ${orgId}::uuid
        and is_active
+       ${locationScope}
        ${fragment ? sql`and name ilike ${`%${likeEscape(fragment)}%`} escape '\\'` : sql``}
      order by name, id
-     limit ${limit}`)).rows.filter(
-    (row) => row.subsidiaryId === null || allowed === null || allowed.has(row.subsidiaryId),
-  );
+     limit ${limit}`)).rows;
   // The pinned draft value is read by id, never by page position: it leads
   // even when it falls outside the bounded page. An unknown, inactive, or
   // out-of-scope id stays absent rather than leaking existence.
@@ -1496,9 +1500,8 @@ export async function loadLocationOptions(
         from locations
        where org_id = ${orgId}::uuid
          and id = ${includeId}::uuid
-         and is_active`)).rows.filter(
-        (row) => row.subsidiaryId === null || allowed === null || allowed.has(row.subsidiaryId),
-      )[0] ?? null
+         and is_active
+         ${locationScope}`)).rows[0] ?? null
     : null;
   const rows = pinned ? [pinned, ...page.filter((row) => row.locationId !== pinned.locationId)] : page;
 

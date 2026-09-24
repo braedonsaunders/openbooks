@@ -689,6 +689,11 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
     const allowed = await requireAggregatePositionRead(db, orgId, query.actorId);
     const fragment = (query.q ?? "").trim();
     const includeId = query.includePositionId?.trim() ? query.includePositionId.trim() : null;
+    const employerScope = allowed === null
+      ? sql``
+      : allowed.size === 0
+        ? sql`and false`
+        : sql`and v.employer_subsidiary_id in (${sql.join([...allowed].map((id) => sql`${id}::uuid`), sql`, `)})`;
     type OptionRow = {
       positionId: string;
       code: string;
@@ -709,11 +714,10 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
            limit 1
         ) v on true
        where p.org_id = ${orgId}::uuid
+         ${employerScope}
          ${fragment ? sql`and (p.position_code ilike ${`%${likeEscape(fragment)}%`} escape '\\' or v.title ilike ${`%${likeEscape(fragment)}%`} escape '\\')` : sql``}
        order by p.position_code, p.id
-       limit ${limit}`)).rows.filter(
-      (row) => allowed === null || allowed.has(row.subsidiaryId),
-    );
+       limit ${limit}`)).rows;
     const pinned = includeId
       ? (await db.execute<OptionRow>(sql`
         select p.id::text as "positionId", p.position_code as code,
@@ -727,9 +731,8 @@ export async function listPositionOptions(query: PositionOptionsQuery): Promise<
              order by version_no desc
              limit 1
           ) v on true
-         where p.org_id = ${orgId}::uuid and p.id = ${includeId}::uuid`)).rows.filter(
-          (row) => allowed === null || allowed.has(row.subsidiaryId),
-        )[0] ?? null
+         where p.org_id = ${orgId}::uuid and p.id = ${includeId}::uuid
+           ${employerScope}`)).rows[0] ?? null
       : null;
     const rows = pinned
       ? [pinned, ...page.filter((row) => row.positionId !== pinned.positionId)]

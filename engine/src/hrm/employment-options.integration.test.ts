@@ -252,6 +252,38 @@ test("location options list active native locations inside the scope", { skip },
   }
 });
 
+test("employment, people, and location option pages scope before applying their limit", { skip }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Scoped HRM reader", "scoped_hrm_reader");
+    await grantRead(org.orgId, "scoped_hrm_reader");
+    await enableHrm(org.orgId);
+    const childId = await seedChildSubsidiary(org.orgId, org.subsidiaryId);
+    await restrictRole(org.orgId, "scoped_hrm_reader", [org.subsidiaryId]);
+
+    const hiddenParty = await mkParty(org.orgId, "A Hidden Worker");
+    await mkEmployment(org.orgId, hiddenParty, childId);
+    const visibleParty = await mkParty(org.orgId, "Z Visible Worker");
+    const visibleEmployment = await mkEmployment(org.orgId, visibleParty, org.subsidiaryId);
+
+    const employmentPage = await listEmploymentOptions({ orgId: org.orgId, actorId: actor, limit: 1 });
+    assert.deepEqual(employmentPage.map((row) => row.employmentId), [visibleEmployment]);
+    const peoplePage = await listPeopleOptions({ orgId: org.orgId, actorId: actor, limit: 1 });
+    assert.deepEqual(peoplePage.map((row) => row.partyId), [visibleParty]);
+
+    const hiddenLocation = await mkLocation(org.orgId, "A Hidden Site", null, childId, true);
+    const visibleLocation = await mkLocation(org.orgId, "Z Visible Site", null, org.subsidiaryId, true);
+    const locationPage = await listLocationOptions({ orgId: org.orgId, actorId: actor, q: "Site", limit: 1 });
+    assert.deepEqual(locationPage.map((row) => row.locationId), [visibleLocation]);
+    assert.ok(!locationPage.some((row) => row.locationId === hiddenLocation));
+    const shared = await mkLocation(org.orgId, "M Shared Site", null, null, true);
+    const allVisibleLocations = await listLocationOptions({ orgId: org.orgId, actorId: actor, limit: 10 });
+    assert.ok(allVisibleLocations.some((row) => row.locationId === shared), "null-subsidiary shared locations remain visible");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("people options key directory holders by party for the exit-interviewer picker", { skip }, async () => {
   const org = await createScratchOrg();
   try {
