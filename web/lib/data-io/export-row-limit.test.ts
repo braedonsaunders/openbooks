@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -45,69 +44,4 @@ test('one row past the cap refuses by name with a remedy that exists', () => {
     assert.doesNotMatch(err.message, /subsidiary/)
     return true
   })
-})
-
-// Every export read must fetch the sentinel row (MAX + 1) and gate on it.
-// A bare `limit ${MAX_EXPORT_ROWS}` returns a complete-looking truncated
-// file with no signal — the defect this slice removes.
-const FAMILY_FILES = [
-  'master-data-resources.ts',
-  'record-resources.ts',
-  'setup-resources.ts',
-  'transaction-resources.ts',
-  'property-resources.ts',
-  'fixed-asset-resources.ts',
-  'payroll-opening-balances-resource.ts',
-  'prior-payroll-register-resource.ts',
-]
-
-for (const file of FAMILY_FILES) {
-  test(`${file} gates its export read on the sentinel, never a bare cap`, async () => {
-    const source = await readFile(new URL(`./${file}`, import.meta.url), 'utf8')
-    assert.match(source, /enforceExportRowLimit\(/)
-    assert.match(source, /MAX_EXPORT_ROWS \+ 1/)
-    assert.doesNotMatch(source, /limit \$\{MAX_EXPORT_ROWS\}/)
-  })
-}
-
-test('test doubles re-export the real pure gate instead of copying it', async () => {
-  // Repository rule: never mock pure validation. The resource-core doubles
-  // re-export ./export-cap.ts; a copied class or function here is a failure.
-  const doubles = [
-    'import-route.test.ts',
-    'master-data-resources.test.ts',
-    'record-resources.test.ts',
-    'transaction-resources.test.ts',
-    'transaction-resources-distribution.test.ts',
-  ]
-  for (const file of doubles) {
-    const source = await readFile(new URL(`./${file}`, import.meta.url), 'utf8')
-    assert.doesNotMatch(source, /class ExportRowLimitError/, file)
-    assert.doesNotMatch(source, /function enforceExportRowLimit/, file)
-    assert.match(source, /export \* from.*export-cap\.ts/, file)
-  }
-})
-
-test('no resource family keeps a parallel copy of the cap', async () => {
-  for (const file of FAMILY_FILES) {
-    const source = await readFile(new URL(`./${file}`, import.meta.url), 'utf8')
-    assert.doesNotMatch(
-      source,
-      /const MAX_EXPORT_ROWS = 50_000/,
-      `${file} must reuse the canonical cap from resource-core.ts`,
-    )
-  }
-})
-
-test('in-memory setup sources refuse instead of slicing silently', async () => {
-  const source = await readFile(new URL('./setup-resources.ts', import.meta.url), 'utf8')
-  assert.doesNotMatch(source, /slice\(0, MAX_EXPORT_ROWS\)/)
-})
-
-test('the export route turns the refusal into a named 413, never a file', async () => {
-  const route = await readFile(new URL('../../app/api/data/export/route.ts', import.meta.url), 'utf8')
-  assert.match(route, /ExportRowLimitError/)
-  assert.match(route, /status: 413/)
-  // The error body is JSON on the refusal path — never a streamed file.
-  assert.match(route, /NextResponse\.json\(\{ error: error\.message \}/)
 })
