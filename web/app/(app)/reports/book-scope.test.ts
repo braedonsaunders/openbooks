@@ -19,6 +19,23 @@ import test from "node:test";
 
 import ts from 'typescript';
 
+const { registerHooks } = await import('node:module')
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    // Platform boundary, not our own module: lets the unit partition import
+    // the book-selection contract without a Next server runtime.
+    if (specifier === 'server-only') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,export default {}',
+      }
+    }
+    return nextResolve(specifier, context)
+  },
+})
+
+const { ReportBookSelectionError, reportBookSelection } = await import('../../../lib/report-books')
+
 const REPORTS_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** Every reports view that offers the book picker — derived, never hand-listed. */
@@ -98,3 +115,24 @@ test("detail exports label the book basis when an org holds more than one book",
   assert.match(source, /dateRangeLabel/);
   assert.match(source, /selectedBook\.name/);
 });
+
+
+// One selection contract for statement pages, exports, and supporting rows:
+// only an omitted selection defaults to the primary book. A stale or foreign
+// explicit selection must never silently change the accounting basis — a
+// malformed id is refused before any book is read. Multi-book catalog and
+// default semantics are covered database-backed in
+// book-selection.integration.test.ts.
+test('a malformed book selection is refused before any book is read', async () => {
+  await assert.rejects(
+    reportBookSelection('org-1', 'not-a-uuid'),
+    (error: unknown) => {
+      assert.ok(error instanceof ReportBookSelectionError, 'the refusal must be typed')
+      assert.equal(
+        (error as Error).message,
+        'Accounting book is unavailable. Choose an active accounting book.',
+      )
+      return true
+    },
+  )
+})
