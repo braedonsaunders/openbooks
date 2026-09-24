@@ -184,3 +184,47 @@ test(
     }
   },
 )
+
+test(
+  'a failed line insert leaves no journal and the confirmation can be retried',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    try {
+      commitState.authz = authzFor(fx)
+      const body = commitBody(fx, '10.00')
+      body.preview.lines[1]!.accountId = randomUUID()
+      await assert.rejects(post(body))
+      assert.equal(await journalCount(fx.org.orgId), 0)
+
+      body.preview.lines[1]!.accountId = fx.org.accounts.revenue
+      const retry = await post(body)
+      assert.equal(retry.status, 200, JSON.stringify(await retry.json().catch(() => null)))
+      assert.equal(await journalCount(fx.org.orgId), 1)
+    } finally {
+      commitState.authz = null
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
+
+test(
+  'a retried confirmation replays the same draft instead of double-posting',
+  { skip: !DB },
+  async () => {
+    const fx = await makeFixture()
+    try {
+      commitState.authz = authzFor(fx)
+      const body = commitBody(fx, '10.00')
+      const first = await post(body)
+      assert.equal(first.status, 200, JSON.stringify(await first.clone().json().catch(() => null)))
+      const second = await post(body)
+      assert.equal(second.status, 200, JSON.stringify(await second.clone().json().catch(() => null)))
+      assert.deepEqual(await second.json(), await first.json())
+      assert.equal(await journalCount(fx.org.orgId), 1)
+    } finally {
+      commitState.authz = null
+      await dropScratchOrg(fx.org.orgId)
+    }
+  },
+)
