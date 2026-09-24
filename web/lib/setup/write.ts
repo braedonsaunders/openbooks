@@ -2283,25 +2283,19 @@ export async function updateSetupRecord(
         returning ${sql.raw(idColumn(entity))} as id`)))
       if (updated.rows.length === 0) {
         // customer-price-level-assignments: deactivating a never-effective
-        // (starts-today) assignment removes the row in
+        // (starts today or later) assignment removes the row in
         // customer_price_level_end_date_on_deactivate instead of end-dating
         // it — end-dating to yesterday would violate
         // customer_price_level_dates, and any storable window would still
-        // price today. The before-image was row-locked above, so a row that
-        // was present and is now gone was revoked by this same statement:
-        // record the delete the trigger performed, not a missing row.
+        // price a future date. The before-image was row-locked above, so a
+        // row that was present and is now gone was revoked by this same
+        // statement: report the delete, not a missing row. The evidence is
+        // the trigger's own audit row (before-image included), so this layer
+        // writes no second one.
         if (entity.key === 'customer-price-level-assignments'
           && before.is_active === true
           && updateCols.some((column) => column.column === 'is_active' && column.value === false)
           && !(await loadSetupAuditRow(entity, orgId, id, tx))) {
-          await audit({
-            orgId: entity.orgScoped ? orgId : null,
-            table: entity.table,
-            rowId: id,
-            action: 'delete',
-            changes: { before },
-            actorId,
-          }, tx)
           return true
         }
         return false

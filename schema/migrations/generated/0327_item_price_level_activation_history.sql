@@ -41,7 +41,8 @@
 --     inactive rows with an open window are end-dated to the day before
 --     their last touch (the deactivation is the only write such rows
 --     receive), floored at effective_from so the dates CHECK holds —
---     except never-effective rows, which are removed to match the trigger.
+--     except never-effective rows, which are removed with their before-image
+--     audited, to match the trigger.
 --
 -- Re-runnable: table and trigger are IF NOT EXISTS-guarded; the backfills
 -- only fill gaps (no open period / still-open inactive window /
@@ -151,13 +152,17 @@ BEGIN
     -- Revoked before it ever started (today or later): never effective, so
     -- end-dating would either violate customer_price_level_dates (today) or
     -- leave a live future window on a dead row. Remove it instead; no
-    -- transaction could have priced off it, so no pricing history is lost.
-    -- The delete runs as the deactivating role under the same
-    -- org_isolation predicate that permitted the update, and the caller
-    -- observes zero updated rows and must record the revocation as the
-    -- delete it was (see updateSetupRecord). (PRC15c for today, PRC15d for
-    -- future starts.)
+    -- transaction could have priced off it, so no pricing history is lost —
+    -- but the removal is audited with the row's before-image, never silent
+    -- (PRC15d). The delete and its audit run as the deactivating role under
+    -- the same org_isolation predicate that permitted the update, and the
+    -- caller observes zero updated rows and must report the revocation as
+    -- the delete it was (see updateSetupRecord). (PRC15c for today, PRC15d
+    -- for future starts.)
     IF NEW.effective_from >= current_date THEN
+      INSERT INTO public.audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      VALUES (NEW.org_id, 'customer_price_level_assignments', NEW.id, 'delete',
+              jsonb_build_object('before', to_jsonb(OLD)), NEW.updated_by);
       DELETE FROM public.customer_price_level_assignments
        WHERE org_id = NEW.org_id AND id = NEW.id;
       RETURN NULL;
@@ -187,12 +192,20 @@ $trigger$;
 -- meaning: an inactive row starting today or later with an open window never
 -- priced anything, and end-dating it would violate customer_price_level_dates
 -- (today) or leave a live future window on a dead row, so the upgrade
--- removes it instead of flooring it at a single live day. (PRC15c for today,
--- PRC15d for future starts.)
-DELETE FROM public.customer_price_level_assignments a
- WHERE NOT a.is_active
-   AND a.effective_from >= current_date
-   AND (a.effective_to IS NULL OR a.effective_to >= current_date);
+-- removes it instead of flooring it at a single live day — audited with the
+-- before-image like the trigger's own removals. (PRC15c for today, PRC15d
+-- for future starts.)
+WITH removed AS (
+  DELETE FROM public.customer_price_level_assignments a
+   WHERE NOT a.is_active
+     AND a.effective_from >= current_date
+     AND (a.effective_to IS NULL OR a.effective_to >= current_date)
+  RETURNING a.*
+)
+INSERT INTO public.audit_log (org_id, table_name, row_id, action, changes, actor_id)
+SELECT removed.org_id, 'customer_price_level_assignments', removed.id, 'delete',
+       jsonb_build_object('before', to_jsonb(removed)), removed.updated_by
+  FROM removed;
 UPDATE public.customer_price_level_assignments a
    SET effective_to = GREATEST(a.updated_at::date - 1, a.effective_from)
  WHERE NOT a.is_active

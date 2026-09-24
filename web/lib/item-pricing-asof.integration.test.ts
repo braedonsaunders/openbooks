@@ -384,12 +384,24 @@ test('revoking a future assignment removes it and nothing prices off it', enable
         orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
       } as const
       // Revoked before it ever started: no error, no row left behind.
+      const assignmentId = (await db.execute<{ id: string }>(sql`
+        select id from customer_price_level_assignments
+         where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.id
       await db.execute(sql`update customer_price_level_assignments set is_active = false
        where org_id = ${org.orgId} and customer_id = ${customerId}`)
       const remaining = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from customer_price_level_assignments
          where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.n
       assert.equal(remaining, 0)
+
+      // The removal is audited with the row's before-image, never silent.
+      const audits = (await db.execute<{ action: string; before_customer: string | null }>(sql`
+        select action, changes->'before'->>'customer_id' as before_customer from audit_log
+         where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments'
+           and row_id = ${assignmentId}`)).rows
+      assert.equal(audits.length, 1)
+      assert.equal(audits[0]!.action, 'delete')
+      assert.equal(audits[0]!.before_customer, customerId)
 
       const now = await resolveItemPrice({ ...input, onDate: today })
       assert.equal(now?.unitPrice, '80.0000')
