@@ -11,7 +11,7 @@
 // month boundary (including a DST fall-back day) cannot cancel out in the
 // correction.
 
-import { utcCivilDate } from './fiscal-calendar'
+import { lastDayOfMonth, utcCivilDate } from './fiscal-calendar'
 
 export type ReportCadence = 'daily' | 'weekly' | 'monthly'
 export const REPORT_CADENCES: ReportCadence[] = ['daily', 'weekly', 'monthly']
@@ -113,7 +113,13 @@ function matchesDay(localDay: Date, input: CadenceInput, tz: string): boolean {
     return dow === (input.dayOfWeek ?? 1)
   }
   if (input.cadence === 'monthly') {
-    return tzDay(localDay, tz) === (input.dayOfMonth ?? 1)
+    const target = input.dayOfMonth ?? 1
+    const day = tzDay(localDay, tz)
+    if (day === target) return true
+    // Clamp-to-month-end: a 31st schedule fires on April 30 (and February
+    // 28/29), not never — short months would otherwise go dark.
+    const last = lastDayOfMonth(tzYear(localDay, tz), tzMonth(localDay, tz))
+    return target > last && day === last
   }
   return false
 }
