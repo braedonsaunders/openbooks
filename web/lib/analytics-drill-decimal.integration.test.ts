@@ -59,7 +59,7 @@ const { GET } = await import('../app/api/analytics/drill/route.ts')
 const EXACT_AMOUNT = '123456789012345.6789'
 const EXACT_TOTAL = '98765432109876.5432'
 
-test('analytics drill GET serializes account amounts without numeric coercion', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('analytics drill GET serializes account amounts without numeric coercion', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     setGateOrg(scratch.orgId)
@@ -116,7 +116,7 @@ test('analytics drill GET serializes account amounts without numeric coercion', 
   }
 })
 
-test('analytics drill GET serializes party document totals without numeric coercion', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('analytics drill GET serializes party document totals without numeric coercion', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     setGateOrg(scratch.orgId)
@@ -178,7 +178,7 @@ test('analytics drill GET serializes party document totals without numeric coerc
   }
 })
 
-test('analytics drill rejects malformed account and party selectors before querying', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+test('analytics drill rejects malformed account and party selectors before querying', async () => {
   const scratch = await withBypass(() => createScratchOrg())
   try {
     setGateOrg(scratch.orgId)
