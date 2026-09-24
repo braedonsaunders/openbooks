@@ -599,11 +599,16 @@ export async function computeItStatutoryWithRates(
     return Number.isInteger(n) && n > 0 ? n : 0;
   };
   const calculate = taxYear === 2026 ? calculateIt2026 : calculateIt2025;
+  // L. 207/2024 art. 1 c. 4 selects the somma percentage from full annual
+  // employment income, including non-periodic pay; the formula applies that
+  // selected percentage to `lavoroNet` inside calculateItWithTables.
+  // https://www.gazzettaufficiale.it/eli/id/2024/12/31/24G00229/sg
   const result = calculate({
     hasFamilyCharges: bool(answers["coniuge_a_carico"] ?? null)
       || countOf("figli_a_carico") > 0
       || countOf("altri_familiari_a_carico") > 0,
     annualGrossEmployment: D(U(income) * BigInt(periodsPerYear)),
+    sommaBandBase: D(U(income) * BigInt(periodsPerYear) + U(nonPeriodic)),
     // Annualise the recurring leg only; a non-taxable one-off (inside the
     // leg but outside nonPeriodic) still occurs once, so its excess over the
     // taxable one-offs rides as a flat annual add rather than per period.
