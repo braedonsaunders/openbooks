@@ -70,7 +70,11 @@ export default async function LeasesPage({
         sp={sp}
         drawer={
           payload ? (
+            // Keyed by lease: the drawer holds useState-from-props (the
+            // change/terminate form, its idempotency key), so switching
+            // leases without a remount would pre-fill B with A's terms.
             <LeaseDrawer
+              key={payload.lease.id}
               payload={payload}
               canManage={canManage}
               accounts={accounts.rows}
