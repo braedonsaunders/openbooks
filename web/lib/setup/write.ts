@@ -2341,7 +2341,12 @@ export async function updateSetupRecord(
   // A pay-schedule re-scope re-resolves the schedule's uncommitted runs in
   // the same transaction. The outcome (and any warning) travels out through
   // this binding because the transaction callback's boolean cannot carry it.
-  let scheduleRescope: { reresolved: number; untouched: number; warning?: string } | null = null
+  let scheduleRescope: {
+    reresolved: number
+    untouched: number
+    skipped?: { documentId: string; documentNumber: string | null; reason: string }[]
+    warning?: string
+  } | null = null
   try {
     const found = await setupWriteTransaction(entity, orgId, body, id, async (tx) => {
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
