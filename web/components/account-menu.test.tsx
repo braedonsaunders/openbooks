@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const dir = dirname(fileURLToPath(import.meta.url));
 
 const { JSDOM } = await import("jsdom");
 const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
@@ -18,6 +13,13 @@ for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLEl
 window.HTMLElement.prototype.getBoundingClientRect = function () {
   return { top: 8, left: 8, bottom: 40, right: 128, width: 120, height: 32, x: 8, y: 8, toJSON() { return {}; } };
 };
+if (typeof globals.ResizeObserver !== "function") {
+  globals.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
 if (typeof dom.window.requestAnimationFrame !== "function") {
   dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
     setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame;
@@ -113,16 +115,81 @@ function mount() {
   };
 }
 
-test("platform workspace switcher lives in the account menu, not the header", () => {
-  const shellSource = readFileSync(join(dir, "app-shell.tsx"), "utf8");
-  assert.doesNotMatch(
-    shellSource,
-    /OpenBooksPlatformMenu|from '\.\/platform-menu'/,
-    "the header must not mount a standalone platform dropdown",
+test("platform workspace switcher lives in the account menu, not the header", async (t) => {
+  // A super-admin's header must offer no platform entry of its own; the
+  // Platform card inside the account menu is the single switcher. Proved
+  // through the real AppShell, not shell source text.
+  const { AppShell } = await import("./app-shell");
+  const { NavigationProvider } = await import("./navigation-provider");
+  const { MoneyProvider } = await import("./money-provider");
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={{ shell }} timeZone="UTC">
+        <MoneyProvider currency="USD">
+        <NavigationProvider>
+        <AppShell
+          account={{
+            name: "Ada Admin",
+            email: "ada@example.test",
+            roles: [{ key: "admin", name: "Admin" }],
+            localePreference: null,
+            navModePreference: null,
+          }}
+          environments={{ ...environments, isSuperAdmin: true }}
+          groups={[]}
+          createPermissions={{
+            accountsReceivable: false,
+            accountsPayable: false,
+            journal: false,
+            customerPayments: false,
+            vendorPayments: false,
+            expenses: false,
+            parties: false,
+            items: false,
+            projects: false,
+            assets: false,
+            orders: false,
+          }}
+          canReadParties={false}
+          canManageParties={false}
+          canReadActivities={false}
+          canManageWages={false}
+          feedback={null}
+        >
+          {null}
+        </AppShell>
+        </NavigationProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  const header = document.querySelector("header");
+  assert.ok(header, "the shell renders a header");
+  const headerEntry = [...header.querySelectorAll("button, a")].find((control) =>
+    /platform/i.test(control.textContent ?? ""),
   );
-  const accountSource = readFileSync(join(dir, "account-menu.tsx"), "utf8");
-  assert.match(accountSource, /PlatformWorkspacePicker/);
-  assert.match(accountSource, /setView\('platform'\)/);
+  assert.equal(headerEntry, undefined, "the header offers no platform entry of its own");
+  const trigger = header.querySelector('button[aria-label="Account menu"]') as HTMLButtonElement | null;
+  assert.ok(trigger, "the header keeps the account menu trigger");
+  await act(async () => {
+    trigger.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    await tick();
+    await tick();
+  });
+  const platformCard = [...document.querySelectorAll("button")].find((button) =>
+    (button.textContent ?? "").includes("Platform"),
+  );
+  assert.ok(platformCard, "the account menu hosts the platform switcher");
 });
 
 test("super-admin account menu drills into org vs platform", async (t) => {
