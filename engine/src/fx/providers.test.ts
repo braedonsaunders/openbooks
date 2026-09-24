@@ -1015,13 +1015,17 @@ test("provider rates accept scientific notation and refuse non-positive input", 
   assert.equal(ratioRate("1e1", "1"), "10.0000000000");
   assert.equal(ratioRate("1", "1e-1"), "10.0000000000");
   assert.equal(ratioRate("1e0", "1"), "1.0000000000");
-  // A dust denominator is a valid (if extreme) rate, not a zero.
-  assert.equal(ratioRate("1", "0.000000000000000001"), "1000000000000000000.0000000000");
+  // Both a zero-after-rounding quote and a quote whose reciprocal cannot fit
+  // the common numeric(19,10) domain are refused before storage.
+  assert.throws(() => ratioRate("0.000000000000000001", "1"), /unrepresentable rate/);
+  assert.throws(() => ratioRate("1", "10000000000"), /unrepresentable rate/);
   // Zero, negatives, and negative scientific notation never become rates —
   // silently absolutizing a provider sign would launder the direction.
   assert.throws(() => ratioRate("1", "0"), FxProviderError);
   assert.throws(() => ratioRate("1", "-5"), FxProviderError);
   assert.throws(() => ratioRate("1", "-1.5e-3"), FxProviderError);
+  assert.throws(() => ratioRate("1", "0.000000000000000001"), /unrepresentable rate/);
+  assert.throws(() => ratioRate("1", "10000000000"), /unrepresentable rate/);
 });
 
 test("provider rates refuse unrepresentable scientific notation without expanding it", () => {

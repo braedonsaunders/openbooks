@@ -3,10 +3,22 @@ import test from "node:test";
 import { buildCpa005File, type Cpa005Run } from "./rail-cpa005.ts";
 import { buildNachaFile, nachaFileIdModifierForRunNumber, nachaFileIdModifierForSequence } from "./rail-nacha.ts";
 import { buildSepaFile } from "./rail-sepa.ts";
-import { carryingAmountForSettlement, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
+import { carryingAmountForSettlement, persistPaymentFxRate, realizedFxControlAdjustment, sameCurrencyAllocation } from "./settlement-policy.ts";
 import { type EftSettings } from "./rail-settings.ts";
 import { type NachaSettings } from "./rail-nacha.ts";
 import { PaymentError } from "./payment-errors.ts";
+
+test("payment FX rates share the positive, invertible numeric storage domain", () => {
+  assert.equal(persistPaymentFxRate("1.25"), "1.2500000000");
+  assert.throws(
+    () => persistPaymentFxRate("0.0000000010"),
+    (error: Error) => error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
+  );
+  assert.throws(
+    () => persistPaymentFxRate("1000000000"),
+    (error: Error) => error instanceof PaymentError && /inverse fit numeric\(19,10\)/.test(error.message),
+  );
+});
 
 test("partial settlement allocates carrying value exactly beyond Number's safe range", () => {
   assert.equal(

@@ -1,6 +1,7 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, fromUnits, mulRate, mulRatio, neg, normalizeDecimal, toUnits } from "../money/money.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 
 export type SettlementRateSource = "same_currency" | "provider" | "manual" | "contractual" | "imported";
 export interface AllocationInput {
@@ -20,14 +21,15 @@ export interface AllocationInput {
   settlementFxRateId?: string | null;
 }
 
-/** Persist-time payment FX rate: exact decimal at numeric(19,10). Fail closed. */
+/** Persist-time payment FX rate: exact positive decimal with a numeric(19,10) inverse. */
 export function persistPaymentFxRate(value: unknown): string {
-  const exact = canonicalDecimal(value, 10);
-  if (exact === null) throw new PaymentError("exchange rate must be an exact decimal");
   try {
-    return normalizeDecimal(exact, 10);
-  } catch {
-    throw new PaymentError("exchange rate must be an exact decimal");
+    return updateFxRate({ rate: value });
+  } catch (error) {
+    if (error instanceof CurrencyError) {
+      throw new PaymentError(error.message.replace(/^FX rate/, "exchange rate"));
+    }
+    throw error;
   }
 }
 

@@ -14,6 +14,10 @@ test("updateFxRate persists FX at numeric(19,10) and fails closed", () => {
   assert.throws(() => updateFxRate({ rate: "-1.25" }), CurrencyError);
   assert.throws(() => updateFxRate({ rate: "1e-2" }), CurrencyError);
   assert.throws(() => updateFxRate({ rate: "1.25000000001" }), CurrencyError);
+  assert.equal(updateFxRate({ rate: "0.0000000011" }), "0.0000000011");
+  assert.equal(updateFxRate({ rate: "999999999.9999999999" }), "999999999.9999999999");
+  assert.throws(() => updateFxRate({ rate: "0.0000000010" }), /rate and its inverse fit numeric\(19,10\)/);
+  assert.throws(() => updateFxRate({ rate: "1000000000" }), /rate and its inverse fit numeric\(19,10\)/);
 });
 
 

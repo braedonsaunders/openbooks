@@ -19,6 +19,18 @@ export class CurrencyError extends Error {
   readonly name = "CurrencyError";
 }
 
+const FX_RATE_SCALE = 10_000_000_000n;
+const FX_RATE_MIN_UNITS = 11n; // 0.0000000011; smaller rates have an unrepresentable inverse.
+const FX_RATE_MAX_UNITS = 9_999_999_999_999_999_999n; // numeric(19,10) maximum.
+
+function fxRateUnits(rate: string): bigint {
+  const negative = rate.startsWith("-");
+  const unsigned = negative ? rate.slice(1) : rate;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const units = BigInt(whole!) * FX_RATE_SCALE + BigInt(fraction.padEnd(10, "0"));
+  return negative ? -units : units;
+}
+
 /**
  * Settle a sequence of exact (ledger-precision) amounts into whole minor units
  * of a currency, carrying the rounding residual forward so the settled total
@@ -68,16 +80,21 @@ export function roundCurrencyMoney(amount: string, minorUnits: number): string {
 }
 
 /**
- * Persist-time FX rate: exact decimal at numeric(19,10). Fail closed — a
- * non-canonical or non-positive rate must not be written.
+ * Persist-time FX rate: exact positive decimal at numeric(19,10), with a
+ * representable reciprocal for every direct-or-inverse reader. The lowest
+ * stored quantum that keeps `1 / rate` within numeric(19,10) is 0.0000000011.
  */
 export function updateFxRate(input: { rate: unknown }): string {
   const exact = canonicalDecimal(input.rate, 10);
   if (exact === null) throw new CurrencyError("FX rate must be an exact decimal");
   try {
     const rate = normalizeDecimal(exact, 10);
-    if (rate.startsWith("-") || /^0(?:\.0+)?$/.test(rate)) {
-      throw new CurrencyError("FX rate must be greater than zero");
+    const units = fxRateUnits(rate);
+    if (units <= 0n) throw new CurrencyError("FX rate must be greater than zero");
+    if (units < FX_RATE_MIN_UNITS || units > FX_RATE_MAX_UNITS) {
+      throw new CurrencyError(
+        "FX rate must be between 0.0000000011 and 999999999.9999999999 so the rate and its inverse fit numeric(19,10)",
+      );
     }
     return rate;
   } catch (error) {

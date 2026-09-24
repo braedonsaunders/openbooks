@@ -4,6 +4,7 @@ import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
+import { CurrencyError, updateFxRate } from "./currencies.ts";
 
 export type FxProviderKey = "bank_of_canada" | "ecb" | "open_exchange_rates";
 export type FxSyncSchedule = "manual" | "daily" | "weekdays" | "weekly";
@@ -298,7 +299,14 @@ export function ratioRate(numerator: string, denominator: string): string {
   const scaled = (n * RATE_FACTOR + d / 2n) / d;
   const whole = scaled / RATE_FACTOR;
   const fraction = (scaled % RATE_FACTOR).toString().padStart(10, "0");
-  return `${whole}.${fraction}`;
+  try {
+    return updateFxRate({ rate: `${whole}.${fraction}` });
+  } catch (error) {
+    if (error instanceof CurrencyError) {
+      throw new FxProviderError(`provider returned an unrepresentable rate: ${numerator}/${denominator}`);
+    }
+    throw error;
+  }
 }
 
 /** Build every directed pair so posting and any subsidiary tree need no triangulation. */
@@ -626,11 +634,22 @@ export async function applyNormalizedRates(
   const byKey = new Map(existing.rows.map((row) => [`${row.as_of}|${row.from_currency}|${row.to_currency}`, row.source]));
   const writable: NormalizedFxRate[] = [];
   for (const rate of args.normalized) {
+    let persistedRate: string;
+    try {
+      persistedRate = updateFxRate({ rate: rate.rate });
+    } catch (error) {
+      if (error instanceof CurrencyError) {
+        throw new FxProviderError(
+          `${FX_PROVIDER_MANIFESTS[args.provider].displayName} returned an unrepresentable rate for ${rate.fromCurrency}→${rate.toCurrency} on ${rate.date}`,
+        );
+      }
+      throw error;
+    }
     if (byKey.get(`${rate.date}|${rate.fromCurrency}|${rate.toCurrency}`) === "manual") {
       counts.manualPreserved++;
       continue;
     }
-    writable.push(rate);
+    writable.push({ ...rate, rate: persistedRate });
   }
   for (let at = 0; at < writable.length; at += FX_RATE_APPLY_CHUNK) {
     const chunk = writable.slice(at, at + FX_RATE_APPLY_CHUNK);
