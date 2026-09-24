@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import pg from "pg";
+import { db, withBypass } from "../platform/db.ts";
 import {
   createManagedProperty,
   PropertyManagementError,
@@ -61,6 +62,61 @@ test("property creation rejects a location owned by another subsidiary", { skip:
       (error: unknown) => error instanceof PropertyManagementError && /dimensions do not belong/.test(error.message),
     );
   } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("property creation waits for a concurrent feature disable and then refuses", { skip: !process.env.OPENBOOKS_DB_URL, timeout: 180_000 }, async () => {
+  const org = await createScratchOrg();
+  const holder = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
+  let pending: Promise<{ id: string }> | undefined;
+  try {
+    await enablePropertyManagement(org.orgId);
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await holder.connect();
+    await holder.query("begin");
+    await holder.query("select set_config('app.bypass_rls','on',true)");
+    await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))', [`openbooks:feature-gate:${org.orgId}`]);
+    const staged = await holder.query(
+      "update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"propertyManagement\":false}'::jsonb) where id=$1",
+      [org.orgId],
+    );
+    assert.equal(staged.rowCount, 1, 'the concurrent writer must stage the feature disable');
+    const holderPid = (await holder.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
+
+    const request = withBypass(() => createManagedProperty({
+      orgId: org.orgId,
+      actorId,
+      allowedSubsidiaryIds: null,
+      subsidiaryId: org.subsidiaryId,
+      code: 'PROPERTY-GATE-RACE',
+      name: 'Property gate race',
+      propertyType: 'commercial',
+    }));
+    pending = request;
+    void request.catch(() => {});
+    let blocked = false;
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      await holder.query('select pg_stat_clear_snapshot()');
+      const check = await holder.query<{ blocked: boolean }>(
+        'select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',
+        [holderPid],
+      );
+      if (check.rows[0]?.blocked) { blocked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.ok(blocked, 'property write must wait on the shared feature-gate lock');
+    await holder.query('commit');
+    await assert.rejects(request, (error: unknown) =>
+      error instanceof PropertyManagementError && /feature is disabled/.test(error.message),
+    );
+    const row = await db.execute(sql`select id from managed_properties where org_id=${org.orgId} and code='PROPERTY-GATE-RACE'`);
+    assert.equal(row.rows.length, 0);
+  } finally {
+    await holder.query('rollback').catch(() => {});
+    await pending?.catch(() => {});
+    await holder.end();
     await dropScratchOrg(org.orgId);
   }
 });

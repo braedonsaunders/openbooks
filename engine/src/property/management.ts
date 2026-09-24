@@ -11,7 +11,7 @@ import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter, withScopeSnapshot } from "../organization/subsidiary-scope.ts";
-import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { arePeriodModulesOpen, assertPeriodModulesOpen, CloseError } from "../close/period-policy.ts";
 import { resolveCoveringPeriod } from "../close/period-resolution.ts";
@@ -300,7 +300,9 @@ export function isSecurityDepositImportConflict(error: unknown): boolean {
 // Canonical switchboard read: the previous inline ::boolean cast threw
 // 22P02 on a non-boolean stored value.
 async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
-  if (!(await orgFeatureEnabled(orgId, "propertyManagement", runner as SqlExecutor))) {
+  const tx = runner as SqlExecutor
+  await acquireOrgFeatureGateLock(tx, orgId)
+  if (!(await lockAndCheckOrgFeature(tx, orgId, "propertyManagement"))) {
     throw new PropertyManagementError("Property management feature is disabled");
   }
 }
