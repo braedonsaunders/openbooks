@@ -124,7 +124,8 @@
     "copied": "URI de redirection copiée",
     "copyFailed": "Copie impossible — sélectionnez et copiez le texte manuellement",
     "deletionRetained": "Suppression à la source conservée avec preuve du contrôleur",
-    "deletionVoided": "Transaction supprimée à la source contre-passée et annulée"
+    "deletionVoided": "Transaction supprimée à la source contre-passée et annulée",
+    "saveFailed": "Impossible d’enregistrer la connexion"
   },
   "confirmDelete": "Supprimer la connexion « {name} » ? Les données migrées sont conservées ; seul le lien est supprimé.",
   "drawer": {

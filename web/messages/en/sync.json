@@ -124,7 +124,8 @@
     "copied": "Redirect URI copied",
     "copyFailed": "Could not copy — select and copy the text manually",
     "deletionRetained": "Source deletion retained with controller evidence",
-    "deletionVoided": "Source-deleted transaction reversed and voided"
+    "deletionVoided": "Source-deleted transaction reversed and voided",
+    "saveFailed": "Could not save the connection"
   },
   "confirmDelete": "Delete connection \"{name}\"? Migrated data stays; only the link is removed.",
   "confirmRetainSourceDeletion": "Retain source-deleted transaction {ref} in OpenBooks and record this as the controller's decision?",

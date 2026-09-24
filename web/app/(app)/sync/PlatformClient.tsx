@@ -1193,8 +1193,9 @@ function ConnectionDrawer({
               secrets: provided,
             }),
           });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? `HTTP ${res.status}`);
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t("toast.saveFailed")));
       toast.success(editing ? t("toast.updated") : t("toast.created"));
       onSaved();
     } catch (e) {

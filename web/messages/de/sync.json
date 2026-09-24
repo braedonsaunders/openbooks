@@ -124,7 +124,8 @@
     "copied": "Redirect-URI kopiert",
     "copyFailed": "Kopieren nicht möglich — markieren und kopieren Sie den Text manuell",
     "deletionRetained": "Quellseitige Löschung mit Nachweis des Controllers behalten",
-    "deletionVoided": "Quellseitig gelöschte Buchung storniert und ungültig gemacht"
+    "deletionVoided": "Quellseitig gelöschte Buchung storniert und ungültig gemacht",
+    "saveFailed": "Die Verbindung konnte nicht gespeichert werden"
   },
   "confirmDelete": "Verbindung \"{name}\" löschen? Migrierte Daten bleiben erhalten; nur die Verknüpfung wird entfernt.",
   "drawer": {

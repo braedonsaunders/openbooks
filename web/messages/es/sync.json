@@ -124,7 +124,8 @@
     "copied": "URI de redirección copiada",
     "copyFailed": "No se pudo copiar — seleccione y copie el texto manualmente",
     "deletionRetained": "Eliminación en origen conservada con evidencia del contralor",
-    "deletionVoided": "Transacción eliminada en origen revertida y anulada"
+    "deletionVoided": "Transacción eliminada en origen revertida y anulada",
+    "saveFailed": "No se pudo guardar la conexión"
   },
   "confirmDelete": "¿Eliminar la conexión \"{name}\"? Los datos migrados se conservan; solo se elimina el vínculo.",
   "drawer": {
