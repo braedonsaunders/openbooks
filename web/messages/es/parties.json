@@ -7,7 +7,9 @@
     "shortCode": "Código corto",
     "phone": "Teléfono",
     "emptyTitle": "Aún no hay terceros",
-    "emptyDescription": "Agregue el primer cliente, proveedor o empleado para iniciar el directorio."
+    "emptyDescription": "Agregue el primer cliente, proveedor o empleado para iniciar el directorio.",
+    "filteredEmptyTitle": "Ningún tercero coincide con estos filtros",
+    "filteredEmptyDescription": "Pruebe otra búsqueda o filtro de rol."
   },
   "newParty": {
     "defaultLabel": "Nuevo tercero",

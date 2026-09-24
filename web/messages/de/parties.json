@@ -7,7 +7,9 @@
     "shortCode": "Kurzcode",
     "phone": "Telefon",
     "emptyTitle": "Noch keine Geschäftspartner",
-    "emptyDescription": "Fügen Sie den ersten Kunden, Lieferanten oder Mitarbeiter hinzu, um das Verzeichnis zu starten."
+    "emptyDescription": "Fügen Sie den ersten Kunden, Lieferanten oder Mitarbeiter hinzu, um das Verzeichnis zu starten.",
+    "filteredEmptyTitle": "Keine Geschäftspartner entsprechen diesen Filtern",
+    "filteredEmptyDescription": "Versuchen Sie eine andere Suche oder Rollenfilterung."
   },
   "newParty": {
     "defaultLabel": "Neuer Geschäftspartner",

@@ -7,7 +7,9 @@
     "shortCode": "Code court",
     "phone": "Téléphone",
     "emptyTitle": "Aucun tiers pour l’instant",
-    "emptyDescription": "Ajoutez le premier client, fournisseur ou employé pour démarrer le répertoire."
+    "emptyDescription": "Ajoutez le premier client, fournisseur ou employé pour démarrer le répertoire.",
+    "filteredEmptyTitle": "Aucun tiers ne correspond à ces filtres",
+    "filteredEmptyDescription": "Essayez une autre recherche ou un autre filtre de rôle."
   },
   "newParty": {
     "defaultLabel": "Nouveau tiers",
