@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, SqlParams, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
 import { sourceFromEntity } from './catalog'
 import { buildSource, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -125,6 +125,7 @@ type Ctx = {
   params: unknown[]
   /** Org business day (YYYY-MM-DD). Relative date filters bind this, never current_date. */
   asOf: string
+  fiscalStartMonth: number
 }
 
 /** Push a bound value and return its `$n` placeholder. */
@@ -180,10 +181,20 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
       return `${ref} >= date_trunc('month', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('month', ${bind(ctx, ctx.asOf)}::date) + interval '1 month')::date`
     case 'this_quarter':
       return `${ref} >= date_trunc('quarter', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('quarter', ${bind(ctx, ctx.asOf)}::date) + interval '3 months')::date`
-    case 'this_year':
-      return `${ref} >= date_trunc('year', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} < (date_trunc('year', ${bind(ctx, ctx.asOf)}::date) + interval '1 year')::date`
-    case 'ytd':
-      return `${ref} >= date_trunc('year', ${bind(ctx, ctx.asOf)}::date)::date and ${ref} <= ${bind(ctx, ctx.asOf)}::date`
+    case 'this_year': {
+      const range = resolvePreset('this_fiscal_year', {
+        startMonth: ctx.fiscalStartMonth,
+        today: ctx.asOf,
+      })!
+      return `${ref} >= ${bind(ctx, range.from)}::date and ${ref} < (${bind(ctx, range.to)}::date + interval '1 day')`
+    }
+    case 'ytd': {
+      const range = resolvePreset('this_fiscal_year_to_date', {
+        startMonth: ctx.fiscalStartMonth,
+        today: ctx.asOf,
+      })!
+      return `${ref} >= ${bind(ctx, range.from)}::date and ${ref} <= ${bind(ctx, range.to)}::date`
+    }
     default:
       throw new InsightCompileError('unknown_operator', `unknown filter operator "${op as string}"`, op as string)
   }
@@ -302,6 +313,7 @@ export function compileInsightQuery(
    *  legs arrive collapsed before any caller filter, dimension, sort, or
    *  limit. Defaults to the authored catalog (full detail). */
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
+  fiscalStartMonth = 1,
 ): CompiledQuery {
   const entity = entityMap[query.source]
   if (!entity || entity.key !== query.source)
@@ -309,7 +321,7 @@ export function compileInsightQuery(
   const source = buildSource(sourceFromEntity(entity))
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
-  const ctx: Ctx = { source, entity, params: [orgId], asOf }
+  const ctx: Ctx = { source, entity, params: [orgId], asOf, fiscalStartMonth }
   const wheres: string[] = [`${source.orgColumn} = $1`]
   const subsidiary = compileSubsidiaryScope(entity, allowedSubsidiaryIds, (value) => bind(ctx, value))
   if (subsidiary) wheres.push(subsidiary)

@@ -11,6 +11,7 @@ import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
 import { InsightBookScopeError, resolveInsightBookScope } from '@/lib/insight-books'
 import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { fiscalStartMonth } from '@/lib/fiscal'
 import { normalizeQuery } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -88,6 +89,7 @@ export async function POST(req: Request) {
       await insightLabelResolver(), await businessToday(gate.user.orgId),
       allowedBookIds,
       await reportEntityCatalog(gate),
+      await fiscalStartMonth(gate.user.orgId),
     )
     return NextResponse.json(result)
   } catch (e) {

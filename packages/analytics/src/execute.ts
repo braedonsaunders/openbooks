@@ -107,10 +107,12 @@ export async function runInsightQuery(
   /** The reader's own report-entity catalog rows (a restricted reader's
    *  pre-collapsed grain). Defaults to the authored catalog (full detail). */
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
+  /** Organization-configured fiscal-year start month. */
+  fiscalStartMonth = 1,
 ): Promise<QueryResult> {
   if (allowedSubsidiaryIds === undefined) throw new Error('Insights requires an explicit subsidiary authorization scope')
   const validatedQuery = validateInsightQuery(query)
-  const compiled = compileInsightQuery(validatedQuery, orgId, labels ?? {}, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels ?? {}, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap, fiscalStartMonth)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const sentinelLimit = capped + 1
