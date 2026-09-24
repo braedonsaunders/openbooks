@@ -51,7 +51,7 @@ export function OverheadLifecycle(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'set-lifecycle', mode, cadence }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
       toast.success(t('saved'))
       router.refresh()
     } catch (e) {

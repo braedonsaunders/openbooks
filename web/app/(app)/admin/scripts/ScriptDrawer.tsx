@@ -198,8 +198,8 @@ export function ScriptDrawer({
     setBusy(true)
     const res = await fetch(`/api/admin/scripts/${script.id}`, { method: 'DELETE' })
     if (!res.ok) {
-      const data = await res.json()
-      toast.error(data.error ?? t('drawer.deleteFailed'))
+      const data = await res.json().catch(() => null)
+      toast.error(data?.error ?? t('drawer.deleteFailed'))
       setBusy(false)
       return
     }

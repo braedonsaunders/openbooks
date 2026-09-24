@@ -115,21 +115,6 @@
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
   },
   {
-    "path": "web/app/(app)/assets/AssetDrawer.tsx",
-    "fn": "remove",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
-    "path": "web/app/(app)/banking/rules/RuleDrawer.tsx",
-    "fn": "run",
-    "reason": "server always returns JSON; guard adoption pending. POST /api/banking/rules/apply (web/app/api/banking/rules/apply/route.ts): the apply call sits inside try/catch answering NextResponse.json (422 for PostingError, bankingErrorResponse otherwise); no rethrow. Verified by reading the handler."
-  },
-  {
-    "path": "web/app/(app)/banking/rules/RuleDrawer.tsx",
-    "fn": "save",
-    "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"
-  },
-  {
     "path": "web/app/(app)/budgets/BudgetDrawer.tsx",
     "fn": "BudgetDrawer",
     "reason": "guard adoption pending; conversion held for a typechecked batch (queue item 60, parent item 47)"

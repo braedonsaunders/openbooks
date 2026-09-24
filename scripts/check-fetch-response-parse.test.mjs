@@ -69,6 +69,45 @@ export function commitRun(runId: string) {
 }
 `
 
+// The banking rule-run shape: body parsed, a toast-and-return check after.
+// The branch exits, but the parse still throws first on a non-JSON body.
+const RULE_RUN_SHAPE = `
+export function RunRulesButton({ ruleId }: { ruleId: string }) {
+  async function run() {
+    const res = await fetch('/api/banking/rules/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ruleId }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      toast.error(data.error ?? 'failed')
+      return
+    }
+    toast.success('done')
+  }
+  return run
+}
+`
+
+// The banking rule-delete shape: the parse sits IN the failure branch, so
+// the ordering rule excuses it — but a non-JSON error body still throws
+// before the branch can toast anything.
+const RULE_DELETE_SHAPE = `
+export function RuleDeleteButton({ ruleId }: { ruleId: string }) {
+  async function remove() {
+    const res = await fetch('/api/banking/rules/' + ruleId, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json()
+      toast.error(data.error ?? 'failed')
+      return
+    }
+    toast.success('deleted')
+  }
+  return remove
+}
+`
+
 test('flags the profile-load shape: parse before the status check', () => {
   const violations = auditOne('web/app/(app)/payroll/_ui/PayrollProfileTab.tsx', PROFILE_LOAD_SHAPE)
   assert.equal(violations.length, 1, 'one parse-before-check site must flag exactly once')
@@ -76,6 +115,29 @@ test('flags the profile-load shape: parse before the status check', () => {
   assert.equal(violations[0].fn, 'loadProfile', 'the violation must name the owning operation, not the file')
   assert.equal(typeof violations[0].line, 'number')
   assert.ok(violations[0].line > 0, 'the violation must carry the line so the message identifies the site')
+})
+
+test('flags the rule-run shape: a toast-and-return check still runs after the parse', () => {
+  const violations = auditOne('web/app/(app)/banking/rules/RuleDrawer.tsx', RULE_RUN_SHAPE)
+  assert.equal(violations.length, 1, 'the exiting branch does not excuse the earlier parse')
+  assert.equal(violations[0].fn, 'run')
+})
+
+test('flags the rule-delete shape: a bare parse inside the failure branch', () => {
+  const violations = auditOne('web/app/(app)/banking/rules/RuleDrawer.tsx', RULE_DELETE_SHAPE)
+  assert.equal(violations.length, 1, 'the failure branch cannot read a body that never parsed')
+  assert.equal(violations[0].fn, 'remove')
+})
+
+test('does not flag a failure-branch parse that cannot throw', () => {
+  const violations = auditOne(
+    'web/app/(app)/banking/rules/RuleDrawer.tsx',
+    RULE_DELETE_SHAPE.replace('await res.json()', 'await res.json().catch(() => null)').replace(
+      'data.error',
+      'data?.error',
+    ),
+  )
+  assert.deepEqual(violations, [], 'the converted failure branch must stay clean')
 })
 
 test('flags the certificate-save shape: error read off a maybe-unparseable body', () => {

@@ -198,7 +198,7 @@ export function LaborCostingWorkspace(props: {
           payrollVariance: payrollVariance || null,
         }),
       })
-      if (!res.ok) throw new Error((await res.json()).error ?? 'failed')
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'failed')
       toast.success(t('saved'))
       setSavedSnap(currentSnap)
       router.refresh()
@@ -871,7 +871,7 @@ function RateDrawer({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!response.ok) throw new Error((await response.json()).error ?? tc('feedback.saveFailed'))
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? tc('feedback.saveFailed'))
   }
 
   async function save() {
