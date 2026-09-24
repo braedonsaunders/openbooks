@@ -444,15 +444,12 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
     orgId: authz.user.orgId,
     actorId: authz.user.id,
   })
-  let mineCycleIds: Set<string> | null = null
-  if (mine) {
-    const mineReviews = await listMyReviews({
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-    })
-    mineCycleIds = new Set([...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId))
-  }
-  const visible = cycles.filter((c) => (status === null || c.status === status) && (mineCycleIds === null || mineCycleIds.has(c.id)))
+  const mineReviews = await listMyReviews({
+    orgId: authz.user.orgId,
+    actorId: authz.user.id,
+  })
+  const mineCycleIds = new Set([...mineReviews.asSubject, ...mineReviews.asReviewer].map((r) => r.cycleId))
+  const visible = cycles.filter((c) => (status === null || c.status === status) && (!mine || mineCycleIds.has(c.id)))
   const statusLabel = (value: string): string =>
     value === 'draft'
       ? t('performance.statusDraft')
