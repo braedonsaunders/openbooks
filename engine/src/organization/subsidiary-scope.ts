@@ -137,6 +137,74 @@ export interface LockedProjectScope {
   subsidiaryId: string | null;
 }
 
+export type ScopeRowKind = "party" | "project" | "document" | "account" | "department" | "employment";
+export interface LockedScopeRow {
+  id: string;
+  subsidiaryId: string | null;
+}
+
+/** Lock one canonical scope-bearing row and authorize against its value while
+ * the same lock is held. Row kinds map to their authoritative entity table;
+ * customer and employee entities are represented by party/employment rows.
+ * Callers lock multiple targets through lockScopeRows, which orders by kind
+ * and id before acquiring locks. */
+export async function lockScopeRow(
+  tx: SqlExecutor,
+  orgId: string,
+  kind: ScopeRowKind,
+  id: string,
+  scope: ReadonlySet<string> | null,
+  mode: "update" | "share" = "update",
+  options: SubsidiaryScopeOptions = {},
+): Promise<LockedScopeRow> {
+  const lock = mode === "share" ? "for share" : "for update";
+  const result = kind === "party"
+    ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+        select p.id, p.subsidiary_id as "subsidiaryId" from parties p
+         where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)
+    : kind === "project"
+      ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+          select p.id, p.subsidiary_id as "subsidiaryId" from projects p
+           where p.org_id = ${orgId} and p.id = ${id} ${sql.raw(lock)} of p`)
+      : kind === "document"
+        ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+            select d.id, d.subsidiary_id as "subsidiaryId" from documents d
+             where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`)
+        : kind === "account"
+          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+              select a.id, a.subsidiary_id as "subsidiaryId" from accounts a
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`)
+          : kind === "department"
+            ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+                select d.id, d.subsidiary_id as "subsidiaryId" from departments d
+                 where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`)
+            : await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+                select e.id, e.employer_subsidiary_id as "subsidiaryId" from worker_employments e
+                 where e.org_id = ${orgId} and e.id = ${id} ${sql.raw(lock)} of e`);
+  const row = result.rows[0];
+  if (!row || !subsidiaryScopeAllows(scope, row.subsidiaryId, options)) throw new ScopeNotFoundError();
+  return row;
+}
+
+/** Lock a set in one deterministic global order to avoid reverse-order
+ * deadlocks when concurrent edits touch overlapping subsidiary targets. */
+export async function lockScopeRows(
+  tx: SqlExecutor,
+  orgId: string,
+  targets: readonly { kind: ScopeRowKind; id: string }[],
+  scope: ReadonlySet<string> | null,
+  mode: "update" | "share" = "update",
+  options: SubsidiaryScopeOptions = {},
+): Promise<readonly LockedScopeRow[]> {
+  const ordered = [...new Map(targets.map((target) => [`${target.kind}:${target.id}`, target])).values()]
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.id.localeCompare(b.id));
+  const rows: LockedScopeRow[] = [];
+  for (const target of ordered) {
+    rows.push(await lockScopeRow(tx, orgId, target.kind, target.id, scope, mode, options));
+  }
+  return rows;
+}
+
 /**
  * Shape (1), project instance: lock a project row and recheck the caller's
  * subsidiary scope inside the transaction, closing the rehome race where an
@@ -154,17 +222,7 @@ export async function lockProjectForScope(
   scope: ReadonlySet<string> | null,
   mode: "update" | "share" = "update",
 ): Promise<LockedProjectScope> {
-  const lock = mode === "share" ? sql`for share of p` : sql`for update of p`;
-  const r = await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
-    select p.id, p.subsidiary_id
-      from projects p
-     where p.org_id = ${orgId} and p.id = ${projectId}
-       ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, scope)}
-     ${lock}
-  `);
-  const row = r.rows[0];
-  if (!row) throw new ScopeNotFoundError();
-  return { id: row.id, subsidiaryId: row.subsidiary_id };
+  return lockScopeRow(tx, orgId, "project", projectId, scope, mode);
 }
 
 /**

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, pool, withBypass } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import {
+  lockScopeRow,
   lockProjectForScope,
   ScopeNotFoundError,
   withScopeSnapshot,
@@ -42,11 +43,11 @@ test("lockProjectForScope returns the locked project only when it is in scope", 
     const scope = new Set([scratch.subsidiaryId]);
 
     const visible = await withBypass(() => db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, visibleProject, scope)));
+      lockScopeRow(tx, scratch.orgId, "project", visibleProject, scope)));
     assert.deepEqual(visible, { id: visibleProject, subsidiaryId: scratch.subsidiaryId });
 
     await withBypass(() => assertNotFound(db.transaction((tx) =>
-      lockProjectForScope(tx, scratch.orgId, hiddenProject, scope))));
+      lockScopeRow(tx, scratch.orgId, "project", hiddenProject, scope))));
     await withBypass(() => assertNotFound(db.transaction((tx) =>
       lockProjectForScope(tx, scratch.orgId, randomUUID(), scope))));
 
