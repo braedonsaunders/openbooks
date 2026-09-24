@@ -39,15 +39,16 @@ async function seedAsset(
   categoryId: string,
   cost: string,
   acquiredOn: string,
+  custom: Record<string, unknown> = {},
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
     insert into fixed_assets
       (id, org_id, subsidiary_id, category_id, asset_number, name, status,
-       acquired_on, in_service_on, acquisition_cost, created_by, updated_by)
+       acquired_on, in_service_on, acquisition_cost, custom, created_by, updated_by)
     values (${id}, ${org.orgId}, ${org.subsidiaryId}, ${categoryId}, ${`FA-${id.slice(0, 8)}`},
             ${`Asset ${id.slice(0, 8)}`}, 'in_service', ${acquiredOn}, ${acquiredOn},
-            ${cost}, ${actorId}, ${actorId})`);
+            ${cost}, ${JSON.stringify(custom)}::jsonb, ${actorId}, ${actorId})`);
   return id;
 }
 
@@ -465,6 +466,27 @@ test("the MACRS model runs under the same fence: atomic years, chaining, orderin
     assert.equal(rows[1]!.opening_balance, rows[0]!.closing_balance);
     const pools = await poolsFor(org.orgId);
     assert.equal(pools[0]!.opening_balance, rows[1]!.closing_balance);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("MACRS mid-quarter threshold uses post-Section-179 business-use basis", { skip: !DB }, async () => {
+  // IRS Publication 946 applies the 40% test to depreciable basis after
+  // Section 179/business-use limits and before bonus depreciation:
+  // https://www.irs.gov/publications/p946
+  const { org, actorId } = await seededOrg();
+  try {
+    const categoryId = await seedTaxCategory(org, "5-year property", { us_macrs_class: "gds_5" });
+    await seedAsset(org, actorId, categoryId, "6000.00", "2026-10-15", {
+      taxDepreciation: { us_macrs: { section179: "2000", businessUsePercent: "50" } },
+    });
+    await seedAsset(org, actorId, categoryId, "5000.00", "2026-07-01");
+
+    const result = await runYear(org, actorId, "us_macrs", 2026);
+    // Gross Q4 acquisition cost is 6,000 / 11,000 (>40%), but its eligible
+    // basis is 1,000 / 6,000 (<40%), so the half-year schedule applies.
+    assert.equal(result.lines[0]!.allowance, "3200.00");
   } finally {
     await dropScratchOrg(org.orgId);
   }

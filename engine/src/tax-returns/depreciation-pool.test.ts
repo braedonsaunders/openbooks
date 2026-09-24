@@ -4,6 +4,7 @@ import {
   costCapForAcquisition,
   computePoolYear,
   computeMacrsYear,
+  macrsVintageUsesMidQuarter,
   resolvePoolClass,
   TAX_DEPRECIATION_REGIMES,
   type PoolYearInput,
@@ -58,6 +59,25 @@ test("U.S. MACRS supports mid-quarter and mid-month conventions", () => {
     basis: "10000", placedInServiceOn: "2025-01-10", taxYear: 2025,
     recoveryPeriodYears: 27.5, method: "straight_line", convention: "mid_month",
   }).allowance, "348.48");
+});
+
+test("MACRS mid-quarter 40% test uses basis after Section 179 and business-use elections", () => {
+  // IRS Publication 946 applies the 40% test to depreciable basis after
+  // Section 179/business-use limits and before bonus depreciation:
+  // https://www.irs.gov/publications/p946
+  // Gross Q4 cost is 6,000 / 11,000 (>40%), but eligible Q4 basis is
+  // 1,000 / 6,000 (<40%) after 50% business use and 2,000 Section 179.
+  assert.equal(macrsVintageUsesMidQuarter([
+    {
+      basis: "6000", placedInServiceOn: "2026-10-15",
+      section179: "2000", businessUsePercent: "50",
+    },
+    { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
+  ], 2026), false);
+  assert.equal(macrsVintageUsesMidQuarter([
+    { basis: "6000", placedInServiceOn: "2026-10-15", businessUsePercent: "100" },
+    { basis: "5000", placedInServiceOn: "2026-07-01", businessUsePercent: "100" },
+  ], 2026), true);
 });
 
 test("U.S. MACRS applies configured section 179, bonus, and business-use elections", () => {
