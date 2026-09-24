@@ -772,7 +772,8 @@
         "description": "英国包代扣和累积金额的负债科目。每项选择适用于该槽位覆盖的全部组成(雇员和雇主两侧合计)。",
         "slots": {
           "paye": "PAYE应付（所得税）",
-          "nic": "National Insurance应付（雇员和雇主第一类）"
+          "nic": "National Insurance应付（雇员和雇主第一类）",
+          "student-loans": "学生贷款和研究生贷款扣款应付"
         }
       },
       "IE": {

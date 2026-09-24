@@ -772,7 +772,8 @@
         "description": "Liability accounts for the amounts the United Kingdom pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "paye": "PAYE payable (income tax)",
-          "nic": "National Insurance payable (employee + employer Class 1)"
+          "nic": "National Insurance payable (employee + employer Class 1)",
+          "student-loans": "Student loan and postgraduate loan deductions payable"
         }
       },
       "IE": {

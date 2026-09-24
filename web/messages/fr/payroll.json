@@ -772,7 +772,8 @@
         "description": "Comptes de passif pour les montants que le pack britannique retient et accumule. Chaque choix s’applique à toutes les composantes que la case couvre (parts employé et employeur ensemble).",
         "slots": {
           "paye": "PAYE à payer (impôt sur le revenu)",
-          "nic": "National Insurance à payer (classe 1 employé et employeur)"
+          "nic": "National Insurance à payer (classe 1 employé et employeur)",
+          "student-loans": "Retenues de prêts étudiants et de troisième cycle à payer"
         }
       },
       "IE": {

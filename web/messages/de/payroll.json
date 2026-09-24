@@ -772,7 +772,8 @@
         "description": "Verbindlichkeitskonten für die Beträge, die das GB-Paket einbehält und auflaufen lässt. Jede Wahl gilt für jeden Bestandteil, den das Feld abdeckt (Arbeitnehmer- und Arbeitgeberseite zusammen).",
         "slots": {
           "paye": "Verbindlichkeiten aus PAYE (Einkommensteuer)",
-          "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)"
+          "nic": "Verbindlichkeiten aus National Insurance (Klasse-1-Beiträge von Arbeitnehmer und Arbeitgeber)",
+          "student-loans": "Verbindlichkeiten aus Studienkredit- und Postgraduiertenkredit-Abzügen"
         }
       },
       "IE": {
