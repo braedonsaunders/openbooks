@@ -807,6 +807,33 @@ test("relationship edits survive a tab round-trip", async (t) => {
   assert.equal(revivedIndustry?.value, "Software", "the typed industry must survive the tab round-trip");
 });
 
+test("bank-account approval history names the empty state in the host drawer", async (t) => {
+  const emptyApprovalState = {
+    approvalState: { status: "approved", pendingWith: [], myActions: null },
+    history: [],
+  };
+  const { done } = await renderDrawer({
+    bankAccounts: [BANK_ROW],
+    fetchHandler: (url) =>
+      url.startsWith("/api/flows/record-state") ? Response.json(emptyApprovalState) : null,
+  });
+  t.after(done);
+
+  const accounting = railTabNamed(en("parties.drawer.bankAccountsHeading"));
+  assert.ok(accounting, "the bank-account panel must be reachable in the party drawer");
+  await clickTab(accounting);
+  const history = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === en("common.approvalFlow.historyTitle"),
+  );
+  assert.ok(history, "the bank-account row must expose its approval history");
+  await clickTab(history);
+
+  assert.ok(
+    document.body.textContent?.includes(en("common.approvalFlow.historyEmpty")),
+    "the host drawer must show the localized empty approval state for a bank account with no history",
+  );
+});
+
 test("an open bank account draft survives a tab round-trip", async (t) => {
   const { done } = await renderDrawer({});
   t.after(done);
