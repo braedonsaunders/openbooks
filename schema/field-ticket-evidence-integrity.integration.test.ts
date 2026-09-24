@@ -1,7 +1,7 @@
 /// <reference types="node" />
 
 /**
- * Fresh-install regression coverage for migration 0018.  The baseline's
+ * Fresh-install regression coverage for migration 0018. The baseline's
  * shared field-ticket evidence trigger referenced signature-only and
  * request-only columns directly, so the production signing-link INSERT
  * failed with 42703 before it could persist a request.
@@ -64,7 +64,7 @@ async function assertRejected(query: Promise<unknown>, scenario: string): Promis
   }, scenario);
 }
 
-/** The production evidence tables are intentionally append-only.  Remove the
+/** The production evidence tables are intentionally append-only. Remove the
  * test rows under the same one-transaction trigger-disable escape used by the
  * repository teardown for unconditional evidence guards. */
 async function clearFieldTicketEvidence(orgId: string): Promise<void> {

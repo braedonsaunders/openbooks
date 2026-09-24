@@ -14,8 +14,8 @@
 // database that was somehow set up wrong, rather than the copy having the wrong
 // owner. Measured on the live container before the fix:
 //
-//   ob_integ           owner=openbooks      create=false
-//   openbooks_template owner=openbooks_app  create=true
+//   ob_integ owner=openbooks create=false
+//   openbooks_template owner=openbooks_app create=true
 //
 // The template being correct is precisely what kept this invisible: anyone who
 // checked the template found it right and stopped looking.
