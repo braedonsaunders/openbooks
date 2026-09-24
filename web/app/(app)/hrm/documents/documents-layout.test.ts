@@ -21,13 +21,20 @@ const { documentsSpec } = await import('./view.ts')
 const appkit = await import('@braedonsaunders/appkit-viewspec')
 
 /**
- * CK-32: the signed-document rows were visually overlapped by the
- * Document templates section — the register grid was viewport-clamped
- * (h-full) while its rows overflowed the box, so the following sections
- * painted over them and intercepted clicks. The register must size to
- * its content and the sections must stack as plain siblings in normal
- * flow. This drives documentsSpec (the emitted render tree), never the
- * source text: it fails while the clamp is present and passes without it.
+ * CK-32/CK-32b: the signed-document rows were visually overlapped by the
+ * Document templates section — elementFromPoint at a row-link centre hit
+ * the templates TH/TD. The first fix removed the register grid's own
+ * h-full, but the served build still failed: the real compressor is the
+ * PAGE-level viewport lock (bodyClassName `flex h-full min-h-0 flex-col`
+ * on the scroll-content box). The register grid is a flex item with
+ * min-h-0, so it shrinks below its content height whenever the stacked
+ * sections exceed the viewport; its rows overflow visibly and the later
+ * setup-section siblings paint over them and intercept clicks. The page
+ * has no internal scroll panel (unlike the app-feel HRM tabs), so the
+ * whole body must stack in normal block flow inside the page scroller.
+ * This drives documentsSpec (the emitted render tree), never the source
+ * text: it fails while the viewport lock or the shrinkable register
+ * grid is present and passes without them.
  */
 function stubData(): Record<string, unknown> {
   return {
@@ -58,16 +65,37 @@ function findBlocks(blocks: Block[], kind: string, out: Block[] = []): Block[] {
   return out
 }
 
-test('CK-32: the register grid sizes to content, never to the viewport', () => {
+function tokens(className: unknown): string[] {
+  return String(className ?? '').split(/\s+/).filter(Boolean)
+}
+
+function registerGrid(): Block {
   const grids = findBlocks(bodyBlocks(), 'grid')
   const registerGrids = grids.filter((grid) =>
     findBlocks(grid.blocks ?? [], 'table').length > 0,
   )
   assert.equal(registerGrids.length, 1, 'the register table must live in exactly one grid')
-  const className = String(registerGrids[0]!.className ?? '')
+  return registerGrids[0]!
+}
+
+test('CK-32b: the page body is not a viewport-locked flex column', () => {
+  const spec = documentsSpec(stubData() as never) as { bodyClassName?: unknown }
+  const className = String(spec.bodyClassName ?? '')
+  for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'h-svh', 'max-h-', 'min-h-screen']) {
+    assert.ok(!className.includes(clamp), `the page body must not lock to the viewport (${clamp} compresses the register under the sections)`)
+  }
+  const names = tokens(className)
+  assert.ok(!names.includes('flex-col'), 'the page body must stack sections in normal block flow, not as flex items')
+})
+
+test('CK-32: the register grid sizes to content, never to the viewport', () => {
+  const className = String(registerGrid().className ?? '')
   for (const clamp of ['h-full', 'h-screen', 'h-dvh', 'max-h-']) {
     assert.ok(!className.includes(clamp), `the register grid must not clamp height (${clamp} overflows rows under the sections)`)
   }
+  const names = tokens(className)
+  assert.ok(!names.includes('flex'), 'the register grid must not be a shrinkable flex item (it compresses under the sections)')
+  assert.ok(!names.includes('min-h-0'), 'the register grid must not opt into shrinking below its content (min-h-0 overflows rows under the sections)')
 })
 
 test('CK-32: the templates section stacks after the register as a sibling', () => {
