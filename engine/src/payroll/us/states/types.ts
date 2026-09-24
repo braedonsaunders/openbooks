@@ -33,7 +33,7 @@
  * generic layer above knows only the interface.
  */
 import { PayrollError } from "../../error.ts";
-import { rate6, U } from "../../canada/decimal.ts";
+import { D, rate6, U } from "../../canada/decimal.ts";
 import { fromUnits, roundDiv, toUnits } from "../../../money/money.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
 import type { PayrollWorkAllocation } from "../../statutory-context.ts";
@@ -77,6 +77,103 @@ export interface UsResidentWithholdingFacts {
   workRegionTaxes: readonly { region: string; amount: string }[];
 }
 
+/** Jurisdiction-declared annual nonresident exception evaluated on shared facts. */
+export interface UsNonresidentThresholdRule {
+  /** Calendar-year service-day test, or a calendar-year source-wage test. */
+  measure: "service_days" | "source_wages";
+  /** The statutory maximum exempt count/amount, in days or exact currency. */
+  threshold: number | string;
+  /** `>` means the employee remains exempt at the printed limit; `>=` does not. */
+  crossing: ">" | ">=";
+  /** Wage tests may also compare the current payroll's annualized source wages. */
+  annualizeCurrentWages?: boolean;
+  /** Whether crossing makes the current pay catch up prior exempt source wages. */
+  catchUpPriorWages: boolean;
+  /** Name used in the refusal and calculation trace. */
+  label: string;
+}
+
+export interface UsNonresidentThresholdResult {
+  crossed: boolean;
+  currentSourceWages: string;
+  catchUpSourceWages: string;
+  periodsBeforeCurrent: number | null;
+}
+
+/**
+ * Apply a state's declared nonresident exception to the shared work contract.
+ * Prior wages are reconstructed by payroll-context from committed stubs; no
+ * operator-entered YTD total is accepted here.
+ */
+export function evaluateUsNonresidentThreshold(
+  allocation: UsWageAllocation,
+  rule: UsNonresidentThresholdRule,
+  periodsPerYear: number,
+): UsNonresidentThresholdResult {
+  const currentWages = allocation.sourceWagesCurrentPeriod;
+  const priorWages = allocation.sourceWagesYearToDate;
+  const compare = (value: bigint, limit: bigint) => rule.crossing === ">"
+    ? value > limit : value >= limit;
+  let crossed: boolean;
+  let wasCrossed: boolean;
+  let current = 0n;
+  let prior = 0n;
+  if (rule.measure === "service_days") {
+    if (allocation.serviceDaysYearToDate == null || allocation.serviceDaysCurrentPeriod == null) {
+      throw new PayrollError(
+        `${rule.label} needs verified calendar-year and current-period service days; `
+        + "record approved dated work or HR service-day evidence before calculating; refused by name",
+      );
+    }
+    const daysBefore = allocation.serviceDaysYearToDate - allocation.serviceDaysCurrentPeriod;
+    crossed = compare(BigInt(allocation.serviceDaysYearToDate), BigInt(rule.threshold));
+    wasCrossed = compare(BigInt(daysBefore), BigInt(rule.threshold));
+  } else {
+    if (currentWages == null || priorWages == null) {
+      throw new PayrollError(
+        `${rule.label} needs complete current and committed year-to-date source wages; `
+        + "record verified work allocation and establish source-wage history before calculating; refused by name",
+      );
+    }
+    current = U(currentWages);
+    prior = U(priorWages);
+    const limit = U(String(rule.threshold));
+    if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
+      throw new PayrollError(`${rule.label} needs a valid annual payroll frequency; refused by name`);
+    }
+    const cumulative = prior + current;
+    const projected = rule.annualizeCurrentWages ? current * BigInt(periodsPerYear) : 0n;
+    crossed = compare(cumulative, limit)
+      || (rule.annualizeCurrentWages === true && compare(projected, limit));
+    wasCrossed = compare(prior, limit);
+  }
+  if (crossed && (currentWages == null || priorWages == null)) {
+    throw new PayrollError(
+      `${rule.label} catch-up needs complete current and committed year-to-date source wages; `
+      + "record verified work allocation and establish source-wage history before calculating; refused by name",
+    );
+  }
+  if (crossed && rule.measure === "service_days") {
+    current = U(currentWages!);
+    prior = U(priorWages!);
+  }
+  const catchUp = crossed && !wasCrossed && rule.catchUpPriorWages && prior > 0n;
+  const periodsBeforeCurrent = allocation.periodsYearToDate == null
+    ? null : allocation.periodsYearToDate - 1;
+  if (catchUp && (!Number.isInteger(periodsBeforeCurrent) || periodsBeforeCurrent! < 1)) {
+    throw new PayrollError(
+      `${rule.label} catch-up needs the count of prior committed payroll periods; `
+      + "restore the committed payroll history before calculating; refused by name",
+    );
+  }
+  return {
+    crossed,
+    currentSourceWages: crossed ? D(current) : "0.0000",
+    catchUpSourceWages: catchUp ? D(prior) : "0.0000",
+    periodsBeforeCurrent: catchUp ? periodsBeforeCurrent : null,
+  };
+}
+
 /** Resolve one declared work allocation and refuse missing or ambiguous facts. */
 export function requireUsWageAllocation(
   allocations: readonly UsWageAllocation[] | undefined,
@@ -109,6 +206,30 @@ export function requireUsWageAllocation(
     );
   }
   return allocation;
+}
+
+/** Require the payroll-context-computed wage amount for one exact source. */
+export function requireUsSourceWages(
+  allocations: readonly UsWageAllocation[] | undefined,
+  region: string,
+  subRegion: string | null,
+): string {
+  const allocation = requireUsWageAllocation(allocations, region, subRegion);
+  if (allocation.sourceWagesCurrentPeriod == null) {
+    throw new PayrollError(
+      `${region}/${subRegion} needs current-period source wages from the verified work allocation; `
+      + "record approved work-location time or an HR allocation before calculating; refused by name",
+    );
+  }
+  try {
+    U(allocation.sourceWagesCurrentPeriod);
+  } catch {
+    throw new PayrollError(
+      `${region}/${subRegion} source wages must be an exact non-negative decimal from payroll context; `
+      + "correct the work-location records before calculating; refused by name",
+    );
+  }
+  return allocation.sourceWagesCurrentPeriod;
 }
 
 /** Require the work-region assessment used by a resident withholding credit. */

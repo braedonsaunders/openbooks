@@ -1,0 +1,1 @@
+This migration adds nullable time-entry jurisdiction provenance and a tenant-scoped HR allocation table. It invents no historical work locations and has no data-dependent refusal shape.

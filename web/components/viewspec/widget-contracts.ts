@@ -357,6 +357,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'page-layout-summary': { props: ['text'] },
   'paper-view': { props: ['company', 'currency', 'data', 'emptyLabel'] },
   'parallel-run-workspace': { props: ['canManage', 'comparisons', 'registers', 'runs', 'slots', 'tolerances'] },
+  'payroll-work-locations': { props: [] },
   'party-drawer': { props: ['drawer'] },
   'party-heading': { props: ['closing', 'closingDrill', 'closingLabel', 'partyId', 'partyName', 'statementHref'] },
   'party-link-cell': { props: ['href', 'note', 'partyId', 'partyName'] },

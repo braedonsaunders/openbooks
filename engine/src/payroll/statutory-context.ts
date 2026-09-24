@@ -103,6 +103,16 @@ export interface PayrollWorkAllocation {
   workShare: string;
   /** Certificate or work-record provenance retained for the statutory trace. */
   source: string;
+  /** Distinct approved work dates in this region during the current period. */
+  serviceDaysCurrentPeriod?: number | null;
+  /** Distinct approved work dates in this region from Jan 1 through period end. */
+  serviceDaysYearToDate?: number | null;
+  /** Current-period wages attributed by the verified work share. */
+  sourceWagesCurrentPeriod?: string | null;
+  /** Region-sourced wages in already committed stubs, never a user total. */
+  sourceWagesYearToDate?: string | null;
+  /** Number of committed pay stubs in this tax year plus the current check. */
+  periodsYearToDate?: number | null;
 }
 
 /** Phase 9 — one re-runnable statutory pass over the current line set. */

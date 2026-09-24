@@ -474,6 +474,16 @@ export async function calculateStub(
     if (!advisories.includes(message)) advisories.push(message);
   };
 
+  // Work locations come from approved service dates, with HR period evidence
+  // for untimed work. YTD source wages are read only from committed stubs.
+  const workAllocations = pack.loadWorkAllocations
+    ? await pack.loadWorkAllocations(tx, {
+      orgId, employeePartyId, employmentId: emp.employment_id ?? null,
+      periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
+      documentId, currentWages: sum([income, nonPeriodic]),
+    })
+    : undefined;
+
   const runStatutoryPass = async (): Promise<void> => {
     clearIncomeAssessedLines();
     factors = await pack.computeStatutory({
@@ -487,6 +497,7 @@ export async function calculateStub(
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
+      workAllocations,
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
       supplementalWageAmounts: aggregateUsSupplementalWageAmounts(lines),
       programBases,

@@ -57,6 +57,7 @@ import { US_LOCAL_FACTOR_LABELS, US_SUPPLEMENTAL_FACTOR_LABELS } from "./withhol
 // from the pack interface; the builders are pure over a typed context).
 import { US_LABOR_COMPLIANCE_FORMATS } from "./labor-compliance.ts";
 import { US_EMPLOYEE_FACTS } from "./employee-facts.ts";
+import { loadPayrollWorkAllocations } from "../work-allocations.ts";
 
 /**
  * Names for the stub-line mirror factors (`SIT_<code>` / `LIT_<code>`) no
@@ -198,6 +199,7 @@ const US_REGIONS: PayrollRegionCoverage = {
 export const US_PAYROLL_PACK: PayrollCountryPack = {
   country: "US",
   name: "United States",
+  loadWorkAllocations: loadPayrollWorkAllocations,
   // SSA Handbook §101: "A Social Security Number (SSN) is a nine digit
   // number SSA assigns" — "a three-digit number followed by a two-digit
   // number and ending with a four-digit number" (XXX-XX-XXXX). Both the bare

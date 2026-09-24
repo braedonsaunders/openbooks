@@ -7,6 +7,7 @@ import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/Op
 import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
 import { EmployerLevyOpeningsView } from '../../app/(app)/payroll/opening-balances/EmployerLevyOpeningsView'
 import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRunView'
+import { WorkLocationsView } from '../../app/(app)/payroll/work-locations/WorkLocationsView'
 import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
 import { LaborPricingHeading, LaborPricingView } from '../../app/(app)/admin/setup/labor-pricing/sections'
 import { RunWizard } from '../../app/(app)/payroll/runs/[id]/RunWizard'
@@ -122,6 +123,7 @@ export const PAYROLL_WIDGETS = {
       canManage={props.canManage === true}
     />
   ),
+  'payroll-work-locations': () => <WorkLocationsView />,
 
   /* --- payroll setup workspace ------------------------------------------------ */
   //

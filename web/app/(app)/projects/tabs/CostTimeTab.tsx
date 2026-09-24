@@ -43,6 +43,8 @@ type TimeDimension = 'employee' | 'item' | 'task'
 interface TimeEntry {
   id: string
   workedOn: string
+  workRegion: string | null
+  workSubregion: string | null
   employeeName: string
   itemName: string
   taskName: string
@@ -287,6 +289,7 @@ function TimeEntriesDrawer({
                   <TableRow key={entry.id}>
                     <TableCell className="min-w-36">
                       <p className="whitespace-nowrap tabular-nums">{entry.workedOn}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">{entry.workRegion ? `${entry.workRegion}${entry.workSubregion ? ` · ${entry.workSubregion}` : ''}` : 'Work location not recorded'}</p>
                       {entry.memo ? <p className="mt-0.5 max-w-52 truncate text-xs text-slate-500" title={entry.memo}>{entry.memo}</p> : null}
                       {entry.fieldTicketNumber ? <p className="mt-0.5 text-xs text-slate-400">{entry.fieldTicketNumber}</p> : null}
                     </TableCell>

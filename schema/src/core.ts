@@ -240,6 +240,8 @@ export const projects = pgTable(
   {
     ...dimensionColumns,
     customerId: uuid("customer_id"), // → parties
+    /** ISO 3166-2 subdivision where employees perform project-site work. */
+    siteJurisdiction: text("site_jurisdiction"),
     foremanId: uuid("foreman_id"), // → parties (employee role)
     managerId: uuid("manager_id"),
     status: text("status", {

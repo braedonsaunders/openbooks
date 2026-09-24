@@ -54,6 +54,7 @@ import type {
   PayrollEmployerLevyContext,
   PayrollEmployerLevyFactors,
   PayrollStatutoryComputeContext,
+  PayrollWorkAllocation,
 } from "./statutory-context.ts";
 import type { PayrollTaxYearEdition, PayrollTaxYearSupport } from "./tax-years.ts";
 
@@ -879,6 +880,20 @@ export interface PayrollCountryPack {
   computeStatutory: (
     ctx: PayrollStatutoryComputeContext,
   ) => Promise<Record<string, string>>;
+  /** Optional pack-owned producer of verified work allocations for jurisdiction rules. */
+  loadWorkAllocations?: (
+    tx: Pick<typeof db, "execute">,
+    input: {
+      orgId: string;
+      employeePartyId: string;
+      employmentId: string | null;
+      periodStart: string;
+      periodEnd: string;
+      taxYear: number;
+      documentId: string;
+      currentWages: string;
+    },
+  ) => Promise<PayrollWorkAllocation[]>;
   /**
    * The pack's annual settlement for one tax year: the year-end
    * recomputation and its settlement in the final pay
