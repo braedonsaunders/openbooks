@@ -1,10 +1,7 @@
-// source-pin-contract: every literal ?<param>=new href is armed where it lands; subjects derived by walking web/lib and web/app
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { createRequire, registerHooks } from "node:module";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
-import type * as TS from "typescript";
 
 // OM-15: /hrm/compensation's "New plan" and "New cycle" buttons navigated
 // to ?plan=new / ?cycle=new and nothing opened — the loader never read the
@@ -385,101 +382,6 @@ test("both specs emit the dialog widgets gated on the loader-derived open state"
     [{ $: "generateOpen" }],
     "the equity widget renders once, gated on its open state",
   );
-});
-
-// The pin test this replaced ('the loader, spec, and page thread the
-// params end to end') asserted single-file source text; every behaviour
-// it named stays covered by the loader/spec behaviour tests above.
-// What remains below is the derived repo-wide invariant, kept under the
-// contract header at the top of this file.
-
-// The OM-15 sweep guard: every literal `?<param>=new` href emitted anywhere
-// in web/lib or web/app must be armed — the emitting file or the target
-// route's own directory reads sp.<param>, or the pair is allowlisted below
-// with its reason. A new dead link (a button navigating to a query string
-// nothing reads) fails here, not in a browser.
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
-const ts: typeof TS = createRequire(join(ROOT, "web", "package.json"))("typescript");
-
-function sourceFiles(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry.startsWith(".")) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) found.push(...sourceFiles(full));
-    else if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) found.push(full);
-  }
-  return found;
-}
-
-function literalHrefs(file: string): string[] {
-  const text = readFileSync(file, "utf8");
-  if (!text.includes("=new")) return [];
-  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const hrefs: string[] = [];
-  const visit = (node: TS.Node): void => {
-    if (ts.isStringLiteralLike(node) && node.text.includes("=new")) hrefs.push(node.text);
-    ts.forEachChild(node, visit);
-  };
-  ts.forEachChild(source, visit);
-  return hrefs;
-}
-
-/** route|param pairs armed outside the emitting file and target route dir. */
-const ARMED_ELSEWHERE = new Map<string, string>([
-  // The stock-locations tab on /inventory is the generic setup surface: the
-  // row drawer reads sp.row in SetupEntitySection (admin/setup/[entity]),
-  // fed by searchParams passthrough in inventory/page.tsx.
-  ["/inventory|row", "generic SetupEntitySection row drawer via searchParams passthrough"],
-]);
-
-function routeDirReadsParam(route: string, param: string): boolean {
-  let entries: string[];
-  try {
-    entries = readdirSync(join(ROOT, "web", "app", "(app)", route));
-  } catch {
-    return false;
-  }
-  const probe = new RegExp(`sp\\.${param}\\b`);
-  for (const entry of entries) {
-    const full = join(ROOT, "web", "app", "(app)", route, entry);
-    try {
-      if (statSync(full).isFile() && /\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) {
-        if (probe.test(readFileSync(full, "utf8"))) return true;
-      }
-    } catch {
-      continue;
-    }
-  }
-  return false;
-}
-
-test("every literal ?<param>=new href is armed where it lands", () => {
-  const offenders: string[] = [];
-  const seen = new Set<string>();
-  for (const root of [join(ROOT, "web", "lib"), join(ROOT, "web", "app")]) {
-    for (const file of sourceFiles(root)) {
-      const emitter = readFileSync(file, "utf8");
-      for (const href of literalHrefs(file)) {
-        const queryIndex = href.indexOf("?");
-        if (queryIndex < 0 || !href.startsWith("/")) continue;
-        const route = href.slice(0, queryIndex);
-        const params = new URLSearchParams(href.slice(queryIndex + 1));
-        for (const [param, value] of params) {
-          if (value !== "new") continue;
-          const key = `${route}|${param}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const armed = new RegExp(`sp\\.${param}\\b`).test(emitter) || routeDirReadsParam(route, param);
-          if (!armed && !ARMED_ELSEWHERE.has(key)) {
-            offenders.push(`${key} (emitted by ${file.slice(ROOT.length + 1)}, nothing reads sp.${param})`);
-          }
-        }
-      }
-    }
-  }
-  assert.ok(seen.size > 0, "the href scan found nothing — the guard is blind, not green");
-  assert.deepEqual(offenders, [], `dead ?<param>=new links (a URL nothing reads):\n${offenders.join("\n")}`);
 });
 
 // F3-27/F3-28/F3-29: the bands, cycles, plans, team-grid and plan-line

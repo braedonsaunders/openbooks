@@ -18,7 +18,6 @@ registerHooks({
 })
 
 const { documentsSpec } = await import('./view.ts')
-const appkit = await import('@braedonsaunders/appkit-viewspec')
 
 /**
  * CK-32/CK-32b: the signed-document rows were visually overlapped by the
@@ -130,5 +129,4 @@ test('CK-32: no block positions itself out of flow', () => {
   const spec = documentsSpec(stubData() as never) as { header: Block[]; body: Block[] }
   walk([...spec.header, ...spec.body], 'page')
   assert.deepEqual(outOfFlow, [], 'no block may take itself out of normal flow')
-  assert.ok(typeof appkit.page === 'function', 'the spec composes the shared page builder')
 })

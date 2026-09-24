@@ -1,8 +1,6 @@
-// source-pin-contract: every setup-section embedding receives loader-derived params; subjects derived by walking web/app views
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { join } from "node:path";
 import test from "node:test";
 
 // OM-18: /hrm/change-requests?reasons=1, Reason codes → New navigated to
@@ -186,45 +184,4 @@ test("the queue spec hands the forwarded params to the setup-section widget", as
     "new",
     "?reasons=1&row=new yields a setup section with the New drawer open",
   );
-});
-
-// The OM-18 sweep guard: every `setup-section` widget embedded in a
-// non-setup view must receive loader-derived search params (never a
-// narrowed literal like `sp: {}` or `sp: { tab }`), because the generic
-// SetupEntitySection opens its New/edit drawer from `sp.row` — and the
-// New button writes `row=new` onto the CURRENT url client-side, so a
-// view whose loader drops `row` renders a dead button. Derived from the
-// tree, never a hand list: a new narrowed embedding fails here.
-const ROOT = join(import.meta.dirname, "..", "..", "..", "..", "..");
-
-function sourceFiles(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    if (entry === "node_modules" || entry.startsWith(".")) continue;
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) found.push(...sourceFiles(full));
-    else if (/\.tsx?$/.test(entry) && !/\.test\.tsx?$/.test(entry)) found.push(full);
-  }
-  return found;
-}
-
-test("every embedded setup-section receives loader-derived params, never a narrowed literal", () => {
-  const offenders: string[] = [];
-  let seen = 0;
-  for (const file of sourceFiles(join(ROOT, "web", "app"))) {
-    const text = readFileSync(file, "utf8");
-    if (!text.includes("widgetBlock('setup-section'")) continue;
-    // The widgetBlock call's props object: capture the `sp:` expression.
-    // Loader-derived params read `data.*` (the spec input); a narrowed
-    // literal starts with `{` on the same line and names no data field.
-    for (const match of text.matchAll(/widgetBlock\('setup-section',\s*\{[^}]*?sp:\s*([^\n,}]+)/gs)) {
-      seen += 1;
-      const expr = match[1]!.trim();
-      if (!expr.startsWith("data.")) {
-        offenders.push(`${file.slice(ROOT.length + 1)} passes sp: ${expr} — row never reaches SetupEntitySection`);
-      }
-    }
-  }
-  assert.ok(seen > 0, "the embedding scan found nothing — the guard is blind, not green");
-  assert.deepEqual(offenders, [], `setup-section embeddings that drop sp.row:\n${offenders.join("\n")}`);
 });

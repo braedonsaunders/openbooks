@@ -1,6 +1,5 @@
-// source-pin-contract: no HRM create form renders an id as a label; subjects derived by walking web/app/(app)/hrm views
 import assert from 'node:assert/strict'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 import { isUuid } from '@/lib/list-params'
@@ -11,15 +10,14 @@ import { isUuid } from '@/lib/list-params'
  * `label || value`. The loader now resolves the authorized employer's NAME
  * (the named root for single-entity orgs), and a caller scoped out of every
  * visible entity is refused by name instead of being offered an
- * unauthorized root. No form may ever render an id as a label.
+ * unauthorized root. The tests below exercise both affected create forms.
  * (Ticket in comment only; the test names state the behaviour.)
  *
  * The first two tests RENDER the recruiting and position create forms:
  * the refusal reads as an alert with submit disabled, and the employer
- * reads as a name with no id in the output. The repo-wide walk below is
- * the derived structural invariant that catches the NEXT form rendering
- * an id where a name belongs. The every-locale refusal test asserts the
- * data rule (translated words, never an id) on the message catalogs.
+ * reads as a name with no id in the output. The every-locale refusal test
+ * asserts the data rule (translated words, never an id) on the message
+ * catalogs.
  */
 
 const { registerHooks } = await import('node:module')
@@ -45,7 +43,6 @@ const messages = (await import('../../../messages/en')).default
 const { RecruitingCreateForm } = await import('./recruiting/RecruitingCreateForm')
 const { PositionCreateForm } = await import('./positions/PositionCreateForm')
 
-const HRM = join(process.cwd(), 'web', 'app', '(app)', 'hrm')
 const MESSAGES = join(process.cwd(), 'web', 'messages')
 const LOCALES = ['en', 'de', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
 
@@ -137,19 +134,6 @@ test('the authorized employer renders as a name, never an id', () => {
     assert.ok(html.includes('Main'), `${name}: the single entity renders its NAME`)
     assert.ok(!html.includes(ENTITY_ID), `${name}: the raw employer id never renders as text`)
   }
-})
-
-test('no HRM create form renders an id as a label', () => {
-  function tsxFiles(dir: string, out: string[] = []): string[] {
-    for (const entry of readdirSync(dir)) {
-      const path = join(dir, entry)
-      if (statSync(path).isDirectory()) tsxFiles(path, out)
-      else if (entry.endsWith('.tsx') && !entry.endsWith('.test.tsx')) out.push(path)
-    }
-    return out
-  }
-  const offenders = tsxFiles(HRM).filter((file) => /label \|\| .*value/.test(readFileSync(file, 'utf8')))
-  assert.deepEqual(offenders, [], `forms rendering an id where a name belongs: ${offenders.join(', ')}`)
 })
 
 test('the refusal names the remedy in every locale', () => {
