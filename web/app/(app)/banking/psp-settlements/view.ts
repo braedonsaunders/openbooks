@@ -80,6 +80,10 @@ export interface PspSettlementsStrings {
 export interface PspSettlementsData {
   title: string
   description: string
+  /** Loader-resolved banking.reconcile grant, never an Authz: the import
+   *  form and the post/reverse buttons POST with banking.reconcile, so a
+   *  read-only operator must not see them (F1T-9). */
+  canReconcile: boolean
   strings: PspSettlementsStrings
   rows: PspSettlementRow[]
   subsidiaries: PspSubsidiaryOption[]
@@ -154,6 +158,7 @@ export async function loadPspSettlements(): Promise<PspSettlementsData> {
   return {
     title: t('title'),
     description: t('description'),
+    canReconcile: can(authz, 'banking.reconcile'),
     strings: {
       acceptanceNote: t('acceptanceNote'),
       acceptanceLink: t('acceptanceLink'),
@@ -234,6 +239,7 @@ export function pspSettlementsSpec(data: PspSettlementsData): PageSpec {
             // so passing it here reached nothing. Wiring the route through
             // properly is a separate cleanup — this only stops pretending it
             // is already wired.
+            canReconcile: data.canReconcile,
             strings: data.strings,
             initialRows: data.rows,
             initialSubsidiaries: data.subsidiaries,

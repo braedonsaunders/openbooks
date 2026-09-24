@@ -138,11 +138,16 @@ async function requestSettlement<T>(
  * exactly as it does natively.
  */
 export function PspSettlementsWorkspace({
+  canReconcile,
   strings,
   initialRows,
   initialSubsidiaries,
   initialAccounts,
 }: {
+  /** Loader-resolved banking.reconcile grant: without it the import form
+   *  and the post/reverse buttons stay hidden, since every one of those
+   *  mutations POSTs with banking.reconcile (F1T-9). */
+  canReconcile: boolean
   strings: {
     acceptanceNote: string
     acceptanceLink: string
@@ -400,6 +405,7 @@ export function PspSettlementsWorkspace({
         </p>
       )}
 
+      {canReconcile && (
       <Card className="space-y-3 p-4">
         <h3 className="text-sm font-semibold">{strings.importTitle}</h3>
         <div className="grid gap-3 sm:grid-cols-3">
@@ -508,6 +514,7 @@ export function PspSettlementsWorkspace({
           {strings.importDraft}
         </Button>
       </Card>
+      )}
 
       <Card className="p-4">
         <h3 className="mb-3 text-sm font-semibold">{strings.recentBatches}</h3>
@@ -546,12 +553,12 @@ export function PspSettlementsWorkspace({
                 <td className="text-right tabular-nums">{b.net}</td>
                 <td>{b.status}</td>
                 <td className="text-right">
-                  {b.rawStatus === 'draft' && (
+                  {b.rawStatus === 'draft' && canReconcile && (
                     <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
                       {strings.postLabel}
                     </Button>
                   )}
-                  {b.rawStatus === 'posted' && (
+                  {b.rawStatus === 'posted' && canReconcile && (
                     <Button
                       size="sm"
                       variant="ghost"

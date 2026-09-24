@@ -50,6 +50,7 @@ const messages = (await import("../../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../../components/money-provider");
 const { BusinessDateProvider } = await import("../../../../components/business-date-provider");
 const { PspSettlementsWorkspace } = await import("./sections");
+import type { PspSettlementRow } from "./sections";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -98,7 +99,28 @@ const ACCOUNTS = [
   { id: "33333333-3333-3333-3333-333333333333", label: "1150 · PSP Clearing" },
 ];
 
-async function mount() {
+const ROWS: PspSettlementRow[] = [
+  {
+    id: "d0000000-0000-0000-0000-000000000001",
+    providerLabel: "Stripe",
+    externalRef: "po_draft",
+    settlementDate: "Sep 20, 2026",
+    netAmount: "$100.00",
+    statusLabel: "Draft",
+    status: "draft",
+  },
+  {
+    id: "d0000000-0000-0000-0000-000000000002",
+    providerLabel: "Stripe",
+    externalRef: "po_posted",
+    settlementDate: "Sep 21, 2026",
+    netAmount: "$200.00",
+    statusLabel: "Posted",
+    status: "posted",
+  },
+];
+
+async function mount(options?: { canReconcile?: boolean; rows?: typeof ROWS }) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -108,8 +130,9 @@ async function mount() {
         <MoneyProvider currency="USD">
           <BusinessDateProvider today="2026-09-23">
             <PspSettlementsWorkspace
+              canReconcile={options?.canReconcile ?? true}
               strings={STRINGS}
-              initialRows={[]}
+              initialRows={options?.rows ?? []}
               initialSubsidiaries={[]}
               initialAccounts={ACCOUNTS}
             />
@@ -284,4 +307,40 @@ test("a well-shaped stripe array posts the unchanged stored body", async (t) => 
     payoutId: "po_123",
     transactions: [],
   });
+});
+
+/** F1T-9: every import/post/reverse mutation POSTs with banking.reconcile,
+ * so a read-only operator must not see the import form or the row buttons —
+ * only the batch list. */
+test("read-only operators see batches but no import, post or reverse affordances", async (t) => {
+  const { host, root } = await mount({ canReconcile: false, rows: ROWS });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await tick();
+  const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
+  assert.ok(!buttons.includes(STRINGS.importDraft), "the import button must stay hidden without banking.reconcile");
+  assert.ok(!buttons.includes(STRINGS.postLabel), "the post button must stay hidden without banking.reconcile");
+  assert.ok(!buttons.includes(STRINGS.reverse), "the reverse button must stay hidden without banking.reconcile");
+  assert.ok(host.textContent?.includes("po_draft"), "the draft batch row must still render");
+  assert.ok(host.textContent?.includes("po_posted"), "the posted batch row must still render");
+});
+
+/** F1T-9 companion: the permitted path still offers all three mutations. */
+test("reconcile operators keep the import, post and reverse affordances", async (t) => {
+  const { host, root } = await mount({ canReconcile: true, rows: ROWS });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await tick();
+  const buttons = [...host.querySelectorAll("button")].map((b) => b.textContent);
+  assert.ok(buttons.includes(STRINGS.importDraft), "the import button must render with banking.reconcile");
+  assert.ok(buttons.includes(STRINGS.postLabel), "the post button must render with banking.reconcile");
+  assert.ok(buttons.includes(STRINGS.reverse), "the reverse button must render with banking.reconcile");
 });
