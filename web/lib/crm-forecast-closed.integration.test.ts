@@ -87,6 +87,16 @@ test('a full credit against the sale closes it to zero', { skip: !DB }, async ()
   }
 });
 
+test('a partial credit nets against the sale instead of zeroing or ignoring it', { skip: !DB }, async () => {
+  const { org } = await fixture();
+  try {
+    await postCredit(org, org.customerId, 'CR-C6-P', '30.0000');
+    assert.equal(await closed(org.orgId), '70.0000');
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an unrelated credit does not move the owner's closed figure", { skip: !DB }, async () => {
   const { org, actor } = await fixture();
   try {
