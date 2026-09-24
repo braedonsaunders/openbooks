@@ -379,6 +379,21 @@ test(
       assert.equal(mine.account_id, fixture.bankAccountId);
       assert.ok(mine.server_name, "GET resolves the owning server name");
       assert.ok(mine.account_number, "GET resolves the owning account number");
+      const audits = await withBypass(() => db.execute<{
+        action: string;
+        actor_id: string;
+        request_id: string | null;
+        changes: { after?: { account_id?: string; sftp_server_id?: string } };
+      }>(sql`
+        select action, actor_id, request_id, changes from audit_log
+         where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${String(createdId)}
+      `));
+      assert.equal(audits.rows.length, 1);
+      assert.equal(audits.rows[0]!.action, "insert");
+      assert.equal(audits.rows[0]!.actor_id, fixture.actorId);
+      assert.ok(audits.rows[0]!.request_id, "the audit evidence must carry a request id");
+      assert.equal(audits.rows[0]!.changes.after?.account_id, fixture.bankAccountId);
+      assert.equal(audits.rows[0]!.changes.after?.sftp_server_id, serverId);
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
