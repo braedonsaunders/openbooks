@@ -4,6 +4,8 @@ import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   OPENING_BALANCE_FIELDS,
+  declaredEmployerLevyFields,
+  employerLevyOpeningsForYear,
   type OpeningBalanceYear,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
@@ -63,6 +65,12 @@ export interface PayrollOpeningBalancesData {
     initial: EntitlementOpeningsResult
     canManage: boolean
   }
+  employerLevies: {
+    year: number
+    levies: { country: string; levyKey: string; label: string; description: string; scope: string }[]
+    rows: { country: string; levyKey: string; region: string | null; baseYtd: string }[]
+    canManage: boolean
+  }
 }
 
 export async function loadPayrollOpeningBalances(
@@ -109,6 +117,12 @@ export async function loadPayrollOpeningBalances(
       initial: banks,
       canManage: can(authz, 'payroll.manage'),
     },
+    employerLevies: {
+      year,
+      levies: await declaredEmployerLevyFields(year),
+      rows: await employerLevyOpeningsForYear(orgId, year),
+      canManage: can(authz, 'payroll.manage'),
+    },
   }
 }
 
@@ -152,6 +166,17 @@ export function payrollOpeningBalancesSpec(_data: PayrollOpeningBalancesData): P
         widgetBlock('entitlement-openings-grid', {
           initial: f('banks.initial'),
           canManage: f('banks.canManage'),
+        }),
+        // The employer carry-ins section — one row per pack-declared
+        // aggregate levy (plus one row per stored region), the Save action
+        // and the refusal callout. Same whole-widget reasoning: the draft
+        // state and the region-row adder live in the component. Renders
+        // nothing when no pack declares a levy.
+        widgetBlock('employer-levy-openings-grid', {
+          year: f('employerLevies.year'),
+          levies: f('employerLevies.levies'),
+          rows: f('employerLevies.rows'),
+          canManage: f('employerLevies.canManage'),
         }),
       ]),
     ],

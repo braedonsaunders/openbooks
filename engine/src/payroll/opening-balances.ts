@@ -942,6 +942,72 @@ export interface EmployerLevyOpeningSaveResult {
  * room already consumed, the same immutability the per-employee save
  * enforces per employee.
  */
+/** One employer levy the packs declare a carry-in for, for the UI and the importer. */
+export interface DeclaredEmployerLevyField {
+  country: string;
+  levyKey: string;
+  label: string;
+  description: string;
+  /** 'org' levies carry no region; 'region' levies name one per row. */
+  scope: string;
+}
+
+/**
+ * Every employer-aggregate levy any pack declares for the year — the
+ * country-agnostic list the carry-in UI and the import resource offer. A
+ * third pack's levy arrives with the pack; nothing here names a country.
+ *
+ * Resolved lazily: this module sits below the pack registry in the import
+ * graph, so a static import would join the cycle the opening-ytd registry
+ * exists to avoid.
+ */
+export async function declaredEmployerLevyFields(year: number): Promise<DeclaredEmployerLevyField[]> {
+  const taxYear = assertTaxYear(year);
+  const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
+  const fields: DeclaredEmployerLevyField[] = [];
+  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+    for (const levy of pack.employerAggregateLevies?.(taxYear) ?? []) {
+      fields.push({
+        country,
+        levyKey: levy.key,
+        label: levy.label,
+        description: levy.description,
+        scope: levy.base.scope,
+      });
+    }
+  }
+  return fields.sort((a, b) =>
+    a.country.localeCompare(b.country) || a.label.localeCompare(b.label));
+}
+
+/** One stored employer carry-in row. */
+export interface EmployerLevyOpeningRow {
+  country: string;
+  levyKey: string;
+  region: string | null;
+  baseYtd: string;
+}
+
+/** The stored employer carry-ins for one tax year, for the UI and the export. */
+export async function employerLevyOpeningsForYear(
+  orgId: string,
+  taxYear: number,
+): Promise<EmployerLevyOpeningRow[]> {
+  const year = assertTaxYear(taxYear);
+  const rows = (await db.execute<{ country: string; levy_key: string; region: string | null; base_ytd: string }>(sql`
+    select country, levy_key, region, base_ytd::text as base_ytd
+      from payroll_employer_levy_opening
+     where org_id = ${orgId} and tax_year = ${year}
+     order by country, levy_key, region nulls first
+  `));
+  return rows.rows.map((row) => ({
+    country: row.country,
+    levyKey: row.levy_key,
+    region: row.region,
+    baseYtd: normalizeMoney(String(row.base_ytd)),
+  }));
+}
+
 export async function saveEmployerLevyOpening(input: {
   orgId: string;
   actorId: string;
@@ -952,16 +1018,12 @@ export async function saveEmployerLevyOpening(input: {
   const result: EmployerLevyOpeningSaveResult = { created: 0, updated: 0, deleted: 0, errors: [] };
   if (input.rows.length === 0) return result;
 
-  // Pack declarations, resolved lazily: this module sits below the pack
-  // registry in the import graph, so a static import would join the cycle
-  // the opening-ytd registry exists to avoid.
-  const { PAYROLL_COUNTRY_PACKS } = await import("./packs.ts");
-  const declared = new Map<string, { scope: string }>();
-  for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
-    for (const levy of pack.employerAggregateLevies?.(year) ?? []) {
-      declared.set(`${country}\u001f${levy.key}`, { scope: levy.base.scope });
-    }
-  }
+  const declared = new Map(
+    (await declaredEmployerLevyFields(year)).map((field) => [
+      `${field.country}\u001f${field.levyKey}`,
+      { scope: field.scope },
+    ]),
+  );
 
   return db.transaction(async (tx) => {
     await takeEmployerLevyFences(

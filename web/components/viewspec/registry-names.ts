@@ -146,6 +146,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'email-settings-form',
   'email-subject-cell',
   'empty-state',
+  'employer-levy-openings-grid',
   'entitlement-openings-grid',
   'entity-list-view',
   'entry-cell',
