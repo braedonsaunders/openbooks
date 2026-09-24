@@ -260,8 +260,10 @@ export async function loadLeaveQueue(
   }
 
   // On-leave-today is absence-fact, not request state: approved days land
-  // here even when the request range started earlier.
-  const onLeave = await employmentsOnLeave(db, orgId, today)
+  // here even when the request range started earlier. Scoped to the
+  // actor's allowed employers like the request list above — the
+  // today-count must not leak org-wide totals to a restricted reader.
+  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
   const onLeaveEmploymentIds = new Set(onLeave.map((entry) => entry.employmentId))
 
   const counts: Record<string, number> = { pending: 0, upcoming: 0, today: onLeave.length, history: 0 }
@@ -485,7 +487,9 @@ export async function loadLeavePanel(authz: Authz): Promise<LeavePanelData | nul
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const today = await businessToday(orgId)
-  const onLeave = await employmentsOnLeave(db, orgId, today)
+  // Names and the today-count stay inside the actor's allowed employers —
+  // a subsidiary-A HR reader sees only A's on-leave workers and count.
+  const onLeave = await employmentsOnLeave(db, orgId, today, authz.allowedSubsidiaryIds)
   const pending = await listOrgLeaveRequests(db, orgId, authz.user.id, { status: 'submitted', limit: 6 })
   return {
     title: t('overview.leave.title'),

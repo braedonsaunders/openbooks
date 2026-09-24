@@ -254,7 +254,20 @@ export async function employmentsOnLeave(
   exec: SqlExecutor,
   orgId: string,
   onDate: string,
+  allowedEmployerIds: Set<string> | null,
 ): Promise<{ employmentId: string; workerName: string; leaveTypeCode: string; hours: string }[]> {
+  // The scope is required, never optional: callers pass the actor's
+  // allowed employer set (null = unrestricted) so an on-leave roster
+  // never leaks names or counts across legal entities. An empty set
+  // reads empty, never all.
+  if (allowedEmployerIds !== null && allowedEmployerIds.size === 0) return [];
+  const scopeFilter =
+    allowedEmployerIds === null
+      ? sql``
+      : sql`and e.employer_subsidiary_id in (${sql.join(
+          [...allowedEmployerIds].map((id) => sql`${id}::uuid`),
+          sql`, `,
+        )})`;
   const rows = (await exec.execute<{
     employment_id: string; worker_name: string; code: string; hours: string;
   }>(sql`
@@ -265,6 +278,7 @@ export async function employmentsOnLeave(
       join parties p on p.id = e.worker_party_id and p.org_id = a.org_id
       join hrm_leave_types t on t.id = a.leave_type_id and t.org_id = a.org_id
      where a.org_id = ${orgId} and a.on_date = ${onDate}
+     ${scopeFilter}
      group by a.employment_id, p.display_name, t.code
     having sum(a.hours) <> 0
      order by p.display_name
