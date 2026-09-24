@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { BookOpen, ChevronDown, ChevronUp, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Card, CardContent, Input, Label, Select, Textarea, cn } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
+import { confirmDialog } from '../../../../../lib/confirm'
 import type { FinancialProfile, InvoicingProfile, BackupProfile, PnlLine } from '@openbooks/schema'
 
 export interface ProjectTypeRow {
@@ -179,6 +180,19 @@ export function ProjectTypesWorkspace({
     setFinancialChangeReason('')
   }
 
+  // Any unsaved edit — profitability or otherwise — guards the type switch
+  // below (F4T2-11): without it the selection re-sync silently discards the
+  // draft, including effective-dated profitability edits.
+  const dirty = stableJson(draft) !== stableJson(selected)
+  async function requestSelect(id: string) {
+    if (id === selId) return
+    if (dirty && !(await confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    }))) return
+    setSelId(id)
+  }
   const fp = draft.financialProfile, ip = draft.invoicingProfile, bp = draft.backupProfile
   const availableBases = fieldTicketsEnabled ? BASES : BASES.filter((basis) => basis !== 'field_ticket')
   const financialChanged = draft.id !== 'new' && stableJson(fp) !== stableJson(selected?.financialProfile)
@@ -249,10 +263,10 @@ export function ProjectTypesWorkspace({
       <div className="space-y-1">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('types')}</h2>
-          <Button variant="outline" size="sm" onClick={() => setSelId('new')}><Plus size={14} /> {t('newType')}</Button>
+          <Button variant="outline" size="sm" onClick={() => void requestSelect('new')}><Plus size={14} /> {t('newType')}</Button>
         </div>
         {list.map((ty) => (
-          <button key={ty.id} type="button" onClick={() => setSelId(ty.id)}
+          <button key={ty.id} type="button" onClick={() => void requestSelect(ty.id)}
             className={cn('flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors',
               selId === ty.id ? 'bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/40 dark:text-teal-200' : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}>
             <span className="truncate">{ty.name}</span>
