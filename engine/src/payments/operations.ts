@@ -1881,9 +1881,9 @@ async function advancePaymentScheduleCursor(
 
 /**
  * Submit (or finish submitting) the run linked to one occurrence, with system
- * provenance. Idempotent and race-safe: a run another submitter already moved
- * past draft satisfies the occurrence's goal, and a genuine failure re-checks
- * the run before recording a recoverable 'submit_failed' state.
+ * provenance. Idempotent and race-safe: only a run in a state that proves
+ * submission progressed satisfies the occurrence. Rejected, cancelled,
+ * rolled-back, or otherwise terminal non-success states fail visibly.
  */
 async function submitOccurrenceRun(
   orgId: string,
@@ -1898,23 +1898,43 @@ async function submitOccurrenceRun(
     select status from payment_runs where id = ${runId} and org_id = ${orgId}
   `)).rows[0];
   if (!run) return {};
-  if (run.status !== "draft") {
+  if (isPaymentRunSubmissionSuccess(run.status)) {
     await markOccurrenceSubmitted(orgId, scheduleId, occurrenceAt, runId);
     return {};
+  }
+  if (run.status !== "draft") {
+    return recordOccurrenceRunFailure(
+      orgId,
+      scheduleId,
+      occurrenceAt,
+      runId,
+      run.status,
+      `linked payment run is ${run.status}; scheduled submission cannot continue`,
+    );
   }
   try {
     await submitPaymentRun(runId, orgId, null);
     await markOccurrenceSubmitted(orgId, scheduleId, occurrenceAt, runId);
     return {};
   } catch (error) {
-    // A concurrent submitter may have moved the run past draft while ours
-    // failed; that satisfies the occurrence's submission goal.
+    // A concurrent submitter may have moved the run into a success-equivalent
+    // state while ours failed. Terminal non-success states remain failures.
     const after = (await db.execute<{ status: string }>(sql`
       select status from payment_runs where id = ${runId} and org_id = ${orgId}
     `)).rows[0]?.status;
-    if (after && after !== "draft") {
+    if (after && isPaymentRunSubmissionSuccess(after)) {
       await markOccurrenceSubmitted(orgId, scheduleId, occurrenceAt, runId);
       return {};
+    }
+    if (after && after !== "draft") {
+      return recordOccurrenceRunFailure(
+        orgId,
+        scheduleId,
+        occurrenceAt,
+        runId,
+        after,
+        `linked payment run is ${after}; scheduled submission cannot continue`,
+      );
     }
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     const attempts = occurrence.attempt_count + 1;
@@ -1940,6 +1960,47 @@ async function submitOccurrenceRun(
     }
     return { error: `scheduled submission failed (attempt ${attempts}): ${message}` };
   }
+}
+
+function isPaymentRunSubmissionSuccess(status: string): boolean {
+  return [
+    "pending_approval",
+    "approved",
+    "processing",
+    "generated",
+    "delivered",
+    "partially_failed",
+    "confirmed",
+    "settled",
+    "returned",
+  ].includes(status);
+}
+
+async function recordOccurrenceRunFailure(
+  orgId: string,
+  scheduleId: string,
+  occurrenceAt: Date,
+  runId: string,
+  runStatus: string,
+  message: string,
+): Promise<{ error: string }> {
+  const error = message.slice(0, 500);
+  const result = { scheduleId, runId, runStatus, error };
+  await db.execute(sql`
+    update payment_schedule_occurrences set
+      status = 'failed',
+      result = ${JSON.stringify(result)}::jsonb,
+      updated_at = now()
+     where org_id = ${orgId} and schedule_id = ${scheduleId} and occurrence_at = ${occurrenceAt}
+       and payment_run_id = ${runId}
+       and status in ('awaiting_submit', 'submit_failed')
+  `);
+  await db.execute(sql`
+    update payment_schedules
+       set last_result = ${JSON.stringify(result)}::jsonb
+     where id = ${scheduleId} and org_id = ${orgId}
+  `);
+  return { error };
 }
 
 async function markOccurrenceSubmitted(
