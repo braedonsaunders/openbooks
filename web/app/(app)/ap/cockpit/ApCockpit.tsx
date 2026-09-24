@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
+import { TableDrilldownButton } from '../../../../components/table-drilldown-button'
 import { CashWeekFlyout } from '../../analytics/_ui/CashWeekFlyout'
 import { formatExactPercent } from '../../analytics/_ui/format'
 import { EntityDrawer } from '../../analytics/_ui/EntityDrawer'
@@ -119,10 +120,15 @@ export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; ca
                     {data.byVendor.map((v) => (
                       <tr
                         key={v.partyId ?? v.partyName}
-                        onClick={v.partyId ? () => setEntity({ id: v.partyId!, name: v.partyName }) : undefined}
-                        className={`border-b border-slate-50 last:border-0 dark:border-slate-800/60 ${v.partyId ? 'cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
+                        className="border-b border-slate-50 last:border-0 dark:border-slate-800/60"
                       >
-                        <td className="px-4 py-2 text-slate-700 dark:text-slate-300">{v.partyName}</td>
+                        <td className="px-4 py-2 text-slate-700 dark:text-slate-300">
+                          {v.partyId ? (
+                            <TableDrilldownButton onActivate={() => setEntity({ id: v.partyId!, name: v.partyName })}>
+                              {v.partyName}
+                            </TableDrilldownButton>
+                          ) : v.partyName}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums">
                           {compareMoney(v.overdue, '0.0000') > 0 ? <span className="text-red-600 dark:text-red-400">{moneyCompact(v.overdue)}</span> : <span className="text-slate-300 dark:text-slate-600">—</span>}
                         </td>
