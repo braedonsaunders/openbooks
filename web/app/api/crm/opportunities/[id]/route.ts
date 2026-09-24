@@ -29,6 +29,15 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 class OpportunityDisappeared extends Error {}
 class OpportunityContactMismatch extends Error {}
 class OpportunityValidationError extends Error {}
+/** A stage-entry gate refusal that survives translation: the drawer keys its
+ *  field highlight off `refusal`, never off the message wording. */
+class OpportunityStageRefusalError extends OpportunityValidationError {
+  readonly refusal: OpportunityStageRefusal
+  constructor(refusal: OpportunityStageRefusal) {
+    super(STAGE_REFUSAL_MESSAGES[refusal])
+    this.refusal = refusal
+  }
+}
 class OpportunityNotFound extends Error {}
 class OpportunityRevisionError extends Error {
   constructor(message: string) {
@@ -74,10 +83,9 @@ function stageGates(policy: OpportunityStagePolicy): boolean {
 
 /**
  * Engine refusal codes are locale-free; this route answers in the plain text
- * the rest of its errors use. `win_loss_reason_required` keeps the exact
- * wording the hard-coded rule returned — the drawer highlights the loss-reason
- * field by matching that message, so rewording it would silently break the
- * highlight without failing anything.
+ * the rest of its errors use, plus the machine-readable `code` carrying the
+ * refusal. The drawer highlights the loss-reason field by matching that code,
+ * so rewording a message can never silently break the highlight again.
  */
 const STAGE_REFUSAL_MESSAGES: Record<OpportunityStageRefusal, string> = {
   lines_required: 'this stage requires at least one line',
@@ -300,7 +308,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           policy,
         )
       : null
-    if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal] }, { status: 422 })
+    if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal], code: refusal }, { status: 422 })
   }
   const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined
   const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
@@ -504,7 +512,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             policy,
           )
         : null
-      if (refusal) throw new OpportunityValidationError(STAGE_REFUSAL_MESSAGES[refusal])
+      if (refusal) throw new OpportunityStageRefusalError(refusal)
     }
 
     if (Array.isArray(lines) && calculated) {
@@ -616,6 +624,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (error instanceof OpportunityRevisionError) return NextResponse.json({ error: error.message }, { status: 409 })
     if (error instanceof OpportunityNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
     if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
+    if (error instanceof OpportunityStageRefusalError) return NextResponse.json({ error: error.message, code: error.refusal }, { status: 422 })
     if (error instanceof OpportunityValidationError) return NextResponse.json({ error: error.message }, { status: 422 })
     if (error instanceof OpportunityPermissionDenied) return error.response
     throw error

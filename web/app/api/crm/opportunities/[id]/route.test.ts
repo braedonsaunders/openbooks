@@ -601,8 +601,9 @@ test('a stage that declares a reason requirement refuses without one, before any
   const response = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 422)
-  // Wording pinned: the drawer highlights the loss-reason field by matching it.
-  assert.deepEqual(await response.json(), { error: 'a loss reason is required' })
+  // The drawer highlights the loss-reason field by matching the code, so the
+  // wording stays free to change without breaking the highlight.
+  assert.deepEqual(await response.json(), { error: 'a loss reason is required', code: 'win_loss_reason_required' })
   assert.equal(routeState.txWrites, 0)
 })
 
@@ -626,7 +627,7 @@ test('a stage that requires lines counts the ones already stored, not just the s
 
   const refused = await patch({ statusId: STATUS_B_ID, expectedUpdatedAt: REVISION })
   assert.equal(refused.status, 422)
-  assert.deepEqual(await refused.json(), { error: 'this stage requires at least one line' })
+  assert.deepEqual(await refused.json(), { error: 'this stage requires at least one line', code: 'lines_required' })
   assert.equal(routeState.txWrites, 0)
 
   reset()
@@ -643,7 +644,7 @@ test('a stage that requires a primary contact refuses when the contact is being 
   const response = await patch({ primaryContactId: null, expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 422)
-  assert.deepEqual(await response.json(), { error: 'this stage requires a primary contact' })
+  assert.deepEqual(await response.json(), { error: 'this stage requires a primary contact', code: 'primary_contact_required' })
   assert.equal(routeState.txWrites, 0)
 })
 
