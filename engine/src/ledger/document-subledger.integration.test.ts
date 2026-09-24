@@ -9,6 +9,7 @@ import { PostingError } from "./posting-contracts.ts";
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { getOnHand } from "../inventory/position.ts";
+import { receiveInventory } from "../inventory/movements.ts";
 import { runRevenueRecognition } from "../revenue/recognition.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -54,7 +55,7 @@ async function seedRecognitionTermPeriods(org: ScratchOrg): Promise<void> {
   }
 }
 
-/** Insert a draft document + one item line; return the document id. */
+/** Insert a draft document + item lines (approved on return); return the document id. */
 async function draftDoc(
   org: ScratchOrg,
   kind: string,
@@ -71,7 +72,16 @@ async function draftDoc(
     lineProjectId?: string;
     documentLocationId?: string;
     lineLocationId?: string;
+    lineDepartmentId?: string;
   },
+  extraLines: {
+    itemId: string;
+    quantity: string;
+    unitPrice: string;
+    amount: string;
+    stockLocationId?: string;
+    accountId?: string;
+  }[] = [],
 ): Promise<string> {
   const docId = randomUUID();
   await db.execute(sql`
@@ -81,13 +91,33 @@ async function draftDoc(
     values (${docId}, ${org.orgId}, ${kind}, ${number}, ${line.partyId ?? null}, ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 1,
             'draft', ${line.amount}, '0', ${line.amount}, ${line.documentProjectId ?? null},
             ${line.documentLocationId ?? null}, false, '{}'::jsonb, '{}'::jsonb)`);
-  await db.execute(sql`
+  const insertLine = (
+    lineNumber: number,
+    itemId: string,
+    accountId: string | null | undefined,
+    quantity: string,
+    unitPrice: string,
+    amount: string,
+  ) => db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
-                               project_id, location_id, is_billable, quantity_fulfilled, quantity_billed,
+                               department_id, project_id, location_id, is_billable, quantity_fulfilled, quantity_billed,
                                stock_location_id, custom, tax_overridden, extra_dims)
-    values (${randomUUID()}, ${org.orgId}, ${docId}, 1, ${line.itemId}, ${line.accountId ?? null}, ${line.quantity}, ${line.unitPrice}, ${line.amount}, '0',
-            ${line.lineProjectId ?? null}, ${line.lineLocationId ?? null}, false, '0', '0',
+    values (${randomUUID()}, ${org.orgId}, ${docId}, ${lineNumber}, ${itemId}, ${accountId ?? null}, ${quantity}, ${unitPrice}, ${amount}, '0',
+            ${line.lineDepartmentId ?? null}, ${line.lineProjectId ?? null}, ${line.lineLocationId ?? null}, false, '0', '0',
             ${line.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+  await insertLine(1, line.itemId, line.accountId, line.quantity, line.unitPrice, line.amount);
+  let lineNumber = 2;
+  for (const extra of extraLines) {
+    await db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
+                                 department_id, project_id, location_id, is_billable, quantity_fulfilled, quantity_billed,
+                                 stock_location_id, custom, tax_overridden, extra_dims)
+      values (${randomUUID()}, ${org.orgId}, ${docId}, ${lineNumber}, ${extra.itemId}, ${extra.accountId ?? null},
+              ${extra.quantity}, ${extra.unitPrice}, ${extra.amount}, '0',
+              null, null, null, false, '0', '0',
+              ${extra.stockLocationId ?? null}, '{}'::jsonb, false, '{}'::jsonb)`);
+    lineNumber++;
+  }
   await db.execute(sql`
     update documents
        set status = 'approved', updated_at = now()
@@ -313,6 +343,130 @@ test("standalone invoice with a lot-tracked line is refused by name before posti
                join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
               where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements`)).rows[0];
     assert.deepEqual(residue, { status: "approved", posted_entry_id: null, movements: 0 });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("standalone-invoice drain is atomic: a line-2 failure commits no line-1 COGS", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "2",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
+    // Line 2 is lot-tracked with no lot: the pre-post guard would refuse
+    // this document, so the drain is driven directly — the shape a legacy
+    // half-posted invoice presents to the post-commit effects retry.
+    // (The component item is FIFO: moving-average profiles cannot track
+    // lots under item_inventory_profiles_tracking_costing.)
+    await db.execute(sql`
+      update item_inventory_profiles set tracking = 'lot'
+       where org_id = ${org.orgId} and item_id = ${org.items.component}
+    `);
+    const invId = await draftDoc(org, "customer_invoice", "INV-ATOMIC", {
+      itemId: org.items.fifo,
+      quantity: "5",
+      unitPrice: "5",
+      amount: "25",
+      stockLocationId: org.stockLocationId,
+      accountId: org.accounts.revenue,
+      partyId: org.customerId,
+    }, [{
+      itemId: org.items.component,
+      quantity: "1",
+      unitPrice: "5",
+      amount: "5",
+      stockLocationId: org.stockLocationId,
+      accountId: org.accounts.revenue,
+    }]);
+    await assert.rejects(
+      () => applyInventoryIssuesForInvoice(org.orgId, null, invId, org.date, org.subsidiaryId),
+      /lot-tracked item requires a lot/,
+    );
+    // One transaction for all lines: line 1's issue rolled back with line 2.
+    const residue = (await db.execute<{ movements: number; on_hand: string }>(sql`
+      select (select count(*)::int from inventory_movements m
+               join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+              where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements,
+             (select coalesce(sum(quantity), 0)::text from inventory_movements
+               where org_id = ${org.orgId} and item_id = ${org.items.fifo} and status = 'posted') as on_hand`)).rows[0]!;
+    assert.equal(residue.movements, 0);
+    assert.equal(toUnits(residue.on_hand), toUnits("10"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("standalone-invoice COGS legs carry the line dimensions", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const deps = {
+    control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+    },
+  };
+  try {
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo,
+      stockLocationId: org.stockLocationId,
+      quantity: "10",
+      unitCost: "2",
+      subsidiaryId: org.subsidiaryId,
+      offsetAccountId: org.accounts.clearing,
+      date: org.date,
+    });
+    const departmentId = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values (${departmentId}, ${org.orgId}, 'Field crews')`);
+    const projectId = randomUUID();
+    await db.execute(sql`
+      insert into projects
+        (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'DIM-PROJECT',
+              'Dimension project', ${org.customerId}, 'active', true, '{}'::jsonb)`);
+    const invId = await draftDoc(org, "customer_invoice", "INV-DIMS", {
+      itemId: org.items.fifo,
+      quantity: "4",
+      unitPrice: "5",
+      amount: "20",
+      stockLocationId: org.stockLocationId,
+      accountId: org.accounts.revenue,
+      partyId: org.customerId,
+      lineDepartmentId: departmentId,
+      lineProjectId: projectId,
+      lineLocationId: org.locationId,
+    });
+    await postDocument(invId, deps);
+    // The drain already ran inside posting; the manual re-drain replays.
+    const replayed = await applyInventoryIssuesForInvoice(org.orgId, null, invId, org.date, org.subsidiaryId);
+    assert.equal(replayed, 0);
+    // Exactly one issue movement across both runs, and both COGS legs carry
+    // the same department/project/location as the line.
+    const legs = (await db.execute<{ department_id: string | null; project_id: string | null; location_id: string | null; movements: number }>(sql`
+      select distinct jl.department_id, jl.project_id, jl.location_id,
+             (select count(*)::int from inventory_movements m2
+               join document_lines l2 on l2.id = m2.document_line_id and l2.org_id = m2.org_id
+              where l2.document_id = ${invId} and m2.org_id = ${org.orgId} and m2.kind = 'issue') as movements
+        from journal_lines jl
+        join inventory_movements m on m.journal_entry_id = jl.entry_id and m.org_id = jl.org_id
+        join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+       where l.document_id = ${invId} and m.org_id = ${org.orgId} and m.kind = 'issue'`)).rows;
+    assert.equal(legs.length, 1);
+    assert.equal(legs[0]!.movements, 1);
+    assert.deepEqual(
+      { department_id: legs[0]!.department_id, project_id: legs[0]!.project_id, location_id: legs[0]!.location_id },
+      {
+        department_id: departmentId,
+        project_id: projectId,
+        location_id: org.locationId,
+      },
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

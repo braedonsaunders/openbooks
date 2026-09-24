@@ -5,7 +5,7 @@ import { InventoryError } from "./contracts.ts";
 import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
-import { issueInventory } from "./movements.ts";
+import { issueInventory, type IssueInput } from "./movements.ts";
 import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, UUID_RE, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 
 /**
@@ -124,31 +124,59 @@ export async function applySalesFulfillmentInventoryIssues(
        limit 1`));
     if (seen.rows[0]) continue;
     const selection = salesFulfillmentTrackingSelection(line);
-    await issueInventory(orgId, actorId, {
-      itemId: line.itemId,
-      stockLocationId: line.stockLocationId,
-      quantity: line.quantity,
-      subsidiaryId: movementSubsidiaryId,
-      date,
-      documentLineId: line.lineId,
-      idempotencyKey: inventoryPostingEffectKey(line.lineId, "issue"),
-      lotId: selection.lotId,
-      serialId: selection.serialId,
-      departmentId: line.departmentId,
-      projectId: line.projectId,
-      locationId: line.locationId,
-      memo: "COGS (sales fulfillment)",
-      tx: runner,
-    });
+    await issueInventory(
+      orgId,
+      actorId,
+      salesLineIssueInput(line, selection, movementSubsidiaryId, date, "COGS (sales fulfillment)", runner),
+    );
     count++;
   }
   return count;
 }
 
 /**
+ * One line-to-issue mapping for both sales legs. Fulfillment supplies the
+ * lot/serial selection from its immutable evidence; the standalone drain
+ * passes none (tracked standalone lines are refused pre-post, and any that
+ * reach the drain fail inside its transaction). Dimensions ride every leg:
+ * dropping them booked COGS without the department/project/location the
+ * revenue carries.
+ */
+function salesLineIssueInput(
+  line: DocumentInventoryLine,
+  selection: { lotId: string | null; serialId: string | null },
+  subsidiaryId: string,
+  date: string,
+  memo: string,
+  tx: SqlExecutor,
+): IssueInput {
+  return {
+    itemId: line.itemId,
+    stockLocationId: line.stockLocationId,
+    quantity: line.quantity,
+    subsidiaryId,
+    date,
+    documentLineId: line.lineId,
+    idempotencyKey: inventoryPostingEffectKey(line.lineId, "issue"),
+    lotId: selection.lotId,
+    serialId: selection.serialId,
+    departmentId: line.departmentId,
+    projectId: line.projectId,
+    locationId: line.locationId,
+    memo,
+    tx,
+  };
+}
+
+/**
  * A standalone invoice can represent a combined ship-and-bill policy, so it
  * retains the legacy issue hook. An invoice converted from a sales order is
  * governed by explicit fulfillment and must never move stock a second time.
+ *
+ * All lines issue in ONE transaction: a failure on any line rolls every
+ * sibling back, so a tracking failure on line 2 can never leave line 1's
+ * COGS committed against revenue. The post-commit effects drain retries
+ * the whole set (recording a terminal failure if it never clears).
  */
 export async function applyInventoryIssuesForInvoice(
   orgId: string,
@@ -159,23 +187,30 @@ export async function applyInventoryIssuesForInvoice(
 ): Promise<number> {
   if (!(await inventoryFeatureEnabled(db, orgId))) return 0;
   if (await isFulfilmentGovernedInvoice(db, orgId, documentId)) return 0;
-  const lines = await loadDocumentInventoryLines(db, orgId, documentId);
-  let count = 0;
-  for (const l of lines) {
-    const seen = (await db.execute(sql`
-      select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`));
-    if (seen.rows[0]) continue;
-    await issueInventory(orgId, actorId, {
-      itemId: l.itemId,
-      stockLocationId: l.stockLocationId,
-      quantity: l.quantity,
-      subsidiaryId,
-      date,
-      documentLineId: l.lineId,
-      idempotencyKey: inventoryPostingEffectKey(l.lineId, "issue"),
-      memo: "COGS (invoice)",
-    });
-    count++;
-  }
-  return count;
+  return db.transaction(async (tx) => {
+    const lines = await loadDocumentInventoryLines(tx, orgId, documentId);
+    for (const key of [
+      ...new Set(lines.map((line) => `${line.itemId}:${line.stockLocationId}`)),
+    ].sort()) {
+      const separator = key.indexOf(":");
+      await lockInventoryPosition(
+        tx,
+        key.slice(0, separator),
+        key.slice(separator + 1),
+      );
+    }
+    let count = 0;
+    for (const l of lines) {
+      const seen = (await tx.execute(sql`
+        select 1 from inventory_movements where org_id = ${orgId} and document_line_id = ${l.lineId} and kind = 'issue' limit 1`));
+      if (seen.rows[0]) continue;
+      await issueInventory(
+        orgId,
+        actorId,
+        salesLineIssueInput(l, { lotId: null, serialId: null }, subsidiaryId, date, "COGS (invoice)", tx),
+      );
+      count++;
+    }
+    return count;
+  });
 }
