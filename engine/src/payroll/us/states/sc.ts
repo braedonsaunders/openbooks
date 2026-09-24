@@ -186,9 +186,15 @@ export const SC_CERTIFICATE: PayrollCertificate = {
   label: "South Carolina Employee's Withholding Allowance Certificate",
   scope: { level: "region", region: "SC" },
   purpose: "withholding",
+  // SCDOR requires a replacement exempt certificate by February 15 each year.
+  validity: {
+    kind: "following_year_date", monthDay: "02-15",
+    appliesWhen: { field: "exempt", values: ["true"] },
+  },
   citation:
     "South Carolina Department of Revenue, WH-1603F, 2026 SC Withholding Tax Formula; "
-    + "Form SC W-4 (2026); WH-105 Withholding Tax Information Guide; SCDOR Withholding FAQs",
+    + "Form SC W-4 (2026), https://dor.sc.gov/sites/dor/files/forms/SCW4_2026.pdf; "
+    + "SCDOR Withholding FAQs, https://dor.sc.gov/withholding/withholding-faqs-refund-procedures",
   summary:
     "Sets South Carolina allowances and extra withholding. If a new employee does "
     + "not provide an SC W-4, SCDOR requires the employer to withhold at zero allowances.",
@@ -218,8 +224,9 @@ export const SC_CERTIFICATE: PayrollCertificate = {
       label: "Line 7 — Exempt from South Carolina withholding",
       kind: "flag",
       help:
-        "Expires December 31 of the year claimed. A current Exempt on line 7 "
-        + "withholds zero. Dating the year-end lapse is certificate administration.",
+        "The exemption expires December 31. To keep it, file a new SC W-4 by February 15; "
+        + "if none is received by then, SCDOR requires single with zero allowances. A current "
+        + "Exempt on line 7 withholds zero.",
     },
   ],
 };
