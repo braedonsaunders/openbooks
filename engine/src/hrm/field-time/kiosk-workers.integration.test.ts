@@ -14,8 +14,9 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
-import { identifyByPin, listKioskWorkers, registerKiosk, setWorkerPin } from "./kiosk.ts";
+import { identifyByPin, listKioskWorkers, registerKiosk, revokeKiosk, setWorkerPin } from "./kiosk.ts";
 import { FieldTimeError } from "./errors.ts";
+import { ScopeNotFoundError, UnrestrictedScopeError } from "../../organization/subsidiary-scope.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -103,7 +104,7 @@ test("kiosk PIN identify and PIN set refuse non-employees", { skip: !DB }, async
     const customer = randomUUID();
     const { kiosk } = await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${customer}, ${org.orgId}, 'customer', 'Acme Customer')`);
-      return registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate" });
+      return registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate", allowedSubsidiaryIds: null });
     });
     assert.equal(
       await refusesCode(() => identifyByPin({ kiosk, employeePartyId: customer, pin: "0000" })),
@@ -111,9 +112,42 @@ test("kiosk PIN identify and PIN set refuse non-employees", { skip: !DB }, async
     );
     assert.equal(
       await refusesCode(() => withOrg(org.orgId, () =>
-        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: customer, pin: "4821" }))),
+        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: customer, pin: "4821", allowedSubsidiaryIds: null }))),
       "not_employee",
     );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("kiosk-wide actions refuse restricted scope and PIN resets require every active employer in scope", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const worker = randomUUID();
+    const employmentId = randomUUID();
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${worker}, ${org.orgId}, 'person', 'Scoped Worker')`);
+      await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`);
+      await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
+
+      await assert.rejects(
+        registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Restricted", allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
+        UnrestrictedScopeError,
+      );
+      const { kiosk } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Scoped", allowedSubsidiaryIds: null });
+      await assert.rejects(
+        setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: new Set() }),
+        ScopeNotFoundError,
+      );
+      await assert.rejects(
+        // An unassigned kiosk has org-wide effect and cannot be retired by a restricted actor.
+        revokeKiosk({ orgId: org.orgId, kioskId: kiosk.id, actorUserId: randomUUID(), allowedSubsidiaryIds: new Set([org.subsidiaryId]) }),
+        UnrestrictedScopeError,
+      );
+      const pins = (await db.execute<{ count: string }>(sql`select count(*)::text as count from worker_clock_pins where org_id = ${org.orgId} and employee_party_id = ${worker}`)).rows[0];
+      assert.equal(pins?.count, "0", "the refused PIN reset leaves no credential row");
+    });
   } finally {
     await dropScratchOrg(org.orgId);
   }

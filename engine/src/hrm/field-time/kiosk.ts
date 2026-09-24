@@ -12,6 +12,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { assertUnrestrictedScope, lockProjectForScope, ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
 import { FIELD_TIME_FEATURE, FIELD_TIME_KIOSK_FEATURE } from "./settings.ts";
 import { hashDeviceToken, hashPin, issueDeviceToken, verifyPin } from "./pins.ts";
@@ -103,6 +104,7 @@ export async function registerKiosk(input: {
   name: string;
   locationId?: string | null;
   projectId?: string | null;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
   pinRequired?: boolean;
   photoRequired?: boolean;
 }): Promise<{ kiosk: KioskRow; token: string }> {
@@ -111,34 +113,55 @@ export async function registerKiosk(input: {
     refuse("kiosk_name_required", "The kiosk needs a name — name the device after its site or gate and retry");
   }
   const { token, tokenHash } = issueDeviceToken();
-  const row = (await db.execute<KioskRow>(sql`
-    insert into time_kiosks
-      (org_id, name, location_id, project_id, pin_required, photo_required,
-       device_token_hash, created_by, updated_by)
-    values
-      (${input.orgId}, ${input.name.trim()}, ${input.locationId ?? null},
-       ${input.projectId ?? null}, ${input.pinRequired !== false},
-       ${input.photoRequired === true}, ${tokenHash},
-       ${input.actorUserId}, ${input.actorUserId})
-    returning id::text as id, org_id::text as "orgId", name,
-              location_id::text as "locationId", project_id::text as "projectId",
-              pin_required as "pinRequired", photo_required as "photoRequired",
-              is_active as "isActive", last_seen_at::text as "lastSeenAt"`)).rows[0];
+  const row = await withOrgTransaction(input.orgId, async () => {
+    if (input.projectId) {
+      await lockProjectForScope(db, input.orgId, input.projectId, input.allowedSubsidiaryIds, "share");
+    } else {
+      assertUnrestrictedScope(input.allowedSubsidiaryIds);
+    }
+    return (await db.execute<KioskRow>(sql`
+      insert into time_kiosks
+        (org_id, name, location_id, project_id, pin_required, photo_required,
+         device_token_hash, created_by, updated_by)
+      values
+        (${input.orgId}, ${input.name.trim()}, ${input.locationId ?? null},
+         ${input.projectId ?? null}, ${input.pinRequired !== false},
+         ${input.photoRequired === true}, ${tokenHash},
+         ${input.actorUserId}, ${input.actorUserId})
+      returning id::text as id, org_id::text as "orgId", name,
+                location_id::text as "locationId", project_id::text as "projectId",
+                pin_required as "pinRequired", photo_required as "photoRequired",
+                is_active as "isActive", last_seen_at::text as "lastSeenAt"`)).rows[0];
+  });
   if (!row) throw new FieldTimeError("kiosk_not_stored", "The kiosk was not stored — no row was written; retry the registration");
   return { kiosk: row, token };
 }
 
 /** Retire a kiosk: deactivated AND its token rotated so a held URL dies. */
-export async function revokeKiosk(orgId: string, kioskId: string, actorUserId: string): Promise<void> {
+export async function revokeKiosk(input: {
+  orgId: string;
+  kioskId: string;
+  actorUserId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+}): Promise<void> {
+  const { orgId, kioskId, actorUserId, allowedSubsidiaryIds } = input;
   await requireKioskFeature(orgId);
   const rotated = issueDeviceToken().tokenHash;
-  const moved = (await db.execute<{ n: number }>(sql`
-    update time_kiosks
-       set is_active = false, device_token_hash = ${rotated}, updated_at = now(), updated_by = ${actorUserId}
-     where org_id = ${orgId} and id = ${kioskId} and is_active`)).rowCount ?? 0;
-  if (moved !== 1) {
-    refuse("kiosk_unknown", "The kiosk is unknown or already retired — reload the kiosk list");
-  }
+  await withOrgTransaction(orgId, async () => {
+    const kiosk = (await db.execute<{ project_id: string | null }>(sql`
+      select project_id from time_kiosks where org_id = ${orgId} and id = ${kioskId} and is_active for update`)).rows[0];
+    if (!kiosk) refuse("kiosk_unknown", "The kiosk is unknown or already retired — reload the kiosk list");
+    if (kiosk.project_id) {
+      await lockProjectForScope(db, orgId, kiosk.project_id, allowedSubsidiaryIds, "share");
+    } else {
+      assertUnrestrictedScope(allowedSubsidiaryIds);
+    }
+    const moved = (await db.execute(sql`
+      update time_kiosks
+         set is_active = false, device_token_hash = ${rotated}, updated_at = now(), updated_by = ${actorUserId}
+       where org_id = ${orgId} and id = ${kioskId} and is_active`)).rowCount ?? 0;
+    if (moved !== 1) refuse("kiosk_unknown", "The kiosk is unknown or already retired — reload the kiosk list");
+  });
 }
 
 export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow> {
@@ -250,19 +273,35 @@ export async function setWorkerPin(input: {
   actorUserId: string;
   employeePartyId: string;
   pin: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
 }): Promise<void> {
   await requireKioskFeature(input.orgId);
   // hashPin refuses non-numeric PINs by name before anything is stored.
   const pinHash = hashPin(input.pin);
   await withOrgTransaction(input.orgId, async () => {
-    // A PIN row is kiosk authority: never mint one for a non-employee, or
-    // the identify check below would admit a customer or vendor.
-    if (!(await hasActiveEmployment(input.orgId, input.employeePartyId))) {
+    const party = (await db.execute<{ id: string }>(sql`
+      select id from parties where org_id = ${input.orgId} and id = ${input.employeePartyId} and is_active for update`)).rows[0];
+    if (!party) throw new ScopeNotFoundError();
+    const employments = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+      select e.employer_subsidiary_id
+        from worker_employments e
+        join worker_employment_versions v
+          on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+       where e.org_id = ${input.orgId} and e.worker_party_id = ${input.employeePartyId}
+         and v.status in ('active', 'on_leave')
+       order by e.id
+       for update of e`)).rows;
+    if (!employments.length) {
       refuse(
         "not_employee",
         "Kiosk PINs are for active employees — this person has no active employment in this organization; create the employment before setting a PIN",
       );
     }
+    if (input.allowedSubsidiaryIds !== null && employments.some(({ employer_subsidiary_id }) => !employer_subsidiary_id || !input.allowedSubsidiaryIds!.has(employer_subsidiary_id))) {
+      throw new ScopeNotFoundError();
+    }
+    // A PIN row is kiosk authority: never mint one for a non-employee, or
+    // the identify check below would admit a customer or vendor.
     const moved = (await db.execute<{ n: number }>(sql`
       update worker_clock_pins
          set pin_hash = ${pinHash}, failed_attempts = 0, locked_until = null, updated_at = now()
