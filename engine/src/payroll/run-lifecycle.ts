@@ -68,6 +68,7 @@ export async function createPayRun(input: {
     const s = (await tx.execute<(ScheduleRow & { subsidiary_id: string | null })>(sql`
       select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
+      for update
     `));
     const schedule = s.rows[0];
     if (!schedule) throw new PayrollError("pay schedule not found");

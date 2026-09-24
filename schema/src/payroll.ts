@@ -525,7 +525,9 @@ export const payRuns = pgTable(
     // the PK, not id, so 0044 never installed this key.
     uniqueIndex("pay_runs_org_id_document_id_unique").on(t.orgId, t.documentId),
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
-    // One live REGULAR run per schedule period; a voided run remains immutable
+    // Migration 0348 installs a GiST exclusion constraint for overlapping
+    // live regular periods at the database boundary. This unique key also
+    // retains the exact-period lookup contract; voided runs remain immutable
     // history but releases the period so an exact replacement can be opened.
     // Off-cycle bonus and termination runs deliberately land inside a period
     // already paid by a regular run.
