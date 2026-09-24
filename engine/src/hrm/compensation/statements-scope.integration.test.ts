@@ -479,3 +479,11 @@ test("F13 unrestricted HR keeps full cross-subsidiary access", { skip: !DB }, as
     assert.ok(stored.some((s) => s.fileId === attached.fileId));
   });
 });
+
+test("I1-refix-151 statement rendering holds the employment lock through PDF generation", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    await assertEmploymentLockHeld(h.org.orgId, h.empA.employmentId, () => renderStatementPdf({
+      orgId: h.org.orgId, actorId: h.readerAId, statementId: h.statementAId, orgName: "Scratch",
+    }));
+  });
+});
