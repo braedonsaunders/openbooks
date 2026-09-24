@@ -62,7 +62,7 @@ export interface CoverageCellData {
 export interface CoverageRowData {
   employmentId: string
   workerName: string
-  /** Six padded cells (the spec reads cells.0..cells.5). */
+  /** One cell per coverage type, in coverageTypes order. */
   cells: CoverageCellData[]
 }
 
@@ -131,7 +131,6 @@ export interface QualificationsPageData {
   coverageTypes: CoverageColumn[]
   coverageRows: CoverageRowData[]
   coverageTruncated: boolean
-  coverageTypesTruncated: boolean
   alertsTitle: string
   alertsEmpty: string
   alerts: AlertRow[]
@@ -294,10 +293,9 @@ export async function loadQualificationsPage(
   const allCoverageTypes = requirements
     .filter((r) => r.subjectKind === 'project' && r.subjectId === coverageProjectId)
     .map((r) => ({ code: r.typeCode, name: r.typeName, id: r.typeId }))
-  // The spec reads six fixed columns (cells.0..cells.5): show the first
-  // six required types, pad the rest with blanks.
-  const coverageTypesTruncated = allCoverageTypes.length > 6
-  const coverageTypes = allCoverageTypes.slice(0, 6)
+  // The spec renders one column per required type (the panel scrolls
+  // horizontally), so every type stays visible — never a silent sixth-column cut.
+  const coverageTypes = allCoverageTypes
   const coverageRows: CoverageRowData[] = []
   let coverageTruncated = false
   if (coverageProjectId) {
@@ -328,7 +326,6 @@ export async function loadQualificationsPage(
           variant: worst === 'danger' ? ('danger' as const) : worst,
         }
       })
-      while (cells.length < 6) cells.push({ label: '—', variant: 'default' as const })
       coverageRows.push({
         employmentId: employment,
         workerName: crewLabels.workerByEmployment.get(employment)?.name ?? employment,
@@ -340,8 +337,7 @@ export async function loadQualificationsPage(
   const alertWorkerIds = [...new Set(alerts.map((a) => a.employmentId))]
   const alertLabels = await loadQueueLabels(orgId, alertWorkerIds, [])
 
-  const paddedTypes: CoverageColumn[] = [...coverageTypes.map((t) => ({ code: t.code, name: t.name }))]
-  while (paddedTypes.length < 6) paddedTypes.push({ code: '—', name: '' })
+  const columns: CoverageColumn[] = coverageTypes.map((t) => ({ code: t.code, name: t.name }))
 
   return {
     title: t('qualifications.title'),
@@ -426,10 +422,9 @@ export async function loadQualificationsPage(
     coverageEmpty: t('qualifications.coverageEmpty'),
     projectOptions,
     coverageProjectId,
-    coverageTypes: paddedTypes,
+    coverageTypes: columns,
     coverageRows,
     coverageTruncated,
-    coverageTypesTruncated,
     alertsTitle: t('qualifications.alertsTitle'),
     alertsEmpty: t('qualifications.alertsEmpty'),
     alerts: alerts.map((a) => ({
