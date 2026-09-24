@@ -23,6 +23,7 @@ const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
+const applicationFiles = await import("./files.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -58,7 +59,7 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
   try {
     await withOrgContext(org.orgId, async () => {
       await db.execute(sql`insert into folders (id, org_id, name) values (${folderId}, ${org.orgId}, 'Probe Cabinet')`);
-      const manager = ctxFor(org.orgId, userId, ["documents.manage"]);
+      const manager = ctxFor(org.orgId, userId, ["documents.manage", "documents.read"]);
       const input = {
         folderId,
         filename: "probe.txt",
@@ -74,6 +75,21 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
         select name, content_type, size_bytes from files where id = ${String(first.id)} and org_id = ${org.orgId}`);
       assert.equal(stored.rows.length, 1);
       assert.equal(stored.rows[0]!.name, "probe.txt");
+
+      const file = await applicationFiles.getApplicationFile(manager, String(first.id));
+      assert.deepEqual([file.id, file.name, file.contentType, file.sizeBytes, file.versionCount], [
+        first.id, "probe.txt", "text/plain", Buffer.byteLength("cabinet probe"), 1,
+      ]);
+      assert.equal(Object.hasOwn(file, "contentBase64"), false);
+      assert.equal(Object.hasOwn(file, "content"), false);
+      assert.equal(JSON.stringify(file).includes(contentBase64), false);
+      const listed = await applicationFiles.listApplicationFiles(manager, { folderId });
+      assert.equal(listed.total, 1);
+      assert.deepEqual(listed.files.map((item) => [item.id, item.name]), [[first.id, "probe.txt"]]);
+      assert.equal(Object.hasOwn(listed.files[0]!, "contentBase64"), false);
+      const folders = await applicationFiles.listApplicationFolders(manager);
+      assert.ok(folders.folders.some((folder) => folder.id === folderId && folder.name === "Probe Cabinet"));
+
       const replay = await executeApplicationTool(definition, manager, input);
       assert.equal(replay.ok, true, JSON.stringify(replay));
       assert.equal(replay.replayed, true);

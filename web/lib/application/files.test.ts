@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -16,8 +15,22 @@ registerHooks({
   },
 });
 
-const { MAX_UPLOAD_BYTES, isUploadContentType, validateCabinetUpload } = await import("./files.ts");
-const SOURCE = readFileSync(new URL("./files.ts", import.meta.url), "utf8");
+const { MAX_UPLOAD_BYTES, isUploadContentType, listApplicationFiles, validateCabinetUpload } = await import("./files.ts");
+const { ApplicationError } = await import("./errors.ts");
+type ApplicationContext = import("./context").ApplicationContext;
+
+function context(permissions: string[]): ApplicationContext {
+  return {
+    authz: {
+      user: { orgId: "file-read-unit-test" } as ApplicationContext["authz"]["user"],
+      permissions: new Set(permissions),
+      allowedSubsidiaryIds: null,
+    },
+    source: "api",
+    requestId: "file-read-unit-request",
+    apiKeyId: null,
+  };
+}
 
 test("cabinet upload accepts the route's allowlisted types and rejects the rest", () => {
   assert.equal(isUploadContentType("application/pdf"), true);
@@ -45,20 +58,22 @@ test("cabinet upload validation refuses blank names, bad payloads, and oversize 
   );
 });
 
-test("file list reuses the cabinet reader and refuses a non-UUID folder", () => {
-  assert.match(SOURCE, /listFiles\(/);
-  assert.match(SOURCE, /assertApplicationPermission\(context, "documents\.read"\)/);
-  assert.match(SOURCE, /folderId must be a UUID/);
+test("file list rejects a malformed folder id before reading the cabinet", async () => {
+  await assert.rejects(
+    listApplicationFiles(context(["documents.read"]), { folderId: "not-a-uuid" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "invalid_input"
+      && error.status === 422
+      && error.message === "folderId must be a UUID",
+  );
 });
 
-test("file get and folder list reuse the cabinet readers and never return contents", () => {
-  const getStart = SOURCE.indexOf("export async function getApplicationFile");
-  const folderStart = SOURCE.indexOf("export async function listApplicationFolders");
-  const folderEnd = SOURCE.indexOf("\nfunction cabinetViewer", folderStart);
-  const getBody = SOURCE.slice(getStart, folderStart);
-  const folderBody = SOURCE.slice(folderStart, folderEnd === -1 ? undefined : folderEnd);
-  assert.match(getBody, /getFile\(/);
-  assert.match(folderBody, /getFolderTree\(/);
-  assert.doesNotMatch(getBody, /getFileBlob|contentBase64/);
-  assert.doesNotMatch(folderBody, /getFileBlob|contentBase64/);
+test("file list refuses callers without document read permission", async () => {
+  await assert.rejects(
+    listApplicationFiles(context([]), {}),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "forbidden"
+      && error.status === 403
+      && error.details?.permission === "documents.read",
+  );
 });
