@@ -143,7 +143,9 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     ],
     newHref: '/time/crew?new=1',
     newLabel: t('field.newBatch'),
-    canEnter: true,
+    // The batch POST requires time.crew.enter (crew-batches/route.ts), so
+    // the New button shows iff the server would allow the create.
+    canEnter: can(authed, 'time.crew.enter'),
     segmentsLabel: t('field.statusLabel'),
     allLabel: t('field.allBatches'),
     segments: ['draft', 'submitted', 'approved_stage_1', 'approved_stage_2', 'rejected', 'posted'].map((status) => ({
@@ -176,7 +178,9 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     workspace,
     setupHref: '/time/setup',
     setupLabel: t('field.setupLink'),
-    canSetup: true,
+    // The Setup page requires time.manage (time/setup/view.ts) — a reader
+    // without it would land on access-denied, so the link hides instead.
+    canSetup: can(authed, 'time.manage'),
   }
 }
 
