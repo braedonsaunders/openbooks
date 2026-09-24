@@ -10,6 +10,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 
 export const runtime = 'nodejs'
@@ -129,12 +130,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as Record<string, unknown>
-  const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null }>(sql`
-    select cp.*, p.display_name, p.is_active as party_active
+  const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null; revision: string }>(sql`
+    select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as revision, p.display_name, p.is_active as party_active
       from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
      where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`))
   const row = current.rows[0]
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  // Mandatory optimistic-concurrency evidence (same contract as the party,
+  // bank-account, and opportunity saves): the relationship tab holds its
+  // fields in local state, so two tabs must 409 instead of silently
+  // replacing each other. Checked after the existence gate so a missing
+  // token never leaks relationship existence.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt) || body.expectedUpdatedAt !== row.revision) {
+    return NextResponse.json(
+      { error: 'This relationship changed after you opened it; reload and reapply your changes' },
+      { status: 409 },
+    )
+  }
 
   const stage = body.lifecycleStage === undefined ? undefined : String(body.lifecycleStage) as Stage
   if (stage !== undefined && !STAGES.includes(stage)) return NextResponse.json({ error: 'invalid lifecycle stage' }, { status: 422 })
@@ -235,6 +247,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const denied = await db.transaction(async (tx) => {
     const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
     if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    // Re-check the token under the profile lock: the pre-transaction
+    // comparison raced this lock's acquisition, and the stage transitions
+    // below bump updated_at (so the field update cannot pin the token
+    // itself) — the lock plus this re-check is what serializes two tabs.
+    const locked = await tx.execute<{ revision: string }>(sql`
+      select ${documentRevisionSql(sql`updated_at`)} as revision from crm_account_profiles
+       where id = ${row.id} and org_id = ${user.orgId} for update`)
+    if (!locked.rows[0] || locked.rows[0].revision !== body.expectedUpdatedAt) {
+      return NextResponse.json(
+        { error: 'This relationship changed after you opened it; reload and reapply your changes' },
+        { status: 409 },
+      )
+    }
     // A demotion owns the stage, the status and the stage event through the
     // transition helper; the field update below must not re-own the status
     // it just wrote. (Promotion keeps the existing split: the helper assigns

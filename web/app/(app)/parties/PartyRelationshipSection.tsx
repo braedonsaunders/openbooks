@@ -85,6 +85,10 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
   const [result, setResult] = useState<{ partyId: string; body: RelationshipResponse | null } | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [storedStage, setStoredStage] = useState<Stage | null>(null)
+  // The optimistic-concurrency token for the PATCH below: profile.updated_at
+  // arrives in token form (the read rewrites it, like opportunity saves), so
+  // this echoes back verbatim and rotates on every re-read.
+  const [storedRevision, setStoredRevision] = useState<string | null>(null)
   const [stageReason, setStageReason] = useState('')
 
   // The section's own copy of the relationship: the POST below opens the
@@ -100,7 +104,10 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
     if (!response.ok) throw new Error('load failed')
     const body = (await response.json()) as RelationshipResponse
     const form = body.account ? toForm(body.account.profile) : null
-    return { result: { partyId, body }, form, storedStage: form?.lifecycleStage ?? null }
+    const revision = body.account && typeof body.account.profile.updated_at === 'string'
+      ? body.account.profile.updated_at
+      : null
+    return { result: { partyId, body }, form, storedStage: form?.lifecycleStage ?? null, revision }
   }, [partyId])
 
   useEffect(() => {
@@ -110,6 +117,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
         setResult(applied.result)
         setForm(applied.form)
         setStoredStage(applied.storedStage)
+        setStoredRevision(applied.revision)
       },
       (error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
@@ -152,6 +160,7 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
       setResult(applied.result)
       setForm(applied.form)
       setStoredStage(applied.storedStage)
+      setStoredRevision(applied.revision)
     } catch {
       // The profile exists server-side; a failed re-read keeps the empty
       // state (and its retryable Start tracking) rather than a dead panel.
@@ -174,11 +183,31 @@ export function PartyRelationshipSection({ partyId, canManage }: { partyId: stri
           nextActionAt: form.nextActionAt || null,
           stageReason: stageReason || null,
           isActive: true,
+          // The concurrency token the main and bank saves already carry: a
+          // second tab holding older fields 409s instead of replacing them.
+          // A 409 surfaces through the alert below with the server's reload
+          // remedy — the form is deliberately NOT re-read here, because the
+          // form IS the draft and a refresh would discard the edits the
+          // operator must reapply.
+          expectedUpdatedAt: storedRevision,
         }),
       }),
       { fallbackMessage: tc('feedback.saveFailed'), successMessage: tc('feedback.saved') },
     )
-    if (ok) router.refresh()
+    if (!ok) return
+    // A save rotates the token: re-read so the next save carries the fresh
+    // revision instead of 409ing against this one's write.
+    try {
+      const applied = await reload()
+      setResult(applied.result)
+      setForm(applied.form)
+      setStoredStage(applied.storedStage)
+      setStoredRevision(applied.revision)
+    } catch {
+      // The save landed server-side; a failed re-read keeps the saved form
+      // and the next save re-checks the token rather than failing silently.
+    }
+    router.refresh()
   }
 
   if (loaded === null) {

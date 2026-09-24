@@ -3,13 +3,14 @@ import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-sco
 import { sql, type SQL } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql, documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isDocKindEnabled } from "./documents.ts";
 import { isIsoCalendarDate } from './crm-dates'
 
 export async function loadCrmAccount(partyId: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const profile = (await db.execute<Record<string, unknown>>(sql`
-    select cp.*, s.name as status_name, s.is_qualified, u.name as owner_name,
+    select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as "__accountRevision",
+           s.name as status_name, s.is_qualified, u.name as owner_name,
            t.name as territory_name, ls.name as lead_source_name
       from crm_account_profiles cp
       join parties scope_party on scope_party.id=cp.party_id and scope_party.org_id=cp.org_id
@@ -20,6 +21,19 @@ export async function loadCrmAccount(partyId: string, orgId: string, allowed?: R
      where cp.party_id = ${partyId} and cp.org_id = ${orgId}${crmSharedScope(sql`scope_party.subsidiary_id`,allowed)}
   `))
   if (!profile.rows[0]) return null
+  // The revision token never leaves this module in raw form: updated_at
+  // carries the exact persisted revision token every relationship save must
+  // send back as expectedUpdatedAt (same wire form as document revisions,
+  // and the same rewrite loadOpportunity performs for opportunities).
+  {
+    const head = profile.rows[0]!
+    const revision = head['__accountRevision']
+    if (!isDocumentRevisionToken(revision)) {
+      throw new Error('account read did not return an exact persisted revision')
+    }
+    delete head['__accountRevision']
+    head.updated_at = revision
+  }
   const [activities, opportunities, stageEvents, assignments] = await Promise.all([
     db.execute(sql`
       select a.id, a.kind, a.status, a.subject, a.priority, a.starts_at, a.due_at,

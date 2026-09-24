@@ -85,10 +85,19 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
   }
 }
 
+
+// The revision token PATCH mandates (F3-97): every pre-existing call below
+// targets other behavior, so each carries a fresh token to reach it.
+async function revisionFor(partyId: string): Promise<string> {
+  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+}
+
 test('PATCH { route: true } succeeds when the account has no address or territory', { skip: !DB }, async () => {
   const { org, partyId } = await fixture(false)
   try {
-    const result = await patch(partyId, { route: true })
+    const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`)
   } finally {
     await dropScratchOrg(org.orgId)
@@ -98,7 +107,7 @@ test('PATCH { route: true } succeeds when the account has no address or territor
 test('PATCH { route: true } assigns the matching territory, owner, and assignment event', { skip: !DB }, async () => {
   const { org, partyId, profileId, ownerId } = await fixture(true)
   try {
-    const result = await patch(partyId, { route: true })
+    const result = await patch(partyId, { route: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, `expected 200, got ${result.status}: ${JSON.stringify(result.json)}`)
     const profile = (await withBypassContext(() => db.execute<{ territory_id: string | null; owner_user_id: string | null }>(sql`
       select territory_id, owner_user_id from crm_account_profiles where id = ${profileId}`))).rows[0]!

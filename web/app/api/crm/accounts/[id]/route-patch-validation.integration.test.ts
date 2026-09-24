@@ -80,11 +80,19 @@ async function profileState(profileId: string) {
     select is_active, industry, qualification_score from crm_account_profiles where id = ${profileId}`))).rows[0]!
 }
 
+// The revision token PATCH mandates (F3-97): every pre-existing call below
+// targets field validation, so each carries a fresh token to reach it.
+async function revisionFor(partyId: string): Promise<string> {
+  return (await withBypassContext(() => db.execute<{ revision: string }>(sql`
+    select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as revision
+      from crm_account_profiles where party_id = ${partyId}`))).rows[0]!.revision
+}
+
 for (const malformed of ['true', 1, null]) {
   test(`PATCH refuses isActive=${JSON.stringify(malformed)} without deactivating`, { skip: !DB }, async () => {
     const { org, partyId, profileId } = await fixture()
     try {
-      const result = await patch(partyId, { isActive: malformed })
+      const result = await patch(partyId, { isActive: malformed, expectedUpdatedAt: await revisionFor(partyId) })
       assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
       assert.match(result.json?.error ?? '', /isActive/)
       assert.deepEqual(await profileState(profileId), { is_active: true, industry: 'Software', qualification_score: 10 })
@@ -97,7 +105,7 @@ for (const malformed of ['true', 1, null]) {
 test('PATCH still deactivates on a real boolean false', { skip: !DB }, async () => {
   const { org, partyId, profileId } = await fixture()
   try {
-    const result = await patch(partyId, { isActive: false })
+    const result = await patch(partyId, { isActive: false, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.equal((await profileState(profileId)).is_active, false)
   } finally {
@@ -108,7 +116,7 @@ test('PATCH still deactivates on a real boolean false', { skip: !DB }, async () 
 test('PATCH refuses a boolean qualification score without writing', { skip: !DB }, async () => {
   const { org, partyId, profileId } = await fixture()
   try {
-    const result = await patch(partyId, { qualificationScore: true })
+    const result = await patch(partyId, { qualificationScore: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.match(result.json?.error ?? '', /qualification score/)
     assert.equal((await profileState(profileId)).qualification_score, 10)
@@ -120,7 +128,7 @@ test('PATCH refuses a boolean qualification score without writing', { skip: !DB 
 test('PATCH refuses a non-string industry without clearing it', { skip: !DB }, async () => {
   const { org, partyId, profileId } = await fixture()
   try {
-    const result = await patch(partyId, { industry: 123 })
+    const result = await patch(partyId, { industry: 123, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
     assert.match(result.json?.error ?? '', /industry/)
     assert.equal((await profileState(profileId)).industry, 'Software')
@@ -132,7 +140,7 @@ test('PATCH refuses a non-string industry without clearing it', { skip: !DB }, a
 test('PATCH audits the actual before/after row, not the request', { skip: !DB }, async () => {
   const { org, partyId, profileId } = await fixture()
   try {
-    const result = await patch(partyId, { isActive: false, industry: 'Hardware' })
+    const result = await patch(partyId, { isActive: false, industry: 'Hardware', expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 200, JSON.stringify(result.json))
     const audit = (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`
       select changes from audit_log
