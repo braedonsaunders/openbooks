@@ -139,12 +139,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const search = new URL(req.url).searchParams
   const page = Number.parseInt(search.get('page') ?? '1', 10)
   const payload = await loadAsset(id, gate.user.orgId, {
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     bookId: search.get('bookId'),
     query: search.get('q') ?? '',
     page: Number.isInteger(page) && page > 0 ? page : 1,
     perPage: 25,
   })
-  if (!payload || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(payload.asset.subsidiary_id)))) {
+  if (!payload) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   return NextResponse.json(payload)
@@ -533,7 +534,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         // Partial drafts legitimately have no category/date/life yet.
       }
       // Return the saved revision while still holding the parent lock.
-      return loadAssetWithRunner(tx, id, user.orgId)
+      return loadAssetWithRunner(tx, id, user.orgId, {
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
     })
     return NextResponse.json(payload)
   } catch (error) {

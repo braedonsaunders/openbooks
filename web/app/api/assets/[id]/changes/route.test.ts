@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
-const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
+const state = {
+  allowed: true,
+  calls: [] as unknown[][],
+  refusal: "",
+  scope: null as Set<string> | null,
+  legacyOwner: "A",
+  currentOwner: "B",
+  directReads: 0,
+};
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("asset-change-route")
 ] = state;
@@ -12,6 +20,11 @@ const hooks = registerHooks({
       return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "server-only")
       return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    if (
+      specifier === "../platform/db.ts" &&
+      context.parentURL?.endsWith("/organization/subsidiary-scope.ts")
+    )
+      return { shortCircuit: true, url: "mock:asset-scope-db-dependency" };
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:asset-change-route-auth" };
     if (specifier === "@openbooks/engine/src/assets/asset-changes.ts")
@@ -19,7 +32,7 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/engine/src/platform/db.ts")
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})}",
+        url: "mock:asset-change-route-db",
       };
     if (specifier === "@/lib/api/json")
       return next(
@@ -38,13 +51,25 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(){return globalThis[Symbol.for('asset-change-route')].allowed?{user:{id:'actor',orgId:'org'},allowedSubsidiaryIds:null}:NextResponse.json({error:'missing permission'},{status:403})}`,
+        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(){const s=globalThis[Symbol.for('asset-change-route')];return s.allowed?{user:{id:'actor',orgId:'org'},allowedSubsidiaryIds:s.scope}:NextResponse.json({error:'missing permission'},{status:403})}`,
       };
     if (url === "mock:asset-change-route-domain")
       return {
         shortCircuit: true,
         format: "module",
         source: `export async function proposeAssetChange(...args){const s=globalThis[Symbol.for('asset-change-route')];s.calls.push(args);if(s.refusal)throw new Error(s.refusal);return 'change'}`,
+      };
+    if (url === "mock:asset-change-route-db")
+      return {
+        shortCircuit: true,
+        format: "module",
+        source: `const s=globalThis[Symbol.for('asset-change-route')];export const db={execute:async()=>({rows:s.directReads++===0?[{subsidiary_id:s.legacyOwner}]:[]}),transaction:async fn=>fn({execute:async()=>({rows:[{id:'asset',subsidiaryId:s.currentOwner}]})})};export async function withOrgTransaction(_orgId,fn){return fn()}`,
+      };
+    if (url === "mock:asset-scope-db-dependency")
+      return {
+        shortCircuit: true,
+        format: "module",
+        source: "export async function withOrgTransaction(_orgId, fn) { return fn(); }",
       };
     return next(url, context);
   },
@@ -146,4 +171,16 @@ test("group component amounts and service reach the actual proposal schema witho
   };
   assert.equal((await route.POST(request(invalid), context)).status, 422);
   assert.equal(state.calls.length, 0);
+});
+
+test("asset change setup reads are denied when the locked asset owner moved out of scope", async () => {
+  state.allowed = true;
+  state.scope = new Set(["A"]);
+  state.legacyOwner = "A";
+  state.currentOwner = "B";
+  state.directReads = 0;
+  const response = await route.GET(new Request("http://openbooks.test/changes"), context);
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "asset not found" });
+  state.scope = null;
 });

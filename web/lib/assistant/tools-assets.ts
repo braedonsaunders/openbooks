@@ -118,13 +118,14 @@ const getAsset: AssistantToolDef = {
     }
     const a = raw as { id: string; bookId?: string; query?: string; page?: number };
     const payload = await loadAsset(a.id, authz.user.orgId, {
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       bookId: a.bookId ?? null,
       query: a.query ?? "",
       page: a.page ?? 1,
       perPage: 25,
     });
-    // The route answers 404 for an asset outside the caller's scope; so do we.
-    if (!payload || (authz.allowedSubsidiaryIds && !authz.allowedSubsidiaryIds.has(String(payload.asset.subsidiary_id)))) {
+    // The locked loader returns null for both missing and out-of-scope assets.
+    if (!payload) {
       return { ok: false, error: "not found" };
     }
     return { ok: true, data: { ...payload, href: "/assets" } };

@@ -273,6 +273,7 @@ export async function loadAssets(
   if (assetId && assetId !== 'new' && isUuid(assetId)) {
     const [openAsset, pickers, fieldDefs] = await Promise.all([
       loadAsset(assetId, orgId, {
+        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         bookId: pickString(sp.deprbook),
         query: pickString(sp.deprq) ?? '',
         page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
@@ -293,11 +294,7 @@ export async function loadAssets(
       ]),
       loadFieldDefs('fixed_assets'),
     ])
-    if (
-      openAsset &&
-      (!authz.allowedSubsidiaryIds ||
-        authz.allowedSubsidiaryIds.has(String(openAsset.asset.subsidiary_id)))
-    ) {
+    if (openAsset) {
       const resolvedForm = await resolveFormLayout({
         orgId,
         userId: authz.user.id,

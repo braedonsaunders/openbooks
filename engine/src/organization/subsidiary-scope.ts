@@ -13,7 +13,7 @@ import { withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
  *      parent row FOR UPDATE and assert scope inside the transaction,
  *      throwing a not-found-shaped domain error. `lockProjectForScope` is the
  *      project instance; the same lock-then-assert order applies to every
- *      other parent (party, document, kiosk unit).
+ *      other parent (party, document, fixed asset, kiosk unit).
  *   2. Org-wide policy and config writes use one route-level guard, a 403
  *      `requires unrestricted subsidiary access`. Record-level denials stay
  *      the uniform 404 (`guardSubsidiaryScope` in web/lib/authz): a B record
@@ -137,7 +137,14 @@ export interface LockedProjectScope {
   subsidiaryId: string | null;
 }
 
-export type ScopeRowKind = "party" | "project" | "document" | "account" | "department" | "employment";
+export type ScopeRowKind =
+  | "party"
+  | "project"
+  | "document"
+  | "fixed_asset"
+  | "account"
+  | "department"
+  | "employment";
 export interface LockedScopeRow {
   id: string;
   subsidiaryId: string | null;
@@ -170,6 +177,10 @@ export async function lockScopeRow(
         ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
             select d.id, d.subsidiary_id as "subsidiaryId" from documents d
              where d.org_id = ${orgId} and d.id = ${id} ${sql.raw(lock)} of d`)
+        : kind === "fixed_asset"
+          ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
+              select a.id, a.subsidiary_id as "subsidiaryId" from fixed_assets a
+               where a.org_id = ${orgId} and a.id = ${id} ${sql.raw(lock)} of a`)
         : kind === "account"
           ? await tx.execute<{ id: string; subsidiaryId: string | null }>(sql`
               select a.id, a.subsidiary_id as "subsidiaryId" from accounts a

@@ -123,6 +123,18 @@ async function carrying(f: Fixture) {
     )
   ).rows[0]!;
 }
+async function rehomeTestAsset(orgId: string, assetId: string, subsidiaryId: string) {
+  await db.transaction(async (tx) => {
+    // This integration scenario models a permitted administrative rehome of
+    // an asset with posted history, which production performs via the
+    // controlled amendment path rather than a generic PATCH.
+    await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`);
+    await tx.execute(sql`
+      update fixed_assets set subsidiary_id=${subsidiaryId}
+       where org_id=${orgId} and id=${assetId}
+    `);
+  });
+}
 test(
   "approved partial disposal keeps posted history and rebuilds only remaining basis",
   { skip: !DB },
@@ -490,6 +502,34 @@ test(
         ),
         groupChange,
       );
+      // Replays use the current asset owner, not the frozen subsidiaries in
+      // the idempotency payload. The accountant can still see the historical
+      // buyer and elimination entities, but not the new owner.
+      const inaccessibleOwner = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${inaccessibleOwner},${f.org.orgId},${f.org.subsidiaryId},'Rehomed owner','CAD','CA')
+      `);
+      await db.execute(sql`
+        update app_roles set subsidiary_restriction=jsonb_build_object(
+          'mode','list','subsidiaryIds',jsonb_build_array(${buyer}::uuid,${elim}::uuid))
+        where org_id=${f.org.orgId} and key='accountant'
+      `);
+      await rehomeTestAsset(f.org.orgId, received, inaccessibleOwner);
+      await assert.rejects(
+        () => proposeAssetGroupValuation(
+          f.org.orgId,
+          received,
+          f.actors.submitterId,
+          groupInput,
+        ),
+        /not found/,
+      );
+      await rehomeTestAsset(f.org.orgId, received, buyer);
+      await db.execute(sql`
+        update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb
+        where org_id=${f.org.orgId} and key='accountant'
+      `);
       const groupEntries = await db.transaction((tx) =>
         consolidateAssetTransfers(tx, f.org.orgId, august, f.actors.adminId),
       );

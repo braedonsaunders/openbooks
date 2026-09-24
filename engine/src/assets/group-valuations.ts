@@ -15,6 +15,7 @@ import {
 } from "../platform/financial-changes.ts";
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { lockScopeRow } from "../organization/subsidiary-scope.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
@@ -376,6 +377,10 @@ export async function proposeAssetGroupValuation(
         )
       ).rows[0];
       if (replay) {
+        // A frozen idempotency payload cannot authorize a retry after its
+        // asset has moved. Recheck the current owner under the asset lock.
+        const currentScope = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+        await lockScopeRow(db, orgId, "fixed_asset", assetId, currentScope, "share");
         const required = (replay.payload.requiredSubsidiaryIds ?? [
           replay.subsidiary_id,
         ]) as string[];
