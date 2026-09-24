@@ -58,6 +58,12 @@ const mockSources = new Map<string, string>([
       export class TaxFilingError extends Error {
         constructor(code) { super(code); this.code = code }
       }
+      // Reached only through ../route's module graph (the shared filing
+      // permission constant); the mark-filed path never builds a snapshot.
+      export const TAX_FILING_SNAPSHOT_VERSION = 2
+      export function buildTaxFilingSnapshot() {
+        throw new Error('buildTaxFilingSnapshot is not used by the mark-filed route')
+      }
       export async function markTaxFilingFiled(orgId, filingId, actorId, reference) {
         state.engineCalls.push({ orgId, filingId, actorId, reference })
         return { id: filingId, filedAt: '2026-08-24T00:00:00.000Z' }
