@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { inspectBackupArchive } from "./restore.ts";
+import { inspectBackupArchive, validateOrgParentage } from "./restore.ts";
 import { BACKUP_FORMAT_VERSION } from "./format.ts";
 
 async function fixture(lines: string[]): Promise<{
@@ -170,5 +170,77 @@ test("archive inspection rejects a checksum mismatch before decompression", asyn
     );
   } finally {
     await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test("org-parentage validation refuses archives pointing outside the backup", async () => {
+  // C-47: the backup closure refuses sandbox parentage that points outside
+  // (pinned by the closure regression test), and restore must refuse such
+  // an archive by name before inserting — never die on a raw FK violation
+  // at commit. sandbox_of is not an org_id, so inspection alone passes it.
+  const orgId = randomUUID();
+  const foreign = randomUUID();
+  const header = {
+    format: "openbooks-backup",
+    version: BACKUP_FORMAT_VERSION,
+    orgId,
+    createdAt: "2026-08-04T12:00:00.000Z",
+    schemaSha256: "c".repeat(64),
+    dataKeyCheck: "enc:v1:AA==:AA==:AA==",
+  };
+  const clean = await fixture([
+    JSON.stringify(header),
+    `{"t":"orgs","r":{"id":"${orgId}","sandbox_of":null}}`,
+    `{"t":"change_sets","r":{"id":"${randomUUID()}","org_id":"${orgId}","sandbox_org_id":"${orgId}"}}`,
+    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }, { name: "change_sets", rows: 1 }], totalRows: 2 } }),
+  ]);
+  try {
+    const inspected = await inspectBackupArchive({
+      archivePath: clean.archive,
+      expectedSha256: clean.sha256,
+      expectedOrgId: orgId,
+      spoolDir: clean.spool,
+    });
+    await validateOrgParentage(inspected, orgId);
+  } finally {
+    await rm(clean.root, { recursive: true, force: true });
+  }
+
+  const dangling = await fixture([
+    JSON.stringify(header),
+    `{"t":"orgs","r":{"id":"${orgId}","sandbox_of":"${foreign}"}}`,
+    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }], totalRows: 1 } }),
+  ]);
+  try {
+    const inspected = await inspectBackupArchive({
+      archivePath: dangling.archive,
+      expectedSha256: dangling.sha256,
+      expectedOrgId: orgId,
+      spoolDir: dangling.spool,
+    });
+    await assert.rejects(validateOrgParentage(inspected, orgId), /org-parentage validation failed at orgs\.sandbox_of/);
+  } finally {
+    await rm(dangling.root, { recursive: true, force: true });
+  }
+
+  const changeset = await fixture([
+    JSON.stringify(header),
+    `{"t":"orgs","r":{"id":"${orgId}","sandbox_of":null}}`,
+    `{"t":"change_sets","r":{"id":"${randomUUID()}","org_id":"${orgId}","sandbox_org_id":"${foreign}"}}`,
+    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }, { name: "change_sets", rows: 1 }], totalRows: 2 } }),
+  ]);
+  try {
+    const inspected = await inspectBackupArchive({
+      archivePath: changeset.archive,
+      expectedSha256: changeset.sha256,
+      expectedOrgId: orgId,
+      spoolDir: changeset.spool,
+    });
+    await assert.rejects(
+      validateOrgParentage(inspected, orgId),
+      /org-parentage validation failed at change_sets\.sandbox_org_id/,
+    );
+  } finally {
+    await rm(changeset.root, { recursive: true, force: true });
   }
 });
