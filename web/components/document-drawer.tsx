@@ -2667,6 +2667,10 @@ export function DocumentDrawer({
       : null
 
   const actionLayout = layout?.actions ?? FORM_ACTION_KEYS.map((key) => ({ key, visible: true }))
+  // The 'hide Edit' form-layout action governs the primary Edit button too,
+  // not just the actions menu (which already filters 'edit' out): saving the
+  // toggle must remove every Edit entry point.
+  const editActionVisible = actionLayout.find((action) => action.key === 'edit')?.visible !== false
   const renderFormAction = (key: string) => {
     switch (key) {
       case 'customize':
@@ -2748,11 +2752,11 @@ export function DocumentDrawer({
                 {tCommon('actions.cancel')}
               </Button>
             </>
-          ) : (
+          ) : editActionVisible ? (
             <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => setMode('edit')}>
               {tCommon('actions.edit')}
             </Button>
-          )
+          ) : null
         ) : null
       }
       actionsMenuHeader={showFormPicker ? (
