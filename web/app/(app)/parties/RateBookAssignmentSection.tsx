@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -55,22 +55,26 @@ export function RateBookAssignmentSection({
   const [total, setTotal] = useState(0)
   const [perPage, setPerPage] = useState(5)
   const [form, setForm] = useState<{ id: string | null; rateBookId: string; effectiveFrom: string; effectiveTo: string; dateBasis:'usage_date'|'project_start'; isActive: boolean } | null>(null)
+  const loadGeneration = useRef(0)
 
   const scopeParam = scope === 'customer' ? `customerId=${scopeId}` : `projectId=${scopeId}`
   const scopeBody = scope === 'customer' ? { customerId: scopeId } : { projectId: scopeId }
 
-  async function load() {
+  async function load(generation = ++loadGeneration.current) {
+    if (generation !== loadGeneration.current) return
     const params = new URLSearchParams(scopeParam)
     if (q.trim()) params.set('q', q.trim())
     params.set('status', status)
     params.set('page', String(page))
     const res = await fetch(`/api/rate-book-assignments?${params}`)
+    if (generation !== loadGeneration.current) return
     if (res.status === 403 || res.status === 404) {
       setVisible(false)
       return
     }
     if (!res.ok) return
     const data = (await res.json()) as { rateBooks: RateBook[]; assignments: Assignment[]; total: number; page: number; perPage: number; canManage: boolean; canOpenPricing: boolean }
+    if (generation !== loadGeneration.current) return
     setRateBooks(data.rateBooks)
     setAssignments(data.assignments)
     setTotal(data.total)
@@ -80,10 +84,15 @@ export function RateBookAssignmentSection({
     setVisible(true)
   }
   useEffect(() => {
-    const timer = window.setTimeout(() => void load(), q ? 200 : 0)
-    return () => window.clearTimeout(timer)
+    const generationRef = loadGeneration
+    const generation = ++generationRef.current
+    const timer = window.setTimeout(() => void load(generation), q ? 200 : 0)
+    return () => {
+      window.clearTimeout(timer)
+      if (generationRef.current === generation) generationRef.current++
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeId, q, status, page])
+  }, [scope, scopeId, q, status, page])
   // A read-only viewer must never hold the form open. Adjusted during render
   // (same committed value, no extra render).
   if (!editable && form !== null) setForm(null)
