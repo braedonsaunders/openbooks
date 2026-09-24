@@ -531,6 +531,40 @@ test(
 );
 
 test(
+  "schedule binding and active-state changes append actor-attributed before/after audit evidence",
+  { skip: !DB },
+  async () => {
+    const fixture = await seed();
+    try {
+      authorize(fixture);
+      const scheduleId = await createSchedule(fixture);
+      const bound = await patchStatus(fixture, scheduleId, { expectedExternalAccountId: "BR001-77" });
+      assert.equal(bound.status, 200);
+      const toggled = await patchStatus(fixture, scheduleId, { isActive: false });
+      assert.equal(toggled.status, 200);
+      const audits = await withBypass(() => db.execute<{
+        action: string;
+        actor_id: string;
+        request_id: string | null;
+        changes: { before?: { expected_external_account_id?: string | null; is_active?: boolean }; after?: { expected_external_account_id?: string | null; is_active?: boolean } };
+      }>(sql`
+        select action, actor_id, request_id, changes from audit_log
+         where org_id = ${fixture.orgId} and table_name = 'sftp_import_schedules' and row_id = ${scheduleId}
+         order by at
+      `));
+      assert.equal(audits.rows.length, 2);
+      assert.ok(audits.rows.every((row) => row.action === "update" && row.actor_id === fixture.actorId && row.request_id));
+      assert.equal(audits.rows[0]!.changes.before?.expected_external_account_id ?? null, null);
+      assert.equal(audits.rows[0]!.changes.after?.expected_external_account_id, "BR001-77");
+      assert.equal(audits.rows[1]!.changes.before?.is_active, true);
+      assert.equal(audits.rows[1]!.changes.after?.is_active, false);
+    } finally {
+      await withBypass(() => dropScratchOrg(fixture.orgId));
+    }
+  },
+);
+
+test(
   "binding a schedule resolves its unbound notice; clearing does not, DELETE does",
   { skip: !DB },
   async () => {

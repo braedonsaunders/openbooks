@@ -5,11 +5,28 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { runDueSftpImports } from '@openbooks/engine/src/sftp/import-job.ts'
 import { SFTP_UNBOUND_SCHEDULE_NOTICE_KIND, sftpUnboundScheduleNoticeHref } from '@openbooks/engine/src/sftp/schedule-notice.ts'
 import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
+import { auditSetupChange } from '../../../../../../lib/setup/audit'
+import { randomUUID } from 'node:crypto'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope, type Authz } from '../../../../../../lib/authz'
 
 export const runtime = 'nodejs'
+const requestId = (req: Request) => req.headers.get('x-request-id')?.trim() || randomUUID()
+
+function scheduleAuditSnapshot(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    sftp_server_id: row.sftp_server_id,
+    account_id: row.account_id,
+    format: row.format,
+    folder: row.folder,
+    csv_mapping: row.csv_mapping,
+    expected_external_account_id: row.expected_external_account_id,
+    is_active: row.is_active,
+    created_by: row.created_by,
+    updated_by: row.updated_by,
+  }
+}
 
 /**
  * Refuse a manual run the engine did not execute. Mirrors the exclusion
@@ -121,12 +138,29 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'expectedExternalAccountId must be a string or null' }, { status: 400 })
     }
     const canonical = normalizeExternalAccountId(body.expectedExternalAccountId) ?? null
-    const bound = await db.execute<{ id: string }>(sql`
-      update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
-       where id = ${id} and org_id = ${user.orgId}
-      returning id
-    `)
-    if (!bound.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    const bound = await db.transaction(async (tx) => {
+      const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+        select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
+      `)).rows[0]
+      if (!before) return null
+      const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+        update sftp_import_schedules set expected_external_account_id = ${canonical}, updated_at = now(), updated_by = ${user.id}
+         where id = ${id} and org_id = ${user.orgId}
+        returning *
+      `)).rows[0]
+      if (!after) throw new Error('SFTP schedule binding update matched no row')
+      await auditSetupChange({
+        orgId: user.orgId,
+        table: 'sftp_import_schedules',
+        rowId: id,
+        action: 'update',
+        changes: { before: scheduleAuditSnapshot(before), after: scheduleAuditSnapshot(after) },
+        actorId: user.id,
+        requestId: requestId(req),
+      }, tx)
+      return after
+    })
+    if (!bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // The binding landing resolves the scheduler's named notice for this
     // schedule (same kind + href the engine writes): the inbox stays
     // truthful without the operator dismissing it by hand. Clearing the
@@ -178,16 +212,33 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // A zero-row toggle is a failure, not a success: without the affected-row
   // check a missing or foreign-tenant id would report {ok:true} while no read
   // can observe any effect. Refuse exactly like the run branch above.
-  const updated = (await db.execute<{ id: string }>(sql`
-    update sftp_import_schedules set is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
-     where id = ${id} and org_id = ${user.orgId}
-    returning id
-  `))
-  if (!updated.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const updated = await db.transaction(async (tx) => {
+    const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+      select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
+    `)).rows[0]
+    if (!before) return null
+    const after = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+      update sftp_import_schedules set is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${user.id}
+       where id = ${id} and org_id = ${user.orgId}
+      returning *
+    `)).rows[0]
+    if (!after) throw new Error('SFTP schedule toggle matched no row')
+    await auditSetupChange({
+      orgId: user.orgId,
+      table: 'sftp_import_schedules',
+      rowId: id,
+      action: 'update',
+      changes: { before: scheduleAuditSnapshot(before), after: scheduleAuditSnapshot(after) },
+      actorId: user.id,
+      requestId: requestId(req),
+    }, tx)
+    return after
+  })
+  if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -199,11 +250,28 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // (missing or foreign-tenant id) refuses with 'not found' rather than
   // reporting {ok:true}. The org-scoped predicate keeps foreign ids
   // indistinguishable from absent.
-  const deleted = (await db.execute<{ id: string }>(sql`
-    delete from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
-    returning id
-  `))
-  if (!deleted.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const deleted = await db.transaction(async (tx) => {
+    const before = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+      select * from sftp_import_schedules where id = ${id} and org_id = ${user.orgId} for update
+    `)).rows[0]
+    if (!before) return null
+    const removed = (await tx.execute<{ id: string }>(sql`
+      delete from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}
+      returning id
+    `)).rows[0]
+    if (!removed) throw new Error('SFTP schedule delete matched no row')
+    await auditSetupChange({
+      orgId: user.orgId,
+      table: 'sftp_import_schedules',
+      rowId: id,
+      action: 'delete',
+      changes: { before: scheduleAuditSnapshot(before) },
+      actorId: user.id,
+      requestId: requestId(req),
+    }, tx)
+    return removed
+  })
+  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
   // A deleted schedule has no setting to visit: resolve its named notice so
   // a stale item cannot outlive the schedule it names.
   await db.execute(sql`
