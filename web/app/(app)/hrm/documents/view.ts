@@ -60,7 +60,11 @@ export function documentsSpec(data: DocumentsPageData): PageSpec {
         statTile({ iconKey: f('tiles.2.iconKey'), accent: f('tiles.2.accent'), label: f('tiles.2.label'), value: f('tiles.2.value'), tone: f('tiles.2.tone') }),
         statTile({ iconKey: f('tiles.3.iconKey'), accent: f('tiles.3.accent'), label: f('tiles.3.label'), value: f('tiles.3.value'), tone: f('tiles.3.tone') }),
       ]),
-      grid('flex h-full min-h-0 flex-col gap-4', [
+      // The register sizes to its content: a viewport-height clamp here
+      // would box the table while its rows overflow visibly, and the
+      // setup sections below would paint over the overflowed rows and
+      // intercept their clicks (CK-32). The page scrolls as a whole.
+      grid('flex min-h-0 flex-col gap-4', [
         widgetBlock('filter-chips', {
           basePath: '/hrm/documents',
           currentParams: data.currentParams,
