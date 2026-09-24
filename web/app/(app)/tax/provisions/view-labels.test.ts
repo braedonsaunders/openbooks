@@ -21,8 +21,11 @@ const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 const stateKey = Symbol.for('openbooks.tax-provisions-labels-test')
 interface LabelState {
   messages: Record<string, unknown>
+  restricted: boolean
+  canCompute: boolean
+  noRuns: boolean
 }
-const labelState: LabelState = { messages: {} }
+const labelState: LabelState = { messages: {}, restricted: false, canCompute: true, noRuns: false }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = labelState
 
 const RUN = {
@@ -40,9 +43,10 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       export async function requirePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null, permissions: ['reports.read', 'reports.create'] }
+        const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.restricted ? ['sub-1'] : null, permissions: ['reports.read', 'reports.create'] }
       }
-      export function can() { return true }
+      export function can() { return globalThis[Symbol.for('openbooks.tax-provisions-labels-test')].canCompute }
     `,
   ],
   [
@@ -67,7 +71,7 @@ const mockSources = new Map<string, string>([
   ['mock:data', `export async function orgInfo() { return { base_currency: 'USD' } }`],
   [
     'mock:provision',
-    `export async function listProvisionRuns() { return [${JSON.stringify(RUN)}] }`,
+    `export async function listProvisionRuns() { const state = globalThis[Symbol.for('openbooks.tax-provisions-labels-test')]; return state.noRuns ? [] : [${JSON.stringify(RUN)}] }`,
   ],
   [
     'mock:viewspec',
@@ -107,7 +111,7 @@ const hooks = registerHooks({
 })
 
 const viewUrl = './view.ts?provisions-labels-test'
-const { loadTaxProvisions } = (await import(viewUrl)) as typeof import('./view.ts')
+const { loadTaxProvisions, taxProvisionsSpec } = (await import(viewUrl)) as typeof import('./view.ts')
 hooks.deregister()
 
 function provisionsOf(locale: string): Record<string, string> {
@@ -155,5 +159,28 @@ test('no locale falls back to the English FY prefix', async () => {
       !data.rows[0]!.fiscalYearLabel.startsWith('FY'),
       `${locale} renders the English FY prefix instead of its own pattern`,
     )
+  }
+})
+
+test('a restricted reader sees the no-grant empty state without a compute action', async () => {
+  const previous = { ...labelState }
+  try {
+    labelState.messages = { tax: JSON.parse(readFileSync(join(MESSAGES, 'en', 'tax.json'), 'utf8')) }
+    labelState.restricted = true
+    labelState.canCompute = false
+    labelState.noRuns = true
+
+    const data = await loadTaxProvisions()
+    assert.equal(data.rows.length, 0)
+    assert.equal(data.canCompute, false)
+    assert.equal(
+      data.emptyText,
+      'No provision runs yet. Only preparers with organization-wide report creation access can compute the first provision.',
+    )
+
+    const spec = taxProvisionsSpec(data)
+    assert.equal(JSON.stringify(spec.header).includes('provision-compute-button'), false)
+  } finally {
+    Object.assign(labelState, previous)
   }
 })

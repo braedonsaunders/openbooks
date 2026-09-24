@@ -27,7 +27,6 @@
     "web/app/(app)/payroll/remittances/RemittancesView.test.tsx": 1,
     "web/app/(app)/payroll/runs/RunWizard.test.ts": 7,
     "web/app/(app)/payroll/runs/[id]/view-approval.test.ts": 3,
-    "web/app/(app)/property-management/CamTable.test.tsx": 2,
-    "web/app/(app)/tax/provisions/view.test.ts": 1
+    "web/app/(app)/property-management/CamTable.test.tsx": 2
   }
 }
