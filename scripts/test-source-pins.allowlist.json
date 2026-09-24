@@ -136,7 +136,6 @@
     "web/components/global-create-menu.test.ts": 1,
     "web/components/route-state.test.ts": 2,
     "web/components/views-menu.test.ts": 1,
-    "web/lib/api/v1-records.test.ts": 1,
     "web/lib/application/admin-read.test.ts": 2,
     "web/lib/application/aging-read.test.ts": 1,
     "web/lib/application/banking-read.test.ts": 3,
