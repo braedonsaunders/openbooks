@@ -165,11 +165,18 @@ interface PendingFlag {
 }
 
 async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string): Promise<void> {
-  if (await actorHasPermission(exec, orgId, actorId, "payroll.manage")) return;
-  throw new AiRailsError(
-    "ai_forbidden",
-    "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
-  );
+  if (!(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))) {
+    throw new AiRailsError(
+      "ai_forbidden",
+      "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
+    );
+  }
+  if ((await actorAllowedSubsidiaryIds(exec, orgId, actorId)) !== null) {
+    throw new AiRailsError(
+      "ai_forbidden",
+      "running organization-wide payroll checks needs a payroll manager with unrestricted subsidiary access — ask an unrestricted payroll administrator to run the scan",
+    );
+  }
 }
 
 async function assertAnomalyFeature(exec: SqlExecutor, orgId: string, timeOnly: boolean): Promise<void> {

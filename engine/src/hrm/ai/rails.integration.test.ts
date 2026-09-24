@@ -460,8 +460,6 @@ test("inbox adapters surface blocking checks and overdue reviews through the act
 test("flag reads and transitions see only the flag employment's employer", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
-    // Two legal entities, one employment each. The org keeps a single
-    // root subsidiary (subsidiaries_org_root), so the second is a child.
     const subB = randomUUID();
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -494,7 +492,6 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     const flagB = await seedFlag(empB, "terminated_with_pay", "block");
     const flagNull = await seedFlag(null, "duplicate_entry", "warn");
 
-    // Two restricted readers over entity A under different grants.
     const scopedHr = await createScratchUser(org.orgId, "Scoped HR", "scoped_hr");
     await grant(org.orgId, scopedHr, "hrm.employment.read");
     const scopedTime = await createScratchUser(org.orgId, "Scoped time", "scoped_time");
@@ -505,8 +502,6 @@ test("flag reads and transitions see only the flag employment's employer", { ski
          where org_id = ${org.orgId} and key = ${roleKey}`);
     }
 
-    // List: each scoped reader sees only entity A's flag. The
-    // unattributable (null-employment) flag fails closed for both.
     for (const actorId of [scopedHr, scopedTime]) {
       const visible = await listFlags(db, { orgId: org.orgId, actorId });
       assert.deepEqual(
@@ -515,18 +510,14 @@ test("flag reads and transitions see only the flag employment's employer", { ski
         `scoped reader must see exactly entity A's flag`,
       );
     }
-    // The unrestricted admin sees all three.
     const all = await listFlags(db, { orgId: org.orgId, actorId: adminId });
     assert.deepEqual(all.map((f) => f.id).sort(), [flagA, flagB, flagNull].sort());
 
-    // Per-employment chips inherit the lens.
     assert.deepEqual(
       (await flagsForEmployment(db, { orgId: org.orgId, actorId: scopedHr, employmentId: empB })).map((f) => f.id),
       [],
     );
 
-    // Transition: touching entity B's flag answers exactly like a missing
-    // flag — the refusal must never confirm the row exists elsewhere.
     await assert.rejects(
       transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: flagB, to: "acknowledged", reason: "reviewed" }),
       /matched no row/,
@@ -540,15 +531,11 @@ test("flag reads and transitions see only the flag employment's employer", { ski
       transitionFlag(db, { orgId: org.orgId, actorId: scopedHr, flagId: missingId, to: "acknowledged", reason: "reviewed" }),
       /matched no row/,
     );
-    // The in-scope flag still transitions.
     const done = await transitionFlag(db, {
       orgId: org.orgId, actorId: scopedHr, flagId: flagA, to: "acknowledged", reason: "confirmed with payroll",
     });
     assert.equal(done.status, "acknowledged");
 
-    // The inbox projects the same lens: a payroll manager scoped to A sees
-    // none of B's blocks (and none of their explanation and pay detail),
-    // while one scoped to B still sees B's block.
     const { payrollAnomalyBlockAdapter } = await import(
       "../../inbox/adapters/ai-rails.ts"
     );
@@ -562,6 +549,19 @@ test("flag reads and transitions see only the flag employment's employer", { ski
     await db.execute(sql`
       update app_roles set subsidiary_restriction = ${JSON.stringify({ mode: "list", subsidiaryIds: [subB] })}::jsonb
        where org_id = ${org.orgId} and key = 'scoped_payroll_b'`);
+    await db.execute(sql`
+      insert into party_bank_accounts (org_id, party_id, routing, account_last_four, is_active, approval_status)
+      select ${org.orgId}, e.worker_party_id, '{"institution":"scope-test"}'::jsonb, '4242', true, 'approved'
+        from worker_employments e
+       where e.org_id = ${org.orgId} and e.id in (${empA}::uuid, ${empB}::uuid)`);
+    const flagsBeforeScan = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
+    await assert.rejects(runAnomalyScan({
+      orgId: org.orgId, actorId: scopedPayrollA, periodFrom: "2026-09-01", periodTo: "2026-09-30",
+    }), /unrestricted subsidiary access/);
+    const flagsAfterScan = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from payroll_anomaly_flags where org_id = ${org.orgId}`)).rows[0]?.count;
+    assert.equal(flagsAfterScan, flagsBeforeScan, "a restricted scan refuses before creating cross-entity duplicate-bank flags");
     const inboxCtx = (actorId: string) => ({ orgId: org.orgId, actorId, asOf: "2026-09-30T00:00:00Z" });
     assert.deepEqual(await payrollAnomalyBlockAdapter.list(inboxCtx(scopedPayrollA)), []);
     assert.deepEqual(
