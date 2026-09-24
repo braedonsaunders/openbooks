@@ -11,6 +11,7 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 
 export interface SourceLink {
   sourceRef: string;
@@ -221,6 +222,16 @@ export async function applyTimeTicketLinks(
   },
 ): Promise<number> {
   if (batch.length === 0) return 0;
+  // Ticket project membership can change while the source entry remains
+  // locked. Take canonical document locks first (same order as ticket
+  // writers), then re-read ticket/project provenance under those locks.
+  await lockScopeRows(
+    db,
+    orgId,
+    batch.map((row) => ({ kind: "document" as const, id: row.toTicketId })),
+    null,
+    "share",
+  );
   // Lock first on an inner join: FOR UPDATE cannot name the nullable side
   // of an outer join, and the lock — not the later read — is what excludes
   // concurrent writers for the rest of this transaction.
