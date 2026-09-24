@@ -1399,15 +1399,17 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0257_provisional_cost_subsidiary.sql",
     from: "569040393f4ccd6c64186c49c9d0f7e917a78228d2aacaf5e01a22027099fc43",
-    to: "ecd2626b775e72025ce26251643930f1bf676ec06fcfae4f1605d35374c734f3",
+    to: "67256fd8450973ff88a2592c4d0bb834547499da41e9410ff96a43a3eb1583fa",
     strategy: "reapply",
     reason:
-      "corrective revision b8403c9a drops the forbidden lock_timeout SET and wraps "
-      + "both provisional-cost constraint adds in IF NOT EXISTS guards, so runner "
-      + "retries on lock timeouts are re-runnable. The resulting schema is unchanged; "
-      + "a database that recorded 56904039 already holds both constraints, so re-running "
-      + "the current body is a no-op there. Reapply, not restamp: the body text changed "
-      + "and only execution proves the guarded path converges.",
+      "corrective revisions b8403c9a and 0d752732 remove the forbidden lock_timeout, "
+      + "guard constraint adds, and stage the two lookup indexes CONCURRENTLY with "
+      + "INVALID-index cleanup and guarded NOT VALID/VALIDATE foreign keys. The current "
+      + "body is retry-safe against the 56904039 state: columns and indexes use "
+      + "IF NOT EXISTS, backfills only fill NULL ownership, and constraints are added "
+      + "and validated only when absent or unvalidated. Reapply, not restamp: the "
+      + "migration body changed, and executing it converges that state to the current "
+      + "staged build.",
   },
   {
     filename: "generated/0258_payment_run_file_created_at.sql",
@@ -1610,30 +1612,10 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
     from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
-    to: "74408c2026f5e84d304f1a1586dca7e7967222efd6cdb388f02ffd128f9552be",
-    strategy: "reapply",
-    reason:
-      "corrective revision PRC15c: deactivating an assignment that starts "
-      + "today removed no row and end-dated the window to yesterday, which "
-      + "violates the customer_price_level_dates CHECK — the operator got an "
-      + "opaque database error and could not revoke a mistaken same-day "
-      + "assignment. The trigger now removes the never-effective row (it never "
-      + "covered any date, so no pricing history is lost) and the backfill "
-      + "deletes matching pre-upgrade rows instead of flooring them at a "
-      + "single live day. Every statement stays idempotent against the old "
-      + "migration's successful state — IF NOT EXISTS DDL, CREATE OR REPLACE "
-      + "FUNCTION, conditional triggers, gap-only backfills — so reapplying "
-      + "redefines the trigger and converges rows the old revision left "
-      + "behind. Reapply, not restamp: the revision changes enforced trigger "
-      + "behavior the old state lacks.",
-  },
-  {
-    filename: "generated/0327_item_price_level_activation_history.sql",
-    from: "26606980c32021dae07ba3942fbe0bf955c6c10dae5e5f5985f84b19ce4049b2",
     to: "683a93ba8734ba3b472ce6dbdff1fe4a7fe1477c687b70a90a837b22129f5432",
     strategy: "reapply",
     reason:
-      "corrective revision (PRC15d plus the Sol residual): revoking a "
+      "corrective revisions (PRC15c, PRC15d, plus the Sol residual): revoking a "
       + "future-effective assignment before it starts kept its open window "
       + "while the resolver matches windows ignoring the flag, so a dead "
       + "future window would price when its dates arrive — the trigger now "
@@ -1649,7 +1631,8 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "CREATE of the widened trigger, gap-only backfills. Reapply, not "
       + "restamp: enforced trigger behavior changes. For databases still at "
       + "the original digest; databases already at the PRC15c digest use "
-      + "the next entry.",
+      + "the next entry. Reapplying the current body from the original digest "
+      + "also includes PRC15c's audited removal of same-day never-effective rows.",
   },
   {
     filename: "generated/0327_item_price_level_activation_history.sql",
@@ -1681,6 +1664,19 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "every statement is idempotent. Reapply, not restamp.",
   },
   {
+    filename: "generated/0327_item_price_level_activation_history.sql",
+    from: "696333297953bfffdf39879cd5618a585a10c5b85a8fa8ffb6e81bb0c7372091",
+    to: "683a93ba8734ba3b472ce6dbdff1fe4a7fe1477c687b70a90a837b22129f5432",
+    strategy: "reapply",
+    reason:
+      "the published 0a7e9d94 PRC15d revision added audited removal of "
+      + "future-effective assignments and historical handling for inactive "
+      + "rows. The current revision retains that behavior and adds the final "
+      + "recorded-basis-safe same-day revocation and activation instants. Its "
+      + "DDL, trigger replacement, and gap-only backfills are idempotent from "
+      + "the PRC15d state. Reapply to reach the current published digest.",
+  },
+  {
     filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
     from: "08c69798a164afcace78fbf2b18bc196f983de7ab0d8599f62a7b8d94c99a30f",
     to: "85e22004dcc3ea50eb5225e683c7e39de5335a65d7c004f02c4e4c0a3b55e7b7",
@@ -1693,6 +1689,56 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "and after. Restamp, not reapply: replaying the file would be a no-op "
       + "by construction (every statement tolerates re-execution), and only "
       + "the recorded identity moves.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "c573c6091ee2be62e196c409db619bce6c693ef954602a84ad4261bf80d20599",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    strategy: "reapply",
+    reason:
+      "the published G9 revision (4be4bada) corrected the inactive-account "
+      + "refusal remedy. The current body retains that function and includes the "
+      + "subsequent G10-G13 guards, recompute trigger, catalog additions, and "
+      + "queued-table promotion. Replaying against the G9 state is idempotent: "
+      + "functions are replaced, triggers and constraints are guarded, and the "
+      + "backfills only fill eligible NULL state. Reapply to converge the ledger "
+      + "and catalog to the published migration.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "2063e23ba8f1d68b1dc6d59e610c17247a094ae23f0d3ab361530990cfdc8d91",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    strategy: "reapply",
+    reason:
+      "the published G8 revision (d0e4e0b7) added posted-document INSERT "
+      + "open-balance recomputation and healed NULL caches. The current body "
+      + "retains G8 and adds G9-G13. Its DDL and trigger changes are guarded or "
+      + "replaceable, and its NULL-only backfills converge from the G8 state; "
+      + "reapply to install the later sections and current digest.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "ce10d0cc376ea645c0c7cb9bd79d3b02b590abd794d9836d8cea77aa03811de0",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    strategy: "reapply",
+    reason:
+      "the published G10 revision (20427818) recomputed open balances after "
+      + "posted journal-line edits. The current body retains that trigger and "
+      + "adds G11-G13. Existing functions are replaced; trigger, constraint, "
+      + "and catalog operations tolerate replay, and backfills are NULL-guarded. "
+      + "Reapply to converge the G10 state to the published migration.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "af2dc7d1d643f28ddb3289a7431f4e7b78bad6ff98ad7a9ce5a93c4d81c04334",
+    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    strategy: "reapply",
+    reason:
+      "the published G6 revision (99f7962a) made monthly activity follow a "
+      + "posted entry's book rehome. The current body retains G6 and adds G8-G13. "
+      + "Functions are replaced, triggers and constraints are guarded, and "
+      + "backfills are NULL-only, so replay converges safely from the G6 state. "
+      + "Reapply to reach the published digest.",
   },
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
