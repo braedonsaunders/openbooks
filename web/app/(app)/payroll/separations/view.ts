@@ -7,7 +7,7 @@ import { orgFilingYearOptions } from '@openbooks/engine/src/payroll/yearend.ts'
 import { notFound } from 'next/navigation'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { scopedYearEndFilings } from '../../../../lib/payroll-scoped-views'
@@ -59,6 +59,7 @@ export interface SeparationsData {
   year: number
   years: number[]
   sections: YearEndFilingSection[]
+  canFile: boolean
 }
 
 export async function loadSeparations(
@@ -91,6 +92,10 @@ export async function loadSeparations(
     year,
     years,
     sections,
+    // The electronic file is a filing act (payroll.run): a read-only caller
+    // reads every separation but is never offered the download. The route
+    // refuses it; the workspace gates it so it is never offered.
+    canFile: can(authz, 'payroll.run'),
   }
 }
 
@@ -118,6 +123,7 @@ export function separationsSpec(data: SeparationsData): PageSpec {
         year: f('year'),
         years: f('years'),
         sections: f('sections'),
+        canFile: f('canFile'),
       }),
     ],
   })

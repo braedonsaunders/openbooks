@@ -254,6 +254,7 @@ export function FilingLifecycleBar({
   busy,
   error,
   onRecordOriginal,
+  canFile,
 }: {
   section: YearEndFilingSection
   year: number
@@ -261,6 +262,12 @@ export function FilingLifecycleBar({
   busy: boolean
   error: string | null
   onRecordOriginal: (note: string) => void
+  /**
+   * Whether the operator may file (payroll.run). A read-only caller sees the
+   * filing status but is never offered the act that starts the trail —
+   * recording an issue is a statutory act, and the route refuses it.
+   */
+  canFile: boolean
 }) {
   const text = useFilingText()
   const [historyOpen, setHistoryOpen] = useState(false)
@@ -299,7 +306,7 @@ export function FilingLifecycleBar({
           {text('lifecycle.title', 'Filing status')}
         </FieldLabel>
         <div className="flex flex-wrap items-center gap-2">
-          {issued === 0 && section.data.rows.length > 0 && (
+          {canFile && issued === 0 && section.data.rows.length > 0 && (
             <>
               <Input
                 aria-label={text('lifecycle.note', 'Filing note')}
@@ -490,6 +497,12 @@ export function FilingCorrectionSection(props: {
   review: FilingRowReview
   lifecycle: FilingLifecycle
   onIssued: () => void
+  /**
+   * Whether the operator may file (payroll.run). A read-only caller sees
+   * what moved since filing but is never offered the amendment or the
+   * cancellation — both are statutory acts the route refuses.
+   */
+  canFile: boolean
 }) {
   const { review } = props
   // A changed row or revision is a new evidence context. Remounting the
@@ -504,12 +517,14 @@ function FilingCorrectionSectionBody({
   review,
   lifecycle,
   onIssued,
+  canFile,
 }: {
   section: YearEndFilingSection
   year: number
   review: FilingRowReview
   lifecycle: FilingLifecycle
   onIssued: () => void
+  canFile: boolean
 }) {
   const text = useFilingText()
   const { money } = useMoney()
@@ -619,10 +634,12 @@ function FilingCorrectionSectionBody({
     return renderTaxFormFacsimileBody(result, { orgName: preview.orgName }, layout)
   }, [preview, year])
 
-  const canAmend = amendment.supported
+  const canAmend = canFile
+    && amendment.supported
     && amendment.revisions.includes('amended')
     && review.status === 'changed'
-  const canCancel = amendment.supported
+  const canCancel = canFile
+    && amendment.supported
     && amendment.revisions.includes('cancelled')
     && (review.status === 'absent' || review.status === 'changed' || review.status === 'unchanged')
   const cancellationPreviewLoaded = preview.status === 'ready'

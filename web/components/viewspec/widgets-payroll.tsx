@@ -61,6 +61,7 @@ export const PAYROLL_WIDGETS = {
       year={num(props, 'year') ?? new Date().getFullYear()}
       years={(props.years as number[]) ?? []}
       sections={(props.sections as ComponentProps<typeof YearEndView>['sections']) ?? []}
+      canFile={props.canFile === true}
     />
   ),
 
@@ -92,6 +93,7 @@ export const PAYROLL_WIDGETS = {
       year={num(props, 'year') ?? 0}
       years={(props.years as number[]) ?? []}
       sections={(props.sections as ComponentProps<typeof SeparationsView>['sections']) ?? []}
+      canFile={props.canFile === true}
     />
   ),
 

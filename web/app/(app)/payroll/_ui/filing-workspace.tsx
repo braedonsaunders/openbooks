@@ -197,6 +197,7 @@ export function FilingWorkspace({
   groups,
   emptyTitle,
   amendments = false,
+  canFile,
 }: {
   year: number
   /**
@@ -220,6 +221,13 @@ export function FilingWorkspace({
    * ROE declaration refuses an amendment here by name for exactly that reason.
    */
   amendments?: boolean
+  /**
+   * Whether the operator may file (payroll.run, from the route's permission
+   * constant). A read-only caller reads every filing but is never offered
+   * the download, the record-as-filed act, or any correction — the routes
+   * refuse all three.
+   */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.filings')
   const router = useRouter()
@@ -347,6 +355,7 @@ export function FilingWorkspace({
           lifecycleBusy={issueBusy}
           lifecycleError={issueError}
           onRecordOriginal={(note) => void recordOriginal(selected, note)}
+          canFile={canFile}
         />
       )}
 
@@ -362,6 +371,7 @@ export function FilingWorkspace({
           review={lifecycle.reviewByRow.get(String(openRow[selected.data.rowKey] ?? '')) ?? null}
           onIssued={() => lifecycle.refresh()}
           onClose={() => setOpenRow(null)}
+          canFile={canFile}
         />
       )}
     </div>
@@ -379,6 +389,7 @@ export function FilingSection({
   lifecycleBusy = false,
   lifecycleError = null,
   onRecordOriginal,
+  canFile,
 }: {
   section: YearEndFilingSection
   year: number
@@ -390,6 +401,8 @@ export function FilingSection({
   lifecycleBusy?: boolean
   lifecycleError?: string | null
   onRecordOriginal?: (note: string) => void
+  /** Whether the operator may file (payroll.run) — gates the file download. */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.filings')
   const { money } = useMoney()
@@ -464,7 +477,7 @@ export function FilingSection({
         >
           {section.label}
         </FieldLabel>
-        {section.download && section.data.rows.length > 0 && (
+        {canFile && section.download && section.data.rows.length > 0 && (
           <Button
             variant="outline"
             disabled={downloadBusy || (section.issue != null && issueSelection.length === 0)}
@@ -495,6 +508,7 @@ export function FilingSection({
           busy={lifecycleBusy}
           error={lifecycleError}
           onRecordOriginal={onRecordOriginal}
+          canFile={canFile}
         />
       )}
 
@@ -558,6 +572,7 @@ export function SlipDrawer({
   review = null,
   onIssued,
   onClose,
+  canFile,
 }: {
   section: YearEndFilingSection
   row: FilingRow
@@ -568,6 +583,8 @@ export function SlipDrawer({
   review?: FilingRowReview | null
   onIssued?: () => void
   onClose: () => void
+  /** Whether the operator may file (payroll.run) — gates any correction. */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.filings')
   const tCommon = useTranslations('common')
@@ -683,6 +700,7 @@ export function SlipDrawer({
                 review={review}
                 lifecycle={lifecycle}
                 onIssued={() => onIssued?.()}
+                canFile={canFile}
               />
             )}
 
@@ -758,9 +776,12 @@ export function SlipDrawer({
 export function SeparationIssuePanel({
   sections,
   year,
+  canFile,
 }: {
   sections: YearEndFilingSection[]
   year: number
+  /** Whether the operator may file (payroll.run) — gates the file download. */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.separations')
   const tFilings = useTranslations('payroll.filings')
@@ -796,7 +817,7 @@ export function SeparationIssuePanel({
                 {t('run.title', { label: section.label })}
               </FieldLabel>
               <div className="flex items-center gap-2">
-                {section.download && section.data.rows.length > 0 && (
+                {canFile && section.download && section.data.rows.length > 0 && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -870,6 +891,7 @@ export function SeparationIssuePanel({
           year={year}
           issues={issues}
           onClose={() => setOpen(null)}
+          canFile={canFile}
         />
       )}
     </div>

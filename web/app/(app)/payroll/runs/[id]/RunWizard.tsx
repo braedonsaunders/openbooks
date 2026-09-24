@@ -2910,7 +2910,7 @@ function FinishStep({
           year-end page. Same drawer, facsimile and reason flow as the
           Separations surface. */}
       {committed && separationSections.length > 0 && (
-        <SeparationIssuePanel sections={separationSections} year={run.tax_year} />
+        <SeparationIssuePanel sections={separationSections} year={run.tax_year} canFile={canRun} />
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">

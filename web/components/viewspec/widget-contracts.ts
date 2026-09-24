@@ -444,7 +444,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'section-heading': { props: ['description', 'iconKey', 'id', 'title'] },
   'security-panel': { props: [] },
   'sentinel-view': { props: ['data'] },
-  'separations-workspace': { props: ['sections', 'year', 'years'] },
+  'separations-workspace': { props: ['canFile', 'sections', 'year', 'years'] },
   'setup-badge-link-cell': { props: ['href', 'label', 'variant'] },
   'setup-close': { props: ['canReopen', 'sp'] },
   'setup-code-cell': { props: ['href', 'shown', 'text'] },
@@ -499,5 +499,5 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'waivers-panel': { props: ['actionHref', 'actionLabel', 'empty', 'hint', 'rows', 'title'] },
   'wip-billing-workspace': { props: [], open: true },
   'work-item-drawer': { props: ['drawer'] },
-  'year-end-workspace': { props: ['sections', 'year', 'years'] },
+  'year-end-workspace': { props: ['canFile', 'sections', 'year', 'years'] },
 }

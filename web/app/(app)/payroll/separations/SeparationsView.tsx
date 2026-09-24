@@ -14,10 +14,13 @@ export function SeparationsView({
   year,
   years,
   sections,
+  canFile,
 }: {
   year: number
   years: number[]
   sections: YearEndFilingSection[]
+  /** Whether the operator may file (payroll.run) — gates the file download. */
+  canFile: boolean
 }) {
   const t = useTranslations('payroll.separations')
   return (
@@ -25,6 +28,7 @@ export function SeparationsView({
       year={year}
       years={years}
       path="/payroll/separations"
+      canFile={canFile}
       emptyTitle={t('noFilings')}
       groups={[{ key: 'separation', sections }]}
     />
