@@ -1,11 +1,22 @@
+// source-pin-contract: MCP skill playbooks must only name registered assistant/MCP tools (or named non-tool terms). The catalog sources import server-only code, so the prose-to-catalog cross-check reads their tool names from source; the subject (skill bodies) is the imported registry, never hand-listed.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
 import { ZodError, z } from "zod";
 import { ApplicationError } from "../application/errors";
 import { AssistantToolFailure, mapMcpError, mcpErrorStatus } from "./errors";
 import { MCP_SKILLS } from "./skills";
+
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    }
+    return next(specifier, context);
+  },
+});
 
 /**
  * The skill pack's authoring rule, enforced: every snake_case identifier a
@@ -117,17 +128,16 @@ test("document playbooks forward persisted revisions without synthesizing tokens
   assert.match(groundRules, /never generate, parse, or reformat it/);
 });
 
-test("the tools the playbooks depend on are registered with the right shape", () => {
-  const catalogSource = readFileSync(join(here, "../application/tool-catalog.ts"), "utf8");
-  const vitals = catalogSource.match(/name: "get_vitals"[\s\S]{0,600}?readOnly: (\w+)/);
+test("the tools the playbooks depend on are registered with the right shape", async () => {
+  const { APPLICATION_TOOLS } = await import("../application/tool-catalog.ts");
+  const vitals = APPLICATION_TOOLS.find((tool) => tool.name === "get_vitals");
   assert.ok(vitals, "get_vitals is registered in the application catalog");
-  assert.equal(vitals[1], "true", "get_vitals must be read-only");
+  assert.equal(vitals.readOnly, true, "get_vitals must be read-only");
 
-  const toolsSource = readFileSync(join(here, "../assistant/tools.ts"), "utf8");
-  const openItems = toolsSource.match(/name: "list_open_items"[\s\S]{0,400}?category: "(\w+)"/);
+  const { READ_TOOLS } = await import("../assistant/tools.ts");
+  const openItems = READ_TOOLS.find((tool) => tool.name === "list_open_items");
   assert.ok(openItems, "list_open_items is registered as an assistant tool");
-  assert.equal(openItems[1], "read");
-  assert.match(toolsSource, /listOpenItems,/, "list_open_items is exported in READ_TOOLS");
+  assert.equal(openItems.category, "read");
 });
 
 test("error mapping surfaces safe shapes and hides the rest", () => {
