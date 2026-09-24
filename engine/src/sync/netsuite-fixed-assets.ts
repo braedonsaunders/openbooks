@@ -5,6 +5,7 @@ import { db, schema, withOrg, withOrgContext } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { fromUnits, normalizeDecimal, normalizeMoney, toUnits } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { lockAssetCategoryTaxLifecycle } from "../organization/asset-tax-fence.ts";
 import { buildNativeContext } from "./native.ts";
 import { NetSuiteSource, type NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -317,18 +318,30 @@ export async function syncNetSuiteFixedAssets(
       let categoryId: string;
       if (existing.rows[0]) {
         categoryId = existing.rows[0].id;
-        await db.execute(sql`
-          update asset_categories
-             set name = ${text(assetType.name) ?? `NetSuite FAM type ${sourceId}`},
-                 asset_account_id = ${assetAccountId},
-                 accumulated_depreciation_account_id = ${accumulatedAccountId},
-                 depreciation_expense_account_id = ${expenseAccountId},
-                 gain_loss_account_id = ${gainLossAccountId},
-                 default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
-                 default_convention = 'full_month', tax_attributes = ${json(rawMetadata)}::jsonb,
-                 is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
-           where id = ${categoryId} and org_id = ${options.orgId}
-        `);
+        await db.transaction(async (tx) => {
+          // Tax-class attributes share the pool-run lifecycle fence with the
+          // admin category assignment route. Re-read and lock the category
+          // only after every affected subsidiary is fenced.
+          await lockAssetCategoryTaxLifecycle(tx, options.orgId, categoryId);
+          const locked = (await tx.execute(sql`
+            select id from asset_categories where id = ${categoryId} and org_id = ${options.orgId} for update
+          `)).rows[0];
+          if (!locked) throw new Error(`NetSuite FAM asset category ${categoryId} disappeared before sync`);
+          const updated = (await tx.execute(sql`
+            update asset_categories
+               set name = ${text(assetType.name) ?? `NetSuite FAM type ${sourceId}`},
+                   asset_account_id = ${assetAccountId},
+                   accumulated_depreciation_account_id = ${accumulatedAccountId},
+                   depreciation_expense_account_id = ${expenseAccountId},
+                   gain_loss_account_id = ${gainLossAccountId},
+                   default_method = ${method(assetType)}, default_life_months = ${lifeMonths},
+                   default_convention = 'full_month', tax_attributes = ${json(rawMetadata)}::jsonb,
+                   is_active = ${!truthy(assetType.isinactive)}, updated_at = now(), updated_by = ${options.actorId ?? null}
+             where id = ${categoryId} and org_id = ${options.orgId}
+             returning id
+          `)).rows[0];
+          if (!updated) throw new Error(`NetSuite FAM asset category ${categoryId} was not updated`);
+        });
         updatedCategories += 1;
       } else {
         const inserted = (await db.execute<{ id: string }>(sql`

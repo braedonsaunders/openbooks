@@ -17,3 +17,25 @@ export async function lockAssetTaxLifecycle(
     );
   }
 }
+
+/** Lock every subsidiary currently carrying an asset in a category, then
+ * rescan under those locks so a newly attached subsidiary is fenced too. */
+export async function lockAssetCategoryTaxLifecycle(
+  tx: SqlExecutor,
+  orgId: string,
+  categoryId: string,
+): Promise<string[]> {
+  const locked = new Set<string>();
+  while (true) {
+    const scopes = (await tx.execute<{ subsidiary_id: string }>(sql`
+      select distinct subsidiary_id
+        from fixed_assets
+       where org_id = ${orgId} and category_id = ${categoryId}
+       order by subsidiary_id
+    `)).rows.map((row) => row.subsidiary_id);
+    const missing = scopes.filter((id) => !locked.has(id));
+    if (missing.length === 0) return [...locked].sort();
+    await lockAssetTaxLifecycle(tx, orgId, missing);
+    for (const subsidiaryId of missing) locked.add(subsidiaryId);
+  }
+}
