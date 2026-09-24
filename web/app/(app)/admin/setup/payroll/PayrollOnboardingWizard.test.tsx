@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { isUuid } from '../../../../../lib/list-params'
 
 declare global {
   var __payrollWizRouter: { push(url: string): void; refresh(): void } | undefined
@@ -217,7 +218,7 @@ test('the pay-schedule create sends an Idempotency-Key', async () => {
     const posts = seen.filter((request) => request.method === 'POST')
     assert.equal(posts.length, 1, 'leaving the schedule step creates the schedule once')
     const key = posts[0]!.headers['idempotency-key'] ?? ''
-    assert.ok(/^[0-9a-f-]{36}$/i.test(key), 'the create carries a UUID Idempotency-Key')
+    assert.ok(isUuid(key), 'the create carries a UUID Idempotency-Key')
     assert.equal((posts[0]!.body as Record<string, unknown>).name, 'Biweekly HQ')
     assert.ok(
       (document.body.textContent ?? '').includes(RAILS_TITLE),
@@ -248,7 +249,7 @@ test('the key is stable per attempt, minted once and kept across retries', async
     const posts = seen.filter((request) => request.method === 'POST')
     assert.equal(posts.length, 2, 'the retry replays the create instead of abandoning it')
     assert.ok(
-      /^[0-9a-f-]{36}$/i.test(posts[0]!.headers['idempotency-key'] ?? ''),
+      isUuid(posts[0]!.headers['idempotency-key'] ?? ''),
       'the attempt carries a UUID key in the first place',
     )
     assert.equal(
