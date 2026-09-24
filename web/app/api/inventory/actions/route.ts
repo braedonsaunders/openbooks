@@ -10,7 +10,7 @@ import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventor
 import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
 import { transferInventory } from "@openbooks/engine/src/inventory/transfers.ts";
-import { InventoryError, InventoryIdempotencyConflictError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -122,15 +122,7 @@ export async function POST(req: Request) {
       )
       return NextResponse.json({ ok: true, replayed, ...res })
     } catch (e: unknown) {
-      const status =
-        e instanceof InventoryOwnershipError
-          ? 403
-          : e instanceof InventoryIdempotencyConflictError
-            ? 409
-            : e instanceof InventoryError
-              ? 422
-              : 500
-      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
     }
   }
   if (!body.itemId || !isUuid(body.itemId)) return NextResponse.json({ error: 'item required' }, { status: 422 })
@@ -325,16 +317,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, replayed, ...res })
   } catch (e: unknown) {
     // A cross-entity inventory attempt is refused as an authorization
-    // failure, mirroring the subsidiary permission gate above; key reuse
-    // with different input is a conflict, not a validation miss.
-    const status =
-      e instanceof InventoryOwnershipError
-        ? 403
-        : e instanceof InventoryIdempotencyConflictError
-          ? 409
-          : e instanceof InventoryError
-            ? 422
-            : 500
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
+    // failure (403) through the shared inventory mapping, mirroring the
+    // subsidiary permission gate above.
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
   }
 }

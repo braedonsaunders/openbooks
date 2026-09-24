@@ -16,11 +16,7 @@ import {
 } from '@openbooks/engine/src/inventory/stock-counts.ts'
 import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
-import {
-  InventoryError,
-  InventoryIdempotencyConflictError,
-  InventoryOwnershipError,
-} from '@openbooks/engine/src/inventory/contracts.ts'
+import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -46,15 +42,8 @@ const stockCountBody = z.looseObject({
   lines: z.array(countLineBody).optional(),
 })
 
-function inventoryStatus(e: unknown): number {
-  if (e instanceof InventoryOwnershipError) return 403
-  if (e instanceof InventoryIdempotencyConflictError) return 409
-  if (e instanceof InventoryError) return 422
-  return 500
-}
-
 function refusal(e: unknown) {
-  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryStatus(e) })
+  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: inventoryErrorStatus(e) })
 }
 
 /**

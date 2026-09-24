@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { InventoryError, InventoryIdempotencyConflictError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
 import { ensureLot, ensureSerial, queryLotRecall } from "@openbooks/engine/src/inventory/tracking.ts";
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
@@ -393,13 +393,11 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    // Key reuse with different input is a conflict, not a validation miss.
-    const status =
-      e instanceof InventoryIdempotencyConflictError
-        ? 409
-        : e instanceof InventoryError
-          ? 422
-          : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    // One shared mapping: an engine ownership refusal is a 403, key reuse
+    // with different input is a 409, any other InventoryError is a 422.
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status: inventoryErrorStatus(e) },
+    );
   }
 }
