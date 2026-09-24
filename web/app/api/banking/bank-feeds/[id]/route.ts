@@ -106,7 +106,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if ("externalAccountId" in body) sets.push(sql`external_account_id = ${(body.externalAccountId as string | null) ?? null}`);
   if ("syncCadence" in body) sets.push(sql`sync_cadence = ${body.syncCadence as string}`);
   if ("syncOverlapDays" in body) sets.push(sql`sync_overlap_days = ${(body.syncOverlapDays as number | null) ?? null}`);
-  if ("isActive" in body) sets.push(sql`is_active = ${Boolean(body.isActive)}`);
+  if ("isActive" in body) {
+    if (typeof body.isActive !== "boolean") {
+      return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+    }
+    sets.push(sql`is_active = ${body.isActive}`);
+  }
   // Only re-seal when a fresh credentials object is supplied (never on absence).
   const rotating = Boolean(body.credentials && typeof body.credentials === "object");
   if (rotating) {
