@@ -71,7 +71,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?account-hierarchy-test";
-const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
@@ -553,6 +553,45 @@ test(
       assert.equal(response.status, 200, JSON.stringify(await response.json()));
       const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`select custom from accounts where id = ${accountId} and org_id = ${org.orgId}`)).rows[0]?.custom;
       assert.deepEqual(stored, { required_code: "R-1", optional_note: "updated" });
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "account GET and PATCH return the same not-found response for a hidden subsidiary record",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const { adminId } = await seedFlowActors(org.orgId);
+      const hiddenSubsidiary = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${hiddenSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Hidden API account entity', 'CAD', 'CA')
+      `);
+      const hiddenAccount = await seedAccount(org.orgId, "9403", false);
+      await db.execute(sql`
+        update accounts set subsidiary_id = ${hiddenSubsidiary}
+         where id = ${hiddenAccount} and org_id = ${org.orgId}
+      `);
+      routeState.authz = {
+        user: { orgId: org.orgId, id: adminId },
+        permissions: new Set(),
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      };
+
+      const getResponse = await GET(new Request("http://localhost/api/accounts/hidden"), {
+        params: Promise.resolve({ id: hiddenAccount }),
+      });
+      const patchResponse = await PATCH(patchRequest({ name: "Should stay hidden" }), {
+        params: Promise.resolve({ id: hiddenAccount }),
+      });
+      assert.equal(getResponse.status, 404);
+      assert.equal(patchResponse.status, 404);
+      assert.deepEqual(await getResponse.json(), await patchResponse.json());
     } finally {
       routeState.authz = null;
       await dropScratchOrg(org.orgId);

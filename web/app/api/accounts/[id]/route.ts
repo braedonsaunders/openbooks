@@ -53,7 +53,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
-  const payload = await loadAccount(id, gate.user.orgId)
+  const payload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   // Entity-owned accounts are visible only inside the caller's scope; the
   // shared chart (null subsidiary) reads for everyone.
@@ -68,7 +68,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
 
-  const existingPayload = await loadAccount(id, gate.user.orgId)
+  const existingPayload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
   const existing = (existingPayload.account)
   // Reads hide out-of-scope entity accounts; the shared chart reads for all.
@@ -317,7 +317,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     throw error
   }
 
-  const saved = await loadAccount(id, gate.user.orgId)
+  const saved = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   // Effective values after the edit; a statement behind the account counts as
   // corroboration even when the name says nothing. The warning rides
   // alongside success — the edit is always saved.
