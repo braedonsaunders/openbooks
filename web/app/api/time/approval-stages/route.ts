@@ -1,6 +1,7 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { loadChain, saveChain, type ChainSubject } from '@openbooks/engine/src/hrm/field-time/stages.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
@@ -41,11 +42,21 @@ export async function GET(req: Request) {
   }
 }
 
-/** PUT {subject, stages} → declare the chain. Validated, never guessed. */
+/**
+ * PUT {subject, stages} → declare the chain. Validated, never guessed.
+ *
+ * The chain is org-wide policy with no subsidiary lineage — it governs
+ * every entity's timesheets at once — so declaring it needs unrestricted
+ * subsidiary scope (canonical shape 2). The read stays open to every
+ * time.manage holder: approvers need the chain to do their job, and it
+ * discloses no per-subsidiary material.
+ */
 export async function PUT(req: Request) {
   const gate = await guardFeaturePermission('time.manage', 'fieldTime')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
 
   const parsedBody = await parseJsonBody(req, chainBody);
   if (!parsedBody.ok) return parsedBody.response;
