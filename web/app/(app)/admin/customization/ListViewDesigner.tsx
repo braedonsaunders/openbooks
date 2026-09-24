@@ -232,8 +232,8 @@ export function ListViewDesigner({
                   <span className="w-44 shrink-0 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{colLabel(c.key)}</span>
                   <Input value={c.labelOverride ?? ''} onChange={(e) => updateCol(ci, { labelOverride: e.target.value || null })} placeholder={colLabel(c.key)} className="h-7 w-36" />
                   <div className="ml-auto flex items-center gap-1">
-                    <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci - 1); return n })} className="text-slate-400 hover:text-slate-600"><ChevronUp size={15} /></button>
-                    <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci + 1); return n })} className="text-slate-400 hover:text-slate-600"><ChevronDown size={15} /></button>
+                    <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci - 1); return n })} aria-label={`${tCommon('actions.previous')}: ${colLabel(c.key)}`} className="text-slate-400 hover:text-slate-600"><ChevronUp size={15} /></button>
+                    <button type="button" onClick={() => setView((p) => { const n = structuredClone(p) as ListViewConfig; n.columns = reorder(n.columns, ci, ci + 1); return n })} aria-label={`${tCommon('actions.next')}: ${colLabel(c.key)}`} className="text-slate-400 hover:text-slate-600"><ChevronDown size={15} /></button>
                     <button type="button" onClick={() => updateCol(ci, { visible: !c.visible })} className={cn('text-slate-400 hover:text-slate-600', !c.visible && 'text-red-500')} aria-label={t('designer.list.visible')}>
                       {c.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                     </button>
