@@ -133,6 +133,29 @@ test('relative date filters bind the org business day, never current_date', () =
   assert.match(compiled.sql, /::date/)
 })
 
+test('this_year and ytd use the configured fiscal start month', () => {
+  const compiled = compileInsightQuery(
+    {
+      source: 'ledger_lines',
+      measures: [{ agg: 'count' }],
+      filters: [
+        { field: 'posting_date', op: 'this_year' },
+        { field: 'posting_date', op: 'ytd' },
+      ],
+    },
+    'org-1',
+    {},
+    '2026-08-21',
+    null,
+    undefined,
+    undefined,
+    4,
+  )
+  assert.ok(compiled.params.includes('2026-04-01'))
+  assert.ok(compiled.params.includes('2027-03-31'))
+  assert.ok(compiled.params.includes('2026-08-21'))
+})
+
 test('bound parameters stay numbered in order when a baseFilter binds values', () => {
   const compiled = compileInsightQuery(
     {
