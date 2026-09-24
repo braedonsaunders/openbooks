@@ -2,7 +2,8 @@ import 'server-only'
 
 import { getMoneyFormatter } from '@/lib/money-server'
 import { notFound } from 'next/navigation'
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { formatCivilDate } from '@/lib/format'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/src/banking/banking.ts'
@@ -162,6 +163,7 @@ export async function loadReconciliation(
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')
+  const locale = await getLocale()
   if (!isUuid(accountId) || !isUuid(reconciliationId)) notFound()
   const basePath = `/banking/${accountId}/reconcile/${reconciliationId}`
 
@@ -341,11 +343,11 @@ export async function loadReconciliation(
       : signedOff
         ? recon.signed_off_by_name
           ? t('reconcile.signedOffByDescription', {
-              date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+              date: formatCivilDate(String(recon.signed_off_at ?? recon.through_date).slice(0, 10), locale),
               name: recon.signed_off_by_name,
             })
           : t('reconcile.signedOffDescription', {
-              date: new Date(recon.signed_off_at ?? recon.through_date).toLocaleDateString('en-CA'),
+              date: formatCivilDate(String(recon.signed_off_at ?? recon.through_date).slice(0, 10), locale),
             })
         : t('reconcile.description'),
     badgeLabel: RECON_STATUS_KEYS.includes(recon.status)
