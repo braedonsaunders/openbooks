@@ -1051,6 +1051,13 @@ export async function resolveSurcharge(
 export type PaymentLinkView = {
   id: string;
   token: string;
+  /**
+   * Whether the pay URL can be rebuilt: "ok" carries a usable token, while
+   * "unsealable" means the sealed token no longer opens (data-key rotation
+   * or tampering) — the link collects nothing until it is reissued. The
+   * token is then empty ON PURPOSE and no URL may be built from it.
+   */
+  tokenState: "ok" | "unsealable";
   documentId: string;
   provider: AcceptanceProvider;
   amount: string;
@@ -1064,7 +1071,7 @@ export type PaymentLinkView = {
 };
 
 export async function listPaymentLinks(orgId: string, documentId: string): Promise<PaymentLinkView[]> {
-  const r = (await db.execute<PaymentLinkView & { token_sealed: string | null; token: string | null }>(sql`
+  const r = (await db.execute<Omit<PaymentLinkView, "tokenState"> & { token_sealed: string | null; token: string | null }>(sql`
     select id, token, token_sealed, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
            currency, status, expires_on::text as "expiresOn", memo,
            paid_payment_document_id as "paidPaymentDocumentId", created_at as "createdAt"
@@ -1075,10 +1082,20 @@ export async function listPaymentLinks(orgId: string, documentId: string): Promi
   // token_sealed is authoritative (written since at-rest sealing); the raw
   // token column survives only until bootstrap's seal-and-null step and
   // covers links created between migration and that step.
-  return r.rows.map(({ token_sealed, token, ...view }) => ({
-    ...view,
-    token: (token_sealed ? unsealSecret(token_sealed) : token) ?? "",
-  }));
+  return r.rows.map(({ token_sealed, token, ...view }) => {
+    const plain = token_sealed ? unsealSecret(token_sealed) : token;
+    if (plain == null) {
+      // Never emit an empty-token URL as if it were collectible: the link
+      // is broken until reissued (void it and create a new link), and the
+      // failure is logged with the link identity — never the secret.
+      console.error(
+        `[payments] payment link ${view.id} (document ${view.documentId}) token cannot be unsealed — ` +
+          `void the link and create a new one`,
+      );
+      return { ...view, token: "", tokenState: "unsealable" as const };
+    }
+    return { ...view, token: plain, tokenState: "ok" as const };
+  });
 }
 
 export async function createPaymentLink(
