@@ -483,6 +483,74 @@ test("H-CONSTRUCTION: the wage resolver fences B's priced day and writes no evid
   }
 });
 
+test("H-CONSTRUCTION: a department schedule prices only workers assigned to that department", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableConstruction(org.orgId);
+    const adminId = await createScratchUser(org.orgId, "Department Rate Admin", "dept_rate_admin");
+    await grantPermissions(org.orgId, adminId, ["hrm.construction.read", "hrm.construction.manage"]);
+    const deptA = randomUUID();
+    const deptB = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name) values
+      (${deptA}, ${org.orgId}, 'Electrical'), (${deptB}, ${org.orgId}, 'Plumbing')`);
+    const project = await seedEntityProject(org.orgId, org.subsidiaryId, "Department project");
+    const worker = await seedWorker(org.orgId, org.subsidiaryId, "Department worker");
+    const assignmentId = randomUUID();
+    await db.execute(sql`insert into employment_assignments (id, org_id, employment_id, assignment_key)
+      values (${assignmentId}, ${org.orgId}, ${worker.employmentId}, 'primary')`);
+    await db.execute(sql`insert into employment_assignment_versions
+      (org_id, assignment_id, employment_id, version_no, department_id, is_primary, effective_from)
+      values (${org.orgId}, ${assignmentId}, ${worker.employmentId}, 1, ${deptB}, true, '2026-01-01'::date)`);
+    const workerInA = await seedWorker(org.orgId, org.subsidiaryId, "Electrical department worker");
+    const assignmentA = randomUUID();
+    await db.execute(sql`insert into employment_assignments (id, org_id, employment_id, assignment_key)
+      values (${assignmentA}, ${org.orgId}, ${workerInA.employmentId}, 'primary')`);
+    await db.execute(sql`insert into employment_assignment_versions
+      (org_id, assignment_id, employment_id, version_no, department_id, is_primary, effective_from)
+      values (${org.orgId}, ${assignmentA}, ${workerInA.employmentId}, 1, ${deptA}, true, '2026-01-01'::date)`);
+    const classification = await createClassification(db, {
+      orgId: org.orgId, actorId: adminId, code: "PLMB-ONLY", name: "Plumber", trade: "Plumbing",
+    });
+    const schedule = await createSchedule(db, {
+      orgId: org.orgId, actorId: adminId, kind: "prevailing_wage", name: "Plumbing department schedule",
+      appliesTo: { department_id: deptB }, reciprocity: "jobsite_local", effectiveFrom: "2026-01-01",
+    });
+    await addScheduleLine(db, {
+      orgId: org.orgId, actorId: adminId, scheduleId: schedule.id, classificationId: classification.id,
+      baseRate: "91.0000", fringeRate: "5.0000", currency: "USD", effectiveFrom: "2026-01-01",
+    });
+    await assignClassification(db, {
+      orgId: org.orgId, actorId: adminId, employmentId: worker.employmentId,
+      classificationId: classification.id, effectiveFrom: "2026-01-01",
+    });
+    await assignClassification(db, {
+      orgId: org.orgId, actorId: adminId, employmentId: workerInA.employmentId,
+      classificationId: classification.id, effectiveFrom: "2026-01-01",
+    });
+    const assignments = (await db.execute<{ employment_id: string; department_id: string; is_primary: boolean }>(sql`
+      select employment_id::text as employment_id, department_id::text as department_id, is_primary
+        from employment_assignment_versions where org_id = ${org.orgId}::uuid
+         and employment_id in (${worker.employmentId}::uuid, ${workerInA.employmentId}::uuid)
+    `)).rows;
+    assert.deepEqual(assignments.map((row) => row.department_id).sort(), [deptA, deptB].sort());
+    const matching = await resolveWage(db, {
+      orgId: org.orgId, actorId: adminId, employmentId: worker.employmentId,
+      projectId: project, workedOn: "2026-09-08",
+    });
+    assert.equal(matching.base, "91.0000");
+    await assert.rejects(
+      resolveWage(db, {
+        orgId: org.orgId, actorId: adminId, employmentId: workerInA.employmentId,
+        projectId: project, workedOn: "2026-09-08",
+      }),
+      /No (active prevailing-wage or union schedule covers|rate line covers)/,
+      "a schedule anchored to Plumbing must not price an Electrical department worker",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("H-CONSTRUCTION: ratio, split, and classify refuse B's project", { skip: !DB }, async () => {
   const lens = await setupLens();
   try {

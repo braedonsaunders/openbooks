@@ -18,10 +18,11 @@ export interface ScopeTarget {
   projectId?: string | null;
   locationId?: string | null;
   subsidiaryId?: string | null;
+  departmentId?: string | null;
 }
 
 /**
- * Scope precedence: project (3) > location (2) > subsidiary (1) > org (0).
+ * Scope precedence: project (4) > location (3) > department (2) > subsidiary (1) > org (0).
  * A schedule with no scope at all is org-wide (0). A schedule whose scope
  * names a project/location/subsidiary that does NOT match the target does
  * not apply (-1) — it loses to every schedule that does, and an empty
@@ -33,10 +34,14 @@ export function scopeScore(appliesTo: AppliesTo, target: ScopeTarget): number {
   const locationIds = scope.location_ids ?? null;
   if (projectIds && projectIds.length > 0) {
     if (!target.projectId || !projectIds.includes(target.projectId)) return -1;
-    return 3;
+    return 4;
   }
   if (locationIds && locationIds.length > 0) {
     if (!target.locationId || !locationIds.includes(target.locationId)) return -1;
+    return 3;
+  }
+  if (scope.department_id) {
+    if (!target.departmentId || scope.department_id !== target.departmentId) return -1;
     return 2;
   }
   if (scope.employer_subsidiary_id) {

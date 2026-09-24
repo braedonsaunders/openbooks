@@ -11,12 +11,14 @@ import {
 } from "./pure.ts";
 import { HrmConstructionError } from "./errors.ts";
 
-test("scope precedence is project over location over subsidiary over org; mismatches do not apply", () => {
+test("scope precedence is project over location over department over subsidiary over org; mismatches do not apply", () => {
   const target = { projectId: "p1", locationId: "l1", subsidiaryId: "s1" };
-  assert.equal(scopeScore({ project_ids: ["p1"] }, target), 3);
+  assert.equal(scopeScore({ project_ids: ["p1"] }, target), 4);
   assert.equal(scopeScore({ project_ids: ["p9"] }, target), -1);
-  assert.equal(scopeScore({ location_ids: ["l1"] }, target), 2);
+  assert.equal(scopeScore({ location_ids: ["l1"] }, target), 3);
   assert.equal(scopeScore({ location_ids: ["l9"] }, target), -1);
+  assert.equal(scopeScore({ department_id: "d1" }, { ...target, departmentId: "d1" }), 2);
+  assert.equal(scopeScore({ department_id: "d9" }, { ...target, departmentId: "d1" }), -1);
   assert.equal(scopeScore({ employer_subsidiary_id: "s1" }, target), 1);
   assert.equal(scopeScore({ employer_subsidiary_id: "s9" }, target), -1);
   assert.equal(scopeScore({}, target), 0);
@@ -24,6 +26,7 @@ test("scope precedence is project over location over subsidiary over org; mismat
   assert.ok(
     scopeScore({ project_ids: ["p1"] }, target) > scopeScore({ location_ids: ["l1"] }, target),
   );
+  assert.ok(scopeScore({ department_id: "d1" }, { ...target, departmentId: "d1" }) > scopeScore({ employer_subsidiary_id: "s1" }, target));
 });
 
 test("reciprocity: home, jobsite, and higher-of price from the named line", () => {
