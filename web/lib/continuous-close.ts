@@ -10,6 +10,12 @@ import { can, type Authz } from "./authz";
 export type WorkItemAccess = {
   agentKey: ContinuousCloseAgentKey;
   status: "open" | "in_review" | "resolved" | "dismissed";
+  /**
+   * The subject's subsidiary via the account join. Null for non-account
+   * subjects and unattributed accounts: restricted callers fail closed on
+   * null, exactly like unattributed documents elsewhere.
+   */
+  subjectSubsidiaryId: string | null;
 };
 
 /**
@@ -49,9 +55,13 @@ export function readableContinuousCloseAgents(authz: Authz): ContinuousCloseAgen
 }
 
 export async function loadWorkItemAccess(orgId: string, itemId: string): Promise<WorkItemAccess | null> {
-  const result = (await db.execute<{ agent_key: ContinuousCloseAgentKey; status: WorkItemAccess["status"] }>(sql`
-    select agent_key, status from ai_work_items where id = ${itemId} and org_id = ${orgId}
+  const result = (await db.execute<{ agent_key: ContinuousCloseAgentKey; status: WorkItemAccess["status"]; subjectSubsidiaryId: string | null }>(sql`
+    select w.agent_key, w.status, subj.subsidiary_id as "subjectSubsidiaryId"
+      from ai_work_items w
+      left join accounts subj
+        on subj.id = w.subject_id and w.subject_type = 'account' and subj.org_id = w.org_id
+     where w.id = ${itemId} and w.org_id = ${orgId}
   `));
   const row = result.rows[0];
-  return row ? { agentKey: row.agent_key, status: row.status } : null;
+  return row ? { agentKey: row.agent_key, status: row.status, subjectSubsidiaryId: row.subjectSubsidiaryId } : null;
 }

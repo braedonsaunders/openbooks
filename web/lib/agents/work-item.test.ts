@@ -41,6 +41,15 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { url: "mock:work-item-db", shortCircuit: true };
     }
+    // The scope check loads through the real lib/authz; only the session
+    // identity behind it is scripted.
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return {
+        url: "data:text/javascript,export async function currentUser(){return null}",
+        format: "module",
+        shortCircuit: true,
+      };
+    }
     if (specifier === "@openbooks/engine/src/navigation/nav-registry.ts") {
       // The worktree's root node_modules is a symlink to the main
       // checkout's modules, so the workspace alias would resolve the
@@ -82,6 +91,8 @@ const hooks = registerHooks({
               return { rows: [{ ...finding }] };
             },
           };
+          export function ambientTenantOrgId() { return undefined; }
+          export function withBypassContext(work) { return work(); }
         `,
       };
     }
@@ -93,11 +104,19 @@ const { loadWorkItemDetail } = await import("./work-item.ts");
 hooks.deregister();
 
 test("old stored finding hrefs resolve through the registry at load", async () => {
-  const item = await loadWorkItemDetail("org-1", "user-1", "work-item-old", ["collections"]);
+  const item = await loadWorkItemDetail("org-1", "user-1", "work-item-old", ["collections"], null);
   assert.ok(item, "old finding must load");
   const summary = item.summary as Record<string, unknown>;
   assert.equal(summary.href, "/ar", "stored /ar/cockpit must resolve to the live ar href");
   const citations = (summary.aiAnalysis as { citations: { href: string; label: string }[] }).citations;
   assert.equal(citations[0]!.href, "/ar", "stored citation href must resolve too");
   assert.equal(citations[1]!.href, "/ar/invoices/inv-1", "live deep-link citations must pass through");
+});
+
+test("a finding without subject lineage is not-found to a restricted caller", async () => {
+  // The canned row carries no subject_subsidiary_id (a non-account subject
+  // resolves to null lineage): unrestricted callers still load it, but any
+  // restricted scope must fail closed with the same null as a missing item.
+  const item = await loadWorkItemDetail("org-1", "user-1", "work-item-old", ["collections"], new Set(["sub-a"]));
+  assert.equal(item, null);
 });

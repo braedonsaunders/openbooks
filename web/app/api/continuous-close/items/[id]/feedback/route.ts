@@ -2,7 +2,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getAuthz } from "../../../../../../lib/authz";
+import { getAuthz, subsidiaryScopeAllows } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../../../../../../lib/continuous-close";
@@ -19,6 +19,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!access) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!canReadContinuousCloseAgent(authz, access.agentKey)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  // Feedback confirms the finding exists: an out-of-scope subject answers
+  // like a missing item, or the rating becomes an existence oracle.
+  if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   let body: Record<string, unknown>;
   try {

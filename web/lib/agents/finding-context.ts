@@ -32,6 +32,7 @@ export async function loadFindingContext(
     authz.user.id,
     findingId,
     readableContinuousCloseAgents(authz),
+    authz.allowedSubsidiaryIds,
   );
   if (!item) return null;
   const lines = [

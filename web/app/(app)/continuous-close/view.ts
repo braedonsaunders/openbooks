@@ -274,7 +274,7 @@ export async function loadContinuousClose(
   const itemId = pickString(sp.item)
   let selected: ContinuousCloseWorkItem | null = null
   if (itemId && isUuid(itemId)) {
-    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
+    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable, authz.allowedSubsidiaryIds)
   }
 
   const reportId = pickString(sp.report)
