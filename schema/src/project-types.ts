@@ -494,7 +494,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       committedCost: STANDARD_COMMITTED,
       billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "cost_times_markup" },
       costBudget: STANDARD_BUDGET,
-      totalPrice: { method: "cost_plus", defaultMarkupPercent: 15 },
+      totalPrice: { method: "cost_plus", defaultMarkupPercent: "15" },
       couldBeInvoiced: { formula: "unbilled_billable" },
       totalCost: { components: ["actual_cost", "committed_cost"] },
       layout: standardLayout(),
