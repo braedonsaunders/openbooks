@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import { postDocument } from "./posting-document.ts";
+import { PostingError } from "./posting-contracts.ts";
 import { applyInventoryIssuesForInvoice } from "../inventory/documents-sales.ts";
 import { applyInventoryReceiptsForBill } from "../inventory/documents-purchasing.ts";
 import { getOnHand } from "../inventory/position.ts";
@@ -266,6 +267,52 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     const bad = (await db.execute(sql`
       select entry_id from journal_lines where org_id = ${org.orgId} group by entry_id having sum(amount) <> 0`));
     assert.equal(bad.rows.length, 0);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("standalone invoice with a lot-tracked line is refused by name before posting", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const deps = {
+    control: {
+      ar: org.accounts.ar,
+      ap: org.accounts.ap,
+      bank: org.accounts.bank,
+    },
+  };
+  try {
+    await db.execute(sql`
+      update item_inventory_profiles set tracking = 'lot'
+       where org_id = ${org.orgId} and item_id = ${org.items.fifo}
+    `);
+    const invId = await draftDoc(org, "customer_invoice", "INV-LOT-REFUSED", {
+      itemId: org.items.fifo,
+      quantity: "5",
+      unitPrice: "5",
+      amount: "25",
+      stockLocationId: org.stockLocationId,
+      accountId: org.accounts.revenue,
+      partyId: org.customerId,
+    });
+    // The lot-tracked line names no lot, so posting must refuse by name
+    // before the journal commits — revenue with no COGS was the old shape.
+    await assert.rejects(
+      () => postDocument(invId, deps),
+      (error: unknown) =>
+        error instanceof PostingError &&
+        /lot-tracked item requires lot evidence/.test(error.message) &&
+        /standalone-invoice lines/.test(error.message) &&
+        /sales-fulfillment/.test(error.message),
+    );
+    // Refused before posting: still approved, no entry stamped, no movement.
+    const residue = (await db.execute<{ status: string; posted_entry_id: string | null; movements: number }>(sql`
+      select (select status::text from documents where id = ${invId} and org_id = ${org.orgId}) as status,
+             (select posted_entry_id from documents where id = ${invId} and org_id = ${org.orgId}) as posted_entry_id,
+             (select count(*)::int from inventory_movements m
+               join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
+              where l.document_id = ${invId} and m.org_id = ${org.orgId}) as movements`)).rows[0];
+    assert.deepEqual(residue, { status: "approved", posted_entry_id: null, movements: 0 });
   } finally {
     await dropScratchOrg(org.orgId);
   }

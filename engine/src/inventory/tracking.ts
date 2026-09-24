@@ -12,6 +12,28 @@ import { InventoryError, type InventoryProfile, type Runner } from "./contracts.
  * must name the serial. (Issues pick lots/serials via their own inputs; the
  * receipt-side rule is what guarantees downstream traceability.)
  */
+/**
+ * Document legs that move stock without line-level tracking evidence —
+ * vendor-bill receipts and standalone-invoice issues — cannot carry
+ * tracked items: no lot or serial can be named on the line. Shared by the
+ * bill and invoice pre-post guards so a tracked line is refused BEFORE
+ * the document posts, never inside the post-commit drain after AP or
+ * revenue has committed with no offsetting stock movement.
+ */
+export function assertDocumentLinesUntracked(
+  lines: readonly { lineNumber: number; itemId: string; tracking: string }[],
+  leg: { movement: "receipt" | "issue"; carrier: string; remedy: string },
+): void {
+  for (const line of lines) {
+    if (line.tracking === "none") continue;
+    throw new InventoryError(
+      `${line.tracking}-tracked item requires ${line.tracking} evidence on its ${leg.movement}; ` +
+        `${leg.carrier} cannot carry lot or serial evidence ` +
+        `(document line ${line.lineNumber}, item ${line.itemId}) — ${leg.remedy}`,
+    );
+  }
+}
+
 export function assertTracking(
   profile: { tracking: string },
   input: { quantity: string; lotId?: string | null; serialId?: string | null },

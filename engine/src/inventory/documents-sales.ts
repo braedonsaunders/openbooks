@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError } from "./contracts.ts";
+import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
 import { issueInventory } from "./movements.ts";
@@ -46,7 +47,15 @@ export async function assertInvoiceIssuesPostable(
   if (!(await inventoryFeatureEnabled(runner, orgId))) return;
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   if (await isFulfilmentGovernedInvoice(runner, orgId, documentId)) return;
-  await loadDocumentInventoryLines(runner, orgId, documentId);
+  // A standalone invoice names no lot or serial per line, so a tracked line
+  // could never issue: without this guard revenue posts and the post-commit
+  // drain fails with COGS never booked against it. Refuse before posting,
+  // through the same helper as the bill leg.
+  assertDocumentLinesUntracked(await loadDocumentInventoryLines(runner, orgId, documentId), {
+    movement: "issue",
+    carrier: "standalone-invoice lines",
+    remedy: "ship the goods on a sales-fulfillment document naming the lot or serial instead",
+  });
 }
 
 function salesFulfillmentTrackingSelection(

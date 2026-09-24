@@ -4,6 +4,7 @@ import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition } from "./position.ts";
@@ -43,6 +44,11 @@ export async function assertBillReceiptsPostable(
   assertNoUnprofiledInventoryLines(await unprofiledInventoryLines(runner, orgId, documentId));
   const lines = await loadDocumentInventoryLines(runner, orgId, documentId);
   if (lines.length === 0) return;
+  assertDocumentLinesUntracked(lines, {
+    movement: "receipt",
+    carrier: "vendor-bill lines",
+    remedy: "receive the goods on a goods receipt naming the lot or serial instead",
+  });
   const profiles = (await runner.execute<{
     item_id: string;
     tracking: string;
@@ -56,11 +62,6 @@ export async function assertBillReceiptsPostable(
   for (const line of lines) {
     const profile = byItem.get(line.itemId);
     if (!profile) continue;
-    if (profile.tracking !== "none") {
-      throw new InventoryError(
-        `${profile.tracking}-tracked item requires ${profile.tracking} evidence on its receipt; vendor-bill lines cannot carry lot or serial evidence (item ${line.itemId})`,
-      );
-    }
     if (line.costingMethod === "standard" && !line.clearingAccountId) {
       // Same exact math the receipt books: the extended amount less the
       // standard value is the variance, not quantity × a rounded rate. A
