@@ -120,6 +120,9 @@ export const PUB15T_FACTOR_LABELS: Readonly<Record<string, string>> = {
   SS_TAXABLE: "Social Security taxable wages this period",
   SS: "Social Security tax (employee)",
   MED: "Medicare tax (employee)",
+  // IRS Instructions for Form 941 (03/2026), line 5d:
+  // https://www.irs.gov/instructions/i941
+  MED2_TAXABLE: "Medicare wages subject to Additional Medicare Tax this period",
   MED2: "Additional Medicare tax (employee)",
   FUTA: "Federal unemployment tax (employer)",
   SUTA: "State unemployment tax (employer)",
@@ -248,6 +251,9 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
     const overThreshold = max0(priorMedicareWages + ficaWages - threshold)
       - max0(priorMedicareWages - threshold);
     additionalMedicare = mulRateCents(overThreshold, rates.fica.additionalMedicareRate);
+    // Carry the exact threshold-crossing wage slice so the quarterly Form 941
+    // can report line 5d separately from ordinary Medicare wages on line 5c.
+    trace("MED2_TAXABLE", overThreshold);
     trace("SS_TAXABLE", ssTaxable);
   }
   trace("SS", ss);
