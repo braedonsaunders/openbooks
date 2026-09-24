@@ -50,6 +50,7 @@ test("cabinet upload validation refuses blank names, bad payloads, and oversize 
   assert.throws(() => validateCabinetUpload({ ...good, filename: "  " }), /filename is required/);
   assert.throws(() => validateCabinetUpload({ ...good, contentType: "application/x-sh" }), /unsupported file type/);
   assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "!!!not-base64!!!" }), /not valid base64/);
+  assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "YQ==Yg==" }), /not valid base64/);
   assert.throws(() => validateCabinetUpload({ ...good, contentBase64: "" }), /file is empty/);
   const over = Buffer.alloc(MAX_UPLOAD_BYTES + 1, 7).toString("base64");
   assert.throws(

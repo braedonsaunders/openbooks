@@ -51,7 +51,7 @@ export function isUploadContentType(contentType: string): boolean {
 /** Tool payloads stay model-sized: 1 MB of bytes (the route allows 25 MB). */
 export const MAX_UPLOAD_BYTES = 1024 * 1024;
 
-const BASE64 = /^[A-Za-z0-9+/=]+$/;
+const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 
 export type CabinetUpload = { filename: string; contentType: string; bytes: Buffer };
 
@@ -70,6 +70,7 @@ export function validateCabinetUpload(input: {
   if (!compact) throw invalidInput("file is empty");
   if (!BASE64.test(compact)) throw invalidInput("contentBase64 is not valid base64");
   const bytes = Buffer.from(compact, "base64");
+  if (bytes.toString("base64") !== compact) throw invalidInput("contentBase64 is not valid base64");
   if (bytes.length === 0) throw invalidInput("file is empty");
   if (bytes.length > MAX_UPLOAD_BYTES) {
     throw invalidInput(`file exceeds the ${MAX_UPLOAD_BYTES / 1024 / 1024} MB tool upload limit`);
