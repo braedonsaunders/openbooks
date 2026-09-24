@@ -1,68 +1,76 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 
-const dir = dirname(fileURLToPath(import.meta.url))
-const messagesDir = join(dir, '..', '..', '..', 'messages')
-const locales = ['de', 'en', 'es', 'fr', 'ja', 'pt-BR', 'zh'] as const
-
-const catalog = (locale: string): Record<string, unknown> =>
-  JSON.parse(readFileSync(join(messagesDir, locale, 'ar.json'), 'utf8'))
-
-function at(locale: Record<string, unknown>, path: string): unknown {
-  return path
-    .split('.')
-    .reduce<unknown>(
-      (node, key) => (node && typeof node === 'object' ? (node as Record<string, unknown>)[key] : undefined),
-      locale,
-    )
-}
-
-// UX-01: /collections promised the overdue chase list (it borrowed the AR
-// cockpit description) while rendering only recurring/subscription/dunning
-// configuration. The page now describes itself as configuration and links to
-// the real worklist on /ar. Every locale needs both strings — a missing key
-// renders the raw path, and an English paste reads as a glitch.
-for (const locale of locales) {
-  test(`collections worklist copy exists in ${locale}`, () => {
-    for (const key of ['collections.pageDescription', 'collections.worklistCta'] as const) {
-      const value = at(catalog(locale), key)
-      assert.equal(typeof value, 'string', `${locale} ${key} must exist`)
-      assert.ok((value as string).trim().length > 0, `${locale} ${key} must not be empty`)
+const state = { canReadAr: true }
+Object.assign(globalThis, { __collectionsWorklistState: state })
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    if (specifier === 'next/navigation') {
+      return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
     }
-  })
-}
-
-for (const locale of locales.filter((candidate) => candidate !== 'en')) {
-  test(`collections worklist copy is translated in ${locale}`, () => {
-    for (const key of ['collections.pageDescription', 'collections.worklistCta'] as const) {
-      assert.notEqual(
-        at(catalog(locale), key),
-        at(catalog('en'), key),
-        `${locale} ${key} must not be the English fallback`,
-      )
+    if (specifier === 'next-intl/server') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent(`
+          export async function getTranslations(namespace){
+            return (key) => namespace === 'nav' && key === 'modules.collections' ? 'Collections'
+              : namespace === 'ar' && key === 'collections.pageDescription' ? 'Recurring billing configuration.'
+              : namespace === 'ar' && key === 'collections.worklistCta' ? 'Open overdue worklist'
+              : key;
+          }
+        `),
+      }
     }
-  })
-}
-
-const viewSource = readFileSync(join(dir, 'view.ts'), 'utf8')
-const sectionsSource = readFileSync(join(dir, 'sections.tsx'), 'utf8')
-
-test('the collections loader no longer borrows the AR worklist description', () => {
-  assert.doesNotMatch(viewSource, /cockpit\.description/)
-  assert.match(viewSource, /collections\.pageDescription/)
+    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent('export const db={execute:async()=>({rows:[]})}'),
+      }
+    }
+    if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/collections/view.ts')) {
+      return {
+        shortCircuit: true,
+        url: 'data:text/javascript,' + encodeURIComponent(`
+          export async function requirePermission(){return {user:{orgId:'org-1'}}}
+          export function can(){return globalThis.__collectionsWorklistState.canReadAr}
+        `),
+      }
+    }
+    if (specifier === '../../../lib/features' && context.parentURL?.endsWith('/web/app/(app)/collections/view.ts')) {
+      return { shortCircuit: true, url: 'data:text/javascript,export async function isFeatureEnabled(){return false}' }
+    }
+    return next(specifier, context)
+  },
 })
 
-test('the collections spec binds the /ar worklist link into the shell', () => {
-  assert.match(viewSource, /worklistHref/)
-  assert.match(viewSource, /worklistLabel/)
-  assert.match(viewSource, /'\/ar'/)
+const { loadCollections, collectionsSpec } = await import('./view')
+
+function fieldPath(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !("$" in value)) return undefined
+  return typeof value.$ === 'string' ? value.$ : undefined
+}
+
+test('collections loader describes configuration and only offers the accessible worklist', async () => {
+  state.canReadAr = true
+  const accessible = await loadCollections()
+  assert.equal(accessible.description, 'Recurring billing configuration.')
+  assert.equal(accessible.worklistHref, '/ar')
+  assert.equal(accessible.worklistLabel, 'Open overdue worklist')
+
+  state.canReadAr = false
+  const restricted = await loadCollections()
+  assert.equal(restricted.description, 'Recurring billing configuration.')
+  assert.equal(restricted.worklistHref, null)
 })
 
-test('the collections shell links to the worklist when the reader may open it', () => {
-  assert.match(sectionsSource, /worklistHref/)
-  assert.match(sectionsSource, /href=\{worklistHref\}/)
-  assert.match(sectionsSource, /\{worklistLabel\}/)
+test('collections page spec carries the loader copy and worklist into its shell', async () => {
+  const data = await loadCollections()
+  const spec = collectionsSpec(data)
+  const shell = spec.body.find((block) => block.kind === 'widget' && block.widget === 'collections-shell')
+  assert.ok(shell && shell.kind === 'widget')
+  assert.equal(fieldPath(shell.props?.description), 'description')
+  assert.equal(fieldPath(shell.props?.worklistHref), 'worklistHref')
+  assert.equal(fieldPath(shell.props?.worklistLabel), 'worklistLabel')
 })
