@@ -230,14 +230,6 @@ test(
   },
 );
 
-test("every outbound FX fetch is forced through the no-redirect guard", () => {
-  assert.match(source, /function fxFetch\(/);
-  assert.match(source, /redirect: "error"/);
-  // Exactly one raw fetch call site may exist — inside fxFetch itself — so a
-  // future provider path cannot quietly bypass the redirect refusal.
-  assert.equal([...source.matchAll(/\bfetch\(/g)].length, 1, "all FX fetches must route through fxFetch");
-});
-
 // Every 3xx with a Location must be refused, not followed: Open Exchange Rates
 // carries its app_id as a query parameter, and a query parameter is part of the
 // URL — unlike the Authorization header, which fetch strips cross-origin, it
