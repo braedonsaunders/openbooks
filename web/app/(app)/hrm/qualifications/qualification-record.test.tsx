@@ -12,7 +12,7 @@ registerHooks({
     if (specifier === 'next/navigation') {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(){}, replace(){} })',
+        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){ (globalThis.__qualRefreshes ??= []).push(1) }, push(u){ (globalThis.__qualPushes ??= []).push(u) }, replace(){} }); export const usePathname = () => (globalThis.__qualPathname ?? "/hrm/qualifications"); export const useSearchParams = () => new URLSearchParams(globalThis.__qualSearch ?? "")',
       }
     }
     return next(specifier, context)
@@ -291,3 +291,38 @@ test('a read-only viewer sees the credential with no Verify, Renew or Revoke', a
   }
 })
 
+// F3-39: renewal writes a new row, so the drawer navigates to the new id
+// instead of showing the new row under the old id.
+test('renew navigates to the renewed row, preserving the other params', async () => {
+  const g = globalThis as Record<string, unknown>
+  g.__qualPushes = []
+  const m = await mount(async (url, method) => {
+    if (url === '/api/hrm/qualifications/q-1' && method === 'GET') return { ok: true, body: PENDING_DETAIL }
+    if (url.includes('/api/hrm/qualification-types')) return { ok: true, body: TYPES }
+    if (url === '/api/hrm/qualifications/q-1/renew' && method === 'POST') {
+      return { ok: true, body: { qualification: { id: 'q-2' } } }
+    }
+    throw new Error(`unexpected fetch ${method} ${url}`)
+  }, { qualificationId: 'q-1', recordOpen: false, canManage: true })
+  try {
+    await flushAsync()
+    // The renewal date comes from the operator prompt, never the browser day.
+    const win = g.window as unknown as { prompt?: (message: string, def?: string) => string | null }
+    win.prompt = () => '2026-09-20'
+    const { act } = await import('react')
+    await act(async () => {
+      const renew = [...m.document.querySelectorAll('button')].find((b) => b.textContent === 'Renew')
+      assert.ok(renew, 'Renew renders for the manage grant')
+      m.click(renew!)
+    })
+    await flushAsync()
+    const pushes = (g.__qualPushes ?? []) as string[]
+    assert.equal(pushes.length, 1, 'renewal navigates exactly once')
+    assert.ok(pushes[0]!.includes('qualification=q-2'), `the drawer keys on the new id: ${pushes[0]}`)
+    assert.ok(!pushes[0]!.includes('qualification=q-1'), 'the old id leaves the URL')
+    const rereads = m.calls.filter((c) => c.url === '/api/hrm/qualifications/q-2')
+    assert.equal(rereads.length, 0, 'the drawer does not reread under the old key — the remount loads the new row')
+  } finally {
+    await m.unmount()
+  }
+})
