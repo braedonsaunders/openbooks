@@ -93,7 +93,6 @@
     "web/app/(app)/timesheets/view-subsidiary-scope.test.ts": 2,
     "web/app/api/_order/order-line-warehouse.test.ts": 3,
     "web/app/api/admin/api-keys/route-ceiling.integration.test.ts": 1,
-    "web/app/api/admin/backups/manifest/route.test.ts": 1,
     "web/app/api/admin/setup/[entity]/route.test.ts": 1,
     "web/app/api/ap-capture/item-api-scope.test.ts": 1,
     "web/app/api/ap-capture/route-config-refusal.test.ts": 1,
