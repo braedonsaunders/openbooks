@@ -66,7 +66,7 @@ export async function deleteDocument(
       await releaseBillingProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
     }
     if (doc.kind === "vendor_bill") {
-      await releaseVendorBillProvenance(tx, doc.orgId, documentId);
+      await releaseVendorBillProvenance(tx, doc.orgId, documentId, { actorId: userId, reason: audit.reason?.trim() || "draft_discarded" });
       // The retainage release reservation must go before the document row it
       // references; the FK would otherwise reject the delete with 23503.
       // Voided bills keep their row as posted-history provenance instead.

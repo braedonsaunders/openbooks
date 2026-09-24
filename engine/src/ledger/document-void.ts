@@ -983,7 +983,7 @@ export async function completeRequestedDocumentVoid(
         await releaseBillingProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
       }
       if (String(doc.kind) === "vendor_bill") {
-        await releaseVendorBillProvenance(tx, orgId, documentId);
+        await releaseVendorBillProvenance(tx, orgId, documentId, { actorId: String(doc.void_requested_by), reason: String(doc.void_reason) });
       }
       if (String(doc.kind) === "pay_run") {
         await releaseVoidedPayRun(tx, orgId, documentId);

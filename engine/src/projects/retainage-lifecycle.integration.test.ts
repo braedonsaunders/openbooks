@@ -188,6 +188,35 @@ test("vendor partial release reversed first permits the supporting draw-bill voi
   } finally { await dropScratchOrgReporting(f.org.orgId); }
 });
 
+test("vendor draw-bill void writes an audited application release", enabled, async () => {
+  // A-S32: the application's return to billable must carry the void actor,
+  // the reason, and the before/after status and bill link — the same
+  // evidence the customer-side release writes — instead of a silent flip.
+  const f = await vendorSetup();
+  try {
+    const app = (await db.execute<{ id: string }>(sql`select id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!;
+    const bill = (await db.execute<{ id: string }>(sql`select vendor_bill_document_id as id from vendor_pay_applications where org_id=${f.org.orgId}`)).rows[0]!.id;
+    await voidDoc(f.org.orgId, f.actor, bill, f.org.date);
+    const released = (await db.execute<{ status: string; vendor_bill_document_id: string | null; updated_by: string | null }>(sql`
+      select status, vendor_bill_document_id, updated_by from vendor_pay_applications where org_id=${f.org.orgId} and id=${app.id}`)).rows[0]!;
+    assert.equal(released.status, "approved");
+    assert.equal(released.vendor_bill_document_id, null);
+    assert.equal(released.updated_by, f.actor);
+    const audit = (await db.execute<{ action: string; changes: unknown; actor_id: string | null }>(sql`
+      select action, changes, actor_id from audit_log
+       where org_id=${f.org.orgId} and table_name='vendor_pay_applications' and row_id=${app.id} and action='billing_released'
+       order by at desc limit 1`)).rows[0]!;
+    assert.equal(audit.action, "billing_released");
+    assert.equal(audit.actor_id, f.actor);
+    const changes = audit.changes as { before: { status: string; vendor_bill_document_id: string }; after: { status: string; vendor_bill_document_id: null }; reason: string };
+    assert.equal(changes.before.status, "billed");
+    assert.equal(changes.before.vendor_bill_document_id, bill);
+    assert.equal(changes.after.status, "approved");
+    assert.equal(changes.after.vendor_bill_document_id, null);
+    assert.equal(changes.reason, "Lifecycle test reversal");
+  } finally { await dropScratchOrgReporting(f.org.orgId); }
+});
+
 test("customer release posting refuses shrunken capacity instead of over-releasing", enabled, async () => {
   const f = await customerSetup();
   try {
