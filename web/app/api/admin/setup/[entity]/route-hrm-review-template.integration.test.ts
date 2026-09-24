@@ -139,3 +139,48 @@ test("a review template created with rating-scale labels persists and reads back
   assert.equal(String(edited.scale.min), "1");
   assert.equal(String(edited.scale.max), "5");
 });
+
+test("string scale bounds from the drawer save as numbers; garbage is refused by name", async () => {
+  // OM-17: the drawer's integer inputs keep STRING values. The input
+  // boundary coerces decimal strings to JSON numbers so the storage
+  // CHECK (numbers only) never sees them; an unparseable bound is
+  // refused by field name instead of reaching the write.
+  const org = await createScratchOrg();
+  const actorId = await createScratchUser(org.orgId, "Review Admin", "admin");
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb)
+     where id = ${org.orgId}`);
+  authenticate({ orgId: org.orgId, actorId });
+
+  const created = await POST(
+    postRequest("hrm-review-templates", {
+      name: "String scale",
+      ratingScaleMin: "1",
+      ratingScaleMax: "3",
+      ratingScaleLabels: ["low", "mid", "high"],
+      isActive: true,
+    }),
+    call("hrm-review-templates"),
+  );
+  assert.equal(created.status, 200, JSON.stringify(await created.clone().json().catch(() => null)));
+  const { id } = (await created.json()) as { id: string };
+  const stored = await scaleOf(id);
+  assert.equal(typeof stored.scale.min, "number");
+  assert.equal(typeof stored.scale.max, "number");
+  assert.equal(stored.scale.min, 1);
+  assert.equal(stored.scale.max, 3);
+
+  const refused = await POST(
+    postRequest("hrm-review-templates", {
+      name: "Bad scale",
+      ratingScaleMin: "many",
+      ratingScaleMax: "3",
+      ratingScaleLabels: ["low", "high"],
+      isActive: true,
+    }),
+    call("hrm-review-templates"),
+  );
+  assert.equal(refused.status, 422);
+  const body = (await refused.json()) as { error: string };
+  assert.match(body.error, /ratingScaleMin/);
+});

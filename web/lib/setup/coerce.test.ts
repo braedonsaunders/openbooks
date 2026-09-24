@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildRow, coerceField, describeDbError } from './coerce.ts'
+import { buildRow, coerceField, describeDbError, scaleShapeCheckRefusal } from './coerce.ts'
 import { foldWholeNumber } from './whole-number'
 import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
 
@@ -216,4 +216,30 @@ test('refs to natural-key entities carry the key, never a UUID (hrm-document-cat
   // UUID-shaped refs to ordinary entities still validate as UUIDs.
   const uuidField: SetupField = { key: 'levelId', kind: 'ref', ref: 'hrm-job-levels' }
   assert.deepEqual(coerceField(uuidField, 'not-a-uuid'), { error: 'levelId must reference a valid record' })
+})
+
+test('a residual scale-shape CHECK refusal names the remedy, never the CHECK', () => {
+  // The input boundary coerces and the engine proves the shape, so this
+  // mapping is unreachable in practice — it is the last fence if a layer
+  // is ever bypassed or drifts. Other entities and constraints pass
+  // through untouched.
+  const checkError = Object.assign(new Error('driver text'), {
+    code: '23514',
+    cause: { constraint: 'hrm_review_templates_scale_shape', message: 'raw CHECK text' },
+  })
+  assert.deepEqual(scaleShapeCheckRefusal('hrm-review-templates', checkError), {
+    status: 422,
+    body: {
+      error:
+        'the review template rating scale min and max must be numbers with min below max — fix the scale fields before saving',
+      code: 'invalid',
+    },
+  })
+  assert.equal(scaleShapeCheckRefusal('hrm-process-templates', checkError), null)
+  const otherCheck = Object.assign(new Error('driver text'), {
+    code: '23514',
+    cause: { constraint: 'some_other_check', message: 'raw CHECK text' },
+  })
+  assert.equal(scaleShapeCheckRefusal('hrm-review-templates', otherCheck), null)
+  assert.equal(scaleShapeCheckRefusal('hrm-review-templates', new Error('nope')), null)
 })

@@ -31,12 +31,13 @@ import {
   idColumn,
   multirefField,
   pgErrorCode,
+  scaleShapeCheckRefusal,
   taxRatePercentProblem,
   UUID_RE,
 } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
-import { normalizeHrmReviewTemplateInput } from './hrm-review-template'
+import { HrmReviewTemplateScaleError, normalizeHrmReviewTemplateInput } from './hrm-review-template'
 import { normalizeHrmCompensationInput } from './hrm-compensation'
 import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
 import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
@@ -1596,7 +1597,19 @@ export async function createSetupRecord(
 
   // HR-18: recruiting-depth create defaults fold before the generic coercion.
   const recruitingBody = foldRecruitingSetupCreate(entity.key, rawBody)
-  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody))))))))
+  // The review-template fold is the one input boundary that refuses: a
+  // scale bound no decimal reading accepts fails here as a 422 before
+  // buildRow or the storage CHECK ever sees it.
+  let reviewFolded: Record<string, unknown>
+  try {
+    reviewFolded = normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, recruitingBody))))
+  } catch (error) {
+    if (error instanceof HrmReviewTemplateScaleError) {
+      return { status: 422, body: { error: error.message, code: 'invalid' } }
+    }
+    throw error
+  }
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, reviewFolded))))
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -1876,6 +1889,11 @@ export async function createSetupRecord(
     if (pgErrorCode(e) === '23P01') {
       return overlapConflict(entity.key)
     }
+    // A storage CHECK the earlier layers should have proved (the review
+    // scale shape) still refuses by name with the remedy — the CHECK
+    // itself stays intact; only its surfacing changes.
+    const scaleRefusal = scaleShapeCheckRefusal(entity.key, e)
+    if (scaleRefusal) return scaleRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }
@@ -1895,7 +1913,16 @@ export async function updateSetupRecord(
   if (owned) return owned
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
-  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))))))
+  let reviewFolded: Record<string, unknown>
+  try {
+    reviewFolded = normalizeHrmReviewTemplateInput(entity.key, normalizeHrmCompensationInput(entity.key, normalizeHrmProcessTemplateInput(entity.key, normalizeTaxReturnFormInput(entity.key, rawBody))))
+  } catch (error) {
+    if (error instanceof HrmReviewTemplateScaleError) {
+      return { status: 422, body: { error: error.message, code: 'invalid' } }
+    }
+    throw error
+  }
+  const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, reviewFolded))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
@@ -2397,6 +2424,8 @@ export async function updateSetupRecord(
     if (pgErrorCode(e) === '23P01') {
       return overlapConflict(entity.key)
     }
+    const scaleRefusal = scaleShapeCheckRefusal(entity.key, e)
+    if (scaleRefusal) return scaleRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }

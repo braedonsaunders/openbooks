@@ -44,7 +44,13 @@ export function parseCivilDay(value: unknown, field: string): string {
   return value;
 }
 
-const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
+/**
+ * The engine's decimal recognition, shared by readers (parseRatingScale)
+ * and input boundaries (the setup review-template fold): one classifier,
+ * never two. A bound the reader accepts must normalize; anything else is
+ * refused by name before the write.
+ */
+export const DECIMAL_RE = /^-?\d+(\.\d+)?$/;
 
 /** Scale a decimal string to a bigint at 4 fractional digits (exact, never float). */
 function scale4(value: string): bigint {
