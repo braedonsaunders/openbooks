@@ -2,13 +2,11 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// A denied dashboard widget must be absent AND unqueried: the loader only
-// runs the readers its visible widget set needs, so a caller without the
-// permission leaves no trace in the query log (and nothing for timing or
-// logs to leak). These tests inject spying readers — production always uses
-// the canonical default — and prove the spies are never invoked.
+// A denied widget must be absent and unqueried; readers run only for visible
+// widgets. Spying readers prove the denied query leaves no timing or log trace.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }

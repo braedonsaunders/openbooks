@@ -7,6 +7,7 @@ import test from "node:test";
 // /banking cockpit and its Match-button count — never a parallel count.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }

@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// The close widget reads listCloseRuns — the same reader as the /close
-// workspace and orgVitals — never a parallel query.
+// The close widget uses listCloseRuns, matching /close and orgVitals.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }

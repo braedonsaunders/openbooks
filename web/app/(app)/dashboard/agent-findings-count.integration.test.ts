@@ -3,14 +3,13 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// The dashboard "Agent findings" tile links to /agents — the ranked inbox —
-// so its numbers must BE the inbox scope: open/in_review findings over the
-// caller's readable packs, open carriers with a proposal, and the latest
-// detection instant as "last run". Pack visibility is the doorway: without
-// assistant.use (plus a module grant per pack) the readable set is empty and
-// the tile counts zero instead of leaking org-wide numbers.
+// The Agent findings tile links to /agents, so it uses inbox scope: open and
+// in-review findings over readable packs, open carriers with proposals, and
+// latest detection as "last run". assistant.use and per-pack grants determine
+// visibility; no grants means zero findings, not org-wide counts.
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "data:text/javascript,export async function getTranslations(){return (key)=>key};export async function getLocale(){return 'en-CA'}" };
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
