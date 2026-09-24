@@ -137,11 +137,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y qpdf
       - name: Unit test shard
         shell: bash
-        env:
-          # Measured per-file cost. scripts/test-timings-merge.mjs folds the
-          # shard records into scripts/test-timings.json, which is what packs
-          # the shards on the next run.
-          OPENBOOKS_TEST_TIMINGS: .local/test-timings.json
         run: |
           set -o pipefail
           timeout --signal=TERM --kill-after=10s 16m npm run test:unit 2>&1 | tee unit.txt
@@ -159,7 +154,6 @@ jobs:
           path: |
             unit.txt
             .local/test-selection.json
-            .local/test-timings.json
 
   database:
     needs: [scope, typecheck]
@@ -281,10 +275,6 @@ jobs:
         shell: bash
         env:
           COLLECT_COVERAGE: ${{ github.event_name == 'workflow_dispatch' }}
-          # Measured per-file cost. The 16 shards held an even 63-64 files each
-          # and still spread 312s-632s; this is the record that replaces file
-          # count with cost as the thing being balanced.
-          OPENBOOKS_TEST_TIMINGS: .local/test-timings.json
         run: |
           set -o pipefail
           coverage=()
@@ -350,7 +340,6 @@ jobs:
             lcov.info
             coverage.txt
             .local/test-selection.json
-            .local/test-timings.json
             .local/fixture-lifecycle-receipt.txt
           if-no-files-found: ignore
 

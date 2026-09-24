@@ -138,13 +138,11 @@ const connectorPaths = [
   // Catalog cognate pins quote connector-namespace keys (sync.netsuite.*)
   // the locale files themselves already hold in scope.
   /^web\/lib\/messages-catalog\.test\.ts$/,
-  // Generated measurement record. Its keys are repository-relative test file
-  // paths and its values are integer milliseconds, so it inherits the names of
-  // the connector regression tests already in scope above. It carries no
-  // product copy, no executable defaults and no tenant identity; a timing
-  // record that could not name the connector tests it measured would have to
-  // omit them from shard balancing instead.
-  /^scripts\/test-timings\.json$/,
+  // Burn-down list of source-pin tests. Its keys are repository-relative test
+  // file paths and its values are integer counts, so it names the connector
+  // tests already in scope above. It carries no product copy, no executable
+  // defaults and no tenant identity.
+  /^scripts\/test-source-pins\.allowlist\.json$/,
   // Relocation record for the engine module move. Its keys and values are
   // repository-relative file paths, so it names the connector client files it
   // moved exactly as the connector scope above does. No product copy.
