@@ -8,6 +8,12 @@ import {
   runBulkScript,
   runScheduledScript,
 } from '@openbooks/engine/src/scripting/scripting.ts'
+import {
+  bulkRunClientKey,
+  bulkScriptQueueJobId,
+  claimBulkRunKey,
+  completeBulkRunKey,
+} from '@openbooks/engine/src/scripting/bulk-run-claim.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -32,7 +38,7 @@ function invalidCronResponse(error: InvalidScheduledScriptCronError): NextRespon
  * unattributed: without an actor its material operations would be
  * indistinguishable from system automation.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -51,15 +57,72 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   try {
     if (kind === 'bulk') {
+      // E02: a bulk Run-now is a non-idempotent money-moving execution, so
+      // it carries the caller's run key plus a durable claim. A double-click
+      // reuses the key: the second request either replays the recorded
+      // outcome (completed) or is refused as in-flight (409) — it never runs
+      // twice. Without a client key each request mints a fresh one (no
+      // cross-request dedupe). The queue id is deterministic in the key, so
+      // live duplicates collapse in BullMQ; the worker re-checks the claim
+      // because BullMQ dedupe only covers live jobs.
+      let rawBody: unknown = null
+      try {
+        rawBody = await req.json()
+      } catch {
+        rawBody = null
+      }
+      const provided = (rawBody as { idempotencyKey?: unknown } | null)?.idempotencyKey
+      let runKey: string
+      try {
+        runKey = bulkRunClientKey(provided)
+      } catch {
+        return NextResponse.json(
+          { error: 'A valid idempotencyKey is required; retry this run with the same client key.', code: 'SCRIPT_RUN_KEY_INVALID' },
+          { status: 400 },
+        )
+      }
+      const claim = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+      if (claim.status === 'completed') {
+        return NextResponse.json({ ...(claim.response as Record<string, unknown>), deduped: true })
+      }
+      if (claim.status === 'inflight') {
+        return NextResponse.json(
+          { error: 'A run with this key is already in progress.', code: 'SCRIPT_RUN_IN_PROGRESS' },
+          { status: 409 },
+        )
+      }
+      if (claim.status === 'mismatched') {
+        return NextResponse.json(
+          { error: 'This run key is already in use by a different script.', code: 'SCRIPT_RUN_KEY_MISMATCH' },
+          { status: 409 },
+        )
+      }
+      const queueJobId = bulkScriptQueueJobId(id, runKey)
+      const payload = { orgId: user.orgId, scriptId: id, kind: 'bulk' as const, actorId: user.id, idempotencyKey: runKey }
       try {
         const { enqueueScriptRun } = await import('@openbooks/jobs')
-        const job = await enqueueScriptRun({ orgId: user.orgId, scriptId: id, kind: 'bulk', actorId: user.id })
-        return NextResponse.json({ queued: true, jobId: job.id })
+        const job = await enqueueScriptRun(payload, { jobId: queueJobId })
+        return NextResponse.json({ queued: true, jobId: job.id, idempotencyKey: runKey })
       } catch {
+        // The enqueue reply may be lost after Redis accepted the job: only
+        // run inline on provable non-acceptance, mirroring the report and
+        // close delivery settlement. A kept job proceeds down the normal
+        // queued path; the worker completes the claim.
+        let accepted = false
+        try {
+          const { getScriptsQueue } = await import('@openbooks/jobs')
+          accepted = (await getScriptsQueue().getJob(queueJobId)) != null
+        } catch {
+          accepted = false
+        }
+        if (accepted) return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
         // Redis unavailable — run inline so "Run now" still works in dev,
-        // under the same authenticated actor as the queued path.
+        // under the same authenticated actor as the queued path, completing
+        // the same claim the worker would have completed.
         const outcome = await runBulkScript(id, user.orgId, { actorId: user.id })
-        return NextResponse.json({ queued: false, ...outcome })
+        const response = { queued: false, ...outcome }
+        await completeBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey, response })
+        return NextResponse.json(response)
       }
     }
 

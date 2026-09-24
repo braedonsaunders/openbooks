@@ -70,6 +70,14 @@ async function seedScheduled(orgId: string): Promise<string> {
   return id;
 }
 
+async function seedBulk(orgId: string): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into user_scripts (id, org_id, name, trigger_point, source, is_active)
+    values (${id}, ${orgId}, 'Manual', 'bulk', 'function main(ctx) { return 1; }', true)`);
+  return id;
+}
+
 async function runCount(orgId: string): Promise<number> {
   return Number(
     (await db.execute<{ n: string }>(sql`
@@ -78,8 +86,11 @@ async function runCount(orgId: string): Promise<number> {
   );
 }
 
-function runReq(id: string): Request {
-  return new Request(`http://audit.local/api/admin/scripts/${id}/run`, { method: "POST" });
+function runReq(id: string, body?: unknown): Request {
+  return new Request(`http://audit.local/api/admin/scripts/${id}/run`, {
+    method: "POST",
+    ...(body === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+  });
 }
 
 test("an unauthenticated caller cannot Run now", { skip: !DB }, async () => {
@@ -134,5 +145,23 @@ test("Run now cannot execute another organization's script by id", { skip: !DB }
     session.user = null;
     await dropScratchOrg(home.orgId);
     await dropScratchOrg(other.orgId);
+  }
+});
+
+test("bulk Run now refuses requests without a stable client idempotency key", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableScripts(org.orgId);
+    const id = await seedBulk(org.orgId);
+    const userId = await createScratchUser(org.orgId, "Script administrator", "script_admin");
+    await grant(org.orgId, "script_admin", ["scripts.manage"]);
+    session.user = caller(org.orgId, userId);
+    const res = await POST(runReq(id), { params: Promise.resolve({ id }) });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "SCRIPT_RUN_KEY_INVALID");
+    assert.equal(await runCount(org.orgId), 0, "a refused request must not create a script run");
+  } finally {
+    session.user = null;
+    await dropScratchOrg(org.orgId);
   }
 });

@@ -208,20 +208,32 @@ export function ScriptDrawer({
     router.refresh()
   }
 
+  // One run key per drawer instance, rotated once the server answers with
+  // a terminal outcome: a double-click reuses the key and either replays
+  // the recorded run or is refused as in-flight, instead of running twice.
+  // A 409 keeps the key so the operator can retry the same intent.
+  const [runKey, setRunKey] = useState(() => crypto.randomUUID())
   async function runNow() {
     if (!script?.id) return
     setRunning(true)
     try {
-      const res = await fetch(`/api/admin/scripts/${script.id}/run`, { method: 'POST' })
+      const res = await fetch(`/api/admin/scripts/${script.id}/run`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idempotencyKey: runKey }),
+      })
       const data = await res.json()
       if (!res.ok) {
         toast.error(data.error ?? t('drawer.runFailed'))
       } else if (data.queued) {
         toast.success(t('drawer.runOk', { ms: 0 }))
+        setRunKey(crypto.randomUUID())
       } else if (data.status === 'ok') {
         toast.success(t('drawer.runOk', { ms: data.durationMs }))
+        setRunKey(crypto.randomUUID())
       } else {
         toast.error(t('drawer.runFailed') + (data.abortReason ? `: ${data.abortReason}` : ''))
+        setRunKey(crypto.randomUUID())
       }
       setTab('log')
       setSelectedRun(0)
