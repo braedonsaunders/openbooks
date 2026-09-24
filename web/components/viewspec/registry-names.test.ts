@@ -47,6 +47,27 @@ test('WIDGET_NAMES mirrors the composed WIDGET_REGISTRY exactly', () => {
     missing: actual.filter((name) => !WIDGET_NAMES.has(name)),
     extra: [...WIDGET_NAMES].filter((name) => !actual.includes(name)),
   }, { missing: [], extra: [] })
+  assert.equal(WIDGET_NAMES.size, actual.length, 'WIDGET_NAMES must match the registry exactly (length)')
+})
+
+test('the mirrors list every name exactly once', () => {
+  // A duplicated literal collapses in the Set, so membership checks stay
+  // green while the mirror lies about being generated. Count the literals
+  // structurally (TypeScript AST, not text search) and require no repeats.
+  for (const [setName, set] of [['WIDGET_NAMES', WIDGET_NAMES], ['FRAME_NAMES', FRAME_NAMES]] as const) {
+    const node = parse(read('./registry-names.ts')).statements.filter(ts.isVariableStatement)
+      .flatMap((statement) => [...statement.declarationList.declarations])
+      .find((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === setName)
+    assert.ok(node?.initializer, `${setName} declaration is missing`)
+    const literals: string[] = []
+    const visit = (n: ts.Node): void => {
+      if (ts.isStringLiteral(n)) literals.push(n.text)
+      ts.forEachChild(n, visit)
+    }
+    visit(node.initializer)
+    assert.equal(new Set(literals).size, literals.length, `${setName} lists a name twice`)
+    assert.equal(literals.length, set.size, `${setName} literal count must equal its Set size`)
+  }
 })
 
 test('FRAME_NAMES mirrors FRAME_REGISTRY exactly', () => {
@@ -57,6 +78,7 @@ test('FRAME_NAMES mirrors FRAME_REGISTRY exactly', () => {
   })
   assert.equal(new Set(actual).size, actual.length, 'frame registry must not duplicate keys')
   assert.deepEqual({ missing: actual.filter((name) => !FRAME_NAMES.has(name)), extra: [...FRAME_NAMES].filter((name) => !actual.includes(name)) }, { missing: [], extra: [] })
+  assert.equal(FRAME_NAMES.size, actual.length, 'FRAME_NAMES must match the registry exactly (length)')
 })
 
 test('every registry name is a slug the spec schema accepts', () => {

@@ -239,7 +239,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-step-complete',
   'hrm-upcoming-changes',
   'hrm-onboarding-panel',
-  'hrm-process-drawer',
   'hrm-propose-change-dialog',
   'hrm-review-drawer',
   // HR-16 begin
