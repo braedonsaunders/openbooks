@@ -168,3 +168,36 @@ test('account reconciliation rows badge statement vs source evidence', { skip: !
     await dropScratchOrgReporting(org.orgId)
   }
 })
+
+test('account balance nets a reversed entry with its posted mirror', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, actor } = await seedSourceEvidenceOrg()
+  try {
+    await withBypassContext(async () => {
+      const original = randomUUID()
+      const mirror = randomUUID()
+      for (const [id, number] of [[original, 'reversal-original'], [mirror, 'reversal-mirror']] as const) {
+        await db.execute(sql`insert into journal_entries
+          (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,created_by,updated_by)
+          values(${id},${org.orgId},${org.bookId},${org.subsidiaryId},${number},${org.date},${org.periodId},'draft','manual',${actor},${actor})`)
+      }
+      await db.execute(sql`update journal_entries set reverses_entry_id=${original}
+        where org_id=${org.orgId} and id=${mirror}`)
+      await db.execute(sql`insert into journal_lines
+        (id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+        values(${randomUUID()},${org.orgId},${original},1,${org.accounts.bank},${org.subsidiaryId},200,'USD',200,1),
+          (${randomUUID()},${org.orgId},${original},2,${org.accounts.adjustment},${org.subsidiaryId},-200,'USD',-200,1),
+          (${randomUUID()},${org.orgId},${mirror},1,${org.accounts.bank},${org.subsidiaryId},-200,'USD',-200,1),
+          (${randomUUID()},${org.orgId},${mirror},2,${org.accounts.adjustment},${org.subsidiaryId},200,'USD',200,1)`)
+      await db.execute(sql`update journal_entries set status='posted',posted_by=${actor}
+        where org_id=${org.orgId} and id in (${original},${mirror})`)
+      await db.execute(sql`update journal_entries set status='reversed'
+        where org_id=${org.orgId} and id=${original}`)
+    })
+
+    const account = await withOrgContext(org.orgId, async () => loadBankingAccount(org.accounts.bank, {}))
+    assert.equal(account.glBalance, '150.0000', 'both the reversed original and its posted mirror net to zero')
+  } finally {
+    state.user = null
+    await dropScratchOrgReporting(org.orgId)
+  }
+})
