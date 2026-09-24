@@ -1,3 +1,4 @@
+// source-pin-contract: every HRM translation call passes declared placeholder values; subjects derived by walking web/app/(app)/hrm views
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -10,6 +11,7 @@ import test from 'node:test'
  * braces on the page. Every t()/tc() call in the HRM views whose English
  * message declares {placeholders} must pass values, so no heading, badge,
  * or refusal ever ships with braces again.
+ * (Ticket in comment only; the test names state the behaviour.)
  *
  * Derived from the call sites, never a hand list: the test walks every
  * HRM view file and checks each translation call against the catalog.
@@ -76,11 +78,8 @@ test('every HRM translation call whose message declares placeholders passes valu
   assert.deepEqual(violations, [], `translation calls that would render literal {braces}:\n${violations.join('\n')}`)
 })
 
-test('the requisition drawer title carries the requisition number', () => {
-  const view = readFileSync(join(HRM, 'recruiting', 'view.ts'), 'utf8')
-  assert.match(
-    view,
-    /t\('recruiting\.drawer\.title',\s*\{\s*number:/,
-    'the drawer title must pass { number } so the heading never renders a literal {number}',
-  )
-})
+// The single-call pin this file used to carry ('the requisition drawer
+// title carries the requisition number', asserting the exact call shape
+// in recruiting/view.ts) is deleted: the walk test above fails on the
+// same regression — a t('recruiting.drawer.title') call without values
+// for a message declaring {number} is exactly the violation it reports.
