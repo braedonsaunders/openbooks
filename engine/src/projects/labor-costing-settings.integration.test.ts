@@ -22,8 +22,8 @@ test("stored garbage components refuse by name instead of pricing without the bu
   try {
     await writeSettings(org.orgId, {
       mode: "post",
-      hoursPerDay: 8,
-      annualHours: 2080,
+      hoursPerDay: "8",
+      annualHours: "2080",
       components: [{ key: "b", name: "Statutory Burden", kind: "per_hour", value: "bogus" }],
     });
     await assert.rejects(laborCostingSettings(org.orgId), (error: unknown) => {
@@ -42,9 +42,9 @@ test("a stored unknown component kind refuses by name", async () => {
   try {
     await writeSettings(org.orgId, {
       mode: "post",
-      hoursPerDay: 8,
-      annualHours: 2080,
-      components: [{ kind: "annual_bonus", value: 5 }],
+      hoursPerDay: "8",
+      annualHours: "2080",
+      components: [{ kind: "annual_bonus", value: "5" }],
     });
     await assert.rejects(laborCostingSettings(org.orgId), /component 1: unknown kind/);
   } finally {
@@ -58,7 +58,7 @@ test("a stored out-of-range workday refuses by name instead of mispricing overti
     await writeSettings(org.orgId, {
       mode: "post",
       hoursPerDay: "lots",
-      annualHours: 2080,
+      annualHours: "2080",
       components: [],
     });
     await assert.rejects(laborCostingSettings(org.orgId), /hoursPerDay must be a number between 0 and 24/);
@@ -73,7 +73,7 @@ test("valid stored settings still resolve, with defaults for absent fields", asy
     await writeSettings(org.orgId, {
       mode: "post",
       hoursPerDay: "8.5000",
-      annualHours: 2000,
+      annualHours: "2000",
       components: [{ key: "burden", name: "Burden", kind: "percent_of_wage", value: "13" }],
     });
     const settings = await laborCostingSettings(org.orgId);

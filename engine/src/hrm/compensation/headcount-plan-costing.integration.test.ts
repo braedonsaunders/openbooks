@@ -138,7 +138,7 @@ async function setLaborCostingComponents(orgId: string, components: Record<strin
     select settings from orgs where id = ${orgId}`)).rows[0]?.settings ?? {};
   const next = {
     ...(current as Record<string, unknown>),
-    laborCosting: { mode: "off", hoursPerDay: 8, annualHours: 2080, components },
+    laborCosting: { mode: "off", hoursPerDay: "8", annualHours: "2080", components },
   };
   await db.execute(sql`update orgs set settings = ${JSON.stringify(next)}::jsonb where id = ${orgId}`);
 }
@@ -223,9 +223,9 @@ test("F04: fallback labor-costing percents cost end to end, empty means zero", a
     const { level } = await seedBand(org.orgId, h.hrId, org.subsidiaryId);
     await setCompensationSettings(org.orgId, { burdenRate: null });
     await setLaborCostingComponents(org.orgId, [
-      { key: "stat", kind: "percent_of_wage", name: "Statutory", value: 10 },
-      { key: "wc", kind: "worker_comp", name: "Worker comp", value: 4 },
-      { key: "per_diem", kind: "per_day", name: "Per diem", value: 50 },
+      { key: "stat", kind: "percent_of_wage", name: "Statutory", value: "10" },
+      { key: "wc", kind: "worker_comp", name: "Worker comp", value: "4" },
+      { key: "per_diem", kind: "per_day", name: "Per diem", value: "50" },
     ]);
     const plan = await createPlan({
       orgId: org.orgId, actorId: h.hrId, name: "FY26 fallback plan",
@@ -257,7 +257,7 @@ test("F04: fallback labor-costing percents cost end to end, empty means zero", a
     assert.equal((bare.costBasis as Record<string, unknown>).burden_rate, "0");
     // A fractional percent prices exactly through the service path too.
     await setLaborCostingComponents(org.orgId, [
-      { key: "micro", kind: "percent_of_wage", name: "Micro levy", value: 0.005 },
+      { key: "micro", kind: "percent_of_wage", name: "Micro levy", value: "0.005" },
     ]);
     const micro = await createPlanLine({
       orgId: org.orgId, actorId: h.hrId, planId: plan.id, kind: "create",
