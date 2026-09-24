@@ -43,6 +43,60 @@ type Harness = {
   cycleId: string;
 };
 
+test("calibration sessions require an open or calibrating cycle", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = (await db.execute<{ template_id: string }>(sql`
+      select template_id from hrm_review_cycles where org_id = ${h.org.orgId} and id = ${h.cycleId}
+    `)).rows[0]!.template_id;
+    const draftCycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrAll,
+      templateId,
+      name: "Draft calibration cycle",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+    });
+    await assert.rejects(
+      createCalibrationSession({
+        orgId: h.org.orgId,
+        actorId: h.hrAll,
+        cycleId: draftCycle.id,
+        name: "Too early",
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmPerformanceError);
+        assert.equal(error.code, "BAD_STATE");
+        assert.match(error.message, /draft.*open or calibrating/);
+        return true;
+      },
+    );
+    const sessionId = (await db.execute<{ id: string }>(sql`
+      insert into hrm_calibration_sessions (org_id, cycle_id, name, created_by, updated_by)
+      values (${h.org.orgId}, ${draftCycle.id}, 'Legacy draft session', ${h.hrAll}, ${h.hrAll}) returning id
+    `)).rows[0]!.id;
+    await assert.rejects(
+      openCalibrationSession({ orgId: h.org.orgId, actorId: h.hrAll, id: sessionId }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmPerformanceError);
+        assert.equal(error.code, "BAD_STATE");
+        assert.match(error.message, /draft.*open or calibrating/);
+        return true;
+      },
+    );
+    const stored = (await db.execute<{ status: string }>(sql`
+      select status from hrm_calibration_sessions where org_id = ${h.org.orgId} and id = ${sessionId}
+    `)).rows[0]!;
+    assert.equal(stored.status, "draft");
+    const entries = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_calibration_entries where org_id = ${h.org.orgId} and session_id = ${sessionId}
+    `)).rows[0]!.count;
+    assert.equal(entries, "0");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
 async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
   for (const permission of permissions) {
     await db.execute(sql`

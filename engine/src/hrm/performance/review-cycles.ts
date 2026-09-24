@@ -144,7 +144,7 @@ function assertCycleInScope(allowed: Set<string> | null, cycle: StoredCycle): vo
   }
 }
 
-async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string): Promise<StoredCycle> {
+async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string, forUpdate = false): Promise<StoredCycle> {
   const row = (await exec.execute<StoredCycle>(sql`
     select id,
            template_id as "templateId",
@@ -159,7 +159,7 @@ async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string): Pro
            opened_at as "openedAt",
            closed_at as "closedAt"
       from hrm_review_cycles
-     where org_id = ${orgId} and id = ${cycleId}
+     where org_id = ${orgId} and id = ${cycleId} ${forUpdate ? sql`for update` : sql``}
   `)).rows[0];
   // Zero rows is a failure: unknown id, or an id from another organization
   // (the org_id predicate is the org-isolation enforcement).
@@ -441,7 +441,7 @@ export async function openCycle(args: {
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    const cycle = await loadCycle(db, orgId, cycleId);
+    const cycle = await loadCycle(db, orgId, cycleId, true);
     assertCycleInScope(allowed, cycle);
     if (cycle.status !== "draft") {
       throw new HrmPerformanceError(
