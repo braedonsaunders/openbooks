@@ -1,9 +1,17 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { requireHrmRecruitingManageOrg } from "../authorization.ts";
+import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
+import {
+  requireHrmRecruitingManage,
+  requireHrmRecruitingManageOrg,
+  requireHrmRecruitingRead,
+  requireHrmRecruitingReadOrg,
+} from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
 import { pgTextArray, requireDepthFeature } from "./depth.ts";
+import { requireCandidateOwnedInScope } from "./candidate-scope.ts";
 
 /**
  * Canonical talent-pool service (HR-18, 0229): named pools of past
@@ -69,7 +77,7 @@ export async function listTalentPools(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmTalentPool");
     const rows = (await db.execute<PoolRow>(sql`
       select id, name, description from hrm_talent_pools where org_id = ${orgId} order by name
@@ -173,6 +181,11 @@ export async function addPoolMember(query: {
     if (!candidate) {
       throw new RecruitingError("NOT_FOUND", "candidate is not visible in this organization");
     }
+    // Pool membership shares the candidate with pool readers, so pulling a
+    // stranger into a pool (or learning their name from the add reply) is
+    // an exfiltration path: the candidate must already be owned through an
+    // in-scope requisition. Unknown and out-of-scope refuse identically.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     try {
       const row = (await db.execute<{ addedAt: string }>(sql`
         insert into hrm_talent_pool_members (org_id, pool_id, candidate_id, added_by, note)
@@ -212,6 +225,9 @@ export async function removePoolMember(query: {
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmTalentPool");
+    // Removing a stranger's membership answers whether they were pooled:
+    // ownership first, so unknown and out-of-scope refuse identically.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const removed = (await db.execute<{ id: string }>(sql`
       delete from hrm_talent_pool_members
        where org_id = ${orgId} and pool_id = ${poolId} and candidate_id = ${candidateId}
@@ -232,14 +248,29 @@ export async function listPoolMembers(query: {
   const actorId = requireActorId(query.actorId);
   const poolId = requireId(query.poolId, "poolId");
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    await requireHrmRecruitingReadOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmTalentPool");
+    const pool = (await db.execute<{ one: number }>(sql`
+      select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
+    `)).rows[0];
+    if (!pool) throw new RecruitingError("NOT_FOUND", "talent pool is not visible in this organization");
+    // Members render only for candidates owned through an in-scope
+    // requisition: the pool shares names with its readers, but a scoped
+    // reader must not enumerate another entity's benched candidates.
+    const allowed = await actorAllowedSubsidiaryIds(db, orgId, actorId);
+    const ownedExpression =
+      allowed === null
+        ? sql`true`
+        : sql`exists (select 1 from hrm_applications a
+                        join hrm_requisitions r on r.org_id = a.org_id and r.id = a.requisition_id
+                       where a.org_id = ${orgId} and a.candidate_id = c.id
+                         ${subsidiaryVisibleFilter(sql`r.employer_subsidiary_id`, allowed)})`;
     const rows = (await db.execute<PoolMemberDTO>(sql`
       select m.candidate_id as "candidateId", c.display_name as "displayName",
              c.tags as tags, m.added_at as "addedAt", m.note as note
         from hrm_talent_pool_members m
         join hrm_candidates c on c.org_id = m.org_id and c.id = m.candidate_id
-       where m.org_id = ${orgId} and m.pool_id = ${poolId}
+       where m.org_id = ${orgId} and m.pool_id = ${poolId} and (${ownedExpression})
        order by c.display_name
     `)).rows;
     return rows;
@@ -259,6 +290,9 @@ export async function tagCandidate(query: {
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     await requireDepthFeature(db, orgId, "hrmTalentPool");
+    // Tags ride the candidate row: retagging a stranger mutates them, so
+    // ownership comes before the write and the denial stays not-found.
+    await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
     const updated = (await db.execute<{ tags: string[] }>(sql`
       update hrm_candidates
          set tags = ${pgTextArray(tags)}::text[], updated_by = ${actorId}, updated_at = now()
@@ -291,7 +325,14 @@ export async function rediscoverForRequisition(query: {
   const requisitionId = requireId(query.requisitionId, "requisitionId");
   const wanted = requireTags(query.requisitionTags, "requisition");
   return withOrgTransaction(orgId, async () => {
-    await requireHrmRecruitingManageOrg(db, orgId, actorId);
+    // A read: the read grant — or manage — on the TARGET requisition opens
+    // it (scope rides the requisition, never the org). Matches stay
+    // pool-context rows: names plus matched tags, never contact PII.
+    try {
+      await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
+    } catch {
+      await requireHrmRecruitingRead(db, orgId, actorId, requisitionId);
+    }
     await requireDepthFeature(db, orgId, "hrmTalentPool");
     const requisition = (await db.execute<{ status: string }>(sql`
       select status from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
