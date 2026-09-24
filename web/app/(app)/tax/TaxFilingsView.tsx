@@ -90,6 +90,27 @@ export function buildPrepareBody(
   }
 }
 
+/**
+ * The preview's own filing scope as export query params (the export route
+ * parses the same scope params as the preview): the subsidiary set, the
+ * pinned registration, and the translation policy the engine echoed. An
+ * org-wide, untranslated preview contributes nothing, preserving the
+ * historical export shape byte-for-byte.
+ */
+export function exportScopeQuery(
+  result: Pick<Result, 'subsidiaryIds' | 'registrationId' | 'translation'>,
+): string {
+  const parts: string[] = []
+  for (const id of result.subsidiaryIds) parts.push(`subsidiary=${encodeURIComponent(id)}`)
+  if (result.registrationId) parts.push(`registration=${encodeURIComponent(result.registrationId)}`)
+  if (result.translation) {
+    parts.push(`presentationCurrency=${encodeURIComponent(result.translation.presentationCurrency)}`)
+    if (result.translation.rateType) parts.push(`rateType=${encodeURIComponent(result.translation.rateType)}`)
+    if (result.translation.rateDate) parts.push(`rateDate=${encodeURIComponent(result.translation.rateDate)}`)
+  }
+  return parts.map((part) => `&${part}`).join('')
+}
+
 /** Return a reportable window only when the obligation belongs to this form. */
 export function obligationPeriodForForm(
   obligations: readonly FilingObligation[],
@@ -201,7 +222,7 @@ export function TaxFilingsView({
   }
 
   const exportHref = (format: string) =>
-    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}${adjustmentQuery(adjustments)}`
+    `/api/tax/returns/${encodeURIComponent(code)}/export?from=${from}&to=${to}&format=${format}${adjustmentQuery(adjustments)}${result ? exportScopeQuery(result) : ''}`
 
   return (
     <div className="space-y-6">

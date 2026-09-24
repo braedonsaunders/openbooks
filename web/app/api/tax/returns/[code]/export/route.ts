@@ -5,6 +5,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { parseReturnScopeQuery, returnScopeOpts } from '@/lib/tax-return-scope'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import {
   exportDataToCsv,
@@ -31,8 +32,6 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardSubsidiaryScope(gate, null)
-  if (scopeDenied) return scopeDenied
   const { code } = await params
   const p = new URL(req.url).searchParams
   const from = p.get('from')
@@ -40,6 +39,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   const format = (p.get('format') ?? 'pdf').toLowerCase()
   if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
     return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
+  }
+  // The export downloads exactly what the preview shows: the same scope and
+  // translation params through the same shared parser, with the same
+  // subsidiary guards — an export of a scoped or translated preview used to
+  // silently download the org-wide untranslated return.
+  const parsed = parseReturnScopeQuery(p)
+  if (parsed.error || !parsed.scope) {
+    return NextResponse.json({ error: parsed.error ?? 'invalid scope' }, { status: 422 })
+  }
+  const { subsidiaryIds } = parsed.scope
+  if (subsidiaryIds.length > 0) {
+    for (const id of subsidiaryIds) {
+      const denied = guardSubsidiaryScope(gate, id)
+      if (denied) return denied
+    }
+  } else {
+    const scopeDenied = guardSubsidiaryScope(gate, null)
+    if (scopeDenied) return scopeDenied
   }
   if (!['pdf', 'facsimile', 'json', 'xlsx', 'csv', 'official'].includes(format)) {
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
@@ -56,7 +73,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   }
   try {
     const t = (await getTranslations('tax')) as unknown as Translator
-    const result = await computeTaxReturn(gate.user.orgId, code, from, to, adjustments)
+    const result = await computeTaxReturn(gate.user.orgId, code, from, to, adjustments, returnScopeOpts(parsed.scope))
     const stamp = await businessToday(gate.user.orgId)
     const filename = `${safeName(code)}-${from}-${to}-${stamp}`
 
