@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  assertImportOrgId,
   parseTicketTsv,
   resolveTicketIdentity,
   type ImportTicket,
@@ -27,6 +28,22 @@ const ticket = (overrides: Partial<ImportTicket> = {}): ImportTicket => ({
   po: null,
   description: "Week nine",
   ...overrides,
+});
+
+test("the import target must be a UUID, naming what was received", () => {
+  assert.equal(
+    assertImportOrgId("123e4567-e89b-12d3-a456-426614174000"),
+    "123e4567-e89b-12d3-a456-426614174000",
+  );
+  assert.throws(() => assertImportOrgId("not-a-uuid"), /--org must be a UUID/);
+  assert.throws(() => assertImportOrgId(""), /--org must be a UUID/);
+});
+
+test("a quote in the import target refuses at parse, never in SQL", () => {
+  assert.throws(
+    () => assertImportOrgId("x' OR '1'='1"),
+    /--org must be a UUID.*--org=<uuid>/,
+  );
 });
 
 test("header TSV parsing keeps the source identity columns", () => {

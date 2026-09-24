@@ -817,14 +817,20 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     downloadSet.add(fileId);
   }
   for (const batch of chunks(backfill, 500)) {
-    const tuples = batch
-      .map(({ fileId, modifiedMs }) => `('${fileId}', '${new Date(modifiedMs).toISOString()}'::timestamptz)`)
-      .join(",");
-    await db.execute(sql.raw(`
+    // fileIds arrive from the source system: they travel as bound parameters,
+    // never interpolated, so a quote in an external id cannot break out.
+    const values = sql.join(
+      batch.map(
+        ({ fileId, modifiedMs }) =>
+          sql`(${fileId}, ${new Date(modifiedMs).toISOString()}::timestamptz)`,
+      ),
+      sql`, `,
+    );
+    await db.execute(sql`
       update files f set source_modified_at = v.marker
-        from (values ${tuples}) as v(source_id, marker)
-       where f.org_id = '${orgId}' and f.source_system = '${SOURCE_SYSTEM}' and f.source_id = v.source_id
-    `));
+        from (values ${values}) as v(source_id, marker)
+       where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id = v.source_id
+    `);
   }
   if (backfill.length > 0) {
     console.log(`[import] backfilled last-modified markers for ${backfill.length} already-current files`);

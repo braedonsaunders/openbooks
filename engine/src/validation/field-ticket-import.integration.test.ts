@@ -8,6 +8,7 @@ import {
 } from "../testing/fixtures.ts";
 import {
   importFieldTickets,
+  sourceIdMap,
   type ImportTicket,
 } from "./field-ticket-import.ts";
 
@@ -169,4 +170,36 @@ test("one unmapped job refuses the whole import with zero writes", { skip: !DB }
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("source mappings cannot see another tenant through a hostile org id", { skip: !DB }, async () => {
+  const victim = await createScratchOrg();
+  const probe = await createScratchOrg();
+  try {
+    await project(victim.orgId, "JOB-1");
+    await project(probe.orgId, "PROBE-JOB");
+    // Under the old sql.raw spelling this broke out of org_id = '<value>'
+    // and returned every tenant's mappings; bound, it matches nothing.
+    const leaked = await sourceIdMap("projects", `x' OR '1'='1`);
+    assert.equal(leaked.size, 0);
+    // Sanity: each tenant still resolves its own mappings under its own id.
+    assert.ok((await sourceIdMap("projects", victim.orgId)).has("JOB-1"));
+    assert.ok((await sourceIdMap("projects", probe.orgId)).has("PROBE-JOB"));
+  } finally {
+    await dropScratchOrg(victim.orgId);
+    await dropScratchOrg(probe.orgId);
+  }
+});
+
+test("a hostile org id refuses as a missing organization, never as a driver error", { skip: !DB }, async () => {
+  await assert.rejects(
+    () =>
+      importFieldTickets({
+        orgId: `not-a-uuid'"`,
+        sourceSystem: "test-source",
+        tickets: [ticket()],
+        apply: false,
+      }),
+    /target organization has no base currency/,
+  );
 });

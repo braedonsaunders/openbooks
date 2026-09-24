@@ -25,6 +25,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import {
+  assertImportOrgId,
   importFieldTickets,
   parseTicketTsv,
 } from "./field-ticket-import.ts";
@@ -39,11 +40,12 @@ const args = new Map(
       return [key!, value.length ? value.join("=") : "true"];
     }),
 );
-const ORG =
+const ORG = assertImportOrgId(
   args.get("org") ??
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
-  (() => { throw new Error("--org, TARGET_ORG, or SANDBOX_ORG is required"); })();
+  (() => { throw new Error("--org, TARGET_ORG, or SANDBOX_ORG is required"); })(),
+);
 const APPLY = args.get("apply") === "true";
 const HEADERS = args.get("headers") ?? "/tmp/ft-head.tsv";
 const ROWS = args.get("rows") ?? "/tmp/ft-rows.tsv";

@@ -1468,11 +1468,17 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
       // by age or name, and only the flag is touched — the row itself is
       // still removed by the delete passes.
       if (restoreRemaining.includes("fiscal_calendars")) {
-        await tx.execute(sql.raw(
-          `update public.${quoteIdentifier("fiscal_calendars")} as target set ${quoteIdentifier("is_default")} = false`
-          + ` where target.${quoteIdentifier("org_id")} = '${org.orgId}' and target.${quoteIdentifier("is_default")}`
-          + ` and not exists (select 1 from ${quoteIdentifier(schema)}.${quoteIdentifier("fiscal_calendars")} as baseline where baseline.${quoteIdentifier("id")} = target.${quoteIdentifier("id")})`,
-        ));
+        await tx.execute(sql`
+          update ${sql.raw(`public.${quoteIdentifier("fiscal_calendars")}`)} as target
+             set ${sql.raw(quoteIdentifier("is_default"))} = false
+           where target.${sql.raw(quoteIdentifier("org_id"))} = ${org.orgId}
+             and target.${sql.raw(quoteIdentifier("is_default"))}
+             and not exists (
+               select 1
+                 from ${sql.raw(`${quoteIdentifier(schema)}.${quoteIdentifier("fiscal_calendars")}`)} as baseline
+                where baseline.${sql.raw(quoteIdentifier("id"))} = target.${sql.raw(quoteIdentifier("id"))}
+             )
+        `);
       }
       const failures: { table: string; error: string }[] = [];
       for (const [index, table] of restoreRemaining.entries()) {
@@ -1482,7 +1488,10 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
         const snapshot = `${quoteIdentifier(schema)}.${quoteIdentifier(table)}`;
         const assignments = mutable.map((column) => `${quoteIdentifier(column)} = baseline.${quoteIdentifier(column)}`).join(", ");
         const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
-        const ownerPredicate = table === "orgs" ? `target.id = '${org.orgId}'` : `target.org_id = '${org.orgId}'`;
+        // The owner column is an identifier chosen by a ternary over two fixed
+        // names; the org id itself always travels as a bound parameter, never
+        // interpolated into raw SQL.
+        const ownerColumnFragment = sql.raw(`target.${table === "orgs" ? "id" : "org_id"}`);
         const savepoint = `scratch_fixture_restore_${pass}_${index}`;
         await tx.execute(sql.raw(`savepoint ${savepoint}`));
         try {
@@ -1502,11 +1511,15 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
             const nested = `${savepoint}_colliders`;
             await tx.execute(sql.raw(`savepoint ${nested}`));
             try {
-              await tx.execute(sql.raw(
-                `delete from ${target} as target where target.${quoteIdentifier(ownerColumn)} = '${org.orgId}'`
-                + ` and not exists (select 1 from ${snapshot} as baseline where baseline.${quoteIdentifier("id")} = target.${quoteIdentifier("id")})`
-                + ` and (${collider})`,
-              ));
+              await tx.execute(sql`
+                delete from ${sql.raw(target)} as target
+                 where target.${sql.raw(quoteIdentifier(ownerColumn))} = ${org.orgId}
+                   and not exists (
+                     select 1 from ${sql.raw(snapshot)} as baseline
+                      where baseline.${sql.raw(quoteIdentifier("id"))} = target.${sql.raw(quoteIdentifier("id"))}
+                   )
+                   and (${sql.raw(collider)})
+              `);
               await tx.execute(sql.raw(`release savepoint ${nested}`));
             } catch {
               await tx.execute(sql.raw(`rollback to savepoint ${nested}`));
@@ -1514,13 +1527,18 @@ async function restoreScratchOrgBaseline(org: ScratchOrg, tables: readonly strin
             }
           }
           if (mutable.length > 0) {
-            await tx.execute(sql.raw(
-              `update ${target} as target set ${assignments} from ${snapshot} as baseline where target.id = baseline.id and ${ownerPredicate}`,
-            ));
+            await tx.execute(sql`
+              update ${sql.raw(target)} as target
+                 set ${sql.raw(assignments)}
+                from ${sql.raw(snapshot)} as baseline
+               where target.id = baseline.id and ${ownerColumnFragment} = ${org.orgId}
+            `);
           }
-          await tx.execute(sql.raw(
-            `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.id = baseline.id)`,
-          ));
+          await tx.execute(sql`
+            insert into ${sql.raw(target)} (${sql.raw(insertColumns)})
+            select ${sql.raw(insertColumns)} from ${sql.raw(snapshot)} as baseline
+             where not exists (select 1 from ${sql.raw(target)} as target where target.id = baseline.id)
+          `);
           await tx.execute(sql.raw(`release savepoint ${savepoint}`));
         } catch (error) {
           await tx.execute(sql.raw(`rollback to savepoint ${savepoint}`));
@@ -1741,12 +1759,20 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
                 // the savepoint/sweep machinery keeps FK ordering recoverable.
                 const match = rowMatch(tableColumns, "target", "baseline");
                 const insertColumns = tableColumns.map(quoteIdentifier).join(", ");
-                await tx.execute(sql.raw(
-                  `delete from ${target} as target where target.org_id = '${org.orgId}' and not exists (select 1 from ${snapshot} as baseline where ${match})`,
-                ));
-                await tx.execute(sql.raw(
-                  `insert into ${target} (${insertColumns}) select ${insertColumns} from ${snapshot} as baseline where not exists (select 1 from ${target} as target where target.org_id = '${org.orgId}' and ${rowMatch(tableColumns, "target", "baseline")})`,
-                ));
+                await tx.execute(sql`
+                  delete from ${sql.raw(target)} as target
+                   where target.org_id = ${org.orgId}
+                     and not exists (select 1 from ${sql.raw(snapshot)} as baseline where ${sql.raw(match)})
+                `);
+                await tx.execute(sql`
+                  insert into ${sql.raw(target)} (${sql.raw(insertColumns)})
+                  select ${sql.raw(insertColumns)} from ${sql.raw(snapshot)} as baseline
+                   where not exists (
+                     select 1 from ${sql.raw(target)} as target
+                      where target.org_id = ${org.orgId}
+                        and ${sql.raw(rowMatch(tableColumns, "target", "baseline"))}
+                   )
+                `);
               }
               await tx.execute(sql.raw(`release savepoint ${savepoint}`));
             } catch (error) {

@@ -79,7 +79,11 @@ export async function loadWorkItemDetail(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ContinuousCloseWorkItem | null> {
   if (readable.length === 0) return null;
-  const readableSql = sql.raw(`(${readable.map((key) => `'${key}'`).join(",")})`);
+  // Agent keys travel as bound parameters, never interpolated into sql.raw.
+  const readableSql = sql`(${sql.join(
+    readable.map((key) => sql`${key}`),
+    sql`, `,
+  )})`;
   const detail = await db.execute<WorkItemDetailRow & { subject_subsidiary_id: string | null }>(sql`
     select w.*, f.rating, subj.subsidiary_id as subject_subsidiary_id
       from ai_work_items w

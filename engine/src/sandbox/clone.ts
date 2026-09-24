@@ -510,21 +510,21 @@ export async function copyClonedFileObjects(opts: {
   onlyTables?: Set<string>;
 }): Promise<{ objectsCopied: number }> {
   if (opts.onlyTables && !opts.onlyTables.has("file_versions")) return { objectsCopied: 0 };
-  // assertUuid at this boundary: both ids are interpolated below (the shared
-  // PARENT_FILTER pattern), so they must provably be values, not statements.
+  // assertUuid at this boundary: both ids travel as bound parameters below,
+  // so they must provably be values, not statements.
   const seed = assertUuid(opts.seed);
   const prod = assertUuid(opts.productionOrgId);
-  const pairs = (await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql.raw(`
-    select fv.id as "prodVersionId", ob_rebase(fv.id, '${seed}') as "sandboxVersionId"
+  const pairs = (await db.execute<{ prodVersionId: string; sandboxVersionId: string }>(sql`
+    select fv.id as "prodVersionId", ob_rebase(fv.id, ${seed}) as "sandboxVersionId"
       from file_versions fv
       join files f on f.id = fv.file_id
-     where f.org_id = '${prod}'
+     where f.org_id = ${prod}
        and fv.storage_kind = 's3'
        and exists (
          select 1 from file_versions sv
-          where sv.id = ob_rebase(fv.id, '${seed}') and sv.storage_kind = 's3'
+          where sv.id = ob_rebase(fv.id, ${seed}) and sv.storage_kind = 's3'
        )
-  `))).rows;
+  `)).rows;
   const copied: string[] = [];
   try {
     for (const pair of pairs) {
@@ -548,11 +548,11 @@ export async function copyClonedFileObjects(opts: {
  */
 export async function listSandboxS3VersionIds(sandboxOrgId: string): Promise<string[]> {
   const org = assertUuid(sandboxOrgId);
-  const rows = (await db.execute<{ id: string }>(sql.raw(`
+  const rows = (await db.execute<{ id: string }>(sql`
     select fv.id as id
       from file_versions fv
       join files f on f.id = fv.file_id
-     where f.org_id = '${org}' and fv.storage_kind = 's3'
-  `))).rows;
+     where f.org_id = ${org} and fv.storage_kind = 's3'
+  `)).rows;
   return rows.map((row) => row.id);
 }
