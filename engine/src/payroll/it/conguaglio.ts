@@ -147,8 +147,8 @@ export interface ItConguaglioDeclaration {
   hasFamilyCharges: boolean;
   /** Fixed-term contract: art. 13 c. 1 floor 1.380 instead of 690. */
   isFixedTerm: boolean;
-  /** Post-1995 seniority: the year's massimale applies. */
-  isPost1995: boolean;
+  /** Post-1995 seniority: the year's massimale applies; absent is unknown. */
+  isPost1995?: boolean;
   /** Art. 49 c. 2 lett. a) pension income: refused, as monthly. */
   isPensioner?: boolean;
   /** Reddito complessivo presunto from the declaration, when declared. */
@@ -337,7 +337,9 @@ function readSettlementDeclaration(
       || countOf("figli_a_carico") > 0
       || countOf("altri_familiari_a_carico") > 0,
     isFixedTerm: bool(answers["tempo_determinato"] ?? null),
-    isPost1995: bool(answers["anzianita_post_1995"] ?? null),
+    isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
+      ? undefined
+      : bool(answers["anzianita_post_1995"]),
     isPensioner: bool(answers["titolare_pensione"] ?? null),
     presumedTotalIncome: presumed && presumed !== "0" ? presumed : null,
     comuneCode: (answers["domicilio_comune"] ?? null) as string | null,

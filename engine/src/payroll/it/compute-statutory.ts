@@ -268,7 +268,7 @@ export interface It2025Input {
   isFixedTerm?: boolean;
   /** Art. 49 c. 2 lett. a) pension income: refused (TABELLA 7). */
   isPensioner?: boolean;
-  /** Post-1995 seniority: the 120.607 massimale applies. */
+  /** Post-1995 seniority: the annual massimale applies; absent is unknown. */
   isPost1995?: boolean;
 }
 
@@ -333,7 +333,19 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
   const oneOff = needNonNegative(input.nonPeriodicAnnual ?? "0", "nonPeriodicAnnual", year);
   const pensBase = needNonNegative(input.annualPensionable, "annualPensionable", year) + oneOff;
 
-  // INPS IVS on the pensionable base, with prima fascia and massimale.
+  // INPS IVS on the pensionable base, with prima fascia and massimale. The
+  // post-1995 status selects whether that cap applies; it is never inferred
+  // from wages. L. 335/1995 art. 2 c. 18 and INPS Circ. 14/2026:
+  // https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1995-08-08;335
+  // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2026/02/Circolare_15162/Allegati/16561_Circolare-numero-14-del-09-02-2026.pdf
+  if (input.isPost1995 == null && pensBase > U(tables.massimalePost1995)) {
+    refuse(
+      `IT ${year} IVS base ${D(pensBase)} exceeds the ${tables.massimalePost1995} annual massimale, but `
+      + `the employee's anzianita_post_1995 status is unknown — declare whether the worker first joined `
+      + "after 31 December 1995 (or opted into the contributory system) before pricing IVS; "
+      + "see L. 335/1995 art. 2 c. 18 and the annual INPS massimale",
+    );
+  }
   const cap = input.isPost1995 ? U(tables.massimalePost1995) : null;
   const ivsBase = cap === null ? pensBase : bmin(pensBase, cap);
   const inpsWorker = r2(mulFrac(ivsBase, tables.inpsIvs.worker))
@@ -597,7 +609,9 @@ export async function computeItStatutoryWithRates(
       : { rate: rates.municipalRate, exemption: rates.municipalExemption },
     hasDetrazioniDeclaration: cert !== null,
     isFixedTerm: bool(answers["tempo_determinato"] ?? null),
-    isPost1995: bool(answers["anzianita_post_1995"] ?? null),
+    isPost1995: answers["anzianita_post_1995"] == null || answers["anzianita_post_1995"] === ""
+      ? undefined
+      : bool(answers["anzianita_post_1995"]),
   });
   pushStatutory("income_tax", "deduction", "IRPEF", result.period.irpef, 110);
   pushStatutory("regional_surtax", "deduction", "Addizionale regionale all'IRPEF", result.period.addizionaleRegionale, 115);
