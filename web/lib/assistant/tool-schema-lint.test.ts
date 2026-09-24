@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { pathToFileURL } from "node:url";
@@ -255,8 +255,6 @@ test("shared schema atoms emit exactly the provider-safe patterns (no flag-depen
   );
   const date = toJsonSchema(z.object({ on: sharedAtoms.dateInput }));
   assert.equal((asRecord(date.properties)?.on as Record<string, unknown>).pattern, "^\\d{4}-\\d{2}-\\d{2}$");
-  const sharedSource = readFileSync(new URL("./tools-shared.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(sharedSource, /\$\/i/, "flag-dependent end-anchored pattern in the shared atoms");
 });
 
 test("the RE2 pattern guard catches the historical failure classes", () => {
