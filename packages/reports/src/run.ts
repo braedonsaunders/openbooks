@@ -316,6 +316,16 @@ function shapeSummarizeResult(
     ...breakouts.map((b) => labels.breakout?.(entity, b) ?? breakoutLabel(entity, b)),
     ...measures.map(measureHeading),
   ]
+  const rowNames = new Map<Record<string, unknown>, string>(dataRows.map((row, index) => {
+    const dimensions = breakouts.map((breakout, i) => {
+      const value = formatBreakoutValue(row[`d${i}`], breakout.bin, fiscalStartMonth)
+        ?? (row[`d${i}`] == null ? '(blank)' : String(row[`d${i}`]))
+      return `${breakoutLabel(entity, breakout)}=${value}`
+    })
+    return [row, dimensions.length ? dimensions.join(', ') : `aggregate row ${index + 1}`]
+  }))
+  const namesForRows = (raws: Record<string, unknown>[]) =>
+    raws.map((row) => rowNames.get(row) ?? 'aggregate row')
   const rows = dataRows.map((row) => [
     ...breakouts.map((b, i) =>
       b.bin
@@ -377,12 +387,17 @@ function shapeSummarizeResult(
     row[labelPos] = spec.label
     measures.forEach((m, mi) => {
       if (!summableFlags[mi]) return
-      const plusInputs = raws.filter((r) => String(r[`d${fieldIndex}`] ?? '') === spec.plus.value).map((r) => r[`m${mi}`])
-      const minusInputs = spec.minus
-        ? raws.filter((r) => String(r[`d${minusIndex}`] ?? '') === spec.minus!.value).map((r) => r[`m${mi}`])
+      const plusRows = raws.filter((r) => String(r[`d${fieldIndex}`] ?? '') === spec.plus.value)
+      const plusInputs = plusRows.map((r) => r[`m${mi}`])
+      const minusRows = spec.minus
+        ? raws.filter((r) => String(r[`d${minusIndex}`] ?? '') === spec.minus!.value)
         : []
+      const minusInputs = minusRows.map((r) => r[`m${mi}`])
       if (plusInputs.every((v) => v == null) && minusInputs.every((v) => v == null)) return
-      const total = subtractExactDecimals(sumExactDecimals(plusInputs), sumExactDecimals(minusInputs))
+      const total = subtractExactDecimals(
+        sumExactDecimals(plusInputs, namesForRows(plusRows)),
+        sumExactDecimals(minusInputs, namesForRows(minusRows)),
+      )
       row[measureOffset + mi] = m.fn === 'sum' || m.fn === 'latest'
         ? (formatExactNumber(total) ?? total)
         : Number(total)
@@ -453,7 +468,7 @@ function shapeSummarizeResult(
             if (!summable[mi]) return
             const inputs = levelRaw.map((raw) => raw[`m${mi}`])
             if (inputs.every((v) => v === null || v === undefined)) return
-            const total = sumExactDecimals(inputs)
+            const total = sumExactDecimals(inputs, namesForRows(levelRaw))
             totalsRow[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
               ? (formatExactNumber(total) ?? total)
               : Number(total)
@@ -533,7 +548,7 @@ function shapeSummarizeResult(
             row[breakouts.length - 1 + mi] = null
             return
           }
-          const total = sumExactDecimals(inputs)
+          const total = sumExactDecimals(inputs, namesForRows(entry.raw))
           row[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
             ? (formatExactNumber(total) ?? total)
             : Number(total)
@@ -607,7 +622,10 @@ function shapeSummarizeResult(
     // A snapshot card never sums: the compiler refuses sum-of-snapshot plans,
     // and a total here would multiply every movement by its stub count.
     if (m.fn === 'count' || (m.fn === 'sum' && !isSnapshotSum(entity, m))) {
-      const total = sumExactDecimals(dataRows.map((row) => row[`m${i}`]))
+      const total = sumExactDecimals(
+        dataRows.map((row) => row[`m${i}`]),
+        namesForRows(dataRows),
+      )
       summary.push({
         label:
           labels.summaryTotal?.(measureHeading(m)) ??
@@ -755,8 +773,16 @@ function subtractExactDecimals(a: string, b: string): string {
   return sumExactDecimals([a, negated])
 }
 
-function sumExactDecimals(values: unknown[]): string {
-  const parts = values.map(decimalParts).filter((part): part is { units: bigint; scale: number } => part !== null)
+function sumExactDecimals(values: unknown[], rowNames: string[] = values.map((_, index) => `row ${index + 1}`)): string {
+  const parts: { units: bigint; scale: number }[] = []
+  values.forEach((value, index) => {
+    if (value === null || typeof value === 'undefined') return
+    const part = decimalParts(value)
+    if (!part) {
+      throw new Error(`Report total is incomplete: invalid numeric value in ${rowNames[index] ?? `row ${index + 1}`}`)
+    }
+    parts.push(part)
+  })
   const scale = parts.reduce((maximum, part) => Math.max(maximum, part.scale), 0)
   const units = parts.reduce((total, part) => total + part.units * 10n ** BigInt(scale - part.scale), 0n)
   const negative = units < 0n
