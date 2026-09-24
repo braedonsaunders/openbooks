@@ -13,8 +13,23 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { z } from "zod";
 
 export const runtime = "nodejs";
+
+const taxRateProviderConfigSchema = z.object({
+  provider: z.enum(["avalara", "taxjar", "custom_http", "manual"]),
+  displayName: z.string().optional(),
+  isEnabled: z.boolean({ error: "isEnabled must be a boolean" }),
+  preferProvider: z.boolean().optional(),
+  settings: z.record(z.string(), z.unknown()).optional(),
+  apiKey: z.union([z.string().min(1), z.null()], { error: "apiKey must be null or a non-empty string" }).optional(),
+  accountId: z.union([z.string().min(1), z.null()], { error: "accountId must be null or a non-empty string" }).optional(),
+  licenseKey: z.union([z.string().min(1), z.null()], { error: "licenseKey must be null or a non-empty string" }).optional(),
+  expectedUpdatedAt: z.union([z.string().min(1), z.null()], {
+    error: "expectedUpdatedAt must be the current revision or null for initial setup",
+  }),
+});
 
 export async function GET() {
   const gate = await guardPermission("admin.setup.manage");
@@ -29,27 +44,24 @@ export async function PUT(req: Request) {
   // The rate provider prices tax for every entity in the org.
   const unrestricted = guardUnrestrictedScope(gate);
   if (unrestricted) return unrestricted;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, taxRateProviderConfigSchema, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>;
-  const provider = body.provider as TaxRateProviderKey;
-  if (!["avalara", "taxjar", "custom_http", "manual"].includes(provider)) {
-    return NextResponse.json({ error: "invalid provider" }, { status: 422 });
-  }
+  const body = parsedBody.data;
   try {
     await saveTaxRateProviderConfig(
       gate.user.orgId,
       {
-        provider,
-        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
-        isEnabled: Boolean(body.isEnabled),
-        preferProvider: body.preferProvider !== false,
-        settings: (body.settings as Record<string, unknown>) ?? {},
-        apiKey: "apiKey" in body ? (body.apiKey as string | null) : undefined,
-        accountId: "accountId" in body ? (body.accountId as string | null) : undefined,
-        licenseKey: "licenseKey" in body ? (body.licenseKey as string | null) : undefined,
+        provider: body.provider satisfies TaxRateProviderKey,
+        displayName: body.displayName,
+        isEnabled: body.isEnabled,
+        preferProvider: body.preferProvider ?? true,
+        settings: body.settings ?? {},
+        apiKey: body.apiKey,
+        accountId: body.accountId,
+        licenseKey: body.licenseKey,
       },
       gate.user.id,
+      { expectedUpdatedAt: body.expectedUpdatedAt },
     );
     return NextResponse.json({ ok: true });
   } catch (e) {
