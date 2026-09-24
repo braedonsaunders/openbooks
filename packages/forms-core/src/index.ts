@@ -79,7 +79,7 @@ export type {
   TriggerKind,
 } from './automation'
 
-export { profileFieldIds } from './flow-subjects'
+export { flowFieldValueError, profileFieldIds } from './flow-subjects'
 export type {
   FlowFieldDef,
   FlowFieldOption,
