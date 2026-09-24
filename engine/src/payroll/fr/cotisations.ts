@@ -150,6 +150,9 @@ export interface FrCotisations2026Input {
    * refusal) rather than assuming a size.
    */
   employerEmployeeCount: number | null;
+  /** The employer has a source-backed exemption/special regime that allows
+   * the reduced family rate. Missing means ordinary employer (5.25%). */
+  allocFamReducedEligible?: boolean;
   /** Tenant-declared AT/MP rate as a percent ("1.1" = 1.1 %); null = undeclared. */
   atmpRatePct?: string | null;
   /** Tenant-declared versement mobilité rate as a percent; null = undeclared. */
@@ -265,18 +268,16 @@ export function calculateFrCotisations2026(
   const csgNonImp = lineOf(csgBase, rate6(FR_CSG_SAL_2026.nonImposable.rate));
   const crds = lineOf(csgBase, rate6(FR_CRDS_SAL_2026.rate));
 
-  // Employer: maladie plein only (réduit refused by name). Allocations
-  // familiales selects its rate from the annualised remuneration (CSS art.
-  // L241-6-1, modalités D241-3-1): 3,45 % when brut × periods does not
-  // exceed 3,5 × SMIC annuel, 5,25 % above. Bigint comparison — no float,
-  // no centime rounding at the boundary; at monthly periodicity this is
-  // exactly brut ≤ 3,5 × SMIC mensuel (6 380,605 €).
+  // Employer: maladie plein only (réduit refused by name). The ordinary
+  // allocations familiales rate is 5.25%. The reduced 3.45% rate requires
+  // an explicit employer eligibility fact and remuneration no higher than
+  // 3.5 × the 31-Dec-2023 SMIC annual threshold (URSSAF, 2026 rules).
   const maladieEr = lineOf(brut, rate6(FR_MALADIE_ER_2026.plein.rate));
   const vieilErPlaf = lineOf(plafPer, rate6(FR_VIEILLESSE_ER_2026.plafonnee.rate));
   const vieilErDeplaf = lineOf(brut, rate6(FR_VIEILLESSE_ER_2026.deplafonnee.rate));
   const allocFamSeuilAnnual = U(FR_ALLOC_FAM_SEUIL_2026.annual);
   const allocFamAnnualised = brut * BigInt(periods);
-  const allocFamRate = allocFamAnnualised <= allocFamSeuilAnnual
+  const allocFamRate = input.allocFamReducedEligible === true && allocFamAnnualised <= allocFamSeuilAnnual
     ? FR_ALLOC_FAM_ER_2026.reduit.rate
     : FR_ALLOC_FAM_ER_2026.plein.rate;
   const allocFamEr = lineOf(brut, rate6(allocFamRate));

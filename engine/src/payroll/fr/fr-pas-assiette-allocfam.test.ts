@@ -10,15 +10,17 @@
  * soit 2,4 points, demeure non déductible comme la CRDS").
  *
  * Defect 2 — allocations familiales (CSS art. L241-6-1, modalités art.
- * D241-3-1): 3,45 % when the annualised remuneration does not exceed
- * 3,5 × SMIC (décret n° 2025-1228: 1 823,03 € mensuel, 21 876,36 € annuel;
- * ceiling 76 567,26 €), 5,25 % above. The pack charged 5,25 % flat.
+ * D241-3-1): 5,25 % generally, or 3,45 % for specified exemption/special-
+ * regime employers below 3,5 × the 31-Dec-2023 SMIC (ceiling 73 382,40 €).
+ * The pack applied 3,45 % based only on remuneration.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money/money.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { reduceTaxBases } from "../treatment-bases.ts";
+import { buildResolution } from "../statutory-rates.ts";
+import type { StatutoryRateRow } from "../statutory-rates.ts";
 import { calculateFrPas2026 } from "./compute-statutory.ts";
 import {
   calculateFrCotisations2026,
@@ -30,6 +32,7 @@ import {
   FR_SMIC_2026,
 } from "./cotisations-2026.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
+import { frAllocFamReducedEligible, FR_PACK_RATES } from "./statutory-rates.ts";
 
 const PAY = "2026-06-15";
 const COTS = { payDate: PAY, periodsPerYear: 12, employerEmployeeCount: 10 } as const;
@@ -191,67 +194,85 @@ test("PAS assiette above the PASS: CET stays in the base (5 000 €)", () => {
   assert.equal(net.netImposable, "4112.4000");
 });
 
-test("DEFECT 2: 3 400 € annualises below 3,5 SMIC → 3,45 % = 117,30 €", () => {
-  // 3 400 × 12 = 40 800 ≤ 76 567,26 : réduit. Pack (defective) charged
-  // 3 400 × 5,25 % = 178,50 €.
-  const r = calculateFrCotisations2026({ brut: "3400.00", ...COTS });
+test("eligible employer: 3 400 € annualises below 3.5×2023 SMIC → 3.45%", () => {
+  // Only specified exemption/special-regime employers can use the reduced
+  // rate; the €73,382.40 annual threshold is 3.5×the 31-Dec-2023 SMIC.
+  const r = calculateFrCotisations2026({
+    brut: "3400.00", ...COTS, allocFamReducedEligible: true,
+  });
   assert.equal(r.allocFamErRate, FR_ALLOC_FAM_ER_2026.reduit.rate);
   assert.equal(r.allocFamErRate, "0.0345");
   assert.equal(r.allocFamEr, "117.3000");
 });
 
-test("DEFECT 2: 7 000 € annualises above 3,5 SMIC → 5,25 % = 367,50 €", () => {
-  // 7 000 × 12 = 84 000 > 76 567,26 : plein.
-  const r = calculateFrCotisations2026({ brut: "7000.00", ...COTS });
+test("eligible employer above the 2023-SMIC ceiling owes the 5.25% family rate", () => {
+  // 7,000 × 12 exceeds the €73,382.40 reduced-rate ceiling.
+  const r = calculateFrCotisations2026({
+    brut: "7000.00", ...COTS, allocFamReducedEligible: true,
+  });
   assert.equal(r.allocFamErRate, FR_ALLOC_FAM_ER_2026.plein.rate);
   assert.equal(r.allocFamErRate, "0.0525");
   assert.equal(r.allocFamEr, "367.5000");
 });
 
-test("DEFECT 2: the 3,5-SMIC boundary itself — at or below réduit, above plein", () => {
-  // Annual pay hits the ceiling exactly: 76 567,26 annualised = ceiling →
-  // réduit ("n'excède pas", CSS art. L241-6-1).
+test("eligible employer: reduced-rate threshold includes its €73,382.40 boundary", () => {
+  // URSSAF keys this special reduced-rate threshold to the 31-Dec-2023 SMIC.
   const at = calculateFrCotisations2026({
-    brut: "76567.26",
+    brut: "73382.40",
     payDate: PAY,
     periodsPerYear: 1,
     employerEmployeeCount: 10,
+    allocFamReducedEligible: true,
   });
   assert.equal(at.allocFamErRate, "0.0345");
-  // 76 567,26 × 3,45 % = 2 641,57047 → 2 641,57.
-  assert.equal(at.allocFamEr, "2641.5700");
+  // 73 382,40 × 3,45 % = 2 532,6936 → 2 532,69.
+  assert.equal(at.allocFamEr, "2531.6900");
   const over = calculateFrCotisations2026({
-    brut: "76567.27",
+    brut: "73382.41",
     payDate: PAY,
     periodsPerYear: 1,
     employerEmployeeCount: 10,
+    allocFamReducedEligible: true,
   });
   assert.equal(over.allocFamErRate, "0.0525");
-  // 76 567,27 × 5,25 % = 4 019,781675 → 4 019,78.
-  assert.equal(over.allocFamEr, "4019.7800");
+  // 73 382,41 × 5,25 % = 3 852,576525 → 3 852,58.
+  assert.equal(over.allocFamEr, "3852.5800");
 });
 
-test("DEFECT 2: monthly edges around 3,5 × SMIC mensuel (6 380,605 €)", () => {
-  // 6 380,60 × 12 = 76 567,20 ≤ 76 567,26 → réduit;
-  // 6 380,61 × 12 = 76 567,32 > 76 567,26 → plein.
-  const under = calculateFrCotisations2026({ brut: "6380.60", ...COTS });
-  assert.equal(under.allocFamErRate, "0.0345");
-  // 6 380,60 × 3,45 % = 220,1307 → 220,13.
-  assert.equal(under.allocFamEr, "220.1300");
-  const above = calculateFrCotisations2026({ brut: "6380.61", ...COTS });
-  assert.equal(above.allocFamErRate, "0.0525");
-  // 6 380,61 × 5,25 % = 334,982025 → 334,98.
-  assert.equal(above.allocFamEr, "334.9800");
+test("ordinary employer below the former 2026-SMIC cutoff still owes 5.25%", () => {
+  const result = calculateFrCotisations2026({ brut: "6380.60", ...COTS });
+  assert.equal(result.allocFamErRate, "0.0525");
+  assert.equal(result.allocFamEr, "334.9800");
 });
 
-test("year values: SMIC 2026 and the 3,5-SMIC ceiling assert their relationships", () => {
+test("reduced-rate eligibility resolves only from the employer's account", () => {
+  const rate: StatutoryRateRow = {
+    id: "eligible-account",
+    country: "FR",
+    rateKey: "fr_allocfam",
+    region: "FR",
+    filingAccountId: "siret-eligible",
+    taxYear: 2026,
+    values: { reduced_rate_eligible: "true" },
+    supersededOn: null,
+  };
+  const resolution = buildResolution({
+    country: "FR", taxYear: 2026, pack: FR_PACK_RATES, rows: [rate], legacy: [],
+  });
+  assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-eligible"), true);
+  assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-ordinary"), false);
+  assert.equal(frAllocFamReducedEligible(resolution, "FR", null), false);
+});
+
+test("year values: reduced-rate threshold is tied to the 2023 SMIC", () => {
   assert.equal(FR_SMIC_2026.hourly, "12.02");
   assert.equal(FR_SMIC_2026.monthly, "1823.03");
   assert.equal(FR_SMIC_2026.annual, "21876.36");
   // Annual is monthly × 12, not an independent figure (bigint: floats lose it).
   assert.equal(toUnits(FR_SMIC_2026.annual), toUnits(FR_SMIC_2026.monthly) * 12n);
-  // The ceiling is 3,5 × SMIC annuel, not an independent figure.
+  // The ceiling is 3.5 × the 31-Dec-2023 annual SMIC, not the 2026 SMIC.
   assert.equal(FR_ALLOC_FAM_SEUIL_2026.multiple, "3.5");
-  assert.equal(FR_ALLOC_FAM_SEUIL_2026.annual, "76567.26");
-  assert.equal(toUnits(FR_ALLOC_FAM_SEUIL_2026.annual), (toUnits(FR_SMIC_2026.annual) * 35n) / 10n);
+  assert.equal(FR_ALLOC_FAM_SEUIL_2026.annual, "73382.40");
+  assert.equal(FR_ALLOC_FAM_SEUIL_2026.referenceSmicAnnual, "20966.40");
+  assert.equal(toUnits(FR_ALLOC_FAM_SEUIL_2026.annual), (toUnits(FR_ALLOC_FAM_SEUIL_2026.referenceSmicAnnual) * 35n) / 10n);
 });
