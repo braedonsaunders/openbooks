@@ -4,6 +4,7 @@ import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
 import { add, cmp, isZero, mul, mulDecimal, normalizeDecimal, normalizeMoney } from "../../money/money.ts";
 import {
+  loadCompensationLens,
   requireAggregateCompensationRead,
   requireHrmCompensationManage,
 } from "../authorization.ts";
@@ -417,9 +418,13 @@ export async function createPlanLine(query: CreatePlanLineQuery): Promise<PlanLi
     await requireHrmCompensationManage(db, orgId, actorId);
     const plan = (await db.execute<PlanRow>(sql`
       select id, name, fiscal_period_from::text as fiscal_period_from,
-             fiscal_period_to::text as fiscal_period_to, status, revision
+             fiscal_period_to::text as fiscal_period_to, status, revision, scope
         from hrm_headcount_plans where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
     if (!plan) throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
+    // Adding a line staffs the plan: the plan's scope and the line's
+    // declared employer are rechecked under the plan lock, or an
+    // A-scoped actor plants B headcount.
+    await assertPlanWriteScope(orgId, actorId, plan.scope, [query.employerSubsidiaryId], "headcount plan");
     if (plan.status !== "draft") {
       throw new CompensationError(
         "BAD_STATE",
@@ -467,6 +472,13 @@ export async function approvePlanLine(query: {
       select ${LINE_COLUMNS} from hrm_headcount_plan_lines
        where org_id = ${orgId} and id = ${lineId} for update`)).rows[0];
     if (!line) throw new CompensationError("NOT_FOUND", "plan line is not visible in this organization");
+    // Approving a create/backfill line OPENS A REQUISITION for its
+    // employer: the line's employer and its plan's scope are rechecked
+    // under the line lock, or an A-scoped actor requisitions into B.
+    const planScope = (await db.execute<{ scope: PlanRow["scope"] }>(sql`
+      select scope from hrm_headcount_plans
+       where org_id = ${orgId} and id = ${line.plan_id} for update`)).rows[0]?.scope ?? null;
+    await assertPlanWriteScope(orgId, actorId, planScope, [line.employer_subsidiary_id], "plan line");
     if (line.status !== "proposed") {
       throw new CompensationError(
         "BAD_STATE",
@@ -535,8 +547,46 @@ export async function markPlanLineFilledForRequisition(
  * discoverable and its salaries fence per line. An empty allowed set sees
  * headers only — every costed line filters to nothing.
  */
-function planScopeSubsidiary(row: PlanRow): string | null {
+function planScopeSubsidiary(row: Pick<PlanRow, "scope">): string | null {
   return row.scope?.employer_subsidiary_id ?? null;
+}
+
+/**
+ * Write scope rechecked under the plan's row lock: the plan's scope plus
+ * every affected line's employer must sit inside the lens. An unscoped
+ * (null) plan constrains nothing by header — its lines govern instead —
+ * so a restricted actor adds lines to, approves lines of, or moves only
+ * plans with no out-of-scope line. Refuses uniformly not-visible, exactly
+ * like a missing plan or line, so a B plan probes like a missing one.
+ */
+async function assertPlanWriteScope(
+  orgId: string,
+  actorId: string,
+  planScope: { employer_subsidiary_id: string | null } | null,
+  lineEmployerIds: readonly string[],
+  what: "headcount plan" | "plan line",
+): Promise<void> {
+  const allowed = await loadCompensationLens(db, orgId, actorId);
+  if (allowed === null) return;
+  const subsidiary = planScope?.employer_subsidiary_id ?? null;
+  if (subsidiary !== null && !allowed.has(subsidiary)) {
+    throw new CompensationError("NOT_FOUND", `${what} is not visible in this organization`);
+  }
+  for (const employerId of lineEmployerIds) {
+    if (!allowed.has(employerId)) {
+      throw new CompensationError("NOT_FOUND", `${what} is not visible in this organization`);
+    }
+  }
+}
+
+/** Persisted line employers of one plan, read fresh in-transaction (an
+ * unattributable line maps to "" and fails closed for restricted actors). */
+async function planLineEmployerIds(orgId: string, planId: string): Promise<string[]> {
+  const rows = (await db.execute<{ employer_subsidiary_id: string | null }>(sql`
+    select l.employer_subsidiary_id
+      from hrm_headcount_plan_lines l
+     where l.org_id = ${orgId} and l.plan_id = ${planId}`)).rows;
+  return rows.map((row) => String(row.employer_subsidiary_id ?? ""));
 }
 
 export async function listPlans(query: { orgId: string; actorId: string }): Promise<readonly HeadcountPlanDTO[]> {
@@ -605,6 +655,17 @@ async function transitionPlan(
   const planId = requireId(rawPlanId, "planId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
+    // Moving a plan moves every line with it: the plan row is locked,
+    // then its scope plus every line's employer are rechecked in-
+    // transaction before the conditional update below, or an A-scoped
+    // actor approves or closes a B-scoped plan.
+    const locked = (await db.execute<{ scope: PlanRow["scope"] }>(sql`
+      select scope from hrm_headcount_plans
+       where org_id = ${orgId} and id = ${planId} for update`)).rows[0];
+    if (!locked) {
+      throw new CompensationError("NOT_FOUND", "headcount plan is not visible in this organization");
+    }
+    await assertPlanWriteScope(orgId, actorId, locked.scope, await planLineEmployerIds(orgId, planId), "headcount plan");
     const updated = (await db.execute<PlanRow>(sql`
       update hrm_headcount_plans
          set status = ${to}, ${sql.raw(stamp)} = now(), revision = revision + 1,
