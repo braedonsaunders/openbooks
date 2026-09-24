@@ -39,7 +39,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
-  const driver = await getDriver(gate.user.orgId, id);
+  const driver = await getDriver(gate.user.orgId, id, undefined, gate.allowedSubsidiaryIds);
   if (!driver) return NextResponse.json({ error: "not found" }, { status: 404 });
   return NextResponse.json({ driver });
 }

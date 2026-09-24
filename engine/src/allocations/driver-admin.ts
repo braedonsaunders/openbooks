@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { documentRevisionSql } from "../records/revision.ts";
+import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { add, div, normalizeDecimal } from "../money/money.ts";
 import type {
   AccountScope,
@@ -373,7 +374,7 @@ async function assertStatisticalAccountsOrg(
 
 export async function listDrivers(
   orgId: string,
-  opts?: { includeInactive?: boolean; executor?: SqlExecutor },
+  opts?: { includeInactive?: boolean; executor?: SqlExecutor; allowedSubsidiaryIds?: ReadonlySet<string> | null },
 ): Promise<AllocationDriver[]> {
   const ex = opts?.executor ?? db;
   const rows = opts?.includeInactive
@@ -383,13 +384,15 @@ export async function listDrivers(
     : await ex.execute<Record<string, unknown>>(sql`
         select *, ${documentRevisionSql(sql`updated_at`)} as revision
           from allocation_drivers where org_id = ${orgId} and is_active order by name, key`);
-  return rows.rows.map(mapDriver);
+  const drivers = rows.rows.map(mapDriver);
+  return projectDriverAccountReferences(orgId, drivers, opts?.allowedSubsidiaryIds, ex);
 }
 
 export async function getDriver(
   orgId: string,
   id: string,
   executor?: SqlExecutor,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<AllocationDriver | null> {
   if (!isUuid(id)) return null;
   const ex = executor ?? db;
@@ -397,7 +400,47 @@ export async function getDriver(
     select *, ${documentRevisionSql(sql`updated_at`)} as revision
       from allocation_drivers where org_id = ${orgId} and id = ${id}`);
   const row = rows.rows[0];
-  return row ? mapDriver(row) : null;
+  if (!row) return null;
+  const [driver] = await projectDriverAccountReferences(orgId, [mapDriver(row)], allowedSubsidiaryIds, ex);
+  return driver ?? null;
+}
+
+/** Hide account references a subsidiary-restricted reader cannot inspect. */
+async function projectDriverAccountReferences(
+  orgId: string,
+  drivers: AllocationDriver[],
+  allowedSubsidiaryIds: ReadonlySet<string> | null | undefined,
+  executor: SqlExecutor,
+): Promise<AllocationDriver[]> {
+  if (allowedSubsidiaryIds === undefined || allowedSubsidiaryIds === null) return drivers;
+  const ids = [...new Set(drivers.flatMap(({ config }) => {
+    const nested = config.accountScope && typeof config.accountScope === "object"
+      ? (config.accountScope as Record<string, unknown>).accountIds
+      : undefined;
+    return [
+      ...(Array.isArray(nested) ? nested.filter((id): id is string => typeof id === "string") : []),
+      ...(Array.isArray(config.accountIds) ? config.accountIds.filter((id): id is string => typeof id === "string") : []),
+    ];
+  }))];
+  if (!ids.length) return drivers;
+  const visible = await executor.execute<{ id: string }>(sql`
+    select id from accounts a where a.org_id = ${orgId} and a.id = any(${uuidArray(ids)}::uuid[])
+      ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`);
+  const visibleIds = new Set(visible.rows.map(({ id }) => id));
+  return drivers.map((driver) => {
+    const config = { ...driver.config };
+    const accountScope = config.accountScope;
+    if (accountScope && typeof accountScope === "object") {
+      const value = accountScope as Record<string, unknown>;
+      if (Array.isArray(value.accountIds)) {
+        config.accountScope = { ...value, accountIds: value.accountIds.filter((id) => typeof id === "string" && visibleIds.has(id)) };
+      }
+    }
+    if (Array.isArray(config.accountIds)) {
+      config.accountIds = config.accountIds.filter((id) => typeof id === "string" && visibleIds.has(id));
+    }
+    return { ...driver, config };
+  });
 }
 
 export async function createDriver(
