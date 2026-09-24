@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { Alert, Badge } from '@openbooks/ui'
+import { notFound } from 'next/navigation'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
@@ -10,6 +11,7 @@ import {
 import { DateRangeFilter } from '../../../../../components/date-range-filter'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { pickString } from '../../../../../lib/list-params'
+import { guardRootSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 import { DerivedRulePreviewTable } from './DerivedRulePreviewTable'
 
 /**
@@ -25,12 +27,15 @@ import { DerivedRulePreviewTable } from './DerivedRulePreviewTable'
 const BASE_PATH = '/admin/setup/payroll'
 
 export async function DerivedRulePreviewSection({
+  authz,
   orgId,
   searchParams: sp,
 }: {
+  authz: Authz
   orgId: string
   searchParams: Record<string, string | string[] | undefined>
 }) {
+  if (await guardRootSubsidiaryScope(authz)) notFound()
   const t = await getTranslations('payroll.settingsPage')
   const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
 
