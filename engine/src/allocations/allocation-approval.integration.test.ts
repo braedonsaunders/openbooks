@@ -365,7 +365,7 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
       mode: "any",
     });
     await seedSourceEntry(org, actors.adminId, "500.0000");
-    const { ruleId } = await seedPeriodRule({
+    const { ruleId, versionId } = await seedPeriodRule({
       org,
       publisherId: actors.adminId,
       poolAccountId: org.accounts.adjustment,
@@ -375,7 +375,7 @@ test("scheduler auto_post with a flow waits in pending_approval, never posts", {
     const outcome = await processAllocationRunOutboxRow({
       id: randomUUID(),
       org_id: org.orgId,
-      payload: { ruleId, periodId: org.periodId, bookId: org.bookId },
+      payload: { ruleId, versionId, periodId: org.periodId, bookId: org.bookId },
     });
     assert.equal(outcome.outcome, "ran");
     const posted = (await db.execute<{ count: string }>(sql`

@@ -39,6 +39,7 @@ async function seedPeriodRule(
     isActive?: boolean;
     mode?: string;
     omitPublisher?: boolean;
+    effectiveTo?: string | null;
   } = {},
 ): Promise<{ ruleId: string; versionId: string; publishedBy: string | null }> {
   const actors = await seedFlowActors(org.orgId);
@@ -53,9 +54,9 @@ async function seedPeriodRule(
   const version = (
     await db.execute<{ id: string }>(sql`
       insert into allocation_rule_versions
-        (org_id, rule_id, version_no, status, effective_from, definition_hash,
+        (org_id, rule_id, version_no, status, effective_from, effective_to, definition_hash,
          run_policy, run_offset_days, book_scope, book_ids, account_scope)
-      values (${org.orgId}, ${rule.id}, 1, 'draft', '2026-01-01', 'sched',
+      values (${org.orgId}, ${rule.id}, 1, 'draft', '2026-01-01', ${overrides.effectiveTo ?? null}, 'sched',
               ${overrides.runPolicy ?? "auto_preview"}, 0, 'books', ${JSON.stringify([org.bookId])}::jsonb,
               ${JSON.stringify({ kind: "accounts", accountIds: [org.accounts.adjustment] })}::jsonb)
       returning id
@@ -201,6 +202,49 @@ test("enqueue is idempotent and honors policy, runs, feature, and status guards"
   }
 });
 
+test("delayed occurrence keeps its effective version publisher and preview-only policy", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableAllocations(org.orgId);
+    const first = await seedPeriodRule(org, { runPolicy: "auto_preview", effectiveTo: "2026-07-31" });
+    const v2Publisher = (await seedFlowActors(org.orgId)).approver1Id;
+    const version2 = (await db.execute<{ id: string }>(sql`
+      insert into allocation_rule_versions
+        (org_id, rule_id, version_no, status, effective_from, definition_hash, run_policy,
+         run_offset_days, book_scope, book_ids, account_scope, published_at, published_by)
+      select org_id, rule_id, 2, 'draft', '2026-08-01', 'sched-v2', 'auto_post',
+             run_offset_days, book_scope, book_ids, account_scope, null, null
+        from allocation_rule_versions where org_id = ${org.orgId} and id = ${first.versionId}
+      returning id`)).rows[0]!;
+    await db.execute(sql`
+      insert into allocation_rule_targets
+        (org_id, version_id, sequence, target_account_id, department_id, location_id, class_id,
+         project_id, subsidiary_id, extra_dims, fixed_percent, weight, is_remainder, label, custom)
+      select org_id, ${version2.id}, sequence, target_account_id, department_id, location_id, class_id,
+             project_id, subsidiary_id, extra_dims, fixed_percent, weight, is_remainder, label, custom
+        from allocation_rule_targets where org_id = ${org.orgId} and version_id = ${first.versionId}`);
+    await db.execute(sql`
+      update allocation_rule_versions set status = 'published', published_at = now(), published_by = ${v2Publisher}
+       where org_id = ${org.orgId} and id = ${version2.id}`);
+    await db.execute(sql`
+      update allocation_rules set current_version_id = ${version2.id}
+       where org_id = ${org.orgId} and id = ${first.ruleId}`);
+
+    assert.equal(await ensureAllocationRunOutboxRows(), 1);
+    const row = (await outboxRows(org.orgId))[0]!;
+    assert.equal((row.payload as { versionId: string }).versionId, first.versionId);
+    const result = await processAllocationRunOutboxRow(row);
+    assert.deepEqual(result, { outcome: "ran", note: "previewed (source 100.0000)" });
+    const runs = await db.execute<{ version_id: string; requested_by: string; status: string }>(sql`
+      select version_id, requested_by, status from allocation_runs
+       where org_id = ${org.orgId} and rule_id = ${first.ruleId}`);
+    assert.deepEqual(runs.rows, [{ version_id: first.versionId, requested_by: first.publishedBy!, status: "previewed" }]);
+    assert.equal(v2Publisher === first.publishedBy, false);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("processing previews and posts through the real engine", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -248,7 +292,7 @@ test("processing previews and posts through the real engine", { skip: !DB }, asy
 
     await assert.rejects(
       processAllocationRunOutboxRow({ id: row.id, org_id: org.orgId, payload: {} }),
-      /ruleId, periodId, and bookId/,
+      /ruleId, versionId, periodId, and bookId/,
     );
 
   } finally {

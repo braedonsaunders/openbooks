@@ -94,6 +94,8 @@ export interface PreviewAllocationRunOptions {
   ruleId: string;
   periodId: string;
   bookId: string;
+  /** Pin unattended occurrences to the version captured when they were scheduled. */
+  versionId?: string;
   subsidiaryId?: string | null;
   actorId: string;
   trigger?: AllocationRunTrigger;
@@ -306,7 +308,7 @@ async function assertNoVersionEdgeInsidePeriod(
   );
 }
 
-async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Promise<VersionRow> {
+async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow, requestedVersionId?: string): Promise<VersionRow> {
   // A period pool cannot be split by day: refuse before selecting anything.
   await assertNoVersionEdgeInsidePeriod(tx, rule, period);
   const load = async (id: string): Promise<VersionRow | undefined> =>
@@ -321,6 +323,16 @@ async function loadVersionInForce(tx: Tx, rule: RuleRow, period: PeriodRow): Pro
   const inWindow = (version: VersionRow): boolean =>
     version.effective_from <= period.ends_on &&
     (version.effective_to === null || version.effective_to >= period.starts_on);
+  if (requestedVersionId) {
+    const pinned = await load(requestedVersionId);
+    if (!pinned || pinned.rule_id !== rule.id || pinned.status !== "published" || !inWindow(pinned)) {
+      throw new AllocationRunError(
+        "INVALID",
+        `allocation rule ${rule.key} version ${requestedVersionId} is not published and effective for period ${period.name}`,
+      );
+    }
+    return pinned;
+  }
   if (rule.current_version_id) {
     const current = await load(rule.current_version_id);
     if (current && current.status === "published" && inWindow(current)) return current;
@@ -1643,7 +1655,7 @@ export async function previewAllocationRun(
     const book = await loadBook(tx, opts.orgId, opts.bookId);
     if (subsidiaryId) await requireSubsidiary(tx, opts.orgId, subsidiaryId);
     const rule = await loadRule(tx, opts.orgId, opts.ruleId);
-    const version = await loadVersionInForce(tx, rule, period);
+    const version = await loadVersionInForce(tx, rule, period, opts.versionId);
     const targets = await loadTargets(tx, opts.orgId, version.id);
     const built = await buildComputation(
       tx,
@@ -2234,7 +2246,6 @@ export async function rerunAllocationRun(
  * `queryLineage`) — the single run/list/detail surface shared with the Runs
  * tab. period-run.ts owns the lifecycle (preview/post/reverse/rerun) only.
  */
-
 
 
 
