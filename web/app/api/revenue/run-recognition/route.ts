@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  runRevenueRecognition,
-  StaleRecognitionPreviewError,
-} from '@openbooks/engine/src/revenue/recognition.ts'
+import { runRevenueRecognition } from '@openbooks/engine/src/revenue/recognition.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/projects/revenue.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
@@ -106,12 +104,6 @@ export async function POST(req: Request) {
     result.problems.push(...projectSync.problems)
     return NextResponse.json(result)
   } catch (e: unknown) {
-    // A stale confirmation is the operator's to resolve, not a server fault:
-    // it names the remedy (preview again) and nothing was written.
-    if (e instanceof StaleRecognitionPreviewError) {
-      return NextResponse.json({ error: 'stale_preview' }, { status: 409 })
-    }
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return revenueRecognitionErrorResponse(e, 'Unable to run revenue recognition.')
   }
 }

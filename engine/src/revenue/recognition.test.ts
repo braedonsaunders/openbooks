@@ -264,6 +264,8 @@ test("an end date before the start date is refused, not planned as silent zeros"
     "straight_line_prorate_first_last",
     "straight_line_daily",
   ] as const) {
+    // The refusal class is the product: only RevenueRecognitionError reaches
+    // the routes as a named 422 instead of a 500.
     assert.throws(
       () =>
         computeRecognitionSchedule({
@@ -272,7 +274,9 @@ test("an end date before the start date is refused, not planned as silent zeros"
           startOn: "2026-03-01",
           endOn: "2026-02-28",
         }),
-      /precedes the recognition start/,
+      (error: unknown) =>
+        error instanceof RevenueRecognitionError &&
+        /precedes the recognition start/.test(error.message),
     );
   }
 });

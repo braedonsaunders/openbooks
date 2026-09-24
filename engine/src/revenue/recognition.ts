@@ -635,7 +635,7 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
   ) {
     const end = resolveEnd(rawStart, input);
     if (epochDay(end) < epochDay(rawStart)) {
-      throw new Error(`recognition end (${end}) precedes the recognition start (${rawStart})`);
+      throw new RevenueRecognitionError(`recognition end (${end}) precedes the recognition start (${rawStart})`);
     }
     // Cap explicit endOn spans too: without this, a centuries-wide date
     // range allocates one array entry per month before anything else runs.

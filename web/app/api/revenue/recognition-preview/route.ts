@@ -7,6 +7,7 @@ import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'
 import { parseJsonBody } from '../../../../lib/api/json'
 
 export const runtime = 'nodejs'
@@ -109,7 +110,6 @@ export async function POST(request: Request) {
     })
     return NextResponse.json(preview)
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    return revenueRecognitionErrorResponse(e, 'Unable to preview revenue recognition.')
   }
 }
