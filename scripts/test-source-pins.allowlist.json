@@ -50,7 +50,6 @@
     "web/components/views-menu.test.ts": 1,
     "web/lib/apps/manifest-tools.test.ts": 1,
     "web/lib/apps/store-audit.test.ts": 2,
-    "web/lib/apps/store-write-refusal.test.ts": 2,
     "web/lib/apps/tools.test.ts": 8,
     "web/lib/apps/zip.test.ts": 2,
     "web/lib/assistant/result-compaction.test.ts": 1,
