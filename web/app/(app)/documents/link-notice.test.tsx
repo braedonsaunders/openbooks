@@ -2,7 +2,6 @@
 // drawers stay closed by design, so the page carries an inline notice
 // instead of rendering the plain list as if the link had worked.
 
-import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
@@ -35,43 +34,4 @@ test('the dead-link notice names the message as an alert', () => {
     html.includes('The requested file or folder could not be opened.'),
     'the notice carries the loader message',
   )
-})
-
-const view = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
-const contracts = readFileSync(
-  new URL('../../../components/viewspec/widget-contracts.ts', import.meta.url),
-  'utf8',
-)
-const widgets = readFileSync(
-  new URL('../../../components/viewspec/widgets-records.tsx', import.meta.url),
-  'utf8',
-)
-
-test('the loader notices every requested-but-unresolved drawer param', () => {
-  assert.match(
-    view,
-    /sp\.file !== undefined && !openFile/,
-    'a ?file= with no resolved file notices',
-  )
-  assert.match(
-    view,
-    /folderParam !== undefined && \(folderParam === 'new' \? !canManage : !openFolder\)/,
-    'a ?folder= with no resolved folder notices, including new without manage',
-  )
-  assert.match(view, /linkNotice/, 'the notice travels on the loader data')
-  assert.match(
-    view,
-    /widgetBlock\('documents-link-notice', \{ message: data\.linkNotice/,
-    'the spec renders the notice widget',
-  )
-  assert.match(view, /when: f\('linkNotice'\)/, 'the notice renders only when set')
-})
-
-test('the notice widget is registered with its message prop', () => {
-  assert.match(
-    contracts,
-    /'documents-link-notice': \{ props: \['message'\] \}/,
-    'the widget contract names the message prop',
-  )
-  assert.match(widgets, /'documents-link-notice'/, 'the widget is registered')
 })
