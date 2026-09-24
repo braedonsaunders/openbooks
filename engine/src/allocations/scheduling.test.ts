@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
-  ALLOCATION_RUN_OUTBOX_KIND,
   allocationRunOccurrenceKey,
   parseRunAllocationConfig,
   previewInputFor,
@@ -13,7 +11,6 @@ test("allocation run occurrences key on rule, period, and book", () => {
     allocationRunOccurrenceKey("rule-1", "period-1", "book-1"),
     "alloc:rule-1:period-1:book-1",
   );
-  assert.equal(ALLOCATION_RUN_OUTBOX_KIND, "allocation_run");
 });
 
 test("run_allocation config fails closed on shape", () => {
@@ -70,14 +67,11 @@ test("unattended preview input runs as the version publisher", () => {
   );
 });
 
-test("scheduler outbox enqueues and processes the allocation_run kind", () => {
-  const source = readFileSync(new URL("../scheduling/outbox.ts", import.meta.url), "utf8");
-  assert.match(source, /ensureAllocationRunOutboxRows/);
-  assert.match(source, /processAllocationRunOutboxRow/);
-});
-
-test("close automation routes run_allocation to the allocation scheduler", () => {
-  const source = readFileSync(new URL("../close/run-automation.ts", import.meta.url), "utf8");
-  assert.match(source, /rule\.action === "run_allocation"/);
-  assert.match(source, /runAllocationCloseAction/);
-});
+/* Outbox enqueue/process wiring is proven through the real functions in
+ * scheduling.integration.test.ts ("enqueue is idempotent …", "processing
+ * previews and posts through the real engine"), and the production sweep
+ * dispatch in scheduling/outbox.integration.test.ts ("the scheduler sweep
+ * routes allocation_run rows to the allocation processor"). Close-automation
+ * routing is proven in
+ * close/automations-recovery.integration.test.ts ("a run_allocation rule
+ * routes into the allocation scheduler …"). */
