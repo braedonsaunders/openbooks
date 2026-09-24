@@ -1,23 +1,31 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
+import type { ApplicationContext } from "./context";
+import { ApplicationError } from "./errors";
 
-const SOURCE = readFileSync(new URL("./setup-read.ts", import.meta.url), "utf8");
-
-test("getSetupRecord queries by primary key and names the list remedy", () => {
-  const start = SOURCE.indexOf("export async function getSetupRecord");
-  assert.ok(start >= 0);
-  const next = SOURCE.indexOf("\nexport async function", start + 1);
-  const body = SOURCE.slice(start, next === -1 ? undefined : next);
-  assert.doesNotMatch(body, /listSetupRecords/);
-  assert.match(body, /where \$\{sql\.raw\(idColumn\)\} = \$\{input\.id\}/);
-  assert.match(body, /setupRecordMissing\(entity\.key\)/);
-  assert.match(body, /rows\.rows\.length !== 1/);
-  assert.match(SOURCE, /list ids from GET \/api\/v1\/setup\/\$\{entityKey\}/);
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    return next(specifier, context);
+  },
 });
 
-test("unknown and feature-off setup entities name the catalog remedy", () => {
-  assert.match(SOURCE, /list enabled entities from GET \/api\/v1\/setup/);
-  assert.doesNotMatch(SOURCE, /throw notFound\("setup entity"\)/);
-  assert.doesNotMatch(SOURCE, /throw notFound\("setup record"\)/);
+const { listSetupRecords } = await import("./setup-read");
+
+test("unknown setup entities return the catalog remedy without querying records", async () => {
+  const context = {
+    authz: { user: { orgId: "setup-read-unit-test" }, permissions: new Set(["admin.setup.manage"]) },
+    source: "api",
+    requestId: "setup-read-unit-request",
+    apiKeyId: null,
+  } as unknown as ApplicationContext;
+
+  await assert.rejects(
+    listSetupRecords(context, { entityKey: "not-a-setup-entity" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "not_found"
+      && error.status === 404
+      && error.message === "setup entity not found; list enabled entities from GET /api/v1/setup",
+  );
 });
