@@ -896,7 +896,7 @@
       "enabled": "Chiffrer les bulletins envoyés par courriel",
       "unavailable": "Le chiffrement PDF est indisponible sur ce serveur — l’outil qpdf n’est pas installé.",
       "expression": "Règle de mot de passe",
-      "expressionHelp": "Jetons : {surname}, {givenName}, {employeeNumber} (ajoutez :3 pour les trois premiers caractères) et {dob} avec un format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Ajoutez |upper ou |lower pour changer la casse. Exemple : {surname:3|upper}{dob:MMDDYYYY}."
+      "expressionHelp": "Jetons : '{surname}', '{givenName}', '{employeeNumber}' (ajoutez :3 pour les trois premiers caractères) et '{dob}' avec un format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Ajoutez |upper ou |lower pour changer la casse. Exemple : '{surname:3|upper}{dob:MMDDYYYY}'."
     },
     "derivedPreview": {
       "title": "Prévisualiser une règle de gains dérivés",

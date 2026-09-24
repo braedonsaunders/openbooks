@@ -896,7 +896,7 @@
       "enabled": "Per E-Mail versandte Abrechnungen verschlüsseln",
       "unavailable": "PDF-Verschlüsselung ist auf diesem Server nicht verfügbar — das Werkzeug qpdf ist nicht installiert.",
       "expression": "Passwortregel",
-      "expressionHelp": "Token: {surname}, {givenName}, {employeeNumber} (:3 für die ersten drei Zeichen anhängen) und {dob} mit einem Format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). |upper oder |lower anhängen, um die Großschreibung zu ändern. Beispiel: {surname:3|upper}{dob:MMDDYYYY}."
+      "expressionHelp": "Token: '{surname}', '{givenName}', '{employeeNumber}' (:3 für die ersten drei Zeichen anhängen) und '{dob}' mit einem Format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). |upper oder |lower anhängen, um die Großschreibung zu ändern. Beispiel: '{surname:3|upper}{dob:MMDDYYYY}'."
     },
     "derivedPreview": {
       "title": "Abgeleitete Bezugsregel vorschauen",

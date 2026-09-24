@@ -896,7 +896,7 @@
       "enabled": "Criptografar holerites enviados por e-mail",
       "unavailable": "Criptografia de PDF indisponível neste servidor — a ferramenta qpdf não está instalada.",
       "expression": "Regra de senha",
-      "expressionHelp": "Elementos: {surname}, {givenName}, {employeeNumber} (adicione :3 para os três primeiros caracteres) e {dob} com um formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Adicione |upper ou |lower para mudar maiúsculas/minúsculas. Exemplo: {surname:3|upper}{dob:MMDDYYYY}."
+      "expressionHelp": "Elementos: '{surname}', '{givenName}', '{employeeNumber}' (adicione :3 para os três primeiros caracteres) e '{dob}' com um formato (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Adicione |upper ou |lower para mudar maiúsculas/minúsculas. Exemplo: '{surname:3|upper}{dob:MMDDYYYY}'."
     },
     "derivedPreview": {
       "title": "Prévia de regra de proventos derivados",
