@@ -46,7 +46,7 @@ import { IA_44016, IA_CERTIFICATE, IA_REGION } from "./states/ia.ts";
 import { IN_CERTIFICATE, IN_REGION } from "./states/in.ts";
 import { KY_CERTIFICATE, KY_REGION } from "./states/ky.ts";
 import { ME_CERTIFICATE, ME_REGION } from "./states/me.ts";
-import { MD_CERTIFICATE, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION } from "./states/md.ts";
+import { MD_CERTIFICATE, MD_MW507M, MD_MW507_NR, MD_RECIPROCITY_AGREEMENTS, MD_REGION } from "./states/md.ts";
 import { OR_CERTIFICATE, OR_REGION, OR_TRANSIT_RECORD } from "./states/or.ts";
 import { RI_CERTIFICATE, RI_REGION } from "./states/ri.ts";
 import { VT_CERTIFICATE, VT_REGION } from "./states/vt.ts";
@@ -214,6 +214,21 @@ const CA_DE4: PayrollCertificate = {
       key: "military_spouse_exempt", label: "Line 4 — Military spouse (MSRRA)", kind: "flag",
       help: "The employee certifies they are not subject to California withholding under the "
         + "Servicemembers Civil Relief Act as amended by the Military Spouses Residency Relief Act.",
+    },
+    {
+      key: "servicemember_is_armed_forces_member",
+      label: "Spouse is a member of the Armed Forces present in California under military orders",
+      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (i).",
+    },
+    {
+      key: "spouse_present_solely_to_accompany",
+      label: "Employee is present in California solely to be with the spouse",
+      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (ii).",
+    },
+    {
+      key: "spouse_domiciled_outside_ca",
+      label: "Employee maintains domicile in another state",
+      kind: "flag", help: "DE 4 Rev. 56, MSRRA exemption condition (iii).",
     },
   ],
 };
@@ -1048,7 +1063,7 @@ const US_CERTIFICATES: PayrollPackCertificates = {
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
     NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
     MA_M4, MA_M4_MS, GA_G4, NC_NC4, CO_CERTIFICATE, CO_DR1059_CERTIFICATE, CT_CERTIFICATE, DC_CERTIFICATE,
-    MD_CERTIFICATE, MD_MW507_NR, OR_CERTIFICATE, OR_TRANSIT_RECORD, DE_CERTIFICATE,
+    MD_CERTIFICATE, MD_MW507M, MD_MW507_NR, OR_CERTIFICATE, OR_TRANSIT_RECORD, DE_CERTIFICATE,
     AL_CERTIFICATE, AL_A4_MS_CERTIFICATE, SC_CERTIFICATE, AR_CERTIFICATE, ME_CERTIFICATE,
     RI_CERTIFICATE, VT_CERTIFICATE, HI_CERTIFICATE,
     ID_CERTIFICATE, KS_CERTIFICATE, LA_CERTIFICATE,

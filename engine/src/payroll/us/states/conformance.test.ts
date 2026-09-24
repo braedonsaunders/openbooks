@@ -98,6 +98,25 @@ test("CA carries a pre-2020 federal W-4 status and allowances when no DE 4 is fi
   assert.equal(result.tax, money("3.22"));
 });
 
+test("CA military-spouse DE 4 line 4 requires all three statutory attestations", () => {
+  assert.throws(() => CA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "1600.00", basis: "resident",
+    certificate: de4({ military_spouse_exempt: "true" }),
+  }), /California military-spouse withholding exemption requires proof that .*orders.*solely.*domicile/);
+
+  const eligible = CA_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 26, wages: "1600.00", basis: "resident",
+    certificate: de4({
+      military_spouse_exempt: "true",
+      servicemember_is_armed_forces_member: "true",
+      spouse_present_solely_to_accompany: "true",
+      spouse_domiciled_outside_ca: "true",
+    }),
+  });
+  assert.equal(eligible.tax, money("0"));
+  assert.equal(eligible.factors.CA_EXEMPT, money("0.0001"));
+});
+
 test("CA Example C — monthly $5,100, married, 5 allowances: $0.82", () => {
   const result = CA_WITHHOLDING.compute({
     payDate: "2026-03-31", periodsPerYear: 12, wages: "5100.00", basis: "resident",
