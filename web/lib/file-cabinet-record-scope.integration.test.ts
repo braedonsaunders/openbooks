@@ -12,7 +12,7 @@ registerHooks({
 const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { attachExisting, deleteFile, ensureApCaptureRoot, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
+const { attachExisting, deleteFile, ensureApCaptureRoot, fileAccessLevel, folderAccessLevel, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
 const { buildZip, filesZipManifest, folderZipManifest, MAX_ZIP_FILES } = await import('./file-zip')
 
 /**
@@ -133,6 +133,31 @@ test('trash hides metadata and every pinned or ZIP byte read', { skip: !process.
     assert.equal(await getFileBlob(org.orgId, fileId, viewer), null)
     assert.equal(await getFileBlob(org.orgId, fileId, viewer, versionId), null)
     assert.equal((await buildZip(org.orgId, viewer, manifest)).included, 0)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('stale trashed folder and file ids cannot reveal metadata or activity access', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'Stale cabinet reader', 'clerk')
+    const folderId = randomUUID()
+    const fileId = randomUUID()
+    await db.execute(sql`insert into folders(id, org_id, name) values (${folderId}, ${org.orgId}, 'Former folder')`)
+    await db.execute(sql`insert into files(id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'former.txt', 'text/plain', 0)`)
+    await db.execute(sql`insert into resource_grants(org_id, resource_type, resource_id, principal_type, principal_id, access, created_by)
+      values (${org.orgId}, 'folder', ${folderId}, 'user', ${actorId}, 'viewer', ${actorId}),
+             (${org.orgId}, 'file', ${fileId}, 'user', ${actorId}, 'viewer', ${actorId})`)
+    const viewer = { userId: actorId, isAdmin: false, baseline: 'viewer' as const }
+
+    await db.execute(sql`update folders set is_inactive = true where id = ${folderId} and org_id = ${org.orgId}`)
+    await db.execute(sql`update files set is_inactive = true where id = ${fileId} and org_id = ${org.orgId}`)
+
+    assert.equal(await getFolder(org.orgId, folderId, viewer), null)
+    assert.equal(await folderAccessLevel(org.orgId, viewer, folderId), 'none')
+    assert.equal(await fileAccessLevel(org.orgId, viewer, fileId), 'none')
   } finally {
     await dropScratchOrg(org.orgId)
   }

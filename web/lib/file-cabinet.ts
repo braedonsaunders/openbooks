@@ -412,7 +412,6 @@ export async function folderAccessLevel(
   folderId: string,
   executor?: SqlExecutor,
 ): Promise<AccessLevel> {
-  if (viewer.isAdmin) return 'manager'
   const exec = executor ?? db
   // The anchor row decides existence AND the subsidiary fence in one read: a
   // folder evidencing an out-of-fence record is invisible to a restricted
@@ -421,13 +420,14 @@ export async function folderAccessLevel(
   const fence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`record_table`, sql`record_id`)
   const anchor = (await exec.execute<{ recordVisible: boolean }>(sql`
     select ${fence ?? sql`true`} as "recordVisible"
-      from folders where id = ${folderId} and org_id = ${orgId}
+      from folders where id = ${folderId} and org_id = ${orgId} and not is_inactive
   `)).rows[0]
   if (!anchor) return 'none' // folder not found / not in org
+  if (viewer.isAdmin) return 'manager'
   const r = (await exec.execute<{ n: number; ownsPrivate: boolean | null; foreignPrivate: boolean | null; grantRank: number }>(sql`
     with recursive ancestors as (
       select id, parent_folder_id, is_private, owner_id
-        from folders where id = ${folderId} and org_id = ${orgId}
+        from folders where id = ${folderId} and org_id = ${orgId} and not is_inactive
       union all
       select f.id, f.parent_folder_id, f.is_private, f.owner_id
         from folders f join ancestors a on f.id = a.parent_folder_id and f.org_id = ${orgId}
@@ -465,7 +465,6 @@ export async function fileAccessLevel(
   fileId: string,
   executor?: SqlExecutor,
 ): Promise<AccessLevel> {
-  if (viewer.isAdmin) return 'manager'
   const exec = executor ?? db
   const folderFence = recordTargetVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fo.record_table`, sql`fo.record_id`)
   const attachFence = attachmentTargetsVisiblePredicate(orgId, viewer.allowedSubsidiaryIds, sql`fi.id`)
@@ -478,10 +477,11 @@ export async function fileAccessLevel(
       ${folderFence ?? sql`true`} as "folderRecordVisible",
       ${attachFence ?? sql`true`} as "attachVisible"
       from files fi left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
-     where fi.id = ${fileId} and fi.org_id = ${orgId}
+     where fi.id = ${fileId} and ${liveFilePredicate(orgId)}
   `))
   const row = r.rows[0]
   if (!row) return 'none'
+  if (viewer.isAdmin) return 'manager'
   const fileGrant = ACCESS_BY_RANK[row.grantRank] ?? 'none'
   const folderLevel = await folderAccessLevel(orgId, viewer, row.folderId, exec)
   if (viewer.allowedSubsidiaryIds !== null && viewer.allowedSubsidiaryIds !== undefined
@@ -915,7 +915,7 @@ export async function getFolder(
              left join folders fo on fo.id = fi.folder_id and fo.org_id = fi.org_id
             where fi.folder_id = f.id and ${fileCountVisible}) as "fileCount"
       from folders f
-     where f.id = ${id} and f.org_id = ${orgId} and ${selfVisible}
+     where f.id = ${id} and f.org_id = ${orgId} and not f.is_inactive and ${selfVisible}
        and ${recordVisible}
   `))
   return r.rows[0] ?? null
