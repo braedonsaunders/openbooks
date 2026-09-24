@@ -428,6 +428,12 @@ export async function POST(req: Request) {
     if (missingScope) {
       return NextResponse.json({ error: missingScope }, { status: 422 })
     }
+    // An employee selector with no subsidiary is effectively organization-wide:
+    // costing resolution matches it for projects in every legal entity.
+    if (employeePartyId !== null && employeeRef?.rows[0]?.subsidiaryId == null) {
+      const scopeDenied = guardUnrestrictedScope(gate)
+      if (scopeDenied) return scopeDenied
+    }
     // Wages are confidential per subsidiary: an employee/department/subsidiary
     // outside the caller's scope is indistinguishable from a missing one.
     if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.rows[0]?.subsidiaryId ?? null, { orgWideNull: true })) {
