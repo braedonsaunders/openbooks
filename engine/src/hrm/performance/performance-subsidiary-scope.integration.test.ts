@@ -1123,6 +1123,14 @@ test("competency framework reads and writes obey the subsidiary applicability", 
       orgId: h.org.orgId, actorId: h.hrFull, name: "B framework",
       appliesTo: { employer_subsidiary_id: h.subB, department_id: null },
     });
+    const departmentB = (await db.execute<{ id: string }>(sql`
+      insert into departments (org_id, name, subsidiary_id)
+      values (${h.org.orgId}, 'B framework department', ${h.subB}) returning id
+    `)).rows[0]!.id;
+    const departmentOnlyB = await createFramework({
+      orgId: h.org.orgId, actorId: h.hrFull, name: "B department-only framework",
+      appliesTo: { employer_subsidiary_id: null, department_id: departmentB },
+    });
     const competencyB = await createCompetency({
       orgId: h.org.orgId, actorId: h.hrFull, frameworkId: frameworkB.id,
       code: "B-SKILL", name: "B-only skill",
@@ -1130,6 +1138,8 @@ test("competency framework reads and writes obey the subsidiary applicability", 
     const listed = await listFrameworks({ orgId: h.org.orgId, actorId: h.hrA });
     assert.deepEqual(listed.map((framework) => framework.id), [frameworkA.id]);
     assert.equal(await getFramework({ orgId: h.org.orgId, actorId: h.hrA, id: frameworkB.id }), null);
+    assert.equal(listed.some((framework) => framework.id === departmentOnlyB.id), false);
+    assert.equal(await getFramework({ orgId: h.org.orgId, actorId: h.hrA, id: departmentOnlyB.id }), null);
     const refuseConfig = (error: unknown) => {
       assert.ok(error instanceof HrmAuthorizationError);
       assert.match(error.message, /not visible in this organization and legal-entity scope/);
