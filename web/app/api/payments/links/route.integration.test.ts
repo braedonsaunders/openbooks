@@ -174,9 +174,9 @@ test("a tampered sealed token lists the link as unavailable with no URL", { skip
     })));
     assert.equal(created.status, 201);
     const linkId = ((await created.json()) as { id: string }).id;
-    await db.execute(sql`
+    await withBypassContext(() => (db.execute(sql`
       update payment_links set token_sealed = 'tampered' where id = ${linkId} and org_id = ${org.orgId}
-    `);
+    `)));
     const listed = await getLinks(org.orgId, invoiceId);
     assert.equal(listed.status, 200);
     assert.equal(listed.json.links.length, 1);

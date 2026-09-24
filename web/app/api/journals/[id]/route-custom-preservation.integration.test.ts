@@ -95,7 +95,7 @@ test(
   "journals PATCH preserves omitted required header custom fields on a partial edit",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
       // seedFlowActors seeds app_roles outside any bypass of its own; scope
       // the call (and every seed write below) explicitly now that importing

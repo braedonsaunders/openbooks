@@ -52,16 +52,16 @@ interface Fixture {
 }
 
 async function grant(orgId: string, userId: string, permission: string): Promise<void> {
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)
     values (${orgId}, ${userId}, ${permission}, 'grant')
     on conflict (user_id, permission) do update set effect = 'grant'
-  `);
+  `)));
 }
 
 async function fixture(): Promise<Fixture> {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Bank Preparer", "bank_preparer");
+  const org = await withBypassContext(() => (createScratchOrg()));
+  const actorId = await withBypassContext(() => (createScratchUser(org.orgId, "Bank Preparer", "bank_preparer")));
   await grant(org.orgId, actorId, "banking.reconcile");
   const bankId = org.accounts.bank;
   await withBypassContext(async () => db.execute(sql`

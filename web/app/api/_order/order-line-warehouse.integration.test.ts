@@ -45,7 +45,7 @@ const hooks = registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
 const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/testing/database-bypass.ts");
 const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
 const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
@@ -81,12 +81,12 @@ async function approvedOrder(
   itemId: (org: Fixture["org"]) => string,
   warehouse: ((org: Fixture["org"]) => string) | null,
 ): Promise<Fixture> {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
-    const userId = await createScratchUser(org.orgId, "Warehouse Clerk", "admin");
+    const userId = await withBypassContext(() => (createScratchUser(org.orgId, "Warehouse Clerk", "admin")));
     const order = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, kind, randomUUID(), null));
     const lineId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => (db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, item_id, account_id,
          description, quantity, unit, unit_price, amount, tax_amount,
@@ -96,15 +96,15 @@ async function approvedOrder(
          ${kind === "sales_order" ? org.accounts.revenue : org.accounts.invAsset},
          'Widget', '10', 'ea', '10', '100', '0',
          '0', '0', ${warehouse ? warehouse(org) : null}, '{}'::jsonb)
-    `);
-    await db.execute(sql`
+    `)));
+    await withBypassContext(() => (db.execute(sql`
       update documents
          set status = 'approved',
              party_id = ${kind === "sales_order" ? org.customerId : org.vendorId},
              subsidiary_id = ${org.subsidiaryId}, document_date = ${org.date},
              subtotal = '100', total = '100'
        where id = ${order.id} and org_id = ${org.orgId}
-    `);
+    `)));
     return { org, userId, orderId: order.id, lineId };
   } catch (error) {
     await dropScratchOrg(org.orgId);
@@ -218,7 +218,7 @@ test("assignment unblocks fulfillment and routes stock to the assigned warehouse
 test("a draft order stays on the normal edit path", { skip: !DB }, async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
-    await db.execute(sql`update documents set status = 'draft' where id = ${f.orderId} and org_id = ${f.org.orgId}`);
+    await withBypassContext(() => (db.execute(sql`update documents set status = 'draft' where id = ${f.orderId} and org_id = ${f.org.orgId}`)));
     await assert.rejects(
       withOrg(f.org.orgId, async () =>
         assignOrderLineWarehouse({
@@ -263,8 +263,8 @@ test("a warehouse does not apply to a non-stocked line", { skip: !DB }, async ()
 test("an inactive warehouse is refused", { skip: !DB }, async () => {
   const f = await approvedOrder("sales_order", (org) => org.items.fifo, null);
   try {
-    await db.execute(sql`update stock_locations set is_active = false
-      where id = ${f.org.stockLocationId2} and org_id = ${f.org.orgId}`);
+    await withBypassContext(() => (db.execute(sql`update stock_locations set is_active = false
+      where id = ${f.org.stockLocationId2} and org_id = ${f.org.orgId}`)));
     await assert.rejects(
       withOrg(f.org.orgId, async () =>
         assignOrderLineWarehouse({

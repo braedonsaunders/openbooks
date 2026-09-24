@@ -88,7 +88,7 @@ test('journal GET waits on a journal rehome in flight instead of racing it', { s
     await writer.query('begin')
     await writer.query("select set_config('app.bypass_rls','on',true), set_config('statement_timeout','10000',true)")
     const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
-    await writer.query('update documents set subsidiary_id=$1 where id=$2', [hidden, visible])
+    await withBypassContext(() => (writer.query('update documents set subsidiary_id=$1 where id=$2', [hidden, visible])))
     pending = withOrgContext(org.orgId, () => GET(new Request('http://journals.local/api'), ctxFor(visible)))
     let blocked = false
     for (let n = 0; n < 200; n++) {

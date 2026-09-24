@@ -255,7 +255,7 @@ const postFurnished = (filingId: string, body: unknown) =>
   );
 
 test("a read-only GET renders without marking copies furnished", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["compliance.read"]), allowedSubsidiaryIds: null };
@@ -271,7 +271,7 @@ test("a read-only GET renders without marking copies furnished", { skip: !DB }, 
 });
 
 test("the furnish POST without the manage grant is refused before any write", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     routeState.authz = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["compliance.read"]), allowedSubsidiaryIds: null };
@@ -285,7 +285,7 @@ test("the furnish POST without the manage grant is refused before any write", { 
 });
 
 test("the furnish POST with the manage grant stamps and audits both copies", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     routeState.authz = {
@@ -307,7 +307,7 @@ test("the furnish POST with the manage grant stamps and audits both copies", { s
 });
 
 test("the furnish POST for one recipient stamps only that copy", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const actorId = randomUUID();
     routeState.authz = {

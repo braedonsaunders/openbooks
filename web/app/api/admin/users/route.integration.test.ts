@@ -16,7 +16,8 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
   if (specifier === "server-only") return virtual("export {}");
   if (specifier.endsWith("/lib/authz") && /\/api\/admin\/(users|roles)\/route.ts/.test(context.parentURL ?? "")) {
-    return virtual("export async function guardPermission(){return globalThis[Symbol.for('openbooks.user-control-integration')].authz}");
+    const realAuthzUrl = next(specifier, context).url;
+    return virtual(`export { subsidiaryScopeAllows } from '${realAuthzUrl}'; export async function guardPermission(){return globalThis[Symbol.for('openbooks.user-control-integration')].authz}`);
   }
   return next(specifier, context);
 } });
@@ -97,8 +98,8 @@ for (const change of ["widen", "delete"] as const) {
     try {
       await writer.query("begin");
       await writer.query("select set_config('app.bypass_rls', 'on', true)");
-      if (change === "widen") await writer.query(`update app_roles set permissions = '["gl.post"]'::jsonb where id = $1`, [f.extraRole]);
-      else await writer.query("delete from app_roles where id = $1", [f.extraRole]);
+      if (change === "widen") await withBypassContext(() => (writer.query(`update app_roles set permissions = '["gl.post"]'::jsonb where id = $1`, [f.extraRole])));
+      else await withBypassContext(() => (writer.query("delete from app_roles where id = $1", [f.extraRole])));
       const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
       pending = call({ action: "assign", userId: f.targetId, roleId: f.extraRole });
       await waitForBlocked(pid);
@@ -200,7 +201,7 @@ for (const action of ["assign", "unassign", "set-active"] as const) {
       installed = true;
       const body = { action, userId: f.targetId, roleId: f.extraRole, isActive: false };
       await withOrgTransaction(f.orgId, async () => {
-        await db.execute(sql`update app_roles set description = 'earlier caller work' where id = ${f.extraRole}`);
+        await withBypassContext(() => (db.execute(sql`update app_roles set description = 'earlier caller work' where id = ${f.extraRole}`)));
         const before = await snapshot();
         await assert.rejects(call(body));
         assert.deepEqual(await snapshot(), before);

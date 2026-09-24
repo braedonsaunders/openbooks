@@ -6,7 +6,9 @@ import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-rates-precision-route-test')
-const routeState: { gate: { user: { orgId: string; id: string } } | null } = { gate: null }
+const routeState: {
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: null } | null
+} = { gate: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
@@ -36,7 +38,7 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?item-rates-precision-route-integration'
 const { POST } = (await import(routeUrl)) as typeof import('./route')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 hooks.deregister()
 
@@ -64,12 +66,12 @@ function versioned(itemId: string, book: string, quantity: string, from: string)
  * refusal must leave the prior version intact.
  */
 test('a five-decimal base quantity is refused and the prior version stands', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
-    routeState.gate = { user: { orgId: org.orgId, id: org.orgId } }
+    routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null }
     const book = randomUUID()
-    await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
-      values (${book}, ${org.orgId}, 'PRECISION', 'Precision book', 'CAD', false, true)`)
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
+      values (${book}, ${org.orgId}, 'PRECISION', 'Precision book', 'CAD', false, true)`)))
 
     const first = await post(org.items.service, versioned(org.items.service, book, '1', '2026-01-01'))
     assert.equal(first.status, 200, await first.text())
@@ -78,14 +80,14 @@ test('a five-decimal base quantity is refused and the prior version stands', { s
     assert.equal(precise.status, 422)
     assert.match(String((await precise.json()).error), /at most 4 decimal places/)
 
-    const versions = (await db.execute<{ effective_from: string }>(sql`
+    const versions = (await withOrgContext(org.orgId, () => db.execute<{ effective_from: string }>(sql`
       select effective_from::text from item_rate_versions
        where org_id = ${org.orgId} and rate_book_id = ${book} and status = 'active'
-       order by effective_from`)).rows
+       order by effective_from`))).rows
     assert.deepEqual(versions.map((v) => String(v.effective_from).slice(0, 10)), ['2026-01-01'])
-    const stored = (await db.execute<{ base_quantity: string }>(sql`
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ base_quantity: string }>(sql`
       select base_quantity::text from item_rate_lines
-       where org_id = ${org.orgId} and item_id = ${org.items.service}`)).rows
+       where org_id = ${org.orgId} and item_id = ${org.items.service}`))).rows
     assert.deepEqual(stored.map((r) => r.base_quantity), ['1.0000'])
 
     const valid = await post(org.items.service, versioned(org.items.service, book, '1.0001', '2026-02-01'))

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withBypassContext, db  } from '@openbooks/engine/src/platform/db.ts'
 import { autoMatch, importStatement, markReconciled, startReconciliation } from '@openbooks/engine/src/banking/banking.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import type { Authz } from '../../../../../lib/authz'
@@ -24,21 +24,21 @@ registerHooks({ resolve(specifier, context, next) {
 const { PATCH } = await import('./route')
 
 async function fixture() {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"banking":true}'::jsonb) where id=${org.orgId}`)
-  await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-    where org_id=${org.orgId} and id=${org.accounts.bank}`)
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
+  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"banking":true}'::jsonb) where id=${org.orgId}`)))
+  await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+    where org_id=${org.orgId} and id=${org.accounts.bank}`)))
   const entryId = randomUUID()
-  await db.execute(sql`insert into journal_entries
+  await withBypassContext(() => (db.execute(sql`insert into journal_entries
     (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
-    values(${entryId},${org.orgId},${org.bookId},${org.subsidiaryId},'BANK-ADJUST',${org.date},${org.periodId},'draft','manual')`)
-  await db.execute(sql`insert into journal_lines
+    values(${entryId},${org.orgId},${org.bookId},${org.subsidiaryId},'BANK-ADJUST',${org.date},${org.periodId},'draft','manual')`)))
+  await withBypassContext(() => (db.execute(sql`insert into journal_lines
     (org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
     values(${org.orgId},${entryId},1,${org.accounts.bank},${org.subsidiaryId},100,'CAD',100,1),
-      (${org.orgId},${entryId},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'CAD',-100,1)`)
-  await db.execute(sql`update journal_entries set status='posted',posted_at=now() where org_id=${org.orgId} and id=${entryId}`)
+      (${org.orgId},${entryId},2,${org.accounts.adjustment},${org.subsidiaryId},-100,'CAD',-100,1)`)))
+  await withBypassContext(() => (db.execute(sql`update journal_entries set status='posted',posted_at=now() where org_id=${org.orgId} and id=${entryId}`)))
   const ctx = { orgId: org.orgId, userId: actorId, allowedSubsidiaryIds: null }
   await importStatement({ accountId: org.accounts.bank, source: 'manual', currency: 'CAD',
     lines: [{ postedOn: org.date, amount: '100', description: 'Deposit', bankTransactionId: 'deposit' }] }, ctx)
@@ -143,7 +143,7 @@ test('bank sign-off refuses legacy overlapping cutoffs even when the balance cro
     const next = await startReconciliation({ accountId: org.accounts.bank, throughDate: '2026-07-31', statementBalance: '100' }, org.ctx)
     // Reproduce data persisted by the old adjustment route, without weakening
     // any database constraint. Sign-off must enforce the invariant itself.
-    await db.execute(sql`update reconciliations set through_date=${org.date} where id=${next.id} and org_id=${org.orgId}`)
+    await withBypassContext(() => (db.execute(sql`update reconciliations set through_date=${org.date} where id=${next.id} and org_id=${org.orgId}`)))
     await assert.rejects(markReconciled(next.id, org.ctx), /after the last signed-off reconciliation/)
     assert.equal((await snapshot(org.orgId, next.id)).status, 'in_progress')
     assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${next.id} and action='approve'`)).rows.length, 0)
@@ -167,7 +167,7 @@ test('completed bank sign-off remains idempotent after its book is deactivated',
   const org = await fixture()
   try {
     const signed = await markReconciled(org.reconciliationId, org.ctx)
-    await db.execute(sql`update accounting_books set is_active=false where org_id=${org.orgId} and id=${org.bookId}`)
+    await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=false where org_id=${org.orgId} and id=${org.bookId}`)))
     assert.deepEqual(await markReconciled(org.reconciliationId, org.ctx), signed)
     assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and row_id=${org.reconciliationId} and action='approve'`)).rows.length, 1)
   } finally { identity.gate = null; await dropScratchOrg(org.orgId) }

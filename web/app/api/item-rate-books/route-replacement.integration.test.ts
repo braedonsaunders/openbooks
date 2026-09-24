@@ -6,7 +6,9 @@ import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-rate-books-replacement-test')
-const routeState: { gate: { user: { orgId: string; id: string } } | null } = { gate: null }
+const routeState: {
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: null } | null
+} = { gate: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
@@ -23,7 +25,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: 'module',
-        source: `export async function guardFeaturePermission() { return globalThis[Symbol.for('openbooks.item-rate-books-replacement-test')].gate }`,
+      source: `export async function guardFeaturePermission() { return globalThis[Symbol.for('openbooks.item-rate-books-replacement-test')].gate }`,
       }
     }
     if (url === 'mock:rate-books-features') {
@@ -36,7 +38,7 @@ const hooks = registerHooks({
 const bookRouteUrl = './route.ts?item-rate-books-replacement-integration'
 const { POST } = (await import(bookRouteUrl)) as typeof import('./route')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 hooks.deregister()
 
@@ -64,24 +66,24 @@ function tiers(itemId: string, premiums: Record<string, unknown> = {}) {
 }
 
 async function fixture() {
-  const org = await createScratchOrg()
-  routeState.gate = { user: { orgId: org.orgId, id: org.orgId } }
+  const org = await withBypassContext(() => (createScratchOrg()))
+  routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null }
   const book = randomUUID()
-  await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
-    values (${book}, ${org.orgId}, 'REPLACE', 'Replacement book', 'CAD', false, true)`)
+  await withBypassContext(() => (db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
+    values (${book}, ${org.orgId}, 'REPLACE', 'Replacement book', 'CAD', false, true)`)))
   return { org, book }
 }
 
 async function activeVersions(orgId: string, book: string) {
-  return (await db.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
+  return (await withOrgContext(orgId, () => db.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
     select id, effective_from::text, effective_to::text from item_rate_versions
      where org_id = ${orgId} and rate_book_id = ${book} and status = 'active'
-     order by effective_from`)).rows
+     order by effective_from`))).rows
 }
 
 async function lineCount(orgId: string, versionId: string) {
-  return (await db.execute<{ count: string }>(sql`
-    select count(*)::text as count from item_rate_lines where org_id = ${orgId} and version_id = ${versionId}`)).rows[0]!.count
+  return (await withOrgContext(orgId, () => db.execute<{ count: string }>(sql`
+    select count(*)::text as count from item_rate_lines where org_id = ${orgId} and version_id = ${versionId}`))).rows[0]!.count
 }
 
 /**
@@ -144,9 +146,9 @@ test('an empty replacement refuses without the flag and clears with it', { skip:
     assert.equal(versions.length, 2)
     const live = versions.find((v) => String(v.effective_from).slice(0, 10) === '2026-02-01')!
     assert.equal(await lineCount(org.orgId, live.id), '0')
-    const closed = (await db.execute<{ effective_to: string }>(sql`
+    const closed = (await withOrgContext(org.orgId, () => db.execute<{ effective_to: string }>(sql`
       select effective_to::text from item_rate_versions
-       where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`)).rows[0]
+       where org_id = ${org.orgId} and rate_book_id = ${book} and effective_from = '2026-01-01'`))).rows[0]
     assert.equal(String(closed!.effective_to).slice(0, 10), '2026-01-31')
   } finally {
     routeState.gate = null
@@ -163,8 +165,8 @@ test('unknown time types and premium values refuse with the version intact', { s
   const { org, book } = await fixture()
   try {
     const timeType = randomUUID()
-    await db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
-      values (${timeType}, ${org.orgId}, 'Night', '1.25', true)`)
+    await withBypassContext(() => (db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
+      values (${timeType}, ${org.orgId}, 'Night', '1.25', true)`)))
     const first = await bookPost({ id: book, code: 'REPLACE', name: 'Replacement book', replaceRates: true, effectiveFrom: '2026-01-01', lines: tiers(org.items.service) })
     assert.equal(first.status, 200, await first.text())
 

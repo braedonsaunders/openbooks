@@ -27,20 +27,20 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { POST } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   state.orgId = org.orgId
   state.actorId = randomUUID()
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
-     where id = ${org.orgId}`)
+     where id = ${org.orgId}`)))
   return { org }
 }
 

@@ -78,7 +78,7 @@ const routeUrl = "./route.ts?flow-delegate-scope";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -108,40 +108,40 @@ async function seedHiddenGate(
 ): Promise<string> {
   const employeeId = randomUUID();
   const headerId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into parties
       (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
     values
       (${employeeId}, ${orgId}, 'employee', 'Hidden Worker',
        ${subsidiaryId}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into timesheet_weeks
       (id, org_id, employee_party_id, week_start, status, created_by, updated_by)
     values
       (${headerId}, ${orgId}, ${employeeId}, '2026-07-12',
        'submitted', ${assigneeId}, ${assigneeId})
-  `);
+  `)));
   const flowId = randomUUID();
   const runId = randomUUID();
   const gateId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into flows (id, org_id, name, subject_kind, enabled, graph)
     values (${flowId}, ${orgId}, 'Timesheet approvals', 'timesheet_week', true, '{}'::jsonb)
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into flow_runs
       (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
     values (${runId}, ${orgId}, ${flowId}, 'timesheet_week', ${headerId}, 'on_submit', 'waiting')
-  `);
-  await db.execute(sql`
+  `)));
+  await withBypassContext(() => (db.execute(sql`
     insert into flow_gates
       (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id,
        title, assignee_user_id, group_key, quorum, status)
     values (${gateId}, ${orgId}, ${flowId}, ${runId}, 'gate-1',
             'timesheet_week', ${headerId}, 'Manager approval',
             ${assigneeId}, 'gate-1', 'any', 'pending')
-  `);
+  `)));
   return gateId;
 }
 
@@ -162,15 +162,15 @@ test(
   "a gate outside the caller entity reads as missing and is never delegated",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
       const hiddenId = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
-        values (${hiddenId}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+        values (${hiddenId}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`)));
       // flow_gates.assignee_user_id is a real foreign key: the assignee must
       // be a provisioned user, not a random id.
-      const assigneeId = await createScratchUser(org.orgId, "Hidden Approver", "approver");
+      const assigneeId = await withBypassContext(() => (createScratchUser(org.orgId, "Hidden Approver", "approver")));
       const gateId = await seedHiddenGate(org.orgId, assigneeId, hiddenId);
       gate(org.orgId, randomUUID(), new Set([org.subsidiaryId]));
 
@@ -192,7 +192,7 @@ test(
 );
 
 test("a malformed delegation is a 400 naming both ids", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     gate(org.orgId, randomUUID(), null);
 

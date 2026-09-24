@@ -57,7 +57,7 @@ const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.
 const { POST, DELETE } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -74,15 +74,15 @@ async function seed(): Promise<{
   groupA: string;
   groupB: string;
 }> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const org = await withBypassContext(() => (createScratchOrg()));
+  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
   const groupA = randomUUID();
   const groupB = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into account_groups (id, org_id, dimension, key, name, sort_order, match, is_catch_all, is_active, created_by)
     values
       (${groupA}, ${org.orgId}, 'test_dimension', 'group_a', 'Group A', 1, '{}'::jsonb, false, true, ${actorId}),
-      (${groupB}, ${org.orgId}, 'test_dimension', 'group_b', 'Group B', 2, '{}'::jsonb, false, true, ${actorId})`);
+      (${groupB}, ${org.orgId}, 'test_dimension', 'group_b', 'Group B', 2, '{}'::jsonb, false, true, ${actorId})`)));
   return { orgId: org.orgId, actorId, accountId: org.accounts.cogs, groupA, groupB };
 }
 
@@ -125,18 +125,18 @@ test(
            and indexname = 'account_group_members_org_dimension_account'`);
       assert.match(index.rows[0]?.indexdef ?? "", /org_id.*dimension.*account_id/);
 
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
-        values (${fixture.orgId}, ${fixture.groupA}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`);
+        values (${fixture.orgId}, ${fixture.groupA}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`)));
       await assert.rejects(
-        db.execute(sql`
+        withBypassContext(() => (db.execute(sql`
           insert into account_group_members (org_id, group_id, account_id, dimension, created_by)
-          values (${fixture.orgId}, ${fixture.groupB}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`),
+          values (${fixture.orgId}, ${fixture.groupB}, ${fixture.accountId}, 'test_dimension', ${fixture.actorId})`))),
         (error: unknown) => /account_group_members_org_dimension_account|duplicate key value violates unique constraint/.test(errorChain(error)),
       );
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         delete from account_group_members
-         where org_id = ${fixture.orgId} and account_id = ${fixture.accountId}`);
+         where org_id = ${fixture.orgId} and account_id = ${fixture.accountId}`)));
 
       const lockKey = `account-group-pin:${fixture.orgId}:test_dimension:${fixture.accountId}`;
       const holder = await pool.connect();
@@ -180,21 +180,21 @@ test(
   "account-group pins refuse out-of-scope and shared-chart accounts to restricted callers",
   { skip: !process.env.OPENBOOKS_DB_URL },
   async () => {
-    const org = await createScratchOrg();
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const org = await withBypassContext(() => (createScratchOrg()));
+    const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
     const groupId = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => (db.execute(sql`
       insert into account_groups (id, org_id, dimension, key, name, sort_order, match, is_catch_all, is_active, created_by)
-      values (${groupId}, ${org.orgId}, 'scope_dimension', 'scope_group', 'Scope Group', 1, '{}'::jsonb, false, true, ${actorId})`);
+      values (${groupId}, ${org.orgId}, 'scope_dimension', 'scope_group', 'Scope Group', 1, '{}'::jsonb, false, true, ${actorId})`)));
     const entityB = randomUUID();
-    await db.execute(sql`
+    await withBypassContext(() => (db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-      values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')`);
+      values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')`)));
     const seedAccount = async (number: string, subsidiaryId: string | null) => {
       const id = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into accounts (id, org_id, number, name, type, subsidiary_id)
-        values (${id}, ${org.orgId}, ${number}, ${`Pin scope ${number}`}, 'asset_other', ${subsidiaryId})`);
+        values (${id}, ${org.orgId}, ${number}, ${`Pin scope ${number}`}, 'asset_other', ${subsidiaryId})`)));
       return id;
     };
     // The scratch subsidiary id is not exposed by this fixture file's seed;

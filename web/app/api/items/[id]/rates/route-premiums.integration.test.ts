@@ -6,7 +6,9 @@ import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-rates-premiums-route-test')
-const routeState: { gate: { user: { orgId: string; id: string } } | null } = { gate: null }
+const routeState: {
+  gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: null } | null
+} = { gate: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
@@ -36,7 +38,7 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?item-rates-premiums-route-integration'
 const { POST } = (await import(routeUrl)) as typeof import('./route')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate, snapshotTimeBillRates } = await import('../../../../../lib/item-rates.ts')
 hooks.deregister()
@@ -60,14 +62,14 @@ function tiered(book: string, from: string, premiums: Record<string, unknown>) {
 }
 
 async function fixture() {
-  const org = await createScratchOrg()
-  routeState.gate = { user: { orgId: org.orgId, id: org.orgId } }
+  const org = await withBypassContext(() => (createScratchOrg()))
+    routeState.gate = { user: { orgId: org.orgId, id: org.orgId }, allowedSubsidiaryIds: null }
   const book = randomUUID()
-  await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
-    values (${book}, ${org.orgId}, 'PREMIUMS', 'Premiums book', 'CAD', true, true)`)
+  await withBypassContext(() => (db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
+    values (${book}, ${org.orgId}, 'PREMIUMS', 'Premiums book', 'CAD', true, true)`)))
   const timeType = randomUUID()
-  await db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
-    values (${timeType}, ${org.orgId}, 'Overtime', '1.5', true)`)
+  await withBypassContext(() => (db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
+    values (${timeType}, ${org.orgId}, 'Overtime', '1.5', true)`)))
   return { org, book, timeType }
 }
 
@@ -84,7 +86,7 @@ async function versionCount(orgId: string, book: string) {
  */
 test('bad premiums refuse by rate unit and key with no write', { skip: !DB }, async () => {
   const { org, book } = await fixture()
-  const foreign = await createScratchOrg()
+  const foreign = await withBypassContext(() => (createScratchOrg()))
   try {
     const first = await post(org.items.service, tiered(book, '2026-01-01', {}))
     assert.equal(first.status, 200, await first.text())
@@ -94,8 +96,8 @@ test('bad premiums refuse by rate unit and key with no write', { skip: !DB }, as
     assert.match(String((await badValue.json()).error), /Rate unit 1: labor premium "not-a-uuid" is not a valid time type/)
 
     const foreignType = randomUUID()
-    await db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
-      values (${foreignType}, ${foreign.orgId}, 'Foreign', '2', true)`)
+    await withBypassContext(() => (db.execute(sql`insert into time_types (id, org_id, name, bill_multiplier, is_active)
+      values (${foreignType}, ${foreign.orgId}, 'Foreign', '2', true)`)))
     const foreignKey = await post(org.items.service, tiered(book, '2026-02-01', { [foreignType]: '150' }))
     assert.equal(foreignKey.status, 422)
     assert.match(String((await foreignKey.json()).error), new RegExp(`Rate unit 1: labor premium "${foreignType}" is not an active time type`))
@@ -140,14 +142,14 @@ test('a valid premium map saves and applies at snapshot', { skip: !DB }, async (
     assert.deepEqual(stored!.time_type_bill_rates, { [timeType]: '300.0000' })
 
     const project = randomUUID(), employee = randomUUID(), entry = randomUUID()
-    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
-      values (${employee}, ${org.orgId}, 'employee', 'Premium worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)
-    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
-      values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'PREMIUM', 'Premium job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
-    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, item_id, project_id, time_type_id,
+    await withBypassContext(() => (db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${employee}, ${org.orgId}, 'employee', 'Premium worker', ${org.subsidiaryId}, true, '{}'::jsonb)`)))
+    await withBypassContext(() => (db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'PREMIUM', 'Premium job', ${org.customerId}, 'active', true, '{}'::jsonb)`)))
+    await withBypassContext(() => (db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, item_id, project_id, time_type_id,
                             status, is_billable, billing_status, custom, created_by, updated_by)
       values (${entry}, ${org.orgId}, ${employee}, '2026-01-15', '2.0000', ${org.items.service}, ${project}, ${timeType},
-              'approved', true, 'unbilled', '{}'::jsonb, ${org.orgId}, ${org.orgId})`)
+              'approved', true, 'unbilled', '{}'::jsonb, ${org.orgId}, ${org.orgId})`)))
     // The explicit premium wins over bill_rate × multiplier (100 × 1.5).
     assert.equal((await snapshotTimeBillRates(org.orgId, [entry], { dryRun: true })).get(entry), '300.0000')
     assert.ok(await resolveItemRate({ orgId: org.orgId, projectId: project, itemId: org.items.service, onDate: '2026-01-15', baseQuantity: '1' }))

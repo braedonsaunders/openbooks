@@ -15,6 +15,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
+    allowedSubsidiaryIds: null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -61,7 +62,7 @@ const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
@@ -81,12 +82,12 @@ interface Fixture {
 }
 
 async function seed(): Promise<Fixture> {
-  const org = await createScratchOrg();
-  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  const org = await withBypassContext(() => (createScratchOrg()));
+  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
   const bookId = randomUUID();
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     insert into item_rate_books (org_id, id, code, name, currency, is_default, is_active, created_by, updated_by)
-    values (${org.orgId}, ${bookId}, 'FIELD', 'Field Rates', 'CAD', false, true, ${actorId}, ${actorId})`);
+    values (${org.orgId}, ${bookId}, 'FIELD', 'Field Rates', 'CAD', false, true, ${actorId}, ${actorId})`)));
   return { orgId: org.orgId, actorId, itemId: org.items.service, bookId };
 }
 
@@ -152,6 +153,7 @@ function post(fixture: Fixture, body?: Record<string, unknown>): Promise<Respons
   routeState.authz = {
     user: { orgId: fixture.orgId, id: fixture.actorId },
     permissions: new Set(["*"]),
+    allowedSubsidiaryIds: null,
   };
   const payload = { ...ratesBody(), ...body, rateBookId: fixture.bookId };
   return POST(new Request(`http://openbooks.test/api/items/${fixture.itemId}/rates`, {
@@ -162,13 +164,13 @@ function post(fixture: Fixture, body?: Record<string, unknown>): Promise<Respons
 }
 
 async function assertFirstVersionLanded(fixture: Fixture): Promise<void> {
-  const state = (await db.execute<{ versions: number; lines: number; audit: number; currency: string }>(sql`
+  const state = (await withOrgContext(fixture.orgId, () => db.execute<{ versions: number; lines: number; audit: number; currency: string }>(sql`
     select
       (select count(*)::int from item_rate_versions where org_id = ${fixture.orgId} and rate_book_id = ${fixture.bookId}) as versions,
       (select count(*)::int from item_rate_lines l join item_rate_versions v on v.id = l.version_id
         where l.org_id = ${fixture.orgId} and v.rate_book_id = ${fixture.bookId}) as lines,
       (select count(*)::int from audit_log where org_id = ${fixture.orgId} and table_name = 'item_rate_versions') as audit,
-      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`));
+      (select currency from item_rate_books where id = ${fixture.bookId}) as currency`)));
   assert.equal(state.rows[0]?.versions, 1, "the first version must exist");
   assert.equal(state.rows[0]?.lines, 1, "the version's rate line must exist");
   assert.equal(state.rows[0]?.audit, 1, "the version's audit row must exist");
@@ -192,10 +194,10 @@ test(
 
       // The paused PATCH is the only writer: its guard check sees no version
       // history, so its currency change commits while the save waits.
-      await patch.client.query(
+      await withBypassContext(() => patch.client.query(
         "update item_rate_books set currency = $1 where org_id = $2 and id = $3",
         ["USD", fixture.orgId, fixture.bookId],
-      );
+      ));
       await patch.client.query("commit");
       open = false;
 
@@ -205,12 +207,12 @@ test(
 
       // Exactly one currency generation landed, and the committed first
       // version freezes it: subsequent changes are rejected.
-      const book = (await db.execute<{ currency: string }>(sql`
-        select currency from item_rate_books where id = ${fixture.bookId}`));
+      const book = (await withOrgContext(fixture.orgId, () => db.execute<{ currency: string }>(sql`
+        select currency from item_rate_books where id = ${fixture.bookId}`)));
       assert.equal(book.rows[0]?.currency, "USD");
       await assert.rejects(
-        db.execute(sql`
-          update item_rate_books set currency = 'EUR' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`),
+        withBypassContext(() => (db.execute(sql`
+          update item_rate_books set currency = 'EUR' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),
         (error: unknown) =>
           errorChain(error).includes("rate book currency cannot change after version history exists"),
       );
@@ -258,8 +260,8 @@ test(
         select currency from item_rate_books where id = ${fixture.bookId}`));
       assert.equal(book.rows[0]?.currency, "CAD", "no currency change raced this save");
       await assert.rejects(
-        db.execute(sql`
-          update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`),
+        withBypassContext(() => (db.execute(sql`
+          update item_rate_books set currency = 'USD' where org_id = ${fixture.orgId} and id = ${fixture.bookId}`))),
         (error: unknown) =>
           errorChain(error).includes("rate book currency cannot change after version history exists"),
       );

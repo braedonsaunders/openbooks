@@ -68,7 +68,7 @@ const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 const { PATCH, GET } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -90,20 +90,20 @@ function patchRequest(body: unknown): Request {
 }
 
 async function enableMultiCurrency(orgId: string): Promise<void> {
-  await db.execute(sql`
+  await withBypassContext(() => (db.execute(sql`
     update orgs
        set settings = coalesce(settings, '{}'::jsonb) || '{"features":{"multiCurrency":true}}'::jsonb
      where id = ${orgId}
-  `);
+  `)));
 }
 
 test(
   "accounts POST refuses a reconcilable account without a currency instead of failing in storage",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
       await enableMultiCurrency(org.orgId);
 
@@ -139,9 +139,9 @@ test(
     // F-t05-003: single-currency orgs (scratch orgs are CAD, feature off)
     // have no other currency to settle in, so the reconcilable invariant can
     // only ever mean the base currency. Anything else stays refused.
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
 
       const created = await POST(
@@ -174,10 +174,10 @@ test(
       assert.equal(unflagged.status, 404);
 
       const plainId = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into accounts (id, org_id, number, name, type)
         values (${plainId}, ${org.orgId}, '9003', 'Plain cash', 'asset_bank')
-      `);
+      `)));
       const allowed = await PATCH(patchRequest({ reconcilable: true, currencyRestriction: "cad" }), {
         params: Promise.resolve({ id: plainId }),
       });
@@ -198,17 +198,17 @@ test(
   "accounts PATCH refuses to add reconcilable or drop its currency instead of failing in storage",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       routeState.authz = { user: { orgId: org.orgId, id: adminId }, permissions: new Set(), allowedSubsidiaryIds: null };
       await enableMultiCurrency(org.orgId);
 
       const plainId = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into accounts (id, org_id, number, name, type)
         values (${plainId}, ${org.orgId}, '9001', 'Plain cash', 'asset_bank')
-      `);
+      `)));
       const refused = await PATCH(patchRequest({ reconcilable: true }), {
         params: Promise.resolve({ id: plainId }),
       });
@@ -224,10 +224,10 @@ test(
       assert.equal(allowed.status, 200);
 
       const settledId = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into accounts (id, org_id, number, name, type, reconcilable, currency_restriction)
         values (${settledId}, ${org.orgId}, '9002', 'Settled cash', 'asset_bank', true, 'CAD')
-      `);
+      `)));
       const cleared = await PATCH(patchRequest({ currencyRestriction: null }), {
         params: Promise.resolve({ id: settledId }),
       });
@@ -247,20 +247,20 @@ test(
   "accounts routes scope entity-owned accounts to the caller subsidiary",
   { skip: !DB },
   async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => (createScratchOrg()));
     try {
-      const { adminId } = await seedFlowActors(org.orgId);
+      const { adminId } = await withBypassContext(() => (seedFlowActors(org.orgId)));
       const entityB = randomUUID();
-      await db.execute(sql`
+      await withBypassContext(() => (db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
         values (${entityB}, ${org.orgId}, ${org.subsidiaryId}, 'Entity B', 'CAD', 'CA')
-      `);
+      `)));
       const seed = async (number: string, subsidiaryId: string | null) =>
-        db.execute(sql`
+        withBypassContext(() => (db.execute(sql`
           insert into accounts (id, org_id, number, name, type, subsidiary_id)
           values (${randomUUID()}, ${org.orgId}, ${number}, ${`Scoped ${number}`}, 'asset_other', ${subsidiaryId})
           returning id
-        `);
+        `)));
       const accountA = (await seed('9101', org.subsidiaryId)).rows[0]!.id as string;
       const accountB = (await seed('9102', entityB)).rows[0]!.id as string;
       const sharedId = (await seed('9103', null)).rows[0]!.id as string;

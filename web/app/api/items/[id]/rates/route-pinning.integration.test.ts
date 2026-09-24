@@ -51,7 +51,7 @@ const { POST } = (await import(routeUrl)) as typeof import('./route')
 const bookRouteUrl = '../../../item-rate-books/route.ts?item-rates-pin-book-integration'
 const { POST: BOOKS_POST } = (await import(bookRouteUrl)) as typeof import('../../../item-rate-books/route')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate } = await import('../../../../../lib/item-rates.ts')
 hooks.deregister()
@@ -80,18 +80,18 @@ function postRates(itemId: string, body: Record<string, unknown>) {
  * must carry the other item's pin forward exactly like its lines.
  */
 test('saving a version pins policy per item and carries other items forward', { skip: !DB }, async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => (createScratchOrg()))
   try {
     routeState.gate = { user: { orgId: org.orgId, id: org.orgId } }
     const project = randomUUID(), book = randomUUID(), aide = randomUUID()
-    await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
-      values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'PIN-WRITE', 'Pin writer job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
-    await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
-      values (${book}, ${org.orgId}, 'PIN-WRITE', 'Pin writer book', 'CAD', false, true)`)
-    await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
-      values (${org.orgId}, ${book}, 'usage_date', true)`)
-    await db.execute(sql`insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation)
-      values (${aide}, ${org.orgId}, 'service', 'Pinning aide', false, true, '{}'::jsonb, 'billing', 'normal')`)
+    await withBypassContext(() => (db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+      values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'PIN-WRITE', 'Pin writer job', ${org.customerId}, 'active', true, '{}'::jsonb)`)))
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_default, is_active)
+      values (${book}, ${org.orgId}, 'PIN-WRITE', 'Pin writer book', 'CAD', false, true)`)))
+    await withBypassContext(() => (db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
+      values (${org.orgId}, ${book}, 'usage_date', true)`)))
+    await withBypassContext(() => (db.execute(sql`insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation)
+      values (${aide}, ${org.orgId}, 'service', 'Pinning aide', false, true, '{}'::jsonb, 'billing', 'normal')`)))
 
     const january = await BOOKS_POST(new Request('http://openbooks.test/api/item-rate-books', {
       method: 'POST',

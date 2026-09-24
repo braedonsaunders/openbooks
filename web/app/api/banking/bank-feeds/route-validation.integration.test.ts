@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { withBypassContext, db  } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
 import type { Authz } from '../../../../lib/authz'
 
@@ -27,12 +27,12 @@ const { POST } = await import('./route')
 const { PATCH, DELETE } = await import('./[id]/route')
 
 async function fixture() {
-  const org = await createScratchOrg()
-  const actorId = (await seedFlowActors(org.orgId)).adminId
-  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
-    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`)
-  await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-    where org_id=${org.orgId} and id=${org.accounts.bank}`)
+  const org = await withBypassContext(() => (createScratchOrg()))
+  const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId
+  await withBypassContext(() => (db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"bankFeeds":true}'::jsonb) where id=${org.orgId}`)))
+  await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+    where org_id=${org.orgId} and id=${org.accounts.bank}`)))
   identity.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(['*']), allowedSubsidiaryIds: null } as Authz
   return { ...org, actorId }
 }
@@ -111,8 +111,8 @@ test('bank-feed routes reject malformed ids as client errors', { skip: !enabled 
 test('bank-feed POST refuses a reconcilable non-bank account', { skip: !enabled }, async () => {
   const org = await fixture()
   try {
-    await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
-      where org_id=${org.orgId} and id=${org.accounts.clearing}`)
+    await withBypassContext(() => (db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD'
+      where org_id=${org.orgId} and id=${org.accounts.clearing}`)))
     const refused = await post({ name: 'Clearing feed', provider: 'manual', accountId: org.accounts.clearing })
     assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
     assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
@@ -122,7 +122,7 @@ test('bank-feed POST refuses a reconcilable non-bank account', { skip: !enabled 
 test('bank-feed POST refuses an inactive reconcilable bank account', { skip: !enabled }, async () => {
   const org = await fixture()
   try {
-    await db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)
+    await withBypassContext(() => (db.execute(sql`update accounts set is_active=false where org_id=${org.orgId} and id=${org.accounts.bank}`)))
     const refused = await post({ name: 'Dead feed', provider: 'manual', accountId: org.accounts.bank })
     assert.equal(refused.status, 400, JSON.stringify(await refused.clone().json()))
     assert.deepEqual(await refused.json(), { error: 'not a reconcilable account' })
