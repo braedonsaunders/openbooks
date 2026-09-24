@@ -339,10 +339,11 @@ test("Send now on a manual-cadence package delivers", { skip: !DB }, async () =>
     const { packageId, definitionId, periodId, bookId } = await seedReportablePackage(
       org.orgId, sender, '{"cadence":"manual"}',
     );
+    const idempotencyKey = randomUUID();
     const renderedParams: Array<Record<string, string>> = [];
     const enqueued: Array<{ data: unknown; options: unknown }> = [];
     const result = await processCloseDeliveryJobData(
-      { orgId: org.orgId, packageId, periodId, bookId, senderId: sender, manualTrigger: true },
+      { orgId: org.orgId, packageId, periodId, bookId, senderId: sender, manualTrigger: true, idempotencyKey },
       {
         renderReport: async (renderOrgId, renderDefinitionId, params) => {
           assert.equal(renderOrgId, org.orgId);
@@ -381,11 +382,43 @@ test("Send now on a manual-cadence package delivers", { skip: !DB }, async () =>
     // The bundle was handed to mail and the delivery recorded with no run.
     assert.equal(enqueued.length, 1);
     assert.deepEqual((enqueued[0]!.data as { to: string[] }).to, ["ops@scratch.test"]);
+    assert.equal(
+      (enqueued[0]!.options as { jobId: string }).jobId,
+      `close-package|manual|${org.orgId}|${packageId}|${periodId}|${bookId}|${idempotencyKey}`,
+      "the queued email identity must come from the request's idempotency key",
+    );
     const events = (await db.execute<{ event_type: string; payload: unknown }>(sql`
       select event_type, payload from close_events
        where org_id = ${org.orgId} and run_id is null and event_type = 'package.delivered'`)).rows;
     assert.equal(events.length, 1, "delivery must record its event");
     assert.equal((events[0]!.payload as { reports: number }).reports, 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("manual Send now refuses a job with no request idempotency key", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, periodId, bookId } = await seedReportablePackage(
+      org.orgId, sender, '{"cadence":"manual"}',
+    );
+    let emailEnqueues = 0;
+    await assert.rejects(
+      processCloseDeliveryJobData(
+        { orgId: org.orgId, packageId, periodId, bookId, senderId: sender, manualTrigger: true },
+        {
+          renderReport: async () => Buffer.from("%PDF-1.4 close-probe\n%%EOF"),
+          enqueueEmail: async () => {
+            emailEnqueues += 1;
+            return [{ id: "email-job-1" }];
+          },
+        },
+      ),
+      /missing the request idempotency key.*retry through Send now/,
+    );
+    assert.equal(emailEnqueues, 0, "an unattributed manual intent must never send email");
   } finally {
     await dropScratchOrg(org.orgId);
   }

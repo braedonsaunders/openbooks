@@ -25,15 +25,35 @@ export type CloseDeliveryJobData = {
    * never does, so scheduled ticks keep skipping manual packages.
    */
   manualTrigger?: boolean
-  /**
-   * The user who authorized this send (publish actor, or the manual
-   * "Send now" actor). The worker mints each report render under this
-   * principal and the render route re-resolves their grants — a send
-   * whose authorizer lost close/report authority fails named instead
-   * of rendering. Older jobs omit it and fall back to the package
-   * author recorded on close_reporting_packages.created_by.
-   */
+  /** The user who authorized this send; render permission is re-resolved. */
   senderId?: string
+  /** Client-minted identity for this manual send intent. */
+  idempotencyKey?: string
+}
+
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function assertManualScope(input: { packageId: string; periodId?: string; bookId?: string; idempotencyKey?: string }): void {
+  for (const [label, value] of [
+    ["package", input.packageId],
+    ["period", input.periodId ?? ""],
+    ["book", input.bookId ?? ""],
+    ["idempotency key", input.idempotencyKey ?? ""],
+  ] as const) {
+    if (!UUID.test(value)) throw new Error(`close manual delivery requires a valid ${label} id`)
+  }
+}
+
+export function closeDeliveryManualJobId(input: { packageId: string; periodId?: string; bookId?: string; idempotencyKey?: string }): string {
+  assertManualScope(input)
+  return `close-delivery|manual|${input.packageId}|${input.periodId}|${input.bookId}|${input.idempotencyKey}`
+}
+
+export function closeDeliveryManualEmailIntentKey(input: { orgId: string; packageId: string; periodId?: string; bookId?: string; idempotencyKey?: string }): string {
+  assertManualScope(input)
+  if (!UUID.test(input.orgId)) throw new Error("close manual delivery requires a valid org id")
+  return `close-package|manual|${input.orgId}|${input.packageId}|${input.periodId}|${input.bookId}|${input.idempotencyKey}`
 }
 
 let closeDeliveryQueue: Queue<CloseDeliveryJobData> | undefined

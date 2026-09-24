@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { sql } from "drizzle-orm";
 import {
   CLOSE_DELIVERY_QUEUE,
+  closeDeliveryManualEmailIntentKey,
   enqueueEmail,
   getBlockingConnection,
   newEmailIntentKey,
@@ -380,7 +381,7 @@ export async function processCloseDeliveryJobData(
       // binder hash identifies the published content: a parent retry
       // collapses onto the same delivery, while a corrected re-publication
       // mints a new binder and therefore new mail. Manual "send now" runs
-      // have no content revision, so each invocation mints its own key.
+      // carry the request's client key instead of a content revision.
       let emailIntentKey: string;
       if (runId) {
         const binder = await db.execute<{ binder_hash: string | null }>(sql`
@@ -390,9 +391,21 @@ export async function processCloseDeliveryJobData(
         emailIntentKey = binderHash
           ? `close-package|${orgId}|${runId}|${binderHash}`
           : newEmailIntentKey(`close-package|${orgId}|${runId}`);
+      } else if (data.idempotencyKey) {
+        // Manual "Send now": the intent key comes from the request, never
+        // from the worker — a double-click or retried send reuses the
+        // client's key and collapses onto one delivery instead of minting a
+        // fresh random key per invocation and sending both mails (E04).
+        emailIntentKey = closeDeliveryManualEmailIntentKey({
+          orgId,
+          packageId: data.packageId,
+          periodId: data.periodId,
+          bookId: data.bookId,
+          idempotencyKey: data.idempotencyKey,
+        });
       } else {
-        emailIntentKey = newEmailIntentKey(
-          `close-package|${orgId}|${data.packageId}|${data.periodId ?? ""}|${data.bookId ?? ""}`,
+        throw new Error(
+          "manual close delivery is missing the request idempotency key — retry through Send now to attach a fresh client key",
         );
       }
       // Stage the rendered bundle outside the queue payload: the email
