@@ -892,13 +892,16 @@ export async function assertPayrollRemittanceBillCurrent(
     party_id: string | null;
     total: string;
     document_number: string | null;
+    currency: string;
+    doc_subsidiary_id: string | null;
     from: string | null;
     to: string | null;
     filing_account_id: string | null;
     subsidiary_id: string | null;
   }>(sql`
     select party_id::text as party_id, total::text as total,
-           document_number,
+           document_number, currency,
+           subsidiary_id::text as doc_subsidiary_id,
            custom->'payrollRemittance'->>'from' as from,
            custom->'payrollRemittance'->>'to' as to,
            custom->'payrollRemittance'->>'filingAccountId' as filing_account_id,
@@ -912,6 +915,35 @@ export async function assertPayrollRemittanceBillCurrent(
     throw new PayrollError("payroll remittance bill has an invalid source marker");
   }
   const billName = locked.document_number ?? "unnumbered";
+  const staleRemedy = `void this draft and raise a fresh bill`;
+  // The bill posts in its source entity's books and currency: the header row
+  // must still carry the stamped subsidiary and currency. Either drifting —
+  // by a header edit that bypassed the editor or by direct writes — refuses
+  // here even when the coverage itself is untouched.
+  if (locked.doc_subsidiary_id !== locked.subsidiary_id) {
+    throw new PayrollError(
+      `payroll remittance bill ${billName} no longer matches its committed source: `
+      + `its subsidiary changed; ${staleRemedy}`,
+    );
+  }
+  if (locked.subsidiary_id !== null) {
+    const entity = (await executor.execute<{ base_currency: string }>(sql`
+      select base_currency from subsidiaries
+       where org_id = ${orgId} and id = ${locked.subsidiary_id}
+    `)).rows[0];
+    if (!entity) {
+      throw new PayrollError(
+        `payroll remittance bill ${billName} no longer matches its committed source: `
+        + `its source entity is gone; ${staleRemedy}`,
+      );
+    }
+    if (locked.currency !== entity.base_currency) {
+      throw new PayrollError(
+        `payroll remittance bill ${billName} no longer matches its committed source: `
+        + `its currency ${locked.currency} differs from its entity's ${entity.base_currency}; ${staleRemedy}`,
+      );
+    }
+  }
 
   const coverage = (await executor.execute<{ stub_line_id: string; amount: string }>(sql`
     select cov.stub_line_id::text as stub_line_id, cov.amount::text as amount
@@ -1021,11 +1053,13 @@ export async function assertPayrollRemittanceBillCurrent(
 export class RemittanceSourceIntegrityError extends Error {}
 
 /**
- * Caller holds the document revision lock. A remittance bill's lines are
- * generated from its recorded coverage (one line per consumed accrual, named
- * for its component and period): hand-editing them breaks the receipt the
- * posting check reconciles, so any line replacement refuses by name. Header
- * edits (memo, dates, dimensions) proceed normally.
+ * Caller holds the document revision lock. A remittance bill is generated
+ * from its source entity whole: its lines (one per consumed accrual, named
+ * for component and period) AND its header currency and subsidiary are
+ * stamped at creation. Changing any of the three breaks the receipt the
+ * posting check reconciles, so each refuses by name — even a header-only
+ * save that leaves the lines alone. Other header edits (memo, dates,
+ * dimensions) proceed normally.
  * Returns true for remittance bills (whose stored lines the editor must
  * keep), false for every other document.
  */
@@ -1034,18 +1068,36 @@ export async function assertRemittanceBillEdit(
   orgId: string,
   id: string,
   preparedLines: unknown[] | null,
+  patch?: { currency?: string | undefined; subsidiaryId?: string | null | undefined },
 ): Promise<boolean> {
-  const bill = (await tx.execute<{ document_number: string | null }>(sql`
-    select document_number
+  const bill = (await tx.execute<{
+    document_number: string | null; currency: string; subsidiary_id: string | null;
+  }>(sql`
+    select document_number, currency, subsidiary_id::text as subsidiary_id
       from documents
      where org_id = ${orgId} and id = ${id}
        and kind = 'vendor_bill' and custom ? 'payrollRemittance'
   `)).rows[0];
   if (!bill) return false;
+  const name = `remittance bill ${bill.document_number ?? "unnumbered"}`;
+  const remedy = "void or delete this draft and raise a fresh bill from Payroll → Remittances";
+  // Currency and subsidiary are frozen to the stamped values: the bill posts
+  // in its source entity's books and currency, and a header-only save must
+  // not move it into another entity or currency behind the same coverage.
+  if (patch?.currency !== undefined && patch.currency !== bill.currency) {
+    throw new RemittanceSourceIntegrityError(
+      `${name} is stamped in ${bill.currency} — its currency cannot be changed to ${patch.currency}; ${remedy}`,
+    );
+  }
+  if (patch?.subsidiaryId !== undefined && patch.subsidiaryId !== bill.subsidiary_id) {
+    throw new RemittanceSourceIntegrityError(
+      `${name} belongs to its source entity — its subsidiary cannot be changed; ${remedy}`,
+    );
+  }
   if (preparedLines === null) return true;
   throw new RemittanceSourceIntegrityError(
-    `remittance bill ${bill.document_number ?? "unnumbered"} is generated from its payroll source — `
-    + "its lines cannot be edited; void or delete this draft and raise a fresh bill from Payroll → Remittances",
+    `${name} is generated from its payroll source — `
+    + `its lines cannot be edited; ${remedy}`,
   );
 }
 

@@ -1656,11 +1656,14 @@ export async function applyDocumentEdit(
       }
 
       try {
-        // A remittance bill's lines are generated from its recorded coverage:
-        // replacing them would break the receipt the posting check
-        // reconciles, so the edit refuses by name with the regenerate remedy.
-        // Header-only saves pass through with the stored lines kept.
-        const remittance = await assertRemittanceBillEdit(tx, orgId, id, preparedLines)
+        // A remittance bill is generated from its source entity whole: its
+        // lines, header currency, and subsidiary are stamped at creation.
+        // Any of the three changing refuses by name with the regenerate
+        // remedy — including a header-only save that leaves the lines alone.
+        const remittance = await assertRemittanceBillEdit(tx, orgId, id, preparedLines, {
+          currency,
+          subsidiaryId: body.subsidiaryId,
+        })
         if (remittance) preparedLines = null
       } catch (error) {
         if (error instanceof RemittanceSourceIntegrityError) throw new DocumentEditError(422, error.message)
