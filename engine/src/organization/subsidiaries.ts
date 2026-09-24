@@ -64,6 +64,16 @@ export async function loadSubsidiaryContext(
   };
 }
 
+/**
+ * Default legal entity for an unscoped posting. An omitted subsidiary books
+ * to the hierarchy root — the same default the document posting path
+ * applies — so identical economic events land on the same entity whatever
+ * the entry path (API route or document lines).
+ */
+export function defaultPostingSubsidiaryId(ctx: SubsidiaryContext): string {
+  return ctx.rootId;
+}
+
 /** All ids in `subId`'s subtree (inclusive). */
 export function subtreeIds(ctx: SubsidiaryContext, subId: string): Set<string> {
   const out = new Set<string>([subId]);
