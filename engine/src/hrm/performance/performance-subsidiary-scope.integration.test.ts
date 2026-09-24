@@ -473,10 +473,16 @@ test("restricted HR cycle lists and details hide other subsidiaries and scope or
     assert.ok(!listed.some((cycle) => cycle.id === cycleB.id), "B-scoped cycle is not disclosed");
     const orgProgress = listed.find((cycle) => cycle.id === orgCycle.id);
     assert.ok(orgProgress, "the org-wide cycle remains visible");
+    assert.equal(orgProgress.templateId, null, "a scoped reader does not receive global template metadata");
+    assert.equal(orgProgress.templateName, null, "a scoped reader does not receive the global template name");
+    assert.equal(orgProgress.managerGapCount, null, "a scoped reader does not receive the org-wide manager gap count");
     assert.equal(orgProgress.totalSelf, 2, "only A's worker and manager self reviews contribute");
     assert.equal(orgProgress.totalManager, 1, "only A's manager review contributes");
 
     const orgDetail = await getCycleDetail({ orgId: h.org.orgId, actorId: h.hrA, cycleId: orgCycle.id });
+    assert.equal(orgDetail.templateId, null);
+    assert.equal(orgDetail.templateName, null);
+    assert.equal(orgDetail.managerGapCount, null);
     assert.deepEqual(
       new Set(orgDetail.reviews.map((review) => review.employmentId)),
       new Set([h.a.employmentId, h.a.managerEmploymentId]),

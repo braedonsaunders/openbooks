@@ -149,8 +149,10 @@ async function cycleProgress(
 /** A cycle as the read service renders it: the write-service shape plus the
  * template name the table and drawer show (joined here, in the service —
  * loaders never read domain tables directly). */
-export interface ReadCycleDTO extends CycleDTO {
-  readonly templateName: string;
+export interface ReadCycleDTO extends Omit<CycleDTO, "templateId" | "managerGapCount"> {
+  readonly templateName: string | null;
+  readonly templateId: string | null;
+  readonly managerGapCount: number | null;
 }
 
 async function loadCycleRow(db: SqlExecutor, orgId: string, cycleId: string): Promise<ReadCycleDTO> {
@@ -219,6 +221,11 @@ function cycleVisibleToHr(cycle: ReadCycleDTO, allowed: Set<string> | null): boo
     allowed.has(cycle.appliesTo.employerSubsidiaryId);
 }
 
+function projectCycleForHrScope(cycle: ReadCycleDTO, allowed: Set<string> | null): ReadCycleDTO {
+  if (allowed === null || cycle.appliesTo.employerSubsidiaryId !== null) return cycle;
+  return { ...cycle, templateId: null, templateName: null, managerGapCount: null };
+}
+
 /**
  * Cycles with progress. HR sees cycles within their legal-entity scope;
  * org-wide cycles retain only counts from that HR reader's visible reviews.
@@ -248,7 +255,7 @@ export async function listCycleProgress(args: {
       const progress = await cycleProgress(db, orgId, id, visible);
       // A structural viewer sees only cycles they participate in; HR sees all.
       if (!granted && progress.totalSelf + progress.totalManager === 0) continue;
-      out.push({ ...cycle, scoped: !granted, ...progress });
+      out.push({ ...projectCycleForHrScope(cycle, granted ? allowed : null), scoped: !granted, ...progress });
     }
     return out;
   });
@@ -306,7 +313,7 @@ export async function getCycleDetail(args: {
     for (const id of ids) {
       reviews.push(projectReviewForReader(await readReviewRow(db, orgId, id), { granted, actorPartyId: person.partyId }));
     }
-    return { ...cycle, scoped: !granted, ...progress, reviews };
+    return { ...projectCycleForHrScope(cycle, granted ? allowed : null), scoped: !granted, ...progress, reviews };
   });
 }
 
