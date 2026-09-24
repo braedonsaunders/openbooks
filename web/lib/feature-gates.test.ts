@@ -504,11 +504,11 @@ test('the surfaces this test was written for are covered', () => {
     /kind === 'equipment_charge'[\s\S]{0,80}Equipment is disabled/,
     'convertOrder must not copy equipment_charge lines when Equipment is off — stored source order lines stay',
   )
-  assert.match(
-    read('lib/order-cycle.ts'),
-    /ConversionError\('Equipment is disabled', 404\)/,
-    'convertOrder must 404 — not persist equipment_charge — when Equipment is off',
-  )
+  // convertOrder's Equipment-off refusal is covered behaviourally (named
+  // 422 with the enable-it remedy, nothing persisted) in
+  // app/api/purchase-orders/[id]/convert/route-convert-status.integration.test.ts,
+  // not by a source pin: the refusal used to be a remedy-less 404 and the
+  // pin could not tell the two apart.
   assert.match(
     read('app/api/_order/handlers.ts'),
     /e instanceof ConversionError[\s\S]{0,400}status: e\.status/,

@@ -1359,7 +1359,9 @@ export async function convertOrder(
         const item = (await tx.execute<{ kind: string }>(sql`
           select kind from items where id = ${itemId} and org_id = ${orgId}`))
         if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-          throw new ConversionError('Equipment is disabled', 404)
+          throw new ConversionError(
+            'Equipment is disabled: this conversion would copy equipment charges onto the new document — enable Equipment under Company Settings → Features, then convert again',
+          )
         }
       }
     }
