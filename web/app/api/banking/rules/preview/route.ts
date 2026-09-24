@@ -5,6 +5,7 @@ import { isUuid } from '../../../../../lib/list-params'
 import { previewRules } from '../../../../../lib/banking-rules'
 import { validateCriteria, validateOutcome } from '../../../../../lib/banking-rules-validate'
 import { bankingErrorResponse } from '../../util'
+import { bankRulePriority } from '../../../../../lib/banking-rule-priority'
 
 export const runtime = 'nodejs'
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
     draftRule = {
       criteria: c.value,
       outcome: o.value,
-      priority: Number(body.priority) || 100,
+      priority: bankRulePriority(body.priority),
       id: isUuid(String(body.id)) ? String(body.id) : undefined,
     }
   }

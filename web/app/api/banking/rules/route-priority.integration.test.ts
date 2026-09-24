@@ -64,6 +64,12 @@ async function ruleCount(orgId: string): Promise<number> {
   return rows[0]!.n;
 }
 
+async function priorities(orgId: string): Promise<number[]> {
+  return (await withBypassContext(() => db.execute<{ priority: number }>(sql`
+    select priority from bank_match_rules where org_id = ${orgId} order by created_at
+  `))).rows.map((row) => row.priority);
+}
+
 test("bank-rule creation refuses an out-of-int32 priority without writing", { skip: !DB }, async () => {
   const { org } = await fixture();
   try {
@@ -84,6 +90,17 @@ test("bank-rule creation still files an ordinary priority", { skip: !DB }, async
     const json = (await response.json().catch(() => null)) as { id?: string } | null;
     assert.equal(response.status, 200, JSON.stringify(json));
     assert.equal(await ruleCount(org.orgId), 1);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("bank-rule creation preserves an explicitly configured zero priority", { skip: !DB }, async () => {
+  const { org } = await fixture();
+  try {
+    const response = await post({ name: "Zero priority rule", criteria: CRITERIA, outcome: OUTCOME, priority: 0 });
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.deepEqual(await priorities(org.orgId), [0]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

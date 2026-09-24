@@ -11,6 +11,7 @@ import { Button, Drawer, Input, Label, Select, SearchSelect, UrlDrawer, cn } fro
 import { ConditionBuilder } from '../../../../components/conditions/ConditionBuilder'
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
 import { LivePreview } from '../../../../components/live-preview/LivePreview'
+import { bankRulePriority } from '../../../../lib/banking-rule-priority'
 import type { ConditionGroup, FieldDef } from '../../../../lib/conditions'
 type Opt = {
   value: string
@@ -241,7 +242,7 @@ export function RuleDrawer({
         action === 'exclude'
           ? { action: 'exclude' }
           : { action: 'categorize', version: 2, mode, lines: serializeLines(lines), partyId: partyId || undefined, memo: memo || undefined },
-      priority: Number(priority) || 100,
+      priority: bankRulePriority(priority),
       id: rule?.id,
     }),
     [group, scope, scopeOpen, action, mode, lines, partyId, memo, priority, rule?.id],
