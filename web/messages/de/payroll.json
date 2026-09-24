@@ -753,7 +753,8 @@
           "futa": "Verbindlichkeiten aus FUTA",
           "suta": "Verbindlichkeiten aus staatlicher Arbeitslosenversicherung",
           "state_income_tax": "Verbindlichkeiten aus staatlicher Einkommensteuer",
-          "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer"
+          "local_income_tax": "Verbindlichkeiten aus kommunaler Einkommensteuer",
+          "transit_payroll_tax": "Verbindlichkeiten aus Nahverkehrs-Lohnsteuer"
         }
       },
       "NL": {

@@ -753,7 +753,8 @@
           "futa": "FUTA por pagar",
           "suta": "Desempleo estatal por pagar",
           "state_income_tax": "Impuesto estatal sobre la renta por pagar",
-          "local_income_tax": "Impuesto local sobre la renta por pagar"
+          "local_income_tax": "Impuesto local sobre la renta por pagar",
+          "transit_payroll_tax": "Impuesto de nómina de transporte público por pagar"
         }
       },
       "NL": {

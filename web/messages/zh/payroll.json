@@ -753,7 +753,8 @@
           "futa": "FUTA 应付",
           "suta": "州失业税应付",
           "state_income_tax": "州所得税应付",
-          "local_income_tax": "地方所得税应付"
+          "local_income_tax": "地方所得税应付",
+          "transit_payroll_tax": "公共交通工资税应付"
         }
       },
       "NL": {

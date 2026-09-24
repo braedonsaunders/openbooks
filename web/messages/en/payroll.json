@@ -753,7 +753,8 @@
           "futa": "FUTA payable",
           "suta": "State unemployment payable",
           "state_income_tax": "State income tax payable",
-          "local_income_tax": "Local income tax payable"
+          "local_income_tax": "Local income tax payable",
+          "transit_payroll_tax": "Transit payroll tax payable"
         }
       },
       "NL": {
