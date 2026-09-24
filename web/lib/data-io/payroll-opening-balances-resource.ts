@@ -655,6 +655,7 @@ export function payrollOpeningEntitlementsResource(orgId: string): DataResource 
             actorId: ctx.actorId,
             movementDate: asOf,
             rows: [{ employeePartyId: employee.id, amounts: { [plan.code]: amount } }],
+            allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
           })
           outcome.created += result.created
           outcome.updated += result.updated + result.deleted
