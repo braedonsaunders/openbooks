@@ -5,6 +5,9 @@
   "list": {
     "name": "名称",
     "paper": "纸张",
+    "paperLetter": "Letter",
+    "paperA4": "A4",
+    "paperLegal": "Legal",
     "default": "默认",
     "builtInStarter": "内置起始模板",
     "builtIn": "内置",

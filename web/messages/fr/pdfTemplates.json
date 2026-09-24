@@ -5,6 +5,9 @@
   "list": {
     "name": "Nom",
     "paper": "Papier",
+    "paperLetter": "Lettre",
+    "paperA4": "A4",
+    "paperLegal": "Légal",
     "default": "Par défaut",
     "builtInStarter": "Design intégré",
     "starterHint": "Imprimé lorsqu'aucun modèle personnalisé n'existe — dupliquez-le pour le personnaliser",

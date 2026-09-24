@@ -5,6 +5,9 @@
   "list": {
     "name": "名称",
     "paper": "用紙",
+    "paperLetter": "レター",
+    "paperA4": "A4",
+    "paperLegal": "リーガル",
     "default": "既定",
     "builtInStarter": "組み込みスターター",
     "builtIn": "組み込み",

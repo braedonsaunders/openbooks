@@ -8,8 +8,6 @@ import { Badge, Drawer, Select } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { DuplicateTemplateButton, NewTemplateButton, uniqueTemplateName } from './TemplateActions'
 
-const PAPER_LABEL: Record<string, string> = { letter: 'Letter', a4: 'A4', legal: 'Legal' }
-
 export type TemplateRow = {
   id: string
   name: string
@@ -60,6 +58,18 @@ export function TemplatesList({
     () => new Map(recordTypes.map((rt) => [rt.key, rt.label])),
     [recordTypes],
   )
+
+  // Paper-size names come from the catalog (list.paperLetter/paperA4/
+  // paperLegal) — an unknown stored size renders verbatim, exactly like an
+  // unknown run status in the delivery panel.
+  const paperName = (size: string) =>
+    size === 'letter'
+      ? t('list.paperLetter')
+      : size === 'a4'
+        ? t('list.paperA4')
+        : size === 'legal'
+          ? t('list.paperLegal')
+          : size
 
   // Taken names per record type (the unique index is org + type + name), so
   // the offered duplicate default never collides (F-t13-001).
@@ -188,8 +198,8 @@ export function TemplatesList({
       cell: (row) => (
         <span className="text-sm text-slate-600 dark:text-slate-300">
           {row.kind === 'starter'
-            ? `${PAPER_LABEL.letter} · ${t('editor.portrait')}`
-            : `${PAPER_LABEL[row.template.paperSize] ?? row.template.paperSize} · ${
+            ? `${paperName('letter')} · ${t('editor.portrait')}`
+            : `${paperName(row.template.paperSize)} · ${
                 row.template.orientation === 'landscape' ? t('editor.landscape') : t('editor.portrait')
               }`}
         </span>
