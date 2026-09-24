@@ -116,6 +116,47 @@ New accounting behavior should include:
 - tenant-isolation checks; and
 - proof that every generated journal entry balances.
 
+### What a test in this repository must be
+
+Tests are product code: someone reads them to learn what the system promises,
+and they fail only when that promise breaks. Every test must:
+
+- **Exercise behaviour through a real interface.** Call the function, the HTTP
+  route, or the database path a caller uses. Assert on what that caller observes:
+  return values, response status and body, rows written, journal lines posted.
+- **Use an independent expected value.** Compute it by hand, take it from a
+  published source (a statute, a tax table, a file-format specification), or
+  derive it from the inputs. Never compute it with the code under test or a
+  copy of its formula. Asserting what a mock was told to return proves nothing.
+- **Fail for one reason, and say so.** One behaviour per test. The name states
+  the behaviour ("posting into a closed period is refused with the period
+  named"), not the ticket that prompted it.
+- **Mock only what you don't own.** External services, the clock and
+  randomness are fine to double. Doubling our own modules turns the test into a
+  description of today's call graph.
+- **Be deterministic.** Pin the clock, and seed anything random. A test that
+  passes only before a calendar date, or only in one time zone, is broken.
+
+These are not tests, and review refuses them:
+
+- **Source-text assertions.** A regex, `includes` or `indexOf` over a `.ts`,
+  `.tsx`, `.sql` or `.yml` file ("the guard call exists", "the view uses
+  `table({`"). They break on reformatting and pass while the behaviour
+  regresses. `check:test-source-pins` refuses new ones. The rare file that pins
+  a genuine external contract (a CI or release workflow's trigger policy, a
+  published migration's bytes) declares it with a
+  `// source-pin-contract: <which contract>` header.
+- **Inventory and fingerprint pins.** Asserting that a catalog has exactly N
+  keys, or that some content hashes to a fixed digest, so every legitimate
+  addition fails until someone "re-pins". Assert the rule instead: every English
+  message key exists in every locale with the same placeholders.
+- **A regression test with no behavioural gap behind it.** When fixing a bug,
+  first look for an existing test of that behaviour and extend it. Add a new
+  test only when nothing covers the behaviour, and make it fail on the
+  behaviour before the fix, not on the exact bug example or the fixed line.
+- **Trivial or duplicate tests.** "The function exists", constants compared
+  with themselves, or a second test of a case another test already covers.
+
 ## Pull requests
 
 Keep pull requests focused. Describe:
