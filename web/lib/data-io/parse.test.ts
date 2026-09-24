@@ -173,6 +173,17 @@ test('JSON parsing still accepts an object and an array of objects', async () =>
   assert.equal(many.truncated, false)
 })
 
+test('JSON import preserves decimal number tokens before exact-money validation', async () => {
+  const parsed = await parseImportFile('json', {
+    text: '[{"amount":999999999999998.99,"quantity":0.1000,"label":"invoice"}]',
+  })
+  assert.deepEqual(parsed.rows, [{
+    amount: '999999999999998.99',
+    quantity: '0.1000',
+    label: 'invoice',
+  }])
+})
+
 test('XLSX parsing retains array-formula child provenance for numeric and string results', async () => {
   const parsed = await parseImportFile('xlsx', { base64: await arrayFormulaWorkbook() })
 

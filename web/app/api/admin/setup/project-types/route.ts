@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import {
+  assertValidProjectFinancialProfile,
   canonicalizeProjectFinancialProfile,
   publishProjectFinancialProfileInTransaction,
 } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
@@ -129,6 +130,16 @@ export async function PATCH(req: Request) {
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const b = ((parsedBody2.data))
+  if (b.financialProfile) {
+    try {
+      assertValidProjectFinancialProfile(b.financialProfile)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "financialProfile is invalid" },
+        { status: 422 },
+      )
+    }
+  }
   if (typeof b.id !== 'string' || !isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const id = b.id
   if (typeof b.billingMethod !== 'string' || !['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))

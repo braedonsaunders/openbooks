@@ -79,9 +79,17 @@ function persistProjectPolicyDecimal(value: unknown, name: string): string {
 function optionalNonnegativeDecimal(
   value: unknown,
   name: string,
+  allowTrustedNumber = false,
 ): string | undefined {
   if (value === undefined) return undefined;
-  return persistProjectPolicyDecimal(value, name);
+  // Built-in defaults and rows persisted before the decimal-string boundary
+  // may still be JSON numbers. Normalize those trusted values for storage;
+  // API input validation uses the strict default and refuses numeric values.
+  if (!allowTrustedNumber && typeof value !== "string") {
+    throw new Error(`${name} must be a finite non-negative decimal string`);
+  }
+  const decimal = allowTrustedNumber && typeof value === "number" ? String(value) : value;
+  return persistProjectPolicyDecimal(decimal, name);
 }
 
 /**
@@ -97,18 +105,21 @@ export function canonicalizeProjectFinancialProfile(
     next.overhead.ratePercent = optionalNonnegativeDecimal(
       next.overhead.ratePercent,
       "overhead.ratePercent",
+      true,
     );
   }
   if (next.overhead?.ratePerHour !== undefined) {
     next.overhead.ratePerHour = optionalNonnegativeDecimal(
       next.overhead.ratePerHour,
       "overhead.ratePerHour",
+      true,
     );
   }
   if (next.totalPrice?.defaultMarkupPercent !== undefined) {
     next.totalPrice.defaultMarkupPercent = optionalNonnegativeDecimal(
       next.totalPrice.defaultMarkupPercent,
       "totalPrice.defaultMarkupPercent",
+      true,
     );
   }
   return next;
