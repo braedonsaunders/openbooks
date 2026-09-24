@@ -115,8 +115,12 @@ export async function GET() {
   // hand a restricted caller the exact account to target: mask references
   // outside their scope (the picker above already hides those rows).
   let configRows = configs.rows as Array<Record<string, unknown>>;
+  let surchargeRows = rules.rows as Array<Record<string, unknown>>;
   if (scope !== null) {
-    const referenced = [...new Set(configRows.map((c) => c.defaultBankAccountId).filter((id) => typeof id === "string"))] as string[];
+    const referenced = [...new Set([
+      ...configRows.map((c) => c.defaultBankAccountId),
+      ...surchargeRows.map((r) => r.feeIncomeAccountId),
+    ].filter((id) => typeof id === "string"))] as string[];
     if (referenced.length > 0) {
       const subs = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
         select id, subsidiary_id from accounts
@@ -130,12 +134,17 @@ export async function GET() {
           ? { ...c, defaultBankAccountId: null }
           : c,
       );
+      surchargeRows = surchargeRows.map((rule) =>
+        typeof rule.feeIncomeAccountId === "string" && !visible.has(rule.feeIncomeAccountId)
+          ? { ...rule, feeIncomeAccountId: null }
+          : rule,
+      );
     }
   }
   return NextResponse.json({
     configs: configRows,
     bankAccounts: banks.rows,
-    surchargeRules: rules.rows,
+    surchargeRules: surchargeRows,
     incomeAccounts: incomeAccounts.rows,
     featureEnabled: await isFeatureEnabled(orgId, "onlinePayments"),
   });
