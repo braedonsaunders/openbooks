@@ -4,12 +4,76 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
-import { ensureBuiltInPaymentFormats, recordPaymentSettlement } from "./operations.ts";
+import { unsealJson } from "../platform/secrets.ts";
+import {
+  createPaymentBankProfile,
+  ensureBuiltInPaymentFormats,
+  recordPaymentSettlement,
+  updatePaymentBankProfile,
+} from "./operations.ts";
 import { PaymentError } from "./payment-errors.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const paymentOperationsSource = readFileSync(new URL("./operations.ts", import.meta.url), "utf8");
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+
+test("concurrent bank-profile secret rotations preserve both fields and audit the locked state", { skip: !DB }, async () => {
+  const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
+  process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Profile operator", "admin"));
+    await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
+    const format = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from payment_formats where org_id = ${org.orgId} and code = 'WIRE'
+    `))).rows[0]!;
+    const profile = await withOrgContext(org.orgId, () => createPaymentBankProfile(org.orgId, actorId, {
+      name: "Rotation profile",
+      bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId,
+      paymentFormatId: format.id,
+      currency: "CAD",
+      originatorSecrets: { initial: "present" },
+    }));
+
+    await Promise.all([
+      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+        name: "Rotation A",
+        originatorSecrets: { credentialA: "value-a" },
+      })),
+      withOrgContext(org.orgId, () => updatePaymentBankProfile(profile.id, org.orgId, actorId, {
+        name: "Rotation B",
+        originatorSecrets: { credentialB: "value-b" },
+      })),
+    ]);
+
+    const stored = (await withOrgContext(org.orgId, () => db.execute<{ originator_secrets_encrypted: string | null; name: string }>(sql`
+      select originator_secrets_encrypted, name from payment_bank_profiles
+       where id = ${profile.id} and org_id = ${org.orgId}
+    `))).rows[0]!;
+    assert.deepEqual(unsealJson(stored.originator_secrets_encrypted), {
+      initial: "present",
+      credentialA: "value-a",
+      credentialB: "value-b",
+    });
+
+    const audit = (await withOrgContext(org.orgId, () => db.execute<{ changes: { before: { name: string }; after: { name: string } } }>(sql`
+      select changes from audit_log
+       where org_id = ${org.orgId} and table_name = 'payment_bank_profiles'
+         and row_id = ${profile.id} and action = 'update'
+    `))).rows;
+    assert.equal(audit.length, 2, "each rotation must have an audit record");
+    assert.ok(
+      audit.some(({ changes }) => changes.before.name === "Rotation A" || changes.before.name === "Rotation B"),
+      "the later audit before-image must include the earlier committed profile edit",
+    );
+    assert.ok(stored.name === "Rotation A" || stored.name === "Rotation B");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+  }
+});
 
 test("returned instructions are guarded before settlement writes", () => {
   const guard = paymentOperationsSource.match(
@@ -287,10 +351,12 @@ test(
            where payment_instruction_id in (${instructionA}, ${instructionB})
            group by org_id, bank_reference`)).rows,
       );
-      assert.deepEqual(rows, [
+      const sortedRows = [...rows].sort((a, b) => a.orgId.localeCompare(b.orgId));
+      const expectedRows = [
         { orgId: orgA.orgId, reference: "ref-A2", count: 1 },
         { orgId: orgB.orgId, reference: "ref-B", count: 1 },
-      ]);
+      ].sort((a, b) => a.orgId.localeCompare(b.orgId));
+      assert.deepEqual(sortedRows, expectedRows);
     } finally {
       await withBypass(() => db.execute(sql`
         delete from payment_settlements where payment_instruction_id in (${instructionA}, ${instructionB})`));

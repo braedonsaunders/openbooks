@@ -214,6 +214,7 @@ export async function updatePaymentBankProfile(
       originator_secrets_encrypted: string | null;
     }>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
+       for update
     `));
     if (!existing.rows[0]) throw new PaymentError("payment bank profile not found");
     const current = existing.rows[0];
@@ -234,7 +235,7 @@ export async function updatePaymentBankProfile(
             ...input.originatorSecrets,
           })
       : current.originator_secrets_encrypted;
-    await tx.execute(sql`
+    const write = await tx.execute<{ id: string }>(sql`
       update payment_bank_profiles set
         name = coalesce(${input.name?.trim() ?? null}, name),
         bank_account_id = coalesce(${input.bankAccountId ?? null}::uuid, bank_account_id),
@@ -252,13 +253,16 @@ export async function updatePaymentBankProfile(
         is_active = coalesce(${input.isActive ?? null}, is_active),
         updated_at = now(), updated_by = ${userId}
       where id = ${id} and org_id = ${orgId}
+      returning id
     `);
+    if (!write.rows[0]) throw new PaymentError("payment bank profile not found");
     const updated = (await tx.execute<Record<string, unknown>>(sql`
       select * from payment_bank_profiles where id = ${id} and org_id = ${orgId}
     `));
+    if (!updated.rows[0]) throw new PaymentError("payment bank profile not found");
     await auditProfileChange(tx, orgId, id, "update", {
       before: profileAuditView(current),
-      after: profileAuditView(updated.rows[0]!),
+      after: profileAuditView(updated.rows[0]),
       ...(rotating ? { originatorSecretsRotated: true } : {}),
     }, userId);
   });
