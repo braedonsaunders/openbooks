@@ -284,6 +284,7 @@ const setupActor = (context: ApplicationContext) => ({
   orgId: context.authz.user.orgId,
   id: context.authz.user.id,
   permissions: context.authz.permissions,
+  allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
 });
 
 const visible = (): boolean => true;

@@ -5,19 +5,13 @@ import test from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
 
-// Regression for the tax-rate domain contract (web/app/api/admin/setup/[entity]/route.ts).
-// Setup used to persist negative and FX-scale tax rates that the calculation
-// engine (engine/src/tax/tax.ts) refuses at every later document, and its
-// autocommit natural-key duplicate check let two concurrent creates commit
-// parallel authoritative definitions. These tests pin the API rejection, the
-// storage CHECK/UNIQUE authority (migration 0042), the deterministic 409
-// mapping, audit atomicity, and the exact-decimal effective-dated happy path.
+// Live DB coverage for the generic setup API's validation, scope, and audit behavior.
 const stateKey = Symbol.for("openbooks.tax-rate-domain-route-test");
 interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: Set<string> | null;
   } | null;
 }
 const routeState: RouteState = { authz: null };
@@ -29,6 +23,8 @@ const mockAuthz = `
     if (!state.authz) return new Response(null, { status: 403 })
     return state.authz
   }
+  export async function requirePermission(_permission) { return state.authz }
+  export function can() { return true }
 `;
 
 const hooks = registerHooks({
@@ -38,10 +34,9 @@ const hooks = registerHooks({
     if (specifier === "server-only") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
     }
+    if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
     // Forward Next.js-style aliases to the real modules they point at.
-    if (specifier.startsWith("@/") && context.parentURL) {
-      return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
-    }
+    if (specifier.startsWith("@/") && context.parentURL) return nextResolve(new URL(`../../../../../${specifier.slice(2)}.ts`, context.parentURL).href, context);
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && entityRoute) {
@@ -53,12 +48,18 @@ const hooks = registerHooks({
     if (url === "mock:authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
     }
+    if (url === "mock:setup-intl") {
+      return { format: "module", source: `export async function getTranslations(){ return (key) => key }; export async function getLocale(){ return 'en' }`, shortCircuit: true };
+    }
     return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?tax-rate-domain-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
+const { loadEntityOptions } = await import("../../../../../lib/setup/ref-options.ts");
+const { setupEntitySubsidiaryFilter } = await import("../../../../../lib/setup/subsidiary-scope.ts");
+const { SETUP_ENTITY_BY_KEY } = await import("../../../../../lib/setup/registry.ts");
 hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
@@ -70,34 +71,10 @@ const { loadTaxComponentConfig } = await import("@openbooks/engine/src/tax/persi
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
-function authenticate(f: { orgId: string; actorId: string }) {
-  routeState.authz = {
-    user: { orgId: f.orgId, id: f.actorId },
-    permissions: new Set(["admin.setup.manage"]),
-    allowedSubsidiaryIds: null,
-  };
-}
-
-function postRequest(entity: string, body: unknown): Request {
-  return new Request(`http://localhost/api/admin/setup/${entity}`, {
-    method: "POST",
-    headers: { "Idempotency-Key": randomUUID() },
-    body: JSON.stringify(body),
-  });
-}
-
-function patchRequest(entity: string, body: unknown): Request {
-  return new Request(`http://localhost/api/admin/setup/${entity}`, {
-    method: "PATCH",
-    body: JSON.stringify(body),
-  });
-}
-
-function deleteRequest(entity: string, id: string): Request {
-  return new Request(`http://localhost/api/admin/setup/${entity}?id=${id}`, {
-    method: "DELETE",
-  });
-}
+function authenticate(f: { orgId: string; actorId: string }, allowedSubsidiaryIds: Set<string> | null = null) { routeState.authz = { user: { orgId: f.orgId, id: f.actorId }, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds }; }
+function postRequest(entity: string, body: unknown): Request { return new Request(`http://localhost/api/admin/setup/${entity}`, { method: "POST", headers: { "Idempotency-Key": randomUUID() }, body: JSON.stringify(body) }); }
+function patchRequest(entity: string, body: unknown): Request { return new Request(`http://localhost/api/admin/setup/${entity}`, { method: "PATCH", body: JSON.stringify(body) }); }
+function deleteRequest(entity: string, id: string): Request { return new Request(`http://localhost/api/admin/setup/${entity}?id=${id}`, { method: "DELETE" }); }
 
 const call = (entity: string) => ({ params: Promise.resolve({ entity }) });
 
@@ -280,15 +257,28 @@ test("derived-rule edits close the old window and create a successor", { skip: !
 test("setup deletes write their audit event in the same transaction", { skip: !DB }, async () => {
   const f = await seedDerivedRuleFixture();
   try {
-    const deleted = await DELETE(
-      deleteRequest("pay-derived-rules", f.ruleId),
-      call("pay-derived-rules"),
-    );
-    assert.equal(deleted.status, 200);
-    const rows = await db.execute(sql`
-      select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`);
-    assert.equal(rows.rows.length, 0);
+    assert.equal((await DELETE(deleteRequest("pay-derived-rules", f.ruleId), call("pay-derived-rules"))).status, 200);
+    assert.equal((await db.execute(sql`select id from pay_derived_rules where id = ${f.ruleId} and org_id = ${f.orgId}`)).rows.length, 0);
     assert.equal(await auditCount(f.orgId, "pay_derived_rules", f.ruleId), 2, "insert and delete each leave audit evidence");
+
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"multiSubsidiary":true}'::jsonb, true) where id = ${f.orgId}`);
+    const main = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${f.orgId} order by created_at limit 1`)).rows[0]!.id;
+    const [foreign, segment] = [randomUUID(), randomUUID()];
+    await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country) values (${foreign}, ${f.orgId}, ${main}, 'Entity B', 'CAD', 'CA')`);
+    await db.execute(sql`insert into segment_definitions (id, org_id, key, name, plural_name) values (${segment}, ${f.orgId}, ${`scope_${randomUUID().replaceAll('-', '').slice(0, 12)}`}, 'Scope test', 'Scope tests')`);
+    authenticate(f, new Set([main]));
+    const orgWide = await POST(postRequest("account-groups", {}), call("account-groups")); assert.deepEqual([orgWide.status, await orgWide.json()], [403, { error: "requires unrestricted subsidiary access" }]);
+    const scoped = await POST(postRequest("segment-values", { segmentId: segment, name: "Foreign", subsidiaryId: foreign }), call("segment-values")); assert.equal(scoped.status, 403);
+    assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from segment_values where segment_id = ${segment}`)).rows[0]!.n, 0);
+    const groupId = randomUUID();
+    await db.execute(sql`insert into account_groups (id, org_id, dimension, key, name) values (${groupId}, ${f.orgId}, 'class', 'scope_test', 'Restricted group')`);
+    const accountGroups = SETUP_ENTITY_BY_KEY.get("account-groups")!;
+    assert.equal((await db.execute(sql`select count(*)::int as n from account_groups where id = ${groupId} ${setupEntitySubsidiaryFilter(accountGroups, new Set([main]))}`)).rows[0]!.n, 0);
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,equipment}', 'true'::jsonb) where id = ${f.orgId}`);
+    const unitId = randomUUID(); await db.execute(sql`insert into equipment_units (id,org_id,subsidiary_id,unit_number,name,status,purchase_price) values (${unitId},${f.orgId},${foreign},'FOREIGN','Foreign unit','active','1')`);
+    assert.deepEqual(await loadEntityOptions("equipment-units", f.orgId, new Set([main])), []);
+    const rule = await POST(postRequest("pay-derived-rules", { code: `SCOPED-${randomUUID()}`, name: "Foreign unit rule", componentId: f.componentId, trigger: "distinct_day", effectiveFrom: "2026-01-01", rateMode: "fixed_per_unit", rateValue: "1", quantityMode: "count", costingMode: "source", billableOnly: false, equipmentUnitId: unitId, includedJobTitles: [], excludedJobTitles: [], sequence: 50, isActive: true }), call("pay-derived-rules"));
+    assert.deepEqual([rule.status, await rule.json()], [403, { error: "equipment unit is outside your allowed subsidiary scope" }]);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(f.orgId);

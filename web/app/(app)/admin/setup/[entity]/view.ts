@@ -39,6 +39,7 @@ import {
 } from '../../../../../lib/setup/registry'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
+import { setupEntitySubsidiaryFilter } from '../../../../../lib/setup/subsidiary-scope'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
 
 /**
@@ -222,14 +223,15 @@ export async function loadSetupEntity(
   const rowFilter = entity
     ? sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
+    ${authz.allowedSubsidiaryIds === null ? sql`` : setupEntitySubsidiaryFilter(entity, authz.allowedSubsidiaryIds)}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
     : sql``
   const moduleRows = entity?.dataSource === 'extension-settings'
-    ? (await loadExtensionSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
+    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadExtensionSettingRows(orgId)).filter((row) => !list.q || Object.values(row).some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase()))) : null
   // HR-15: home announcements list from org settings JSON.
   const announcementRows = entity?.dataSource === 'home-announcements'
-    ? (await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
+    ? (authz.allowedSubsidiaryIds !== null ? [] : await loadHomeAnnouncementRows(orgId)).filter((row) => !list.q || [row.title, row.body ?? ''].some((value) => String(value).toLowerCase().includes(list.q!.toLowerCase())))
     : null
   const [rowsRes, countRes, refOptions, installedPackRows] = moduleRows
     ? [{ rows: moduleRows.slice((list.page - 1) * list.perPage, list.page * list.perPage) }, { rows: [{ n: moduleRows.length }] }, {}, { rows: [] }]
