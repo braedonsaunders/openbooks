@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { NextRequest } from "next/server";
 
 const post = (url: string, headers: Record<string, string>) =>
   new Request(url, { method: "POST", headers });
@@ -293,20 +293,22 @@ test("safe methods skip host resolution entirely", async () => {
   );
 });
 
-test("the proxy gates unsafe methods before any route short-circuit", async () => {
-  const source = readFileSync(new URL("../proxy.ts", import.meta.url), "utf8");
-  assert.match(source, /isUnsafeMethod\(req\.method\)/);
-  assert.match(source, /isCsrfExemptPath\(pathname\)/);
-  assert.match(source, /!hasTrustedOrigin\(req\)/);
-  const gateIndex = source.indexOf("isUnsafeMethod(req.method)");
-  const publicIndex = source.indexOf("if (isPublicPath(pathname))");
-  assert.ok(gateIndex >= 0 && publicIndex > gateIndex);
-});
-
-test("the CSRF module stays Edge-runtime safe", () => {
-  for (const file of ["csrf.ts", "proxy-policy.ts"]) {
-    const source = readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
-    assert.doesNotMatch(source, /from "node:/, file);
-    assert.doesNotMatch(source, /require\(/, file);
+test("the proxy rejects a forged login mutation before public-route passthrough", async () => {
+  const priorAppUrl = process.env.OPENBOOKS_APP_URL;
+  process.env.OPENBOOKS_APP_URL = "https://books.example";
+  try {
+    const { proxy } = await import("../proxy.ts");
+    const response = await proxy(new NextRequest("https://books.example/api/login", {
+      method: "POST",
+      headers: { origin: "https://attacker.example" },
+    }));
+    assert.equal(response.status, 403);
+    assert.deepEqual(await response.json(), {
+      error: "forbidden",
+      requestId: response.headers.get("x-request-id"),
+    });
+  } finally {
+    if (priorAppUrl === undefined) delete process.env.OPENBOOKS_APP_URL;
+    else process.env.OPENBOOKS_APP_URL = priorAppUrl;
   }
 });

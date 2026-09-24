@@ -11,7 +11,8 @@ import { isPublicPath, isCsrfExemptPath } from "./lib/proxy-policy";
 import { hasTrustedOrigin, isUnsafeMethod } from "./lib/csrf";
 
 /**
- * Session gate. Edge runtime: verify the HMAC cookie with Web Crypto —
+ * Session gate. The Proxy uses Next.js's Node.js runtime: verify the HMAC
+ * cookie with Web Crypto —
  * user-row checks happen server-side in pages/APIs via currentUser().
  */
 
