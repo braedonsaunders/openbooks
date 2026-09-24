@@ -444,10 +444,11 @@ async function loadScopedPlan(
   orgId: string,
   planId: string,
   allowed: Set<string> | null,
+  forUpdate = false,
 ): Promise<{ id: string; positionId: string; status: SuccessionPlanStatus }> {
   const plan = (await exec.execute<{ id: string; positionId: string; status: SuccessionPlanStatus }>(sql`
     select id, position_id as "positionId", status
-      from hrm_succession_plans where org_id = ${orgId} and id = ${planId}
+      from hrm_succession_plans where org_id = ${orgId} and id = ${planId} ${forUpdate ? sql`for update` : sql``}
   `)).rows[0];
   if (!plan) {
     throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — it may belong to another organization");
@@ -539,10 +540,10 @@ export async function setSuccessionPlanStatus(args: {
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     // The fence first: a scoped actor never moves a plan they cannot see,
     // and the NOT_FOUND below stays uniform either way.
-    await loadScopedPlan(db, orgId, id, allowed);
+    const plan = await loadScopedPlan(db, orgId, id, allowed, true);
     const updated = (await db.execute<{ id: string }>(sql`
       update hrm_succession_plans set status = ${args.status}, updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and id = ${id}
+       where org_id = ${orgId} and id = ${id} and status = ${plan.status}
       returning id
     `)).rows;
     if (updated.length !== 1) {
@@ -564,10 +565,10 @@ export async function setSuccessionPlanNotes(args: {
   await withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
-    await loadScopedPlan(db, orgId, id, allowed);
+    const plan = await loadScopedPlan(db, orgId, id, allowed, true);
     const updated = (await db.execute(sql`
       update hrm_succession_plans set notes = ${args.notes}, updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and id = ${id}
+       where org_id = ${orgId} and id = ${id} and status = ${plan.status}
       returning id
     `)).rows;
     if (updated.length !== 1) {
@@ -674,13 +675,20 @@ export async function addSuccessionCandidate(args: {
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
+    let plan: Awaited<ReturnType<typeof loadScopedPlan>>;
     try {
-      await loadScopedPlan(db, orgId, planId, allowed);
+      plan = await loadScopedPlan(db, orgId, planId, allowed, true);
     } catch (e) {
       if (e instanceof HrmPerformanceError && e.code === "NOT_FOUND") {
         throw new HrmPerformanceError("NOT_FOUND", "succession plan was not found — add the candidate to an existing plan");
       }
       throw e;
+    }
+    if (plan.status !== "draft") {
+      throw new HrmPerformanceError(
+        "REFUSED",
+        `a ${plan.status} succession plan keeps its candidates as evidence — move the plan back to draft to edit its candidates`,
+      );
     }
     const employment = (await db.execute<{ id: string; employerSubsidiaryId: string }>(sql`
       select id, employer_subsidiary_id as "employerSubsidiaryId"
@@ -740,7 +748,7 @@ export async function removeSuccessionCandidate(args: {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     // The fence first: a scoped actor never touches a plan they cannot see.
-    const plan = await loadScopedPlan(db, orgId, planId, allowed);
+    const plan = await loadScopedPlan(db, orgId, planId, allowed, true);
     // Only draft plans shed candidates: an active or archived plan is
     // evidence, and deleting from it would erase history. Move the plan
     // back to draft to edit its candidates.
