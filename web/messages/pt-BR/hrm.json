@@ -945,6 +945,12 @@
         "distributionTitle": "Distribuição das notas",
         "unrated": "Sem nota",
         "missingTitle": "Ausentes nesta sessão",
+        "missingReasons": {
+          "facilitator_own": "Avaliação da própria pessoa facilitadora",
+          "not_manager_review": "Não é uma avaliação de gestor",
+          "not_submitted": "Não enviada",
+          "not_in_scope": "Fora do escopo da sessão"
+        },
         "openSession": "Abrir sessão",
         "closeSession": "Encerrar sessão",
         "sessionName": "Nome da sessão",

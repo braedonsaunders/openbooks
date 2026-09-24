@@ -945,6 +945,12 @@
         "distributionTitle": "評価の分布",
         "unrated": "未評価",
         "missingTitle": "このセッションの未登録",
+        "missingReasons": {
+          "facilitator_own": "進行役本人の評価",
+          "not_manager_review": "管理者による評価ではありません",
+          "not_submitted": "未提出",
+          "not_in_scope": "セッションの対象外"
+        },
         "openSession": "セッションを開始",
         "closeSession": "セッションを確定",
         "sessionName": "セッション名",

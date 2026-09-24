@@ -239,6 +239,18 @@ test("opening a session enters only in-scope reviews and decides only in-scope e
       !opened.missing.some((m) => m.employmentId === h.workerBEmployment),
       "the other subsidiary's review is never named through the missing list — the fence cannot be probed",
     );
+    const workerAName = (await db.execute<{ name: string }>(sql`
+      select p.display_name as name
+        from worker_employments e
+        join parties p on p.org_id = e.org_id and p.id = e.worker_party_id
+       where e.org_id = ${h.org.orgId} and e.id = ${h.workerAEmployment}
+    `)).rows[0]!.name;
+    assert.ok(opened.missing.length > 0, "the in-scope self review remains listed as missing");
+    assert.ok(
+      opened.missing.some((missing) => missing.subjectName === workerAName)
+        && opened.missing.every((missing) => missing.subjectName !== missing.reviewId.slice(0, 8)),
+      "missing reviews identify the worker by name, never by a review id fragment",
+    );
     // The in-scope entry decides normally.
     const entryA = opened.entries[0]!;
     const decided = await setCalibratedRating({

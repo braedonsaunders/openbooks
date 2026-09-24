@@ -88,6 +88,7 @@ export interface CalibrationEntryDTO {
 export interface MissingReviewDTO {
   readonly reviewId: string;
   readonly employmentId: string;
+  readonly subjectName: string;
   readonly status: string;
   readonly kind: string;
   readonly reason: string;
@@ -173,11 +174,20 @@ async function loadMissing(
   facilitatorPartyId: string | null,
   allowed: Set<string> | null,
 ): Promise<MissingReviewDTO[]> {
-  const rows = (await db.execute<{ reviewId: string; employmentId: string; status: string; kind: string; reviewerPartyId: string }>(sql`
-    select r.id as "reviewId", r.employment_id as "employmentId", r.status, r.kind,
+  const rows = (await db.execute<{
+    reviewId: string;
+    employmentId: string;
+    subjectName: string;
+    status: string;
+    kind: string;
+    reviewerPartyId: string;
+  }>(sql`
+    select r.id as "reviewId", r.employment_id as "employmentId",
+           coalesce(subject.display_name, '—') as "subjectName", r.status, r.kind,
            r.reviewer_party_id as "reviewerPartyId"
       from hrm_reviews r
       join worker_employments we on we.org_id = r.org_id and we.id = r.employment_id
+      left join parties subject on subject.org_id = we.org_id and subject.id = we.worker_party_id
      where r.org_id = ${orgId} and r.cycle_id = ${cycleId} ${employmentScopeFilter(allowed, "we")}
        and not exists (select 1 from hrm_calibration_entries e
                         where e.org_id = ${orgId} and e.session_id = ${sessionId} and e.review_id = r.id)
@@ -194,7 +204,14 @@ async function loadMissing(
     } else {
       reason = "not_in_scope";
     }
-    return { reviewId: row.reviewId, employmentId: row.employmentId, status: row.status, kind: row.kind, reason };
+    return {
+      reviewId: row.reviewId,
+      employmentId: row.employmentId,
+      subjectName: row.subjectName,
+      status: row.status,
+      kind: row.kind,
+      reason,
+    };
   });
 }
 

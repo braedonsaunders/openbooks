@@ -945,6 +945,12 @@
         "distributionTitle": "评分分布",
         "unrated": "未评分",
         "missingTitle": "本会话缺失项",
+        "missingReasons": {
+          "facilitator_own": "主持人本人的评估",
+          "not_manager_review": "不是经理评估",
+          "not_submitted": "尚未提交",
+          "not_in_scope": "不在会话范围内"
+        },
         "openSession": "开始会话",
         "closeSession": "结束会话",
         "sessionName": "会话名称",

@@ -945,6 +945,12 @@
         "distributionTitle": "Distribución de calificaciones",
         "unrated": "Sin calificar",
         "missingTitle": "Ausentes en esta sesión",
+        "missingReasons": {
+          "facilitator_own": "Evaluación propia de la persona facilitadora",
+          "not_manager_review": "No es una evaluación de un responsable",
+          "not_submitted": "No enviada",
+          "not_in_scope": "Fuera del ámbito de la sesión"
+        },
         "openSession": "Abrir sesión",
         "closeSession": "Cerrar sesión",
         "sessionName": "Nombre de la sesión",
