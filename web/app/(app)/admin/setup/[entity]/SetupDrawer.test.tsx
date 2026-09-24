@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { isUuid } from '../../../../../lib/list-params'
 
 declare global {
   var __setupDrawerRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined
@@ -341,7 +342,7 @@ test('creates mint one idempotency key per mounted session and reuse it across r
     const posts = seen.filter((request) => request.method === 'POST')
     assert.equal(posts.length, 2, 'the retry replays the create')
     const first = posts[0]!.headers['idempotency-key'] ?? ''
-    assert.ok(/^[0-9a-f-]{36}$/i.test(first), 'the create carries a UUID idempotency key')
+    assert.ok(isUuid(first), 'the create carries a UUID idempotency key')
     assert.equal(posts[1]!.headers['idempotency-key'], first, 'the retry reuses the session key, never a fresh one')
   } finally {
     await unmount()
