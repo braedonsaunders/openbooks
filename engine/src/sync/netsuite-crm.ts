@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '../platform/db.ts'
 import { unsealJson } from '../platform/secrets.ts'
+import { guardedFetch } from '../connectors/ssrf-guard.ts'
 import { netsuiteRecord, netsuiteRecords, suiteql, type NetSuiteCreds } from '../connectors/netsuite.ts'
 import { ensureCrmDefaults } from '../crm/crm.ts'
 import { weightAmount } from '../crm/crm-math.ts'
@@ -179,11 +180,11 @@ function batches<T>(rows: T[], size = 500): T[][] {
   return result
 }
 
-async function importRecentActivityNotes(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport) {
+async function importRecentActivityNotes(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
   const rows = await suiteql<NetSuiteRecentActivityNoteRow>(`
     select ra.id,ra.entity,ra.type,ra.typecode,ra.createddate,ra.lastmodifieddate,ra.details,ra.subdetails
       from recentactivity ra
-     where ra.type like 'Note :%'`, creds)
+     where ra.type like 'Note :%'`, creds, 1000, transport)
   const partyBySourceId = await activityPartyBySourceId(orgId)
   const existingRows = (await db.execute<{ id: string; source_id: string }>(sql`
     select id,custom->'netsuite'->>'id' source_id
@@ -249,15 +250,15 @@ async function importRecentActivityNotes(orgId: string, actorId: string, creds: 
   report.activities.salesVisit = salesVisits
 }
 
-async function importNativeActivities(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport) {
+async function importNativeActivities(orgId: string, actorId: string, creds: NetSuiteCreds, report: CrmImportReport, transport: typeof fetch) {
   const kinds = [{ type: 'task', kind: 'task', reportKey: 'task' }, { type: 'phoneCall', kind: 'call', reportKey: 'phoneCall' }, { type: 'calendarEvent', kind: 'event', reportKey: 'calendarEvent' }, { type: 'note', kind: 'note', reportKey: 'nativeNote' }] as const
   for (const source of kinds) {
     try {
-      const collection = await netsuiteRecords<NsRecord>(source.type, creds)
+      const collection = await netsuiteRecords<NsRecord>(source.type, creds, 1000, transport)
       let imported = 0
       for (const summary of collection) {
         if (summary.id == null) continue
-        const record = await netsuiteRecord<NsRecord>(source.type, summary.id, creds)
+        const record = await netsuiteRecord<NsRecord>(source.type, summary.id, creds, transport)
         const subject = String(record.title ?? record.subject ?? record.memo ?? '').trim()
         const body = String(record.message ?? record.note ?? record.comments ?? '').trim() || null
         if (!subject && !body) continue
@@ -283,7 +284,7 @@ async function importNativeActivities(orgId: string, actorId: string, creds: Net
 }
 
 /** Idempotent CRM import from the tenant's stored NetSuite connection. */
-export async function importNetSuiteCrm(orgId: string, connectionId?: string): Promise<CrmImportReport> {
+export async function importNetSuiteCrm(orgId: string, connectionId?: string, transport: typeof fetch = guardedFetch): Promise<CrmImportReport> {
   // Canonical switchboard read (::boolean casts threw on non-boolean imports).
   if (!(await orgFeatureEnabled(orgId, 'crm'))) throw new Error('CRM feature is disabled')
   const creds = await credentials(orgId, connectionId)
@@ -302,7 +303,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
   await ensureCrmDefaults(orgId, actorId)
   const report: CrmImportReport = { accountStatuses: 0, accounts: 0, missingParties: 0, opportunities: 0, opportunityLines: 0, activities: {}, sourceNoteLinks: 0, warnings: [] }
 
-  const statuses = await suiteql<{ key: string; name: string; entitytype: string; probability?: string; inactive?: string }>(`select key,name,entitytype,probability,inactive from entitystatus where entitytype in ('LEAD','PROSPECT','CUSTOMER')`, creds)
+  const statuses = await suiteql<{ key: string; name: string; entitytype: string; probability?: string; inactive?: string }>(`select key,name,entitytype,probability,inactive from entitystatus where entitytype in ('LEAD','PROSPECT','CUSTOMER')`, creds, 1000, transport)
   const statusIds = new Map<string, string>()
   for (const source of statuses) {
     const lifecycle = stage(source.entitytype)
@@ -319,7 +320,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
       ? (creds as { probabilityField?: string }).probabilityField!
       : undefined
   const probCol = probField ? `,${probField}` : ""
-  const customers = await suiteql<{ id:string; stage:string; entitystatus?:string; probability?:string; dateprospect?:string; dateclosed?:string; datecreated?:string }>(`select id,stage,entitystatus,probability${probCol}, dateprospect,dateclosed,datecreated from customer`, creds)
+  const customers = await suiteql<{ id:string; stage:string; entitystatus?:string; probability?:string; dateprospect?:string; dateclosed?:string; datecreated?:string }>(`select id,stage,entitystatus,probability${probCol}, dateprospect,dateclosed,datecreated from customer`, creds, 1000, transport)
   for (const customer of customers) {
     const lifecycle = stage(customer.stage)
     const party = (await db.execute<{ id: string }>(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${customer.id} limit 1`))
@@ -352,10 +353,10 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     report.accounts++
   }
 
-  const noteLinks = await suiteql<{ id:string; entity:string }>('select id,entity from note', creds)
+  const noteLinks = await suiteql<{ id:string; entity:string }>('select id,entity from note', creds, 1000, transport)
   report.sourceNoteLinks = noteLinks.length
 
-  const opportunities = await suiteql<{ id:string; tranid:string; entity?:string; trandate?:string; duedate?:string; status?:string; probability?:string; currency?:string; foreigntotal?:string; memo?:string }>(`select id,tranid,entity,trandate,duedate,status,probability,currency,foreigntotal,memo from transaction where type='Opprtnty'`, creds)
+  const opportunities = await suiteql<{ id:string; tranid:string; entity?:string; trandate?:string; duedate?:string; status?:string; probability?:string; currency?:string; foreigntotal?:string; memo?:string }>(`select id,tranid,entity,trandate,duedate,status,probability,currency,foreigntotal,memo from transaction where type='Opprtnty'`, creds, 1000, transport)
   const [defaultStatusResult, orgResult, configuredCurrencyResult] = await Promise.all([
     db.execute<{ id: string; probability: number }>(sql`select id,probability from crm_opportunity_statuses where org_id=${orgId} and is_default order by sequence limit 1`),
     db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id=${orgId}`),
@@ -367,7 +368,7 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
   const configuredCurrencies = new Set(configuredCurrencyResult.rows.map((row) => row.code.toUpperCase()))
   const sourceCurrencyById = new Map<string, string>()
   try {
-    const sourceCurrencies = await suiteql<{ id: string; symbol?: string }>('select id,symbol from currency', creds)
+    const sourceCurrencies = await suiteql<{ id: string; symbol?: string }>('select id,symbol from currency', creds, 1000, transport)
     for (const currency of sourceCurrencies) {
       const code = sourceText(currency.symbol)?.toUpperCase()
       if (code && /^[A-Z]{3}$/.test(code)) sourceCurrencyById.set(String(currency.id), code)
@@ -390,10 +391,10 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     await db.execute(sql`insert into crm_opportunities(org_id,opportunity_number,title,party_id,status_id,probability,expected_close_date,currency,projected_amount,weighted_amount,description,is_active,custom,created_by,updated_by) values(${orgId},${opportunity.tranid || `NS-${opportunity.id}`},${opportunity.memo || opportunity.tranid || `NS-${opportunity.id}`},${party.id},${defaultStatus.id},${probability},${date(opportunity.duedate)},${currency},${projectedAmount},${weightedAmount},${opportunity.memo ?? null},true,${JSON.stringify({ netsuite: { id: opportunity.id } })}::jsonb,${actorId},${actorId}) on conflict(org_id,opportunity_number) do update set probability=excluded.probability,title=excluded.title,party_id=excluded.party_id,expected_close_date=excluded.expected_close_date,currency=excluded.currency,projected_amount=excluded.projected_amount,weighted_amount=excluded.weighted_amount,description=excluded.description,custom=crm_opportunities.custom||excluded.custom,updated_at=now(),updated_by=${actorId} where crm_opportunities.org_id=${orgId}`)
     report.opportunities++
   }
-  await importRecentActivityNotes(orgId, actorId, creds, report)
+  await importRecentActivityNotes(orgId, actorId, creds, report, transport)
   if (report.activities.recentActivityNoteSource !== report.sourceNoteLinks) {
     report.warnings.push(`Source note coverage: the note-link table contains ${report.sourceNoteLinks} rows, while RecentActivity exposes ${report.activities.recentActivityNoteSource ?? 0} typed notes with activity content. Link-only rows without activity content were not fabricated as CRM activities.`)
   }
-  await importNativeActivities(orgId, actorId, creds, report)
+  await importNativeActivities(orgId, actorId, creds, report, transport)
   return report
 }
