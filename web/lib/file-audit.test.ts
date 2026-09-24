@@ -1,40 +1,67 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { PgDialect } from 'drizzle-orm/pg-core'
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 
-const source = readFileSync(new URL('./file-audit.ts', import.meta.url), 'utf8')
-
-test('recordFileEvent persists audit evidence on the caller executor and does not swallow insert failures', () => {
-  const start = source.indexOf('export async function recordFileEvent')
-  const end = source.indexOf('export type FileActivityEntry', start)
-  assert.ok(start >= 0 && end > start, 'recordFileEvent is defined')
-  const fn = source.slice(start, end)
-
-  // Executor seam: evidence runs on the transaction the caller hands in (so a
-  // failed insert rolls back the mutation it describes) and falls back to the
-  // pooled db only when no executor is supplied.
-  assert.match(fn, /input\.executor \?\? db/)
-  assert.match(fn, /await executor\.execute\(sql`/)
-  // Fail-closed: the insert is awaited bare — no catch, no best-effort mode.
-  assert.doesNotMatch(fn, /best-effort/)
-  assert.doesNotMatch(fn, /\bcatch\b/)
+const hooks = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === 'server-only') {
+      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
+    }
+    return nextResolve(specifier, context)
+  },
 })
 
-test('file audit contract matches transaction audit fail-closed persistence', () => {
-  const transactionAudit = readFileSync(
-    new URL('../../engine/src/records/transaction-audit.ts', import.meta.url),
-    'utf8',
+const { recordFileEvent } = await import('./file-audit.ts')
+hooks.deregister()
+
+const dialect = new PgDialect()
+
+test('purging a file records an immutable delete event with its reason', async () => {
+  let statement: { sql: string; params: unknown[] } | undefined
+  const executor = {
+    async execute(query: Parameters<typeof dialect.sqlToQuery>[0]) {
+      statement = dialect.sqlToQuery(query)
+      return { rows: [] }
+    },
+  }
+
+  await recordFileEvent({
+    orgId: 'org-1',
+    actorId: 'user-1',
+    table: 'files',
+    rowId: 'file-1',
+    action: 'purge',
+    changes: { reason: 'retention expired' },
+    executor: executor as unknown as SqlExecutor,
+  })
+
+  assert.ok(statement)
+  assert.match(statement.sql, /insert into audit_log/)
+  assert.deepEqual(statement.params, [
+    'org-1',
+    'files',
+    'file-1',
+    'delete',
+    JSON.stringify({ event: 'purge', reason: 'retention expired' }),
+    'user-1',
+  ])
+})
+
+test('an audit insert failure rejects the file operation', async () => {
+  const failure = new Error('audit storage unavailable')
+  const executor = { async execute() { throw failure } }
+
+  await assert.rejects(
+    recordFileEvent({
+      orgId: 'org-1',
+      actorId: 'user-1',
+      table: 'files',
+      rowId: 'file-1',
+      action: 'delete',
+      executor: executor as unknown as SqlExecutor,
+    }),
+    (error) => error === failure,
   )
-  const recordStart = transactionAudit.indexOf('export async function recordTransactionAudit')
-  const recordEnd = transactionAudit.indexOf('\n}', recordStart)
-  const recordFn = transactionAudit.slice(recordStart, recordEnd + 2)
-
-  assert.match(recordFn, /await runner\.execute\(sql`/)
-  assert.doesNotMatch(recordFn, /\bcatch\b/)
-
-  assert.match(source, /Audit evidence is required/)
-})
-
-test('purge carries its own delete-mapped event so purge evidence is expressible', () => {
-  assert.match(source, /'delete'\s*\n\s*\| 'purge'|purge: 'delete'/)
 })

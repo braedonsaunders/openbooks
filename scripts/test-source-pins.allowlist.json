@@ -87,7 +87,6 @@
     "web/lib/documents.test.ts": 4,
     "web/lib/field-tickets-native-storage.test.ts": 3,
     "web/lib/field-tickets.test.ts": 2,
-    "web/lib/file-audit.test.ts": 3,
     "web/lib/file-cabinet.test.ts": 2,
     "web/lib/hrm/compensation-scope.test.ts": 2,
     "web/lib/hrm/workspace-tabs.test.ts": 5,
