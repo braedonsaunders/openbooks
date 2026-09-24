@@ -111,17 +111,26 @@ export function AiDraftDrawer({
     }
   }, [draftParam, failedLabel])
   if (!draftParam) return null
-  const close = (outcome: 'accepted' | 'rejected' | null, decisionId: string | null): void => {
+  const close = async (outcome: 'accepted' | 'rejected' | null, decisionId: string | null): Promise<void> => {
     if (outcome && decisionId) {
-      fetch('/api/ai/drafts', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ decisionId, outcome }),
-      }).catch(() => undefined)
+      try {
+        const res = await fetch('/api/ai/drafts', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ decisionId, outcome }),
+        })
+        if (!res.ok) {
+          setFailed({ param: draftParam, message: await readApiErrorMessage(res, failedLabel) })
+          return
+        }
+      } catch {
+        setFailed({ param: draftParam, message: failedLabel })
+        return
+      }
     }
     router.push(closeHref)
   }
-  const insert = (): void => {
+  const insert = async (): Promise<void> => {
     if (!draft) return
     const field = fieldId ? document.getElementById(fieldId) : null
     if (field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement) {
@@ -131,24 +140,24 @@ export function AiDraftDrawer({
       )?.set
       setter?.call(field, draft.text)
       field.dispatchEvent(new Event('input', { bubbles: true }))
-      close('accepted', draft.decisionId)
+      await close('accepted', draft.decisionId)
       return
     }
     // No editable field on this host (detail drawers): copy to the
     // clipboard and say so, still recording acceptance of the draft.
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(draft.text).then(
+      void navigator.clipboard.writeText(draft.text).then(
         () => setCopied(true),
         () => setFailed({ param: draftParam, message: failedLabel }),
       )
     }
-    close('accepted', draft.decisionId)
+    await close('accepted', draft.decisionId)
   }
   return (
     <UrlDrawer open closeHref={closeHref} title={title}>
       <div className="space-y-3">
         {busy ? <p className="text-sm text-slate-500 dark:text-slate-400">{loadingLabel}</p> : null}
-        {status ? <p className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
+        {status ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{status}</p> : null}
         {draft ? (
           <>
             <p className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200">{draft.text}</p>
@@ -190,7 +199,7 @@ export function AiDraftDrawer({
               <Button size="sm" onClick={insert}>
                 {insertLabel}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => close('rejected', draft.decisionId)}>
+              <Button size="sm" variant="outline" onClick={() => void close('rejected', draft.decisionId)}>
                 {discardLabel}
               </Button>
             </div>
