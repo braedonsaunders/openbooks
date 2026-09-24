@@ -16,7 +16,6 @@ import {
 
 /**
  * Locale parity as derived rules over the assembled message catalogs.
- *
  * The shipped locales come from the app's locale config (web/i18n/config.ts),
  * never a literal list: adding a language there extends every rule below to
  * it with no test change. Each locale is loaded through its assembled index
@@ -25,7 +24,6 @@ import {
  * from continuous-close.json) resolve exactly as the app resolves them, and
  * message arrays flatten by index (sync.sources.qbo.steps.0) because the
  * runtime deep-merge turns arrays into objects before next-intl sees them.
- *
  * The rules:
  * 1. Every English key exists non-empty in every shipped locale.
  * 2. ICU arguments ({name}, {count}) and rich-text tags are the same set per
@@ -35,7 +33,6 @@ import {
  * 4. No locale carries keys English does not have.
  * 5. Every message parses as valid ICU (the same parser family next-intl
  *    formats with, so a red here is a render-time crash or garbage avoided).
- *
  * Rule 3 needs a word on single-form languages. Japanese and Chinese have a
  * single plural category (other): one bare {count} form is correct for every
  * count, so a translation may simplify or drop the plural block. French,
@@ -3173,8 +3170,7 @@ test('every English message key exists non-empty in every shipped locale', () =>
 })
 
 test('no locale carries message keys absent from English', () => {
-  // An orphaned key renders nowhere: the app resolves through English-first
-  // namespaces, so the translation is dead weight that rots — usually a key
+  // An orphaned key renders nowhere: the app resolves through Englis/ namespaces, so the translation is dead weight that rots — usually a key
   // renamed in English whose translation was never removed.
   for (const catalog of OTHER_CATALOGS) {
     const extra = [...catalog.leaves.keys()].filter((key) => !EN_LEAVES.has(key)).sort()
@@ -3344,7 +3340,7 @@ test('every cognate declaration names a real verbatim key and pins its exact ter
     if (shipped !== term) {
       offenders.push(`${scope} must stay the reviewed term ${JSON.stringify(term)} (ships ${JSON.stringify(shipped)})`)
     } else if (shipped !== EN_LEAVES.get(key)) {
-      offenders.push(`${scope} is no longer English-verbatim — remove the declaration`)
+      offenders.push(`${scope} is no longer Englisremove the declaration`)
     }
   }
   assert.deepEqual(offenders, [], `${offenders.length} cognate declarations rotted:\n  ${sample(offenders)}`)

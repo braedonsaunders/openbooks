@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { LOCALE_CODES as LOCALES } from "../i18n/config"
 
 /**
  * A status the page can render but no locale names renders as its own raw
@@ -9,7 +10,6 @@ import test from 'node:test'
  * export and document status on /me/documents: the loader reads
  * meDocuments.status.<value> with a raw-value fallback, and no locale
  * defined meDocuments.status at all, so the fallback was the whole UI.
- *
  * So derive it. The storage CHECK constraints are the source of truth for
  * which statuses exist; the test reads the latest definition of each
  * constraint out of the migration chain and requires a non-empty
@@ -19,7 +19,6 @@ import test from 'node:test'
  */
 
 const ROOT = process.cwd()
-const LOCALES = ['en', 'fr', 'es', 'de', 'ja', 'zh', 'pt-BR'] as const
 
 function checkStatuses(constraint: string): string[] {
   const dir = join(ROOT, 'schema', 'migrations', 'generated')
