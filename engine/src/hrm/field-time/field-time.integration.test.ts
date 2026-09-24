@@ -208,6 +208,44 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
   }
 });
 
+test("a foreman double-submit names the existing batch instead of a 500", { skip: !DB }, async () => {
+  // G14: a retry/timeout second POST collided on the foreman/day business
+  // key and leaked a PG unique violation (a 500 with driver detail). The
+  // retry must refuse by name with the winning batch id, and exactly one
+  // batch row exists.
+  const org = await createScratchOrg();
+  try {
+    await enableFieldTime(org.orgId);
+    const foreman = randomUUID();
+    const projectId = randomUUID();
+    const actor = randomUUID();
+    await withOrg(org.orgId, async () => {
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman')`);
+      await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
+      await db.execute(sql`insert into schedule_resources (org_id, project_id, name, kind, party_id) values (${org.orgId}, ${projectId}, 'Foreman', 'crew', ${foreman})`);
+      const first = await createBatch({
+        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
+        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+      });
+      const retry = await createBatch({
+        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
+        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
+      }).then(
+        () => { throw new Error("expected a refusal"); },
+        (error: unknown) => error,
+      );
+      assert.ok(retry instanceof FieldTimeError, `retry refuses with FieldTimeError, got ${String(retry)}`);
+      assert.equal(retry.code, "batch_already_exists");
+      assert.match(retry.message, new RegExp(`batch ${first}`), "the refusal names the winning batch id");
+      const batches = (await db.execute<{ ids: string[] }>(sql`
+        select array_agg(id::text) as ids from crew_time_batches where org_id = ${org.orgId}`)).rows[0]!.ids;
+      assert.deepEqual(batches, [first]);
+    });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("a declared two-stage chain rejects at stage 2 with reasons", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
