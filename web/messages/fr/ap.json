@@ -75,7 +75,7 @@
     "emptyDescriptionNoGrant": "Téléversez des documents fournisseurs PDF, JPEG, PNG ou TIFF pour commencer. Vous devez disposer de l’accès de création des dettes fournisseurs pour téléverser.",
     "selected": "{count, plural, =0 {Aucune sélection} one {# sélection} other {# sélections}}", "select": "Sélectionner", "selectDocument": "Sélectionner {name}",
     "reprocess": "Retraiter", "reject": "Rejeter", "createDraft": "Créer le brouillon", "createDrafts": "Créer les brouillons",
-    "bulkComplete": "Action groupée terminée : {succeeded} réussies, {failed} échouées.", "actionFailed": "L’action de capture a échoué.",
+    "bulkComplete": "Action groupée terminée : {succeeded} réussies, {failed} échouées.", "bulkPartial": "Action groupée partiellement terminée : {succeeded} réussies, {failed} échouées. Les documents en échec restent sélectionnés avec leurs motifs ci-dessous.", "actionFailed": "L’action de capture a échoué.",
     "rejected": "Document rejeté.", "reprocessQueued": "Document mis en file pour retraitement.", "draftCreated": "Brouillon fournisseur créé.", "openDraft": "Ouvrir le brouillon fournisseur",
     "bill": "Facture fournisseur", "credit": "Note de crédit fournisseur",
     "columns": { "document": "Document", "vendor": "Fournisseur", "invoice": "N° de facture", "date": "Date de facture", "total": "Total", "status": "Statut", "received": "Reçu" },

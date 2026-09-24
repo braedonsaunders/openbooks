@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { Badge, Button, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { mergeHref } from '../../../../lib/list-params'
 import { SortTh } from '../../../../components/sortable-th'
+import { readApiBulkFailures, readApiErrorMessage } from '../../../../lib/api-error'
 import { CaptureUploadButton } from './CaptureUploadButton'
 
 export type CaptureListRow = {
@@ -56,24 +57,45 @@ export function CaptureList({ rows, currentParams, canCreate, uploadDisabled, so
   const [busy, setBusy] = useState(false)
   const selectable = rows.filter((row) => row.status !== 'materialized')
 
+  const [bulkResult, setBulkResult] = useState<{
+    succeeded: number
+    failures: Array<{ id: string; name: string; error: string }>
+  } | null>(null)
+  const names = new Map(rows.map((row) => [row.id, row.filename] as const))
+
   async function act(action: 'reprocess' | 'reject' | 'materialize') {
     if (!selected.size) return
     setBusy(true)
+    setBulkResult(null)
     try {
       const response = await fetch('/api/ap-capture/actions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action, ids: [...selected] }),
       })
-      const body = (await response.json()) as { results?: Array<{ ok: boolean }> }
-      if (!response.ok) throw new Error('action_failed')
-      const succeeded = body.results?.filter((result) => result.ok).length ?? 0
-      const failed = (body.results?.length ?? 0) - succeeded
-      toast.success(t('bulkComplete', { succeeded, failed }))
-      setSelected(new Set())
+      // The status is checked before the body parses: a non-JSON 502 page
+      // must toast the translated fallback, never a SyntaxError.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('actionFailed')))
+      const body = (await response.json()) as { results?: Array<{ id: string; ok: boolean }> }
+      // A partial bulk result names its reasons per item instead of
+      // collapsing them to counts: the operator can act only on the which
+      // and the why. Failed rows stay selected for a one-click retry.
+      const failed = readApiBulkFailures(body, t('actionFailed'))
+      const succeeded = (body.results?.length ?? 0) - failed.length
+      if (failed.length > 0) {
+        setBulkResult({
+          succeeded,
+          failures: failed.map((item) => ({ ...item, name: names.get(item.id) ?? item.id })),
+        })
+        setSelected(new Set(failed.map((item) => item.id)))
+        toast.error(t('bulkPartial', { succeeded, failed: failed.length }))
+      } else {
+        toast.success(t('bulkComplete', { succeeded, failed: 0 }))
+        setSelected(new Set())
+      }
       router.refresh()
-    } catch {
-      toast.error(t('actionFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('actionFailed'))
     } finally {
       setBusy(false)
     }
@@ -113,6 +135,22 @@ export function CaptureList({ rows, currentParams, canCreate, uploadDisabled, so
               <Button size="sm" disabled={busy} onClick={() => void act('materialize')}>{t('createDrafts')}</Button>
             </>
           ) : null}
+        </div>
+      ) : null}
+      {bulkResult && bulkResult.failures.length > 0 ? (
+        <div role="alert" className="space-y-1 rounded-lg border border-red-200 bg-red-50 p-3 text-sm dark:border-red-900/60 dark:bg-red-950/40">
+          <p className="font-medium text-red-800 dark:text-red-200">
+            {t('bulkPartial', { succeeded: bulkResult.succeeded, failed: bulkResult.failures.length })}
+          </p>
+          <ul className="list-disc space-y-0.5 pl-5 text-red-700 dark:text-red-300">
+            {bulkResult.failures.map((item) => (
+              <li key={item.id}>
+                <span className="font-medium">{item.name}</span>
+                {' — '}
+                {item.error}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
       <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">

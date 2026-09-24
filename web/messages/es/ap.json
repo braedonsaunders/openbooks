@@ -70,7 +70,7 @@
     "emptyDescriptionNoGrant": "Cargue documentos de proveedor PDF, JPEG, PNG o TIFF para comenzar. Necesita acceso de creación de cuentas por pagar para subir documentos.",
     "selected": "{count, plural, =0 {Ninguno seleccionado} one {# seleccionado} other {# seleccionados}}", "select": "Seleccionar", "selectDocument": "Seleccionar {name}",
     "reprocess": "Reprocesar", "reject": "Rechazar", "createDraft": "Crear borrador", "createDrafts": "Crear borradores",
-    "bulkComplete": "Acción masiva terminada: {succeeded} correctas, {failed} fallidas.", "actionFailed": "La acción de captura falló.",
+    "bulkComplete": "Acción masiva terminada: {succeeded} correctas, {failed} fallidas.", "bulkPartial": "Acción masiva parcialmente terminada: {succeeded} correctas, {failed} fallidas. Los documentos fallidos siguen seleccionados con sus motivos abajo.", "actionFailed": "La acción de captura falló.",
     "rejected": "Documento rechazado.", "reprocessQueued": "Documento en cola para reprocesamiento.", "draftCreated": "Borrador de compras creado.", "openDraft": "Abrir borrador de compras",
     "bill": "Factura de proveedor", "credit": "Abono de proveedor",
     "columns": { "document": "Documento", "vendor": "Proveedor", "invoice": "N.º de factura", "date": "Fecha de factura", "total": "Total", "status": "Estado", "received": "Recibido" },

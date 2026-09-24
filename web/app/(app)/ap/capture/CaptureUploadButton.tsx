@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { FileUp, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 
 export function CaptureUploadButton({ disabled = false }: { disabled?: boolean }) {
   const t = useTranslations('ap.capture')
@@ -20,12 +21,15 @@ export function CaptureUploadButton({ disabled = false }: { disabled?: boolean }
       const form = new FormData()
       for (const file of Array.from(files)) form.append('files', file)
       const response = await fetch('/api/ap-capture', { method: 'POST', body: form })
-      const body = (await response.json()) as { ids?: string[]; error?: string }
-      if (!response.ok) throw new Error(body.error ?? 'upload_failed')
+      // The status is checked before the body parses, and the server's
+      // named refusal (not configured, oversized batch) is toasted — never
+      // a SyntaxError or a generic fallback that hides the remedy.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('uploadFailed')))
+      const body = (await response.json()) as { ids?: string[] }
       toast.success(t('uploadComplete', { count: body.ids?.length ?? files.length }))
       router.refresh()
-    } catch {
-      toast.error(t('uploadFailed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('uploadFailed'))
     } finally {
       setUploading(false)
       if (input.current) input.current.value = ''
