@@ -27,7 +27,9 @@
 import { sql } from "drizzle-orm";
 import { sum } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
+import "./employee-facts.ts";
 import {
   calculateGbNic,
   calculateGbPaye,
@@ -144,6 +146,19 @@ export async function computeGbStatutory(
     );
   }
   const tables = gbTablesForTaxYear(taxYear);
+
+  const nicCategoryCertificate = certificateFor("gb_nic_category");
+  const nicCategoryRaw = empFact("GB", {
+    gb_nic_category_letter: nicCategoryCertificate?.answers.category_letter ?? null,
+  }, "gb_nic_category_letter");
+  const nicCategory = resolveEmployeeFact("GB", "gb_nic_category_letter", nicCategoryRaw);
+  if (nicCategory !== "A") {
+    throw new PayrollPackError(
+      `GB payroll cannot calculate National Insurance category ${nicCategory}: this pack currently `
+      + "implements category A only, and must not apply its employee or employer rates to another "
+      + "category. Use payroll software that supports this HMRC category until this pack adds its rules.",
+    );
+  }
 
   const studentLoanPlan = certificateFor("gb_starter_checklist")?.answers.student_loan_plan;
   if (studentLoanPlan && studentLoanPlan !== "none") {

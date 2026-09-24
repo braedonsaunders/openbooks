@@ -47,7 +47,7 @@ test("certificates are a starter checklist and a coding notice, not a W-4 clone"
   assert.equal(GB_CERTIFICATES.country, "GB");
   assert.deepEqual(
     GB_CERTIFICATES.certificates.map((certificate) => certificate.key),
-    ["gb_starter_checklist", "gb_tax_code_notice"],
+    ["gb_starter_checklist", "gb_tax_code_notice", "gb_nic_category"],
   );
   const [checklist, notice] = GB_CERTIFICATES.certificates;
   const declaration = checklist!.fields.find((field) => field.key === "starter_declaration")!;
@@ -161,5 +161,4 @@ test("filings declare the PAYE program type with the P60 and P45 statements", ()
     assert.equal(filing.amendment.supported, true);
   }
 });
-
 
