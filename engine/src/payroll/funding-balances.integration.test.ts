@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
 import { payRunFunding } from "./readiness.ts";
+import { createPayRun } from "./run-lifecycle.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 /**
@@ -70,8 +71,30 @@ async function ledgerBankBalance(org: ScratchOrg): Promise<string> {
   return rows.rows[0]!.balance;
 }
 
-async function fundingBankBalance(org: ScratchOrg): Promise<string> {
-  const funding = await payRunFunding(org.orgId, randomUUID());
+/**
+ * Funding is per-run since the missing-run refusal: the balance legs under
+ * test need a real run to read through. The assertions below are unchanged —
+ * only the setup names a run instead of a random id.
+ */
+async function fundingRun(org: ScratchOrg, actorId: string): Promise<string> {
+  await db.execute(sql`
+    update orgs set settings = settings || '{"features":{"payroll":true}}'::jsonb
+     where id = ${org.orgId}`);
+  const scheduleId = randomUUID();
+  await db.execute(sql`
+    insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                               pay_date_offset_days, is_active, created_by, updated_by)
+    values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+            ${actorId}, ${actorId})`);
+  const run = await createPayRun({
+    orgId: org.orgId, actorId, payScheduleId: scheduleId,
+    periodStart: "2026-07-05", periodEnd: "2026-07-18",
+  });
+  return run.documentId;
+}
+
+async function fundingBankBalance(org: ScratchOrg, documentId: string): Promise<string> {
+  const funding = await payRunFunding(org.orgId, documentId);
   const account = funding.accounts.find((a) => a.id === org.accounts.bank);
   assert.ok(account, "the fixture bank account must appear in funding");
   return account.balance;
@@ -88,8 +111,9 @@ test("funding nets a voided transfer instead of counting only its reversal (F-t0
     await db.execute(sql`update journal_entries set status = 'reversed' where id = ${original} and org_id = ${org.orgId}`);
 
     // The ledger nets the void pair to zero; funding must read the same.
+    const documentId = await fundingRun(org, actor);
     assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
-    assert.equal(cmp(await fundingBankBalance(org), "0"), 0);
+    assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -103,8 +127,9 @@ test("funding excludes secondary-book postings like the banking roster", { skip:
     await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values(${secondary},${org.orgId},'TAX','Tax',false,true,true)`);
     await postFundingJournal(org, actor, "2000", "tax-book", secondary);
 
+    const documentId = await fundingRun(org, actor);
     assert.equal(cmp(await ledgerBankBalance(org), "0"), 0);
-    assert.equal(cmp(await fundingBankBalance(org), "0"), 0);
+    assert.equal(cmp(await fundingBankBalance(org, documentId), "0"), 0);
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
