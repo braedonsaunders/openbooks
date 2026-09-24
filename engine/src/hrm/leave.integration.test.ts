@@ -1306,3 +1306,63 @@ test("OM-11: manager on-behalf filing succeeds for a managed employment and refu
     assert.equal(childDrafts, 0, "a refused on-behalf filing leaves no rows behind");
   });
 });
+
+test("eight concurrent recordings of one day produce one row and seven named refusals", { skip: !DB }, async () => {
+  // The double-record race: two concurrent recordAbsence POSTs both pass the
+  // count==0 check and both insert, and only a non-unique index exists, so
+  // the calendar nets double hours. The partial day guard (0337, one live
+  // row per employment and day) settles the race in storage; every loser —
+  // whether it loses at the count check or at the unique index — is refused
+  // by name, never a raw 23505.
+  await withHarness(async (h) => {
+    const workerParty = await linkPerson(h.org.orgId, h.employeeId);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: workerParty });
+    const type = await seedType(h.org.orgId, h.managerId);
+    await seedPolicy(h.org.orgId, h.managerId, type.id);
+
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        recordAbsence({
+          orgId: h.org.orgId, actorId: h.managerId, employmentId,
+          onDate: "2026-08-15", hours: "8", leaveTypeId: type.id,
+        })),
+    );
+    const fulfilled = attempts.filter((outcome) => outcome.status === "fulfilled");
+    const rejected = attempts.filter((outcome) => outcome.status === "rejected");
+    assert.equal(fulfilled.length, 1, "exactly one recording wins the day");
+    assert.equal(rejected.length, 7);
+    for (const outcome of rejected) {
+      assert.ok(outcome.status === "rejected");
+      assert.ok(outcome.reason instanceof LeaveError, `losers refuse by name, got ${String(outcome.reason)}`);
+      assert.match(outcome.reason.message, /already recorded/);
+    }
+    const rows = (await db.execute<{ n: number; hours: string }>(sql`
+      select count(*)::int as n, sum(hours)::text as hours from hrm_absences
+       where org_id = ${h.org.orgId} and employment_id = ${employmentId} and on_date = '2026-08-15'
+         and reversal_of is null`)).rows[0]!;
+    assert.equal(rows.n, 1, "the day carries one live row, never two");
+    assert.equal(rows.hours, "8.00", "the calendar nets single hours for the day");
+  });
+});
+
+test("the absence day guard exists, is valid, and covers live rows only", { skip: !DB }, async () => {
+  // The guard's own property: the index the race test leans on is present,
+  // usable (never INVALID from a failed concurrent build), partial to live
+  // rows so reversals stay insertable, and keyed exactly on the day.
+  const guard = (await db.execute<{
+    valid: boolean; predicate: string | null; columns: string;
+  }>(sql`
+    select i.indisvalid as valid,
+           pg_get_expr(i.indpred, i.indrelid) as predicate,
+           (select string_agg(a.attname, ',' order by o.ord)
+              from unnest(i.indkey) with ordinality as o(attnum, ord)
+              join pg_attribute a on a.attrelid = i.indrelid and a.attnum = o.attnum) as columns
+      from pg_index i
+      join pg_class c on c.oid = i.indexrelid
+     where c.relname = 'hrm_absences_no_double_record'`)).rows[0];
+  assert.ok(guard, "0337 built the day guard");
+  assert.equal(guard.valid, true, "a failed concurrent build must never leave the guard INVALID");
+  assert.match(guard.predicate ?? "", /reversal_of IS NULL/);
+  assert.match(guard.predicate ?? "", /is_pre_guard_legacy/);
+  assert.equal(guard.columns, "org_id,employment_id,on_date");
+});

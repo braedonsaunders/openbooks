@@ -1055,13 +1055,28 @@ async function writeApprovalEffects(
   await assertNoApprovedOverlap(exec, orgId, request.employment_id, startsOn, endsOn, request.id);
   const perDay = splitHoursAcrossDays(String(request.hours), days.length);
   for (let index = 0; index < days.length; index += 1) {
-    const absence = (await exec.execute<{ id: string }>(sql`
-      insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
-        leave_type_id, source, created_by, updated_by)
-      values (${orgId}, ${request.id}, ${request.employment_id}, ${days[index]},
-        ${perDay[index]}, ${request.leave_type_id}, 'request', ${actorId}, ${actorId})
-      returning id
-    `)).rows[0];
+    // The overlap re-validation above cannot arbitrate two approvals
+    // deciding at once: both pass it and both write. The partial day guard
+    // (0337) settles that race in storage, and the loser lands here —
+    // translated to a named refusal, never a raw 23505.
+    let absence: { id: string } | undefined;
+    try {
+      absence = (await exec.execute<{ id: string }>(sql`
+        insert into hrm_absences (org_id, leave_request_id, employment_id, on_date, hours,
+          leave_type_id, source, created_by, updated_by)
+        values (${orgId}, ${request.id}, ${request.employment_id}, ${days[index]},
+          ${perDay[index]}, ${request.leave_type_id}, 'request', ${actorId}, ${actorId})
+        returning id
+      `)).rows[0];
+    } catch (error) {
+      if ((error as { code?: string }).code === "23505") {
+        throw new LeaveError(
+          "REFUSED",
+          `absence day ${days[index]} was just recorded by another approval — reload the request and decide again`,
+        );
+      }
+      throw error;
+    }
     if (!absence) {
       throw new LeaveError("REFUSED", `absence for ${days[index]} was not stored — no row was written; the decision rolled back, decide again`);
     }
