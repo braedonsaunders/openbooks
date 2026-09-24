@@ -838,6 +838,73 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
   });
 });
 
+test("expiry alerts resolve managers from the exact holder employment", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const branchId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${branchId}, ${h.org.orgId}, ${h.org.subsidiaryId}, 'Alert Branch', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)
+    `);
+    const party = async (name: string): Promise<string> => {
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${id}, ${h.org.orgId}, 'person', ${name}, true, '{}'::jsonb)
+      `);
+      return id;
+    };
+    const employment = async (partyId: string, subsidiaryId: string): Promise<string> => {
+      const id = randomUUID();
+      await db.execute(sql`
+        insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+        values (${id}, ${h.org.orgId}, ${partyId}, ${subsidiaryId}, 1)
+      `);
+      await db.execute(sql`
+        insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, recorded_at)
+        values (${h.org.orgId}, ${id}, 1, 'active', '2020-01-01', now())
+      `);
+      return id;
+    };
+    const userFor = async (name: string, partyId: string): Promise<string> => {
+      const userId = await createScratchUser(h.org.orgId, name, `alert_${randomUUID().slice(0, 8)}`);
+      await db.execute(sql`update users set party_id = ${partyId} where org_id = ${h.org.orgId} and id = ${userId}`);
+      return userId;
+    };
+    const holderPartyId = await party("Dual-entity holder");
+    const holderA = await employment(holderPartyId, h.org.subsidiaryId);
+    const holderB = await employment(holderPartyId, branchId);
+    const managerAPartyId = await party("Entity A manager");
+    const managerBPartyId = await party("Entity B manager");
+    const managerA = await employment(managerAPartyId, h.org.subsidiaryId);
+    const managerB = await employment(managerBPartyId, branchId);
+    const managerAUserId = await userFor("Manager A", managerAPartyId);
+    const managerBUserId = await userFor("Manager B", managerBPartyId);
+    for (const [employmentId, managerEmploymentId] of [[holderA, managerA], [holderB, managerB]]) {
+      await db.execute(sql`
+        insert into reporting_relationships
+          (org_id, employment_id, manager_employment_id, kind, relationship_id, version_no, effective_from, recorded_at)
+        values (${h.org.orgId}, ${employmentId}, ${managerEmploymentId}, 'line', ${randomUUID()}, 1, '2020-01-01', now())
+      `);
+    }
+    await db.execute(sql`update users set party_id = ${holderPartyId} where org_id = ${h.org.orgId} and id = ${h.adminId}`);
+    const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
+    const today = await businessToday(h.org.orgId);
+    const qualification = await recordQualification(db, {
+      orgId: h.org.orgId, actorId: h.adminId, employmentId: holderB,
+      typeId, issuedOn: addDays(today, -100), expiresOn: addDays(today, 30),
+    });
+    await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: qualification.id });
+
+    await runQualificationAlertScan(new Date());
+    const recipients = (await db.execute<{ user_id: string }>(sql`
+      select distinct user_id::text from notifications
+       where org_id = ${h.org.orgId} and kind = 'hrm_qualification_expiry'
+    `)).rows.map((row) => row.user_id);
+    assert.ok(recipients.includes(managerBUserId), "the manager for the alerted employment receives its alert");
+    assert.ok(!recipients.includes(managerAUserId), "another employment of the same party does not receive the alert");
+  });
+});
+
 test("alert scan enumerates orgs past RLS: a constrained caller still scans", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const worker = await seedWorker(h.org.orgId, h.org.subsidiaryId, "RLS Hand");

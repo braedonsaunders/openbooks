@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { requireHrmCertificationsRead } from "../authorization.ts";
+import { requireAggregateCertificationsRead } from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { HrmQualificationError } from "./errors.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
@@ -14,7 +14,7 @@ import {
   type SqlExecutor,
   type StoredQualificationStatus,
 } from "./shared.ts";
-import type { RequirementSubjectKind, RequirementSeverity } from "./requirements.ts";
+import { resolveSubject, type RequirementSubjectKind, type RequirementSeverity } from "./requirements.ts";
 
 /**
  * Dispatch gating (HR-14): can this person be on that job today?
@@ -87,9 +87,21 @@ export async function checkAssignment(
   const employmentId = requireId(input.employmentId, "employmentId");
   const subjectId = requireId(input.subjectId, "subjectId");
   const subjectKind = input.subjectKind;
-  await requireHrmCertificationsRead(exec, orgId, actorId);
+  const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
   await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Dispatch gating");
   const on = input.on ? requireDate(input.on, "on") : await businessToday(orgId);
+  const employmentScope = allowed === null ? null : `{${[...allowed].join(",")}}`;
+  const visibleEmployment = (await exec.execute<{ id: string }>(sql`
+    select id from worker_employments
+     where org_id = ${orgId}::uuid and id = ${employmentId}::uuid
+       and (${employmentScope}::uuid[] is null or employer_subsidiary_id = any(${employmentScope}::uuid[]))
+  `)).rows[0];
+  if (!visibleEmployment) {
+    throw new HrmQualificationError(
+      "The employment was not found in this organization or you cannot read it — use a visible employment and retry the qualification check.",
+    );
+  }
+  await resolveSubject(exec, orgId, subjectKind, subjectId, allowed, on);
   return checkAssignmentInternal(exec, orgId, employmentId, subjectKind, subjectId, on);
 }
 
