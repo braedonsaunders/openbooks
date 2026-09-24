@@ -90,3 +90,33 @@ export function currencyLabel(amount: number, currency: string, locale: string):
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+/**
+ * Whole-unit counts (rows, lines, documents) in the operator locale — never
+ * a hardcoded 'en-CA'/'en-US' literal at the call site.
+ */
+export function formatCount(value: number, locale: string): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value);
+}
+
+/**
+ * A 0–1 fraction as a localized percent string. String-concatenating '%'
+ * hardcodes the English placement (`13%` vs the French `13 %` vs the Turkish
+ * `%13`), so every bare `${rate}%` goes through here instead.
+ */
+export function formatPercent01(fraction: number, locale: string, maximumFractionDigits = 0): string {
+  return new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits }).format(fraction);
+}
+
+/**
+ * A civil YYYY-MM-DD date as a medium date in the operator locale, anchored
+ * at UTC noon so the civil day never shifts with the server timezone.
+ */
+export function formatCivilDate(isoDate: string, locale: string): string {
+  return new Date(`${isoDate.slice(0, 10)}T12:00:00Z`).toLocaleDateString(locale, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
