@@ -28,7 +28,7 @@ import { saveTemplate } from "./templates.ts";
 import { listRetentionActions, saveSchedule } from "./retention.ts";
 
 /**
- * H-HRMDOCS two-entity regressions (integration partition): an HR actor
+ * Two-entity document regressions: an HR actor
  * restricted to subsidiary A lists only A's subjects' documents, and
  * reads, downloads, sends, holds, voids, generates and template writes
  * against B's subjects are refused — with B's rows proven untouched in

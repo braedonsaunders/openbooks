@@ -13,7 +13,7 @@ import { saveCategory } from "./categories.ts";
 import { listSchedules, saveSchedule } from "./retention.ts";
 
 /**
- * H-RETENTION regression (integration partition): retention schedules are
+ * Retention schedules are
  * org-wide policy — they purge every legal entity's documents — so a
  * subsidiary-restricted manager cannot write them (canonical 403), while
  * the unrestricted admin still can and the read list stays open.

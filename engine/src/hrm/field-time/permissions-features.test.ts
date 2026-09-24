@@ -1,10 +1,7 @@
 /**
- * HR-20 durable gate tests: field-time features and permissions.
- *
- * feature-registry.test.ts is truncated mid-test at the base tip, so
- * these pins live here until the integrator repairs that file — the
- * assertions are the same shape (registered, defaulted, parented,
- * granted to the same built-in roles as time.read/manage).
+ * Field-time features and permissions: same shape as feature-registry tests
+ * (registered, defaulted, parented, granted to the same built-in roles as
+ * time.read/manage).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

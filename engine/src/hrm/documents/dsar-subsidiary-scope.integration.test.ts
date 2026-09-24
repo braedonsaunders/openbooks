@@ -18,7 +18,7 @@ import {
 } from "./dsar.ts";
 
 /**
- * H-DSAR two-entity regressions (integration partition): an HR actor
+ * Two-entity DSAR regressions: an HR actor
  * restricted to subsidiary A cannot queue a full data ZIP for B's people,
  * lists only in-scope subjects' exports, and cannot download (or mark
  * delivered) B's ready export. Proofs are read back from storage, never
