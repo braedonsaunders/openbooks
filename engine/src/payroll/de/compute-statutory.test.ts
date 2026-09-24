@@ -148,11 +148,21 @@ test("ceilings cap the SV base; KiSt elected at 9% outside BY/BW", () => {
 });
 
 test("Sachsen PV split and BY KiSt at 8%", () => {
-  // SN: PV-AN 3000 × 3.4% = 102.00, PV-AG 3000 × 0.8% = 24.00.
-  const sn = fakeCtx({ region: "SN" });
+  // BMG financing summary: https://www.bundesgesundheitsministerium.de/themen/pflege/online-ratgeber-pflege/die-pflegeversicherung/finanzierung
+  // 2026 €3,000, not childless: 2.3% employee (€69), 1.3% employer (€39).
+  // The 1-point employer-rate reduction moves each equal half by 0.5 points.
+  const sn = fakeCtx({ region: "SN", pv: { kinderlosenzuschlag: "false", abschlag_kinder: "0" } });
   const snResult = computeDeStatutoryWithRates(sn.ctx, { kvz: 2.9 });
-  assert.equal(snResult.PV_W, "102.0000");
-  assert.equal(snResult.PV_ER, "24.0000");
+  assert.equal(snResult.PV_W, "69.0000");
+  assert.equal(snResult.PV_ER, "39.0000");
+  const snChildless = fakeCtx({ region: "SN", pv: { kinderlosenzuschlag: "true", abschlag_kinder: "0" } });
+  const snChildlessResult = computeDeStatutoryWithRates(snChildless.ctx, { kvz: 2.9 });
+  assert.equal(snChildlessResult.PV_W, "87.0000"); // +0.6 points, borne by employee
+  assert.equal(snChildlessResult.PV_ER, "39.0000");
+  const snDiscountedChildren = fakeCtx({ region: "SN", pv: { kinderlosenzuschlag: "false", abschlag_kinder: "2" } });
+  const snDiscountedResult = computeDeStatutoryWithRates(snDiscountedChildren.ctx, { kvz: 2.9 });
+  assert.equal(snDiscountedResult.PV_W, "54.0000"); // −0.25 points per eligible child
+  assert.equal(snDiscountedResult.PV_ER, "39.0000");
   // BY confession: 8% of BK.
   const by = fakeCtx({
     region: "BY",

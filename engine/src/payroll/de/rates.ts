@@ -176,7 +176,10 @@ export const DE_2026_CEILINGS = {
  * ist" — that Land is Sachsen (only Land that kept Buß- und Bettag), and
  * "für die Berechnung des Beitragsanteils des Arbeitgebers ein
  * Beitragssatz in Höhe des um einen Prozentpunkt verminderten
- * Beitragssatzes" (§58 Abs. 5).
+ * Beitragssatzes" (§58 Abs. 5). Since the base contribution is otherwise
+ * split equally, this shifts each half by 0.5 percentage points, not 1.0.
+ * BMG contribution-rate summary (including Sachsen employer rate):
+ * https://www.bundesgesundheitsministerium.de/themen/pflege/online-ratgeber-pflege/die-pflegeversicherung/finanzierung
  */
 export const DE_2026_RATES = {
   /** KV allgemeiner Satz, percent. */
@@ -191,8 +194,8 @@ export const DE_2026_RATES = {
   pvKinderlosenzuschlag: 0.6,
   /** PV Abschlag per child (2nd–5th), percentage points. */
   pvKindAbschlag: 0.25,
-  /** Sachsen: employee-borne extra share, percentage points. */
-  pvSachsenExtra: 1.0,
+  /** Sachsen: employee/employer differential from an equal half, points. */
+  pvSachsenDifferential: 0.5,
 } as const;
 
 export const DE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
