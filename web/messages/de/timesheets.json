@@ -215,6 +215,8 @@
     "geofencesTitle": "Stempel-Geofences",
     "geofencesHint": "Ein Kreis und ein Polygon pro Projekt. Fixes außerhalb werden erfasst und markiert, nie verweigert.",
     "noGeofences": "Kein Geofence hinterlegt — jeder Stempel lautet nicht erforderlich.",
+    "geofenceLoadFailed": "Geofences konnten nicht geladen werden; die angezeigten Zeilen können veraltet sein.",
+    "retry": "Erneut versuchen",
     "circle": "Kreis",
     "polygon": "Polygon",
     "corners": "Ecken",

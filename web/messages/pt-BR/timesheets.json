@@ -215,6 +215,8 @@
     "geofencesTitle": "Cercas de ponto",
     "geofencesHint": "Um círculo e um polígono por projeto. Fora se registra e sinaliza, nunca se recusa.",
     "noGeofences": "Sem cerca — todo ponto fica como não exigido.",
+    "geofenceLoadFailed": "Não foi possível carregar as cercas; as linhas exibidas podem estar desatualizadas.",
+    "retry": "Tentar novamente",
     "circle": "Círculo",
     "polygon": "Polígono",
     "corners": "vértices",

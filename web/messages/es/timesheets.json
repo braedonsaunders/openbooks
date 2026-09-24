@@ -215,6 +215,8 @@
     "geofencesTitle": "Geocercas de fichaje",
     "geofencesHint": "Un círculo y un polígono por proyecto. Lo de fuera se registra y se marca, nunca se rechaza.",
     "noGeofences": "Sin geocerca — todo fichaje queda como no requerido.",
+    "geofenceLoadFailed": "No se pudieron cargar las geocercas; las filas mostradas podrían estar desactualizadas.",
+    "retry": "Reintentar",
     "circle": "Círculo",
     "polygon": "Polígono",
     "corners": "vértices",

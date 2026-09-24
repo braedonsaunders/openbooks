@@ -215,6 +215,8 @@
     "geofencesTitle": "打刻ジオフェンス",
     "geofencesHint": "プロジェクトごとに円と多角形を1つずつ。圏外も記録・フラグ表示し、拒否しません。",
     "noGeofences": "ジオフェンス未宣言 — すべての打刻は不要扱いです。",
+    "geofenceLoadFailed": "ジオフェンスを読み込めませんでした。表示中の内容は古い可能性があります。",
+    "retry": "再試行",
     "circle": "円",
     "polygon": "多角形",
     "corners": "頂点",

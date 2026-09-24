@@ -32,6 +32,8 @@ export function GeofenceSection({
   const t = useTranslations('timesheets')
   const [fences, setFences] = useState<GeofenceRow[]>(initial)
   const [visible, setVisible] = useState(true)
+  const [loaded, setLoaded] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   const [kind, setKind] = useState<'circle' | 'polygon'>('circle')
   const [lat, setLat] = useState('')
   const [lng, setLng] = useState('')
@@ -41,38 +43,35 @@ export function GeofenceSection({
   const [error, setError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
-    const res = await fetch(`/api/time/geofences?projectId=${projectId}`, { credentials: 'same-origin' })
-    // A 404 is the feature-off path (or no grant): the section hides,
-    // never an empty or forbidden panel.
-    if (res.status === 404 || res.status === 403) {
-      setVisible(false)
-      return
+    try {
+      const res = await fetch(`/api/time/geofences?projectId=${projectId}`, { credentials: 'same-origin' })
+      // A 404 is the feature-off path (or no grant): the section hides,
+      // never an empty or forbidden panel.
+      if (res.status === 404 || res.status === 403) {
+        setVisible(false)
+        setLoaded(true)
+        return
+      }
+      if (!res.ok) throw new Error('geofences could not be loaded')
+      const payload = (await res.json()) as { geofences: GeofenceRow[] }
+      setFences(payload.geofences)
+      setLoadError(false)
+      setLoaded(true)
+    } catch {
+      setLoadError(true)
+      setLoaded(true)
     }
-    if (!res.ok) return
-    const payload = (await res.json()) as { geofences: GeofenceRow[] }
-    setFences(payload.geofences)
   }, [projectId])
 
-  // Mount load through a promise chain (approval-actions precedent):
-  // state settles in the continuation, never synchronously in the body.
   useEffect(() => {
     let cancelled = false
-    fetch(`/api/time/geofences?projectId=${projectId}`, { credentials: 'same-origin' })
-      .then((res) => {
-        if (res.status === 404 || res.status === 403) {
-          if (!cancelled) setVisible(false)
-          return null
-        }
-        return res.ok ? res.json() : null
-      })
-      .then((payload: { geofences: GeofenceRow[] } | null) => {
-        if (!cancelled && payload) setFences(payload.geofences)
-      })
-      .catch(() => {})
+    Promise.resolve().then(() => {
+      if (!cancelled) void reload()
+    })
     return () => {
       cancelled = true
     }
-  }, [projectId])
+  }, [reload])
 
   const save = useCallback(async () => {
     setBusy(true)
@@ -164,7 +163,13 @@ export function GeofenceSection({
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('field.geofencesTitle')}</h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('field.geofencesHint')}</p>
       </div>
-      {fences.length === 0 ? <p className="text-sm text-slate-500">{t('field.noGeofences')}</p> : null}
+      {loadError ? (
+        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+          <span>{t('field.geofenceLoadFailed')}</span>
+          <Button variant="outline" size="sm" onClick={() => void reload()}>{t('field.retry')}</Button>
+        </div>
+      ) : null}
+      {loaded && !loadError && fences.length === 0 ? <p className="text-sm text-slate-500">{t('field.noGeofences')}</p> : null}
       <ul className="space-y-2">
         {fences.map((fence) => (
           <li key={fence.id} className="flex items-center gap-2 rounded-lg border border-slate-100 p-3 text-sm dark:border-slate-800">
