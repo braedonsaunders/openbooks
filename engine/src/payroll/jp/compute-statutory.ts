@@ -27,7 +27,7 @@
  * unknown code must stop here, not price a neighbour's rate.
  */
 import { toUnits } from "../../money/money.ts";
-import { empFact } from "../employee-facts.ts";
+import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 // Side effect: registers JP_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
 // side effect of the pack registry.
@@ -126,6 +126,23 @@ export async function computeJpStatutoryWithRates(
     );
   }
   const standard = Number(standardRaw);
+
+  const insuranceCertificate = certificateFor("jp_employment_insurance");
+  const insuranceRaw = empFact("JP", {
+    jp_employment_insurance_coverage: insuranceCertificate?.answers.coverage_status ?? null,
+  }, "jp_employment_insurance_coverage");
+  const insuranceCoverage = resolveEmployeeFact(
+    "JP",
+    "jp_employment_insurance_coverage",
+    insuranceRaw,
+  );
+  if (insuranceCoverage === "insured") {
+    fail(
+      "the employee is covered by 雇用保険, but employee/employer premiums and the deduction "
+      + "before the 月額表 lookup are not implemented. Complete this run in payroll software that "
+      + "calculates the applicable MHLW employment-insurance rates; do not omit the premiums.",
+    );
+  }
 
   const kaigo = empFact("JP", ctx.emp, "jp_kaigo_dainigou");
   if (kaigo !== "false") {
