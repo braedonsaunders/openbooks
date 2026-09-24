@@ -193,6 +193,8 @@ export interface ReplaceTargetsInput extends AllocationOrgScope {
 
 export interface VersionTransitionInput {
   orgId: string;
+  /** Route parent used to reject a mismatched nested resource before mutation. */
+  expectedRuleId?: string;
   actorId: string | null;
   reason?: string;
   /** Subsidiaries the actor may configure; null = unrestricted (explicit sentinel, never omitted). */
@@ -1165,6 +1167,9 @@ export async function publishVersion(
   return withOrgTransaction(orgId, async () => {
     const row = await loadVersionRow(orgId, id);
     const version = mapVersion(row, "version_");
+    if (input.expectedRuleId !== undefined && version.ruleId !== uuid(input.expectedRuleId, "ruleId")) {
+      throw new AllocationRuleError("NOT_FOUND", "not found");
+    }
     // Lock the rule head so two overlapping publishes cannot both pass validation.
     const head = await loadRuleHead(orgId, version.ruleId, true);
     refuseSystemRule(head, "published");
@@ -1218,6 +1223,9 @@ export async function retireVersion(
   const id = uuid(versionId, "versionId");
   return withOrgTransaction(orgId, async () => {
     const version = mapVersion(await loadVersionRow(orgId, id), "version_");
+    if (input.expectedRuleId !== undefined && version.ruleId !== uuid(input.expectedRuleId, "ruleId")) {
+      throw new AllocationRuleError("NOT_FOUND", "not found");
+    }
     const head = await loadRuleHead(orgId, version.ruleId, true);
     refuseSystemRule(head, "retired");
     if (version.status === "retired") {

@@ -256,6 +256,8 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   assert.equal(branched.status, 201)
   assert.equal(branched.body.version.versionNo, 2)
 
+  const wrongParentId = '00000000-0000-0000-0000-000000000000'
+
   const edited = await read<{ version: { memoTemplate: string } }>(
     await versionRoute.PATCH(
       jsonRequest('http://openbooks.test/x', 'PATCH', {
@@ -301,6 +303,14 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   assert.equal(saved.status, 200)
   assert.deepEqual(saved.body.targets.map((row) => row.sequence), [1, 2])
 
+  const mismatchedPublish = await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), {
+    params: Promise.resolve({ id: wrongParentId, versionId: branched.body.version.id }),
+  })
+  assert.equal(mismatchedPublish.status, 404)
+  const remainsDraft = await db.execute<{ status: string }>(sql`
+    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`)
+  assert.equal(remainsDraft.rows[0]?.status, 'draft')
+
   const published = await read<{ version: { status: string; definitionHash: string }; targets: unknown[] }>(
     await publishRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', {}), {
       params: Promise.resolve({ id: ruleId, versionId: branched.body.version.id }),
@@ -308,6 +318,14 @@ test('version lifecycle: draft edit, publish problems inline, targets, retire', 
   )
   assert.equal(published.status, 200)
   assert.equal(published.body.version.status, 'published')
+
+  const mismatchedRetire = await retireRoute.POST(jsonRequest('http://openbooks.test/x', 'POST', { reason: 'wrong parent' }), {
+    params: Promise.resolve({ id: wrongParentId, versionId: branched.body.version.id }),
+  })
+  assert.equal(mismatchedRetire.status, 404)
+  const remainsPublished = await db.execute<{ status: string }>(sql`
+    select status from allocation_rule_versions where org_id = ${f.orgId} and id = ${branched.body.version.id}`)
+  assert.equal(remainsPublished.rows[0]?.status, 'published')
 
   const frozen = await targetsRoute.PUT(
     jsonRequest('http://openbooks.test/x', 'PUT', {
