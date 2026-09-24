@@ -9,10 +9,11 @@
  * What the pack declares:
  * - statutory slots: PAYE income tax, Class 1 NIC employee (primary) and
  *   employer (secondary), computed end to end for 2026/27, 2025/26 and
- *   2024/25 — each year from its own transcribed tables (year-tables.ts). Student-loan /
- *   postgraduate-loan and workplace pension are REFUSED by name (see
- *   jurisdictions.ts header): no slot, no engine. The Employment Allowance
- *   (£10,500) is tenant-entered, never computed (conditional eligibility).
+ *   2024/25 — each year from its own transcribed tables (year-tables.ts).
+ *   Student and postgraduate loans use the declared NIC-able earnings base.
+ *   Workplace-pension contributions remain employer-scheme configured. The
+ *   Employment Allowance (£10,500) is tenant-entered, never computed
+ *   (conditional eligibility).
  * - fiscal tax year opening 6 April, named for the opening year (2026/27).
  * - four nations, four supported: ENG/WLS/NIR share the rUK bands and SCT
  *   prices its own starter..top bands through the SCT edition (GB_SCT_BANDS),
@@ -69,7 +70,7 @@ export const GB_KNOWN_NATIONS: readonly string[] = [...GB_NATIONS];
  * Office quoted on the employer's PAYE reference, not to an org-wide vendor
  * row this pack establishes), so both shares surface unassigned until a
  * destination is configured — the same treatment as the US pack's EFTPS
- * deposits. No student-loan or pension slot: refused, not forgotten.
+ * deposits. Student and postgraduate loan deductions remit through the same HMRC payroll account.
  */
 export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
   {
@@ -112,6 +113,30 @@ export const GB_STATUTORY_SLOTS: readonly PayrollStatutorySlot[] = [
         systemKey: "nic",
         kind: "employer_contribution",
         sequence: 210,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+    ],
+  },
+  {
+    key: "student-loans",
+    liabilityAccountRole: "payrollDeductions",
+    components: [
+      {
+        code: "STUDENT-LOAN",
+        name: "Student loan repayment",
+        systemKey: "student_loan",
+        kind: "deduction",
+        sequence: 130,
+        assessedOn: "earnings",
+        remittance: "tax_authority",
+      },
+      {
+        code: "POSTGRADUATE-LOAN",
+        name: "Postgraduate loan repayment",
+        systemKey: "postgraduate_loan",
+        kind: "deduction",
+        sequence: 140,
         assessedOn: "earnings",
         remittance: "tax_authority",
       },
@@ -167,9 +192,9 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   contributoryBases: {
     pensionable: "Class 1 National Insurance-able earnings (primary and secondary)",
     insurable:
-      "unused by the GB pack: Class 1 NIC is the only earnings-assessed levy and it reads "
-      + "pensionable; no second NIC-style base exists and the student-loan/pension tables "
-      + "are untranscribed",
+      "unused by the GB pack: employee and employer Class 1 NIC plus student-loan and "
+      + "postgraduate-loan deductions use the Class 1 NIC-able earnings basis named under "
+      + "pensionable",
   },
   // PAYE gives employee-paid union dues no T4127-U1-style deduction from
   // taxable pay.
@@ -209,8 +234,7 @@ export const GB_PACK: Omit<PayrollCountryPack, "country"> & {
   computeStatutory: computeGbStatutory,
   statutoryEngineLabel: "PAYE",
   factorLabels: { ...GB_FACTOR_LABELS },
-  // No `emp` facts: the engine reads the tax code and student-loan flags
-  // off the certificate answers, never off bare profile keys.
+  // Statutory calculation facts are declared and produced by GB certificates.
   employeeFacts: GB_EMPLOYEE_FACTS,
   employerFacts: [],
 };

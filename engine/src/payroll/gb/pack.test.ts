@@ -55,6 +55,16 @@ test("certificates are a starter checklist and a coding notice, not a W-4 clone"
     declaration.choices!.map((choice) => choice.value),
     ["A", "B", "C"],
   );
+  const loanPlan = checklist!.fields.find((field) => field.key === "student_loan_plan")!;
+  assert.deepEqual(
+    loanPlan.choices!.map((choice) => choice.value),
+    ["none", "plan_1", "plan_2", "plan_4", "plan_5"],
+  );
+  assert.equal(
+    checklist!.fields.find((field) => field.key === "student_loan_postgraduate")?.kind,
+    "flag",
+    "postgraduate and undergraduate loans can be recorded concurrently",
+  );
   // No allowances, no filing statuses, no extra-withholding amount: the
   // checklist routes to an emergency code and HMRC issues the real one.
   for (const field of [...checklist!.fields, ...notice!.fields]) {
@@ -66,12 +76,12 @@ test("certificates are a starter checklist and a coding notice, not a W-4 clone"
   assert.equal(taxCode.kind, "code");
 });
 
-test("slots are PAYE plus employee/employer NIC only — no loan, no pension", () => {
+test("slots declare PAYE, employee/employer NIC, and both loan repayments", () => {
   assert.deepEqual(
     GB_PACK.statutorySlots.map((slot) => slot.key),
-    ["paye", "nic"],
+    ["paye", "nic", "student-loans"],
   );
-  const [paye, nic] = GB_PACK.statutorySlots;
+  const [paye, nic, loans] = GB_PACK.statutorySlots;
   assert.equal(paye!.components[0]!.assessedOn, "taxable_income");
   assert.deepEqual(
     nic!.components.map((component) => component.kind),
@@ -80,6 +90,10 @@ test("slots are PAYE plus employee/employer NIC only — no loan, no pension", (
   for (const component of nic!.components) {
     assert.equal(component.assessedOn, "earnings");
   }
+  assert.deepEqual(
+    loans!.components.map((component) => [component.systemKey, component.kind]),
+    [["student_loan", "deduction"], ["postgraduate_loan", "deduction"]],
+  );
 });
 
 test("2026/27 IS transcribed with its edition stamp, and the pack is installable", () => {
@@ -161,4 +175,3 @@ test("filings declare the PAYE program type with the P60 and P45 statements", ()
     assert.equal(filing.amendment.supported, true);
   }
 });
-

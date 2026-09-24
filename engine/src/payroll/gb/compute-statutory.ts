@@ -1,6 +1,7 @@
 /**
- * The GB pack's statutory pass: PAYE income tax and Class 1 National
- * Insurance (primary and secondary, category A).
+ * The GB pack's statutory pass: PAYE income tax, Class 1 National Insurance
+ * (primary and secondary, category A), and student/postgraduate loan
+ * deductions on NIC-able earnings.
  *
  * Thin by design: every number comes from calculate.ts (pure, gold-tested).
  * This wrapper resolves the employee's operable tax code from the P6/P9
@@ -32,6 +33,7 @@ import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import "./employee-facts.ts";
 import {
   calculateGbNic,
+  calculateGbLoanDeductions,
   calculateGbPaye,
   gbResolveTaxYear,
   resolveGbCumulativeBasis,
@@ -117,6 +119,8 @@ export const GB_FACTOR_LABELS: Readonly<Record<string, string>> = {
   GB_TAXABLE: "Taxable pay this period",
   GB_ADDPAY: "Added pay this period (bonus / back pay)",
   GB_TAX: "PAYE income tax this period",
+  GB_STUDENT_LOAN: "Student loan deduction this period",
+  GB_POSTGRADUATE_LOAN: "Postgraduate loan deduction this period",
 };
 
 export async function computeGbStatutory(
@@ -160,14 +164,21 @@ export async function computeGbStatutory(
     );
   }
 
-  const studentLoanPlan = certificateFor("gb_starter_checklist")?.answers.student_loan_plan;
-  if (studentLoanPlan && studentLoanPlan !== "none") {
-    throw new PayrollPackError(
-      `GB payroll cannot calculate this run while the starter checklist records ${studentLoanPlan}: `
-      + "HMRC student-loan and postgraduate-loan deductions are not yet implemented, so this run "
-      + "must be completed with payroll software that calculates the applicable loan deductions.",
-    );
-  }
+  const starterChecklist = certificateFor("gb_starter_checklist");
+  const studentLoanPlan = resolveEmployeeFact(
+    "GB",
+    "gb_student_loan_plan",
+    empFact("GB", {
+      gb_student_loan_plan: starterChecklist?.answers.student_loan_plan ?? null,
+    }, "gb_student_loan_plan"),
+  );
+  const postgraduateLoan = resolveEmployeeFact(
+    "GB",
+    "gb_postgraduate_loan",
+    empFact("GB", {
+      gb_postgraduate_loan: starterChecklist?.answers.student_loan_postgraduate ?? null,
+    }, "gb_postgraduate_loan"),
+  );
 
   const notice = certificateFor("gb_tax_code_notice");
   const rawCode = notice?.onFile ? notice.answers.tax_code : null;
@@ -239,9 +250,18 @@ export async function computeGbStatutory(
   // Category A: the only NIC letter with an input channel (none exists yet —
   // see the module header). Every other letter is refused by name in docs.
   const nic = calculateGbNic({ earnings: pensionable, periodsPerYear: P, tables });
+  const loan = calculateGbLoanDeductions({
+    earnings: pensionable,
+    periodsPerYear: P,
+    taxYear,
+    studentLoanPlan: studentLoanPlan!,
+    postgraduateLoan: postgraduateLoan === "true",
+  });
 
   pushStatutory("paye", "deduction", "PAYE income tax", paye.tax, 110);
   pushStatutory("nic", "deduction", "National Insurance (employee, primary)", nic.employee, 120);
+  pushStatutory("student_loan", "deduction", "Student loan repayment", loan.studentLoan, 130);
+  pushStatutory("postgraduate_loan", "deduction", "Postgraduate loan repayment", loan.postgraduateLoan, 140);
   pushStatutory(
     "nic", "employer_contribution", "National Insurance (employer, secondary)", nic.employer, 210,
   );
@@ -249,5 +269,7 @@ export async function computeGbStatutory(
     GB_TAXABLE: paye.periodTaxablePay,
     GB_ADDPAY: paye.periodAddedPay,
     GB_TAX: paye.tax,
+    GB_STUDENT_LOAN: loan.studentLoan,
+    GB_POSTGRADUATE_LOAN: loan.postgraduateLoan,
   };
 }

@@ -194,12 +194,21 @@ test(
       const amy = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Amy Stayer", "ENG");
       const hamish = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Hamish Stayer", "SCT");
       const larry = await makeEmployee(org.orgId, org.subsidiaryId, actorId, scheduleId, "Larry Leaver", "ENG");
+      await fileCertificate(org.orgId, amy, actorId, "gb_nic_category", { category_letter: "A" });
+      await fileCertificate(org.orgId, hamish, actorId, "gb_nic_category", { category_letter: "A" });
+      await fileCertificate(org.orgId, larry, actorId, "gb_nic_category", { category_letter: "A" });
       await fileCertificate(org.orgId, amy, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
-      await fileCertificate(org.orgId, amy, actorId, "gb_starter_checklist", { starter_declaration: "A" });
+      await fileCertificate(org.orgId, amy, actorId, "gb_starter_checklist", {
+        starter_declaration: "A", student_loan_plan: "plan_2", student_loan_postgraduate: "true",
+      });
       await fileCertificate(org.orgId, hamish, actorId, "gb_tax_code_notice", { tax_code: "S1257L" });
-      await fileCertificate(org.orgId, hamish, actorId, "gb_starter_checklist", { starter_declaration: "A" });
+      await fileCertificate(org.orgId, hamish, actorId, "gb_starter_checklist", {
+        starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
+      });
       await fileCertificate(org.orgId, larry, actorId, "gb_tax_code_notice", { tax_code: "1257L" });
-      await fileCertificate(org.orgId, larry, actorId, "gb_starter_checklist", { starter_declaration: "A" });
+      await fileCertificate(org.orgId, larry, actorId, "gb_starter_checklist", {
+        starter_declaration: "A", student_loan_plan: "plan_4", student_loan_postgraduate: "false",
+      });
 
       await payMonth(org.orgId, actorId, scheduleId, "2026-05-01", "2026-05-31", true);
       await payMonth(org.orgId, actorId, scheduleId, "2026-06-01", "2026-06-30", true);
@@ -220,6 +229,16 @@ test(
         assert.equal(cmp(slip.payInEmployment, expected.pay), 0, `${slip.employeeName} pay ties to gross`);
         assert.equal(cmp(slip.taxDeducted, expected.tax), 0, `${slip.employeeName} tax ties to PAYE lines`);
         assert.equal(cmp(slip.nicEmployee, expected.nic), 0, `${slip.employeeName} NIC ties to NIC lines`);
+        assert.equal(
+          cmp(slip.studentLoanDeducted, slip.employeeName === "Amy Stayer" ? "98" : "0"),
+          0,
+          `${slip.employeeName} student-loan total ties to statutory lines`,
+        );
+        assert.equal(
+          cmp(slip.postgraduateLoanDeducted, slip.employeeName === "Amy Stayer" ? "150" : "0"),
+          0,
+          `${slip.employeeName} postgraduate-loan total ties to statutory lines`,
+        );
         assert.equal(slip.stubCount, 2);
         assert.ok(cmp(slip.taxDeducted, "0") > 0, "PAYE priced above zero through the product");
       }
@@ -289,6 +308,8 @@ test(
       assert.equal(cmp(totalOf("Total PAYE deducted"), orgWide.tax), 0);
       assert.equal(cmp(totalOf("Employee NIC (primary)"), orgWide.nicEe), 0);
       assert.equal(cmp(totalOf("Employer NIC (secondary)"), orgWide.nicEr), 0);
+      assert.equal(cmp(totalOf("Student-loan deductions"), "98"), 0);
+      assert.equal(cmp(totalOf("Postgraduate-loan deductions"), "150"), 0);
 
       // The slip ties to the population, heads the PAYE reference, and
       // reports the Scottish code as Scottish tax.
@@ -300,6 +321,8 @@ test(
       assert.equal(cmp(box("this-pay"), amyStatement.payInEmployment), 0);
       assert.equal(cmp(box("this-tax"), amyStatement.taxDeducted), 0);
       assert.equal(box("final-tax-code"), "1257L");
+      assert.equal(cmp(box("student-loan"), "98"), 0);
+      assert.equal(cmp(box("postgrad-loan"), "150"), 0);
       assert.ok(amySlip.headerFields.some((field) => field.value === "123/AB45678"));
       const hamishRow = String(population.rows.find((row) => row.employee === "Hamish Stayer")![population.rowKey]);
       const hamishFacsimile = await p60.slip!.build(org.orgId, YEAR, hamishRow);
@@ -332,6 +355,11 @@ test(
       assert.equal(
         larrySlip.boxes.find((candidate) => candidate.code === "leaving-date")!.value,
         "2026-06-20",
+      );
+      assert.equal(
+        larrySlip.boxes.find((candidate) => candidate.code === "student-loan")!.value,
+        "Yes",
+        "P45 continues the recorded active Plan 4 repayment",
       );
       assert.equal(
         cmp(larrySlip.boxes.find((candidate) => candidate.code === "pay-to-date")!.value, larryExpected.pay),

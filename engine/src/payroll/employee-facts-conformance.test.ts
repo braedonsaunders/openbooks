@@ -131,7 +131,12 @@ test("every pack with reads has its facts module registered", () => {
   for (const country of ["CA", "US", "ES", "JP", "PL", "BR"]) {
     assert.ok(isEmployeeFactsRegistered(country), `${country} facts are registered`);
   }
-  assert.deepEqual(employeeFactsFor("GB").map((fact) => fact.key), ["gb_nic_category_letter"]);
+  assert.ok(isEmployeeFactsRegistered("GB"), "GB facts are registered");
+  assert.deepEqual(employeeFactsFor("GB").map((fact) => fact.key), [
+    "gb_student_loan_plan",
+    "gb_postgraduate_loan",
+    "gb_nic_category_letter",
+  ]);
 });
 
 for (const country of FOURTEEN) {
