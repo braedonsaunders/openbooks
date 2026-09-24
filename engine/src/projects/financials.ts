@@ -229,19 +229,12 @@ async function resolveProjectFinancialsInSnapshot(
     profile.laborCost.source === 'account_group'
       ? { source: 'account_group', dimension: profile.laborCost.dimension, groupKeys: profile.laborCost.groupKeys }
       : { source: 'none' }
-  const [costIds, overheadIds, laborIds] = await Promise.all([
-    groupAccountIds(orgId, profile.actualCost, "actualCost.source 'account_group'"),
-    groupAccountIds(orgId, overheadCostSource, "overhead.method 'posted_gl_account_group'"),
-    groupAccountIds(orgId, laborCostSource, "laborCost.source 'account_group'"),
-  ])
-  const financialAdjustmentsPromise = projectFinancialAdjustments(
-    orgId,
-    projectId,
-  )
-  const directSubcontractCommitmentPromise = directSubcontractOpenCommitment(
-    orgId,
-    projectId,
-  )
+  // Sequential account-group resolutions: this function shares one client
+  // with its caller's transaction, where concurrent queries interleave on
+  // the single connection.
+  const costIds = await groupAccountIds(orgId, profile.actualCost, "actualCost.source 'account_group'")
+  const overheadIds = await groupAccountIds(orgId, overheadCostSource, "overhead.method 'posted_gl_account_group'")
+  const laborIds = await groupAccountIds(orgId, laborCostSource, "laborCost.source 'account_group'")
 
   const invoiceKinds = profile.invoicedToDate.docKinds
   const creditKinds = profile.invoicedToDate.creditKinds
@@ -254,10 +247,13 @@ async function resolveProjectFinancialsInSnapshot(
   const billableCostStatuses =
     profile.billableValue.costSourceStatuses ?? ['approved', 'posted']
 
-  const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
-    // invoicedToDate — effective line tagging (line override, then header
-    // inheritance), matching the posting kernel's dimension semantics.
-    db.execute(sql`
+    // Sequential measure reads, never Promise.all: this function shares one
+  // client with its caller's transaction, where concurrent queries
+  // interleave on the single connection — deprecated by pg and fatal in
+  // pg 9.
+  // invoicedToDate — effective line tagging (line override, then header
+  // inheritance), matching the posting kernel's dimension semantics.
+  const invRes = await (db.execute(sql`
       select sub.base_currency as func,
              max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(round(dl.amount * d.fx_rate, 4)) filter (where d.kind in (${kindList(invoiceKinds)})), 0) as invoiced_pos,
@@ -268,10 +264,10 @@ async function resolveProjectFinancialsInSnapshot(
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status = 'posted'
          and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})
-       group by 1`),
-    // actualCost + revenuePosted — posted GL tagged to the project. Legs
-    // arrive in their line entity's functional and translate below.
-    db.execute(sql`
+       group by 1`))
+  // actualCost + revenuePosted — posted GL tagged to the project. Legs
+  // arrive in their line entity's functional and translate below.
+  const costRes = await (db.execute(sql`
       select sub.base_currency as func, max(e.posting_date)::text as late,
              coalesce(sum(l.amount) filter (where ${costPredicate(profile.actualCost, costIds)}), 0) as cost,
              coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue
@@ -281,11 +277,11 @@ async function resolveProjectFinancialsInSnapshot(
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
-       group by 1`),
-    // committedCost — unbilled portion (by line amount) of open (approved)
-    // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
-    // migrated orders often carry the amount but no per-unit price.
-    db.execute(sql`
+       group by 1`))
+  // committedCost — unbilled portion (by line amount) of open (approved)
+  // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
+  // migrated orders often carry the amount but no per-unit price.
+  const committedRes = await (db.execute(sql`
       select sub.base_currency as func,
              max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(
@@ -317,13 +313,13 @@ async function resolveProjectFinancialsInSnapshot(
              and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)
            )
          )
-       group by 1`),
-    // Billable time is selling-value evidence independent of invoice amount.
-    // Fixed/progress invoices often have no one-to-one time-line relationship,
-    // so total price cannot be reconstructed as invoice + unbilled time.
-    // Bill and cost legs carry their own stamped currencies, so each side
-    // groups by its own functional and translates separately below.
-    db.execute(sql`
+       group by 1`))
+  // Billable time is selling-value evidence independent of invoice amount.
+  // Fixed/progress invoices often have no one-to-one time-line relationship,
+  // so total price cannot be reconstructed as invoice + unbilled time.
+  // Bill and cost legs carry their own stamped currencies, so each side
+  // groups by its own functional and translates separately below.
+  const billableTimeRes = await (db.execute(sql`
       select coalesce(te.bill_rate_currency, crs.base_currency, o.base_currency) as bill_func,
              coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as cost_func,
              max(te.worked_on)::text as late,
@@ -338,10 +334,10 @@ async function resolveProjectFinancialsInSnapshot(
        join orgs o on o.id = te.org_id
        where te.org_id = ${orgId} and te.project_id = ${projectId}
          and te.status = 'approved' and te.is_billable
-       group by 1, 2`),
-    // Billable cost is likewise all eligible work, with its unbilled subset
-    // retained separately for invoicing/backlog presentation.
-    db.execute(sql`
+       group by 1, 2`))
+  // Billable cost is likewise all eligible work, with its unbilled subset
+  // retained separately for invoicing/backlog presentation.
+  const billableLineRes = await (db.execute(sql`
       select sub.base_currency as func,
              max(coalesce(d.document_date, d.posting_date))::text as late,
              coalesce(sum(round((
@@ -397,9 +393,9 @@ async function resolveProjectFinancialsInSnapshot(
          and d.status in (${kindList(billableCostStatuses.length ? billableCostStatuses : ['__none__'])})
          and (d.kind = 'project_charge'
            or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))
-       group by 1`),
-    // laborCost — resolved per profile source (payroll JE / time rate / group).
-    profile.laborCost.source === 'payroll_je'
+       group by 1`))
+  // laborCost — resolved per profile source (payroll JE / time rate / group).
+  const laborRes = await (profile.laborCost.source === 'payroll_je'
       ? db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
              coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
              left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
@@ -437,9 +433,9 @@ async function resolveProjectFinancialsInSnapshot(
             group by 1`)
           : profile.laborCost.source === 'in_actual_cost' || profile.laborCost.source === 'none'
             ? db.execute(sql`select 0 as labor`)
-            : Promise.reject(new Error(`Unknown laborCost.source '${profile.laborCost.source as string}' — refusing instead of pricing labor as zero`)),
-    // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
-    profile.overhead.method !== 'posted_gl_account_group'
+            : Promise.reject(new Error(`Unknown laborCost.source '${profile.laborCost.source as string}' — refusing instead of pricing labor as zero`)))
+  // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
+  const overheadRes = await (profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute(sql`select 0 as overhead`)
       : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
              coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
@@ -447,14 +443,14 @@ async function resolveProjectFinancialsInSnapshot(
            left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
             and ${primaryBookSql(orgId)}
-          group by 1`),
-    // project approved labor hours (base for per-hour / rate-engine overhead).
-    db.execute(sql`select coalesce(sum(te.hours), 0) as total,
+          group by 1`))
+  // project approved labor hours (base for per-hour / rate-engine overhead).
+  const hoursRes = await (db.execute(sql`select coalesce(sum(te.hours), 0) as total,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billed
         from time_entries te
-       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`),
-    // cost by account (for the breakdown subtab) — same cost predicate.
-    db.execute<{
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`))
+  // cost by account (for the breakdown subtab) — same cost predicate.
+  const byAccountRes = await (db.execute<{
       account_id: string; number: string | null; name: string; type: string; amount: string;
       func: string | null; late: string;
     }>(sql`
@@ -465,11 +461,11 @@ async function resolveProjectFinancialsInSnapshot(
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
          and ${costPredicate(profile.actualCost, costIds)}
-       group by a.id, a.number, a.name, a.type, sub.base_currency having coalesce(sum(l.amount),0) <> 0 order by amount desc`),
-    // documents on the project (transactions tab). Row amounts arrive in
-    // the document's transaction currency with its functional first leg and
-    // translate per row below, so the tab states presentation like the rest.
-    db.execute<{
+       group by a.id, a.number, a.name, a.type, sub.base_currency having coalesce(sum(l.amount),0) <> 0 order by amount desc`))
+  // documents on the project (transactions tab). Row amounts arrive in
+  // the document's transaction currency with its functional first leg and
+  // translate per row below, so the tab states presentation like the rest.
+  const docRes = await (db.execute<{
       id: string; kind: string; documentNumber: string; documentDate: string; status: string;
       partyName: string | null; func: string | null; late: string; fxRate: string; amount: string;
     }>(sql`
@@ -486,13 +482,18 @@ async function resolveProjectFinancialsInSnapshot(
         left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
        where d.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
-       group by d.id, pt.display_name, sub.base_currency, d.fx_rate order by d.document_date desc, d.document_number desc`),
-  ])
+       group by d.id, pt.display_name, sub.base_currency, d.fx_rate order by d.document_date desc, d.document_number desc`))
 
-  const [adjustments, directSubcontractCommitment] = await Promise.all([
-    financialAdjustmentsPromise,
-    directSubcontractCommitmentPromise,
-  ])
+  // Started here, not earlier: an early start would overlap the measure
+  // fan-out above on the same connection.
+  const adjustments = await projectFinancialAdjustments(
+    orgId,
+    projectId,
+  )
+  const directSubcontractCommitment = await directSubcontractOpenCommitment(
+    orgId,
+    projectId,
+  )
   // ---- presentation translation -------------------------------------------
   // Every money scan above arrives per functional (documents carry their
   // txn→functional first leg; legs and rates carry their stamped currency).

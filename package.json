@@ -63,6 +63,7 @@
     "check:civil-date-arithmetic": "node scripts/check-civil-date-arithmetic.mjs",
     "check:migration-headers": "node scripts/check-migration-headers.mjs",
     "check:test-source-pins": "node scripts/check-test-source-pins.mjs",
+    "check:tx-concurrency": "node scripts/check-tx-concurrency.mjs",
     "check:uuid-shapes": "node scripts/check-uuid-shapes.mjs",
     "check:migration-preflights": "node scripts/check-migration-preflights.mjs",
     "upgrade:check": "node --import tsx scripts/bootstrap.ts --check",
