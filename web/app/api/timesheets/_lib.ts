@@ -1,4 +1,5 @@
 import 'server-only'
+import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -52,6 +53,21 @@ export function weekStart(iso: string): string {
 /** The current week's Sunday on the org business calendar. */
 export async function currentWeekStart(orgId: string): Promise<string> {
   return weekStart(await businessToday(orgId))
+}
+
+/**
+ * The week's content revision: a stable hash over the week identity, its
+ * header status and the full aggregated grid content. Any save, submit,
+ * approval, rejection or amendment through any route moves something it
+ * covers, so the hash moves whenever the week does — and two readers of
+ * identical content always agree. The weekly PUT sends it back as
+ * expectedRevision; a mismatch is a lost update refused with a named 409
+ * instead of a silent overwrite.
+ */
+export function computeWeekRevision(payload: { weekId: string; status: string; rows: unknown }): string {
+  return createHash('md5')
+    .update(JSON.stringify({ week: [payload.weekId, payload.status], rows: payload.rows }))
+    .digest('hex')
 }
 
 /** The seven ISO dates Sun…Sat for the week that `sundayIso` starts. */
@@ -236,6 +252,9 @@ export interface WeekPayload {
   rejectionReason: string | null
   /** The header row's id — what an approval flow names as its subject. */
   weekId: string | null
+  /** Content revision of the whole week. The weekly PUT sends it back as
+   *  expectedRevision; a mismatch is refused with a named 409. */
+  revision: string
 }
 
 /**
@@ -353,20 +372,25 @@ export async function loadWeek(
     }
   }
 
+  const rows = Array.from(byKey.values())
+  const status: WeekStatus =
+    allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status
   return {
     employeeId: ownedEmployee,
     week,
     days,
-    rows: Array.from(byKey.values()),
+    rows,
     // Status is the header's, not a fold over the entries: a week with no
     // hours yet is 'draft' (a real, submittable record), and 'empty' is
     // reserved for describing that it carries nothing.
-    status: allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status,
+    status,
     hasApproved: allStatuses.some((s) => s === 'approved'),
     lockReasons: weekLockReasons(provenance),
     lockedCount: provenance.filter((e) => lockReasonsFor(e).length > 0).length,
     rejectionReason: header.rejectionReason,
     weekId: header.id,
+    // Sent back by the weekly PUT as expectedRevision — see computeWeekRevision.
+    revision: computeWeekRevision({ weekId: header.id, status, rows }),
   }
 }
 

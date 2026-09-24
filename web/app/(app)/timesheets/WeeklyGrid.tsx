@@ -186,20 +186,34 @@ export function WeeklyGrid({
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
+  // The revision this editor loaded. Every save sends it back; the server
+  // refuses a save over a moved week with a named 409 instead of silently
+  // overwriting the other editor's hours.
+  const [revision, setRevision] = useState(payload.revision)
+  // A refused (stale) save parks its server message here with a reload
+  // path. Local edits stay in the grid — nothing the server holds is
+  // touched, and nothing typed is dropped until the editor reloads.
+  const [staleError, setStaleError] = useState<string | null>(null)
 
   // The employee/week live in the URL, so switching either re-renders THIS
   // component instance with a new payload — a `useState` initializer would not
   // re-run and the grid would keep showing the previous week's hours under the
   // new heading (and, worse, one employee's hours under another's name).
-  // Re-seed whenever the identity of the loaded week changes.
+  // Re-seed whenever the identity of the loaded week changes — or its
+  // revision does, which is how a reload-after-conflict (router.refresh)
+  // delivers the week the other editor saved.
   const loadedKey = `${employeeId ?? ''}:${week}`
   const seededKey = useRef(loadedKey)
+  const seededRevision = useRef(payload.revision)
   useEffect(() => {
-    if (seededKey.current === loadedKey) return
+    if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return
     seededKey.current = loadedKey
+    seededRevision.current = payload.revision
     setRows(fromPayload(payload.rows, pickers.timeTypes))
     setStatus(payload.status)
+    setRevision(payload.revision)
     setDirty(false)
+    setStaleError(null)
   }, [loadedKey, payload, pickers.timeTypes])
 
   // Manual approval seals the week. Automatic availability seals each saved
@@ -272,7 +286,15 @@ export function WeeklyGrid({
   }
 
   // ---- actions -------------------------------------------------------------
-  async function post(url: string, body: unknown, method: 'PUT' | 'POST' = 'POST') {
+  // onConflict handles the weekly-PUT staleness refusal: the status is
+  // checked FIRST and only the 409 body is parsed, so a proxy error page
+  // can never surface as a parse error here.
+  async function post(
+    url: string,
+    body: unknown,
+    method: 'PUT' | 'POST' = 'POST',
+    onConflict?: (message: string) => void,
+  ) {
     setBusy(true)
     try {
       const res = await fetch(url, {
@@ -280,6 +302,15 @@ export function WeeklyGrid({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       })
+      if (res.status === 409 && onConflict) {
+        const data = (await res.json().catch(() => ({}))) as { error?: unknown }
+        onConflict(
+          typeof data.error === 'string' && data.error
+            ? data.error
+            : tCommon('feedback.somethingWentWrong'),
+        )
+        return null
+      }
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         toast.error(data?.error ?? tCommon('feedback.somethingWentWrong'))
@@ -306,6 +337,7 @@ export function WeeklyGrid({
     const data = await post('/api/timesheets', {
       employee: employeeId,
       week,
+      expectedRevision: revision,
       rows: rows.filter((r) => !r.immutable).map((r) => ({
         projectId: r.projectId || null,
         itemId: r.itemId || null,
@@ -316,8 +348,10 @@ export function WeeklyGrid({
         hours: r.hours,
         custom: r.custom,
       })),
-    }, 'PUT')
+    }, 'PUT', (message) => setStaleError(message))
     if (data) {
+      setRevision(data.revision)
+      setStaleError(null)
       applyPayload(data)
       toast.success(t('grid.saved'))
     }
@@ -463,6 +497,19 @@ export function WeeklyGrid({
         </>
       }
     >
+      {/* A refused save names what happened and offers the way back. The
+          grid keeps the typed hours until the editor chooses Reload. */}
+      {staleError ? (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          role="alert"
+        >
+          <span className="min-w-52 flex-1">{staleError}</span>
+          <Button size="sm" variant="outline" onClick={() => router.refresh()}>
+            {tCommon('actions.refresh')}
+          </Button>
+        </div>
+      ) : null}
       {/* Employee + week navigator. pb keeps the controls off the grid below. */}
       <div className="mb-5 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
         <div className="w-72">

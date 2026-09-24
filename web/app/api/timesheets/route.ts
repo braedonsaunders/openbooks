@@ -21,6 +21,12 @@ function bad(error: string) {
   return NextResponse.json({ error }, { status: 422 })
 }
 
+/** The named refusal for a save over a moved week. The caller reloads and
+ *  re-enters; nothing was saved or overwritten. */
+const STALE_WEEK_ERROR =
+  'This week changed since you opened it — another editor saved first. ' +
+  'Reload the week and re-enter your hours; nothing was saved or overwritten.'
+
 interface SaveRow {
   projectId?: string | null
   itemId?: string | null
@@ -35,6 +41,13 @@ interface SaveBody {
   employee?: string
   week?: string
   rows?: SaveRow[]
+  /**
+   * The revision the client loaded (loadWeek returns it). When present and
+   * stale, the save is refused with a named 409 instead of silently
+   * overwriting another editor's hours. The grid always sends it; saves
+   * that predate the fence omit it and keep the old behavior.
+   */
+  expectedRevision?: string
 }
 
 function uuidOrNull(v: unknown): string | null | 'invalid' {
@@ -260,6 +273,9 @@ async function save(req: Request) {
   // genuinely new lines insert. Only editable (draft/rejected) entries are
   // ever deleted — approved and submitted entries are left intact so a save
   // never silently overwrites an approval (or an in-flight submission).
+  // Set when the revision fence below refuses the save; answered as a 409
+  // after the transaction (which wrote nothing) commits empty.
+  let staleRevision: string | null = null
   const projectsRefused = await withOrgTransaction(orgId, async () => {
     const tx = db
     // When approval is not required, saved entries land already approved, so
@@ -314,6 +330,20 @@ async function save(req: Request) {
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
        for update
     `)).rows
+    // Lost-update fence: when the client names the revision it loaded,
+    // refuse a save over a week that moved since. The lock above is held,
+    // so the re-read sees the latest committed state; no write has
+    // happened yet, so recording the refusal and returning persists
+    // nothing — the other editor's hours stand and this save lands
+    // nowhere. (The refusal travels out-of-band: any truthy callback
+    // value is read as the projects-refused flag.)
+    if (typeof body.expectedRevision === 'string' && body.expectedRevision !== '') {
+      const current = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
+      if (current.revision !== body.expectedRevision) {
+        staleRevision = current.revision
+        return false
+      }
+    }
     const replaceable = (row: (typeof stored)[number]): boolean => {
       if (row.amends_entry_id != null || row.has_contra) return false
       if (row.status === 'draft' || row.status === 'rejected') return true
@@ -432,6 +462,12 @@ async function save(req: Request) {
     if (newStatus === 'approved') await runTimeApprovalEffects(orgId, user.id, savedIds)
     return false
   })
+  if (staleRevision !== null) {
+    return NextResponse.json(
+      { error: STALE_WEEK_ERROR, code: 'timesheet_stale_revision', revision: staleRevision },
+      { status: 409 },
+    )
+  }
   if (projectsRefused) return bad('Projects feature is disabled')
 
   const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
