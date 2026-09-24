@@ -19,7 +19,7 @@ import { sameCurrencyAllocation, type AllocationInput } from "./settlement-polic
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { assertUnrestrictedScope, ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -2393,7 +2393,15 @@ export async function saveAcceptanceConfig(
     apiKey?: string | null;
     webhookSecret?: string | null;
   },
+  /**
+   * REQUIRED actor scope (explicit null only for system/test setup): provider
+   * configs are org-wide rows with no subsidiary lineage, so the write
+   * requires unrestricted scope — a restricted caller is refused by name
+   * before any validation or persistence.
+   */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
+  assertUnrestrictedScope(allowedSubsidiaryIds);
   if (input.defaultBankAccountId !== undefined && input.defaultBankAccountId !== null) {
     await validateAcceptanceBankAccount(orgId, input.defaultBankAccountId);
   }

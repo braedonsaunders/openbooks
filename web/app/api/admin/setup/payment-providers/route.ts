@@ -11,7 +11,7 @@ import {
 } from "@openbooks/engine/src/payments/acceptance.ts";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
@@ -73,6 +73,14 @@ export async function GET() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
+  // Account pickers disclose account names and numbers: a restricted caller
+  // sees the shared chart plus their own subsidiaries' accounts, never
+  // another entity's. NULL-subsidiary accounts are the shared chart (readable
+  // by all); entity-owned accounts stay inside their entity.
+  const scope = gate.allowedSubsidiaryIds;
+  const accountScope = scope === null
+    ? sql``
+    : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...scope].join(",")}}`}::uuid[]))`;
   const [configs, banks, rules, incomeAccounts] = await Promise.all([
     db.execute(sql`
       select provider, display_name as "displayName", is_enabled as "isEnabled",
@@ -86,6 +94,7 @@ export async function GET() {
     db.execute(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
+       ${accountScope}
        order by number nulls last, name
     `),
     db.execute(sql`
@@ -98,11 +107,33 @@ export async function GET() {
     db.execute(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and type in ('income', 'income_other') and is_active and not is_summary
+       ${accountScope}
        order by number nulls last, name
     `),
   ]);
+  // The config rows are org-wide, but their settlement-bank reference would
+  // hand a restricted caller the exact account to target: mask references
+  // outside their scope (the picker above already hides those rows).
+  let configRows = configs.rows as Array<Record<string, unknown>>;
+  if (scope !== null) {
+    const referenced = [...new Set(configRows.map((c) => c.defaultBankAccountId).filter((id) => typeof id === "string"))] as string[];
+    if (referenced.length > 0) {
+      const subs = await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
+        select id, subsidiary_id from accounts
+         where org_id = ${orgId} and id = any(${`{${referenced.join(",")}}`}::uuid[])
+      `);
+      const visible = new Set(
+        subs.rows.filter((r) => r.subsidiary_id === null || scope.has(r.subsidiary_id)).map((r) => r.id),
+      );
+      configRows = configRows.map((c) =>
+        typeof c.defaultBankAccountId === "string" && !visible.has(c.defaultBankAccountId)
+          ? { ...c, defaultBankAccountId: null }
+          : c,
+      );
+    }
+  }
   return NextResponse.json({
-    configs: configs.rows,
+    configs: configRows,
     bankAccounts: banks.rows,
     surchargeRules: rules.rows,
     incomeAccounts: incomeAccounts.rows,
@@ -208,11 +239,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // A referenced fee account must be a real posting income account here.
+    // A referenced fee account must be a real posting income account the
+    // caller may see: entity-owned accounts outside their subsidiaries fail
+    // the same lookup (record-level 404-shaped refusal, unchanged).
+    const feeScope = gate.allowedSubsidiaryIds === null
+      ? sql``
+      : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
     const feeAccount = await db.execute<{ id: string }>(sql`
       select id from accounts
        where org_id = ${orgId} and id = ${body.feeIncomeAccountId}
          and type in ('income', 'income_other') and is_active and not is_summary
+         ${feeScope}
        limit 1
     `);
     if (!feeAccount.rows[0]) {
@@ -384,6 +421,11 @@ export async function POST(req: Request) {
   }
 
   if (body.action === "test") {
+    // A connection test reads the org-wide config (including sealed-secret
+    // presence) and writes its last_error back to the shared row: restricted
+    // callers are refused before touching it.
+    const unrestrictedTest = guardUnrestrictedScope(gate);
+    if (unrestrictedTest) return unrestrictedTest;
     const provider = body.provider;
     if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
       return NextResponse.json({ error: "unknown provider" }, { status: 400 });
@@ -408,6 +450,13 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   }
 
+  // Provider configs are org-wide rows with no subsidiary lineage: saving one
+  // (settlement bank, surcharge rule, keys, settings) acts on every entity
+  // at once, so only unrestricted callers may write them. Surcharge-rule
+  // saves above stay available to restricted callers, constrained to
+  // in-scope fee accounts by the scoped lookup.
+  const unrestrictedSave = guardUnrestrictedScope(gate);
+  if (unrestrictedSave) return unrestrictedSave;
   const provider = body.provider;
   if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
     return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
@@ -433,13 +482,16 @@ export async function POST(req: Request) {
       displayName: typeof body.displayName === "string" ? body.displayName : undefined,
       isEnabled: body.isEnabled !== false,
       acceptanceEnabled: body.acceptanceEnabled === true,
+      // The unrestricted gate above already refused restricted callers; the
+      // engine re-asserts it, so the settlement bank can never be set
+      // cross-entity even by a future caller that skips the route guard.
       defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
       publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
       surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
       settings,
       apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
       webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
-    });
+    }, gate.allowedSubsidiaryIds);
     return NextResponse.json({ ok: true });
   } catch (e) {
     const status = e instanceof PaymentAcceptanceError ? 422 : 500;
