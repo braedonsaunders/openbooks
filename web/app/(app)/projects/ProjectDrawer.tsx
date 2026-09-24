@@ -37,6 +37,7 @@ import {
   type EffectiveInvoicingClient,
 } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money/money.ts'
+import { SUBDIVISIONS } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useMoney } from '@/components/money-provider'
@@ -70,6 +71,7 @@ interface ProjectRecord {
   customer_po_number: string | null
   starts_on: string | null
   ends_on: string | null
+  site_jurisdiction: string | null
   notes: string | null
   subsidiary_id: string | null
   subsidiary_include_children: boolean
@@ -227,6 +229,20 @@ export function ProjectDrawer({
   const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
   const [startsOn, setStartsOn] = useState<string>(pr.starts_on ?? '')
   const [endsOn, setEndsOn] = useState<string>(pr.ends_on ?? '')
+  // Where the improved property sits (ISO 3166-2): lien waivers release
+  // payment only when their jurisdiction matches it. Empty means unrecorded,
+  // which fails lien-waiver coverage closed as unevaluable.
+  const [siteJurisdiction, setSiteJurisdiction] = useState<string>(pr.site_jurisdiction ?? '')
+  const subdivisionOptions = useMemo(() => SUBDIVISIONS.map((entry) => {
+    let label = `${entry.code} · ${entry.name}`
+    if (locale) {
+      try {
+        const localized = new Intl.DisplayNames([locale], { type: 'region' }).of(entry.code)
+        if (localized && localized !== entry.code) label = `${entry.code} · ${localized}`
+      } catch { /* fall through to the registry English name */ }
+    }
+    return { value: entry.code, label }
+  }), [locale])
   const [contractValue, setContractValue] = useState<string>(
     payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '',
   )
@@ -296,11 +312,12 @@ export function ProjectDrawer({
       endsOn: endsOn || null,
       contractValue: contractValue || null,
       notes: notes || null,
+      siteJurisdiction: siteJurisdiction || null,
       custom,
       subsidiaryId: subsidiaries.length > 0 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
     }),
-    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive],
+    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, siteJurisdiction, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -327,6 +344,7 @@ export function ProjectDrawer({
     setCustomerPoNumber(pr.customer_po_number ?? '')
     setStartsOn(pr.starts_on ?? '')
     setEndsOn(pr.ends_on ?? '')
+    setSiteJurisdiction(pr.site_jurisdiction ?? '')
     setContractValue(payload.contractValue != null ? formatMoney(payload.contractValue, 2) : '')
     setNotes(pr.notes ?? '')
     setCustom(pr.custom ?? {})
@@ -550,6 +568,18 @@ export function ProjectDrawer({
             {editable ? <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} /> : <ReadOnlyValue value={endsOn} />}
           </>
         )
+      case 'site_jurisdiction': {
+        const siteLabel = subdivisionOptions.find((option) => option.value === siteJurisdiction)?.label ?? siteJurisdiction
+        return (
+          <>
+            <Label>{lbl || t('labels.siteJurisdiction')}</Label>
+            {editable ? <Select value={siteJurisdiction} onChange={(e) => setSiteJurisdiction(e.target.value)}>
+              <option value="">—</option>
+              {subdivisionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </Select> : <ReadOnlyValue value={siteLabel} />}
+          </>
+        )
+      }
       case 'subsidiary_id':
         if (subsidiaries.length === 0) return null
         return (

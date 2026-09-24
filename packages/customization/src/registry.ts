@@ -1413,6 +1413,7 @@ const PROJECT: RecordTypeMeta = {
     { key: "manager_id", labelKey: "projects.labels.manager", level: "header", kind: "entity_ref" },
     { key: "starts_on", labelKey: "projects.labels.startDate", level: "header", kind: "date" },
     { key: "ends_on", labelKey: "projects.labels.endDate", level: "header", kind: "date" },
+    { key: "site_jurisdiction", labelKey: "projects.labels.siteJurisdiction", level: "header", kind: "select" },
     { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
     { key: "notes", labelKey: "common.labels.notes", level: "header", kind: "long_text" },
   ],

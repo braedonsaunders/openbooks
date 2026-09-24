@@ -20,6 +20,7 @@
     "customerPo": "得意先 PO 番号",
     "startDate": "開始日",
     "endDate": "終了日",
+    "siteJurisdiction": "現場の管轄区域",
     "task": "タスク",
     "estHours": "見積時間",
     "estCost": "見積原価",

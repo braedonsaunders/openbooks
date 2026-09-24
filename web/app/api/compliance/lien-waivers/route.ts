@@ -8,6 +8,7 @@ import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } f
 import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
@@ -118,6 +119,22 @@ export async function POST(req: Request) {
   if (!WAIVER_TYPES.has(waiverType)) {
     return NextResponse.json({ error: 'unknown lien waiver type' }, { status: 400 })
   }
+  // The release is effective under the law of the project's site, so the
+  // jurisdiction is an ISO 3166-2 subdivision code, not free text. A waiver
+  // for the wrong subdivision can never release this project's bills (the
+  // evaluator matches it against the project's site), so refuse an unknown
+  // code here with its remedy instead of storing unusable text.
+  let jurisdiction: string | null = null
+  if (body.jurisdiction != null && body.jurisdiction !== '') {
+    const canonical = normalizeSubdivisionCode(body.jurisdiction)
+    if (!canonical) {
+      return NextResponse.json(
+        { error: `unknown jurisdiction ${JSON.stringify(body.jurisdiction)} — use an ISO 3166-2 subdivision code (e.g. US-CA)` },
+        { status: 422 },
+      )
+    }
+    jurisdiction = canonical
+  }
 
   // Default the amount from the bill being released, so the released figure and
   // the money it releases cannot drift apart through a typo.
@@ -190,7 +207,7 @@ export async function POST(req: Request) {
            notes, created_by, updated_by)
         values (${orgId}, ${waiverNumber}, ${direction}, ${body.partyId}, ${body.projectId},
                 ${waiverType}, 'draft', ${body.throughDate}, ${amount}, ${currency},
-                ${body.jurisdiction ?? null}, ${body.billDocumentId ?? null},
+                ${jurisdiction}, ${body.billDocumentId ?? null},
                 ${body.payApplicationId ?? null}, ${body.notes ?? null}, ${actorId}, ${actorId})
         returning id
       `)

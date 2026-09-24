@@ -20,6 +20,7 @@
     "customerPo": "客户采购订单号",
     "startDate": "开始日期",
     "endDate": "结束日期",
+    "siteJurisdiction": "项目管辖区",
     "task": "任务",
     "estHours": "预估工时",
     "estCost": "预估成本",

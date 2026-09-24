@@ -20,6 +20,7 @@
     "customerPo": "N.º de OC del cliente",
     "startDate": "Fecha de inicio",
     "endDate": "Fecha de fin",
+    "siteJurisdiction": "Jurisdicción del emplazamiento",
     "task": "Tarea",
     "estHours": "Horas est.",
     "estCost": "Costo est.",
