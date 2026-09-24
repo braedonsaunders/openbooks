@@ -236,12 +236,14 @@ export async function loadLeaveQueue(
     truncated = result.truncated
   } catch (error) {
     const message = error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null
+    // An unexpected system failure is not an empty queue: the change-request
+    // queue in this module area rethrows it, and so does this loader. A
+    // null refusal beside zero rows would present an outage as content.
+    if (message === null) throw error
     return {
       ...base,
-      refusal: message
-        ? { title: t('leave.refusedTitle'), message }
-        : null,
-      hasContent: message === null,
+      refusal: { title: t('leave.refusedTitle'), message },
+      hasContent: false,
       counts: {},
       total: 0,
       truncated: false,
@@ -408,7 +410,11 @@ export async function loadMyLeave(
     inbox = await myLeaveRequests({ orgId, actorId: authz.user.id })
   } catch (error) {
     const message = error instanceof HrmAuthorizationError || error instanceof LeaveError ? error.message : null
-    return { ...base, refusal: message ? { title: t('leave.refusedTitle'), message } : null, hasContent: message === null, requests: [], balances: [] }
+    // An unexpected system failure is not an empty inbox: like the org
+    // queue above, this loader rethrows it. A null refusal beside zero
+    // rows would present an outage as content.
+    if (message === null) throw error
+    return { ...base, refusal: { title: t('leave.refusedTitle'), message }, hasContent: false, requests: [], balances: [] }
   }
   const { workerByEmployment } = await loadQueueLabels(
     orgId,
