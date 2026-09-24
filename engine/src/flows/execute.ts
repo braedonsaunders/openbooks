@@ -22,6 +22,7 @@ import { lockRecord, unlockRecord } from "./locks.ts";
 import { flowPdfTemplateMeta, renderFlowPdf } from "./pdf-hook.ts";
 import { enqueueFlowEmail } from "../scheduling/outbox.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
+import { flowSubjectProfileForOrg } from "./registry.ts";
 
 /**
  * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
@@ -250,14 +251,12 @@ export async function executeFlowPlan(
       case "set_field": {
         const v = resolveDefaultValue(action.value, evalCtx);
         // resolveDefaultValue output is untyped (authored literals, formula
-        // results, {{interpolation}}): refuse a value that cannot inhabit the
-        // field's declared type before setField persists it. Only
-        // profile-writable header fields are checked here — anything else
-        // reaches the adapter, which owns the writability refusal (and the
-        // custom-field existence and reference-ownership checks).
-        const def = adapter.writableFields.has(action.field)
-          ? adapter.profile.fields.find((f) => f.key === action.field)
-          : undefined;
+        // results, {{interpolation}}): validate against the tenant's runtime
+        // definition before the adapter persists either a header or custom
+        // field. The adapter remains authoritative for write permission and
+        // reference ownership.
+        const profile = await flowSubjectProfileForOrg(ctx.orgId, adapter.subjectKind);
+        const def = profile?.fields.find((field) => field.key === action.field);
         const typeError = def ? flowFieldValueError(def, v ?? null) : null;
         if (typeError) throw new Error(typeError);
         await adapter.setField(subjectId, action.field, v ?? null, ctx);

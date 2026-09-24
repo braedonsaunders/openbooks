@@ -140,3 +140,47 @@ test("set_field refuses a number for a text field", { skip: !DB }, async () => {
     assert.match(res.failed[0]!, /memo/);
   });
 });
+
+test("set_field validates tenant custom definitions for each custom value family", { skip: !DB }, async () => {
+  await withOrgFixture(async (org, actors) => {
+    const cases = [
+      { key: "custom_number", fieldType: "number", config: {}, value: "42" },
+      { key: "custom_flag", fieldType: "boolean", config: {}, value: "true" },
+      { key: "custom_date", fieldType: "date", config: {}, value: 20260924 },
+      { key: "custom_choice", fieldType: "select", config: { options: ["approved", "rejected"] }, value: "pending" },
+    ] as const;
+
+    for (const field of cases) {
+      await db.insert(schema.customFieldDefs).values({
+        orgId: org.orgId,
+        targetTable: "documents",
+        targetKind: "vendor_bill",
+        key: field.key,
+        label: field.key,
+        fieldType: field.fieldType,
+        config: field.config,
+        createdBy: actors.adminId,
+        updatedBy: actors.adminId,
+      });
+      const run = await createRun(org.orgId, actors.submitterId);
+      const result = await executeFlowPlan(
+        { orgId: org.orgId },
+        adapter,
+        {
+          flow: { id: run.flowId, name: "Custom field type probe", subjectKind: "vendor_bill", graph: {} },
+          runId: run.runId,
+          subjectId: run.subjectId,
+          plan: setFieldPlan(field.key, field.value),
+          evalCtx: { values: {}, rows: {} },
+        },
+      );
+      assert.equal(result.completed.length, 0, `${field.key} must not accept a value outside its definition`);
+      assert.equal(result.failed.length, 1);
+      assert.match(result.failed[0]!, new RegExp(field.key));
+      const stored = (await db.execute<{ custom: Record<string, unknown> }>(sql`
+        select custom from documents where id = ${run.subjectId} and org_id = ${org.orgId}
+      `)).rows[0]!.custom;
+      assert.equal(Object.hasOwn(stored, field.key), false, `${field.key} must remain unwritten`);
+    }
+  });
+});
