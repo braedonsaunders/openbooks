@@ -8,7 +8,8 @@
     "nextPageAria": "Page suivante",
     "prev": "Préc.",
     "pageOf": "Page {page} sur {pages}",
-    "selectAllMatching": "Sélectionner toutes les lignes correspondantes"
+    "selectAllMatching": "Sélectionner toutes les lignes correspondantes",
+    "perPage": "Lignes par page"
   },
   "search": {
     "placeholder": "Rechercher…",

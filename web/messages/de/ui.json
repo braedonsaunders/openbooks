@@ -8,7 +8,8 @@
     "nextPageAria": "Nächste Seite",
     "prev": "Zurück",
     "pageOf": "Seite {page} von {pages}",
-    "selectAllMatching": "Alle passenden Zeilen auswählen"
+    "selectAllMatching": "Alle passenden Zeilen auswählen",
+    "perPage": "Zeilen pro Seite"
   },
   "search": {
     "placeholder": "Suchen…",
