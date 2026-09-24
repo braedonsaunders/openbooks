@@ -383,6 +383,7 @@ export const TENANT_TABLE_POLICIES = {
   "payment_surcharge_rules": "clone:catalog-uuid-rebase",
   "payment_terms": "clone:catalog-uuid-rebase",
   "payroll_anomaly_flags": "clone:catalog-uuid-rebase",
+  "payroll_employer_facts": "clone:catalog-uuid-rebase",
   "payroll_employer_levy_opening": "clone:catalog-uuid-rebase",
   "payroll_filing_accounts": "clone:catalog-uuid-rebase",
   "payroll_filing_submission_slips": "clone:catalog-uuid-rebase",
