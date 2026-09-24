@@ -10,7 +10,7 @@ import { reciprocityAgreement } from "./reciprocity.ts";
 import { regionWithholding } from "./withholding-jurisdictions.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import {
-  CA_WITHHOLDING, DC_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
+  AL_WITHHOLDING, CA_WITHHOLDING, DC_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
 } from "./us/states/index.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -141,7 +141,7 @@ async function usPayrollOrg(): Promise<Fixture> {
       '{payroll,us}',
       coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
         sui: Object.fromEntries(
-          ["CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"].map((state) => [
+          ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"].map((state) => [
             state, { rate: "0.03", wageBase: "7000" },
           ]),
         ),
@@ -289,6 +289,42 @@ test(
       // The residence assumption is recorded rather than silent.
       assert.equal(stub!.factors.WITHHOLDING_RESIDENCE, "CA");
       assert.equal(stub!.factors.WITHHOLDING_RESIDENCE_SOURCE, "assumed");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "Alabama withholding uses the current pay run's federal tax",
+  { skip: !DB },
+  async () => {
+    const fx = await usPayrollOrg();
+    try {
+      const employee = await usEmployee(fx, "Alabama Employee", { state: "AL" });
+      const { run, result } = await runPayroll(fx);
+      assert.deepEqual(result.errors, []);
+
+      const stub = await stubOf(fx, run.documentId, employee);
+      assert.ok(stub, "the Alabama employee was paid");
+      const expected = AL_WITHHOLDING.compute({
+        payDate: PAY_DATE,
+        periodStart: PERIOD_START,
+        periodEnd: PERIOD_END,
+        periodsPerYear: 26,
+        wages: PERIOD_WAGES,
+        federalIncomeTax: stub!.factors.FIT,
+        certificate: resolveCertificate({
+          certificate: payrollCertificate("US", "us_al_a4"),
+          asOf: PAY_DATE,
+        }),
+        basis: "resident",
+      });
+      assert.notEqual(stub!.factors.FIT, "0.0000", "the fixture must have current federal withholding");
+      assert.equal(stub!.factors.SIT_AL, expected.tax);
+      assert.notEqual(expected.tax, "0.0000", "the fixture must exercise Alabama's federal-tax deduction");
+      const deductions = await deductionsOf(fx, stub!.id);
+      assert.equal(deductions.find((line) => line.system_key === "state_income_tax")?.amount, expected.tax);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

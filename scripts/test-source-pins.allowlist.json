@@ -21,7 +21,6 @@
     "engine/src/payroll/parallel-run.test.ts": 1,
     "engine/src/payroll/rl1.test.ts": 1,
     "engine/src/payroll/tax-year-scaffold.test.ts": 3,
-    "engine/src/payroll/us/withholding-current-fit.test.ts": 1,
     "engine/src/platform/file-storage-copysource.test.ts": 1,
     "engine/src/platform/operations-config.test.ts": 2,
     "engine/src/projects/field-ticket-labor-evidence.test.ts": 3,
