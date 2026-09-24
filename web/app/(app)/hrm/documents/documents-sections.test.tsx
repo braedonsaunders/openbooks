@@ -63,7 +63,8 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            `export async function getTranslations(ns) {
+            `export async function getLocale() { return 'en'; }
+            export async function getTranslations(ns) {
               const root = { admin: globalThis.__docSecCatalogs.admin };
               const lookup = (key) => {
                 let node = root;
