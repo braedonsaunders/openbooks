@@ -50,7 +50,8 @@ const mockSources = new Map<string, string>([
         // The fenced recheck reads the flag the disable may just have written.
         if (text.includes('for share') && text.includes('from orgs')) return { rows: [{ features: state.txFeatures }] }
         if (text.includes("as f from orgs")) return { rows: [{ f: state.entryFeatures }] }
-        if (text.includes("as time_zone from orgs")) return { rows: [] }
+        // The org exists with no stored zone: the business clock days in UTC.
+        if (text.includes("as time_zone from orgs")) return { rows: [{ time_zone: null }] }
         if (text.includes('from field_ticket_policies')) return { rows: [] }
         if (text.includes('select base_currency from orgs')) return { rows: [{ base_currency: 'CAD' }] }
         if (text.includes('from users where')) return { rows: [{ party_id: null }] }
@@ -81,6 +82,7 @@ const mockSources = new Map<string, string>([
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
+      export const ambientBypassWithoutTransaction = () => false
       export const pool = {}
       export const env = {}
       // Link-time surface for the wider engine chain (flows, savepoints):
