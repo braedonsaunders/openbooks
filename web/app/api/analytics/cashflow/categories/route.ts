@@ -209,6 +209,8 @@ async function clean(
 export async function GET() {
   const gate = await guardPermission("reports.read");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   const r = ((await db.execute(sql`
     select settings -> 'analytics' -> 'cashflowCategories' as cats,
            coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev

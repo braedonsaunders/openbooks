@@ -136,8 +136,50 @@ for (const file of routes) {
   }
 }
 
+// Inventory GET handlers that disclose org-wide policy. Read access is its
+// own boundary: a guarded PUT cannot authorize an unrestricted configuration
+// read. This map is derived from the same stored settings touched by the
+// corresponding org-wide writers.
+const orgSettingsReaders = new Map([
+  ["cashflowCategories", "orgs.settings.analytics.cashflowCategories"],
+  ["getOrgAiSettings", "orgs.settings.ai"],
+  ["getFeedbackSettings", "orgs.settings.hrm_feedback.public_praise_by"],
+]);
+const orgWideConfigReaders = [];
+for (const file of routes) {
+  const source = readFileSync(join(root, file), "utf8");
+  const get = /export\s+async\s+function\s+GET\s*\([\s\S]*?(?=\nexport\s+async\s+function\s+|$)/.exec(source)?.[0];
+  if (!get) continue;
+  for (const [signal, target] of orgSettingsReaders) {
+    if (!new RegExp(`\\b${signal}\\b`).test(get)) continue;
+    assert.match(get, /guardUnrestrictedScope\s*\(/,
+      `${file} reads ${target} without a GET unrestricted-scope guard`);
+    orgWideConfigReaders.push({ file, target });
+  }
+}
+
+// Keep an inventory of other config-table readers as they are discovered.
+// Some have purpose-built scoped projections (for example flow execution
+// history); the inventory makes those surfaces visible for review rather than
+// silently treating the writer check as coverage for reads.
+const tableReaders = [];
+for (const file of routes) {
+  const source = readFileSync(join(root, file), "utf8");
+  const get = /export\s+async\s+function\s+GET\s*\([\s\S]*?(?=\nexport\s+async\s+function\s+|$)/.exec(source)?.[0];
+  if (!get) continue;
+  for (const table of policyTables) {
+    const directRead = new RegExp(`\\bfrom\\s+(?:public\\.)?${table}\\b`, "i").test(get);
+    const delegatedRead = table === "allocation_drivers" && /\b(?:listDrivers|getDriver)\s*\(/.test(get);
+    if (directRead || delegatedRead) tableReaders.push({ file, target: table });
+  }
+}
+
 console.log(`org-wide config scope: ${writes.length} route(s), ${writes.reduce((n, row) => n + row.tables.length, 0)} write target(s)`);
 for (const row of writes) console.log(`  ${row.file}: ${row.tables.join(", ")}`);
 console.log(`org-wide connector scope: ${connectorRoutes.length} route(s), reads and writes guarded`);
 console.log(`org-wide settings scope: ${orgSettingsWrites.length} route writer(s), mutation handlers guarded`);
 for (const row of orgSettingsWrites) console.log(`  ${row.file}: ${row.target}`);
+console.log(`org-wide settings readers: ${orgWideConfigReaders.length} route reader(s), unrestricted handlers guarded`);
+for (const row of orgWideConfigReaders) console.log(`  ${row.file}: ${row.target}`);
+console.log(`org-wide config table readers inventoried: ${tableReaders.length}`);
+for (const row of tableReaders) console.log(`  ${row.file}: ${row.target}`);

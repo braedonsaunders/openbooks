@@ -71,7 +71,7 @@ const mockSources = new Map<string, string>([
       export function guardUnrestrictedScope(authz) {
         return authz.allowedSubsidiaryIds === null
           ? null
-          : NextResponse.json({ error: 'unrestricted subsidiary scope required' }, { status: 403 })
+          : NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
       export async function guardPermission(permission) {
         state.permissionChecks.push(permission)
@@ -308,6 +308,17 @@ test('GET returns the list with its revision', async () => {
   const response = await GET()
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { categories: state.priorCategories, revision: 7 })
+})
+
+test('restricted reader cannot inspect org-wide cashflow configuration', async () => {
+  reset()
+  state.allowedSubs = new Set(['sub-a'])
+
+  const response = await GET()
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
+  assert.deepEqual(state.databaseCalls, [], 'restricted reads stop before fetching org-wide references')
 })
 
 test('a replacement without the expected revision refuses before touching the database', async () => {
