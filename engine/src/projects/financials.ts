@@ -45,13 +45,32 @@ export interface ProjectFinancials {
   contractValue: string
 }
 
-/** Resolve the account-id set for an account-group cost source (empty ⇒ no filter). */
-async function groupAccountIds(orgId: string, src: CostSource): Promise<string[]> {
-  if (src.source !== 'account_group' || !src.dimension) return []
+/**
+ * Resolve the account-id set for an account-group cost source. `label`
+ * names the profile field for refusals (e.g. "actualCost.source
+ * 'account_group'"). An account_group source that resolves to no active
+ * accounts — a deactivated or mistyped group, or an empty dimension —
+ * refuses by name: the cost predicate would otherwise turn the empty set
+ * into SQL false and the report would price the measure as zero.
+ */
+async function groupAccountIds(orgId: string, src: CostSource, label: string): Promise<string[]> {
+  if (src.source !== 'account_group') return []
+  if (!src.dimension) {
+    throw new Error(`${label} requires a dimension — refusing instead of pricing as zero`)
+  }
   const { byAccount } = await resolveAccountGroups(src.dimension, orgId)
   const keys = src.groupKeys && src.groupKeys.length ? new Set(src.groupKeys) : null
   const ids: string[] = []
   for (const [accountId, g] of byAccount) if (!keys || keys.has(g.key)) ids.push(accountId)
+  if (!ids.length) {
+    throw new Error(
+      `${label} is unresolved: ` +
+      (src.groupKeys?.length
+        ? `groupKeys [${src.groupKeys.join(", ")}] resolve to no active accounts`
+        : `dimension '${src.dimension}' has no active accounts`) +
+      ` — refusing instead of pricing as zero; reactivate the group or correct the project type's cost source`,
+    )
+  }
   return ids
 }
 
@@ -192,17 +211,17 @@ async function resolveProjectFinancialsInSnapshot(
   // its method is posted_gl_account_group; every other method is a
   // statistical rate applied below (never a GL sum).
   const overheadCostSource: CostSource =
-    profile.overhead.method === 'posted_gl_account_group' && profile.overhead.accountGroup
-      ? { source: 'account_group', dimension: profile.overhead.accountGroup.dimension, groupKeys: profile.overhead.accountGroup.groupKeys }
+    profile.overhead.method === 'posted_gl_account_group'
+      ? { source: 'account_group', dimension: profile.overhead.accountGroup?.dimension, groupKeys: profile.overhead.accountGroup?.groupKeys }
       : { source: 'none' }
   const laborCostSource: CostSource =
-    profile.laborCost.source === 'account_group' && profile.laborCost.dimension
+    profile.laborCost.source === 'account_group'
       ? { source: 'account_group', dimension: profile.laborCost.dimension, groupKeys: profile.laborCost.groupKeys }
       : { source: 'none' }
   const [costIds, overheadIds, laborIds] = await Promise.all([
-    groupAccountIds(orgId, profile.actualCost),
-    groupAccountIds(orgId, overheadCostSource),
-    groupAccountIds(orgId, laborCostSource),
+    groupAccountIds(orgId, profile.actualCost, "actualCost.source 'account_group'"),
+    groupAccountIds(orgId, overheadCostSource, "overhead.method 'posted_gl_account_group'"),
+    groupAccountIds(orgId, laborCostSource, "laborCost.source 'account_group'"),
   ])
   const financialAdjustmentsPromise = projectFinancialAdjustments(
     orgId,
@@ -394,23 +413,15 @@ async function resolveProjectFinancialsInSnapshot(
                  and te.status = 'approved' and te.costing_basis = 'estimated'
              group by 1`)
         : profile.laborCost.source === 'account_group'
-          ? (!profile.laborCost.dimension
-              ? Promise.reject(new Error("laborCost.source 'account_group' requires laborCost.dimension"))
-              : laborIds.length === 0
-                ? Promise.reject(new Error(
-                    `laborCost.source 'account_group' is unresolved: ` +
-                    (profile.laborCost.groupKeys?.length
-                      ? `groupKeys [${profile.laborCost.groupKeys.join(", ")}] resolve to no active accounts`
-                      : `dimension '${profile.laborCost.dimension}' has no active accounts`) +
-                    ` — refusing instead of pricing labor as zero; reactivate the group or correct the project type's labor source`,
-                  ))
-              : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
-                   coalesce(sum(l.amount) filter (where ${costPredicate(laborCostSource, laborIds)}), 0) as labor
-                 from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
-                 left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-                where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
-                  and ${primaryBookSql(orgId)}
-                group by 1`))
+          // The resolver above guarantees a non-empty account set (or a
+          // named refusal), so this query always has an arm.
+          ? db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
+               coalesce(sum(l.amount) filter (where ${costPredicate(laborCostSource, laborIds)}), 0) as labor
+             from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id
+             left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+            where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
+              and ${primaryBookSql(orgId)}
+            group by 1`)
           : profile.laborCost.source === 'in_actual_cost' || profile.laborCost.source === 'none'
             ? db.execute(sql`select 0 as labor`)
             : Promise.reject(new Error(`Unknown laborCost.source '${profile.laborCost.source as string}' — refusing instead of pricing labor as zero`)),
@@ -887,7 +898,7 @@ export async function resolveProjectActualCosts(
     const key = `${src.dimension ?? ''}::${[...(src.groupKeys ?? [])].sort().join(',')}`
     const hit = groupCache.get(key)
     if (hit) return hit
-    const ids = new Set(await groupAccountIds(orgId, src))
+    const ids = new Set(await groupAccountIds(orgId, src, "actualCost.source 'account_group'"))
     groupCache.set(key, ids)
     return ids
   }
@@ -918,7 +929,16 @@ export async function resolveProjectActualCosts(
     const profile = profiles.get(id)
     if (!profile) return
     const src = profile.actualCost
-    const memberIds = await groupIdsFor(src)
+    // An unresolved group refuses per row (surfaced beside it, never a
+    // fake zero) rather than failing the whole list page.
+    let memberIds: Set<string>
+    try {
+      memberIds = await groupIdsFor(src)
+    } catch (error) {
+      profileErrors.set(id, error instanceof Error ? error.message : String(error))
+      out.delete(id)
+      return
+    }
     const inSource = (accountId: string, type: string): boolean =>
       src.source === 'none'
         ? false

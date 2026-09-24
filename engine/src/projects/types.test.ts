@@ -140,3 +140,18 @@ test('tenant project forecasts may explicitly include source rejected documents'
     /committedCost\.statuses contains an unsupported lifecycle/,
   )
 })
+
+test('account-group labor without a dimension is refused at the profile boundary', () => {
+  const builtIn = BUILTIN_PROJECT_TYPES.find(
+    (candidate) => candidate.key === 'time_and_materials',
+  )
+  if (!builtIn) throw new Error('time_and_materials built-in is missing')
+  const profile = structuredClone(builtIn.financialProfile)
+  profile.laborCost = { source: 'account_group' }
+  assert.throws(
+    () => assertValidProjectFinancialProfile(profile),
+    /laborCost\.dimension is required/,
+  )
+  profile.laborCost = { source: 'account_group', dimension: 'labor_pool', groupKeys: ['field_labor'] }
+  assert.doesNotThrow(() => assertValidProjectFinancialProfile(profile))
+})

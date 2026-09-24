@@ -396,3 +396,41 @@ test("a deactivated labor group refuses by name instead of pricing zero", { skip
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("an unresolved actual-cost group refuses by name instead of pricing zero", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const projectId = await seedProjectWithPostedCost(db, org, "ACTUAL-DEAD-1", "500");
+    const grouped: FinancialProfile = {
+      ...structuredClone(profile),
+      actualCost: { source: "account_group", dimension: "labor_pool", groupKeys: ["ghost_pool"] },
+    };
+    await assert.rejects(
+      resolveProjectFinancials(org.orgId, projectId, grouped),
+      /actualCost\.source 'account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an unresolved overhead group refuses by name instead of pricing zero", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const projectId = await seedProjectWithPostedCost(db, org, "OH-DEAD-1", "500");
+    const grouped: FinancialProfile = {
+      ...structuredClone(profile),
+      overhead: {
+        ...structuredClone(profile).overhead,
+        method: "posted_gl_account_group",
+        accountGroup: { dimension: "labor_pool", groupKeys: ["ghost_pool"] },
+      },
+    };
+    await assert.rejects(
+      resolveProjectFinancials(org.orgId, projectId, grouped),
+      /overhead\.method 'posted_gl_account_group' is unresolved: groupKeys \[ghost_pool\] resolve to no active accounts/,
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
