@@ -32,15 +32,15 @@ test('customer receipt totals convert each receipt at its posting rate', async (
       // test reads only the documents rows, but posting integrity demands
       // consistent legs.
       for (const [num, currency, fx, functional] of [
-        ['RCPT-CAD', 'CAD', '1', '100'],
-        ['RCPT-USD', 'USD', '1.35', '135'],
+        ['RCPT-CAD', 'CAD', '1', '100.1255'],
+        ['RCPT-USD', 'USD', '1.35', '135.1694'],
       ] as const) {
         const docId = randomUUID()
         const entryId = randomUUID()
         await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id,
             document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total)
           values (${docId}, ${org.orgId}, 'customer_payment', ${num}, ${org.customerId},
-            ${org.subsidiaryId}, ${D}, ${D}, ${currency}, ${fx}, 'draft', 100, 0, 100)`)
+            ${org.subsidiaryId}, ${D}, ${D}, ${currency}, ${fx}, 'draft', '100.1255', 0, '100.1255')`)
         await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number,
             posting_date, period_id, status, origin, source_document_id)
           values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${num}, ${D},
@@ -48,9 +48,9 @@ test('customer receipt totals convert each receipt at its posting rate', async (
         await db.execute(sql`insert into journal_lines (id, org_id, entry_id, line_number, account_id,
             subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
           values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.bank},
-            ${org.subsidiaryId}, ${org.customerId}, false, ${functional}, ${currency}, '100', ${fx}),
+            ${org.subsidiaryId}, ${org.customerId}, false, ${functional}, ${currency}, '100.1255', ${fx}),
                (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.ar},
-            ${org.subsidiaryId}, ${org.customerId}, false, ${'-' + functional}, ${currency}, '-100', ${fx})`)
+            ${org.subsidiaryId}, ${org.customerId}, false, ${'-' + functional}, ${currency}, '-100.1255', ${fx})`)
         await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entryId}`)
         await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId},
           posting_period_id=${org.periodId} where id=${docId}`)
@@ -59,10 +59,10 @@ test('customer receipt totals convert each receipt at its posting rate', async (
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await customersHome(org.orgId)
-        assert.equal(home.badges.collected7d, 235, 'CAD 100 plus USD 100 at the 1.35 posting rate')
+        assert.equal(home.badges.collected7d, '235.2949', 'CAD 100.1255 plus USD 100.1255 at the 1.35 posting rate')
         assert.equal(
-          home.trend.find((w) => w.collected > 0)?.collected,
-          235,
+          home.trend.find((w) => w.collected !== '0.0000')?.collected,
+          '235.2949',
           'the weekly trend converts before bucketing too',
         )
       })

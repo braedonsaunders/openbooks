@@ -7,6 +7,7 @@ import { BookOpen, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { useMoney } from '../../../components/money-provider'
 import { PagedTable } from '../../../components/paged-table'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 
@@ -33,6 +34,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
   const t = useTranslations('parties.drawer.wages')
   const tc = useTranslations('common')
   const format = useFormatter()
+  const { money } = useMoney()
   const today = useBusinessToday()
   const [data, setData] = useState<RatesResponse | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -271,8 +273,7 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
               search: (row) => row.rate,
               cell: (row) => (
                 <span className="inline-flex items-center gap-2 tabular-nums">
-                  {format.number(Number(row.rate), {
-                    style: 'currency',
+                  {money(row.rate, {
                     currency: row.currency,
                     currencyDisplay: 'code',
                     minimumFractionDigits: 2,

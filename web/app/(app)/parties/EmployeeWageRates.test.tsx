@@ -59,6 +59,7 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const enMessages = (await import("../../../messages/en")).default as Record<string, unknown>;
 const { BusinessDateProvider } = await import("../../../components/business-date-provider");
+const { MoneyProvider } = await import("../../../components/money-provider");
 const { EmployeeWageRates } = await import("./EmployeeWageRates");
 
 function msg(path: string): string {
@@ -82,7 +83,7 @@ interface PostedRate {
   body: Record<string, unknown>;
 }
 
-async function renderRates(posted: PostedRate[], postQueue: Response[]) {
+async function renderRates(posted: PostedRate[], postQueue: Response[], rates: Record<string, unknown>[] = []) {
   globalThis.__wageToasts = [];
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -93,7 +94,7 @@ async function renderRates(posted: PostedRate[], postQueue: Response[]) {
         const next = postQueue.shift();
         return next ?? Response.json({});
       }
-      return Response.json({ rates: [], currencies: ["CAD"], defaultCurrency: "CAD" });
+      return Response.json({ rates, currencies: ["CAD"], defaultCurrency: "CAD" });
     }
     return Response.json({});
   }) as typeof fetch;
@@ -103,9 +104,11 @@ async function renderRates(posted: PostedRate[], postQueue: Response[]) {
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={enMessages} timeZone="UTC">
-        <BusinessDateProvider today="2026-08-28">
-          <EmployeeWageRates partyId="employee-1" />
-        </BusinessDateProvider>
+        <MoneyProvider currency="USD">
+          <BusinessDateProvider today="2026-08-28">
+            <EmployeeWageRates partyId="employee-1" />
+          </BusinessDateProvider>
+        </MoneyProvider>
       </NextIntlClientProvider>,
     );
     await tick();
@@ -223,6 +226,31 @@ test("large decimal text posts exactly, never rounded through Number", async (t)
   assert.equal(posted.length, 1, "one submit must post one payload");
   assert.equal(posted[0]?.body.rate, "9007199254740993.1234");
   assert.equal(posted[0]?.body.annualHours, "9007199254740993.0001");
+});
+
+test("displayed wage rates preserve decimal precision through localized currency formatting", async (t) => {
+  const posted: PostedRate[] = [];
+  const { done } = await renderRates(posted, [], [{
+    id: "rate-1",
+    rate: "12345678901234.1255",
+    currency: "CAD",
+    basis: "hour",
+    annual_hours: "2080",
+    effective_from: "2026-01-01",
+    effective_to: null,
+    notes: null,
+    is_current: true,
+  }]);
+  t.after(done);
+
+  const { createMoneyFormatter } = await import("../../../lib/money-format");
+  const expected = createMoneyFormatter("en", "USD").money("12345678901234.1255", {
+    currency: "CAD",
+    currencyDisplay: "code",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  });
+  assert.match(document.body.textContent ?? "", new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("exponent, NaN, and infinite input never posts", async (t) => {

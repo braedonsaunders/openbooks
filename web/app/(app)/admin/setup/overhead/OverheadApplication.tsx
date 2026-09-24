@@ -3,11 +3,12 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
 import { useMoney } from '@/components/money-provider'
+import { formatDecimal } from '@/lib/money-format'
 
 export interface ApplicationRow {
   id: string
@@ -47,6 +48,7 @@ export function OverheadApplication(props: {
   systemRule?: SystemRuleEvidence | null
 }) {
   const { money } = useMoney()
+  const locale = useLocale()
   const t = useTranslations('admin.setup.entities.overhead-model.application')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -81,7 +83,7 @@ export function OverheadApplication(props: {
     setBusy(true)
     try {
       const r = await post({ action: 'backfill-overhead' })
-      toast.success(t('backfilled', { total: Number(r.total).toFixed(2), entries: r.entries }))
+      toast.success(t('backfilled', { total: formatDecimal(locale, r.total, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), entries: r.entries }))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)

@@ -31,8 +31,8 @@ async function seedTwoCurrencyReceivables() {
     await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
       values (${org.orgId},'USD','CAD',${D}::date,'spot',1.35,'manual')`)
     const invoices = [
-      ['INV-CAD', org.subsidiaryId, org.customerId, 'CAD', '100', '1'],
-      ['INV-USD', usSub, usCust, 'USD', '200', '1'],
+      ['INV-CAD', org.subsidiaryId, org.customerId, 'CAD', '100.1255', '1'],
+      ['INV-USD', usSub, usCust, 'USD', '200.1255', '1'],
     ] as const
     for (const [num, sub, party, cur, total, fx] of invoices) {
       const docId = randomUUID()
@@ -76,11 +76,11 @@ test('customers cockpit translates every receivable functional to presentation',
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await customersHome(org.orgId)
-        assert.equal(home.arOutstanding, 370)
-        assert.equal(home.badges.collected7d, 235)
-        assert.equal(home.trend.find((w) => w.collected > 0)?.collected, 235)
+        assert.equal(home.arOutstanding, '370.2949')
+        assert.equal(home.badges.collected7d, '235.0000')
+        assert.equal(home.trend.find((w) => w.collected !== '0.0000')?.collected, '235.0000')
         const usRow = home.topExposure.find((r) => r.partyId === usCust)!
-        assert.equal(usRow.open, 270)
+        assert.equal(usRow.open, '270.1694')
       })
     })
   } finally {
