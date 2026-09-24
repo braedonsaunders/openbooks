@@ -84,6 +84,7 @@ export function parseRunAllocationConfig(config: unknown): RunAllocationConfig {
 export function previewInputFor(args: {
   orgId: string;
   ruleId: string;
+  versionId: string;
   periodId: string;
   bookId: string;
   triggerKind: "scheduled" | "close_automation";
@@ -95,6 +96,7 @@ export function previewInputFor(args: {
   return {
     orgId: args.orgId,
     ruleId: args.ruleId,
+    versionId: args.versionId,
     periodId: args.periodId,
     bookId: args.bookId,
     subsidiaryId: null,
@@ -178,7 +180,7 @@ export async function ensureAllocationRunOutboxRows(
   return enqueued;
 }
 
-type CurrentVersion = {
+type OccurrenceVersion = {
   version_id: string;
   run_policy: string;
   mode: string;
@@ -187,9 +189,9 @@ type CurrentVersion = {
 };
 
 /**
- * Fire one due occurrence: preview the rule's CURRENT published version for
- * the occurrence period/book, then post it when that version's run_policy is
- * auto_post. A retired rule, an unpublished current version, a non-period
+ * Fire one due occurrence using the exact published version captured when
+ * it was enqueued, then post when that version's run_policy is auto_post. A
+ * retired rule, an unavailable occurrence version, a non-period
  * rule, or a switched-off feature skips quietly — the schedule legitimately
  * went away, so there is nothing to retry.
  */
@@ -199,15 +201,17 @@ export async function processAllocationRunOutboxRow(
   if (!row.org_id) return { outcome: "skipped", note: "allocation occurrence has no org" };
   const payload = (row.payload ?? {}) as {
     ruleId?: unknown;
+    versionId?: unknown;
     periodId?: unknown;
     bookId?: unknown;
   };
   if (
     typeof payload.ruleId !== "string" ||
+    typeof payload.versionId !== "string" ||
     typeof payload.periodId !== "string" ||
     typeof payload.bookId !== "string"
   ) {
-    throw new Error("allocation_run payload requires ruleId, periodId, and bookId");
+    throw new Error("allocation_run payload requires ruleId, versionId, periodId, and bookId");
   }
   const org = (
     await db.execute<{ settings: { features?: Record<string, boolean> } | null }>(sql`
@@ -217,35 +221,40 @@ export async function processAllocationRunOutboxRow(
   if (!featureEnabled(org?.settings?.features ?? {}, "allocations")) {
     return { outcome: "skipped", note: "allocations feature is off" };
   }
-  const current = (
-    await db.execute<CurrentVersion>(sql`
+  const occurrence = (
+    await db.execute<OccurrenceVersion>(sql`
       select v.id as version_id, v.run_policy, v.published_by, r.mode, r.is_active
         from allocation_rules r
         left join allocation_rule_versions v
-          on v.id = r.current_version_id and v.org_id = r.org_id and v.status = 'published'
+          on v.id = ${payload.versionId} and v.rule_id = r.id and v.org_id = r.org_id and v.status = 'published'
+        join accounting_periods p on p.id = ${payload.periodId} and p.org_id = r.org_id
        where r.id = ${payload.ruleId} and r.org_id = ${row.org_id}
+         and v.effective_from <= p.ends_on
+         and (v.effective_to is null or v.effective_to >= p.starts_on)
     `)
   ).rows[0];
-  if (!current?.version_id || current.mode !== "period" || !current.is_active) {
-    return { outcome: "skipped", note: "rule is gone, retired, or no longer period-mode" };
+  if (!occurrence?.version_id || occurrence.mode !== "period" || !occurrence.is_active) {
+    return { outcome: "skipped", note: "rule or scheduled version is gone, retired, or not effective for the period" };
   }
-  if (!current.published_by) {
+  if (!occurrence.published_by) {
     throw new Error(`allocation rule ${payload.ruleId} has no publisher to attribute the unattended run to`);
   }
   const preview = previewInputFor({
     orgId: row.org_id,
     ruleId: payload.ruleId,
+    versionId: payload.versionId,
     periodId: payload.periodId,
     bookId: payload.bookId,
     triggerKind: "scheduled",
-    publishedBy: current.published_by,
+    publishedBy: occurrence.published_by,
   });
   const computed = await previewAllocationRun(preview);
-  if (current.run_policy === "auto_post") {
+  if (occurrence.run_policy === "auto_post") {
     const posted = await postPreviewedOccurrence({
       orgId: row.org_id,
       actorId: preview.actorId,
       ruleId: payload.ruleId,
+      versionId: payload.versionId,
       periodId: payload.periodId,
       bookId: payload.bookId,
       reason: "scheduled auto_post policy",
@@ -275,6 +284,7 @@ async function postPreviewedOccurrence(args: {
   orgId: string;
   actorId: string;
   ruleId: string;
+  versionId: string;
   periodId: string;
   bookId: string;
   reason: string;
@@ -284,6 +294,7 @@ async function postPreviewedOccurrence(args: {
     await db.execute<{ id: string }>(sql`
       select id from allocation_runs
        where org_id = ${args.orgId} and rule_id = ${args.ruleId}
+         and version_id = ${args.versionId}
          and period_id = ${args.periodId} and book_id = ${args.bookId}
          and status = 'previewed'
        order by created_at desc limit 1
@@ -315,10 +326,10 @@ async function resolveRulePublisher(
   orgId: string,
   ruleId: string,
   periodId: string,
-): Promise<string> {
+): Promise<{ versionId: string; publishedBy: string }> {
   const rows = (
-    await db.execute<{ published_by: string | null }>(sql`
-      select v.published_by
+    await db.execute<{ id: string; published_by: string | null }>(sql`
+      select v.id, v.published_by
         from allocation_rule_versions v
         join allocation_rules r on r.id = v.rule_id and r.org_id = v.org_id
         join accounting_periods p on p.id = ${periodId} and p.org_id = v.org_id
@@ -336,7 +347,7 @@ async function resolveRulePublisher(
   if (!publisher) {
     throw new Error(`allocation rule ${ruleId} has no publisher to attribute the unattended run to`);
   }
-  return publisher;
+  return { versionId: rows[0]!.id, publishedBy: publisher };
 }
 
 /**
@@ -419,13 +430,15 @@ export async function runAllocationCloseAction(args: {
     // A resumed attempt adopts the previously committed stage instead of
     // re-firing; the counts below reflect effects fired by this call.
     await args.commitStage(`allocation:${rule.id}:${run.period_id}:${run.book_id}`, async () => {
+      const resolvedVersion = await resolveRulePublisher(args.orgId, rule.id, run.period_id);
       const preview = previewInputFor({
         orgId: args.orgId,
         ruleId: rule.id,
+        versionId: resolvedVersion.versionId,
         periodId: run.period_id,
         bookId: run.book_id,
         triggerKind: "close_automation",
-        publishedBy: await resolveRulePublisher(args.orgId, rule.id, run.period_id),
+        publishedBy: resolvedVersion.publishedBy,
       });
       await previewAllocationRun(preview);
       previewed++;
@@ -436,6 +449,7 @@ export async function runAllocationCloseAction(args: {
           orgId: args.orgId,
           actorId: preview.actorId,
           ruleId: rule.id,
+          versionId: resolvedVersion.versionId,
           periodId: run.period_id,
           bookId: run.book_id,
           reason: "close automation requested posting",
