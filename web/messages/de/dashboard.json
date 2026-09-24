@@ -228,6 +228,11 @@
     "allClear": "Alles in Ordnung.",
     "needsAttention": "Handlungsbedarf.",
     "requestTimeOff": "Urlaub beantragen",
-    "lastSlip": "Letzte Abrechnung {date}"
+    "lastSlip": "Letzte Abrechnung {date}",
+    "serviceYears": "{years, plural, one {# Jahr} other {# Jahre}}",
+    "joinedSince": "seit {date}",
+    "joinsOn": "Eintritt am {date}",
+    "overdueSteps": "{overdue, plural, one {# überfälliger Checklisten-Schritt} other {# überfällige Checklisten-Schritte}} in Ihrem Team",
+    "newJoiners": "{joiners, plural, one {# Neueinstellung} other {# Neueinstellungen}} in den letzten 30 Tagen — erstes 1:1-Gespräch vereinbaren"
   }
 }

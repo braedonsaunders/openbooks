@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
+import { getLocale, getTranslations } from 'next-intl/server'
+import { celebrationDetail, teamNudgeTexts } from './_persona-copy'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { countInbox, listInbox, type InboxItem } from '@openbooks/engine/src/inbox/index.ts'
@@ -142,6 +144,8 @@ export async function loadPersonaMetrics(
   if (fields.size === 0) return out
   const orgId = authz.user.orgId
   const userId = authz.user.id
+  const tp = await getTranslations('dashboard.persona')
+  const locale = await getLocale()
   const need = (...names: (keyof PersonaMetrics)[]): boolean => names.some((name) => fields.has(name))
   const ctx = need('inboxTasksTop', 'inboxApprovalsTop', 'inboxCount') ? await inboxContext(authz) : null
   const today = await businessToday(orgId)
@@ -299,13 +303,12 @@ export async function loadPersonaMetrics(
            or to_char(min(v.effective_from)::date, 'MM-DD') in (
              select to_char(d::date, 'MM-DD') from generate_series(${today}::date - 3, ${today}::date + 3, '1 day') d)
        order by min(v.effective_from) desc limit 8`)).rows
-    out.celebrations = rows.map((row) => {
-      const years = Number(today.slice(0, 4)) - Number(row.service_start.slice(0, 4))
-      return {
-        name: row.name,
-        detail: row.service_start > today ? `joins ${row.service_start}` : years > 0 ? `${years} year${years === 1 ? '' : 's'}` : `since ${row.service_start}`,
-      }
-    })
+    // Server-side copy uses ICU plurals and locale dates — never English
+    // string-concat (`2 years`, `1 step(s)`); see `_persona-copy`.
+    out.celebrations = rows.map((row) => ({
+      name: row.name,
+      detail: celebrationDetail(row.service_start, today, locale, (key, params) => tp(key, params)),
+    }))
   }
 
   if (need('announcements') && (await isFeatureEnabled(orgId, 'homeAnnouncements'))) {
@@ -327,20 +330,17 @@ export async function loadPersonaMetrics(
   }
 
   if (need('teamNudges') && isManager && (await isFeatureEnabled(orgId, 'hrmManagerNudges'))) {
-    const nudges: { text: string; href: string }[] = []
     const overdue = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
        where s.org_id = ${orgId} and p.status = 'open' and s.status = 'pending' and s.due_on < ${today}::date
          and p.employment_id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`)).rows[0]?.n ?? 0
-    if (overdue > 0) nudges.push({ text: `${overdue} checklist step${overdue === 1 ? '' : 's'} overdue on your team`, href: '/hrm/processes' })
     const joiners = (await db.execute<{ n: number }>(sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
        where e.org_id = ${orgId} and v.effective_from >= ${today}::date - 30
          and e.id in (select jsonb_array_elements_text(${JSON.stringify(teamIds)}::jsonb)::uuid)`)).rows[0]?.n ?? 0
-    if (joiners > 0) nudges.push({ text: `${joiners} new joiner${joiners === 1 ? '' : 's'} in the last 30 days — schedule the first 1:1`, href: '/hrm' })
-    out.teamNudges = nudges
+    out.teamNudges = teamNudgeTexts(overdue, joiners, (key, params) => tp(key, params))
   }
 
   if (need('teamHeadcount') && isManager && (await isFeatureEnabled(orgId, 'hrm'))) {

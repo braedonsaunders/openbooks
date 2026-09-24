@@ -228,6 +228,11 @@
     "allClear": "Todo al día.",
     "needsAttention": "Requiere atención.",
     "requestTimeOff": "Solicitar vacaciones",
-    "lastSlip": "Último recibo {date}"
+    "lastSlip": "Último recibo {date}",
+    "serviceYears": "{years, plural, one {# año} other {# años}}",
+    "joinedSince": "desde el {date}",
+    "joinsOn": "se incorpora el {date}",
+    "overdueSteps": "{overdue, plural, one {# paso de lista} other {# pasos de lista}} vencidos en su equipo",
+    "newJoiners": "{joiners, plural, one {# nueva incorporación} other {# nuevas incorporaciones}} en los últimos 30 días — programe la primera reunión 1:1"
   }
 }

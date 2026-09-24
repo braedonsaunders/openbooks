@@ -228,6 +228,11 @@
     "allClear": "All clear.",
     "needsAttention": "Needs attention.",
     "requestTimeOff": "Request time off",
-    "lastSlip": "Last slip {date}"
+    "lastSlip": "Last slip {date}",
+    "serviceYears": "{years, plural, one {# year} other {# years}}",
+    "joinedSince": "since {date}",
+    "joinsOn": "joins {date}",
+    "overdueSteps": "{overdue, plural, one {# checklist step} other {# checklist steps}} overdue on your team",
+    "newJoiners": "{joiners, plural, one {# new joiner} other {# new joiners}} in the last 30 days — schedule the first 1:1"
   }
 }
