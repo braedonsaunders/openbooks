@@ -136,6 +136,7 @@ test(
       // Nothing has changed yet: detection must find nothing at all.
       const quiet = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(quiet.periods.length, 0, "an unchanged payroll owes no retro");
 
@@ -154,8 +155,17 @@ test(
                 ${actorId}, ${actorId})`);
 
       // ---- Detect + quantify ------------------------------------------------
+      await assert.rejects(
+        proposeRetroPay({
+          orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+          allowedSubsidiaryIds: new Set(),
+        }),
+        /pay schedule not found/,
+        "an explicit empty entity lens cannot reveal or propose another entity's backpay",
+      );
       const proposal = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(proposal.taxYear, 2026);
       assert.equal(proposal.periods.length, 3, "all three paid periods are affected");
@@ -191,6 +201,7 @@ test(
       // ---- Pay ---------------------------------------------------------------
       const retro = await createRetroPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(retro.settlements, 3);
       assert.equal(retro.employees, 1);
@@ -201,6 +212,7 @@ test(
       await assert.rejects(
         createRetroPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+          allowedSubsidiaryIds: null,
         }),
         /already settles Robin Field's period\(s\) and has not been committed/,
       );
@@ -359,6 +371,7 @@ test(
       // ---- Exactly once -------------------------------------------------------
       const after = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(after.payableTotal, "0.0000", "the same difference is never owed twice");
       assert.equal(after.overpaidTotal, "0.0000");
@@ -369,6 +382,7 @@ test(
       await assert.rejects(
         createRetroPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+          allowedSubsidiaryIds: null,
         }),
         /nothing to pay retroactively/,
       );
@@ -383,6 +397,7 @@ test(
            and effective_from = '2026-01-01'`);
       const corrected = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(corrected.payableTotal, "240.0000", "3 periods × 80 h × the further $1.00");
       assert.equal(corrected.periods.length, 3, "three committed periods share the correction");
@@ -494,12 +509,14 @@ test(
                 ${actorId}, ${actorId})`);
       const proposal = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(proposal.periods.length, 1);
       assert.equal(proposal.periods[0]!.difference!.recomputedEarnings, "990.0000");
       assert.equal(proposal.periods[0]!.difference!.delta, "90.0000");
       const retro = await createRetroPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(retro.total, "90.0000");
       assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
@@ -701,6 +718,7 @@ test(
       // Quantification re-runs the period on today's inputs: 31 h x $33.00.
       const proposal = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(proposal.periods.length, 1);
       assert.equal(proposal.periods[0]!.difference!.originalEarnings, "900.0000");
@@ -709,6 +727,7 @@ test(
 
       const retro = await createRetroPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(retro.total, "123.0000");
 
@@ -755,6 +774,7 @@ test(
       await assert.rejects(
         createRetroPayRun({
           orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
+          allowedSubsidiaryIds: null,
         }),
         /nothing to pay retroactively/,
       );
@@ -873,6 +893,7 @@ test(
       const periods = await quantifyRetroCandidates({
         orgId: org.orgId, actorId,
         candidates: [candidate(hourlyId), candidate(salaryId)],
+        allowedSubsidiaryIds: null,
       });
       assert.equal(periods.length, 2);
       const byEmployee = new Map(periods.map((period) => [period.candidate.employeePartyId, period]));

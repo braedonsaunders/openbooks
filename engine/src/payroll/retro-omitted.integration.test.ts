@@ -114,6 +114,7 @@ test(
       // ---- Detect + quantify ------------------------------------------------
       const proposal = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-09-19",
+        allowedSubsidiaryIds: null,
       });
       const sanne = proposal.periods.filter(
         (p) => p.candidate.employeeName === "Sanne de Vries",
@@ -140,6 +141,7 @@ test(
       // ---- Pay ----------------------------------------------------------------
       const retro = await createRetroPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-09-19",
+        allowedSubsidiaryIds: null,
       });
       assert.equal(retro.settlements, 1);
       assert.equal(retro.employees, 1);
@@ -155,6 +157,7 @@ test(
       // left to give — the committed settlement sits inside previouslySettled.
       const again = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-09-19",
+        allowedSubsidiaryIds: null,
       });
       const settled = again.periods.filter(
         (p) => p.candidate.employeeName === "Sanne de Vries",
