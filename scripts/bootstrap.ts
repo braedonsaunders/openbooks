@@ -1694,6 +1694,32 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "by construction (every statement tolerates re-execution), and only "
       + "the recorded identity moves.",
   },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "b3738d09a836ba824febc892bac3a081cb162b9a4fafe1561edbc28a17f9a1f0",
+    to: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
+    strategy: "reapply",
+    reason:
+      "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
+      + "openbooks.sandbox_wipe session GUC that any session can SET, reopening the "
+      + "posted -> draft rewrite G4 exists to refuse; the guard now admits a wipe only "
+      + "through openbooks_sandbox_wipe_allowed(org_id). A database recorded at the "
+      + "G4-only (3f4e33911) body re-runs the current file: every statement is CREATE OR REPLACE / "
+      + "DROP TRIGGER IF EXISTS + CREATE TRIGGER, so reapply converges idempotently.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "3d46141b8540f29d28d1905acad92a0d3478c6b0b7297e85e2b3654783a3ffab",
+    to: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
+    strategy: "reapply",
+    reason:
+      "unshipped 0338 corrective revision: posted_document_status_guard trusted a raw "
+      + "openbooks.sandbox_wipe session GUC that any session can SET, reopening the "
+      + "posted -> draft rewrite G4 exists to refuse; the guard now admits a wipe only "
+      + "through openbooks_sandbox_wipe_allowed(org_id). A database recorded at the "
+      + "G4+G5 (673890cb9) body re-runs the current file: every statement is CREATE OR REPLACE / "
+      + "DROP TRIGGER IF EXISTS + CREATE TRIGGER, so reapply converges idempotently.",
+  },
 ];
 
 async function executeTrackedMigration(

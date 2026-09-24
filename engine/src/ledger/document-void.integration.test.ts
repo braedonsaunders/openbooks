@@ -1082,3 +1082,32 @@ test("a posted document cannot regress to draft in storage", { skip: !DB }, asyn
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("a raw sandbox-wipe session setting does not open posted -> draft", { skip: !DB }, async () => {
+  // Any session can SET openbooks.sandbox_wipe, so the guard must not trust
+  // it: only openbooks_sandbox_wipe_allowed(org_id) admits a wipe, and this
+  // org was never authorized for one.
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "Wipe GUC Controller", "admin");
+    const { documentId } = await seedPostedCheck(org, actorId, "CHECK-WIPE-GUC-1");
+    await assert.rejects(
+      db.transaction(async (tx) => {
+        await tx.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+        await tx.execute(sql`update documents set status = 'draft' where id = ${documentId} and org_id = ${org.orgId}`);
+      }),
+      (error: unknown) => {
+        const chain: string[] = [];
+        for (let cur: unknown = error; cur && typeof cur === "object"; cur = (cur as { cause?: unknown }).cause) {
+          chain.push(String((cur as { message?: unknown }).message ?? ""));
+        }
+        assert.match(chain.join(" "), /is posted and immutable/);
+        return true;
+      },
+    );
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${documentId}`)).rows[0]!.status;
+    assert.equal(status, "posted");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
