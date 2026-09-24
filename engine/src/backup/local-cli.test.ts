@@ -42,3 +42,32 @@ test("removes every artifact after a manifest failure so the backup can be retri
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("a lax --org id is refused at arg-parse before any side effect", async () => {
+  // C-49: /^[0-9a-f-]{36}$/ accepted 36 dashes and failed mid-run, after the
+  // output directory already existed. The canonical assertUuid (the same one
+  // restore uses) must refuse before streamBackup is even called.
+  const root = await mkdtemp(join(tmpdir(), "openbooks-local-backup-"));
+  const out = join(root, "organization.json.gz");
+  let streamCalls = 0;
+  const streamBackup = async (_orgId: string, sink: Writable) => {
+    streamCalls += 1;
+    sink.end("backup bytes");
+    return { tables: [], totalRows: 0 };
+  };
+  try {
+    await assert.rejects(
+      runLocalBackup({ orgId: "-".repeat(36), out, streamBackup }),
+      /--org must be a canonical uuid/,
+    );
+    assert.equal(streamCalls, 0, "no backup work may start for a lax id");
+    assert.equal(existsSync(out), false);
+    await assert.rejects(
+      runLocalBackup({ orgId: "not-a-uuid", out, streamBackup }),
+      /--org must be a canonical uuid/,
+    );
+    assert.equal(streamCalls, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
