@@ -436,6 +436,33 @@ export interface PayrollContributoryBases {
 }
 
 /**
+ * One contribution program with its OWN insurable/pensionable base — a
+ * program the pack prices and files separately from the two classic flags
+ * (Québec's QPIP parental program beside CPP/QPP and EI).
+ *
+ * The base accumulates from per-earning-type applicability the pack declares
+ * (each earning line carries the program key when the type contributes to
+ * it; absent means included, matching the sibling flags' default-true), is
+ * stored per stub period under `stubFactorKey`, and is read back by the
+ * pack's slips capped at the program's own maximum. Never approximated from
+ * another program's base: EI-excluded earnings can be QPIP-insurable and the
+ * reverse, and the model must let them differ.
+ *
+ * OPTIONAL: a pack whose every program rides the two classic flags declares
+ * nothing. No other pack declares one today.
+ */
+export interface PayrollContributionProgram {
+  /** Program code, e.g. `qpip`. Keys earning-line applicability and the opening carry-in. */
+  key: string;
+  /** Operator label, e.g. `QPIP insurable earnings`. */
+  label: string;
+  /** What the base is, in the program's own statutory words. */
+  help: string;
+  /** Stub `factors` key carrying the period's base, e.g. `IE_QPIP`. */
+  stubFactorKey: string;
+}
+
+/**
  * One second-order opening year-to-date amount a country pack declares for
  * mid-year adopters (see `openingYtdFields` on the pack). The generic
  * opening-balances layer — the field list, the money validation, the
@@ -650,6 +677,11 @@ export interface PayrollCountryPack {
   retroactivePayTreatment: PayrollRetroactiveTreatment;
   /** What the generic pensionable/insurable flags mean here. See the type. */
   contributoryBases: PayrollContributoryBases;
+  /**
+   * Contribution programs with their own bases (see the type). Absent means
+   * the pack's every program rides the two classic flags.
+   */
+  contributionPrograms?: readonly PayrollContributionProgram[];
   /**
    * pay_components.tax_treatment for EMPLOYEE-paid union dues, or null when
    * the pack's statutory engine gives dues no tax treatment at all.

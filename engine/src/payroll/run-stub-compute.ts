@@ -378,6 +378,17 @@ export async function calculateStub(
   // still contributes to the contributory base exactly once.
   const pensionableNonPeriodic = earning((l) => (l.pensionable ?? true) && (l.nonPeriodic ?? false));
 
+  // Per-program bases for contribution programs the pack declares. Each
+  // program accumulates its OWN base from the per-earning-type applicability
+  // carried on the lines — never from another program's base. Absent
+  // applicability means included (the sibling flags' default-true), so a
+  // pack that declares no program skips this loop and nothing changes.
+  const programBases: Record<string, string> = {};
+  for (const program of pack.contributionPrograms ?? []) {
+    programBases[program.key] =
+      earning((l) => l.programApplicability?.[program.key] ?? true);
+  }
+
   // Pack-declared pre-tax treatments, computed generically: each base less
   // the deduction lines carrying a treatment the pack declares as reducing
   // it. The pack's engine prices off the reduced legs (AU salary sacrifice
@@ -431,12 +442,29 @@ export async function calculateStub(
       filingAccountId: jurisdiction.filingAccountId,
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,
+      programBases,
       reducedBases: reducedBases(),
       deduction,
       pushStatutory, storedCertificates, certificateFor, noteAdvisory, bool,
       assertRegionSupported: (region) => assertPayrollRegionSupported(country, region),
       employerLevies,
     });
+    // Per-program period bases merge here, not inside the pack pass: the
+    // generic layer accumulates every declared program's base from the
+    // lines, so the fact is stored durably on the stub under the pack's own
+    // factor key. A pack that already set the key to something else collides
+    // by name rather than merging two bases into one year-to-date.
+    for (const program of pack.contributionPrograms ?? []) {
+      const value = programBases[program.key]!;
+      const key = program.stubFactorKey;
+      if (key in factors && factors[key] !== value) {
+        throw new PayrollError(
+          `program factor "${key}" collides with the ${country} pack's statutory factors — `
+          + "rename the program's stubFactorKey",
+        );
+      }
+      factors[key] = value;
+    }
     // Employer-aggregate factors merge here, not inside the pack pass: the
     // pack owns its factor namespace and the levies own theirs, and a key in
     // both would accumulate two levies into one year-to-date. Refused by

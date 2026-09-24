@@ -173,13 +173,32 @@ test("opening bases are capped together with committed T4 bases", () => {
       employeePartyId: slip.employeePartyId,
       insurable: slip.box24EiInsurable,
       pensionable: slip.box26CppPensionable,
+      qpipInsurable: slip.box56QpipInsurable,
     })),
-    { mie: "68900", yampe: "85000" },
+    { mie: "68900", yampe: "85000", qpipMie: "103000" },
   );
   assert.equal(capped[0]!.box24EiInsurable, "68900");
   assert.equal(capped[0]!.box26CppPensionable, "85000");
   assert.equal(capped[1]!.box24EiInsurable, "0");
   assert.equal(capped[1]!.box26CppPensionable, "0");
+});
+
+test("box 56 consumes its OWN room at the QPIP maximum (C-12)", () => {
+  // A Québec two-slip employee: 70,000 + 50,000 of QPIP-insurable earnings
+  // against a 103,000 QPIP maximum. The first slip fills first and the
+  // second gets only the 33,000 of QPIP room that is left — while the EI
+  // room (68,900) is consumed by the EI base alone, untouched by the QPIP
+  // figures on either slip.
+  const capped = capAnnualEarnings(
+    [
+      { employeePartyId: "qc", insurable: "50000", pensionable: "60000", qpipInsurable: "70000" },
+      { employeePartyId: "qc", insurable: "40000", pensionable: "50000", qpipInsurable: "50000" },
+    ],
+    { mie: "68900", yampe: "85000", qpipMie: "103000" },
+  );
+  assert.equal(capped[0]!.box56QpipInsurable, "70000");
+  assert.equal(capped[1]!.box56QpipInsurable, "33000.0000"); // 103,000 − 70,000
+  assert.equal(capped[1]!.box24EiInsurable, "18900.0000"); // 68,900 − 50,000
 });
 
 /**

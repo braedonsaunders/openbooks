@@ -216,6 +216,30 @@ test("Quebec employment: QPP + QPIP + abatement, no provincial T2", () => {
   assert.equal(result.factors.T1, "3517.7500");
 });
 
+test("QPIP prices off its OWN insurable base, never the EI leg (C-12)", () => {
+  // EI-insurable 2,000 but only 1,500 QPIP-insurable (benefits the QPIP
+  // program excludes): the QPIP premium follows the program base while EI
+  // still prices off the full EI leg.
+  const low = calculateT4127({
+    payDate: "2026-02-13", province: "QC", periodsPerYear: 26,
+    income: "2000.00", insurable: "2000.00", qpipInsurable: "1500.00",
+    federalClaimCode: 1,
+  });
+  assert.equal(low.ei, "26.0000"); // 0.0130 × 2000 — untouched
+  assert.equal(low.qpip, "6.4500"); // 0.0043 × 1500
+  assert.equal(low.qpipEmployer, "9.0300"); // 0.00602 × 1500
+  // And the reverse: EI-excluded earnings that ARE QPIP-insurable price QPIP
+  // above the EI premium's base.
+  const high = calculateT4127({
+    payDate: "2026-02-13", province: "QC", periodsPerYear: 26,
+    income: "2000.00", insurable: "2000.00", qpipInsurable: "2500.00",
+    federalClaimCode: 1,
+  });
+  assert.equal(high.ei, "26.0000");
+  assert.equal(high.qpip, "10.7500"); // 0.0043 × 2500
+  assert.equal(high.qpipEmployer, "15.0500"); // 0.00602 × 2500
+});
+
 test("tax-exempt (claim code E) still pays the Ontario Health Premium", () => {
   const result = calculateT4127({
     payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
