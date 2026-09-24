@@ -46,7 +46,7 @@ import { add as addMoney } from "../../money/money.ts";
 import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
-import { U } from "../canada/decimal.ts";
+import { D, mulRateCents, U } from "../canada/decimal.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import {
   miCityWithholding,
@@ -94,6 +94,21 @@ export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
     // Delaware Employer's Guide Section 14:
     // https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
     detail: "Delaware Employer's Guide Section 14 requires the incremental withholding differential and its regular-pay basis",
+  } as const,
+  GA: {
+    kind: "flat",
+    // 2026 Georgia Employer's Tax Guide, O.C.G.A. §48-7-101(f)(5): separately
+    // paid bonuses use the income-tax rate effective on the payment date.
+    rates: [
+      {
+        effectiveFrom: "2026-01-01", rate: "0.0519",
+        source: "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
+      },
+      {
+        effectiveFrom: "2026-05-11", rate: "0.0499",
+        source: "https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download",
+      },
+    ],
   } as const,
 } satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
@@ -190,6 +205,7 @@ export interface UsWithholdingResult {
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
   const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
+  let separateFlatRate: string | undefined;
   if (supplemental > 0n && input.supplementalPaymentTiming == null) {
     throw new UsWithholdingError(
       `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
@@ -204,9 +220,23 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         + "Record the jurisdiction's official method and required inputs before calculating — refused by name",
       );
     }
-    throw new UsWithholdingError(
-      `${levy.label} separately paid supplemental method ${method.kind} is declared but its calculator is not available in this pack version — update the pack before calculating; refused by name`,
-    );
+    if (method.kind === "flat") {
+      const applicable = method.rates
+        .filter((rate) => rate.effectiveFrom <= input.payDate)
+        .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+        .at(-1);
+      if (!applicable) {
+        throw new UsWithholdingError(
+          `${levy.label} has no transcribed separate-supplemental flat rate for ${input.payDate}; `
+          + "transcribe the official rate effective on the payment date before calculating — refused by name",
+        );
+      }
+      separateFlatRate = applicable.rate;
+    } else {
+      throw new UsWithholdingError(
+        `${levy.label} separately paid supplemental method ${method.kind} is declared but its calculator is not available in this pack version — update the pack before calculating; refused by name`,
+      );
+    }
   }
   const certificate = levy.certificateKey
     ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
@@ -217,6 +247,40 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
     // returns null ONLY for a state with no wage income tax at all.
     const engine = requireUsStateWithholding(levy.region);
     if (!engine) return null;
+    if (separateFlatRate) {
+      // Flat-rate supplemental methods do not consume the employee's regular
+      // certificate exemptions. The state engine still computes the regular
+      // leg with no bonus; this dispatch computes the separately taxed bonus
+      // from the effective-dated method declaration above.
+      const regular = engine.compute({
+        payDate: input.payDate,
+        periodStart: input.periodStart,
+        employerEmployeeCount: input.employerEmployeeCount,
+        periodEnd: input.periodEnd,
+        periodsPerYear: input.periodsPerYear,
+        wages: input.wages,
+        supplemental: "0",
+        federalIncomeTax: input.federalIncomeTax,
+        taxQualifiedDeductions: input.taxQualifiedDeductions,
+        certificate,
+        basis: levy.reach,
+        regionTax: input.regionTax,
+        socialInsuranceDeducted: input.socialInsuranceDeducted,
+        ytd: input.ytd,
+      });
+      const supplementalTax = mulRateCents(supplemental, separateFlatRate);
+      return {
+        code: engine.state,
+        label: engine.label,
+        tax: addMoney(regular.tax, D(supplementalTax)),
+        factors: {
+          ...regular.factors,
+          US_SUPPLEMENTAL_METHOD: "flat",
+          US_SUPPLEMENTAL_RATE: separateFlatRate,
+          US_SUPPLEMENTAL_TAX: D(supplementalTax),
+        },
+      };
+    }
     const result = engine.compute({
       payDate: input.payDate,
       periodStart: input.periodStart,

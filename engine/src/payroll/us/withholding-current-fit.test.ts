@@ -220,6 +220,30 @@ test('US supplemental withholding refuses when payment timing was not captured',
   )
 })
 
+test('Georgia separately paid bonus uses the effective flat supplemental rate', () => {
+  // Georgia 2026 Employer's Tax Guide, O.C.G.A. §48-7-101(f)(5): separately
+  // paid bonuses use the rate effective on the payment date.
+  // https://dor.georgia.gov/document/document-document/2026-employers-tax-guide-updated-june-2026/download
+  const input = {
+    levy: levy('GA', 'us_ga_g4'),
+    payDate: '2026-05-11', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '500.0000',
+    supplementalPaymentTiming: 'separate' as const,
+    certificateFor: () => certificate('us_ga_g4', {}), tenantRates: () => undefined,
+    federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0]
+  const result = computeUsWithholding(input)
+  assert.equal(result?.tax, '24.9500')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_RATE, '0.0499')
+  assert.equal(result?.factors.US_SUPPLEMENTAL_TAX, '24.9500')
+
+  const beforeRateChange = computeUsWithholding({
+    ...input, payDate: '2026-05-10',
+  })
+  assert.equal(beforeRateChange?.tax, '25.9500')
+  assert.equal(beforeRateChange?.factors.US_SUPPLEMENTAL_RATE, '0.0519')
+})
+
 test('every US state and DC declares a separate-supplemental method', () => {
   assert.deepEqual(
     Object.keys(US_SEPARATE_SUPPLEMENTAL_METHODS).sort(),
