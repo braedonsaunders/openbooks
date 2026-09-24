@@ -42,7 +42,7 @@
     "engine/src/scripting/permissions.integration.test.ts": 4,
     "engine/src/sim/saas-autopilot.test.ts": 2,
     "engine/src/sync/connection-dynamics-tokens.test.ts": 1,
-    "engine/src/sync/identity-boundary.test.ts": 15,
+    "engine/src/sync/identity-boundary.test.ts": 2,
     "engine/src/sync/netsuite-crm.test.ts": 2,
     "engine/src/sync/netsuite-fixed-assets.test.ts": 6,
     "engine/src/sync/readme-accuracy.test.ts": 1,
