@@ -39,7 +39,7 @@ registerHooks({
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { POST } = await import("./route.ts");
+const { GET, POST } = await import("./route.ts");
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", { skip: !DB }, async () => {
@@ -54,6 +54,9 @@ test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", 
         features: { hrm: true, hrmPerformance: true, hrmFeedback: true },
         hrm_feedback: { public_praise_by: "anyone" },
       })}::jsonb where id = ${org.orgId}`));
+    const read = await GET(new Request("http://feedback.test/api/hrm/feedback/settings"));
+    assert.equal(read.status, 403, "restricted HR actors cannot read org-wide feedback policy");
+    assert.deepEqual(await read.json(), { error: "requires unrestricted subsidiary access" });
     const response = await POST(new Request("http://feedback.test/api/hrm/feedback/settings", {
       method: "POST",
       headers: { "content-type": "application/json" },

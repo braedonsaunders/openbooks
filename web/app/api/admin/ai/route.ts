@@ -17,6 +17,8 @@ export const runtime = "nodejs";
 export async function GET() {
   const gate = await guardPermission("admin.ai.manage");
   if (gate instanceof NextResponse) return gate;
+  const scopeDenied = guardUnrestrictedScope(gate);
+  if (scopeDenied) return scopeDenied;
   return NextResponse.json(await getOrgAiSettings(gate.user.orgId));
 }
 

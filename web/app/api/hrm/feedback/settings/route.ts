@@ -21,6 +21,8 @@ const settingsBody = z.object({ publicPraiseBy: z.enum(["anyone", "managers_and_
 export async function GET(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const scopeDenied = guardUnrestrictedScope(authz);
+  if (scopeDenied) return scopeDenied;
   if (
     !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||

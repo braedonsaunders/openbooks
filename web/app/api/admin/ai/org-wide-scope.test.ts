@@ -4,8 +4,9 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.org-ai-scope-test");
-const state: { writes: string[]; allowedSubsidiaryIds: Set<string> | null } = {
+const state: { writes: string[]; reads: string[]; allowedSubsidiaryIds: Set<string> | null } = {
   writes: [],
+  reads: [],
   allowedSubsidiaryIds: null,
 };
 Object.assign(globalThis, { [stateKey]: state });
@@ -41,7 +42,7 @@ const hooks = registerHooks({
         export async function saveOrgAiAgentSettings() { state.writes.push("ai-agent"); return {}; }
         export async function saveOrgAiSettings() { state.writes.push("ai-settings"); }
         export async function clearOrgAiKey() { state.writes.push("ai-key-delete"); }
-        export async function getOrgAiSettings() { return {}; }
+        export async function getOrgAiSettings() { state.reads.push("ai-settings"); return {}; }
         export function normalizeAgentSettingsInput(value) { return value; }
       `);
     }
@@ -76,4 +77,15 @@ test("restricted actors cannot write any org-wide AI or setup-agent policy", asy
     assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
   }
   assert.deepEqual(state.writes, [], "no org-wide setting or key reaches a writer");
+});
+
+test("restricted actors cannot read org-wide AI settings", async () => {
+  state.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
+  state.reads.length = 0;
+
+  const response = await ai.GET();
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.deepEqual(state.reads, [], "org-wide settings are not loaded before refusing the reader");
 });
