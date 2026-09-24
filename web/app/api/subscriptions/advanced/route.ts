@@ -93,6 +93,9 @@ export async function POST(req: Request) {
               return NextResponse.json({ error: `components[${index}] must be an object` }, { status: 422 });
             }
             const component = entry as Record<string, unknown>;
+            if (component.isOptional !== undefined && component.isOptional !== null && typeof component.isOptional !== "boolean") {
+              return NextResponse.json({ error: `components[${index}].isOptional must be a boolean` }, { status: 422 });
+            }
             // Quantity defaults to one per the documented catalog contract;
             // a unit price is never defaulted: a missing price once became a
             // silent free component, so it is required and must be canonical
@@ -113,7 +116,7 @@ export async function POST(req: Request) {
               incomeAccountId: (component.incomeAccountId as string) || null,
               itemId: (component.itemId as string) || null,
               taxCodeId: (component.taxCodeId as string) || null,
-              isOptional: Boolean(component.isOptional),
+              isOptional: component.isOptional === true,
             });
           }
         }
@@ -139,6 +142,9 @@ export async function POST(req: Request) {
         if (!body.subscriptionId || !body.planVersionId || !body.termStartsOn) {
           return NextResponse.json({ error: "subscription, version and term start are required" }, { status: 400 });
         }
+        if (body.billFromUnbilledBoundary !== undefined && body.billFromUnbilledBoundary !== null && typeof body.billFromUnbilledBoundary !== "boolean") {
+          return NextResponse.json({ error: "billFromUnbilledBoundary must be a boolean" }, { status: 400 });
+        }
         await activateLifecycle(authz.user.orgId, authz.user.id, {
           subscriptionId: String(body.subscriptionId),
           planVersionId: String(body.planVersionId),
@@ -147,7 +153,7 @@ export async function POST(req: Request) {
           trialEndsOn: typeof body.trialEndsOn === "string" || body.trialEndsOn == null ? body.trialEndsOn || null : String(body.trialEndsOn),
           renewalPolicy: (body.renewalPolicy ?? "auto") as RenewalPolicy,
           renewalTermMonths: body.renewalTermMonths == null || body.renewalTermMonths === "" ? null : subscriptionPeriodCount(body.renewalTermMonths, "renewal term"),
-          billFromUnbilledBoundary: body.billFromUnbilledBoundary == null ? undefined : Boolean(body.billFromUnbilledBoundary),
+          billFromUnbilledBoundary: body.billFromUnbilledBoundary == null ? undefined : body.billFromUnbilledBoundary === true,
         }, authz.allowedSubsidiaryIds);
         return NextResponse.json({ ok: true });
       case "amend": {

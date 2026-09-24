@@ -91,12 +91,15 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
   if (effectiveFrom === 'invalid' || effectiveTo === 'invalid') {
     return { error: 'Enter a real calendar date (YYYY-MM-DD)' }
   }
+  if (body.isActive !== undefined && typeof body.isActive !== 'boolean') {
+    return { error: 'isActive must be a boolean' }
+  }
   if (effectiveFrom && effectiveTo && effectiveTo < effectiveFrom) {
     return { error: 'The end date cannot precede the start date' }
   }
   return {
     currency, unitPrice, lowValue, highValue,
-    effectiveFrom, effectiveTo, isActive: body.isActive === undefined ? true : Boolean(body.isActive),
+    effectiveFrom, effectiveTo, isActive: body.isActive === undefined ? true : body.isActive === true,
   }
 }
 

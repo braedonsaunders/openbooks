@@ -71,6 +71,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
+  if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
+    return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
+  }
 
   const org = (await db.execute<{ brand_primary: string | null }>(sql`
     select settings ->> 'brandPrimary' as brand_primary from orgs where id = ${user.orgId}
@@ -115,7 +118,7 @@ export async function POST(req: Request) {
 
   try {
     const row = await db.transaction(async (tx) => {
-      if (body.isDefault) {
+      if (body.isDefault === true) {
         // Serialize default-swaps per (org, kind) under an advisory
         // transaction lock: without it two concurrent creates both clear,
         // both insert is_default=true, and the partial unique index answers
@@ -133,7 +136,7 @@ export async function POST(req: Request) {
                                    is_default, created_by, updated_by)
         values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
                 ${paperSize}, ${orientation}, ${marginMm}, ${header || null}, ${footer || null},
-                ${prettySource}, ${compiled.compiledHtml}, ${!!body.isDefault},
+                ${prettySource}, ${compiled.compiledHtml}, ${body.isDefault === true},
                 ${user.id}, ${user.id})
         returning id, name, to_jsonb(pdf_templates) as snapshot
       `));

@@ -61,14 +61,14 @@ async function post(id: string, body: unknown): Promise<{ status: number; json: 
   }
 }
 
-test('POST refuses an impossible effective date without writing', { skip: !DB }, async () => {
+test('POST refuses malformed policy values without writing', { skip: !DB }, async () => {
   const { org, itemId } = await fixture()
   try {
-    const result = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-30' })
-    assert.equal(result.status, 400, `expected 400, got ${result.status}: ${JSON.stringify(result.json)}`)
+    const invalidDate = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-30' })
+    const invalidFlag = await post(itemId, { currency: 'CAD', unitPrice: '10', effectiveFrom: '2024-02-29', isActive: 'false' })
     const rows = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from fair_value_prices where item_id = ${itemId}`)).rows
-    assert.equal(rows[0]!.n, 0)
+    assert.deepEqual([invalidDate.status, invalidFlag.status, rows[0]!.n], [400, 400, 0])
   } finally {
     await dropScratchOrg(org.orgId)
   }
