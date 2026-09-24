@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { Button, Label, Select } from '@openbooks/ui'
+import { readApiErrorMessage } from '../../../lib/api-error'
 
 export interface ComplianceClassOption {
   id: string
@@ -47,8 +48,9 @@ export function VendorCompliancePanel({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ complianceClassId: classId || null }),
       })
-      const result = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(result.error ?? t('compliance.saveFailed'))
+      // The status is checked before the body is read: `result.error` is
+      // unguarded here, so an object payload toasted '[object Object]'.
+      if (!response.ok) throw new Error(await readApiErrorMessage(response, t('compliance.saveFailed')))
       toast.success(t('compliance.saved'))
       router.refresh()
     } catch (error) {
