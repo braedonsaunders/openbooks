@@ -345,7 +345,19 @@ export function inCountyWithholding(input: {
   exemptions: InExemptionCounts;
   county: InCounty;
   additionalPerPeriod?: string;
+  exempt?: boolean;
 }): { tax: string; factors: Record<string, string> } {
+  if (input.exempt) {
+    return {
+      tax: D(0n),
+      factors: {
+        IN_COUNTY_CODE: input.county.code,
+        IN_COUNTY_RATE: input.county.rate,
+        IN_COUNTY_TAX: D(0n),
+        IN_EXEMPT: "1",
+      },
+    };
+  }
   const { taxable, factors } = inPeriodTaxable(input);
   factors.IN_COUNTY_CODE = input.county.code;
   factors.IN_COUNTY_RATE = input.county.rate;
@@ -525,12 +537,21 @@ export const IN_CERTIFICATE: PayrollCertificate = {
     },
     {
       key: "exempt",
-      label: "Exempt from Indiana withholding (WH-4MIL / WH-4AFF)",
+      label: "Exempt from Indiana state and county withholding (WH-4MIL)",
       kind: "flag",
       help:
-        "WH-4MIL military-spouse earned-income exemption, or a WH-4AFF 30-day "
-        + "nonresident waiver the employer is honoring. Departmental Notice #1 does "
-        + "not otherwise permit a federal-style exempt claim.",
+        "Valid WH-4MIL military-spouse earned-income exemption. State Form 55496 exempts "
+        + "qualifying wages from both state and county income tax. Departmental Notice #1 "
+        + "does not otherwise permit a federal-style exempt claim.",
+    },
+    {
+      key: "county_exempt",
+      label: "Exempt from Indiana county tax (WH-4AFF)",
+      kind: "flag",
+      help:
+        "A current WH-4AFF county-tax waiver for a reciprocal-state nonresident; it does "
+        + "not exempt Indiana state withholding. File a new certificate when its 30-day "
+        + "authorization ends.",
     },
   ],
 };

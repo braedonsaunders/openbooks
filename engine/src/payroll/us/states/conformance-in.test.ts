@@ -230,3 +230,43 @@ test("IN county withholding taxes supplemental pay without reapplying WH-4 exemp
   assert.equal(result?.factors.IN_COUNTY_SUPPLEMENTAL_TAXABLE, money("200.00"));
   assert.equal(result?.tax, money("6.73"));
 });
+
+test("IN WH-4MIL exemption also excludes county withholding", () => {
+  // State Form 55496 (WH-4MIL) exempts qualifying military-spouse wages from
+  // both Indiana state and county income tax.
+  const result = computeUsWithholding({
+    levy: {
+      level: "sub_region", region: "IN", subRegion: "31",
+      label: "Harrison County income tax",
+      basis: "resident", side: "residence", reach: "resident",
+      certificateKey: "us_in_wh4",
+    },
+    payDate: "2026-03-06", periodEnd: "2026-03-06", periodsPerYear: 52,
+    wages: "800.00", federalIncomeTax: "13.96",
+    certificateFor: () => cert({ exempt: "true" }),
+    tenantRates: () => undefined,
+  });
+  assert.equal(result?.tax, money("0.00"));
+  assert.equal(result?.factors.IN_EXEMPT, "1");
+});
+
+test("IN WH-4AFF county waiver excludes county tax without exempting state tax", () => {
+  const certificate = cert({ county_exempt: "true" });
+  const result = computeUsWithholding({
+    levy: {
+      level: "sub_region", region: "IN", subRegion: "31",
+      label: "Harrison County income tax",
+      basis: "resident", side: "residence", reach: "resident",
+      certificateKey: "us_in_wh4",
+    },
+    payDate: "2026-03-06", periodEnd: "2026-03-06", periodsPerYear: 52,
+    wages: "800.00", federalIncomeTax: "13.96",
+    certificateFor: () => certificate,
+    tenantRates: () => undefined,
+  });
+  assert.equal(result?.tax, money("0.00"));
+  assert.equal(IN_WITHHOLDING.compute({
+    payDate: "2026-03-06", periodsPerYear: 52, wages: "800.00",
+    basis: "resident", certificate,
+  }).tax, money("23.60"));
+});

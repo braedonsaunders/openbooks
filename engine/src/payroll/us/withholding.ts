@@ -787,6 +787,8 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         )
           ? certificateAmount(certificate, "additional_county_per_period") ?? undefined
           : undefined,
+        exempt: certificateFlag(certificate, "exempt")
+          || certificateFlag(certificate, "county_exempt"),
       });
       return {
         code: `IN-${subRegion}`, label: declared?.label ?? `${county.name} County income tax`,
