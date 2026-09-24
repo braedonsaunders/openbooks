@@ -137,10 +137,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
         if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
       }
-      await db.transaction(async (tx) => {
+      // A write that matches zero rows is a failure, not a success: the row
+      // may be missing or belong to another org (or have vanished between the
+      // pre-read above and this transaction), and answering {ok:true} would
+      // report a no-op as a save.
+      const scheduleWrite = await db.transaction(async (tx) => {
         const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}
         `))
+        if (!before.rows[0]) return 'missing' as const
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_schedules set
             name = coalesce(${body.name?.trim() ?? null}, name),
@@ -154,10 +159,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           where id = ${id} and org_id = ${gate.user.orgId}
           returning *
         `))
-        if (!before.rows[0] || !updated.rows[0]) return
+        if (!updated.rows[0]) return 'missing' as const
         await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', id, 'update',
           { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+        return 'updated' as const
       })
+      if (scheduleWrite === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
     } else {
       // POST allowlists the mandate status; PATCH must enforce the same
       // contract instead of storing an unknown status that silently disables
@@ -181,10 +188,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           return NextResponse.json({ error: `${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
         }
       }
-      await db.transaction(async (tx) => {
+      // A write that matches zero rows is a failure, not a success: a missing
+      // or other-org id must answer 404, never {ok:true} for work no read can
+      // observe.
+      const mandateWrite = await db.transaction(async (tx) => {
         const before = (await tx.execute<Record<string, unknown>>(sql`
           select * from payment_mandates where id = ${id} and org_id = ${gate.user.orgId}
         `))
+        if (!before.rows[0]) return 'missing' as const
         const updated = (await tx.execute<Record<string, unknown>>(sql`
           update payment_mandates set
             status = coalesce(${body.status ?? null}, status),
@@ -195,10 +206,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           where id = ${id} and org_id = ${gate.user.orgId}
           returning *
         `))
-        if (!before.rows[0] || !updated.rows[0]) return
+        if (!updated.rows[0]) return 'missing' as const
         await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', id, 'update',
           { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
+        return 'updated' as const
       })
+      if (mandateWrite === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
     }
     return NextResponse.json({ ok: true })
   } catch (error) {
