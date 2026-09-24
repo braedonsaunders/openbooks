@@ -100,3 +100,17 @@ test('POST still files with a column-maximum threshold and identical read-back',
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('POST refuses the current tax year as not yet completed', { skip: !DB }, async () => {
+  const { org } = await fixture()
+  try {
+    const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')
+    const currentYear = Number((await withOrgContext(state.orgId, () => businessToday(state.orgId))).slice(0, 4))
+    const result = await post({ taxYear: currentYear, formType: '1099-NEC' })
+    assert.equal(result.status, 422, JSON.stringify(result.json))
+    assert.match(String((result.json as { error?: string }).error ?? ''), /completed tax years|has not ended yet/)
+    assert.equal(await filingCount(), 0)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
