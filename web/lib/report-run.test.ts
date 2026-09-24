@@ -11,10 +11,12 @@ const agingKey = Symbol.for('openbooks.aging-export-asof-test')
 const agingState: {
   asOfValues: unknown[]
   bookThreading: Array<{ kind: string; bookId: unknown }>
+  agingOptions: Array<{ basis: unknown; reportingCurrency: unknown }>
   featuresOn: string[]
 } = {
   asOfValues: [],
   bookThreading: [],
+  agingOptions: [],
   featuresOn: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[agingKey] = agingState
@@ -63,8 +65,10 @@ const mockSources = new Map<string, string>([
       export async function agingByParty(side, asOf, dims, orgId, opts) {
         state.asOfValues.push(asOf)
         state.bookThreading.push({ kind: 'aging', bookId: opts?.bookId })
+        state.agingOptions.push({ basis: opts?.basis, reportingCurrency: opts?.reportingCurrency })
         return []
       }
+      export async function agingCurrenciesInScope() { return { baseCurrency: 'CAD', currencies: ['CAD', 'EUR'] } }
       const thread = (kind, bookId) => { state.bookThreading.push({ kind, bookId }) }
       // Shape contract with web/lib/report-run.ts: the ledger resolves to
       // { accounts } and the journal to { entries }; the export-data mocks
@@ -167,6 +171,14 @@ test('an explicit aging as-of keeps its meaning', async () => {
   await resolveReport('aging', new URLSearchParams('asOf=2026-07-31'), ctx)
 
   assert.deepEqual(agingState.asOfValues, ['2026-07-31'])
+})
+
+test('aging exports use the same validated currency selection as the screen', async () => {
+  agingState.agingOptions = []
+
+  await resolveReport('aging', new URLSearchParams('currencyBasis=transaction&currency=EUR'), ctx)
+
+  assert.deepEqual(agingState.agingOptions, [{ basis: 'transaction', reportingCurrency: 'EUR' }])
 })
 
 // A secondary-book statement export must not silently mix primary-book

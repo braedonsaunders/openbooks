@@ -16,6 +16,7 @@ import {
   cashFlowIndirect,
   generalLedger,
   journalReport,
+  agingCurrenciesInScope,
   partnerBalances,
   partnerStatement,
   partyRegister,
@@ -51,7 +52,7 @@ import {
   streamPagedReportCsv,
   streamPagedReportXlsx,
 } from './custom-reports'
-import { isReportUuidParam, type ReportQuery } from './report-filters'
+import { isReportUuidParam, resolveAgingCurrencyParams, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 import { can } from './authz'
 import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
@@ -352,7 +353,16 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
         periodTo: period.to,
         today: asOfParam ?? periodParam ? period.to : (await resolvePeriod('today', { orgId })).to,
       })
-      return { render: 'data', data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, { bookId: detailBookId }), t) }
+      const currencyScope = await agingCurrenciesInScope(side, agingAsOf, dims, orgId)
+      const currency = resolveAgingCurrencyParams(p, currencyScope)
+      return {
+        render: 'data',
+        data: agingExportData(side, await agingByParty(side, agingAsOf, dims, orgId, {
+          bookId: detailBookId,
+          basis: currency.basis,
+          reportingCurrency: currency.currency,
+        }), t),
+      }
     }
     case 'cash-flow':
       return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId, detailBookId), from, to, t) }
