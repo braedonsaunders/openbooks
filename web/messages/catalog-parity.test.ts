@@ -2992,6 +2992,10 @@ const COGNATES = new Set<string>([
   'de:shell.themeToggle.options.system|System',
   'es:shell.accountMenu.sandbox|sandbox',
   'fr:shell.accountMenu.sandbox|sandbox',
+  // m101 workspace switcher: the French production-environment label is
+  // spelled exactly like English (the standalone label shortens
+  // "environnement de production" to the same word).
+  'fr:shell.accountMenu.production|Production',
   'fr:shell.globalSearch.groups.contacts|Contacts',
   'fr:shell.globalSearch.groups.transactions|Transactions',
   'fr:shell.mobileNav.menu|Menu',

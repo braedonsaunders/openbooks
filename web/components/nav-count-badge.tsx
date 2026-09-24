@@ -8,10 +8,12 @@
 // number.
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 
 const POLL_MS = 60_000
 
 export function NavCountBadge({ source }: { source: string }) {
+  const t = useTranslations('shell.topNav')
   const [count, setCount] = useState<number | null>(null)
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function NavCountBadge({ source }: { source: string }) {
   if (count === null || count <= 0) return null
   return (
     <span
-      aria-label={`${count} items waiting`}
+      aria-label={t('itemsWaiting', { count })}
       className="ml-auto inline-flex min-w-5 items-center justify-center rounded-full bg-teal-700 px-1.5 text-[11px] font-semibold tabular-nums text-white dark:bg-teal-400 dark:text-teal-950"
     >
       {count > 99 ? '99+' : count}

@@ -17,12 +17,22 @@
     "organizations": "Organizations",
     "sandbox": "sandbox",
     "sampleCompany": "sample company",
+    "workspace": "Workspace",
+    "production": "Production",
+    "manageEnvironments": "Manage environments",
     "superAdmin": "Super admin",
     "platform": "Platform",
     "organizationWorkspace": "Organization workspace",
     "organizationWorkspaceDescription": "Modules for the current organization",
     "platformDescription": "Deployment-wide operator tools",
     "security": "Sign-in security"
+  },
+  "sandboxBanner": {
+    "sandbox": "Sandbox environment",
+    "sampleCompany": "Sample company",
+    "withName": "{environment} · {name} — emails, payments, and integrations are disabled.",
+    "withoutName": "{environment} — emails, payments, and integrations are disabled.",
+    "exit": "Exit to production"
   },
   "language": {
     "label": "Language",
@@ -40,7 +50,8 @@
   },
   "topNav": {
     "ariaLabel": "Primary",
-    "more": "More"
+    "more": "More",
+    "itemsWaiting": "{count, plural, one {# item waiting} other {# items waiting}}"
   },
   "apps": {
     "ariaLabel": "Open apps",

@@ -7,6 +7,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Check, FlaskConical, Layers, Settings2, Sparkles } from "lucide-react";
 import { Badge, cn } from "@openbooks/ui";
 import { enterOrg } from "../lib/sandbox-session";
@@ -22,6 +23,8 @@ export function EnvironmentPicker({
   /** Hide the built-in "Workspace" label (e.g. when a parent already titles the view). */
   hideHeading?: boolean;
 }) {
+  // Named tPicker: the tenant rows below already bind `t` to the tenant.
+  const tPicker = useTranslations("shell.accountMenu");
   const [pending, start] = useTransition();
   const multi = env.tenants.length > 1;
 
@@ -38,7 +41,7 @@ export function EnvironmentPicker({
     <div>
       {!hideHeading && (
         <div className="px-3 pt-2 pb-1 text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
-          Workspace
+          {tPicker("workspace")}
         </div>
       )}
       <div className="max-h-72 overflow-y-auto px-1 pb-1">
@@ -54,8 +57,8 @@ export function EnvironmentPicker({
               )}
               <Row
                 icon={isPreview ? <Sparkles size={15} className="text-teal-500" /> : <Layers size={15} />}
-                label={multi && !isPreview ? "Production" : t.productionOrgName}
-                hint={isPreview ? "Sample company" : multi ? undefined : "Production"}
+                label={multi && !isPreview ? tPicker("production") : t.productionOrgName}
+                hint={isPreview ? tPicker("sampleCompany") : multi ? undefined : tPicker("production")}
                 active={topLevelActive}
                 disabled={pending}
                 onClick={() => go(t.productionOrgId)}
@@ -84,7 +87,7 @@ export function EnvironmentPicker({
             className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60"
           >
             <Settings2 size={15} className="text-slate-500 dark:text-slate-400" />
-            Manage environments
+            {tPicker("manageEnvironments")}
           </Link>
         </div>
       )}
