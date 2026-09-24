@@ -50,6 +50,12 @@
     "failedTitle": "No se pudo abrir esta aplicación.",
     "failedHint": "Pruebe a actualizar la página. Si el problema continúa, contacte con su administrador."
   },
+  "runtime": {
+    "notFoundTitle": "Aplicación no encontrada",
+    "notInstalled": "Esta aplicación no está instalada o no tiene una versión activa.",
+    "disabled": "Esta aplicación está desactivada.",
+    "backToApps": "Volver a las aplicaciones"
+  },
   "admin": {
     "title": "Aplicaciones",
     "description": "Cree e instale paquetes de aplicaciones: una interfaz en zona aislada y un backend controlado, separados para cada aplicación.",

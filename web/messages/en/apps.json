@@ -50,6 +50,12 @@
     "failedTitle": "This app couldn't be opened.",
     "failedHint": "Try refreshing. If it keeps happening, contact your administrator."
   },
+  "runtime": {
+    "notFoundTitle": "App not found",
+    "notInstalled": "This app is not installed, or has no active version.",
+    "disabled": "This app is currently disabled.",
+    "backToApps": "Back to apps"
+  },
   "admin": {
     "title": "Apps",
     "description": "Manage app packages, native screens, source files, permissions, and release history.",
