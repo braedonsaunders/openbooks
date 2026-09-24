@@ -1,4 +1,5 @@
 import { parseJsonBody } from '@/lib/api/json'
+import { UNTITLED_DASHBOARD_NAME } from '@/lib/insight-untitled'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
   if (body.name !== undefined && typeof body.name !== 'string') {
     return bad('Dashboard name must be a string')
   }
-  const name = body.name?.trim() || 'Untitled dashboard'
+  const name = body.name?.trim() || UNTITLED_DASHBOARD_NAME
   const description = strOrNull(body.description)
 
   let layout: ReturnType<typeof normalizeLayout>

@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { mutateInsight } from '@/lib/insight-mutations'
+import { UNTITLED_DASHBOARD_NAME } from '@/lib/insight-untitled'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadDashboard } from '../../../_lib'
@@ -55,7 +56,7 @@ export async function POST(
         publish &&
         (typeof dashboard.name !== 'string' ||
           dashboard.name.trim() === '' ||
-          dashboard.name === 'Untitled dashboard')
+          dashboard.name === UNTITLED_DASHBOARD_NAME)
       ) {
         return NextResponse.json(
           { error: 'Give the dashboard a real name before publishing.' },

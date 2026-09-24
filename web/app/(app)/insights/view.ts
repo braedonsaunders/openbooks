@@ -22,6 +22,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { insightVisibilitySql } from '@/lib/insight-access'
+import { UNTITLED_CARD_NAME } from '@/lib/insight-untitled'
 import { can, requirePermission } from '../../../lib/authz'
 import { featureEnabled, orgFeatureState } from '../../../lib/features'
 import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
@@ -219,7 +220,7 @@ export async function loadInsights(
  */
 const BLANK_CARD = {
   id: '',
-  name: 'Untitled card',
+  name: UNTITLED_CARD_NAME,
   description: null,
   query: {
     source: 'ledger_lines',

@@ -2,6 +2,7 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { mutateInsight } from '@/lib/insight-mutations'
+import { UNTITLED_CARD_NAME } from '@/lib/insight-untitled'
 import { validateInsightQuery } from '@openbooks/analytics'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
@@ -59,7 +60,7 @@ export async function POST(
         if (
           typeof card.name !== 'string' ||
           card.name.trim() === '' ||
-          card.name === 'Untitled card'
+          card.name === UNTITLED_CARD_NAME
         ) {
           return NextResponse.json(
             { error: 'Give the card a real name before publishing.' },
