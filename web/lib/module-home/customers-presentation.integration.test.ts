@@ -112,7 +112,6 @@ test('customers cockpit counts a corrected receivable once from its current post
     await withBypass(async () => {
       const reversalId = randomUUID()
       const correctionId = randomUUID()
-      await db.execute(sql`update journal_entries set status='reversed' where id=${cadInvoice.entryId} and org_id=${org.orgId}`)
       await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id, reverses_entry_id)
         values (${reversalId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`REV-${reversalId}`}, ${D}, ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId}, ${cadInvoice.entryId})`)
@@ -121,6 +120,7 @@ test('customers cockpit counts a corrected receivable once from its current post
         values (${org.orgId}, ${reversalId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, false, '-100.1255', 'CAD', '-100.1255', '1'),
                (${org.orgId}, ${reversalId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '100.1255', 'CAD', '100.1255', '1')`)
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${reversalId}`)
+      await db.execute(sql`update journal_entries set status='reversed' where id=${cadInvoice.entryId} and org_id=${org.orgId}`)
       await db.execute(sql`insert into journal_entries
         (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
         values (${correctionId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`CORR-${correctionId}`}, ${D}, ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId})`)
