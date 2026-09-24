@@ -1202,6 +1202,22 @@ export async function ensureFiling(args: {
   const currency =
     args.currency ??
     (await resolveInformationReturnCurrency({ orgId: args.orgId, subsidiaryId, runner }));
+  // Two POSTs for the same (year, form, entity) can race past a SELECT-then-
+  // INSERT: both see nothing, and the second INSERT dies on the 0071 unique
+  // index while the route reports a 500 for a filing that now exists. The
+  // conflict below is expected and benign — it is the concurrent create of
+  // the very filing being opened — so DO NOTHING is correct here: the loser
+  // re-reads the winner's row and both callers receive the same filing.
+  const inserted = (await runner.execute<FilingRow>(sql`
+    insert into information_return_filings
+      (org_id, tax_year, form_type, subsidiary_id, status, threshold, currency, created_by, updated_by)
+    values (${args.orgId}, ${args.taxYear}, ${args.formType}, ${subsidiaryId}, 'draft',
+            ${args.threshold ?? form.defaultThreshold}, ${currency}, ${args.actorId}, ${args.actorId})
+    on conflict do nothing
+    returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
+              status, threshold, currency
+  `));
+  if (inserted.rows[0]) return inserted.rows[0];
   const existing = (await runner.execute<FilingRow>(sql`
     select id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
            status, threshold, currency
@@ -1209,16 +1225,13 @@ export async function ensureFiling(args: {
      where org_id = ${args.orgId} and tax_year = ${args.taxYear} and form_type = ${args.formType}
        and subsidiary_id is not distinct from ${subsidiaryId}::uuid
   `));
-  if (existing.rows[0]) return existing.rows[0];
-  const inserted = (await runner.execute<FilingRow>(sql`
-    insert into information_return_filings
-      (org_id, tax_year, form_type, subsidiary_id, status, threshold, currency, created_by, updated_by)
-    values (${args.orgId}, ${args.taxYear}, ${args.formType}, ${subsidiaryId}, 'draft',
-            ${args.threshold ?? form.defaultThreshold}, ${currency}, ${args.actorId}, ${args.actorId})
-    returning id, tax_year as "taxYear", form_type as "formType", subsidiary_id as "subsidiaryId",
-              status, threshold, currency
-  `));
-  return inserted.rows[0]!;
+  const winner = existing.rows[0];
+  if (!winner) {
+    throw new InformationReturnError(
+      "the filing was created concurrently but cannot be read — retry the open",
+    );
+  }
+  return winner;
 }
 
 /**
