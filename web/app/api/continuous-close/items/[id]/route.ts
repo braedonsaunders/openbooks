@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
-import { can } from "../../../../../lib/authz";
+import { can, subsidiaryScopeAllows } from "../../../../../lib/authz";
 import {
   canReadContinuousCloseAgent,
   loadWorkItemAccess,
@@ -44,6 +44,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     authz.user.id,
     id,
     readableContinuousCloseAgents(authz),
+    authz.allowedSubsidiaryIds,
   );
   if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
   const canWrite = can(authz, "assistant.write");
@@ -71,6 +72,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!access) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!canReadContinuousCloseAgent(authz, access.agentKey)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  // Lifecycle and assignment writes move another entity's finding when the
+  // subject is out of scope: restricted callers share the uniform not-found.
+  if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   let body: Record<string, unknown>;
   try {

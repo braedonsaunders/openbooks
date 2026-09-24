@@ -5,6 +5,7 @@ import { resolvePdfPageSetup } from '@openbooks/pdf'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import { guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { readableContinuousCloseAgents } from '../../../../../../lib/continuous-close'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { exportDataToPdf, orgBranding, type ExportData } from '../../../../../../lib/report-pdf'
@@ -19,6 +20,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
   if (!isUuid(runId)) return NextResponse.json({ error: 'invalid_report' }, { status: 422 })
   const readable = readableContinuousCloseAgents(gate)
   if (!readable.length) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  // The narrative is pre-generated free text that can name any entity's
+  // accounts and findings, so per-item filtering is impossible after the
+  // run: exporting needs unrestricted subsidiary access (named 403).
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const result = (await db.execute<{ agent_key: 'accounting' | 'finance'; finished_at: Date; narrative: Record<string, unknown> }>(sql`
     select r.agent_key, r.finished_at, r.stats->'enrichment'->'narrative' as narrative
       from ai_agent_runs r

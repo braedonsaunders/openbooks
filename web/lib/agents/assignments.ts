@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { can, type Authz } from "../authz";
+import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-close";
 
 /**
@@ -46,7 +46,15 @@ export interface WorkItemNote {
 
 async function readableItem(authz: Authz, itemId: string): Promise<boolean> {
   const access = await loadWorkItemAccess(authz.user.orgId, itemId);
-  return !!access && canReadContinuousCloseAgent(authz, access.agentKey);
+  // Pack visibility first, then the actor's subsidiary scope over the
+  // subject: a restricted caller reads (and writes, through the gates
+  // below) only in-scope account-subject findings. Null lineage fails
+  // closed, and every denial answers like a missing item.
+  return (
+    !!access &&
+    canReadContinuousCloseAgent(authz, access.agentKey) &&
+    subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)
+  );
 }
 
 async function resolveAssignee(

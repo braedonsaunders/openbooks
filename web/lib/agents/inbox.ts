@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
 import { can, type Authz } from "../authz";
+import { uuidArray } from "@openbooks/engine/src/organization/subsidiaries.ts";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import type { FindingDir, FindingSort } from "../list/agent-findings";
 
@@ -193,12 +194,19 @@ export async function loadAgentInbox(authz: Authz, filters: AgentInboxFilters): 
   // never the KPI tiles or filter-chip counts (F-t11-005) — and the status
   // facet additionally ignores the status clause so every lifecycle state
   // stays selectable with true counts (F-t11-006).
+  // Findings can sit behind an account subject (lineage resolves through
+  // the account's subsidiary) or behind another subject kind whose
+  // subsidiary is unresolvable. A subsidiary-restricted caller sees only
+  // account-subject findings inside their scope: subjects without lineage
+  // (or with a null subsidiary) fail closed, like unattributed documents
+  // elsewhere. The client-selected subsidiary (above) intersects naturally.
   const whereBase = sql`w.org_id = ${authz.user.orgId}
     and w.agent_key in (${agentList})
     ${severities.length > 0 ? sql`and w.severity in (${sql.join(severities.map((s) => sql`${s}`), sql`, `)})` : sql``}
     ${filters.hasProposal === true ? sql`and (w.summary ? 'proposedCommand')` : sql``}
     ${filters.hasProposal === false ? sql`and not (w.summary ? 'proposedCommand')` : sql``}
     ${filters.subsidiaryId ? sql`and subj_acct.subsidiary_id = ${filters.subsidiaryId}` : sql``}
+    ${authz.allowedSubsidiaryIds === null ? sql`` : sql`and subj_acct.subsidiary_id = any(${uuidArray([...authz.allowedSubsidiaryIds])}::uuid[])`}
     ${sinceValid ? sql`and w.last_detected_at > ${sinceValid.toISOString()}` : sql``}
     ${filters.assignedToMe ? sql`and w.assignee_user_id = ${authz.user.id}` : sql``}
     ${filters.unassignedOnly ? sql`and w.assignee_user_id is null and w.assignee_role is null` : sql``}

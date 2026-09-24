@@ -262,7 +262,7 @@ export async function loadAgents(
   let selectedAssignment: WorkItemAssignmentView | null = null
   let selectedNotes: WorkItemNoteView[] = []
   if (itemId && isUuid(itemId)) {
-    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable)
+    selected = await loadWorkItemDetail(authz.user.orgId, authz.user.id, itemId, readable, authz.allowedSubsidiaryIds)
     if (selected) {
       const [assignment, notes] = await Promise.all([
         loadWorkItemAssignment(authz, itemId),
