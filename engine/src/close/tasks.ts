@@ -110,6 +110,55 @@ export async function transitionCloseTaskTx(
     await resolveTaskDependenciesTx(tx, args.orgId, args.runId);
 }
 
+/**
+ * Canonical close-task assignment shared by close automation (its only
+ * writer today) and any future manual path. Ownership changes are audit
+ * evidence like every other task transition: the assignment writes a
+ * `task.assign` event with the before/after owner and reviewer, in the same
+ * transaction as the update. A task that is gone (deleted or moved to
+ * another run) refuses by name instead of reporting success on zero rows.
+ */
+export async function assignCloseTaskTx(
+  tx: SqlExecutor,
+  args: {
+    orgId: string;
+    runId: string;
+    taskId: string;
+    ownerId: string | null;
+    reviewerId: string | null;
+    actorId: string | null;
+  },
+): Promise<void> {
+  const before = (
+    await tx.execute<{ owner_id: string | null; reviewer_id: string | null }>(sql`
+    select owner_id, reviewer_id from close_run_tasks
+     where id = ${args.taskId} and run_id = ${args.runId} and org_id = ${args.orgId}
+     for update`)
+  ).rows[0];
+  if (!before) throw new CloseError("automation task not found");
+  const updated = (
+    await tx.execute<{ id: string }>(sql`
+    update close_run_tasks
+       set owner_id = coalesce(${args.ownerId}, owner_id),
+           reviewer_id = coalesce(${args.reviewerId}, reviewer_id),
+           updated_at = now(), updated_by = ${args.actorId}
+     where id = ${args.taskId} and run_id = ${args.runId} and org_id = ${args.orgId}
+     returning id`)
+  );
+  // The row was locked above: zero matched rows is a failure, not success.
+  if (updated.rows.length !== 1) throw new CloseError("automation task not found");
+  await tx.execute(sql`
+    insert into close_events (org_id, run_id, task_id, event_type, actor_id, payload)
+    values (${args.orgId}, ${args.runId}, ${args.taskId}, 'task.assign', ${args.actorId},
+            ${JSON.stringify({
+              before: { ownerId: before.owner_id, reviewerId: before.reviewer_id },
+              after: {
+                ownerId: args.ownerId ?? before.owner_id,
+                reviewerId: args.reviewerId ?? before.reviewer_id,
+              },
+            })}::jsonb)`);
+}
+
 export async function updateCloseTask(args: {
   orgId: string;
   runId: string;
