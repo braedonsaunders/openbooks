@@ -16,6 +16,9 @@ registerHooks({
 })
 
 const React = await import('react')
+// Classic-JSX fallback: the shared tsx cache can serve a classic transform,
+// which resolves bare React from the global scope, not the module scope.
+Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { AgingStrip } = await import('./sections.tsx')
 
@@ -47,7 +50,7 @@ function stripProps(asOfLabel: string) {
  * different bucket views appear inconsistent. The strip must show the
  * selected period-end date beside the buckets, without changing any amount.
  */
-test('UX-02: aging strip shows the selected period-end date beside the buckets', () => {
+test('aging strip shows the selected period-end date beside the buckets', () => {
   const html = renderToString(React.createElement(AgingStrip, stripProps('Aging as of 2026-09-30')))
   assert.ok(html.includes('Aging as of 2026-09-30'), 'the as-of caption must render')
   const captionIndex = html.indexOf('Aging as of 2026-09-30')
@@ -55,14 +58,14 @@ test('UX-02: aging strip shows the selected period-end date beside the buckets',
   assert.ok(captionIndex < firstBucketIndex, 'the as-of date must sit adjacent to (before) the bucket strip')
 })
 
-test('UX-02: as-of caption changes no amount', () => {
+test('as-of caption changes no amount', () => {
   const html = renderToString(React.createElement(AgingStrip, stripProps('Aging as of 2026-09-30')))
   for (const amount of ['$100.00', '$50.00', '$150.00']) {
     assert.ok(html.includes(amount), `amount ${amount} must still render`)
   }
 })
 
-test('UX-02: statements.agingAsOf is translated in every locale', async () => {
+test('statements.agingAsOf is translated in every locale', async () => {
   for (const locale of LOCALES) {
     const messages = (await import(`../../../../../messages/${locale}/index.ts`)).default as Record<string, unknown>
     const t = createTranslator({ locale, namespace: 'reports', messages: messages as never } as never) as unknown as (

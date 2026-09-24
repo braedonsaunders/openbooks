@@ -15,6 +15,9 @@ registerHooks({
 })
 
 const React = await import('react')
+// Classic-JSX fallback: the shared tsx cache can serve a classic transform,
+// which resolves bare React from the global scope, not the module scope.
+Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const { ReportFilterBar } = await import('./ReportFilterBar')
@@ -51,7 +54,7 @@ function toolbarHtml() {
   /* eslint-enable react/no-children-prop */
 }
 
-test('F-t12-015: report actions render inside the scrollable toolbar row', () => {
+test('report actions render inside the scrollable toolbar row', () => {
   const html = toolbarHtml()
   const root = html.match(/^<div class="([^"]*)"/)
   assert.ok(root, 'toolbar must render a single root row')
