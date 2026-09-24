@@ -401,3 +401,24 @@ test('failure to audit derived asset status rolls back the financial transaction
     await dropScratchOrg(org.orgId);
   }
 });
+
+test('a convention change after posting refuses rebuild without rewriting history', {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
+  const org = await createScratchOrg();
+  try {
+    const {actorId,assetId} = await seed(org);
+    // Legacy drift the forward guards would refuse to create today: the
+    // retained header claims half_year while every policy layer still says
+    // full_month (B-AST-001). Method, life, rate and units all still agree,
+    // so only the convention leg of the drift gate can fire.
+    await db.execute(sql`update depreciation_schedules set convention='half_year' where org_id=${org.orgId} and asset_id=${assetId}`);
+    const before = await scheduleRows(org,assetId), balanceBefore = await accumulated(org);
+    await assert.rejects(buildSchedule(assetId,org.orgId,actorId,org.bookId),/historical depreciation policy differs/);
+    assert.deepEqual(await scheduleRows(org,assetId),before);
+    assert.equal(await accumulated(org),balanceBefore);
+    // Reconciling the header to the effective convention unblocks the
+    // rebuild, which restamps the header it compared.
+    await db.execute(sql`update depreciation_schedules set convention='full_month' where org_id=${org.orgId} and asset_id=${assetId}`);
+    await buildSchedule(assetId,org.orgId,actorId,org.bookId);
+    assert.equal((await db.execute<{convention:string|null}>(sql`select convention from depreciation_schedules where org_id=${org.orgId} and asset_id=${assetId}`)).rows[0]!.convention,'full_month');
+  } finally { await dropScratchOrg(org.orgId); }
+});
