@@ -42,13 +42,19 @@ export async function resolveItemPrice(input: {
     with assigned_level as (
       -- Membership is the effective-dated window, never current activation:
       -- deactivating an assignment end-dates it (0327), so a late transaction
-      -- inside the old window still finds its level.
+      -- inside the old window still finds its level. But an inactive row with
+      -- a still-open window is a revocation (or a draft that was never
+      -- offered) and must not price: only a closed window reads as history
+      -- (PRC15d). The trigger and backfill remove never-effective rows, so
+      -- this predicate is the backstop for rows they never saw.
       select assignment.price_level_id
         from customer_price_level_assignments assignment
        where assignment.org_id = ${input.orgId}
          and assignment.customer_id = ${input.customerId ?? null}
          and assignment.effective_from <= ${input.onDate}::date
          and (assignment.effective_to is null or assignment.effective_to >= ${input.onDate}::date)
+         and (assignment.is_active
+              or (assignment.effective_to is not null and assignment.effective_to < current_date))
        order by assignment.effective_from desc
        limit 1
     ), candidates as (

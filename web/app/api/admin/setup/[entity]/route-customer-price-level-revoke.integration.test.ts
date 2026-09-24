@@ -130,3 +130,56 @@ test("revoking a same-day assignment through setup PATCH succeeds and is audited
     }
   });
 });
+
+test("revoking a future-effective assignment through setup PATCH succeeds and is audited as a delete", { skip: !DB }, async () => {
+  await withBypassContext(async () => {
+    const org = await createScratchOrg();
+    const actorId = await createScratchUser(org.orgId, "Pricing Setup Admin", "admin");
+    try {
+      authenticate({ orgId: org.orgId, actorId });
+      const customerId = randomUUID();
+      await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${customerId}, ${org.orgId}, 'customer', 'Gold Customer', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+      await db.execute(sql`insert into customer_roles (org_id, party_id, is_active)
+        values (${org.orgId}, ${customerId}, true)`);
+      const goldId = randomUUID();
+      await db.execute(sql`insert into price_levels (id, org_id, code, name, pricing_method, is_base, is_active)
+        values (${goldId}, ${org.orgId}, 'GOLD9', 'Gold price', 'explicit', false, true)`);
+      const today = new Date().toISOString().slice(0, 10);
+      const starts = new Date(Date.parse(`${today}T00:00:00Z`) + 30 * 86400000).toISOString().slice(0, 10);
+      const assignmentId = randomUUID();
+      await db.execute(sql`insert into customer_price_level_assignments (id, org_id, customer_id, price_level_id, effective_from, is_active)
+        values (${assignmentId}, ${org.orgId}, ${customerId}, ${goldId}, ${starts}, true)`);
+
+      const res = await PATCH(
+        patchRequest("customer-price-level-assignments", {
+          id: assignmentId,
+          customerId,
+          priceLevelId: goldId,
+          effectiveFrom: starts,
+          effectiveTo: null,
+          isActive: false,
+        }),
+        call("customer-price-level-assignments"),
+      );
+      assert.equal(res.status, 200);
+      const { id } = (await res.json()) as { id: string };
+      assert.equal(id, assignmentId);
+
+      const remaining = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from customer_price_level_assignments
+         where org_id = ${org.orgId} and id = ${assignmentId}`)).rows[0]!.n;
+      assert.equal(remaining, 0);
+
+      const audits = (await db.execute<{ action: string; actor: string }>(sql`
+        select action, actor_id::text as actor from audit_log
+         where org_id = ${org.orgId} and table_name = 'customer_price_level_assignments' and row_id = ${assignmentId}
+         order by id desc limit 1`)).rows[0];
+      assert.equal(audits?.action, "delete");
+      assert.equal(audits?.actor, actorId);
+    } finally {
+      routeState.authz = null;
+      await dropScratchOrgReporting(org.orgId);
+    }
+  });
+});
