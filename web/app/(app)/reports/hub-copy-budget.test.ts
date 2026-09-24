@@ -45,7 +45,7 @@ const analytics = JSON.parse(
   readFileSync(join(import.meta.dirname, '..', '..', '..', 'messages', 'en', 'analytics.json'), 'utf8'),
 ) as { trueCost: { title: string; summary: { compositeRate: string } } }
 
-test('UX-12b: every static hub card title and description fits the card', () => {
+test('every static hub card title and description fits the card', () => {
   const over: string[] = []
   for (const [key, value] of Object.entries(reports.hub.cards)) {
     if (key.endsWith('Title') && value.length > TITLE_BUDGET) over.push(`${key} (${value.length})`)
@@ -54,7 +54,7 @@ test('UX-12b: every static hub card title and description fits the card', () => 
   assert.deepEqual(over, [], `hub card copy over budget:\n${over.join('\n')}`)
 })
 
-test('UX-12b: hub chrome copy (studio, saved views, true cost) fits the card', () => {
+test('hub chrome copy (studio, saved views, true cost) fits the card', () => {
   assert.ok(
     reports.hub.customStudio.title.length <= TITLE_BUDGET,
     `custom studio title (${reports.hub.customStudio.title.length}) must stay under ${TITLE_BUDGET}`,
@@ -77,7 +77,7 @@ test('UX-12b: hub chrome copy (studio, saved views, true cost) fits the card', (
   )
 })
 
-test('UX-12b: every built-in registry name and description fits the card', () => {
+test('every built-in registry name and description fits the card', () => {
   const over: string[] = []
   for (const definition of BUILT_IN_REPORT_DEFINITIONS) {
     if (definition.name.length > TITLE_BUDGET) over.push(`${definition.slug} name (${definition.name.length})`)
@@ -88,7 +88,7 @@ test('UX-12b: every built-in registry name and description fits the card', () =>
   assert.deepEqual(over, [], `registry copy over budget:\n${over.join('\n')}`)
 })
 
-test('UX-12b: localized built-ins say the same thing as the registry', () => {
+test('localized built-ins say the same thing as the registry', () => {
   // The hub renders the registry name/description while the custom list and
   // the runner prefer the `builtIns.<slug>` message — a card must not promise
   // one thing on the hub and another on its own page.
@@ -102,7 +102,7 @@ test('UX-12b: localized built-ins say the same thing as the registry', () => {
   assert.deepEqual(drift, [], `builtIns messages drifted from the registry:\n${drift.join('\n')}`)
 })
 
-test('UX-12b: every localized built-in name and description fits the card', () => {
+test('every localized built-in name and description fits the card', () => {
   const over: string[] = []
   for (const [slug, entry] of Object.entries(reports.builtIns)) {
     if (entry.name.length > TITLE_BUDGET) over.push(`${slug} name (${entry.name.length})`)
