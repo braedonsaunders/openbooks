@@ -2,6 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
+
+const React = await import('react')
+// Classic-JSX fallback: the shared tsx cache can serve a classic transform,
+// which resolves bare React from the global scope, not the module scope.
+Object.assign(globalThis, { React })
 import { NextIntlClientProvider } from 'next-intl'
 import enMessages from '../../../../messages/en'
 import { createAppStarter } from '../../../../lib/apps/starter'

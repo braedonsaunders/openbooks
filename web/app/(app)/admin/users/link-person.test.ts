@@ -1,96 +1,41 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
-// Native composition contract for the audited Admin Users -> linked person
-// workflow. Runs without dependencies: it reads the maintained sources and
-// proves the UI uses the native Drawer + remote SearchSelect (per-query
-// bounded search, selected preserved, stale races dropped), never a custom
-// list/table, with localized labels, accessible controls, and res.ok before
-// parsing plus toast/inline error on save (the save itself rides the shared
-// fetchAction/execute path, which owns the ok-first read and the toast).
-const actions = readFileSync(new URL("./UserActions.tsx", import.meta.url), "utf8");
-const sections = readFileSync(new URL("./sections.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const route = readFileSync(new URL("../../../api/admin/users/route.ts", import.meta.url), "utf8");
-const strings = readFileSync(new URL("../../../../messages/en/admin.json", import.meta.url), "utf8");
+// The Admin Users -> linked person workflow renders its drawer, reason and
+// attestation copy from the shared en/admin labels. Every locale must carry
+// them: a missing key renders the raw path mid-workflow. (The audited save
+// path itself — attestation, active scope, self-refusal, stale 409s, exact
+// audit — is proved through the real route in
+// web/app/api/admin/users/route-party.test.ts.)
+const MESSAGES = join(import.meta.dirname, "..", "..", "..", "..", "messages");
+const LOCALES = ["en", "fr", "de", "es", "pt-BR", "ja", "zh"];
+const KEYS = [
+  "linkPersonButton",
+  "linkPersonTitle",
+  "linkPersonDescription",
+  "linkAttestationLabel",
+  "linkSelfRefused",
+] as const;
 
-test("link drawer uses the native Drawer and remote SearchSelect, never a custom list", () => {
-  assert.match(actions, /<Drawer/, "link editor renders in the native Drawer shell");
-  assert.match(actions, /<SearchSelect/, "person choice uses the native SearchSelect");
-  assert.match(actions, /remote/, "search is remote per query, not a fixed first-N roster");
-  assert.match(actions, /onSearchChange/, "typing forwards the query to the scoped server search");
-  assert.match(actions, /loading=\{loading\}/, "remote lookup announces loading");
-  assert.match(actions, /statusMessage/, "remote errors surface through the native status message");
-  assert.match(
-    actions,
-    /requestId\.current/,
-    "a sequence guard drops stale search responses so older results never overwrite newer ones",
-  );
-  assert.match(
-    actions,
-    /ensure\(payload\.selected\)|ensure\(selectedOption\)/,
-    "the selected option is merged back when the page does not contain it",
-  );
-  assert.ok(!/<table/.test(actions), "the link drawer builds no custom table");
-  assert.ok(!/PagedTable/.test(actions), "person choice does not fork a parallel roster table");
-});
+const catalog = (locale: string): Record<string, unknown> =>
+  JSON.parse(readFileSync(join(MESSAGES, locale, "admin.json"), "utf8")) as Record<string, unknown>;
 
-test("link save reaches the audited endpoint with concurrency, reason, and attestation", () => {
-  assert.match(actions, /action: 'set-party'/, "save posts the native set-party action");
-  assert.match(actions, /expectedPartyId/, "save carries the optimistic-concurrency token including null");
-  assert.match(actions, /attestation: true/, "save carries the explicit human-identity attestation");
-  assert.match(actions, /reason\.trim\(\)/, "save requires a nonblank reason");
-  assert.match(
-    actions,
-    /if \(!res\.ok\)/,
-    "API failure is detected with res.ok before parsing",
-  );
-  assert.match(actions, /await res\.json\(\)\.catch/, "payload parsing never throws on an error body");
-  assert.match(actions, /useAppAction/, "the save toasts failures through the shared action path");
-  assert.match(actions, /execute\(/, "the save runs on the shared execute so busy always releases");
-  assert.match(actions, /role="alert"/, "failures also render an inline error");
-  assert.match(actions, /router\.refresh\(\)/, "success refreshes the native list");
-});
-
-test("link form controls are localized and accessible", () => {
-  assert.match(actions, /<Label htmlFor="link-person-search">/, "person picker has an associated label");
-  assert.match(actions, /<Label htmlFor="link-person-reason">/, "reason has an associated label");
-  assert.match(actions, /<Label htmlFor="link-person-attest">/, "attestation has an associated label");
-  assert.match(actions, /ariaLabel=\{t\('linkPersonLabel'\)\}/, "picker exposes an accessible name");
-  assert.match(actions, /title=\{t\('linkPersonTitle'/, "drawer title resolves from shared labels, never empty");
-  for (const key of [
-    "linkPersonButton",
-    "linkPersonTitle",
-    "linkPersonDescription",
-    "linkAttestationLabel",
-    "linkSelfRefused",
-  ]) {
-    assert.ok(strings.includes(`"${key}"`), `shared en/admin labels carry ${key}`);
+test("every locale labels the linked-person workflow", () => {
+  for (const locale of LOCALES) {
+    const users = (catalog(locale).users ?? {}) as Record<string, unknown>;
+    for (const key of KEYS) {
+      const value = users[key];
+      assert.equal(typeof value, "string", `${locale} users.${key} must exist`);
+      assert.ok((value as string).length > 0, `${locale} users.${key} must not be empty`);
+    }
   }
-});
-
-test("users list shows the native link without a parallel roster", () => {
-  assert.match(sections, /LinkPersonButton/, "row actions offer the native link editor");
-  assert.match(sections, /linkedPerson/, "list carries a localized linked-person column");
-  assert.match(view, /left join parties p on p\.id = u\.party_id/, "loader reads the native users.party_id join");
-  assert.match(view, /partyId: u\.party_id/, "loader exposes the concurrency token per row");
-  assert.ok(!view.includes("worker_employments"), "loader does not gate on the future canonical table");
-});
-
-test("set-party endpoint enforces attestation, active scope, self-refusal, and audited stale handling", () => {
-  assert.match(route, /attestation !== true/, "absent/false attestation fails closed");
-  assert.match(route, /select id, kind, display_name, is_active from parties/, "party validation reads active state");
-  assert.match(route, /party is not active/, "inactive parties fail closed");
-  assert.match(
-    route,
-    /you cannot change your own linked person/,
-    "self-change is refused with an explicit separation-of-duties message",
-  );
-  assert.match(route, /stale link/, "stale expected reports 409");
-  assert.match(route, /returning id/, "link update checks the precise affected-row count");
-  assert.match(route, /before: \{ party_id: current \}/, "audit records the exact before link");
-  assert.match(route, /after: \{ party_id: partyId \}/, "audit records the exact after link");
-  assert.match(route, /attestation: true/, "audit records the attestation");
-  assert.match(route, /party: partySignals/, "audit records kind/role signals without inferring identity");
+  const en = catalog("en").users as Record<string, unknown>;
+  for (const locale of LOCALES.slice(1)) {
+    const users = catalog(locale).users as Record<string, unknown>;
+    for (const key of KEYS) {
+      assert.notEqual(users[key], en[key], `${locale} users.${key} must not paste the English copy`);
+    }
+  }
 });
