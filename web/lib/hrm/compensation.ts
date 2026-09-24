@@ -514,6 +514,25 @@ export interface CompLineRow {
   department: string
 }
 
+/**
+ * Item-level actions the merit transition table allows on the open line
+ * (F3-38): propose while the round is live and the line is undecided;
+ * decide while the round is live or approved and the line is proposed.
+ * Anything else (pushed/closed/cancelled rounds, decided lines) hides
+ * the forms — the engine refuses them anyway, but the operator never
+ * gets to try. Per-line manageability stays engine-enforced.
+ */
+export function lineActionAvailability(
+  cycleStatus: string,
+  lineStatus: string | null,
+): { canPropose: boolean; canDecideLine: boolean } {
+  const roundLive = cycleStatus === 'open' || cycleStatus === 'in_review';
+  return {
+    canPropose: roundLive && (lineStatus === 'pending' || lineStatus === 'proposed'),
+    canDecideLine: (roundLive || cycleStatus === 'approved') && lineStatus === 'proposed',
+  };
+}
+
 export interface CompCycleDetailData {
   cycleId: string
   title: string
@@ -540,6 +559,7 @@ export interface CompCycleDetailData {
   cycleHref: string
   openLineId: string | null
   openLine: CompLineRow | null
+  lineActions: { canPropose: boolean; canDecideLine: boolean }
   openLineHistory: { kind: string; actor: string | null; reason: string | null; at: string }[]
   drawerCloseHref: string
   drawerLabels: {
@@ -695,6 +715,7 @@ export async function loadCompCycleDetail(
     cycleHref: `/hrm/compensation/cycles/${cycleId}`,
     openLineId,
     openLine,
+    lineActions: lineActionAvailability(cycle.status, openLine?.status ?? null),
     openLineHistory: history.map((h) => ({
       kind: t.has(`compensation.eventKind.${h.kind}`) ? t(`compensation.eventKind.${h.kind}`) : h.kind,
       actor: h.actor,

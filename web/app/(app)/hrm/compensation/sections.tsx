@@ -104,6 +104,10 @@ export interface LineDrawerData {
   labels: CompDrawerLabels
   cycleId: string
   canDecide: boolean
+  /** Transition-table gates from the loader (F3-38): the forms render
+   *  only while the round/line state allows the action. */
+  canPropose: boolean
+  canDecideLine: boolean
   historyColumns: { event: string; reason: string; at: string }
   emptyHistory: string
 }
@@ -114,20 +118,22 @@ export function CompLineDrawer({ drawer }: { drawer: LineDrawerData }) {
   return (
     <UrlDrawer open closeHref={drawer.closeHref} title={drawer.title}>
       <div className="flex flex-col gap-6">
-        <div>
-          <h3 className="mb-2 text-sm font-semibold">{drawer.labels.proposeTitle}</h3>
-          <LineProposeForm
-            cycleId={drawer.cycleId}
-            lineId={line.id}
-            labels={{ failed: drawer.labels.failed, submit: drawer.labels.submit, cancel: drawer.labels.cancel }}
-            pctLabel={drawer.labels.pctLabel}
-            rateLabel={drawer.labels.rateLabel}
-            reasonLabel={drawer.labels.reasonLabel}
-            pctInvalidLabel={drawer.labels.pctInvalid}
-            closeHref={drawer.closeHref}
-          />
-        </div>
-        {drawer.canDecide ? (
+        {drawer.canPropose ? (
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">{drawer.labels.proposeTitle}</h3>
+            <LineProposeForm
+              cycleId={drawer.cycleId}
+              lineId={line.id}
+              labels={{ failed: drawer.labels.failed, submit: drawer.labels.submit, cancel: drawer.labels.cancel }}
+              pctLabel={drawer.labels.pctLabel}
+              rateLabel={drawer.labels.rateLabel}
+              reasonLabel={drawer.labels.reasonLabel}
+              pctInvalidLabel={drawer.labels.pctInvalid}
+              closeHref={drawer.closeHref}
+            />
+          </div>
+        ) : null}
+        {drawer.canDecide && drawer.canDecideLine ? (
           <div>
             <h3 className="mb-2 text-sm font-semibold">{drawer.labels.decideTitle}</h3>
             <LineDecideButtons

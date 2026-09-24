@@ -98,6 +98,8 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
             labels: data.drawerLabels,
             cycleId: data.cycleId,
             canDecide: data.canDecide,
+            canPropose: data.lineActions.canPropose,
+            canDecideLine: data.lineActions.canDecideLine,
             historyColumns: data.historyColumns,
             emptyHistory: data.emptyHistory,
           },

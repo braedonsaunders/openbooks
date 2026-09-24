@@ -44,6 +44,7 @@ const { NextIntlClientProvider } = await import("next-intl");
 // always supplies — backed by the real en catalogs, never stubbed.
 const messages = (await import("../../../../messages/en")).default;
 const { LineDecideButtons, CycleMoveButtons, CompensationSettingsForm, LineProposeForm } = await import("./islands.tsx");
+const { CompLineDrawer } = await import("./sections.tsx");
 const { act } = await import("react");
 const { createRoot } = await import("react-dom/client");
 
@@ -214,4 +215,73 @@ test("a valid percent posts the canonical decimal string", async () => {
   const body = JSON.parse(sent.body) as { proposedPct: unknown };
   assert.equal(body.proposedPct, "3.5", "the wire carries the canonical decimal string, never a float");
   assert.ok(!sent.text.includes(PROPOSE_LABELS.pctInvalid), "no refusal renders for valid input");
+});
+
+// F3-38: the drawer arms only the actions the transition table allows —
+// a pushed line offers neither form even to a decider.
+function drawerWith(actions: { canPropose: boolean; canDecideLine: boolean }) {
+  return {
+    open: true,
+    closeHref: "/hrm/compensation/cycles/cycle-1",
+    title: "Line",
+    line: { id: "line-1", employeeName: "Ava", status: "pushed" } as never,
+    history: [],
+    labels: {
+      failed: "The change was refused",
+      submit: "Save",
+      cancel: "Back",
+      proposeTitle: "Propose",
+      decideTitle: "Decide",
+      historyTitle: "History",
+      pctLabel: "Raise %",
+      rateLabel: "New rate",
+      reasonLabel: "Reason",
+      pctInvalid: PROPOSE_LABELS.pctInvalid,
+      decideReasonLabel: "Decision reason",
+      approve: "Approve",
+      reject: "Reject",
+      reopen: "Reopen",
+    },
+    cycleId: "cycle-1",
+    canDecide: true,
+    ...actions,
+    historyColumns: { event: "Event", reason: "Reason", at: "At" },
+    emptyHistory: "No events yet.",
+  };
+}
+
+async function drawerText(drawer: ReturnType<typeof drawerWith>): Promise<string> {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <CompLineDrawer drawer={drawer as never} />
+      </NextIntlClientProvider>,
+    );
+    await tick();
+    await tick();
+  });
+  // The drawer portals into document.body, so read the whole document;
+  // each drawer mounts alone and unmounts before the next.
+  const body = document.body.innerHTML;
+  const text = document.body.textContent ?? "";
+  await act(async () => {
+    root.unmount();
+  });
+  host.remove();
+  return `${text} ${body.includes('id="comp-line-pct"') ? "HAS-PCT-FORM" : "NO-PCT-FORM"}`;
+}
+
+test("a pushed line offers neither form", async () => {
+  const text = await drawerText(drawerWith({ canPropose: false, canDecideLine: false }));
+  assert.ok(text.includes("NO-PCT-FORM"), "the propose form is hidden past push");
+  assert.ok(!text.includes("Approve"), "the decide buttons are hidden past push");
+});
+
+test("a proposed line on a live round offers both forms", async () => {
+  const text = await drawerText(drawerWith({ canPropose: true, canDecideLine: true }));
+  assert.ok(text.includes("HAS-PCT-FORM"), "the propose form renders while the round is live");
+  assert.ok(text.includes("Approve"), "the decide buttons render for a proposed line");
 });
