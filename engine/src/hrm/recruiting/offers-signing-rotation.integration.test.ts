@@ -19,6 +19,7 @@ import { createApplication } from "./applications.ts";
 import { createOffer, sendOffer } from "./offers.ts";
 import {
   createOfferTemplate,
+  declineOfferSigning,
   readOfferForSigning,
   renderOfferVersion,
   sendOfferLink,
@@ -175,12 +176,14 @@ test("re-rendering changed terms rotates the signing link", async () => {
     `)).rows[0]!;
     assert.equal(stored.tokenHash, null);
     assert.equal(stored.version, 2);
-    const error = recruitingError(await readOfferForSigning(firstToken).then(
-      () => null,
-      (e: unknown) => e,
-    ));
-    assert.equal(error.code, "REFUSED");
-    assert.match(error.message, /no longer the current one/);
+    for (const staleAction of [
+      () => readOfferForSigning(firstToken),
+      () => declineOfferSigning({ signingToken: firstToken, reason: "terms changed" }),
+    ]) {
+      const error = recruitingError(await staleAction().then(() => null, (e: unknown) => e));
+      assert.equal(error.code, "REFUSED");
+      assert.match(error.message, /no longer the current one/);
+    }
   });
 });
 
@@ -202,43 +205,31 @@ test("signing without the displayed hash is refused", async () => {
 
 test("signing a stale hash after new terms render is refused", async () => {
   await withHarness(async (h) => {
-    const orgId = h.org.orgId;
-    const { offerId, token: firstToken } = await seedRenderedOffer(h);
-    const firstView = await readOfferForSigning(firstToken);
-    const templateId = (await db.execute<{ templateId: string }>(sql`
-      select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}
-    `)).rows[0]!.templateId;
-    await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId, selectedClauseKeys: [] });
-    const resent = await sendOfferLink({
-      orgId,
-      actorId: h.recruiterId,
-      offerId,
-      candidateEmail: "candidate@example.test",
-      candidateName: "Offer Candidate",
-      enqueueEmail: async () => {},
-    });
-    // The new link carries the new version, but the old display hash must not sign it.
-    const error = recruitingError(await signOffer({
-      signingToken: resent.signingToken,
-      signerName: "Offer Candidate",
-      ipHash: "test",
-      documentHash: firstView.documentHash,
-    }).then(
-      () => null,
-      (e: unknown) => e,
-    ));
+    const orgId = h.org.orgId, { offerId, token } = await seedRenderedOffer(h);
+    const shown = await readOfferForSigning(token);
+    const templateId = (await db.execute<{ templateId: string }>(sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`)).rows[0]!.templateId;
+    await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId });
+    const { signingToken } = await sendOfferLink({ orgId, actorId: h.recruiterId, offerId, candidateEmail: "candidate@example.test", candidateName: "Offer Candidate", enqueueEmail: async () => {} });
+    const error = recruitingError(await signOffer({ signingToken, signerName: "Offer Candidate", ipHash: "test", documentHash: shown.documentHash }).then(() => null, (e: unknown) => e));
     assert.equal(error.code, "REFUSED");
     assert.match(error.message, /changed since this link was opened/);
-    // And the current hash signs cleanly, sealing the new version.
-    const secondView = await readOfferForSigning(resent.signingToken);
-    assert.notEqual(secondView.documentHash, firstView.documentHash);
-    const signed = await signOffer({
-      signingToken: resent.signingToken,
-      signerName: "Offer Candidate",
-      ipHash: "test",
-      documentHash: secondView.documentHash,
-    });
-    assert.equal(signed.offerId, offerId);
+    assert.equal((await signOffer({ signingToken, signerName: "Offer Candidate", ipHash: "test", documentHash: (await readOfferForSigning(signingToken)).documentHash })).offerId, offerId);
   });
 });
 
+test("render and signing serialize on the offer row", async () => {
+  await withHarness(async (h) => {
+    const { offerId, token } = await seedRenderedOffer(h), orgId = h.org.orgId;
+    const { version, documentHash } = await readOfferForSigning(token);
+    const templateId = (await db.execute<{ templateId: string }>(sql`select template_id as "templateId" from hrm_offers where org_id = ${orgId} and id = ${offerId}`)).rows[0]!.templateId;
+    const results = await Promise.allSettled([
+      renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId }),
+      signOffer({ signingToken: token, signerName: "Offer Candidate", ipHash: "test", documentHash }),
+    ]);
+    const renderWon = results[0]?.status === "fulfilled";
+    const final = (await db.execute<{ signatureStatus: string | null; version: number }>(sql`select signature_status as "signatureStatus", version from hrm_offers where org_id = ${orgId} and id = ${offerId}`)).rows[0]!;
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(final.signatureStatus, renderWon ? "unsigned" : "signed");
+    assert.equal(final.version, version + Number(renderWon));
+  });
+});
