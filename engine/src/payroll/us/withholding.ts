@@ -207,6 +207,15 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
   // RATE the employer supplies, and each helper below refuses by name without
   // it. The declaration itself says which — `rateSource: { kind: "tenant" }`.
   const declared = subRegionLevy("US", levy.region, subRegion);
+  // A parent-computed levy (a Maryland county local inside SIT_MD) is never
+  // a separate posting: refusing by name here is the double-count guard, so
+  // a future branch cannot wire it into a second stub line.
+  if (declared?.computedByParent) {
+    throw new UsWithholdingError(
+      `${levy.label} is computed inside ${declared.computedByParent}, not as a separate levy — `
+      + "posting it again would withhold the same tax twice.",
+    );
+  }
   const rates = declared?.rateSource.kind === "tenant"
     ? input.tenantRates(declared.rateSource.rateKey, subRegion)
     : undefined;

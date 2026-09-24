@@ -477,6 +477,13 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
         trace.push(`${levy.label} does not reach ${reach}s — not withheld on the ${side} side`);
         continue;
       }
+      if (levy.computedByParent) {
+        // Computed inside another posting (a Maryland county local inside
+        // SIT_MD's combined tables): no separate levy, so there is nothing
+        // to settle, relieve, or dispatch — and nothing that can post twice.
+        trace.push(`${levy.label} is computed inside ${levy.computedByParent} — no separate levy`);
+        continue;
+      }
       if (workRegionRelieved && side === "work" && agreement?.relievesSubRegionLevies === false) {
         // Explicit: reciprocity relieved the STATE tax, and the agreement says
         // it does not reach the city. The levy stands.
