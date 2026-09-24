@@ -372,6 +372,39 @@ test("restricted HR must choose a legal entity when creating a review cycle", { 
   }
 });
 
+test("restricted HR cannot open an existing org-wide draft cycle", { skip: !DB }, async () => {
+  const h = await setupHarness();
+  try {
+    const templateId = await mkTemplate(h.org.orgId, h.hrFull);
+    const cycle = await createCycle({
+      orgId: h.org.orgId,
+      actorId: h.hrFull,
+      templateId,
+      name: "Org-wide draft",
+      periodStartOn: "2026-01-01",
+      periodEndOn: "2026-06-30",
+    });
+    await assert.rejects(
+      openCycle({ orgId: h.org.orgId, actorId: h.hrA, cycleId: cycle.id }),
+      (error: unknown) => {
+        assert.ok(error instanceof HrmAuthorizationError);
+        assert.match(error.message, /not visible in this organization and legal-entity scope/);
+        return true;
+      },
+    );
+    const current = (await db.execute<{ status: string }>(sql`
+      select status from hrm_review_cycles where org_id = ${h.org.orgId} and id = ${cycle.id}
+    `)).rows[0]!;
+    const reviews = (await db.execute<{ count: string }>(sql`
+      select count(*)::text as count from hrm_reviews where org_id = ${h.org.orgId} and cycle_id = ${cycle.id}
+    `)).rows[0]!.count;
+    assert.equal(current.status, "draft");
+    assert.equal(reviews, "0");
+  } finally {
+    await dropScratchOrg(h.org.orgId);
+  }
+});
+
 test("restricted HR cycle lists and details hide other subsidiaries and scope org-wide progress", { skip: !DB }, async () => {
   const h = await setupHarness();
   try {

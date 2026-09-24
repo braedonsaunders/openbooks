@@ -442,6 +442,7 @@ export async function openCycle(args: {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
     const cycle = await loadCycle(db, orgId, cycleId);
+    assertCycleInScope(allowed, cycle);
     if (cycle.status !== "draft") {
       throw new HrmPerformanceError(
         "BAD_STATE",
