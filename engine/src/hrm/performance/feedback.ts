@@ -188,13 +188,33 @@ async function performanceReadScope(
   }
 }
 
-async function hasPerformanceManage(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+/**
+ * The actor's HR manage scope: the allowed employer set (null =
+ * unrestricted), or undefined when the actor holds no HR manage grant
+ * at all. The grant alone is never the whole answer — every HR
+ * override below applies the returned Set to the subject employment.
+ * Org-configuration gates (feedback settings) keep the boolean shape:
+ * there is no subject row to fence.
+ */
+async function performanceManageScope(
+  db: SqlExecutor,
+  orgId: string,
+  actorId: string,
+): Promise<Set<string> | null | undefined> {
   try {
-    await requireAggregatePerformanceManage(db, orgId, actorId);
-    return true;
+    return await requireAggregatePerformanceManage(db, orgId, actorId);
   } catch {
-    return false;
+    return undefined;
   }
+}
+
+async function hasPerformanceManage(db: SqlExecutor, orgId: string, actorId: string): Promise<boolean> {
+  return (await performanceManageScope(db, orgId, actorId)) !== undefined;
+}
+
+/** True when the HR scope covers the subject employer (fail-closed on null). */
+function scopeCoversSubject(scope: Set<string> | null, subjectEmployerSubsidiaryId: string | null): boolean {
+  return scope === null || (subjectEmployerSubsidiaryId !== null && scope.has(subjectEmployerSubsidiaryId));
 }
 
 export interface FeedbackDTO {
@@ -466,12 +486,26 @@ export async function retractFeedback(args: { orgId: string; actorId: string; id
       throw new HrmPerformanceError("NOT_FOUND", "feedback was not found — it may belong to another organization or already be retracted");
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
-    const hr = await hasPerformanceManage(db, orgId, actorId);
-    if (!hr && person.partyId !== original.author_party_id) {
-      throw new HrmPerformanceError(
-        "FORBIDDEN",
-        "only the author or HR may retract feedback — ask the author to retract it",
-      );
+    // Author-own retraction always holds; the HR override reaches only
+    // subjects inside the actor's allowed subsidiaries. An out-of-scope
+    // HR answers NOT_FOUND uniformly — they cannot read the row, so from
+    // their side there is nothing to retract.
+    if (person.partyId === original.author_party_id) {
+      // Author-own retraction: proceed below.
+    } else {
+      const manageScope = await performanceManageScope(db, orgId, actorId);
+      if (manageScope === undefined) {
+        throw new HrmPerformanceError(
+          "FORBIDDEN",
+          "only the author or HR may retract feedback — ask the author to retract it",
+        );
+      }
+      if (!scopeCoversSubject(manageScope, original.subject_employer_subsidiary_id)) {
+        throw new HrmPerformanceError(
+          "NOT_FOUND",
+          "feedback was not found — it may belong to another organization or already be retracted",
+        );
+      }
     }
     const already = (await db.execute<{ id: string }>(sql`
       select id from hrm_feedback where org_id = ${orgId} and kind = 'retraction' and retracts_feedback_id = ${id}
@@ -617,8 +651,15 @@ export async function fulfillRequest(args: {
       throw new HrmPerformanceError("BAD_STATE", "this request was retracted — there is nothing left to fulfil");
     }
     const person = await loadApprovalPerson(db, orgId, actorId);
-    if (req.requested_from_party_id !== person.partyId && !(await hasPerformanceManage(db, orgId, actorId))) {
-      throw new HrmPerformanceError("FORBIDDEN", "only the requested party or HR may fulfil a feedback request");
+    // The requested party always answers their own requests; the HR leg
+    // reaches only requests whose subject sits inside the actor's
+    // allowed subsidiaries — a cross-subsidiary write on rows the actor
+    // cannot read is refused, never stored.
+    if (req.requested_from_party_id !== person.partyId) {
+      const manageScope = await performanceManageScope(db, orgId, actorId);
+      if (manageScope === undefined || !scopeCoversSubject(manageScope, req.subject_employer_subsidiary_id)) {
+        throw new HrmPerformanceError("FORBIDDEN", "only the requested party or HR may fulfil a feedback request");
+      }
     }
     // A retried fulfilment returns the first answer instead of writing a
     // second: the fulfils_request_id link is the idempotency key, read
