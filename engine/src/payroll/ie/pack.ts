@@ -652,4 +652,5 @@ export const IE_PAYROLL_PACK: IePayrollPack = {
   statutoryEngineLabel: "PAYE",
   factorLabels: { ...IE_FACTOR_LABELS },
   employeeFacts: IE_EMPLOYEE_FACTS,
+  employerFacts: [],
 };

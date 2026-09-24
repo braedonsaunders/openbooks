@@ -10,7 +10,7 @@ import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRu
 import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
 import { LaborPricingHeading, LaborPricingView } from '../../app/(app)/admin/setup/labor-pricing/sections'
 import { RunWizard } from '../../app/(app)/payroll/runs/[id]/RunWizard'
-import { PayrollSetupHeader, PayrollSetupBanner, PayrollSetupTabs, PacksTabSlot, AccountsTabSlot, PaydayTabSlot, RatesTabSlot, WorkSchedulesTabSlot, DerivedPreviewTabSlot, HolidaysTabSlot, HolidayCalendarTabSlot } from '../../app/(app)/admin/setup/payroll/sections'
+import { PayrollSetupHeader, PayrollSetupBanner, PayrollSetupTabs, PacksTabSlot, AccountsTabSlot, PaydayTabSlot, RatesTabSlot, EmployerFactsTabSlot, WorkSchedulesTabSlot, DerivedPreviewTabSlot, HolidaysTabSlot, HolidayCalendarTabSlot } from '../../app/(app)/admin/setup/payroll/sections'
 import { Sparkles } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { PayrollChecklistBanner, PayrollPreviousRun, PayrollManageLinks, PayrollScheduleList, type PayrollPreviousRunProps, type PayrollScheduleListProps } from '../../app/(app)/payroll/sections'
@@ -154,6 +154,7 @@ export const PAYROLL_WIDGETS = {
   'payroll-accounts-tab': () => <AccountsTabSlot />,
   'payroll-payday-tab': () => <PaydayTabSlot />,
   'payroll-rates-tab': () => <RatesTabSlot />,
+  'payroll-employer-facts-tab': () => <EmployerFactsTabSlot />,
   'payroll-schedules-tab': () => <WorkSchedulesTabSlot />,
   'payroll-derived-preview-tab': (props) => (
     <DerivedPreviewTabSlot sp={(props.sp as Record<string, string | string[] | undefined>) ?? {}} />

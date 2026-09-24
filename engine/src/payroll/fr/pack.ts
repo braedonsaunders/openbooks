@@ -8,6 +8,7 @@ import { computeFrStatutory, FR_FACTOR_LABELS } from "./compute-statutory.ts";
 import { frPackFilings } from "./filings.ts";
 import { FR_TAX_YEARS } from "./rates.ts";
 import { FR_PACK_RATES } from "./statutory-rates.ts";
+import { FR_EMPLOYER_FACTS } from "./employer-facts.ts";
 
 /**
  * France payroll pack — `installable: true` for calendar 2026.
@@ -348,4 +349,5 @@ export const FR_PAYROLL_PACK = {
   // No `emp` facts: the engine reads the PAS rate off the certificate
   // answers, never off bare profile keys.
   employeeFacts: [],
+  employerFacts: FR_EMPLOYER_FACTS,
 } satisfies Omit<PayrollCountryPack, "country"> & { country: "FR" };

@@ -32,7 +32,7 @@ import {
 } from "./cotisations-2026.ts";
 import { FR_PAYROLL_PACK } from "./pack.ts";
 
-const small = { brut: "2000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEmployeeCount: 10 } as const;
+const small = { brut: "2000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEffectif: "10.00" } as const;
 
 test("table integrity: every transcribed rate matches its page quote", () => {
   // Taux patronaux.
@@ -112,7 +112,7 @@ test("ordinary employers retain the 5.25% family rate below the reduced-rate wag
     brut: "3000.00",
     payDate: "2026-06-15",
     periodsPerYear: 12,
-    employerEmployeeCount: 10,
+    employerEffectif: "10.00",
   });
   assert.equal(result.allocFamErRate, "0.0525");
   assert.equal(result.allocFamEr, "157.5000");
@@ -120,7 +120,7 @@ test("ordinary employers retain the 5.25% family rate below the reduced-rate wag
 
 test("hand-worked: 20 000 € brut, monthly, 60 salariés — capped lines", () => {
   const r = calculateFrCotisations2026({
-    brut: "20000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEmployeeCount: 60,
+    brut: "20000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEffectif: "60.00",
   });
   // Plafond mensuel 4 005: 4 005 × 6,90 % = 276,345 → 276,35 half-up.
   assert.equal(r.vieillesseSalPlafonnee, "276.3500");
@@ -150,8 +150,8 @@ test("hand-worked: 20 000 € brut, monthly, 60 salariés — capped lines", () 
 test("FNAL threshold: 49 salariés plafonné, 50 déplafonné", () => {
   // 3 000 € brut is below the 4 005 € plafond, so only the rate differs:
   // 49 → 3 000 × 0,10 % = 3,00; 50 → 3 000 × 0,50 % = 15,00.
-  const under = calculateFrCotisations2026({ ...small, brut: "3000.00", employerEmployeeCount: 49 });
-  const over = calculateFrCotisations2026({ ...small, brut: "3000.00", employerEmployeeCount: 50 });
+  const under = calculateFrCotisations2026({ ...small, brut: "3000.00", employerEffectif: "49.99" });
+  const over = calculateFrCotisations2026({ ...small, brut: "3000.00", employerEffectif: "50.00" });
   assert.equal(under.fnalEr, "3.0000");
   assert.equal(over.fnalEr, "15.0000");
   // CDN carries the difference: 3 + 9 + 0,48 = 12,48 vs 15 + 9 + 0,48 = 24,48.
@@ -215,7 +215,7 @@ test("guards: out-of-year dates, unknown effectif, bad amounts refuse by name", 
     );
   }
   assert.throws(
-    () => calculateFrCotisations2026({ ...small, employerEmployeeCount: null }),
+    () => calculateFrCotisations2026({ ...small, employerEffectif: null }),
     /FNAL refuses/,
   );
   assert.throws(
@@ -230,17 +230,19 @@ test("guards: out-of-year dates, unknown effectif, bad amounts refuse by name", 
     () => calculateFrCotisations2026({ ...small, atmpRatePct: "100.5" }),
     /out of range/,
   );
+  assert.equal(calculateFrCotisations2026({ ...small, employerEffectif: "49.50" }).fnalEr, "2.0000");
   assert.throws(
-    () => calculateFrCotisations2026({ ...small, employerEmployeeCount: 49.5 }),
-    /integer/,
+    () => calculateFrCotisations2026({ ...small, employerEffectif: "49.501" }),
+    /hundredths/,
   );
 });
 
 test("adapter refuses before emitting gross charges while 2026 RGDU is unsupported", async () => {
   const pushed: { systemKey: string; kind: string; amount: string; sequence: number }[] = [];
   const ctx: PayrollStatutoryComputeContext = {
-    tx: null as never,
+    tx: { execute: async () => ({ rows: [{ fact_value: "10.00" }] }) } as never,
     orgId: "org",
+    subsidiaryId: "legal-employer",
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Test",
@@ -291,8 +293,9 @@ test("adapter refuses before emitting gross charges while 2026 RGDU is unsupport
 
 test("adapter refuses without a known effectif, naming FNAL", async () => {
   const ctx: PayrollStatutoryComputeContext = {
-    tx: null as never,
+    tx: { execute: async () => ({ rows: [] }) } as never,
     orgId: "org",
+    subsidiaryId: "legal-employer",
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Test",
@@ -329,5 +332,5 @@ test("adapter refuses without a known effectif, naming FNAL", async () => {
       hsfEarnings: "0",
     },
   };
-  await assert.rejects(() => FR_PAYROLL_PACK.computeStatutory(ctx), /FNAL refuses/);
+  await assert.rejects(() => FR_PAYROLL_PACK.computeStatutory(ctx), /Effectif salarié annuel de l'employeur.*effectif_moyen_annuel/);
 });

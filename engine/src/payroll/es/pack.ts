@@ -171,4 +171,5 @@ export const ES_PAYROLL_PACK: EsPayrollPack = {
   statutoryEngineLabel: "AEAT",
   factorLabels: { ...ES_FACTOR_LABELS },
   employeeFacts: ES_EMPLOYEE_FACTS,
+  employerFacts: [],
 };

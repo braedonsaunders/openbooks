@@ -35,14 +35,15 @@ import { FR_PAYROLL_PACK } from "./pack.ts";
 import { frAllocFamReducedEligible, FR_PACK_RATES } from "./statutory-rates.ts";
 
 const PAY = "2026-06-15";
-const COTS = { payDate: PAY, periodsPerYear: 12, employerEmployeeCount: 10 } as const;
+const COTS = { payDate: PAY, periodsPerYear: 12, employerEffectif: "10.00" } as const;
 
 /** Adapter context for a métropole employee with a transmitted PAS rate. */
 function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeContext {
   const pushed: { systemKey: string; kind: string; amount: string }[] = [];
   return {
-    tx: null as never,
+    tx: { execute: async () => ({ rows: [{ fact_value: "10.00" }] }) } as never,
     orgId: "org",
+    subsidiaryId: "legal-employer",
     documentId: "doc",
     employeePartyId: "emp",
     employeeName: "Test",
@@ -221,7 +222,7 @@ test("eligible employer: reduced-rate threshold includes its €73,382.40 bounda
     brut: "73382.40",
     payDate: PAY,
     periodsPerYear: 1,
-    employerEmployeeCount: 10,
+    employerEffectif: "10.00",
     allocFamReducedEligible: true,
   });
   assert.equal(at.allocFamErRate, "0.0345");
@@ -231,7 +232,7 @@ test("eligible employer: reduced-rate threshold includes its €73,382.40 bounda
     brut: "73382.41",
     payDate: PAY,
     periodsPerYear: 1,
-    employerEmployeeCount: 10,
+    employerEffectif: "10.00",
     allocFamReducedEligible: true,
   });
   assert.equal(over.allocFamErRate, "0.0525");

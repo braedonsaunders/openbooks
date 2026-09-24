@@ -164,6 +164,7 @@ const FREEDONIA: PayrollCountryPack = {
   factorLabels: {},
   // Freedonia reads no `emp` facts, stated like every pack must.
   employeeFacts: [],
+  employerFacts: [],
   statutorySlots: [
     {
       key: "payg",

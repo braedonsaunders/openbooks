@@ -66,6 +66,7 @@ import {
   frPasEditionForVersement,
 } from "./tables-2026.ts";
 import { calculateFrCotisations2026, calculateFrNetImposable2026 } from "./cotisations.ts";
+import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 
 const U = (s: string): bigint => toUnits(s);
 const D = (u: bigint): string => fromUnits(u);
@@ -239,7 +240,7 @@ export function calculateFrPas2026(input: FrPas2026Input): FrPas2026Result {
 export async function computeFrStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
-  const { taxYear, region, run, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor, employerEmployeeCount } = ctx;
+  const { taxYear, region, run, income, nonPeriodic, periodsPerYear, pushStatutory, certificateFor } = ctx;
   if (taxYear !== 2026) {
     throw new PayrollPackError(
       `FR PAS withholding for tax year ${taxYear} has not been transcribed `
@@ -296,6 +297,17 @@ export async function computeFrStatutory(
     );
   }
   const transmitted = answers["taux_transmis"] ?? null;
+  if (!ctx.subsidiaryId) {
+    throw new PayrollPackError("FR RGDU needs the paying legal-employer identity to resolve its effective employer facts.");
+  }
+  const employerEffectif = await resolveStoredEmployerFact({
+    tx: ctx.tx,
+    orgId: ctx.orgId,
+    subsidiaryId: ctx.subsidiaryId,
+    country: "FR",
+    factKey: "effectif_moyen_annuel",
+    asOf: payDate,
+  });
   const base = D(U(income) + U(nonPeriodic === "" ? "0" : nonPeriodic));
   // The stub's earnings figure is the brut. PAS prices on the net imposable
   // derived from it (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10) —
@@ -318,7 +330,7 @@ export async function computeFrStatutory(
     brut: base,
     payDate,
     periodsPerYear,
-    employerEmployeeCount: employerEmployeeCount ?? null,
+    employerEffectif,
     atmpRatePct: null,
     versementMobilitePct: null,
   });

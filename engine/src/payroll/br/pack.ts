@@ -136,4 +136,5 @@ export const BR_PAYROLL_PACK: PayrollCountryPack = {
   statutoryEngineLabel: "IRRF/INSS",
   factorLabels: { ...BR_FACTOR_LABELS },
   employeeFacts: BR_EMPLOYEE_FACTS,
+  employerFacts: [],
 };

@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, check, date, foreignKey, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+import { subsidiaries } from "./subsidiaries";
 
 /**
  * Payroll filing (remittance) accounts.
@@ -166,6 +167,50 @@ export const payrollStatutoryRates = pgTable(
       sql`${t.subRegion} is null or ${t.region} is not null`),
     index("payroll_statutory_rates_org_year").on(t.orgId, t.country, t.taxYear),
     index("payroll_statutory_rates_account").on(t.orgId, t.filingAccountId),
+  ],
+);
+
+/**
+ * Pack-declared employer facts whose legal value changes over time. These
+ * are not rates: headcount bands, sector classifications and employer status
+ * live here with an effective date and append-only supersession history.
+ */
+export const payrollEmployerFacts = pgTable(
+  "payroll_employer_facts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** The payroll legal-employer subsidiary in this organization. */
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    country: text("country").notNull(),
+    factKey: text("fact_key").notNull(),
+    effectiveFrom: date("effective_from").notNull(),
+    valueKind: text("value_kind").notNull(),
+    /** Decimal canonical text; integer/choice/boolean are also stored as text. */
+    factValue: text("fact_value").notNull(),
+    valueScale: integer("value_scale"),
+    supersededOn: date("superseded_on"),
+    changeReason: text("change_reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    foreignKey({
+      name: "payroll_employer_facts_org_subsidiary_fkey",
+      columns: [t.orgId, t.subsidiaryId],
+      foreignColumns: [subsidiaries.orgId, subsidiaries.id],
+    }).onDelete("restrict"),
+    uniqueIndex("payroll_employer_facts_org_point").on(
+      t.orgId, t.subsidiaryId, t.country, t.factKey, t.effectiveFrom,
+    ).where(sql`${t.supersededOn} is null`),
+    check("payroll_employer_facts_value_kind",
+      sql`${t.valueKind} in ('choice', 'integer', 'decimal', 'boolean')`),
+    check("payroll_employer_facts_decimal_scale",
+      sql`(${t.valueKind} = 'decimal' and ${t.valueScale} between 0 and 10)
+          or (${t.valueKind} <> 'decimal' and ${t.valueScale} is null)`),
+    check("payroll_employer_facts_reason", sql`length(btrim(${t.changeReason})) > 0`),
+    index("payroll_employer_facts_org_effective").on(
+      t.orgId, t.country, t.factKey, t.effectiveFrom,
+    ),
   ],
 );
 

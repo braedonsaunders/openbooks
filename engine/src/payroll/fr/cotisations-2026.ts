@@ -197,7 +197,7 @@ export const FR_AGS_ER_2026 = {
  * plafond Fnal (effectif de 50 salariés et plus) 0,50 %"
  *
  * Headcount-dependent: the engine reads the employer's effectif from the
- * statutory context (`employerEmployeeCount`) and fail-closes when it is
+ * statutory context (`effectif_moyen_annuel`) and fail-closes when it is
  * absent — it never assumes a size.
  */
 export const FR_FNAL_ER_2026 = {
@@ -303,7 +303,7 @@ export const FR_COTISATION_REFUSALS_2026: readonly string[] = [
   "AGS 0,03 % interim variant: needs an employer-type (entreprise de travail temporaire) channel no pack carries — the engine applies 0,25 %",
   "Alsace-Moselle cotisation salariale maladie supplémentaire 1,30 % (transcribed above): needs a workplace-department channel no pack carries",
   "AT/MP (Taux notifié par la Carsat) and versement mobilité (commune-dependent): tenant-declared by design, never table-supplied",
-  "FNAL without a known effectif: employerEmployeeCount absent — the 0,10 % plafonné vs 0,50 % déplafonné choice cannot be made",
+  "FNAL without a known legal-employer effectif_moyen_annuel — the 0,10 % plafonné vs 0,50 % déplafonné choice cannot be made",
   "AGIRC-ARRCO T1/T2 both shares, CEG and CET: transcribed in ./retraite-2026.ts and computed",
   "APEC 0,06 % (transcribed in ./retraite-2026.ts): cadres only — no pack channel carries the employee's cadre status",
   "AGIRC-ARRCO split modified by accord collectif: the page allows a collective agreement to modify the regulated 60/40 — the engine applies 60/40 with no tenant-override channel",

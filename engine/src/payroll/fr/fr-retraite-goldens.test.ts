@@ -21,7 +21,7 @@ import {
   FR_CET_2026,
 } from "./retraite-2026.ts";
 
-const small = { brut: "2000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEmployeeCount: 10 } as const;
+const small = { brut: "2000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEffectif: "10.00" } as const;
 
 test("table integrity: tranches, taux appelés, CEG, CET and APEC", () => {
   // Tranches corroborate the PASS: T1 tops at 1×, T2 at 8×.
@@ -82,7 +82,7 @@ test("hand-worked: 2 000 € brut, monthly — T1 only, no CET", () => {
 
 test("hand-worked: 20 000 € brut, monthly — T1 capped, T2, CET", () => {
   const r = calculateFrCotisations2026({
-    brut: "20000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEmployeeCount: 60,
+    brut: "20000.00", payDate: "2026-06-15", periodsPerYear: 12, employerEffectif: "60.00",
   });
   assert.equal(r.t1Base, "4005.0000");
   assert.equal(r.t2Base, "15995.0000");

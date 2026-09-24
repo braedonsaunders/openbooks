@@ -228,6 +228,7 @@ export const NL_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // No `emp` facts: the engine reads the loonheffing answers off the
   // certificate rows, never off bare profile keys.
   employeeFacts: [],
+  employerFacts: [],
 };
 
 export { NL_CERTIFICATES, NL_PACK_RATES as NL_RATES, NL_TAX_YEARS, NL_WITHHOLDING };

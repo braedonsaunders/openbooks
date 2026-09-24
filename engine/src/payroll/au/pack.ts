@@ -148,4 +148,5 @@ export const AU_PAYROLL_PACK: Omit<PayrollCountryPack, "country"> & { country: "
   // No `emp` facts: the engine reads TFN declarations off the certificate
   // answers, never off bare profile keys.
   employeeFacts: [],
+  employerFacts: [],
 };

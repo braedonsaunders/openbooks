@@ -437,6 +437,7 @@ export async function calculateStub(
     clearIncomeAssessedLines();
     factors = await pack.computeStatutory({
       tx, orgId, documentId, employeePartyId,
+      subsidiaryId: ctx.runContext.subsidiaryId,
       employeeName: emp.display_name ?? employeePartyId,
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
