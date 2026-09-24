@@ -1,26 +1,22 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
+import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
+import {
+  assertValidProjectFinancialProfile,
+  canonicalizeProjectFinancialProfile,
+} from "./financial-profile-versions";
 
-const source = readFileSync(
-  new URL("./financial-profile-versions.ts", import.meta.url),
-  "utf8",
-);
+test("trusted numeric policy defaults canonicalize while submitted numeric amounts are refused", () => {
+  const builtIn = BUILTIN_PROJECT_TYPES.find((candidate) => candidate.key === "cost_plus");
+  assert.ok(builtIn);
+  const canonical = canonicalizeProjectFinancialProfile(builtIn.financialProfile);
+  assert.equal(canonical.totalPrice.defaultMarkupPercent, "15.0000");
+  assert.doesNotThrow(() => assertValidProjectFinancialProfile(canonical));
 
-test("canonicalizeProjectFinancialProfile persists policy rates through canonicalDecimal then normalizeMoney", () => {
-  const helperStart = source.indexOf("function persistProjectPolicyDecimal");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistProjectPolicyDecimal helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /must be a finite non-negative decimal/);
-  assert.doesNotMatch(helper, /normalizeDecimal\(value/);
-
-  const start = source.indexOf("export function canonicalizeProjectFinancialProfile");
-  const next = source.indexOf("export function assertValidProjectFinancialProfile");
-  const body = source.slice(start, next);
-  assert.match(body, /optionalNonnegativeDecimal\(/);
-  assert.doesNotMatch(body, /normalizeDecimal\(/);
-  assert.doesNotMatch(body, /normalizeMoney\(/);
+  const submittedNumber = structuredClone(canonical);
+  submittedNumber.totalPrice.defaultMarkupPercent = 15;
+  assert.throws(
+    () => assertValidProjectFinancialProfile(submittedNumber),
+    /totalPrice\.defaultMarkupPercent must be a finite non-negative decimal string/,
+  );
 });

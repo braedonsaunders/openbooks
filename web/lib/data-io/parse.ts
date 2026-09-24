@@ -2,6 +2,7 @@ import 'server-only'
 import { parseCsvRows } from '@openbooks/engine/src/banking/banking.ts'
 import { isSheetFormulaCellValue, readSheet, SheetReadError, type SheetCellValue } from '@openbooks/office'
 import { CELL_PROVENANCE_KEY, type CellProvenance, type ImportFormat } from './types'
+import { parseImportJson } from './import-parse'
 
 export interface ParsedFile {
   /** Column headers found in the file (in order). */
@@ -119,7 +120,7 @@ function matrixToObjects(
 function parseJson(text: string): ParsedFile {
   let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    parsed = parseImportJson(text)
   } catch {
     throw new ImportParseError(
       'the file is not valid JSON — check for trailing commas or a truncated upload before importing',

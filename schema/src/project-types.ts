@@ -84,9 +84,9 @@ export interface OverheadSource {
     | "per_labor_hour" //      project hours × ratePerHour (flat)
     | "rate_engine" //         per-department composite burden rate × project hours-by-dept
     | "posted_gl_account_group"; // sum posted GL in an overhead account group tagged to the project
-  /** For percent_of_labor — the percentage (25 = 25%). Persisted as a canonical decimal string; numbers remain accepted on write. */
+  /** For percent_of_labor — the percentage (25 = 25%). Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
   ratePercent?: string | number;
-  /** For per_labor_hour — the flat dollars per labor hour. Persisted as a canonical decimal string; numbers remain accepted on write. */
+  /** For per_labor_hour — the flat dollars per labor hour. Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
   ratePerHour?: string | number;
   /** For rate_engine — how the per-department composite rate resolves + applies. */
   rateEngine?: {
@@ -144,7 +144,7 @@ export interface FinancialProfile {
   /** How the contract/selling price is determined. */
   totalPrice: {
     method: "contract_field" | "billable_value" | "not_to_exceed" | "cost_plus";
-    /** For cost_plus: default markup % if the project doesn't set one. Persisted as a canonical decimal string; numbers remain accepted on write. */
+    /** For cost_plus: default markup % if the project doesn't set one. Persisted and accepted on API writes as a canonical decimal string; numeric built-in and legacy stored values are normalized internally. */
     defaultMarkupPercent?: string | number;
   };
   /** Could-be-invoiced / backlog definition. */
