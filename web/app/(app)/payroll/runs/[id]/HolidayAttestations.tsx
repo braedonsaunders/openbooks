@@ -80,6 +80,7 @@ export function HolidayAttestations(props: {
   const { runId, errors, roster, canAnswer, onAnswered } = props
   const [employees, setEmployees] = useState<AttestationEmployee[] | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
+  const [attempt, setAttempt] = useState(0)
   const [busy, setBusy] = useState(false)
 
   const actionable = errors
@@ -106,7 +107,10 @@ export function HolidayAttestations(props: {
         // body must surface the failure, never a SyntaxError from res.json().
         if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
         const j = await res.json()
-        if (!cancelled) setEmployees(Array.isArray(j.employees) ? j.employees : [])
+        if (!cancelled) {
+          setEmployees(Array.isArray(j.employees) ? j.employees : [])
+          setLoadFailed(false)
+        }
       } catch {
         if (!cancelled) setLoadFailed(true)
       }
@@ -115,10 +119,31 @@ export function HolidayAttestations(props: {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, canAnswer])
+  }, [runId, canAnswer, attempt])
 
   if (!canAnswer || actionable.length === 0) return null
-  if (loadFailed || employees === null) return null
+  // A failed employee lookup must read as a failure with a retry — never as
+  // the empty panel, which is what "no exceptions need answers" looks like.
+  if (loadFailed) {
+    return (
+      <div className="mt-3 space-y-2 border-t border-amber-200/60 pt-3 dark:border-amber-800/40">
+        <p className="text-sm text-red-700 dark:text-red-300">
+          Could not load the employees these exceptions need — retry rather than answer blind.
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setLoadFailed(false)
+            setAttempt((n) => n + 1)
+          }}
+        >
+          Retry
+        </Button>
+      </div>
+    )
+  }
+  if (employees === null) return null
 
   async function file(body: Record<string, unknown>) {
     setBusy(true)
