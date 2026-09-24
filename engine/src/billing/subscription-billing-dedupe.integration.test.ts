@@ -2,8 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { billSubscriptionNow, runDueSubscriptions } from "./subscription-billing.ts";
+import { db, orgContext } from "../platform/db.ts";
+import {
+  billSubscriptionNow,
+  changeSubscription,
+  createSubscriptionInvoice,
+  runDueSubscriptions,
+  SubscriptionError,
+} from "./subscription-billing.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -16,7 +22,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function seedPlainSubscription(
   org: ScratchOrg,
   actorId: string,
-  opts: { nextBillOn?: string; autoPost?: boolean } = {},
+  opts: { startOn?: string; nextBillOn?: string; autoPost?: boolean } = {},
 ): Promise<string> {
   // The billing feature gate rides on the org settings next to controlAccounts.
   await db.execute(sql`
@@ -37,7 +43,7 @@ async function seedPlainSubscription(
       (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on,
        auto_post, created_by)
     values (${subscriptionId}, ${org.orgId}, ${org.customerId}, ${planId}, '1', 'active',
-            ${opts.nextBillOn ?? org.date}, ${opts.nextBillOn ?? org.date},
+            ${opts.startOn ?? org.date}, ${opts.nextBillOn ?? opts.startOn ?? org.date},
             ${opts.autoPost ?? true}, ${actorId})
   `);
   return subscriptionId;
@@ -285,6 +291,144 @@ test(
       assert.equal(a.invoiceId, b.invoiceId, "both callers observe the same invoice");
       assert.equal(await postedInvoiceCount(org.orgId), 1);
       assert.equal(await journalEntryCount(org.orgId), 1);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "a tenant-scoped tick bills only its own org",
+  { skip: !DB },
+  async () => {
+    // runDueSubscriptions reads the ambient tenant when one is set and must
+    // carry it into the candidate scan, so a scoped tick can never bill
+    // another tenant's due subscriptions.
+    const scoped = await createScratchOrg();
+    const other = await createScratchOrg();
+    try {
+      const scopedActor = await createScratchUser(scoped.orgId, "Billing", "admin");
+      const otherActor = await createScratchUser(other.orgId, "Billing", "admin");
+      await seedPlainSubscription(scoped, scopedActor);
+      await seedPlainSubscription(other, otherActor);
+
+      const run = await orgContext.run({ orgId: scoped.orgId, bypass: false }, () =>
+        runDueSubscriptions(scoped.date),
+      );
+      assert.equal(run.failed, 0);
+      assert.equal(run.billed, 1);
+      assert.equal(await postedInvoiceCount(scoped.orgId), 1, "the scoped org bills");
+      assert.equal(await postedInvoiceCount(other.orgId), 0, "the unscoped org is untouched");
+    } finally {
+      await dropScratchOrgReporting(scoped.orgId);
+      await dropScratchOrgReporting(other.orgId);
+    }
+  },
+);
+
+test(
+  "concurrent identical plan changes cut exactly one proration invoice",
+  { skip: !DB },
+  async () => {
+    // A double-click on a plan change: both serialize on the subscription
+    // row lock inside changeSubscription. The winner prices the upgrade
+    // from the old state and cuts the adjustment; the loser reads the
+    // winner's committed quantity, prices a zero adjustment, and cuts
+    // nothing — no duplicate proration invoice.
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
+
+      const [a, b] = await Promise.all([
+        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }),
+        changeSubscription(subscriptionId, { quantity: "2" }, org.date, { actorId }),
+      ]);
+      const invoiced = [a.invoiceId, b.invoiceId].filter((id): id is string => id !== null);
+      assert.equal(invoiced.length, 1, "exactly one proration invoice across both calls");
+      const winner = a.invoiceId ? a : b;
+      assert.equal(winner.adjustment, "100.0000", "the winner bills the full remaining slice once");
+      const quantity = (await db.execute<{ quantity: string }>(sql`
+        select quantity from subscriptions where id = ${subscriptionId}
+      `)).rows[0]!.quantity;
+      assert.equal(quantity, "2.0000");
+      const invoices = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents
+         where org_id = ${org.orgId} and kind = 'customer_invoice'
+      `)).rows[0]!.n;
+      assert.equal(invoices, 1, "no duplicate proration invoice exists");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "changeSubscription refuses an unreadable quantity without mutating the subscription",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      const subscriptionId = await seedPlainSubscription(org, actorId, { nextBillOn: "2026-08-15" });
+      const before = (await db.execute<{ quantity: string }>(sql`
+        select quantity from subscriptions where id = ${subscriptionId}
+      `)).rows[0]!.quantity;
+
+      await assert.rejects(
+        changeSubscription(subscriptionId, { quantity: "1.00001" }, org.date, { actorId }),
+        (e: unknown) =>
+          e instanceof SubscriptionError && /quantity must be an exact decimal/.test(e.message),
+      );
+      const row = (await db.execute<{ quantity: string; n: number }>(sql`
+        select s.quantity,
+               (select count(*)::int from documents d where d.org_id = ${org.orgId}) as n
+          from subscriptions s where s.id = ${subscriptionId}
+      `)).rows[0]!;
+      assert.equal(row.quantity, before, "the stored quantity is untouched");
+      assert.equal(row.n, 0, "no invoice was cut for the refused change");
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "createSubscriptionInvoice refuses an unreadable line amount without writing a document",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const actorId = await createScratchUser(org.orgId, "Billing", "admin");
+      await seedPlainSubscription(org, actorId);
+      const currency = (await db.execute<{ base_currency: string }>(sql`
+        select base_currency from orgs where id = ${org.orgId}
+      `)).rows[0]!.base_currency;
+
+      await assert.rejects(
+        createSubscriptionInvoice({
+          orgId: org.orgId,
+          actorId,
+          customerId: org.customerId,
+          subsidiaryId: org.subsidiaryId,
+          currency,
+          incomeAccountId: org.accounts.revenue,
+          itemId: null,
+          taxCodeId: null,
+          description: "Probe line",
+          quantity: "1",
+          unitPrice: "9.99999",
+          memo: "decimal probe",
+          invoiceDate: org.date,
+          autoPost: false,
+        }),
+        (e: unknown) =>
+          e instanceof SubscriptionError && /unit price must be an exact decimal/.test(e.message),
+      );
+      const documents = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from documents where org_id = ${org.orgId}
+      `)).rows[0]!.n;
+      assert.equal(documents, 0, "the refused invoice wrote no document");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
