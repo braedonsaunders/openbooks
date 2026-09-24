@@ -384,14 +384,16 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       if (!opts.asOfPeriodId) throw new Error("as-of sandbox requires a cutoff period");
       cutoff = await resolveAsOfCutoff(opts.productionOrgId, opts.asOfPeriodId);
     }
-    // Capture the source org configuration in the same snapshot the tenant
-    // rows are copied from (SBOX2): a Company Settings change landing
-    // between an outer read and this snapshot must reach the sandbox, never
-    // leave it marked ready with pre-change settings beside post-change rows.
+    // Capture settings in the same snapshot as copied rows. Refresh uses this
+    // captured value to rebase JSON control-account references, avoiding a
+    // live read after the clone commits that could pair snapshot rows with a
+    // newer production control map.
+    const source = await readSourceOrgConfig(opts.productionOrgId);
+    sourceSettings = source.settings;
+    // Create additionally applies that snapshot to its new org row; refresh
+    // preserves the sandbox org row but still consumes sourceSettings below.
     if (opts.initializeOrg) {
-      const source = await readSourceOrgConfig(opts.productionOrgId);
       await applySandboxOrgConfig(opts.sandboxOrgId, source, opts.masked, opts.settingsOverlay ?? {});
-      sourceSettings = source.settings;
     }
     // As-of trims journal entries past the cutoff but copies every document,
     // so a post-cutoff posted entry would leave its documents pointing at an

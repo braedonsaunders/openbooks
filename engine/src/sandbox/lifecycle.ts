@@ -551,7 +551,7 @@ export async function refreshSandbox(
 
         // Re-copy only the target tables (deterministic ids → preserved
         // customization rows keep resolving their references to the fresh data).
-        await runClone({
+        const result = await runClone({
           productionOrgId: s.production_org_id,
           sandboxOrgId: s.org_id,
           seed: sandboxSeed,
@@ -564,6 +564,7 @@ export async function refreshSandbox(
           productionOrgId: s.production_org_id,
           sandboxOrgId: s.org_id,
           seed: sandboxSeed,
+          productionSettings: result.sourceSettings,
         });
         // The re-copy just rehydrated every integration/credential row from
         // production; make the sandbox inert again inside the same unit so a
