@@ -429,10 +429,12 @@ function ScheduleForm({
       </div>
 
       <fieldset className="space-y-2">
-        <Label help={t('help.pattern')}>{t('fields.pattern')}</Label>
+        <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('fields.pattern')}</legend>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('help.pattern')}</p>
         <label className="flex items-start gap-2 text-sm">
           <input
             type="radio"
+            name="work-schedule-pattern"
             className="mt-1"
             checked={draft.pattern === 'cycle'}
             onChange={() => patch({
@@ -452,6 +454,7 @@ function ScheduleForm({
         <label className="flex items-start gap-2 text-sm">
           <input
             type="radio"
+            name="work-schedule-pattern"
             className="mt-1"
             checked={draft.pattern === 'varies'}
             onChange={() => patch({
