@@ -7,6 +7,7 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 
 export const runtime = 'nodejs'
 
@@ -63,7 +64,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data)
+  const body = (parsedBody.data) as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
+  // Mandatory optimistic-concurrency evidence (same contract as document,
+  // opportunity, payment, prebill-line, capture, and custom-record edits):
+  // two tabs must 409 instead of silently replacing each other. Checked
+  // after the existence gate so a missing token never leaks activity
+  // existence.
+  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    return NextResponse.json({ error: 'A current activity revision is required; reload the activity and try again' }, { status: 409 })
+  }
   if (body.kind !== undefined && (typeof body.kind !== 'string' || !KINDS.includes(body.kind))) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })
   if (body.status !== undefined && (typeof body.status !== 'string' || !STATUSES.includes(body.status))) return NextResponse.json({ error: 'invalid activity status' }, { status: 422 })
   if (body.priority !== undefined && (typeof body.priority !== 'string' || !PRIORITIES.includes(body.priority))) return NextResponse.json({ error: 'invalid priority' }, { status: 422 })
@@ -112,6 +121,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const denied = await db.transaction(async (tx) => {
     const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
     if (!visible.rows.length) return NextResponse.json({error:'not found'},{status:404})
+    // Compared against the row locked by this write transaction, never the
+    // preflight snapshot (which may have gone stale during validation). A
+    // separate projection keeps the audit before-image free of computed keys.
+    const lockedRevision = (await tx.execute(sql`select ${documentRevisionSql(sql`a.updated_at`)} as revision from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)).rows[0] as { revision: unknown } | undefined
+    if (!isDocumentRevisionToken(lockedRevision?.revision) || lockedRevision.revision !== body.expectedUpdatedAt) {
+      return NextResponse.json({ error: 'This activity changed after you opened it; reload the activity and reapply your changes' }, { status: 409 })
+    }
     // The stored side of the pair comes from the locked row: a concurrent
     // save between the preflight read and this lock must not restore stale
     // dates or stale audit evidence.

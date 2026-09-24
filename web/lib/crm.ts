@@ -140,12 +140,26 @@ export async function loadOpportunity(id: string, orgId: string, allowed?: Reado
 
 export async function loadActivity(id: string, orgId: string, allowed?: ReadonlySet<string> | null) {
   const activity = (await db.execute<Record<string, unknown>>(sql`
-    select a.*, ou.name as owner_name, au.name as assigned_name
+    select a.*, ${documentRevisionSql(sql`a.updated_at`)} as "__activityRevision",
+           ou.name as owner_name, au.name as assigned_name
       from crm_activities a
       left join users ou on ou.id = a.owner_user_id
       left join users au on au.id = a.assigned_user_id
      where a.id = ${id} and a.org_id = ${orgId}${crmActivityScope(allowed)}`))
   if (!activity.rows[0]) return null
+  // The revision token never leaves this module in raw form: updated_at
+  // carries the exact persisted revision token every activity save must send
+  // back as expectedUpdatedAt (same wire form as document revisions, and the
+  // same rewrite loadCrmAccount performs for accounts).
+  {
+    const head = activity.rows[0]!
+    const revision = head['__activityRevision']
+    if (!isDocumentRevisionToken(revision)) {
+      throw new Error('activity read did not return an exact persisted revision')
+    }
+    delete head['__activityRevision']
+    head.updated_at = revision
+  }
   const [links, participants] = await Promise.all([
     db.execute(sql`select * from crm_activity_links where activity_id = ${id} and org_id = ${orgId} order by created_at`),
     db.execute(sql`

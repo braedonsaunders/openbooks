@@ -4,14 +4,13 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// Activity PATCH validates durationMinutes as non-negative minutes but never
-// bounds it as an integer, so an out-of-int32 figure sails through and dies
-// in Postgres as a raw integer failure (HTTP 500 — the verb has no catch for
-// it) instead of failing closed with a named 422 and nothing written.
-// duration_minutes is integer.
+// F3-71: activity PATCH carried no revision token, so the last writer won
+// silently. The route now requires the loader-projected expectedUpdatedAt
+// (409 when missing) and compares it against the locked row (409 when
+// stale), the same contract as the opportunity route.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
-Object.assign(globalThis, { __activityDurationState: state })
+Object.assign(globalThis, { __activityRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
@@ -19,13 +18,13 @@ registerHooks({
     if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
     if (specifier === '../../../../../lib/authz') return virtual(`
       export async function guardPermission() {
-        const s = globalThis.__activityDurationState;
+        const s = globalThis.__activityRevisionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
     if (specifier === '../../../../../lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
-        const s = globalThis.__activityDurationState;
+        const s = globalThis.__activityRevisionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
@@ -36,8 +35,8 @@ registerHooks({
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { PATCH } = await import('./route.ts')
 const { loadActivity } = await import('../../../../../lib/crm')
+const { PATCH } = await import('./route.ts')
 const DB = !!process.env.OPENBOOKS_DB_URL
 
 async function fixture() {
@@ -50,14 +49,19 @@ async function fixture() {
         coalesce(settings->'features','{}'::jsonb) || '{"crm": true}'::jsonb)
        where id = ${org.orgId}`)
     return (await db.execute<{ id: string }>(sql`
-      insert into crm_activities (org_id, kind, status, subject, duration_minutes)
-      values (${org.orgId}, 'call', 'open', 'Probe call', 30)
+      insert into crm_activities (org_id, kind, status, subject)
+      values (${org.orgId}, 'call', 'open', 'Original subject')
       returning id`)).rows[0]!.id
   })
   return { org, activityId }
 }
 
-async function patch(id: string, body: unknown): Promise<{ status: number; json: unknown }> {
+type PatchResult = {
+  status: number
+  json: { error?: unknown; activity?: { subject?: unknown; updated_at?: unknown }; thrown?: unknown } | null
+}
+
+async function patch(id: string, body: unknown): Promise<PatchResult> {
   try {
     const response = await withOrgContext(state.orgId, () => PATCH(
       new Request(`http://crm.test/api/crm/activities/${id}`, {
@@ -73,39 +77,58 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
   }
 }
 
-async function duration(orgId: string, activityId: string): Promise<number | null> {
-  return await withOrgContext(orgId, async () => {
-    const rows = (await db.execute<{ duration_minutes: number | null }>(sql`
-      select duration_minutes from crm_activities where id = ${activityId}`)).rows
-    return rows[0]!.duration_minutes
-  })
-}
-
-// The loader-projected revision token every PATCH must echo back.
-async function token(activityId: string): Promise<string> {
+async function revisionToken(activityId: string): Promise<string> {
   return await withOrgContext(state.orgId, async () => {
     const loaded = await loadActivity(activityId, state.orgId, null)
-    return (loaded!.activity as Record<string, unknown>).updated_at as string
+    const token = (loaded!.activity as Record<string, unknown>).updated_at
+    assert.equal(typeof token, 'string')
+    return token as string
   })
 }
 
-test('PATCH refuses an out-of-int32 duration without writing', { skip: !DB }, async () => {
+async function subject(activityId: string): Promise<string | null> {
+  return await withOrgContext(state.orgId, async () => {
+    const rows = (await db.execute<{ subject: string | null }>(sql`
+      select subject from crm_activities where id = ${activityId}`)).rows
+    return rows[0]!.subject
+  })
+}
+
+test('PATCH without a revision token is refused with 409 and writes nothing', { skip: !DB }, async () => {
   const { org, activityId } = await fixture()
   try {
-    const result = await patch(activityId, { durationMinutes: '99999999999999999999', expectedUpdatedAt: await token(activityId) })
-    assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.equal(await duration(org.orgId, activityId), 30)
+    const result = await patch(activityId, { subject: 'Silent overwrite' })
+    assert.equal(result.status, 409, `expected 409, got ${result.status}: ${JSON.stringify(result.json)}`)
+    assert.match(String(result.json?.error ?? ''), /revision/i)
+    assert.equal(await subject(activityId), 'Original subject')
   } finally {
     await dropScratchOrg(org.orgId)
   }
 })
 
-test('PATCH still saves an ordinary duration', { skip: !DB }, async () => {
+test('PATCH with a stale revision token is refused after a concurrent save', { skip: !DB }, async () => {
   const { org, activityId } = await fixture()
   try {
-    const result = await patch(activityId, { durationMinutes: 45, expectedUpdatedAt: await token(activityId) })
+    const token = await revisionToken(activityId)
+    const first = await patch(activityId, { subject: 'First save', expectedUpdatedAt: token })
+    assert.equal(first.status, 200, JSON.stringify(first.json))
+    const second = await patch(activityId, { subject: 'Second save', expectedUpdatedAt: token })
+    assert.equal(second.status, 409, `expected 409, got ${second.status}: ${JSON.stringify(second.json)}`)
+    assert.match(String(second.json?.error ?? ''), /changed after you opened it/)
+    assert.equal(await subject(activityId), 'First save')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('PATCH with the fresh revision token saves and rotates the token', { skip: !DB }, async () => {
+  const { org, activityId } = await fixture()
+  try {
+    const token = await revisionToken(activityId)
+    const result = await patch(activityId, { subject: 'Fresh save', expectedUpdatedAt: token })
     assert.equal(result.status, 200, JSON.stringify(result.json))
-    assert.equal(await duration(org.orgId, activityId), 45)
+    assert.equal(result.json?.activity?.subject, 'Fresh save')
+    assert.notEqual(result.json?.activity?.updated_at, token)
   } finally {
     await dropScratchOrg(org.orgId)
   }
