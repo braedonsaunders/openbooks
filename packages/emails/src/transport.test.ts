@@ -70,3 +70,21 @@ test("an invalid per-message reply-to refuses before any provider request", asyn
     restore();
   }
 });
+
+test("a refused connection surfaces its classified cause, not a generic failure", async () => {
+  // E09: classifyNetworkFailure names the pre-transmission cause
+  // (ECONNREFUSED); providerDispatch must carry it into the thrown error
+  // instead of discarding it as 'network request failed'.
+  const original = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error("fetch failed", { cause: { code: "ECONNREFUSED" } });
+  }) as typeof fetch;
+  try {
+    await assert.rejects(
+      sendVia(transport("default@example.com"), base, identity("conn-refused")),
+      /Resend: network request failed \(ECONNREFUSED\)/,
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+});

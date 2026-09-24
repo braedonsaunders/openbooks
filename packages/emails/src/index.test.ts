@@ -94,7 +94,9 @@ test("email provider sends refuse a cross-origin redirect without delivering the
   };
 
   try {
-    await assert.rejects(sendVia(transport, message, { deliveryKey: testKey("redirect-proof") }), /Resend: network request failed/);
+    // E09: the refusal must carry its classified cause (redirect refused),
+    // not a generic 'network request failed'.
+    await assert.rejects(sendVia(transport, message, { deliveryKey: testKey("redirect-proof") }), /Resend: cross-origin redirect refused/);
     assert.deepEqual(redirectModes, ["error"]);
     assert.equal(attackerRequests, 0, "the redirect target must never receive a request");
 
