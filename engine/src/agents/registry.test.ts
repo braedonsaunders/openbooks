@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   CONTINUOUS_CLOSE_DETECTOR_SPECS,
@@ -10,8 +9,6 @@ import {
   normalizeContinuousCloseDetectors,
 } from "./continuous-close-config.ts";
 import { AGENT_PACKS } from "./registry.ts";
-
-const controlPlane = readFileSync(new URL("../continuous-close/continuous-close.ts", import.meta.url), "utf8");
 
 test("every registered agent key has exactly one pack implementation", () => {
   assert.deepEqual(
@@ -24,21 +21,6 @@ test("every registered agent key has exactly one pack implementation", () => {
   }
 });
 
-test("the control plane dispatches through the registry, never a per-agent branch", () => {
-  assert.match(
-    controlPlane,
-    /await AGENT_PACKS\[args\.agentKey\]\(args\.orgId, configured\.materiality_threshold, detectors\)/,
-    "one dispatch line serves all six agents",
-  );
-  assert.doesNotMatch(
-    controlPlane,
-    /args\.agentKey === "accounting" \?/,
-    "the accounting/finance ternary is gone: packs own their detectors",
-  );
-  assert.doesNotMatch(controlPlane, /async function accountingFindings/);
-  assert.doesNotMatch(controlPlane, /async function financeFindings/);
-});
-
 test("every detector spec belongs to a registered agent pack", () => {
   for (const spec of CONTINUOUS_CLOSE_DETECTOR_SPECS) {
     assert.ok(
@@ -49,56 +31,34 @@ test("every detector spec belongs to a registered agent pack", () => {
   }
 });
 
+/**
+ * Pack registration is a rule, not a roster: every pack owns at least one
+ * uniquely-keyed detector and ships it enabled. The exact detector set grows
+ * over time, so no test pins the membership list — detector behaviours are
+ * covered by the continuous-close pack suites.
+ */
+function assertPackRegistersEnabledDetectors(agentKey: (typeof CONTINUOUS_CLOSE_AGENT_KEYS)[number]): void {
+  const specs = detectorSpecsForAgent(agentKey);
+  assert.ok(specs.length > 0, `${agentKey} registers at least one detector`);
+  const keys = specs.map((spec) => spec.detectorKey);
+  assert.ok(keys.every((key) => key.length > 0), `${agentKey} detector keys are named`);
+  assert.equal(new Set(keys).size, keys.length, `${agentKey} detector keys are unique`);
+  const defaults = defaultContinuousCloseDetectors(agentKey);
+  assert.deepEqual(
+    enabledDetectorKeys(defaults),
+    defaults.map((detector) => detector.detectorKey),
+    `${agentKey} detectors all default on`,
+  );
+}
+
 test("the four wave-2 packs register their detectors and default on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("collections").map((spec) => spec.detectorKey),
-    ["overdue_customer_balance", "broken_payment_promise", "credit_hold_candidate"],
-  );
-  assert.deepEqual(
-    detectorSpecsForAgent("payables").map((spec) => spec.detectorKey),
-    ["duplicate_bills", "bills_due_before_payrun", "early_pay_discount_opportunity", "bills_missing_approval"],
-  );
-  assert.deepEqual(
-    detectorSpecsForAgent("reconciliation").map((spec) => spec.detectorKey),
-    ["bank_line_match_candidate", "stale_reconciliation", "never_reconciled_account"],
-  );
-  assert.deepEqual(
-    detectorSpecsForAgent("hygiene").map((spec) => spec.detectorKey),
-    [
-      "control_account_type_mismatch",
-      "duplicate_party_identity",
-      "item_missing_tax_code",
-      "project_missing_cost_budget",
-      "budget_scenario_without_lines",
-      "unmapped_payroll_component",
-    ],
-  );
   for (const agentKey of ["collections", "payables", "reconciliation", "hygiene"] as const) {
-    const defaults = defaultContinuousCloseDetectors(agentKey);
-    assert.deepEqual(
-      enabledDetectorKeys(defaults),
-      defaults.map((detector) => detector.detectorKey),
-      `${agentKey} controls all default on`,
-    );
+    assertPackRegistersEnabledDetectors(agentKey);
   }
 });
 
 test("the forensics pack registers its detectors and defaults on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("forensics").map((spec) => spec.detectorKey),
-    [
-      "forensic_weekend_postings",
-      "forensic_round_dollar",
-      "forensic_threshold_trap",
-      "forensic_duplicate_bills",
-    ],
-  );
-  const defaults = defaultContinuousCloseDetectors("forensics");
-  assert.deepEqual(
-    enabledDetectorKeys(defaults),
-    defaults.map((detector) => detector.detectorKey),
-    "forensics controls all default on",
-  );
+  assertPackRegistersEnabledDetectors("forensics");
   assert.throws(
     () => normalizeContinuousCloseDetectors("forensics", {
       forensic_weekend_postings: { parameters: { lookbackDays: 0 } },
@@ -114,73 +74,19 @@ test("the forensics pack registers its detectors and defaults on", () => {
 });
 
 test("the tax pack registers its detectors and defaults on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("tax").map((spec) => spec.detectorKey),
-    [
-      "tax_missing_codes",
-      "tax_missing_registration",
-      "tax_return_blocked",
-      "tax_unlocked_period",
-    ],
-  );
-  const defaults = defaultContinuousCloseDetectors("tax");
-  assert.deepEqual(
-    enabledDetectorKeys(defaults),
-    defaults.map((detector) => detector.detectorKey),
-    "tax controls all default on",
-  );
+  assertPackRegistersEnabledDetectors("tax");
 });
 
 test("the payroll pack registers its detectors and defaults on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("payroll").map((spec) => spec.detectorKey),
-    [
-      "payroll_remittance_due",
-      "payroll_unknown_accounts",
-      "payroll_missing_elections",
-      "payroll_yearend_gaps",
-    ],
-  );
-  const defaults = defaultContinuousCloseDetectors("payroll");
-  assert.deepEqual(
-    enabledDetectorKeys(defaults),
-    defaults.map((detector) => detector.detectorKey),
-    "payroll controls all default on",
-  );
+  assertPackRegistersEnabledDetectors("payroll");
 });
 
 test("the projects pack registers its detectors and defaults on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("projects").map((spec) => spec.detectorKey),
-    [
-      "project_negative_margin",
-      "project_budget_overrun",
-      "project_stale_unbilled",
-    ],
-  );
-  const defaults = defaultContinuousCloseDetectors("projects");
-  assert.deepEqual(
-    enabledDetectorKeys(defaults),
-    defaults.map((detector) => detector.detectorKey),
-    "projects controls all default on",
-  );
+  assertPackRegistersEnabledDetectors("projects");
 });
 
 test("the cash pack registers its detectors and defaults on", () => {
-  assert.deepEqual(
-    detectorSpecsForAgent("cash").map((spec) => spec.detectorKey),
-    [
-      "cash_low_balance",
-      "cash_bill_crunch",
-      "cash_forecast_shortfall",
-    ],
-  );
-  const defaults = defaultContinuousCloseDetectors("cash");
-  assert.deepEqual(
-    enabledDetectorKeys(defaults),
-    defaults.map((detector) => detector.detectorKey),
-    "cash controls all default on",
-  );
+  assertPackRegistersEnabledDetectors("cash");
 });
 
 test("new-pack detector tuning validates like the original packs", () => {

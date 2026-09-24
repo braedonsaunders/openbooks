@@ -1,7 +1,6 @@
 {
   "$comment": "Burn-down of tests that assert on repository source text (change detectors). Entries may only be lowered or removed. See scripts/check-test-source-pins.mjs.",
   "files": {
-    "engine/src/agents/registry.test.ts": 1,
     "engine/src/allocations/scheduling.test.ts": 2,
     "engine/src/assets/asset-lifecycle.test.ts": 1,
     "engine/src/automations/rescind-evidence.test.ts": 1,
