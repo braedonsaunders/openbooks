@@ -8,10 +8,17 @@ import { promotionNextStep, type PromotionState } from "./sandbox-promotion";
 
 const captured: PromotionState = { status: "draft", captureComplete: true, itemCount: 1, capturedCount: 1, baseComplete: true, createdBy: "creator", reviewedBy: null, approvedBy: null };
 test("legacy and partial captures cannot be advanced by the review screen", () => {
-  for (const invalid of [{ baseComplete: false }, { captureComplete: false }, { capturedCount: 0 }]) {
+  // Blocked promotions report a stable reasonKey (resolved to translated
+  // copy by the drawer) rather than reviewer-facing English.
+  const cases = [
+    { invalid: { baseComplete: false }, reasonKey: "noSnapshot" },
+    { invalid: { captureComplete: false }, reasonKey: "incomplete" },
+    { invalid: { capturedCount: 0 }, reasonKey: "incomplete" },
+  ] as const;
+  for (const { invalid, reasonKey } of cases) {
     const step = promotionNextStep({ ...captured, ...invalid }, "reviewer");
     assert.equal(step.transition, null);
-    assert.match(step.reason!, /capture/i);
+    assert.equal(step.reasonKey, reasonKey);
   }
 });
 test("promotion evidence preserves small numeric policy values instead of rounding them away", () => {

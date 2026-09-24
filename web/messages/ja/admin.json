@@ -5544,5 +5544,63 @@
       "summary": "概要",
       "when": "日時"
     }
+  },
+  "sandboxes": {
+    "changeSets": {
+      "actions": {
+        "review": "レビューを記録",
+        "approve": "変更セットを承認",
+        "apply": "本番に適用"
+      },
+      "confirm": "{name}に{action}しますか？",
+      "columns": {
+        "type": "レコード種別",
+        "record": "レコード",
+        "change": "変更"
+      },
+      "capturedFrom": "{name} から取得",
+      "retained": "保持された構成変更セット",
+      "listTitle": "変更セット",
+      "listDescription": "取得した構成変更を確認し、独立したレビューと承認を記録して、承認済みの変更を本番に適用します。",
+      "listBack": "環境",
+      "requestFailed": "リクエストが完了しませんでした。再試行する前に最新の状態を確認してください。",
+      "working": "処理中…",
+      "backToChanges": "取得した変更に戻る",
+      "productionAtCapture": "取得時の本番",
+      "snapshotUnavailable": "本番スナップショットがありません。この変更セットを再取得してください。",
+      "recordDidNotExist": "レコードは存在しませんでした。",
+      "proposedConfiguration": "提案された構成",
+      "willBeDeleted": "このレコードは削除されます。",
+      "capturedCount": "{count}件の変更を取得",
+      "appliedNote": "構成が適用されました。取得した証拠は以下で引き続き確認できます。",
+      "reviewNote": "レビューや承認を記録する前に各レコードを確認してください。取得後に本番が変更されると適用できなくなります。",
+      "stages": {
+        "captured": "取得済み",
+        "reviewed": "レビュー済み",
+        "approved": "承認済み",
+        "applied": "適用済み"
+      },
+      "status": {
+        "draft": "下書き",
+        "reviewed": "レビュー済み",
+        "approved": "承認済み",
+        "applied": "適用済み",
+        "discarded": "破棄済み"
+      },
+      "op": {
+        "insert": "挿入",
+        "update": "更新",
+        "delete": "削除"
+      },
+      "recordedActor": "記録された実行者",
+      "pending": "保留中",
+      "empty": "構成変更はありません。",
+      "reasons": {
+        "incomplete": "このキャプチャは不完全です。環境から新しい変更セットを取得してください。",
+        "noSnapshot": "この古いキャプチャには本番スナップショットがありません。適用する前に新しい変更セットを取得してレビューしてください。",
+        "empty": "構成変更は取得されませんでした。",
+        "segregation": "作成者、レビュー担当者、承認者、適用者は4人の異なるユーザーである必要があります。次のステップは別の権限のあるユーザーが実行してください。"
+      }
+    }
   }
 }

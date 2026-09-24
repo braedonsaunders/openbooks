@@ -5544,5 +5544,63 @@
       "summary": "Zusammenfassung",
       "when": "Wann"
     }
+  },
+  "sandboxes": {
+    "changeSets": {
+      "actions": {
+        "review": "Prüfung erfassen",
+        "approve": "Änderungssatz genehmigen",
+        "apply": "In Produktion übernehmen"
+      },
+      "confirm": "{action} für „{name}“?",
+      "columns": {
+        "type": "Satztyp",
+        "record": "Datensatz",
+        "change": "Änderung"
+      },
+      "capturedFrom": "Erfasst aus {name}",
+      "retained": "Aufbewahrter Konfigurations-Änderungssatz",
+      "listTitle": "Änderungssätze",
+      "listDescription": "Erfasste Konfigurationsänderungen prüfen, unabhängige Prüfung und Genehmigung erfassen und die genehmigten Änderungen dann in Produktion übernehmen.",
+      "listBack": "Umgebungen",
+      "requestFailed": "Die Anfrage wurde nicht abgeschlossen. Aktualisieren Sie die Ansicht, um den erfassten Status zu prüfen, bevor Sie es erneut versuchen.",
+      "working": "Wird ausgeführt…",
+      "backToChanges": "Zurück zu den erfassten Änderungen",
+      "productionAtCapture": "Produktion bei Erfassung",
+      "snapshotUnavailable": "Produktions-Snapshot nicht verfügbar. Erfassen Sie diesen Änderungssatz erneut.",
+      "recordDidNotExist": "Datensatz existierte nicht.",
+      "proposedConfiguration": "Vorgeschlagene Konfiguration",
+      "willBeDeleted": "Dieser Datensatz wird gelöscht.",
+      "capturedCount": "{count, plural, one {# erfasste Änderung} other {# erfasste Änderungen}}",
+      "appliedNote": "Konfiguration angewendet. Die erfassten Nachweise bleiben unten verfügbar.",
+      "reviewNote": "Prüfen Sie jeden Datensatz, bevor Sie Ihre Prüfung oder Genehmigung erfassen. Produktionsänderungen nach der Erfassung verhindern die Anwendung.",
+      "stages": {
+        "captured": "Erfasst",
+        "reviewed": "Geprüft",
+        "approved": "Genehmigt",
+        "applied": "Angewendet"
+      },
+      "status": {
+        "draft": "Entwurf",
+        "reviewed": "Geprüft",
+        "approved": "Genehmigt",
+        "applied": "Angewendet",
+        "discarded": "Verworfen"
+      },
+      "op": {
+        "insert": "Einfügen",
+        "update": "Aktualisieren",
+        "delete": "Löschen"
+      },
+      "recordedActor": "Erfasster Akteur",
+      "pending": "Ausstehend",
+      "empty": "Keine Konfigurationsänderungen.",
+      "reasons": {
+        "incomplete": "Diese Erfassung ist unvollständig. Erfassen Sie einen neuen Änderungssatz aus der Umgebung.",
+        "noSnapshot": "Diese ältere Erfassung hat keinen Produktions-Snapshot. Erfassen und prüfen Sie einen neuen Änderungssatz, bevor Sie ihn anwenden.",
+        "empty": "Es wurden keine Konfigurationsänderungen erfasst.",
+        "segregation": "Ersteller, Prüfer, Genehmiger und Anwender müssen vier verschiedene Benutzer sein. Ein anderer berechtigter Benutzer muss den nächsten Schritt ausführen."
+      }
+    }
   }
 }

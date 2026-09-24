@@ -5544,5 +5544,63 @@
       "summary": "Résumé",
       "when": "Quand"
     }
+  },
+  "sandboxes": {
+    "changeSets": {
+      "actions": {
+        "review": "Enregistrer l'examen",
+        "approve": "Approuver le jeu de modifications",
+        "apply": "Appliquer en production"
+      },
+      "confirm": "{action} pour «{name}» ?",
+      "columns": {
+        "type": "Type d'enregistrement",
+        "record": "Enregistrement",
+        "change": "Modification"
+      },
+      "capturedFrom": "Capturé depuis {name}",
+      "retained": "Jeu de modifications de configuration conservé",
+      "listTitle": "Jeux de modifications",
+      "listDescription": "Examinez les modifications de configuration capturées, enregistrez un examen et une approbation indépendants, puis appliquez les modifications approuvées en production.",
+      "listBack": "Environnements",
+      "requestFailed": "La demande n'a pas abouti. Actualisez pour vérifier le statut enregistré avant de réessayer.",
+      "working": "Traitement en cours…",
+      "backToChanges": "Retour aux modifications capturées",
+      "productionAtCapture": "Production au moment de la capture",
+      "snapshotUnavailable": "Instantané de production indisponible. Capturez à nouveau ce jeu de modifications.",
+      "recordDidNotExist": "L'enregistrement n'existait pas.",
+      "proposedConfiguration": "Configuration proposée",
+      "willBeDeleted": "Cet enregistrement sera supprimé.",
+      "capturedCount": "{count, plural, one {# changement capturé} other {# changements capturés}}",
+      "appliedNote": "Configuration appliquée. Les preuves capturées restent disponibles ci-dessous.",
+      "reviewNote": "Examinez chaque enregistrement avant d'enregistrer votre examen ou votre approbation. Les modifications de production postérieures à la capture empêcheront l'application.",
+      "stages": {
+        "captured": "Capturé",
+        "reviewed": "Examiné",
+        "approved": "Approuvé",
+        "applied": "Appliqué"
+      },
+      "status": {
+        "draft": "Brouillon",
+        "reviewed": "Examiné",
+        "approved": "Approuvé",
+        "applied": "Appliqué",
+        "discarded": "Rejeté"
+      },
+      "op": {
+        "insert": "Insertion",
+        "update": "Mise à jour",
+        "delete": "Suppression"
+      },
+      "recordedActor": "Acteur enregistré",
+      "pending": "En attente",
+      "empty": "Aucune modification de configuration.",
+      "reasons": {
+        "incomplete": "Cette capture est incomplète. Capturez un nouveau jeu de modifications depuis l'environnement.",
+        "noSnapshot": "Cette ancienne capture n'a pas d'instantané de production. Capturez et examinez un nouveau jeu de modifications avant de l'appliquer.",
+        "empty": "Aucune modification de configuration n'a été capturée.",
+        "segregation": "Le créateur, le vérificateur, l'approbateur et l'applicateur doivent être quatre utilisateurs différents. Un autre utilisateur autorisé doit effectuer l'étape suivante."
+      }
+    }
   }
 }
