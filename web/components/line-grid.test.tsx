@@ -80,6 +80,8 @@ interface TestRow extends Record<string, unknown> {
   quantity: string;
   taxAmount: string;
   taxOverridden: boolean;
+  itemId?: string;
+  stockLocationId?: string;
 }
 
 const store: { rows: TestRow[] } = { rows: [] };
@@ -124,6 +126,14 @@ function Probe({ initial }: { initial: TestRow[] }) {
     },
     { key: "category", label: "Category", width: "140px", type: "search-select", options: [{ value: "goods", label: "Goods" }] },
     { key: "kind", label: "Kind", width: "120px", type: "select", options: [{ value: "expense", label: "Expense" }] },
+    {
+      key: "stockLocationId",
+      label: "Warehouse",
+      width: "150px",
+      type: "select",
+      options: [{ value: "", label: "—" }, { value: "loc-1", label: "North" }],
+      isCellEditable: (row) => row.itemId === "stocked-item",
+    },
   ];
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
@@ -199,6 +209,17 @@ const line = (key: string, quantity: string): TestRow => ({
   quantity,
   taxAmount: "",
   taxOverridden: false,
+});
+
+test("a row edit gate exposes the warehouse picker only on applicable lines", async (t) => {
+  const { host, done } = await mount([
+    { ...line("stocked", "1"), itemId: "stocked-item", stockLocationId: "loc-1" },
+    { ...line("service", "2"), itemId: "service-item", stockLocationId: "" },
+  ]);
+  t.after(done);
+
+  assert.ok(host.querySelector('[data-lg-row="0"][data-lg-col="4"] button'), "stocked line has an editable warehouse control");
+  assert.equal(host.querySelector('[data-lg-row="1"][data-lg-col="4"]'), null, "non-stocked line has no warehouse control");
 });
 
 test("Alt+Up keeps the moved line's typed qty off its neighbour", async (t) => {
