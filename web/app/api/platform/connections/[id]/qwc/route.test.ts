@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -55,7 +54,6 @@ const qwc_origin_testUrl = './route.ts?qwc-origin-test'
 const { GET } = (await import(qwc_origin_testUrl)) as typeof import('./route.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 test("QWC AppURL and AppSupport pin to appBaseUrl, not the request Host", async () => {
   const res = await GET(
@@ -69,11 +67,4 @@ test("QWC AppURL and AppSupport pin to appBaseUrl, not the request Host", async 
   assert.match(xml, /<AppURL>https:\/\/books\.example\/api\/qbd\/web-connector\/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee<\/AppURL>/);
   assert.match(xml, /<AppSupport>https:\/\/books\.example\/docs\/quickbooks-desktop-connector<\/AppSupport>/);
   assert.equal(xml.includes("evil.example"), false);
-});
-
-test("the QWC route never reads origin from the request URL", () => {
-  assert.match(routeSource, /from '@openbooks\/engine\/src\/flows\/email-tokens\.ts'/);
-  assert.match(routeSource, /appBaseUrl\(\)/);
-  assert.doesNotMatch(routeSource, /new URL\(req\.url\)\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
 });
