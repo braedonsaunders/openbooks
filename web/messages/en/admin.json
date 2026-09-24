@@ -5490,6 +5490,31 @@
       "approvalSave": "Save settings"
     }
   },
+  "email": {
+    "title": "Email delivery",
+    "description": "Configure your email provider so scheduled reports and notifications can be delivered.",
+    "enableDelivery": "Enable email delivery",
+    "enableHint": "Scheduled reports and test sends use the provider below.",
+    "provider": "Provider",
+    "selectProvider": "Select a provider…",
+    "fromName": "From name",
+    "fromEmail": "From email",
+    "replyTo": "Reply-to (optional)",
+    "secretSet": "set",
+    "secretStored": "•••••••••• stored",
+    "replace": "Replace",
+    "keepExisting": "Keep existing credential",
+    "saveSettings": "Save settings",
+    "saving": "Saving…",
+    "saved": "Email settings saved",
+    "saveFailed": "Email settings could not be saved",
+    "testTitle": "Send a test email",
+    "testHint": "Save your settings first — the test uses the stored provider.",
+    "sendTest": "Send test",
+    "sending": "Sending…",
+    "testSent": "Test sent via {provider} ({messageId})",
+    "testFailed": "The test email could not be sent"
+  },
   "aiLedger": {
     "title": "AI governance",
     "description": "Capabilities, their autonomy ceilings, and the append-only record of every AI-assisted answer.",

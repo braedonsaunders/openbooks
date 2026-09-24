@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
 import { EMAIL_PROVIDER_SPECS, type EmailProvider } from '@openbooks/emails/providers'
@@ -23,6 +24,7 @@ type View = {
 }
 
 export function EmailSettingsForm({ initial }: { initial: View }) {
+  const t = useTranslations('admin')
   const router = useRouter()
   const [v, setV] = useState<View>(initial)
   const [secret, setSecret] = useState('') // new plaintext; '' = keep existing
@@ -48,14 +50,14 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         body: JSON.stringify(body),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Save failed')
+      if (!res.ok) throw new Error(data.error ?? t('email.saveFailed'))
       setV(data)
       setSecret('')
       setReplaceSecret(!data.hasSecret)
-      toast.success('Email settings saved')
+      toast.success(t('email.saved'))
       router.refresh()
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Save failed')
+      toast.error(e instanceof Error ? e.message : t('email.saveFailed'))
     } finally {
       setSaving(false)
     }
@@ -70,10 +72,12 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         body: JSON.stringify({ to: testTo.trim() }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Test failed')
-      toast.success(`Test sent via ${data.provider} (${data.messageId})`)
+      if (!res.ok) throw new Error(data.error ?? t('email.testFailed'))
+      toast.success(
+        t('email.testSent', { provider: String(data.provider ?? ''), messageId: String(data.messageId ?? '') }),
+      )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Test failed')
+      toast.error(e instanceof Error ? e.message : t('email.testFailed'))
     } finally {
       setTesting(false)
     }
@@ -87,15 +91,15 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
       <label className="flex items-center gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
         <input type="checkbox" checked={!!v.enabled} onChange={(e) => set({ enabled: e.target.checked })} className="h-4 w-4" />
         <div>
-          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">Enable email delivery</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">Scheduled reports and test sends use the provider below.</div>
+          <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('email.enableDelivery')}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">{t('email.enableHint')}</div>
         </div>
       </label>
 
       <div className={field}>
-        <Label>Provider</Label>
+        <Label>{t('email.provider')}</Label>
         <Select value={v.provider ?? ''} onChange={(e) => set({ provider: (e.target.value || undefined) as EmailProvider })}>
-          <option value="">Select a provider…</option>
+          <option value="">{t('email.selectProvider')}</option>
           {EMAIL_PROVIDER_SPECS.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
@@ -105,15 +109,15 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div className={field}>
-          <Label>From name</Label>
+          <Label>{t('email.fromName')}</Label>
           <Input value={v.fromName ?? ''} onChange={(e) => set({ fromName: e.target.value })} placeholder="Acme Accounting" />
         </div>
         <div className={field}>
-          <Label>From email</Label>
+          <Label>{t('email.fromEmail')}</Label>
           <Input value={v.fromEmail ?? ''} onChange={(e) => set({ fromEmail: e.target.value })} placeholder="reports@acme.com" />
         </div>
         <div className={field}>
-          <Label>Reply-to (optional)</Label>
+          <Label>{t('email.replyTo')}</Label>
           <Input value={v.replyTo ?? ''} onChange={(e) => set({ replyTo: e.target.value })} placeholder="ap@acme.com" />
         </div>
       </div>
@@ -160,19 +164,19 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
         <div className={field}>
           <Label>
             {spec.secretLabel}
-            {v.hasSecret && !replaceSecret ? <Badge variant="secondary" className="ml-2">set</Badge> : null}
+            {v.hasSecret && !replaceSecret ? <Badge variant="secondary" className="ml-2">{t('email.secretSet')}</Badge> : null}
           </Label>
           {v.hasSecret && !replaceSecret ? (
             <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500 dark:text-slate-400">•••••••••• stored</span>
-              <Button variant="outline" size="sm" onClick={() => setReplaceSecret(true)}>Replace</Button>
+              <span className="text-sm text-slate-500 dark:text-slate-400">{t('email.secretStored')}</span>
+              <Button variant="outline" size="sm" onClick={() => setReplaceSecret(true)}>{t('email.replace')}</Button>
             </div>
           ) : (
             <>
               <Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder={spec.keyHint} autoComplete="off" />
               {v.hasSecret ? (
                 <button type="button" className="text-xs text-slate-500 hover:underline" onClick={() => { setReplaceSecret(false); setSecret('') }}>
-                  Keep existing credential
+                  {t('email.keepExisting')}
                 </button>
               ) : null}
             </>
@@ -181,17 +185,17 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
       ) : null}
 
       <div className="flex items-center gap-3">
-        <Button onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save settings'}</Button>
+        <Button onClick={save} disabled={saving}>{saving ? t('email.saving') : t('email.saveSettings')}</Button>
       </div>
 
       {/* test */}
       <div className={cn('space-y-2 rounded-lg border border-slate-200 p-4 dark:border-slate-800')}>
-        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">Send a test email</div>
+        <div className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('email.testTitle')}</div>
         <div className="flex items-center gap-2">
           <Input value={testTo} onChange={(e) => setTestTo(e.target.value)} placeholder="you@example.com" className="max-w-xs" />
-          <Button variant="outline" onClick={sendTest} disabled={testing || !testTo.trim()}>{testing ? 'Sending…' : 'Send test'}</Button>
+          <Button variant="outline" onClick={sendTest} disabled={testing || !testTo.trim()}>{testing ? t('email.sending') : t('email.sendTest')}</Button>
         </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Save your settings first — the test uses the stored provider.</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400">{t('email.testHint')}</p>
       </div>
     </div>
   )

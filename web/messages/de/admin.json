@@ -5490,6 +5490,31 @@
       "approvalSave": "Einstellungen speichern"
     }
   },
+  "email": {
+    "title": "E-Mail-Versand",
+    "description": "Konfigurieren Sie Ihren E-Mail-Anbieter, damit geplante Berichte und Benachrichtigungen zugestellt werden können.",
+    "enableDelivery": "E-Mail-Versand aktivieren",
+    "enableHint": "Geplante Berichte und Testversand verwenden den untenstehenden Anbieter.",
+    "provider": "Anbieter",
+    "selectProvider": "Anbieter wählen…",
+    "fromName": "Absendername",
+    "fromEmail": "Absender-E-Mail",
+    "replyTo": "Antwort an (optional)",
+    "secretSet": "festgelegt",
+    "secretStored": "•••••••••• gespeichert",
+    "replace": "Ersetzen",
+    "keepExisting": "Bestehende Anmeldedaten behalten",
+    "saveSettings": "Einstellungen speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "E-Mail-Einstellungen gespeichert",
+    "saveFailed": "E-Mail-Einstellungen konnten nicht gespeichert werden",
+    "testTitle": "Test-E-Mail senden",
+    "testHint": "Speichern Sie zuerst Ihre Einstellungen — der Test verwendet den gespeicherten Anbieter.",
+    "sendTest": "Test senden",
+    "sending": "Wird gesendet…",
+    "testSent": "Test über {provider} gesendet ({messageId})",
+    "testFailed": "Die Test-E-Mail konnte nicht gesendet werden"
+  },
   "aiLedger": {
     "title": "KI-Governance",
     "description": "Fähigkeiten, ihre Autonomiestufen und der unveränderliche Nachweis jeder KI-gestützten Antwort.",
