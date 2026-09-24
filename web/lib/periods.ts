@@ -59,7 +59,11 @@ async function accountingPeriodWindow(
       }
     }
   }
-  if (idx < 0) idx = 0
+  if (idx < 0) {
+    throw new Error(
+      `business date '${today}' precedes the first configured accounting period '${rows[0]!.name}' — configure an accounting period covering this date in Close Setup`,
+    )
+  }
   const target = idx + offset
   if (target < 0 || target >= rows.length) return null
   const p = rows[target]!
