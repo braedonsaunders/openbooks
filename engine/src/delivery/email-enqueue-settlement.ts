@@ -53,6 +53,11 @@ export type UncertainEnqueueSettlement = {
   jobIds: string[];
 };
 
+export type EmailEnqueueErrorProbeResult =
+  | { outcome: "already-queued"; jobIds: string[] }
+  | { outcome: "not-queued"; jobIds: string[] }
+  | { outcome: "uncertain"; jobIds: string[] };
+
 async function defaultProbeQueuedJob(jobId: string): Promise<unknown> {
   // Lazy like the scheduling outbox's producer import: scan-only workers
   // that never enqueue must not pay for the queue client at module load.
@@ -67,6 +72,37 @@ async function expectedEmailJobIds(data: EnqueueEmailData, jobId: string): Promi
   return buildEmailJobs(data, { jobId }).map((job) => job.opts.jobId);
 }
 
+/**
+ * Inspect a failed enqueue with the canonical BullMQ job plan. Only an empty
+ * result proves that a producer may safely record a definite enqueue failure;
+ * a partial result or an unavailable queue remains uncertain.
+ */
+export async function probeEmailEnqueueAfterError(input: {
+  data: EnqueueEmailData;
+  jobId: string;
+  probeQueuedJob?: EmailQueuedJobProbe;
+}): Promise<EmailEnqueueErrorProbeResult> {
+  let jobIds: string[];
+  try {
+    jobIds = await expectedEmailJobIds(input.data, input.jobId);
+  } catch {
+    return { outcome: "not-queued", jobIds: [] };
+  }
+  let found: string[];
+  try {
+    const probe = input.probeQueuedJob ?? defaultProbeQueuedJob;
+    found = [];
+    for (const id of jobIds) {
+      if (await probe(id)) found.push(id);
+    }
+  } catch {
+    return { outcome: "uncertain", jobIds: [] };
+  }
+  if (found.length === jobIds.length) return { outcome: "already-queued", jobIds: found };
+  if (found.length === 0) return { outcome: "not-queued", jobIds };
+  return { outcome: "uncertain", jobIds: found };
+}
+
 export async function settleStagedAttachmentsAfterEnqueueError(input: {
   attachments: EmailAttachment[] | undefined;
   data: EnqueueEmailData;
@@ -76,34 +112,12 @@ export async function settleStagedAttachmentsAfterEnqueueError(input: {
   removeStagedAttachments?: RemoveStagedAttachments;
 }): Promise<UncertainEnqueueSettlement> {
   const remove = input.removeStagedAttachments ?? deleteStoredEmailAttachments;
-  let jobIds: string[];
-  try {
-    jobIds = await expectedEmailJobIds(input.data, input.jobId);
-  } catch {
-    // The enqueue plan cannot be built from this data, and the real
-    // producer builds the identical plan before touching Redis — so it
-    // provably accepted nothing. Delete this attempt's refs and rethrow.
+  const result = await probeEmailEnqueueAfterError(input);
+  if (result.outcome === "already-queued") return result;
+  if (result.outcome === "not-queued") {
     await remove(input.attachments);
-    throw input.error;
   }
-  const probe = input.probeQueuedJob ?? defaultProbeQueuedJob;
-  let found: string[];
-  try {
-    found = [];
-    for (const jobId of jobIds) {
-      if (await probe(jobId)) found.push(jobId);
-    }
-  } catch {
-    // The queue cannot be reached to check: the job may exist, so the
-    // refs stay and the original error propagates for a retry.
-    throw input.error;
-  }
-  if (found.length === jobIds.length) return { outcome: "already-queued", jobIds: found };
-  if (found.length === 0) {
-    await remove(input.attachments);
-    throw input.error;
-  }
-  // Partial acceptance: the live jobs still need their refs, and the
-  // missing recipients still need a retry — keep everything and rethrow.
+  // Partial acceptance and an unavailable queue remain uncertain: live jobs
+  // may need the refs, so retain them and let the caller retry the handoff.
   throw input.error;
 }

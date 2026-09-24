@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { probeEmailEnqueueAfterError, type EmailQueuedJobProbe } from "../delivery/email-enqueue-settlement.ts";
 import { PaymentRunPostingClaimFencedError } from "./payment-errors.ts";
 import { type PostingClaim, assertPostingClaimLive } from "./run-claim.ts";
 
@@ -33,6 +34,31 @@ export async function markAutomaticRemittanceEnqueueFailed(
   if ((result?.written ?? 0) === 0 && (result?.status === null || result?.status === "pending")) {
     throw new Error(`payment remittance ${remittanceId} enqueue failure was not recorded`);
   }
+}
+
+export async function settleAutomaticRemittanceEnqueueError(input: {
+  orgId: string;
+  remittanceId: string;
+  actorId: string;
+  error: unknown;
+  data: import("@openbooks/jobs").EnqueueEmailData;
+  jobId: string;
+  probeQueuedJob?: EmailQueuedJobProbe;
+}): Promise<"already-queued" | "not-queued" | "uncertain"> {
+  const result = await probeEmailEnqueueAfterError({
+    data: input.data,
+    jobId: input.jobId,
+    probeQueuedJob: input.probeQueuedJob,
+  });
+  if (result.outcome === "not-queued") {
+    await markAutomaticRemittanceEnqueueFailed(
+      input.orgId,
+      input.remittanceId,
+      input.actorId,
+      input.error instanceof Error ? input.error.message : String(input.error),
+    );
+  }
+  return result.outcome;
 }
 /**
  * Queue the payee's automatic remittance advice for one instruction the
@@ -120,7 +146,8 @@ export async function queueAutomaticRemittance(
   const { instruction } = staged;
   if (!staged.recipients.length) return;
 
-  let enqueueError: unknown = null;
+  let emailData: import("@openbooks/jobs").EnqueueEmailData | null = null;
+  const jobId = `payment-remittance|${staged.remittanceId}`;
   try {
     const [{ enqueueEmail }, { paymentRemittanceEmail }] = await Promise.all([
       import("@openbooks/jobs"),
@@ -142,7 +169,7 @@ export async function queueAutomaticRemittance(
       currency: instruction.currency,
       documents: documents.rows,
     });
-    await enqueueEmail({
+    emailData = {
       orgId,
       to: staged.recipients,
       subject: message.subject,
@@ -152,18 +179,32 @@ export async function queueAutomaticRemittance(
         category: "payment_remittance",
         paymentRemittanceId: staged.remittanceId,
       },
-    }, { jobId: `payment-remittance|${staged.remittanceId}` });
+    };
+    await enqueueEmail(emailData, { jobId });
   } catch (error) {
-    enqueueError = error;
-  }
-  if (enqueueError) {
-    await markAutomaticRemittanceEnqueueFailed(
+    if (!emailData) {
+      await markAutomaticRemittanceEnqueueFailed(
+        orgId,
+        staged.remittanceId,
+        userId,
+        error instanceof Error ? error.message : String(error),
+      );
+      console.error(`[payments] automatic remittance failed for instruction ${instructionId}:`, error);
+      return;
+    }
+    const outcome = await settleAutomaticRemittanceEnqueueError({
       orgId,
-      staged.remittanceId,
-      userId,
-      enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
-    );
-    console.error(`[payments] automatic remittance failed for instruction ${instructionId}:`, enqueueError);
+      remittanceId: staged.remittanceId,
+      actorId: userId,
+      error,
+      data: emailData,
+      jobId,
+    });
+    if (outcome === "not-queued") {
+      console.error(`[payments] automatic remittance failed for instruction ${instructionId}:`, error);
+    } else if (outcome === "uncertain") {
+      console.error(`[payments] automatic remittance enqueue remains uncertain for instruction ${instructionId}:`, error);
+    }
     return;
   }
 

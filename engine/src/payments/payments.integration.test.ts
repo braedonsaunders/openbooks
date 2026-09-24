@@ -14,7 +14,7 @@ import { createPaymentDocument, updateDraftPayment } from "./payment-documents.t
 import { createPaymentRun } from "./run-creation.ts";
 import { PaymentError, PaymentRevisionConflictError } from "./payment-errors.ts";
 import { postPaymentRun } from "./run-posting.ts";
-import { markAutomaticRemittanceEnqueueFailed } from "./run-remittance.ts";
+import { markAutomaticRemittanceEnqueueFailed, settleAutomaticRemittanceEnqueueError } from "./run-remittance.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { createDocumentsFlowAdapter } from "../flows/documents-adapter.ts";
 import { reversePaymentForReturn } from "./payment-return.ts";
@@ -1697,8 +1697,8 @@ test("a terminal transition fences a stale payment-run worker before downstream 
          where payment_instruction_id = ${seeded.instructionIds[1]!} and org_id = ${org.orgId}
       `)).rows[0]))?.statuses ?? [];
     assert.ok(
-      secondRemittanceStatuses.every((status) => status === "failed"),
-      `a superseded worker must never complete advice for work it lost: ${JSON.stringify(secondRemittanceStatuses)}`,
+      secondRemittanceStatuses.every((status) => status === "failed" || status === "pending"),
+      `a superseded worker must never mark advice sent; pending preserves an unverifiable queue handoff: ${JSON.stringify(secondRemittanceStatuses)}`,
     );
   } finally {
     secondInstructionReleased?.();
@@ -2983,6 +2983,59 @@ test("a late remittance enqueue failure cannot overwrite worker-confirmed sent s
       `)).rows[0],
     );
     assert.deepEqual(state, { status: "sent", attempt_count: 1 });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("automatic remittance enqueue failures settle only proven non-acceptance", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actorId = await withBypass(() => createScratchUser(org.orgId, "Remittance queue probe", "admin"));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 1));
+    const ids = [randomUUID(), randomUUID(), randomUUID()];
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      insert into payment_remittances
+        (id, org_id, payment_instruction_id, recipients, status, attempt_count, created_by, updated_by)
+      values
+        (${ids[0]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId}),
+        (${ids[1]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId}),
+        (${ids[2]}, ${org.orgId}, ${seeded.instructionId}, '["ap@example.test","ar@example.test"]'::jsonb, 'pending', 0, ${actorId}, ${actorId})
+    `));
+    const data = (id: string) => ({
+      orgId: org.orgId,
+      to: ["ap@example.test", "ar@example.test"],
+      subject: "Payment advice",
+      html: "<p>Paid</p>",
+      text: "Paid",
+      meta: { category: "payment_remittance", paymentRemittanceId: id },
+    });
+
+    const accepted = await settleAutomaticRemittanceEnqueueError({
+      orgId: org.orgId, remittanceId: ids[0]!, actorId, error: new Error("ack lost"), data: data(ids[0]!),
+      jobId: `payment-remittance|${ids[0]}`, probeQueuedJob: async () => ({ id: "accepted" }),
+    });
+    const absent = await settleAutomaticRemittanceEnqueueError({
+      orgId: org.orgId, remittanceId: ids[1]!, actorId, error: new Error("rejected"), data: data(ids[1]!),
+      jobId: `payment-remittance|${ids[1]}`, probeQueuedJob: async () => null,
+    });
+    const unknown = await settleAutomaticRemittanceEnqueueError({
+      orgId: org.orgId, remittanceId: ids[2]!, actorId, error: new Error("probe unavailable"), data: data(ids[2]!),
+      jobId: `payment-remittance|${ids[2]}`, probeQueuedJob: async () => { throw new Error("Redis unavailable"); },
+    });
+
+    assert.deepEqual([accepted, absent, unknown], ["already-queued", "not-queued", "uncertain"]);
+    const states = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ id: string; status: string }>(sql`
+        select id, status from payment_remittances where org_id = ${org.orgId}
+         and id in (${ids[0]!}, ${ids[1]!}, ${ids[2]!})
+        order by id
+      `)).rows,
+    );
+    const byId = new Map(states.map((row) => [row.id, row.status]));
+    assert.equal(byId.get(ids[0]!), "pending", "a job already accepted by BullMQ remains worker-owned");
+    assert.equal(byId.get(ids[1]!), "failed", "only proven non-acceptance is terminally failed");
+    assert.equal(byId.get(ids[2]!), "pending", "an unreachable queue cannot prove non-acceptance");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
