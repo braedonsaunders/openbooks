@@ -22,7 +22,7 @@ import {
   executeApplicationTool,
 } from "../application/tool-catalog";
 import { ASSISTANT_TOOLS, applicationToolVisible, executeAssistantTool } from "../assistant/registry";
-import { listAppToolViews, runAppTool, toAssistantToolDef } from "../apps/tools";
+import { listAppToolViews, runListedAppTool, toAssistantToolDef } from "../apps/tools";
 import { can } from "../authz";
 import { resolvedFeatureState } from "../features";
 import type { FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
@@ -142,11 +142,10 @@ const appCatalog = async (
             definition.category === "write"
               ? candidate.requestId
               : randomUUID();
-          const outcome = await runAppTool({
+          const outcome = await runListedAppTool({
             orgId: candidate.authz.user.orgId,
             user: candidate.authz.user,
-            appKey: view.appKey,
-            toolKey: view.toolKey,
+            view,
             input,
             userCan: (perm) => can(candidate.authz, perm),
             allowedSubsidiaryIds: candidate.authz.allowedSubsidiaryIds,

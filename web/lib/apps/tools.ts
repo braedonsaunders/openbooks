@@ -56,6 +56,8 @@ export interface RunAppToolOptions {
   appKey: string
   toolKey: string
   input: unknown
+  /** The catalog's stored declaration, forwarded by MCP and assistant callers. */
+  readOnlyTool: boolean
   userCan: (perm: string) => boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
   /** Caller-generated invocation identity. Required: omitted keys are refused, never minted here. */
@@ -88,6 +90,9 @@ export async function runAppTool(
   if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
   const spec = app.manifest.tools?.find((t) => t.key === opts.toolKey)
   if (!spec) return { ok: false, error: `no such tool: ${opts.toolKey}`, status: 404 }
+  if (opts.readOnlyTool !== spec.readOnly) {
+    return { ok: false, error: 'app tool permissions changed; refresh the tool catalog before invoking it', status: 409 }
+  }
   const granted = new Set(app.grantedPermissions)
   for (const permission of spec.requiredPermissions ?? []) {
     if (!permissionSetCovers(granted, permission) || !opts.userCan(permission)) {
@@ -115,6 +120,29 @@ export async function runAppTool(
     readOnlyTool: spec.readOnly,
     idempotencyKey: idempotencyKey,
   })
+}
+
+/** Execute the declaration captured by a caller-facing catalog, rejecting a stale read/write label. */
+export function runListedAppTool(input: {
+  view: Pick<AppToolView, 'appKey' | 'toolKey' | 'readOnly'>
+  orgId: string
+  user: SessionUser
+  input: unknown
+  userCan: (permission: string) => boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
+  idempotencyKey: string
+}, deps?: { getApp?: typeof getAppByKey; invoke?: AppToolInvoker }) {
+  return runAppTool({
+    orgId: input.orgId,
+    user: input.user,
+    appKey: input.view.appKey,
+    toolKey: input.view.toolKey,
+    input: input.input,
+    readOnlyTool: input.view.readOnly,
+    userCan: input.userCan,
+    allowedSubsidiaryIds: input.allowedSubsidiaryIds,
+    idempotencyKey: input.idempotencyKey,
+  }, deps)
 }
 
 /**
@@ -164,6 +192,7 @@ export function toAssistantToolDef(view: AppToolView): AssistantToolDef {
         appKey: view.appKey,
         toolKey: view.toolKey,
         input: parsed.value,
+        readOnlyTool: view.readOnly,
         userCan: (perm) => can(authz, perm),
         allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
         // Each chat read is a new invocation; replaying a stored lookup would
@@ -215,6 +244,7 @@ export async function commitAppToolCommand(
     appKey: view.appKey,
     toolKey: view.toolKey,
     input: parsed.value,
+    readOnlyTool: view.readOnly,
     userCan: (perm) => can(authz, perm),
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     idempotencyKey: commitKey,
