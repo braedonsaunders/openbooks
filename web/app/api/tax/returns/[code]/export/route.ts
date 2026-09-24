@@ -95,7 +95,24 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
         throw err
       }
       if (!blob) return NextResponse.json({ error: 'official PDF not found' }, { status: 404 })
-      const { bytes } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
+      const { bytes, filled, unmatched } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
+      // A drifted upload (or a wrong form) leaves mapped fields unfilled:
+      // returning the flattened PDF with a 200 would file a blank-looking
+      // official return with no warning. Refuse by name when any NON-ZERO
+      // box is unmatched, listing the boxes and the remedy; zero boxes
+      // contribute nothing, so their blanks stay downloadable.
+      const unfilled = unmatched.flatMap((field) =>
+        result.boxes.filter((box) => box.pdfField === field && box.value.split('').some((ch) => ch >= '1' && ch <= '9')),
+      )
+      if (unfilled.length > 0) {
+        const listed = unfilled.map((box) => `${box.lineCode} (${box.pdfField})`).join(', ')
+        return NextResponse.json(
+          {
+            error: `official PDF left ${unfilled.length === 1 ? 'a non-zero box' : `${unfilled.length} non-zero boxes`} unfilled (filled ${filled}): ${listed} — the uploaded form's field names have drifted; re-upload the current official form or map the boxes to its fields`,
+          },
+          { status: 422 },
+        )
+      }
       return pdfResponse(Buffer.from(bytes), `${filename}-official`)
     }
 
