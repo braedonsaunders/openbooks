@@ -60,6 +60,37 @@ for (const mode of ['void','delete'] as const) {
  }));
 }
 
+test('voiding a generated invoice releases time and billed-line provenance with actor and reason evidence',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,_charge,_schedule)=>{
+ await db.execute(sql`update property_leases set auto_post=true where org_id=${org.orgId} and id=${lease}`);
+ const invoice=(await billDueLeaseCharges(org.orgId,actor,null,'2026-07-31',lease)).invoices[0]!;
+ const invoiceLine=(await db.execute<{id:string}>(sql`select id from document_lines where org_id=${org.orgId} and document_id=${invoice} order by line_number limit 1`)).rows[0]!.id;
+ const employee=randomUUID(),entry=randomUUID(),sourceDocument=randomUUID(),sourceLine=randomUUID();
+ await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id)
+   values(${employee},${org.orgId},'employee','Released billable worker',${org.subsidiaryId})`);
+ await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,item_id,is_billable,status,bill_rate,billing_status,invoiced_by_line_id,created_by,updated_by)
+   values(${entry},${org.orgId},${employee},'2026-07-31',1,null,${org.items.service},true,'approved',100,'billed',${invoiceLine},${actor},${actor})`);
+ await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,document_date,currency,status,subtotal,tax_total,total,created_by)
+   values(${sourceDocument},${org.orgId},'customer_invoice','SOURCE-PROVENANCE',${org.customerId},${org.subsidiaryId},'2026-07-31','CAD','draft',100,0,100,${actor})`);
+ await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount,billed_by_line_id,created_by,updated_by)
+   values(${sourceLine},${org.orgId},${sourceDocument},1,${org.accounts.revenue},1,100,100,${invoiceLine},${actor},${actor})`);
+
+ const result=await requestDocumentVoid({orgId:org.orgId,actorId:actor,documentId:invoice,reason:'Correct generated invoice provenance',reversalDate:'2026-07-31'});
+ assert.equal(result.status,'voided');
+ assert.deepEqual((await db.execute(sql`select billing_status,invoiced_by_line_id from time_entries where org_id=${org.orgId} and id=${entry}`)).rows[0],{billing_status:'unbilled',invoiced_by_line_id:null});
+ assert.equal((await db.execute(sql`select billed_by_line_id from document_lines where org_id=${org.orgId} and id=${sourceLine}`)).rows[0]?.billed_by_line_id,null);
+ const evidence=(await db.execute<{table_name:string;row_id:string;actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select table_name,row_id,actor_id,changes from audit_log
+   where org_id=${org.orgId} and action='billing_released' and row_id in (${entry},${sourceLine}) order by table_name`)).rows;
+ assert.equal(evidence.length,2);
+ assert.deepEqual(evidence.map(row=>[row.table_name,row.row_id,row.actor_id,row.changes.reason]),[
+   ['document_lines',sourceLine,actor,'Correct generated invoice provenance'],
+   ['time_entries',entry,actor,'Correct generated invoice provenance'],
+ ]);
+ assert.equal(evidence.find(row=>row.table_name==='time_entries')!.changes.before.billingStatus,'billed');
+ assert.equal(evidence.find(row=>row.table_name==='time_entries')!.changes.after.billingStatus,'unbilled');
+ assert.equal(evidence.find(row=>row.table_name==='document_lines')!.changes.before.billedByLineId,invoiceLine);
+ assert.equal(evidence.find(row=>row.table_name==='document_lines')!.changes.after.billedByLineId,null);
+}));
+
 test('rent source release and audit roll back together and respect organization scope',{skip:!process.env.OPENBOOKS_DB_URL},async()=>fixture(async(org,actor,lease,_charge,schedule)=>{
  const first=await billDueLeaseCharges(org.orgId, actor, null, '2026-07-31',lease);
  const invoice=first.invoices[0]!;

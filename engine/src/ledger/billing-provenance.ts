@@ -51,11 +51,47 @@ export async function releaseBillingProvenance(
   if (lineIds.length > 0) {
     const idArr = `{${lineIds.join(",")}}`;
     await tx.execute(sql`
-      update time_entries
-         set invoiced_by_line_id = null, billing_status = 'unbilled'
-       where org_id = ${orgId}
-         and invoiced_by_line_id = any(${idArr}::uuid[])`);
-    await tx.execute(sql`update document_lines set billed_by_line_id = null where org_id = ${orgId} and billed_by_line_id = any(${idArr}::uuid[])`);
+      with source as (
+        select id, invoiced_by_line_id, billing_status
+          from time_entries
+         where org_id = ${orgId} and invoiced_by_line_id = any(${idArr}::uuid[])
+         for update
+      ), released as (
+        update time_entries entry
+           set invoiced_by_line_id = null, billing_status = 'unbilled', updated_at = now(), updated_by = ${audit.actorId}
+          from source
+         where entry.org_id = ${orgId} and entry.id = source.id
+        returning entry.id, source.invoiced_by_line_id, source.billing_status
+      )
+      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+      select ${orgId}, 'time_entries', id, 'billing_released',
+        jsonb_build_object(
+          'before', jsonb_build_object('invoicedByLineId', invoiced_by_line_id, 'billingStatus', billing_status),
+          'after', jsonb_build_object('invoicedByLineId', null, 'billingStatus', 'unbilled'),
+          'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+        from released
+    `);
+    await tx.execute(sql`
+      with source as (
+        select id, billed_by_line_id
+          from document_lines
+         where org_id = ${orgId} and billed_by_line_id = any(${idArr}::uuid[])
+         for update
+      ), released as (
+        update document_lines line
+           set billed_by_line_id = null, updated_at = now(), updated_by = ${audit.actorId}
+          from source
+         where line.org_id = ${orgId} and line.id = source.id
+        returning line.id, source.billed_by_line_id
+      )
+      insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+      select ${orgId}, 'document_lines', id, 'billing_released',
+        jsonb_build_object(
+          'before', jsonb_build_object('billedByLineId', billed_by_line_id),
+          'after', jsonb_build_object('billedByLineId', null),
+          'reason', ${audit.reason}::text), ${audit.actorId}::uuid
+        from released
+    `);
   }
   await tx.execute(sql`
     update billing_schedules set billing_request_id = null
