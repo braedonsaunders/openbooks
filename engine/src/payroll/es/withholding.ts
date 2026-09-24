@@ -57,11 +57,13 @@ const AEAT_UNIMPLEMENTED =
   + "for the year (ALGORITMO, Sede/Retenciones) is not transcribed into engine/src/payroll/es/rates.ts";
 
 const FORAL_REASONS: Readonly<Record<string, string>> = {
-  NC: "Navarra applies the foral IRPF regime (Hacienda Foral de Navarra publishes its own "
-    + "retention tables) — AEAT tables never cover it and are not transcribed either",
+  NC: "Navarra applies the foral IRPF regime: foral retention tables for Navarra "
+    + "(Hacienda Foral de Navarra) aren't in this pack — AEAT tables never cover Navarra. "
+    + "Transcribe them into engine/src/payroll/es/rates.ts before calculating",
   PV: "the Basque Historical Territories — Álava/Araba, Gipuzkoa and Bizkaia — apply the foral "
-    + "IRPF regime (each Hacienda Foral publishes its own retention tables; e.g. Bizkaia's 2026 "
-    + "table) — AEAT tables never cover them and are not transcribed either",
+    + "IRPF regime: foral retention tables for the three Haciendas Forales aren't in this pack "
+    + "(e.g. Bizkaia's 2026 table) — AEAT tables never cover them. "
+    + "Transcribe them into engine/src/payroll/es/rates.ts before calculating",
 };
 
 const ES_REGIONS: readonly PayrollRegionWithholding[] = ES_REGION_CODES.map(

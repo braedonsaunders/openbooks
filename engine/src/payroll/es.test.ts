@@ -123,11 +123,25 @@ test("ES foral territories are refused by name, never covered by AEAT", () => {
   for (const name of ["Álava", "Gipuzkoa", "Bizkaia"]) {
     assert.match(pv, new RegExp(name), "PV names " + name);
   }
+  // The refusal names the real gap (foral tables missing, AEAT never
+  // covers them) and the remedy — not a stale "AEAT not transcribed".
+  for (const code of ["NC", "PV"] as const) {
+    assert.match(reasons[code] ?? "", /foral retention tables.*aren't in this pack/);
+    assert.match(reasons[code] ?? "", /AEAT tables never cover/);
+    assert.match(reasons[code] ?? "", /Transcribe.*engine\/src\/payroll\/es\/rates\.ts/);
+  }
   const withholding = new Map(ES_WITHHOLDING.regions.map((region) => [region.region, region]));
   for (const code of ["NC", "PV"]) {
     assert.equal(withholding.get(code)?.implemented, false, code);
   }
   assert.match(withholding.get("PV")?.unimplementedReason ?? "", /Bizkaia/);
+  for (const code of ["NC", "PV"]) {
+    const reason = withholding.get(code)?.unimplementedReason ?? "";
+    assert.match(reason, /foral retention tables.*aren't in this pack/);
+    assert.match(reason, /AEAT tables never cover/);
+    assert.match(reason, /Transcribe.*engine\/src\/payroll\/es\/rates\.ts/);
+    assert.doesNotMatch(reason, /not transcribed either/);
+  }
 });
 
 test("ES certificate is the real Modelo 145, not a W-4/TD1 clone", () => {
@@ -239,6 +253,8 @@ test("ES computeStatutory refuses foral regions, off-year runs and off-monthly p
     (error: unknown) => {
       assert.ok(error instanceof PayrollPackError);
       assert.match((error as Error).message, /foral/);
+      assert.match((error as Error).message, /AEAT tables never cover/);
+      assert.match((error as Error).message, /Transcribe.*rates\.ts/);
       return true;
     },
   );
