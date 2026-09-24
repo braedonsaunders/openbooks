@@ -591,7 +591,10 @@ export function nyRatesForPayDate(payDate: string): NyYearRates {
 
 function nyPeriodFor(periodsPerYear: number): NyPeriod {
   const period = payPeriodFor(periodsPerYear);
-  if (period == null || !NY_PERIODS.includes(period)) {
+  // The daily tables are 260-calibrated ($33 = $8,500 ÷ 260), so a 365-day
+  // daily payroll has no printed table — refused like the KS/MO daily guards
+  // refuse theirs.
+  if (period == null || !NY_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
     // NYS-50-T-NYS p. 23 prints a "Conversion of Tables" procedure for
     // quarterly and 10-day payrolls, which converts to a printed period and
     // scales the RESULT. It is deliberately not implemented: it is an

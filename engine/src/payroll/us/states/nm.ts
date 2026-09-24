@@ -491,7 +491,12 @@ export function nmRatesForPayDate(payDate: string): NmYearRates {
 
 function nmPeriodFor(periodsPerYear: number): NmPeriod {
   const period = payPeriodFor(periodsPerYear);
-  if (period == null) refuseUnprintedPeriod(NM_WITHHOLDING, periodsPerYear);
+  // The daily tables are 260-calibrated (single $61.90 = $16,100 ÷ 260), so
+  // a 365-day daily payroll has no printed table — refused like the KS/MO
+  // daily guards refuse theirs.
+  if (period == null || (period === "daily" && periodsPerYear !== 260)) {
+    refuseUnprintedPeriod(NM_WITHHOLDING, periodsPerYear);
+  }
   return period as NmPeriod;
 }
 

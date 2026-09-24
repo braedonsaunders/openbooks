@@ -197,6 +197,15 @@ test("UT refuses a pay frequency it prints no schedule for", () => {
     }),
     /publishes withholding tables for .*there is nothing to scale/s,
   );
+  // The daily schedule is 260-calibrated: a 365-day daily payroll has no
+  // printed schedule and is refused, not scaled.
+  assert.throws(
+    () => UT_WITHHOLDING.compute({
+      payDate: "2026-06-05", periodStart: "2026-06-01", periodsPerYear: 365, wages: "175.00", basis: "resident",
+      certificate: cert(),
+    }),
+    /publishes withholding tables for .*there is nothing to scale/s,
+  );
 });
 
 test("UT refuses a year it has not transcribed, and never extrapolates", () => {
