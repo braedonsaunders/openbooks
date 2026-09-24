@@ -165,13 +165,34 @@
       "negotiation": "Verhandlung",
       "closedWon": "Gewonnen",
       "closedLost": "Verloren"
+    },
+    "kanban": {
+      "listView": "Liste",
+      "boardView": "Vertriebspipeline",
+      "filterPlaceholder": "Geschäfte nach Titel, Konto oder Verantwortlichem filtern …",
+      "showingCount": "{shown, number} von {total, number} Verkaufschancen angezeigt",
+      "requiresLines": "Für diese Phase ist mindestens eine Position in der Verkaufschance erforderlich.",
+      "requiresPrimaryContact": "Für diese Phase muss ein Hauptkontakt zugewiesen sein.",
+      "requiresPositiveAmount": "Für diese Phase ist ein positiver prognostizierter Geschäftsbetrag erforderlich.",
+      "weighted": "Gewichtet",
+      "stagnantTitle": "Seit mehr als {days, number} Tagen keine Aktivität oder Phasenänderung erfasst",
+      "stagnantDays": "{days, plural, one {> # Tag} other {> # Tage}}",
+      "noOpportunities": "Keine Verkaufschancen",
+      "lossReasonTitle": "Begründung für Gewinn oder Verlust erforderlich",
+      "lossReasonDescription": "Dokumentieren Sie für historische Berichte und Pipeline-Analysen, warum diese Verkaufschance abgeschlossen oder verloren wurde.",
+      "reasonDetails": "Begründung",
+      "reasonPlaceholder": "z. B. wegen des Preises an einen Wettbewerber verloren; Budget gestrichen; Umfang reduziert …",
+      "cancel": "Abbrechen",
+      "confirmStageChange": "Phasenänderung bestätigen",
+      "lossReasonRequired": "Zum Abschließen als verloren ist eine Begründung erforderlich."
     }
   },
   "forecastCategories": {
     "omitted": "Ausgelassen",
     "worst_case": "Schlechtester Fall",
     "most_likely": "Wahrscheinlichster Fall",
-    "upside": "Aufwärtspotenzial"
+    "upside": "Aufwärtspotenzial",
+    "pipeline": "Vertriebskanal"
   },
   "forecasts": {
     "title": "Prognosen und Quoten",

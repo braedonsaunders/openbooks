@@ -165,13 +165,34 @@
       "negotiation": "Negotiation",
       "closedWon": "Closed won",
       "closedLost": "Closed lost"
+    },
+    "kanban": {
+      "listView": "List",
+      "boardView": "Pipeline Board",
+      "filterPlaceholder": "Filter deals by title, account, owner...",
+      "showingCount": "Showing {shown, number} of {total, number} opportunities",
+      "requiresLines": "This stage requires at least one line item on the opportunity.",
+      "requiresPrimaryContact": "This stage requires an assigned primary contact.",
+      "requiresPositiveAmount": "This stage requires a positive projected deal amount.",
+      "weighted": "Weighted",
+      "stagnantTitle": "No recorded activity or stage change in more than {days, number} days",
+      "stagnantDays": "{days, plural, one {># day} other {># days}}",
+      "noOpportunities": "No opportunities",
+      "lossReasonTitle": "Win / Loss Reason Required",
+      "lossReasonDescription": "Please document why this opportunity was closed or lost for historical reporting and pipeline analytics.",
+      "reasonDetails": "Reason details",
+      "reasonPlaceholder": "e.g. Lost to competitor on price; project budget cancelled; scope reduced...",
+      "cancel": "Cancel",
+      "confirmStageChange": "Confirm Stage Change",
+      "lossReasonRequired": "A loss reason is required to close as lost."
     }
   },
   "forecastCategories": {
     "omitted": "Omitted",
     "worst_case": "Worst case",
     "most_likely": "Most likely",
-    "upside": "Upside"
+    "upside": "Upside",
+    "pipeline": "Pipeline"
   },
   "forecasts": {
     "title": "Forecasts and quotas",

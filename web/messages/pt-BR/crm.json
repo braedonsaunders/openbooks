@@ -165,13 +165,34 @@
       "negotiation": "Negociação",
       "closedWon": "Ganho",
       "closedLost": "Perdido"
+    },
+    "kanban": {
+      "listView": "Lista",
+      "boardView": "Funil de vendas",
+      "filterPlaceholder": "Filtrar negócios por título, conta ou responsável…",
+      "showingCount": "{shown, number} de {total, number} oportunidades exibidas",
+      "requiresLines": "Esta etapa exige ao menos um item na oportunidade.",
+      "requiresPrimaryContact": "Esta etapa exige um contato principal atribuído.",
+      "requiresPositiveAmount": "Esta etapa exige um valor projetado positivo.",
+      "weighted": "Ponderado",
+      "stagnantTitle": "Nenhuma atividade ou mudança de etapa registrada há mais de {days, number} dias",
+      "stagnantDays": "{days, plural, one {> # dia} other {> # dias}}",
+      "noOpportunities": "Nenhuma oportunidade",
+      "lossReasonTitle": "O motivo de ganho ou perda é obrigatório",
+      "lossReasonDescription": "Registre por que esta oportunidade foi encerrada como ganha ou perdida para relatórios históricos e análise do funil.",
+      "reasonDetails": "Detalhes do motivo",
+      "reasonPlaceholder": "ex.: perdeu para concorrente por preço; orçamento cancelado; escopo reduzido…",
+      "cancel": "Cancelar",
+      "confirmStageChange": "Confirmar mudança de etapa",
+      "lossReasonRequired": "É necessário informar o motivo da perda para encerrar como perdida."
     }
   },
   "forecastCategories": {
     "omitted": "Omitido",
     "worst_case": "Pior caso",
     "most_likely": "Mais provável",
-    "upside": "Cenário otimista"
+    "upside": "Cenário otimista",
+    "pipeline": "Funil"
   },
   "forecasts": {
     "title": "Previsões e cotas",
