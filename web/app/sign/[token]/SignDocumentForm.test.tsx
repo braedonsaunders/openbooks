@@ -55,6 +55,7 @@ function typeInto(input: HTMLInputElement, value: string) {
 async function mountForm(
   fetchImpl: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   acknowledgmentOnly = false,
+  signerStatus = "pending",
 ) {
   const priorFetch = globalThis.fetch;
   globalThis.fetch = fetchImpl as typeof fetch;
@@ -69,7 +70,7 @@ async function mountForm(
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      <SignDocumentForm token="test-token" signerStatus="pending" acknowledgmentOnly={acknowledgmentOnly} />,
+      <SignDocumentForm token="test-token" signerStatus={signerStatus} acknowledgmentOnly={acknowledgmentOnly} />,
     );
     await tick();
   });
@@ -152,6 +153,14 @@ test("a successful acknowledgment renders its thank-you and refreshes", async (t
     1,
     "acknowledgment must also refresh the server-rendered timeline",
   );
+});
+
+test("revisiting a completed acknowledgment link describes the acknowledgment", async (t) => {
+  const mounted = await mountForm(async () => Response.json({ ok: true }), true, "signed");
+  t.after(() => mounted.cleanup());
+
+  assert.match(document.body.textContent ?? "", /acknowledgment is recorded/);
+  assert.doesNotMatch(document.body.textContent ?? "", /signature is recorded/);
 });
 
 /** A refused sign must surface the refusal, not a refresh that hides it. */
