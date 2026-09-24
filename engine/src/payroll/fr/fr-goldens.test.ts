@@ -198,6 +198,10 @@ test("the retired lumped domicile refuses with the re-affirmation remedy", async
     tx: { execute: async () => ({ rows: [{ fact_value: "12.00" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
+    resolveStatutoryRates: async () => ({
+      values: (slotKey: string) => ["fr_atmp", "fr_versement_mobilite"].includes(slotKey)
+        ? { taux: "0.0000" } : null,
+    }) as never,
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-15" },
@@ -218,6 +222,10 @@ test("eligible French payroll refuses missing contractual hours by name", async 
       : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) },
     orgId: "org",
     subsidiaryId: "legal-employer",
+    resolveStatutoryRates: async () => ({
+      values: (slotKey: string) => ["fr_atmp", "fr_versement_mobilite"].includes(slotKey)
+        ? { taux: "0.0000" } : null,
+    }) as never,
     taxYear: 2026,
     region: "FR",
     run: { pay_date: "2026-06-30", run_type: "regular" },

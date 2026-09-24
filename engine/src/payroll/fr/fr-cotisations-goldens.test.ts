@@ -160,14 +160,17 @@ test("FNAL threshold: 49 salariés plafonné, 50 déplafonné", () => {
   assert.equal(over.cdnEr, "24.4800");
 });
 
-test("tenant-declared AT/MP and versement mobilité price when declared", () => {
-  // 2 000 € brut, AT/MP 1,1 % → 22,00; VM 2,5 % → 50,00; CDN 8,32 + 50 = 58,32.
+test("tenant-declared AT/MP and versement mobilité price as separate lines", () => {
+  // Source: URSSAF's 2026 private-sector rates and location lookup.
+  // https://www.urssaf.fr/accueil/outils-documentation/taux-baremes/taux-cotisations-secteur-prive.html
+  // https://www.urssaf.fr/accueil/outils-documentation/outils/recherche-versement-mobilite.html
+  // 2 000 € brut, AT/MP 1,1 % → 22,00; VM 2,5 % → 50,00; CDN remains 8,32.
   const r = calculateFrCotisations2026({
     ...small, atmpRatePct: "1.1", versementMobilitePct: "2.5",
   });
   assert.equal(r.atmpEr, "22.0000");
   assert.equal(r.versementMobiliteEr, "50.0000");
-  assert.equal(r.cdnEr, "58.3200");
+  assert.equal(r.cdnEr, "8.3200");
   // Every other line is untouched by the tenant rates.
   assert.equal(r.vieillesseSal, "146.0000");
   assert.equal(r.maladieEr, "260.0000");
@@ -247,6 +250,11 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
       : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
+    resolveStatutoryRates: async () => ({
+      values: (slotKey: string) => slotKey === "fr_atmp"
+        ? { taux: "1.1000" }
+        : slotKey === "fr_versement_mobilite" ? { taux: "2.5000" } : null,
+    }) as never,
     documentId: "doc",
     employeePartyId: "emp",
     employmentId: "employment",
@@ -256,7 +264,7 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
     region: "FR",
     run: { pay_date: "2026-06-15", run_type: "regular" },
     emp: {},
-    filingAccountId: null,
+    filingAccountId: "fr-siret-account",
     periodsPerYear: 12,
     income: "2000.00",
     nonPeriodic: "0",
@@ -295,6 +303,9 @@ test("the FR adapter emits the URSSAF-published RGDU and apportions it to both i
   assert.equal(factors.FR_RGDU_ADJUSTMENT, "635.6000");
   assert.equal(pushed.find((line) => line.systemKey === "rgdu_urssaf")?.amount, "-540.6000");
   assert.equal(pushed.find((line) => line.systemKey === "rgdu_arrco")?.amount, "-95.0000");
+  assert.equal(pushed.find((line) => line.systemKey === "atmp")?.amount, "22.0000");
+  assert.equal(pushed.find((line) => line.systemKey === "versement_mobilite_er")?.amount, "50.0000");
+  assert.equal(pushed.find((line) => line.systemKey === "cdn_er")?.amount, "16.3200");
   assert.equal(
     pushed.filter((line) => line.systemKey.startsWith("rgdu_")).reduce((sum, line) => add(sum, line.amount), "0"),
     "-635.6000",

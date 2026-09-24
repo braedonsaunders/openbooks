@@ -183,7 +183,7 @@ export interface FrCotisations2026Result {
   fnalEr: string;
   csaEr: string;
   dialogueEr: string;
-  /** FNAL + CSA + dialogue social + versement mobilité (the CDN-ER line). */
+  /** FNAL + CSA + dialogue social (the CDN-ER line). */
   cdnEr: string;
   /** 0.0000 unless a tenant rate was declared. */
   atmpEr: string;
@@ -374,7 +374,7 @@ export function calculateFrCotisations2026(
     fnalEr: D(fnalEr),
     csaEr: D(csaEr),
     dialogueEr: D(dialogueEr),
-    cdnEr: D(add(fnalEr, csaEr, dialogueEr, vmEr)),
+    cdnEr: D(add(fnalEr, csaEr, dialogueEr)),
     atmpEr: D(atmpEr),
     versementMobiliteEr: D(vmEr),
     t1Base: D(t1Base),

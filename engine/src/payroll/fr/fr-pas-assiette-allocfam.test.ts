@@ -38,15 +38,18 @@ const PAY = "2026-06-15";
 const COTS = { payDate: PAY, periodsPerYear: 12, employerEffectif: "10.00" } as const;
 
 /** Adapter context for a métropole employee with a transmitted PAS rate. */
-function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeContext {
+function ctxFor(brut: string, transmitted: string, employerEffectif = "10.00"): PayrollStatutoryComputeContext {
   const pushed: { systemKey: string; kind: string; amount: string }[] = [];
   let query = 0;
   return {
     tx: { execute: async () => ++query === 1
-      ? ({ rows: [{ fact_value: "10.00" }] })
+      ? ({ rows: [{ fact_value: employerEffectif }] })
       : ({ rows: [{ remuneration: "0", smic: "0", reduction: "0" }] }) } as never,
     orgId: "org",
     subsidiaryId: "legal-employer",
+    resolveStatutoryRates: async () => ({
+      values: (slotKey: string) => slotKey === "fr_atmp" ? { taux: "0.0000" } : null,
+    }) as never,
     documentId: "doc",
     employeePartyId: "emp",
     employmentId: "employment",
@@ -56,7 +59,7 @@ function ctxFor(brut: string, transmitted: string): PayrollStatutoryComputeConte
     region: "FR",
     run: { pay_date: PAY, run_type: "regular" },
     emp: {},
-    filingAccountId: null,
+    filingAccountId: "fr-siret-account",
     periodsPerYear: 12,
     income: brut,
     nonPeriodic: "0",
@@ -146,6 +149,26 @@ test("eligible French payroll refuses a missing period-hours fact by name", asyn
   const context = ctxFor("3400.00", "5");
   context.statutoryHours = { regular: null, extra: "0" };
   await assert.rejects(FR_PAYROLL_PACK.computeStatutory(context), /contractual hours for this pay period are missing.*effective work schedule or approved hours/);
+});
+
+test("French statutory compute refuses an unresolved establishment AT/MP rate by name", async () => {
+  const context = ctxFor("3400.00", "5");
+  context.resolveStatutoryRates = async () => ({ values: () => null }) as never;
+  await assert.rejects(
+    FR_PAYROLL_PACK.computeStatutory(context),
+    /FR AT\/MP refuses: no effective rate resolves for this establishment's SIRET.*Enter the Carsat-notified AT\/MP rate/,
+  );
+});
+
+test("French statutory compute refuses an unresolved VM rate for an employer at the 11-employee threshold", async () => {
+  // URSSAF requires VM when the effectif reaches 11 within a zone where the
+  // levy is instituted; 0 is an explicit rate only when the establishment is
+  // not liable. https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/versement-mobilite.html
+  const context = ctxFor("3400.00", "5", "11.00");
+  await assert.rejects(
+    FR_PAYROLL_PACK.computeStatutory(context),
+    /FR versement mobilité refuses: this employer's effectif is at least 11.*Enter the zone's URSSAF rate, or an explicit 0\.0000/,
+  );
 });
 
 test("PAS assiette: CSG add-back identity holds below and above the PASS", () => {

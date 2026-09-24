@@ -105,9 +105,10 @@ const FR_SLOTS: Omit<PayrollCountryPack, "country">["statutorySlots"] = [
       { code: "VIEIL-ER", name: "Assurance vieillesse (employeur)", systemKey: "vieillesse_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "FAM-ER", name: "Allocations familiales (employeur)", systemKey: "allocfam_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "ATMP-ER", name: "Accidents du travail / maladies pro. (employeur)", systemKey: "atmp", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "VM-ER", name: "Versement mobilité (employeur)", systemKey: "versement_mobilite_er", kind: "employer_contribution", sequence: 221, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "CHOM-ER", name: "Assurance chômage (employeur)", systemKey: "chomage_er", kind: "employer_contribution", sequence: 225, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "AGS-ER", name: "Cotisation AGS (employeur)", systemKey: "ags_er", kind: "employer_contribution", sequence: 226, assessedOn: "earnings", remittance: "tax_authority" },
-      { code: "CDN-ER", name: "FNAL, CSA, dialogue social et versement mobilité (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
+      { code: "CDN-ER", name: "FNAL, CSA et dialogue social (employeur)", systemKey: "cdn_er", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "RGDU-URSSAF", name: "Réduction générale (part Urssaf)", systemKey: "rgdu_urssaf", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "RGDU-ARRCO", name: "Réduction générale (part Agirc-Arrco)", systemKey: "rgdu_arrco", kind: "employer_contribution", sequence: 251, assessedOn: "earnings", remittance: "external" },
     ],
@@ -205,9 +206,8 @@ const FR_WITHHOLDING: PayrollPackWithholding = {
       label: "Prélèvement à la source (national)",
       // Implemented for grille I (métropole): PAS plus the 2026 URSSAF
       // cotisations and AGIRC-ARRCO T1/T2 + CEG + CET compute end to end.
-      // DOM domiciles, APEC and tenant-declared AT/MP/versement-mobilité
-      // rates stay refused by name (see FR_REFUSED_2026 and
-      // FR_COTISATION_REFUSALS_2026).
+      // AT/MP and versement-mobilité rates resolve from the establishment's
+      // effective SIRET rates; DOM domiciles and APEC remain refused by name.
       implemented: true,
       // Non-residents face the specific retenue à la source (CGI art. 182 A),
       // not PAS — and the levy DOES reach their French wages, so this stays
