@@ -117,6 +117,8 @@ export const KENYA_TAX_PACK: CountryTaxPackDefinition = {
           { ratePercent: 14, effectiveFrom: "2020-04-01", effectiveTo: "2020-12-31", sourceId: "kra_notice_ln35_2020" },
           { ratePercent: 16, effectiveFrom: "2021-01-01", sourceId: "kra_notice_rate_change_2021" },
         ],
+        // The VAT3 names the "general rate" in words, not numbers.
+        returnBoxes: ["OUTPUT_TAX"],
       },
       {
         code: "KE-VAT-ZERO",
