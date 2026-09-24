@@ -176,6 +176,20 @@ test("INPS 2026 refuses a missing post-1995 status only when the massimale chang
   assert.equal(belowMassimale.inpsWorker, "11665.7600");
 });
 
+test("fixed-term employment refuses when NASpI surcharge renewals and exceptions are unknown", () => {
+  // L. 92/2012 art. 2 c. 28: employer 1.40% contribution, plus 0.50 points
+  // per fixed-term renewal; exclusions and renewals require facts this pack
+  // does not carry. INPS Circ. 13/2023 and Circ. 91/2020.
+  // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2023/02/Circolare_14062/Allegati/14019_Circolare-numero-13-del-02-02-2023.pdf
+  // https://servizi2.inps.it/servizi/Bussola/VisualizzaDoc.aspx?sVirtualURL=%2FCircolari%2FCircolare+numero+91+del+04-08-2020.htm
+  assert.throws(
+    () => calculateIt2026({
+      ...BASE, annualGrossEmployment: "35000", annualPensionable: "35000", isFixedTerm: true,
+    }),
+    /tempo determinato.*NASpI.*1\.40%.*0\.50/,
+  );
+});
+
 test("missing rates refuse naming the 2026 scope point", () => {
   const ok = {
     ...BASE,

@@ -320,6 +320,19 @@ export function calculateItWithTables(input: It2025Input, tables: ItYearTables):
       + `TABELLA 7 detrazioni, not transcribed — see ${refused}`,
     );
   }
+  if (input.isFixedTerm) {
+    // L. 92/2012 art. 2 c. 28 imposes the employer's 1.40% NASpI add-on
+    // plus 0.50 percentage points per qualifying renewal; exclusions also
+    // depend on contract facts not carried here. INPS Circ. 13/2023 and
+    // Circ. 91/2020:
+    // https://www.inps.it/content/dam/inps-site/it/scorporati/circolari-e-messaggi/2023/02/Circolare_14062/Allegati/14019_Circolare-numero-13-del-02-02-2023.pdf
+    // https://servizi2.inps.it/servizi/Bussola/VisualizzaDoc.aspx?sVirtualURL=%2FCircolari%2FCircolare+numero+91+del+04-08-2020.htm
+    refuse(
+      `IT ${year} refuses tempo determinato: NASpI addizionale 1.40% plus 0.50 points per qualifying renewal `
+      + "and contract-specific exclusions are not priced — the pack does not carry renewal count or the "
+      + `required exemption facts; see ${refused}`,
+    );
+  }
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear <= 0) {
     refuse(`IT ${year} annualisation needs a positive integer periodsPerYear, got ${input.periodsPerYear}`);
   }
