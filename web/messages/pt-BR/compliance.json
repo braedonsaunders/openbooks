@@ -262,7 +262,8 @@
     "executedCopy": "Cópia assinada",
     "executedCopyHint": "Anexe aqui a quitação assinada digitalizada. Ela fica no Arquivo de documentos e vinculada a este registro.",
     "errors": {
-      "partyAndProject": "Escolha uma parte e um projeto — a garantia recai sobre um projeto específico."
+      "partyAndProject": "Escolha uma parte e um projeto — a garantia recai sobre um projeto específico.",
+      "typeRequired": "Escolha explicitamente o tipo de renúncia antes de criá-la."
     }
   },
   "informationReturns": {

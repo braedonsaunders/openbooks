@@ -262,7 +262,8 @@
     "executedCopy": "Copia firmada",
     "executedCopyHint": "Adjunte aquí la renuncia firmada escaneada. Queda en el Archivo de documentos y enlazada a este registro.",
     "errors": {
-      "partyAndProject": "Elija una parte y un proyecto: un gravamen recae sobre un proyecto concreto."
+      "partyAndProject": "Elija una parte y un proyecto: un gravamen recae sobre un proyecto concreto.",
+      "typeRequired": "Elija explícitamente el tipo de renuncia antes de crearla."
     }
   },
   "informationReturns": {

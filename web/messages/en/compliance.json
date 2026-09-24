@@ -262,7 +262,8 @@
     "executedCopy": "Executed copy",
     "executedCopyHint": "Attach the scanned signed waiver here. It stays in the File Cabinet and is linked to this record.",
     "errors": {
-      "partyAndProject": "Pick both a party and a project — a lien is a claim against a specific project."
+      "partyAndProject": "Pick both a party and a project — a lien is a claim against a specific project.",
+      "typeRequired": "Choose the waiver type explicitly before creating it."
     }
   },
   "informationReturns": {

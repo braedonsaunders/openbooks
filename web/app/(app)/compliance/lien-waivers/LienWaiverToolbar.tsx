@@ -16,9 +16,8 @@ const WAIVER_TYPES = [
 const STATUSES = ['draft', 'requested', 'received', 'signed', 'rejected', 'void'] as const
 
 /**
- * Filters plus the create form. The waiver type defaults from the
- * subcontractor's compliance class, so the form the office actually collects is
- * pre-selected instead of being chosen afresh each time.
+ * Filters plus the create form. The operator chooses the waiver type
+ * explicitly because unconditional releases can waive lien rights before payment clears.
  */
 export function LienWaiverToolbar({
   direction,
@@ -43,7 +42,7 @@ export function LienWaiverToolbar({
     direction: 'received',
     partyId: '',
     projectId: '',
-    waiverType: 'unconditional_progress',
+    waiverType: '',
     throughDate: useBusinessToday(),
     amount: '',
     jurisdiction: '',
@@ -58,16 +57,15 @@ export function LienWaiverToolbar({
   }
 
   function pickVendor(partyId: string) {
-    const vendor = vendors.find((v) => v.id === partyId)
-    setForm({
-      ...form,
-      partyId,
-      waiverType: vendor?.defaultType || form.waiverType,
-    })
+    setForm({ ...form, partyId, waiverType: '' })
   }
 
   async function create() {
     setError(null)
+    if (!form.waiverType) {
+      setError(t('lienWaivers.errors.typeRequired'))
+      return
+    }
     if (!form.partyId || !form.projectId) {
       setError(t('lienWaivers.errors.partyAndProject'))
       return
@@ -165,15 +163,18 @@ export function LienWaiverToolbar({
           <div>
             <Label>{t('lienWaivers.columns.type')}</Label>
             <Select value={form.waiverType} onChange={(event) => setForm({ ...form, waiverType: event.target.value })}>
+              <option value="">{t('fields.select')}</option>
               {WAIVER_TYPES.map((value) => (
                 <option key={value} value={value}>
                   {t(`waiverType.${value}`)}
                 </option>
               ))}
             </Select>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t(`waiverTypeHint.${form.waiverType}`)}
-            </p>
+            {form.waiverType ? (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                {t(`waiverTypeHint.${form.waiverType}`)}
+              </p>
+            ) : null}
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

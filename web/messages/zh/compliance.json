@@ -262,7 +262,8 @@
     "executedCopy": "已签署副本",
     "executedCopyHint": "在此附上扫描的已签署弃权书。文件保存在文件柜中并关联到本记录。",
     "errors": {
-      "partyAndProject": "请同时选择对方和项目 — 留置权是针对特定项目的主张。"
+      "partyAndProject": "请同时选择对方和项目 — 留置权是针对特定项目的主张。",
+      "typeRequired": "创建前请明确选择豁免类型。"
     }
   },
   "informationReturns": {

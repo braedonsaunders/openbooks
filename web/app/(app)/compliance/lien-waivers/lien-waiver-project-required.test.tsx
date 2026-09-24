@@ -85,7 +85,7 @@ async function click(button: HTMLButtonElement) {
   await tick();
 }
 
-test("creating a waiver without a project pins the reason as an alert and posts nothing (F-t03-006)", async (t) => {
+test("creating a waiver requires an explicit type choice and posts nothing without it (F3-80)", async (t) => {
   globalThis.__waiverRouter = { push() {}, refresh() {} };
   globalThis.__waiverToasts = [];
   globalThis.__waiverPosts = [];
@@ -132,7 +132,8 @@ test("creating a waiver without a project pins the reason as an alert and posts 
   await click(opener);
   const create = buttonsNamed("Create waiver")[0];
   assert.ok(create, "the dialog must offer Create waiver");
-  // Project left unset (party too — either trips the same guard).
+  const waiverType = document.querySelectorAll("select")[3] as HTMLSelectElement;
+  assert.equal(waiverType.value, "", "the form must not preselect an unconditional release");
   await click(create);
   await tick();
   assert.equal(
@@ -144,7 +145,7 @@ test("creating a waiver without a project pins the reason as an alert and posts 
   assert.ok(alert, "the missing-project reason must pin as a record alert");
   assert.match(
     alert.textContent ?? "",
-    /Pick both a party and a project/,
-    "the alert must carry the validation reason",
+    /Choose the waiver type explicitly/,
+    "the alert must require an explicit waiver choice",
   );
 });
