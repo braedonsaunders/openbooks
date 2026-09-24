@@ -1763,7 +1763,8 @@
     },
     "emptyTitle": "No compensation on file yet",
     "emptyDescription": "There is no pay band or compensation statement on file for you yet. Request your pay information below and HR will respond.",
-    "notLinked": "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service"
+    "notLinked": "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
+    "noEmployment": "your login is linked to a person with no employment on record — ask an administrator to create your employment before using self-service"
   },
   "qualifications": {
     "title": "Qualifications",

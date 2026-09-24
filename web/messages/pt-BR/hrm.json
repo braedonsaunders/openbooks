@@ -1707,7 +1707,8 @@
     },
     "emptyTitle": "Nenhuma remuneração registrada ainda",
     "emptyDescription": "Ainda não há posição na faixa nem demonstrativos registrados para você. Solicite suas informações salariais abaixo e o RH responderá.",
-    "notLinked": "nenhuma pessoa está vinculada a este login — peça a um administrador para vincular a sua pessoa em Admin → Users → Link person antes de usar o autoatendimento"
+    "notLinked": "nenhuma pessoa está vinculada a este login — peça a um administrador para vincular a sua pessoa em Admin → Users → Link person antes de usar o autoatendimento",
+    "noEmployment": "seu login está vinculado a uma pessoa sem registro de emprego — peça a um administrador para criar o seu emprego antes de usar o autoatendimento"
   },
   "qualifications": {
     "title": "Qualificações",

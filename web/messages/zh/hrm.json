@@ -1707,7 +1707,8 @@
     },
     "emptyTitle": "暂无薪酬记录",
     "emptyDescription": "目前还没有您的带宽位置或薪酬单记录。请在下方请求您的薪酬信息，人事部将会回复。",
-    "notLinked": "此登录尚未关联任何人员 — 在使用自助服务之前，请让管理员在 Admin → Users → Link person 中关联您的人员"
+    "notLinked": "此登录尚未关联任何人员 — 在使用自助服务之前，请让管理员在 Admin → Users → Link person 中关联您的人员",
+    "noEmployment": "此登录关联的人员尚无雇佣记录 — 在使用自助服务之前，请让管理员创建您的雇佣关系"
   },
   "qualifications": {
     "title": "资质",

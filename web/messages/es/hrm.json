@@ -1707,7 +1707,8 @@
     },
     "emptyTitle": "Aún no hay retribución registrada",
     "emptyDescription": "Todavía no hay una posición en banda ni certificados registrados para usted. Solicite su información salarial abajo y Recursos Humanos responderá.",
-    "notLinked": "ninguna persona está vinculada a este inicio de sesión — pida a un administrador que vincule su persona en Admin → Users → Link person antes de usar el autoservicio"
+    "notLinked": "ninguna persona está vinculada a este inicio de sesión — pida a un administrador que vincule su persona en Admin → Users → Link person antes de usar el autoservicio",
+    "noEmployment": "su inicio de sesión está vinculado a una persona sin registro de empleo — pida a un administrador que cree su empleo antes de usar el autoservicio"
   },
   "qualifications": {
     "title": "Cualificaciones",

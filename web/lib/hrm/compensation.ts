@@ -31,7 +31,7 @@ import {
   listStatements,
 } from '@openbooks/engine/src/hrm/compensation/statements.ts'
 import { CompensationError } from '@openbooks/engine/src/hrm/compensation/errors.ts'
-import { HrmAuthorizationError, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
+import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, getAuthz, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
@@ -1005,8 +1005,15 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
   await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
-  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id).catch(() => [] as string[])
-  if (own.length === 0) return null
+  // OM-08: a linked person with no employment is a different state from no
+  // linked person — and a missing user row is neither. The person read
+  // throws when the identity is not established (never a refusal), an
+  // unlinked login returns null (the notLinked refusal), and a linked
+  // login with no employment returns the noEmployment refusal below.
+  const person = await loadApprovalPerson(db, orgId, authz.user.id)
+  if (!person.partyId) return null
+  const own = await loadOwnEmploymentIds(db, orgId, authz.user.id)
+  if (own.length === 0) return myCompRefusal(authz, 'no-employment')
   const employmentId = own[0]!
   const today = await businessToday(orgId)
   let placement = 'no_band'
@@ -1068,14 +1075,16 @@ export async function loadMyCompensation(authz: Authz): Promise<MyCompData | nul
 }
 
 /**
- * The /me/compensation page state for a login with no employment (not
- * linked): the named no-link refusal with its remedy, carried as page
- * state for the house empty-state block (same as /me, documents, surveys
- * and the clock) — never an ambiguous 404. The request widget stays off
- * (canRequest false): with no employment there is nothing to file
- * against.
+ * The /me/compensation page state for a login with no employment: the
+ * named refusal with its remedy, carried as page state for the house
+ * empty-state block (same as /me, documents, surveys and the clock) —
+ * never an ambiguous 404. Two causes: 'no-link' (no person is linked to
+ * the login; remedy: Link person) and 'no-employment' (a person is
+ * linked but has no employment on record; remedy: create it). The
+ * request widget stays off (canRequest false): with no employment there
+ * is nothing to file against.
  */
-export async function myCompRefusal(authz: Authz): Promise<MyCompData> {
+export async function myCompRefusal(authz: Authz, cause: 'no-link' | 'no-employment' = 'no-link'): Promise<MyCompData> {
   const t = await getTranslations('hrm')
   const { meTabs } = await import('./self-service')
   const tabs = (await meTabs(authz, '/me/compensation')).map((tab) => ({
@@ -1093,7 +1102,10 @@ export async function myCompRefusal(authz: Authz): Promise<MyCompData> {
     canRequest: false,
     emptyTitle: t('myComp.emptyTitle'),
     emptyDescription: t('myComp.emptyDescription'),
-    refusal: { title: t('me.refusedTitle'), message: t('myComp.notLinked') },
+    refusal: {
+      title: t('me.refusedTitle'),
+      message: t(cause === 'no-employment' ? 'myComp.noEmployment' : 'myComp.notLinked'),
+    },
     placementLabel: t('myComp.placement'),
     placement: '',
     compaRatio: null,
