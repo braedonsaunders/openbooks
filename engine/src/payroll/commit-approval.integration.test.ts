@@ -102,3 +102,138 @@ test("a rejected pay run stays committable-free (rejection is not a release)", {
     await dropScratchOrg(fx.orgId);
   }
 });
+
+test("an approval withdrawn mid-commit is refused by name at the terminal write", { skip: !DB }, async () => {
+  // The outside-the-transaction defect: the approval check ran on the default
+  // executor BEFORE the commit's writes, so an approval withdrawn between the
+  // pre-check and the terminal status flip committed without a live approval.
+  // The gate is now asked inside the commit transaction AND re-asked beside
+  // the terminal staleness recheck. Barrier: the commit is stalled inside the
+  // run_scope statement (past the pre-check, before the terminal write) while
+  // the approval is reopened; the commit must then refuse, not ride under a
+  // release answer that was true when it was taken.
+  const fx = await seedAdoption();
+  try {
+    const actors = await seedFlowActors(fx.orgId);
+    await seedApprovalFlow(fx.orgId, {
+      subjectKind: "pay_run",
+      assignees: [{ type: "user", userId: actors.approver1Id }],
+      mode: "any",
+    });
+    const submitted = { ...fx, actorId: actors.submitterId };
+    const { input, entryId } = await calculatedRun(submitted);
+    await submitForApproval("pay_run", input.documentId, actors.submitterId);
+    const decidedGateId = await gateId(input.documentId);
+    await decideGate({ gateId: decidedGateId, decision: "approved", userId: actors.approver1Id });
+
+    // The exact rows the commit's canonical source population will lock: the
+    // run_scope query (after the approval pre-check, before the terminal
+    // write) takes FOR UPDATE on the run's time entries, so holding these rows
+    // parks the commit past its pre-check. The pre-check and the staleness
+    // recheck are non-locking reads, so a commit observed waiting inside
+    // run_scope is definitively past the pre-check.
+    const snapshot = (await db.execute<{ snapshot: unknown }>(sql`
+      select calculation_source_snapshot as snapshot from pay_runs
+       where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.snapshot as {
+      claimEntryIds: string[];
+    };
+    assert.ok(snapshot.claimEntryIds.includes(entryId), "the fixture entry is what the commit claims");
+    const claimIds = snapshot.claimEntryIds;
+
+    // Every wait below is bounded and the holder is ALWAYS released: a
+    // barrier that fails must fail the test loudly, never wedge the process
+    // on a dangling transaction (whose open socket keeps the runner alive
+    // with no output).
+    const barrierTimeout = (label: string) =>
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`barrier timeout: ${label}`)), 30000));
+    let releaseResolve!: () => void;
+    const released = new Promise<void>((resolve) => { releaseResolve = resolve; });
+    let lockedResolve!: () => void;
+    const locked = new Promise<void>((resolve) => { lockedResolve = resolve; });
+    const holder = db.transaction(async (tx) => {
+      await tx.execute(sql`
+        select id from time_entries
+         where org_id = ${fx.orgId} and id = any(${`{${claimIds.join(",")}}`}::uuid[])
+         for update`);
+      lockedResolve();
+      await released;
+    });
+    const holderSettled = holder.then(
+      () => "holder released",
+      (error: unknown) => `holder failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    let committer: Promise<{ rejected: boolean; message: string }> | null = null;
+    try {
+      await Promise.race([locked, barrierTimeout("holder lock")]);
+      committer = commitPayRun({
+        orgId: fx.orgId, documentId: input.documentId, actorId: actors.submitterId,
+      }).then(
+        () => ({ rejected: false as const, message: "" }),
+        (error: unknown) => ({ rejected: true as const, message: String((error as Error)?.message ?? error) }),
+      );
+      // Wait until the commit is genuinely parked INSIDE the run_scope
+      // statement before withdrawing — otherwise the withdrawal lands before
+      // the pre-check and the test cannot fail for the right reason. Parked
+      // means: a live backend whose current statement names run_scope and is
+      // in a lock wait, stable across two polls. pg_locks cannot prove this:
+      // a backend blocked in a CTE waits on the transaction (relation NULL),
+      // so a relation-scoped ungranted-lock count reads zero while the commit
+      // is parked.
+      const parkedInScope = async (): Promise<boolean> => {
+        const seen = (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from pg_stat_activity
+           where datname = current_database()
+             and pid <> pg_backend_pid()
+             and state = 'active'
+             and wait_event is not null
+             and query ilike '%run_scope%'`)).rows[0]!.n;
+        return seen >= 1;
+      };
+      const parkDeadline = Date.now() + 15000;
+      let parkStable = 0;
+      let parked = false;
+      while (Date.now() < parkDeadline) {
+        if (await parkedInScope()) {
+          parkStable += 1;
+          if (parkStable >= 2) { parked = true; break; }
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } else {
+          parkStable = 0;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+      if (!parked) {
+        const live = (await db.execute<{ pid: number; state: string; wait: string | null; query: string }>(sql`
+          select pid, state, wait_event as "wait", left(query, 160) as query from pg_stat_activity
+           where datname = current_database() and pid <> pg_backend_pid() and state <> 'idle'
+           order by pid`));
+        assert.fail(
+          `the commit never parked inside run_scope before the approval was withdrawn `
+          + `(live backends: ${JSON.stringify(live.rows)})`,
+        );
+      }
+
+      // The approval is withdrawn: the decided gate reopens.
+      await db.execute(sql`
+        update flow_gates set status = 'pending', decided_by = null, decided_at = null
+         where org_id = ${fx.orgId} and id = ${decidedGateId}`);
+    } finally {
+      releaseResolve();
+      assert.equal(
+        await Promise.race([holderSettled, barrierTimeout("holder release")]),
+        "holder released",
+      );
+    }
+    const outcome = await Promise.race([committer!, barrierTimeout("commit outcome")]);
+    assert.equal(outcome.rejected, true, "a commit racing a withdrawn approval must refuse");
+    assert.match(outcome.message, /awaiting 1 approval/);
+    assert.equal(await runStatus(fx.orgId, input.documentId), "calculated");
+    const lines = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from document_lines
+       where org_id = ${fx.orgId} and document_id = ${input.documentId}`)).rows[0]!.n;
+    assert.equal(lines, 0, "a refused commit materializes no GL projection");
+  } finally {
+    await dropScratchOrg(fx.orgId);
+  }
+});
