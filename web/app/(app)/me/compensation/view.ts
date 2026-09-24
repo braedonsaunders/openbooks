@@ -109,11 +109,12 @@ export async function myCompTitle(): Promise<string> {
 export async function loadMyCompPage(sp: Record<string, string | undefined>) {
   // The grant decides the route: without a session the route genuinely
   // does not exist for this caller (the same split as the sibling /me
-  // documents and surveys loaders). The loader's null means no employment
-  // resolves for this login (not linked): the page carries the named
-  // no-link refusal with its remedy instead of an ambiguous 404. A linked
-  // person with no band and no statement returns its row with hasContent
-  // false, and the spec renders the empty state.
+  // documents and surveys loaders). The loader's null means no person is
+  // linked to this login: the page carries the named no-link refusal with
+  // its remedy instead of an ambiguous 404. A linked person with no
+  // employment arrives as a refusal-carrying row (the noEmployment
+  // remedy), and a linked person with no band and no statement returns
+  // its row with hasContent false, and the spec renders the empty state.
   const authz = await getAuthz()
   if (!authz) notFound()
   const data = await loadMyCompensation(authz)

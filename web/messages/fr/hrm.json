@@ -1707,7 +1707,8 @@
     },
     "emptyTitle": "Aucune rémunération enregistrée pour le moment",
     "emptyDescription": "Aucune position en fourchette ni aucun relevé n’est encore enregistré pour vous. Demandez vos informations salariales ci-dessous et les RH répondront.",
-    "notLinked": "aucune personne n’est liée à cette connexion — demandez à un administrateur de lier votre personne dans Admin → Users → Link person avant d’utiliser le libre-service"
+    "notLinked": "aucune personne n’est liée à cette connexion — demandez à un administrateur de lier votre personne dans Admin → Users → Link person avant d’utiliser le libre-service",
+    "noEmployment": "votre connexion est liée à une personne sans dossier d’emploi — demandez à un administrateur de créer votre emploi avant d’utiliser le libre-service"
   },
   "qualifications": {
     "title": "Qualifications",

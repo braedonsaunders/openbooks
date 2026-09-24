@@ -41,7 +41,9 @@ test("an unlinked login reads the named no-link refusal, never a 404", () => {
     /if \(!authz\) notFound\(\)/,
     "only a missing session 404s — the route genuinely does not exist there",
   );
-  assert.match(loader, /if \(own\.length === 0\) return null/, "the loader still reports not-linked as null");
+  assert.match(loader, /if \(!person\.partyId\) return null/, "only an unlinked login reports null");
+  assert.match(loader, /return myCompRefusal\(authz, 'no-employment'\)/, "a linked login with no employment gets its own refusal");
+  assert.match(loader, /myComp\.noEmployment/, "the refusal names the create-employment remedy");
   assert.match(loader, /myComp\.notLinked/, "the refusal names the link-person remedy");
   assert.match(loader, /me\.refusedTitle/, "the refusal carries the shared self-service title");
   assert.match(loader, /canRequest: false/, "the refusal carries no employment to file against");
