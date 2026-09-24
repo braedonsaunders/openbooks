@@ -113,5 +113,13 @@ export interface WriteOutcome {
 export const EXPORT_FORMATS = ['csv', 'xlsx', 'json'] as const
 export type ExportFormat = (typeof EXPORT_FORMATS)[number]
 
+/** Resolve the historical absent-format default without coercing unknown values. */
+export function requestedExportFormat(value: unknown): ExportFormat | null {
+  if (value === undefined) return 'csv'
+  return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value)
+    ? (value as ExportFormat)
+    : null
+}
+
 export const IMPORT_FORMATS = ['csv', 'xlsx', 'json'] as const
 export type ImportFormat = (typeof IMPORT_FORMATS)[number]
