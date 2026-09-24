@@ -85,7 +85,6 @@
     "web/app/(app)/items/ItemDrawer.test.tsx": 4,
     "web/app/(app)/journal/JournalDrawer.test.tsx": 6,
     "web/app/(app)/me/compensation/me-compensation.test.ts": 3,
-    "web/app/(app)/me/team/me-team.test.ts": 3,
     "web/app/(app)/payments/PaymentDrawer.test.tsx": 8,
     "web/app/(app)/payments/RunBuilder.test.tsx": 1,
     "web/app/(app)/payments/RunDrawer.test.tsx": 1,
