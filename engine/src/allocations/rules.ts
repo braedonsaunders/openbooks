@@ -655,7 +655,10 @@ export async function updateRule(ruleId: string, input: UpdateRuleInput, audit: 
   const orgId = uuid(input.orgId, "orgId");
   const id = uuid(ruleId, "ruleId");
   return withOrgTransaction(orgId, async () => {
-    const before = await loadRuleHead(orgId, id, false);
+    // Draft creation, publish, and other head mutations serialize on this row.
+    // Keep the visibility proof and revision check in that same lock window so
+    // a concurrent draft cannot appear after the caller's scope was checked.
+    const before = await loadRuleHead(orgId, id, true);
     refuseSystemRule(before, "edited");
     // Head metadata governs every version: scope is asserted over all of
     // the rule's versions, not just the current one, so a restricted caller
