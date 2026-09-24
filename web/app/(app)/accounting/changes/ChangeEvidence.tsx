@@ -1,3 +1,4 @@
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -6,46 +7,21 @@ import {
   TableHeader,
   TableRow,
 } from "@openbooks/ui";
-const labels: Record<string, string> = {
-  existingId: "Existing performance obligation",
-  existingObligationIds: "Promises affected",
-  ssp: "Standalone selling price",
-  standaloneSellingPrice: "Extended standalone selling price",
-  recognitionRuleId: "Recognition rule",
-  deferredAccountId: "Deferred revenue / contract asset",
-  recognizedAccountId: "Revenue account",
-  totalAmount: "Total allocation",
-  catchUp: "Immediate revenue adjustment",
-  priorRecognized: "Previously earned revenue",
-  targetRecognized: "Revised cumulative earned revenue",
-  remaining: "Future recognition",
-  netCredits: "Credits already applied to deferred revenue",
-  newTotal: "Revised total consideration",
-  pool: "Consideration allocated by SSP",
-  remainingDistinct: "Remaining promises are distinct",
-  additionsAtStandalonePrice: "Additions priced at standalone selling prices",
-  enforceableRightsEvidence: "Evidence of enforceable amended rights",
-  fxRate: "Recognition exchange rate",
-  bookId: "Accounting book",
-  effectiveOn: "Effective date",
-  scopeReductionPercent: "Right-of-use scope removed (%)",
-  commensurateStandalonePrice: "Added right priced at standalone price",
-  additionalRightOfUse: "Additional right of use",
-  transfersOwnership: "Ownership transfers",
-  purchaseOptionReasonablyCertain: "Purchase option reasonably certain",
-  pvOfPayments: "Present value of payments",
-  newRou: "Revised right-of-use asset",
-  rouDelta: "Right-of-use adjustment",
-};
-function label(key: string) {
-  return (
-    labels[key] ??
-    key
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replaceAll("_", " ")
-      .replace(/^./, (s) => s.toUpperCase())
-  );
-}
+const fieldKeys = new Set([
+  'existingId', 'existingObligationIds', 'ssp', 'standaloneSellingPrice', 'recognitionRuleId',
+  'deferredAccountId', 'recognizedAccountId', 'totalAmount', 'catchUp', 'priorRecognized',
+  'targetRecognized', 'remaining', 'netCredits', 'newTotal', 'pool',
+  'remainingDistinct', 'additionsAtStandalonePrice', 'enforceableRightsEvidence', 'fxRate', 'bookId',
+  'effectiveOn', 'scopeReductionPercent', 'commensurateStandalonePrice', 'additionalRightOfUse', 'transfersOwnership',
+  'purchaseOptionReasonablyCertain', 'pvOfPayments', 'newRou', 'rouDelta', 'groupCarryingBefore',
+  'groupCarryingAfter', 'groupValuationDelta', 'netAssets', 'nci', 'parentGain',
+  'groupGain', 'recycledOci', 'transferredOci', 'totalGroupGain', 'retainedFairValue',
+  'carryingLiability', 'carryingRou', 'stubInterest', 'stubRou', 'prepaidCarrying',
+  'newLiability', 'liabilityDelta', 'removedLiability', 'removedRou', 'gain',
+  'settlement', 'settlementPayment', 'payment', 'periods', 'annualRatePercent',
+  'paymentTiming', 'paymentFrequency', 'assessment', 'dayCountPolicy', 'specializedAsset',
+  'economicLifeMonths', 'leaseTermMonths', 'termThresholdPercent', 'fairValue', 'pvThresholdPercent',
+]);
 /** Review the complete frozen proposal, including nested assessment inputs.
  * This is record evidence, not a regenerated report or a live calculation. */
 export function ChangeEvidence({
@@ -55,9 +31,10 @@ export function ChangeEvidence({
   value: unknown;
   names?: Record<string, string>;
 }) {
+  const t = useTranslations("accounting");
   if (value === null || value === undefined)
-    return <span className="text-muted-foreground">Not supplied</span>;
-  if (typeof value === "boolean") return <span>{value ? "Yes" : "No"}</span>;
+    return <span className="text-muted-foreground">{t("lifecycle.evidence.notSupplied")}</span>;
+  if (typeof value === "boolean") return <span>{value ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no")}</span>;
   if (typeof value === "string" || typeof value === "number")
     return (
       <span className="break-words">
@@ -79,8 +56,8 @@ export function ChangeEvidence({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Assessment / measurement</TableHead>
-            <TableHead>Approved proposal</TableHead>
+            <TableHead>{t("lifecycle.evidence.assessment")}</TableHead>
+            <TableHead>{t("lifecycle.evidence.approvedProposal")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -88,7 +65,9 @@ export function ChangeEvidence({
             .filter(([key]) => key !== "idempotencyKey")
             .map(([key, v]) => (
               <TableRow key={key}>
-                <TableCell className="align-top">{label(key)}</TableCell>
+                <TableCell className="align-top">{fieldKeys.has(key) && t.has(`lifecycle.evidence.fields.${key}` as never)
+                  ? t(`lifecycle.evidence.fields.${key}` as never)
+                  : t("lifecycle.evidence.otherField")}</TableCell>
                 <TableCell>
                   <ChangeEvidence value={v} names={names} />
                 </TableCell>
@@ -98,4 +77,23 @@ export function ChangeEvidence({
       </Table>
     );
   return null;
+}
+
+
+export function ChangeFacts({ value }: { value: Record<string, unknown> }) {
+  const t = useTranslations("accounting");
+  return (
+    <dl className="grid grid-cols-2 gap-2">
+      {Object.entries(value)
+        .filter(([key, v]) => fieldKeys.has(key) && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"))
+        .map(([key, v]) => (
+          <div key={key}>
+            <dt className="text-sm text-slate-500">{t.has(`lifecycle.evidence.fields.${key}` as never)
+              ? t(`lifecycle.evidence.fields.${key}` as never)
+              : t("lifecycle.evidence.otherField")}</dt>
+            <dd>{typeof v === "boolean" ? v ? t("lifecycle.evidence.yes") : t("lifecycle.evidence.no") : String(v).replaceAll("_", " ")}</dd>
+          </div>
+        ))}
+    </dl>
+  );
 }
