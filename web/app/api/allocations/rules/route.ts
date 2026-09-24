@@ -23,11 +23,11 @@ const createRuleSchema = z.object({
 })
 
 /** Rules tab list + create. Read needs allocations.read; writes need allocations.manage. */
-export async function GET() {
+export async function GET(_req: Request) {
   const gate = await guardAllocations('allocations.read')
   if (gate instanceof NextResponse) return gate
   try {
-    return NextResponse.json({ rules: await listRuleHeads(gate.user.orgId) })
+    return NextResponse.json({ rules: await listRuleHeads(gate.user.orgId, { allowedSubsidiaryIds: gate.allowedSubsidiaryIds }) })
   } catch (error) {
     return allocationErrorResponse(error)
   }

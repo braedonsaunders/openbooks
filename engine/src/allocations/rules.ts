@@ -1321,7 +1321,7 @@ export async function loadRuleInEffectByKey(
  */
 export async function listRuleHeads(
   orgId: string,
-  opts: { mode?: AllocationMode; activeOnly?: boolean } = {},
+  opts: { mode?: AllocationMode; activeOnly?: boolean; allowedSubsidiaryIds?: SubsidiaryScope } = {},
 ): Promise<RuleHeadSummary[]> {
   const id = uuid(orgId, "orgId");
   return withOrgTransaction(id, async () => {
@@ -1336,21 +1336,47 @@ export async function listRuleHeads(
       left join allocation_rule_versions v on v.org_id = r.org_id and v.id = r.current_version_id
       where r.org_id = ${id} ${modeFilter} ${activeFilter}
       order by r.sort_order, r.key`);
-    return rows.rows.map((row) => ({
-      rule: mapRule(row, "rule_"),
-      revision: String(row["rule_revision"]),
-      currentVersion:
-        row["current_id"] === null || row["current_id"] === undefined
-          ? null
-          : {
-              id: String(row["current_id"]),
-              versionNo: Number(row["current_version_no"]),
-              status: row["current_status"] as CurrentVersionSummary["status"],
-              effectiveFrom: asDate(row["current_effective_from"]),
-              effectiveTo: row["current_effective_to"] === null ? null : asDate(row["current_effective_to"]),
-              definitionHash: (row["current_definition_hash"] as string | null) ?? null,
-            },
-    }));
+    const result: RuleHeadSummary[] = [];
+    for (const row of rows.rows) {
+      let currentVisible = true;
+      if (opts.allowedSubsidiaryIds !== undefined && opts.allowedSubsidiaryIds !== null) {
+        const versions = await db.execute<Prefixed>(sql`select ${VERSION_COLS}
+          from allocation_rule_versions v where v.org_id = ${id} and v.rule_id = ${row["rule_id"]}
+          order by v.version_no`);
+        let anyVisible = versions.rows.length === 0;
+        currentVisible = row["current_id"] === null || row["current_id"] === undefined;
+        for (const versionRow of versions.rows) {
+          const version = mapVersion(versionRow, "version_");
+          const targets = await loadTargets(id, version.id);
+          const visible = allocationRuleVisible(opts.allowedSubsidiaryIds, {
+            sourceSubsidiaryIds: version.dimensionFilters.subsidiaryIds,
+            targetKind: version.targetKind,
+            dynamicDimension: version.dynamicTarget.dimension,
+            dynamicIncludes: version.dynamicTarget.include,
+            targetSubsidiaryIds: targets.map((target) => target.subsidiaryId),
+          });
+          anyVisible ||= visible;
+          if (version.id === row["current_id"]) currentVisible = visible;
+        }
+        if (!anyVisible) continue;
+      }
+      result.push({
+        rule: mapRule(row, "rule_"),
+        revision: String(row["rule_revision"]),
+        currentVersion:
+          !currentVisible || row["current_id"] === null || row["current_id"] === undefined
+            ? null
+            : {
+                id: String(row["current_id"]),
+                versionNo: Number(row["current_version_no"]),
+                status: row["current_status"] as CurrentVersionSummary["status"],
+                effectiveFrom: asDate(row["current_effective_from"]),
+                effectiveTo: row["current_effective_to"] === null ? null : asDate(row["current_effective_to"]),
+                definitionHash: (row["current_definition_hash"] as string | null) ?? null,
+              },
+      });
+    }
+    return result;
   });
 }
 
