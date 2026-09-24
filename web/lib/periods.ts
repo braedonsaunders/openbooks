@@ -74,6 +74,14 @@ export async function resolvePeriod(
   presetId: string | null | undefined,
   opts: { customFrom?: string | null; customTo?: string | null; today?: string; orgId?: string } = {},
 ): Promise<ResolvedPeriod> {
+  // A named preset that no longer exists (saved before it was removed from
+  // the catalog) must refuse by name — never silently become This Fiscal
+  // Year and widen or move the window. An absent preset is the ordinary
+  // "no selection" path and still resolves the default. Fail fast, before
+  // any database work: membership is pure catalog.
+  if (typeof presetId === 'string' && presetId !== '' && !isPeriodPreset(presetId)) {
+    throw new Error(`preset '${presetId}' no longer exists — choose a current period preset`)
+  }
   const orgId = await resolveOrgId(opts.orgId)
   const today = opts.today ?? await businessToday(orgId)
   const id = isPeriodPreset(presetId) ? presetId! : DEFAULT_PERIOD_PRESET
