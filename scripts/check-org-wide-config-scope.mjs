@@ -15,7 +15,7 @@ const schema = schemaFiles.map((file) => readFileSync(join(root, file), "utf8"))
 
 // Configuration tables with no subsidiary ownership column. A policy table
 // added here is derived into every route that writes it below.
-const policyTables = ["flows", "allocation_drivers"];
+const policyTables = ["flows", "allocation_drivers", "project_types"];
 for (const table of policyTables) {
   const declaration = new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? public\\.${table} \\(([\\s\\S]*?)\\n\\);`, "i").exec(schema);
   assert.ok(declaration, `governed org-wide config table ${table} has no generated schema declaration`);
@@ -79,6 +79,18 @@ for (const file of routes) {
     // token in save-rate cannot stand in for end-rate or delete-rate.
     for (const action of ["save-rate", "end-rate", "delete-rate"]) {
       assertLaborRateMutationGuard(source, action);
+    }
+  }
+  if (touched.includes("project_types")) {
+    // Project-type rows carry no subsidiary anchor, and each handler is an
+    // independent configuration mutation boundary. A guard in POST cannot
+    // authorize PATCH or archive.
+    for (const method of ["POST", "PATCH", "DELETE"]) {
+      const arm = handlerArm(source, method);
+      if (/\b(?:insert\s+into|update|delete\s+from)\s+(?:public\.)?project_types\b/i.test(arm)) {
+        assert.match(arm, /guardUnrestrictedScope\s*\(/,
+          `${file} writes org-wide project_types without a ${method} unrestricted-scope guard`);
+      }
     }
   }
   assert.match(source, /guardUnrestrictedScope\s*\(/,

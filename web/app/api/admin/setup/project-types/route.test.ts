@@ -25,7 +25,7 @@ interface RouteState {
   authz: {
     user: { orgId: string; id: string };
     permissions: Set<string>;
-    allowedSubsidiaryIds: null;
+    allowedSubsidiaryIds: string[] | null;
   } | null;
   today: string;
   projectTypeId: string;
@@ -99,6 +99,11 @@ const mockSources = new Map<string, string>([
         if (!state.authz) return new Response(null, { status: 403 })
         return state.authz
       }
+      export function guardUnrestrictedScope(authz) {
+        return authz.allowedSubsidiaryIds === null
+          ? null
+          : Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
+      }
     `,
   ],
   [
@@ -169,6 +174,7 @@ const mockSources = new Map<string, string>([
       export function canonicalizeProjectFinancialProfile(profile) {
         return structuredClone(profile)
       }
+      export function assertValidProjectFinancialProfile(_profile) {}
       export async function publishProjectFinancialProfileInTransaction(_tx, input) {
         state.publishInputs.push({ effectiveFrom: input.effectiveFrom, reason: input.reason })
         const parsedDate = new Date(input.effectiveFrom + 'T00:00:00.000Z')
@@ -335,4 +341,19 @@ test("PATCH rejects an invalid financial date without publishing or auditing par
     // production an impossible date used to escape to a raw Postgres throw.
     assert.equal(routeState.txCalls, 0);
   }
+});
+
+test("restricted setup admins cannot publish org-wide project financial policy", async () => {
+  resetState();
+  routeState.authz!.allowedSubsidiaryIds = ["subsidiary-a"];
+  const versionsBefore = structuredClone(routeState.versions);
+  const auditsBefore = structuredClone(routeState.audits);
+
+  const response = await PATCH(patchRequest(patchBody()));
+
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
+  assert.equal(routeState.txCalls, 0);
+  assert.deepEqual(routeState.versions, versionsBefore);
+  assert.deepEqual(routeState.audits, auditsBefore);
 });

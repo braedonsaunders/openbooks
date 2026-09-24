@@ -9,7 +9,7 @@ import {
 } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
@@ -56,6 +56,8 @@ function validateInvoicingProfile(profile: unknown, billingMethod: unknown): str
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
@@ -123,6 +125,8 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const today = await businessToday(orgId)
   const feature = await guardProjectsFeature(orgId)
@@ -265,6 +269,8 @@ export async function PATCH(req: Request) {
 export async function DELETE(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const scopeDenied = guardUnrestrictedScope(gate)
+  if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
