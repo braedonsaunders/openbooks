@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { documentRevisionSql } from "../records/revision.ts";
 import { add, div, normalizeDecimal } from "../money/money.ts";
 import type {
@@ -23,7 +24,6 @@ import type {
  */
 
 export const DRIVER_KEY_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const NATIVE_MEASURES = [
@@ -113,10 +113,6 @@ function uuidArray(ids: string[]) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID_RE.test(value);
 }
 
 /** Driver keys are org-unique slugs (same rule as allocation rule keys). */

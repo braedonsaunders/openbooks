@@ -39,6 +39,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { sourceClient } from "../sync/source-client.ts";
 import { resolveProjectFinancials } from "../projects/financials.ts";
@@ -80,11 +81,11 @@ const args = new Map(
 );
 
 const orgId = args.get("org") ?? process.env.TARGET_ORG;
-if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
+if (!isUuid(orgId)) {
   throw new Error("--org=<uuid> is required");
 }
 const connectionId = args.get("connection")?.trim() || null;
-if (connectionId && !/^[0-9a-f-]{36}$/i.test(connectionId)) {
+if (connectionId && !isUuid(connectionId)) {
   throw new Error("--connection must be a UUID");
 }
 const requestedSourceAccountingBook =

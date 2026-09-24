@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { parseBulkActionIds } from "../../../lib/api/bulk-ids.ts";
 
 /**
  * The AP capture inbox hides a capture when its vendor or PO sits outside the
@@ -115,13 +116,11 @@ test("ap-capture actions refuse a 36-hyphen id as not_found before a uuid bind",
   const src = source("actions/route.ts");
   assert.match(src, /parseBulkActionIds\(parsedBody\.data\)/, "the route must parse ids through the shared bulk parser");
   assert.match(src, /error === 'not_found' \? 404 : 400/, "not_found stays a 404, refusals stay 400");
-  const parse = source("../../../lib/api/bulk-ids.ts");
-  assert.match(parse, /import \{ isUuid \}/);
-  assert.match(parse, /if \(!ids\.every\(isUuid\)\)/);
-  assert.match(parse, /error: 'not_found'/);
-  assert.match(
-    parse,
-    /\[0-9a-f-\]\{36\}/,
-    "the 36-character collector must still name a dash string so it 404s instead of becoming invalid_action",
+  // Behavioural, against the real pure parser (never a double): a dash-only
+  // id is a named id, so it refuses as not_found — never dropped into
+  // invalid_action, never bound into a uuid column.
+  assert.deepEqual(
+    parseBulkActionIds({ action: "reject", ids: ["------------------------------------"] }),
+    { ok: false, error: "not_found" },
   );
 });

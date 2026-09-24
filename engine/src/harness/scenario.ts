@@ -4,6 +4,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, env, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money/money.ts";
 import { runUserSql } from "../platform/sqlapi.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Scenario / close harness — turns a migrated company into a verifiable golden
@@ -771,7 +772,7 @@ export async function runScenario(
       // predicate and the base-table policies must genuinely agree. (The
       // committed RLS red-test pins both this mechanism and the table half
       // with scratch orgs; this probe reuses them against live foreign rows.)
-      if (!/^[0-9a-f-]{36}$/i.test(foreign.id)) {
+      if (!isUuid(foreign.id)) {
         throw new Error("rls probe refused: foreign document id is not a UUID");
       }
       const seenView = await runUserSql(

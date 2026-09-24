@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
+import { isUuid } from '@/lib/list-params'
 
 /**
  * F3: ?requisition=new showed a raw UUID in the Employer field — the loader
@@ -69,7 +70,7 @@ test('the refusal names the remedy in every locale', () => {
     for (const section of ['recruiting', 'positions']) {
       const message = catalog[section]?.create?.noEmployer
       assert.ok(typeof message === 'string' && message.length > 0, `${locale}/${section}: noEmployer must be translated`)
-      assert.ok(!/^[0-9a-f-]{36}$/i.test(message), `${locale}/${section}: the refusal is words, never an id`)
+      assert.ok(!isUuid(message), `${locale}/${section}: the refusal is words, never an id`)
     }
   }
 })

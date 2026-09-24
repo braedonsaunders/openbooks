@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { getConnection, listConnections } from "./connection.ts";
 import { buildSource } from "./connection.ts";
 import { preflightFullSync, runFullMigration, runSync } from "./sync.ts";
@@ -19,7 +20,7 @@ const ORG_ID = orgIdx >= 0 ? argv[orgIdx + 1] : null;
 const outIdx = argv.indexOf("--out");
 const OUT_PATH = outIdx >= 0 ? argv[outIdx + 1] : null;
 
-if (!ORG_ID || !/^[0-9a-f-]{36}$/i.test(ORG_ID)) {
+if (!isUuid(ORG_ID)) {
   console.error("--org <uuid> is required; sync never guesses a tenant");
   process.exit(1);
 }

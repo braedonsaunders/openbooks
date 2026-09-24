@@ -18,6 +18,7 @@ import {
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
 import { AmbiguousListViewDefaultError } from "./list-view-default.ts";
+import { isUuid as isUuidShape } from "../list-params";
 export { AmbiguousListViewDefaultError };
 
 /**
@@ -72,8 +73,10 @@ export interface ResolvedListView {
   available: ListViewRow[];
 }
 
+// The UUID shape lives in lib/list-params (single source of truth); this
+// guard only adds the unknown-input narrowing the resolve callers need.
 function isUuid(v: unknown): v is string {
-  return typeof v === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+  return typeof v === "string" && isUuidShape(v);
 }
 
 /** Merge live custom field defs into a stored layout (auto-append unplaced). */

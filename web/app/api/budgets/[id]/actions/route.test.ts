@@ -68,7 +68,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:list-params',
     `
-      export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value) }
+      export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
     `,
   ],
   [
@@ -188,7 +188,7 @@ if (process.env.VITEST) {
     }),
   }))
   vi['mock']('../../../../../lib/list-params', () => ({
-    isUuid: (value: unknown) => typeof value === 'string' && /^[0-9a-f-]{36}$/i.test(value),
+    isUuid: (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
   }))
   vi['mock']('../../../../../lib/subsidiaries', () => ({
     subsidiaryVisibleFilter: (column: unknown, allowed: Scope) => {

@@ -23,7 +23,7 @@ function opts(actorId: string) {
 }
 
 test("a malformed posted-change actorId is refused before any sync work", async () => {
-  // 36 dashes pass the old /^[0-9a-f-]{36}$/ check and would flow into the
+  // 36 dashes pass the old 36-char-shape check and would flow into the
   // automatic-correction audit attribution as if it were a user.
   await assert.rejects(
     runSync(probeSource, TRIGGERED_BY, opts("-".repeat(36))),

@@ -26,6 +26,7 @@ import {
   listGoals,
   listMyReviews,
 } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
+import { isUuid } from '@/lib/list-params'
 import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
 import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
@@ -650,7 +651,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
   let exit: PerformancePageData['exit'] = null
   let missingExit: string | null = null
   if (exitEmploymentId) {
-    if (/^[0-9a-f-]{36}$/i.test(exitEmploymentId) && (canRetain || canManage)) {
+    if (isUuid(exitEmploymentId) && (canRetain || canManage)) {
       try {
         const exits = await listExitRecords({
           orgId: authz.user.orgId,

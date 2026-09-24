@@ -5,6 +5,7 @@ import { registerHooks } from 'node:module'
 import { createServer, type IncomingMessage, type Server } from 'node:http'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
+import { isUuid } from '@/lib/list-params'
 
 // documents.ts and bills.ts are server-only services (they pull the engine's
 // DB pool and the flows engine), so the runner cannot import them as-is. The
@@ -989,7 +990,7 @@ test(
         ))
         assert.equal(result.replayed, false)
         const outcome = result.result as { correctionId: string; voidStatus: string }
-        assert.match(outcome.correctionId, /^[0-9a-f-]{36}$/)
+        assert.ok(isUuid(outcome.correctionId), 'expected a real UUID correction id')
         assert.equal(outcome.voidStatus, 'voided')
 
         const committed = await withOrgContext(org.orgId, async () => (await db.execute<{

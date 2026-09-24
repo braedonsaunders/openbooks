@@ -17,6 +17,7 @@ import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import { streamOrgBackup, type BackupExportStats } from "./backup.ts";
 import { BACKUP_FORMAT_VERSION } from "./format.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 type StreamBackup = (orgId: string, sink: Writable) => Promise<BackupExportStats>;
 type WriteManifest = (path: string, contents: string) => Promise<void>;
@@ -50,7 +51,7 @@ export async function runLocalBackup({
   streamBackup = streamOrgBackup,
   writeManifest = persistManifest,
 }: LocalBackupOptions) {
-  if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
+  if (!isUuid(orgId)) {
     throw new Error("--org=<uuid> is required");
   }
   if (!out?.startsWith("/")) throw new Error("--out=<absolute-path> is required");

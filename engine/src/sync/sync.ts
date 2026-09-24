@@ -1,6 +1,7 @@
 import { desc, sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, schema, withOrg } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { regenerateGlImpactTx } from "../ledger/posting-replay.ts";
@@ -69,18 +70,6 @@ import type { ComputedTaxComponent } from "../tax/tax.ts";
  *    delete (settlements released, immutable audit tombstone) — the source
  *    stays the system of record; only controller-dispositioned refs are kept
  */
-
-/**
- * House UUID check: the 8-4-4-4-12 hex shape — 36 dashes-and-hex is not a
- * UUID. Every actor attribution in this file goes through it, so a
- * malformed id can never flow into audit rows as if it were a user.
- */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function isUuid(value: unknown): value is string {
-  return typeof value === "string" && UUID_RE.test(value);
-}
 
 export interface SyncResult {
   runId: string;

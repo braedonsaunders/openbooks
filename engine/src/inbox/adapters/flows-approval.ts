@@ -28,6 +28,7 @@ import {
 } from "../../flows/approval-worklist.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { toWorklistScope } from "../guard.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
@@ -141,8 +142,8 @@ export const flowsApprovalAdapter: InboxAdapter = {
       if (actionKey === "delegate") {
         // The reason carries the delegatee user id: "user:<uuid>: <note>".
         // delegateGate resolves the target; the note stays in the comment.
-        const match = /^user:([0-9a-f-]{36})\s*:?\s*(.*)$/i.exec(reason ?? "");
-        if (!match) {
+        const match = /^user:(\S+)\s*:?\s*(.*)$/i.exec(reason ?? "");
+        if (!match || !isUuid(match[1])) {
           throw new Error(
             "delegation needs a recipient — give the reason as the colleague taking over, then the handover note",
           );

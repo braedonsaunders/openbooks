@@ -19,6 +19,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import {
   applyTimeTicketLinks,
   classifyTimeTicketLinks,
@@ -37,7 +38,7 @@ const args = new Map(
     }),
 );
 const orgId = args.get("org");
-if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
+if (!isUuid(orgId)) {
   throw new Error("--org=<uuid> is required");
 }
 const inputPath = args.get("input") ?? "/tmp/ns-time-ticket.json";
@@ -49,7 +50,7 @@ const apply = args.get("apply") === "true";
 const excludeProjectConflicts =
   args.get("exclude-project-conflicts") === "true";
 const actorArg = args.get("actor")?.trim() ?? "";
-if (actorArg && !/^[0-9a-f-]{36}$/i.test(actorArg)) {
+if (actorArg && !isUuid(actorArg)) {
   throw new Error("--actor must be a user UUID from the target organization");
 }
 const reason = args.get("reason")?.trim() ?? "";

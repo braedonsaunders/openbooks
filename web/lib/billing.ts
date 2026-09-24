@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal } from './exact-decimal'
+import { isUuid } from '@/lib/list-params'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPricingError, resolveRateAdjustments, resolveRateAdjustmentWindow, type AdjustmentCharge, type RateAdjustmentWindow } from './rate-adjustments'
 import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 import { roundCurrencyMoney } from '@openbooks/engine/src/fx/currencies.ts'
@@ -406,7 +407,7 @@ export async function generateInvoiceFromBillingRequest(
       if (req.basis === 'time_selection' && selected !== null && selected.length === 0) {
         throw new BillingError('This billing request was created with an empty time selection — cancel it and create a new request selecting the entries to bill')
       }
-      if (selected?.some((id) => typeof id !== 'string' || !/^[0-9a-f-]{36}$/i.test(id))) {
+      if (selected?.some((id) => typeof id !== 'string' || !isUuid(id))) {
         throw new BillingError('A time entry selected on this billing request is invalid — cancel it and create a new request with valid entry ids')
       }
       // A FINAL invoice without an explicit source selection closes the job and
@@ -519,7 +520,7 @@ export async function generateInvoiceFromBillingRequest(
       // the selection and must never veto something named outright.
       const sourceDocumentIds: string[] = Array.isArray((req.custom ?? {}).sourceDocumentIds)
         ? ((req.custom as { sourceDocumentIds: string[] }).sourceDocumentIds ?? [])
-            .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+            .filter((id) => typeof id === 'string' && isUuid(id))
         : []
       const ticketScope = ticketIds.length
         ? sql` and dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`

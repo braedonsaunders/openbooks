@@ -1,5 +1,6 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../close/period-policy.ts";
 import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.ts";
@@ -194,7 +195,7 @@ export async function regenerateGlImpactTx(
       "a source correction reason between 10 and 500 characters is required",
     );
   }
-  if (!/^[0-9a-f-]{36}$/i.test(correction.actorId)) {
+  if (!isUuid(correction.actorId)) {
     throw new PostingError(
       "an attributable organization user is required for a source correction",
     );

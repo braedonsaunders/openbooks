@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
 import {
@@ -869,7 +870,7 @@ export async function assertPayrollRemittanceBillCurrent(
     || !/^\d{4}-\d{2}-\d{2}$/.test(marker.from)
     || !/^\d{4}-\d{2}-\d{2}$/.test(marker.to)
     || marker.from > marker.to
-    || (marker.filing_account_id !== null && !/^[0-9a-f-]{36}$/i.test(marker.filing_account_id))
+    || (marker.filing_account_id !== null && !isUuid(marker.filing_account_id))
   ) {
     throw new PayrollError("payroll remittance bill has an invalid source marker");
   }

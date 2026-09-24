@@ -14,6 +14,7 @@ import {
   type BankDirectoryEntry,
   type FeedProvider,
 } from "../../../../../lib/bank-directory";
+import { isUuid } from "../../../../../lib/list-params";
 
 interface Connection {
   id: string;
@@ -364,7 +365,11 @@ function SftpConnectionCard({
   // initial state (never setState-in-effect); the scroll stays in the effect.
   const [highlightedScheduleId] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    return /[?&]schedule=([0-9a-fA-F-]{36})/.exec(window.location.search)?.[1] ?? null;
+    const raw = /[?&]schedule=([^&]+)/.exec(window.location.search)?.[1] ?? null;
+    // The UUID shape lives in lib/list-params (single source of truth): a
+    // non-uuid schedule value highlights nothing instead of ringing a row
+    // that can never match.
+    return raw && isUuid(raw) ? raw : null;
   });
   useEffect(() => {
     if (!highlightedScheduleId) return;

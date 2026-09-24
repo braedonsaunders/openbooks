@@ -1,5 +1,6 @@
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
+import { isUuid } from './list-params'
 import type {
   RuleCriteria,
   RuleOutcome,
@@ -62,8 +63,10 @@ function exactDecimalSumExceeds(values: number[], limit: number): boolean {
   return parts.reduce((acc, p) => acc + at(p), 0n) > at(limitPart)
 }
 
+// The UUID shape lives in lib/list-params (single source of truth); this
+// guard only adds the unknown-input narrowing the rule-tree callers need.
 function isUuidLike(v: unknown): v is string {
-  return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+  return typeof v === 'string' && isUuid(v)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

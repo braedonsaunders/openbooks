@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { isUuid } from "@/lib/list-params";
 
 // Native line provenance: conversion evidence (purchaseOrderLineId,
 // convertedFrom) and AP-capture evidence used to be stripped by every
@@ -807,7 +808,7 @@ test("posted correction copies source line identities as new replacement lines",
         { orgId: org.orgId, userId, source: "ui" },
       ),
     );
-    assert.match(created.id, /^[0-9a-f-]{36}$/);
+    assert.ok(isUuid(created.id), "expected a real UUID document id");
     const replacement = (
       await withOrgContext(
         org.orgId,
