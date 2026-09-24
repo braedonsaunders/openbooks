@@ -12,10 +12,13 @@ import { NextResponse } from 'next/server'
 interface ExportState {
   filingRow: Record<string, unknown> | null
   captured: Record<string, unknown> | null
+  allowedSubsidiaryIds: string[] | null
+  scopeChecks: Array<string | null>
+  filingReads: number
 }
 
 const stateKey = Symbol.for('openbooks.filing-export-route-test')
-const exportState: ExportState = { filingRow: null, captured: null }
+const exportState: ExportState = { filingRow: null, captured: null, allowedSubsidiaryIds: null, scopeChecks: [], filingReads: 0 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = exportState
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksFilingExportNextResponse =
   NextResponse
@@ -43,9 +46,17 @@ const mockSources = new Map<string, string>([
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const NextResponse = globalThis.openbooksFilingExportNextResponse
       export async function guardPermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
+        }
       }
-      export function guardSubsidiaryScope() { return null }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        state.scopeChecks.push(subsidiaryId ?? null)
+        if (authz.allowedSubsidiaryIds === null) return null
+        if (subsidiaryId !== null && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
     `,
   ],
   ['mock:list-params', `export function isUuid() { return true }`],
@@ -63,7 +74,10 @@ const mockSources = new Map<string, string>([
           // still relabels from orgs therefore reprints USD, never the frozen
           // EUR — and a route that selects the frozen columns gets them.
           if (text.includes('select base_currency from orgs')) return { rows: [{ base_currency: 'USD' }] }
-          if (text.includes('from tax_filings')) return { rows: state.filingRow ? [state.filingRow] : [] }
+          if (text.includes('from tax_filings')) {
+            state.filingReads += 1
+            return { rows: state.filingRow ? [state.filingRow] : [] }
+          }
           throw new Error('unexpected database query: ' + text.slice(0, 120))
         },
       }
@@ -172,6 +186,9 @@ function get(filingId: string): Promise<Response> {
 test('export denominates frozen boxes in the frozen currency, not the org base', async () => {
   exportState.filingRow = frozenRow()
   exportState.captured = null
+  exportState.allowedSubsidiaryIds = null
+  exportState.scopeChecks = []
+  exportState.filingReads = 0
 
   const response = await get(randomUUID())
 
@@ -186,6 +203,34 @@ test('export denominates frozen boxes in the frozen currency, not the org base',
     frozenRow().translation,
     'a translated view reprints its frozen translation evidence',
   )
+  assert.deepEqual(exportState.scopeChecks, [SUB])
+})
+
+test('a restricted filer can export its own in-scope frozen filing', async () => {
+  exportState.filingRow = frozenRow()
+  exportState.allowedSubsidiaryIds = [SUB]
+  exportState.scopeChecks = []
+  exportState.filingReads = 0
+
+  const response = await get(randomUUID())
+
+  assert.equal(response.status, 200)
+  assert.equal(exportState.filingReads, 1, 'load the org-bound filing before checking its frozen scope')
+  assert.deepEqual(exportState.scopeChecks, [SUB])
+})
+
+test('a restricted filer cannot export a frozen filing covering an out-of-scope subsidiary', async () => {
+  const outOfScope = '22222222-2222-4222-8222-222222222222'
+  exportState.filingRow = { ...frozenRow(), subsidiary_ids: [SUB, outOfScope] }
+  exportState.allowedSubsidiaryIds = [SUB]
+  exportState.scopeChecks = []
+  exportState.filingReads = 0
+
+  const response = await get(randomUUID())
+
+  assert.equal(response.status, 404)
+  assert.equal(exportState.filingReads, 1)
+  assert.deepEqual(exportState.scopeChecks, [SUB, outOfScope])
 })
 
 test('a pre-snapshot filing without frozen currency is refused with the remedy', async () => {
@@ -209,6 +254,8 @@ test('a v1 row reprints with no invented registration identity', async () => {
     registration_number: null,
   }
   exportState.captured = null
+  exportState.allowedSubsidiaryIds = null
+  exportState.scopeChecks = []
 
   const response = await get(randomUUID())
 
