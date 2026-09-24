@@ -67,6 +67,24 @@ async function getPay(party: string, side: string): Promise<PayBody> {
   return await response.json() as PayBody;
 }
 
+async function postFxEntry(org: { orgId: string; bookId: string; periodId: string }, sub: string, party: string, date: string, debit: string, credit: string, amount: string, currency: string, openItem: boolean, docId: string | null) {
+  const entryId = randomUUID();
+  const debitLine = randomUUID();
+  const creditLine = randomUUID();
+  await withBypassContext(() => db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin,source_document_id)
+    values (${entryId},${org.orgId},${org.bookId},${sub},${entryId},${date},${org.periodId},'draft','manual',${docId})`));
+  await withBypassContext(() => db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,party_id,is_open_item,amount,currency,txn_amount,fx_rate,posting_date)
+    values (${debitLine},${org.orgId},${entryId},1,${debit},${sub},${party},${openItem},${amount},${currency},${amount},1,${date}),
+           (${creditLine},${org.orgId},${entryId},2,${credit},${sub},${party},${openItem},-${amount}::numeric,${currency},-${amount}::numeric,1,${date})`));
+  await withBypassContext(() => db.execute(sql`update journal_entries set status='posted' where id=${entryId}`));
+  return { entryId, debitLine, creditLine };
+}
+
+async function applyFx(orgId: string, actor: string, fromLine: string, toLine: string, amount: string, currency: string, date: string) {
+  await withBypassContext(() => db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by)
+    values (${orgId},${fromLine},${toLine},${amount},${amount},${amount},${currency},${amount},${currency},1,'same_currency','entity-fx-test',${date},${actor})`));
+}
+
 test('entity drill counts distinct payment documents with weighted days', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const { org, actor } = await setup();
   try {
@@ -130,3 +148,47 @@ for (const side of ['ar', 'ap'] as const) {
     }
   });
 }
+
+/**
+ * An org-wide party settling in two functional frames: 100 CAD paid in the
+ * CAD subsidiary plus 100 USD paid in the USD subsidiary reads 235 CAD at a
+ * 1.35 spot — never 200. Each application leg translates at its own source
+ * date through the flow path, the same path recent payments already use.
+ */
+test('entity drill translates totalPaid across functional frames', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, actor } = await setup();
+  try {
+    const usdSub = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usdSub},${org.orgId},${org.subsidiaryId},'US Co','USD','US','{}'::jsonb,false,true,'{}'::jsonb)`));
+    await withBypassContext(() => db.execute(sql`insert into currencies (code, name, minor_units) values ('USD','US Dollar',2) on conflict (code) do nothing`));
+    await withBypassContext(() => db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId},'USD','CAD','2026-07-01','spot',1.35,'manual')`));
+
+    const party = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${party},${org.orgId},'customer','Two Frame Customer',null)`));
+
+    for (const leg of [
+      { sub: org.subsidiaryId, currency: 'CAD', billDate: '2026-07-01', payDate: '2026-07-10', number: 'PAY-CAD' },
+      { sub: usdSub, currency: 'USD', billDate: '2026-07-05', payDate: '2026-07-12', number: 'PAY-USD' },
+    ]) {
+      const bill = await postFxEntry(org, leg.sub, party, leg.billDate, org.accounts.ar, org.accounts.revenue, '100', leg.currency, true, null);
+      const docId = randomUUID();
+      await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total,fx_rate)
+        values (${docId},${org.orgId},'customer_payment',${leg.number},${leg.payDate},${leg.payDate},${party},${leg.sub},${leg.currency},'100',0,'100','1')`));
+      const pay = await postFxEntry(org, leg.sub, party, leg.payDate, org.accounts.bank, org.accounts.ar, '100', leg.currency, true, docId);
+      await withBypassContext(() => db.execute(sql`update documents set status='posted',posted_entry_id=${pay.entryId},posting_period_id=${org.periodId} where id=${docId}`));
+      await applyFx(org.orgId, actor, pay.creditLine, bill.debitLine, '100', leg.currency, leg.payDate);
+    }
+
+    await withOrgContext(org.orgId, async () => {
+      const body = await getPay(party, 'ar');
+      assert.equal(body.paymentCount, 2);
+      assert.equal(body.avgDays, 8);
+      assert.equal(Number(body.totalPaid), 235);
+    });
+  } finally {
+    state.user = null;
+    await dropScratchOrg(org.orgId);
+  }
+});
