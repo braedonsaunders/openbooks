@@ -150,3 +150,113 @@ test("period-end FX revaluation posts every subsidiary with distinct journal num
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("revaluation without a following period refuses instead of posting an unreversed pair", { skip: !DB }, async () => {
+  // The reversal is mandatory: with no next period to land it in, the run
+  // must record the missing period by name and post nothing — never a
+  // half pair with no mirror.
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`
+      update orgs
+         set settings = settings || jsonb_build_object('controlAccounts',
+              coalesce(settings->'controlAccounts', '{}'::jsonb) ||
+              jsonb_build_object('fxUnrealizedGainLoss', ${org.accounts.fxGainLoss}::text))
+       where id = ${org.orgId}`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.3700000000')`);
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+         period_id, status, origin, created_by, updated_by)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+        'USD-SEED-NOREV', '2026-07-10', ${org.periodId},
+        'draft', 'manual', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id,
+         amount, currency, txn_amount, fx_rate, is_open_item)
+      values
+        (${org.orgId}, ${entryId}, 1, ${org.accounts.ar},
+         ${org.subsidiaryId}, 136.00, 'USD', 100.00, 1.36, false),
+        (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing},
+         ${org.subsidiaryId}, -136.00, 'CAD', -136.00, 1, false)`);
+
+    await db.execute(sql`
+      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
+       where org_id = ${org.orgId} and entry_number = 'USD-SEED-NOREV'`);
+
+    const run = await runRevaluation(org.orgId, org.periodId, actorId);
+    assert.deepEqual(run.posted, [], "nothing posts without a reversal period");
+    assert.equal(run.problems.length, 1);
+    assert.match(run.problems[0]!, /no following accounting period/);
+    assert.match(run.problems[0]!, /generate periods and re-run/);
+    const journals = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries
+       where org_id = ${org.orgId} and origin = 'fx_revaluation'`)).rows[0]!.n;
+    assert.equal(journals, 0, "the refused run writes no adjustment pair");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a same-date direct quote outranks its inverted leg", { skip: !DB }, async () => {
+  // The rate union must be deterministic: with USD→CAD 1.37 and CAD→USD
+  // 0.72 (implying 1.3889) on the same as_of, the direct leg wins and the
+  // 100 USD exposure carried at 1.36 restates by exactly +1.00 CAD. If the
+  // inverted leg won, the delta would be +2.8889 instead.
+  const org = await createScratchOrg();
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
+    coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true}'::jsonb) where id=${org.orgId}`);
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+      select ${randomUUID()}, ${org.orgId}, 2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, fiscal_calendar_id
+        from accounting_periods where id = ${org.periodId}`);
+    await db.execute(sql`
+      update orgs
+         set settings = settings || jsonb_build_object('controlAccounts',
+              coalesce(settings->'controlAccounts', '{}'::jsonb) ||
+              jsonb_build_object('fxUnrealizedGainLoss', ${org.accounts.fxGainLoss}::text))
+       where id = ${org.orgId}`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${org.orgId}, 'USD', 'CAD', '2026-07-31', 'spot', '1.3700000000'),
+             (${org.orgId}, 'CAD', 'USD', '2026-07-31', 'spot', '0.7200000000')`);
+    const entryId = randomUUID();
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+         period_id, status, origin, created_by, updated_by)
+      values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+        'USD-SEED-TIE', '2026-07-10', ${org.periodId},
+        'draft', 'manual', ${actorId}, ${actorId})`);
+    await db.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id,
+         amount, currency, txn_amount, fx_rate, is_open_item)
+      values
+        (${org.orgId}, ${entryId}, 1, ${org.accounts.ar},
+         ${org.subsidiaryId}, 136.00, 'USD', 100.00, 1.36, false),
+        (${org.orgId}, ${entryId}, 2, ${org.accounts.clearing},
+         ${org.subsidiaryId}, -136.00, 'CAD', -136.00, 1, false)`);
+
+    await db.execute(sql`
+      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId}
+       where org_id = ${org.orgId} and entry_number = 'USD-SEED-TIE'`);
+
+    const run = await runRevaluation(org.orgId, org.periodId, actorId);
+    assert.deepEqual(run.problems, []);
+    assert.equal(run.posted.length, 1);
+    assert.equal(run.posted[0]!.netDelta, "1.0000", "the direct 1.37 quote prices the restatement");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

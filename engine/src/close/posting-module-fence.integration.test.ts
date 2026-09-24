@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
-import { DOCUMENT_KINDS, closeModuleForDocument } from "./period-policy.ts";
+import {
+  CloseError,
+  DOCUMENT_KINDS,
+  assertPeriodModulesOpen,
+  closeModuleForDocument,
+} from "./period-policy.ts";
 import { setPeriodLockState } from "./period-locks.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { PostingError } from "../ledger/posting-contracts.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -220,14 +226,219 @@ test("a module close waits for an in-flight posting window", { skip: !DB }, asyn
   }
 });
 
-test("postDocument holds the period fence before its module check", () => {
-  // Structural companion to the window test above: the one-line engine half
-  // of this fix is fence-before-check inside postDocument. If the fence call
-  // moves below the module validation (or disappears), the race reopens while
-  // the behavioral test above keeps passing against its replica prologue.
-  const source = readFileSync(new URL("../ledger/posting-commit.ts", import.meta.url), "utf8");
-  const fence = source.indexOf("period_posting_fence(${doc.orgId}, ${period.id}, ${book.id})");
-  assert.ok(fence >= 0, "postDocument must acquire the shared period fence");
-  const check = source.indexOf("assertPeriodModulesOpen(tx, {");
-  assert.ok(check > fence, "the fence must be held before the authoritative module check");
+async function approvedCustomerInvoice(
+  orgId: string,
+  subsidiaryId: string,
+  customerId: string,
+  revenueAccount: string,
+  date: string,
+  actor: string,
+): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`insert into documents
+    (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date,
+     currency, fx_rate, subtotal, tax_total, total, created_by)
+    values (${id}, ${orgId}, 'customer_invoice', 'draft', ${id}, ${subsidiaryId},
+      ${customerId}, ${date}, 'CAD', 1, 100, 0, 100, ${actor})`);
+  await db.execute(sql`insert into document_lines
+    (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
+    values (${orgId}, ${id}, 1, ${revenueAccount}, 1, 100, 100, 0, 100)`);
+  await db.execute(sql`update documents set status = 'approved' where id = ${id}`);
+  return id;
+}
+
+function postingDeps(org: { accounts: { ar: string; ap: string; bank: string } }): {
+  control: { ar: string; ap: string; bank: string };
+} {
+  return { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } };
+}
+
+test("soft-close fences posting in the engine and storage twins alike", { skip: !DB }, async () => {
+  // periodLockBlocksPosting (engine) and period_module_blocks_write
+  // (storage) must agree that soft_closed blocks: soft-close is a
+  // first-class Setup action, and either twin going blind reopens posting
+  // into a reviewing period.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "gl",
+      state: "soft_closed",
+      actorId: actor,
+      reason: "fence probe: soft-close the period",
+    });
+    await assert.rejects(
+      assertPeriodModulesOpen(db, {
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        subsidiaryIds: [org.subsidiaryId],
+        modules: ["gl"],
+      }),
+      (error: unknown) =>
+        error instanceof CloseError && /GL is closed for this period/.test(error.message),
+      "the engine twin refuses a soft-closed period",
+    );
+    const blocked = (await db.execute<{ blocked: boolean }>(sql`
+      select public.period_module_blocks_write(
+        ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
+      ) as blocked
+    `)).rows[0]!.blocked;
+    assert.equal(blocked, true, "the storage twin blocks a soft-closed period");
+    // Control: reopening clears both twins together.
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "gl",
+      state: "open",
+      actorId: actor,
+      reason: "fence probe: reopen the period",
+    });
+    await assertPeriodModulesOpen(db, {
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      subsidiaryIds: [org.subsidiaryId],
+      modules: ["gl"],
+    });
+    const unblocked = (await db.execute<{ blocked: boolean }>(sql`
+      select public.period_module_blocks_write(
+        ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId}, 'gl', false
+      ) as blocked
+    `)).rows[0]!.blocked;
+    assert.equal(unblocked, false, "an open period passes both twins");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("posting into a closed period refuses at the engine boundary with the module named", { skip: !DB }, async () => {
+  // The app-boundary module check must fire before any journal exists: the
+  // refusal carries the engine's module message, not the storage trigger's.
+  // (If the check call disappeared, the post would still fail — but at the
+  // storage guard with its message instead.)
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+    const invoiceId = await approvedCustomerInvoice(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      org.accounts.revenue,
+      org.date,
+      actor,
+    );
+    await setPeriodLockState({
+      orgId: org.orgId,
+      periodId: org.periodId,
+      bookId: org.bookId,
+      module: "ar",
+      state: "closed",
+      actorId: actor,
+      reason: "fence probe: AR closed",
+    });
+    await assert.rejects(
+      postDocument(invoiceId, postingDeps(org)),
+      (error: unknown) =>
+        error instanceof PostingError && /AR is closed for this period/.test(error.message),
+      "the engine check refuses the closed module by name",
+    );
+    const entries = (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from journal_entries where org_id = ${org.orgId}
+    `)).rows[0]!.n;
+    assert.equal(entries, 0, "the refused post wrote no journal");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a module close landing mid-posting waits for the fence: the started posting wins", { skip: !DB }, async () => {
+  // The real postDocument prologue holds the shared period fence across its
+  // module check and journal insert (not a replica): a closer arriving
+  // mid-post must block on the fence, then commit after the posting wins.
+  // If the fence call disappeared from the prologue, the closer would sail
+  // through while the post sleeps and the post would fail.
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Fence prover", "admin");
+    const invoiceId = await approvedCustomerInvoice(
+      org.orgId,
+      org.subsidiaryId,
+      org.customerId,
+      org.accounts.revenue,
+      org.date,
+      actor,
+    );
+    await db.execute(sql.raw(`create or replace function public.probe_posting_sleep()
+      returns trigger language plpgsql as $$ begin perform pg_sleep(4); return NEW; end $$`));
+    await db.execute(sql.raw(`create trigger probe_posting_sleep_trigger
+      before insert on journal_entries for each statement
+      execute function public.probe_posting_sleep()`));
+    try {
+      const posting = postDocument(invoiceId, postingDeps(org));
+      // Gate the closer on the posting provably sleeping inside the journal
+      // trigger (fence held): a fixed delay would race a loaded database,
+      // where the closer could commit before the posting even starts.
+      let asleep = false;
+      for (let attempt = 0; attempt < 1000; attempt += 1) {
+        const sleeping = await db.execute<{ n: number }>(sql`select count(*)::int as n
+          from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and wait_event_type = 'Timeout'
+           and wait_event = 'PgSleep'`);
+        if (sleeping.rows[0]!.n > 0) {
+          asleep = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(asleep, "the posting must reach its trigger sleep with the fence held");
+      const closer = setPeriodLockState({
+        orgId: org.orgId,
+        periodId: org.periodId,
+        bookId: org.bookId,
+        module: "ar",
+        state: "closed",
+        actorId: actor,
+        reason: "fence probe: AR close races the posting",
+      });
+      const settled = Promise.allSettled([closer]);
+      let sightings = 0;
+      for (let attempt = 0; attempt < 300; attempt += 1) {
+        const waiting = await db.execute<{ n: number }>(sql`select count(*)::int as n
+          from pg_stat_activity
+         where datname = current_database()
+           and pid <> pg_backend_pid()
+           and wait_event_type = 'Lock'
+           and wait_event = 'advisory'`);
+        if (waiting.rows[0]!.n > 0) sightings += 1;
+        if (sightings >= 3) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      assert.ok(sightings >= 3, "the AR close must wait on the posting's shared fence");
+      await posting;
+      const [closeResult] = await settled;
+      assert.equal(closeResult!.status, "fulfilled", JSON.stringify(closeResult));
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from documents where id = ${invoiceId}
+      `)).rows[0]!.status;
+      assert.equal(status, "posted", "the started posting wins the race");
+      const lock = (await db.execute<{ state: string }>(sql`
+        select state from period_locks
+         where org_id = ${org.orgId} and period_id = ${org.periodId}
+           and book_id = ${org.bookId} and module = 'ar'
+      `)).rows[0]!.state;
+      assert.equal(lock, "closed", "the closer commits once the posting releases the fence");
+    } finally {
+      await db.execute(sql.raw(`drop trigger if exists probe_posting_sleep_trigger on journal_entries`));
+      await db.execute(sql.raw(`drop function if exists public.probe_posting_sleep()`));
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
 });
