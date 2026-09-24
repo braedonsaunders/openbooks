@@ -1739,9 +1739,6 @@ export function PartyDrawer({
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
         {tab === 'pulse' && role === 'customer' && !isPlaceholderName ? <PartyPulseSection partyId={String(p.id)} /> : null}
-        {tab === 'relationship' && showRelationshipTab ? (
-          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} />
-        ) : null}
         {tab === 'activities' && role === 'customer' && canReadActivities ? (
           <ActivitySublist partyId={String(p.id)} canManage={canManageActivities} />
         ) : null}
@@ -1790,19 +1787,6 @@ export function PartyDrawer({
               />
             )}
           </section>
-        ) : null}
-
-        {tab === 'accounting' && (!role || role === 'vendor') ? (
-          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
-        ) : null}
-
-        {tab === 'compliance' && showComplianceTab && compliance ? (
-          <VendorCompliancePanel
-            partyId={String(p.id)}
-            initialClassId={compliance.classId}
-            classes={compliance.classes}
-            canManage={canManageCompliance}
-          />
         ) : null}
 
         {tab === 'employment' && showEmploymentTab && hrm ? (
@@ -1917,6 +1901,31 @@ export function PartyDrawer({
         ) : null}
       </Drawer>
       </TabContent>
+      {/* Relationship, vendor bank accounts, and vendor compliance hold
+          unsaved edits in local component state, so they stay mounted once
+          visited (hidden, outside the remounting TabContent) instead of
+          discarding input on every tab switch (F3-96). Mounting stays lazy:
+          an unvisited tab issues no requests until first opened. */}
+      {showRelationshipTab && keptTabs.has('relationship') ? (
+        <div hidden={tab !== 'relationship'} className="space-y-7 p-1">
+          <PartyRelationshipSection partyId={String(p.id)} canManage={canManageCrmAccounts} />
+        </div>
+      ) : null}
+      {(!role || role === 'vendor') && keptTabs.has('accounting') ? (
+        <div hidden={tab !== 'accounting'} className="space-y-7 p-1">
+          <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} multiCurrency={multiCurrency} />
+        </div>
+      ) : null}
+      {showComplianceTab && compliance && keptTabs.has('compliance') ? (
+        <div hidden={tab !== 'compliance'} className="space-y-7 p-1">
+          <VendorCompliancePanel
+            partyId={String(p.id)}
+            initialClassId={compliance.classId}
+            classes={compliance.classes}
+            canManage={canManageCompliance}
+          />
+        </div>
+      ) : null}
       {/* Employee compensation tabs stay mounted once visited (hidden, outside
           the remounting TabContent) so switching tabs never discards their
           local edits — the payroll profile editor and wage-rate form hold
