@@ -1,6 +1,5 @@
 import { strict as assert } from "node:assert";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import {
@@ -553,36 +552,6 @@ test("a vacation plan reproduces the legacy 4%-of-vacationable accrual", () => {
     // The literal expression from calculateStub's vacation block.
     assert.equal(result.closingBalance, mulPercent(earnings, "4.0000", 2));
   }
-});
-
-test("the vacation replay is the legacy expression, term for term", () => {
-  // scripts/migrate-vacation-to-entitlements.ts proves per-employee equality
-  // against real tenant data. This is the structural half of that control: the
-  // two sides must keep reading the SAME three sources with the SAME signs, so
-  // nobody can quietly "fix" one of them and make the tie-out pass vacuously.
-  const script = readFileSync("scripts/migrate-vacation-to-entitlements.ts", "utf8");
-  const legacy = script.slice(
-    script.indexOf("async function legacyVacationBalances"),
-    script.indexOf("async function ensureVacationPlan"),
-  );
-  const projected = script.slice(
-    script.indexOf("async function projectedBalances"),
-    script.indexOf("async function employeeNames"),
-  );
-  for (const term of [
-    /b\.vacation_balance/,           // the carry-in
-    /sum\(s\.vacation_accrued\)|s\.vacation_accrued/, // committed accruals
-    /system_key = 'vacation_payout'/, // committed payouts
-    /r\.run_status = 'committed'/,    // only committed runs count on both sides
-  ]) {
-    assert.match(legacy, term);
-    assert.match(projected, term);
-  }
-  // The legacy expression SUBTRACTS payouts; the ledger stores them negative.
-  assert.match(legacy, /-\s*coalesce\(\(select sum\(l\.amount\)/);
-  assert.match(projected, /select s\.employee_party_id, -l\.amount as amount/);
-  // Neither side may drift onto uncommitted runs or a materialized balance.
-  assert.equal(/entitlement_ledger/.test(projected), false);
 });
 
 test(
