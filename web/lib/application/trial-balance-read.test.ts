@@ -1,14 +1,56 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
+import type { ApplicationContext } from "./context";
+import { ApplicationError } from "./errors";
 
-const SOURCE = readFileSync(new URL("./trial-balance-read.ts", import.meta.url), "utf8");
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === "server-only") return { shortCircuit: true, url: "data:text/javascript,export {}" };
+    return next(specifier, context);
+  },
+});
 
-test("trial balance reuses the statement reader and keeps money exact", () => {
-  assert.match(SOURCE, /from "\.\.\/reports\/statements"/);
-  assert.match(SOURCE, /trialBalance\(/);
-  assert.match(SOURCE, /normalizeMoneyValue/);
-  assert.doesNotMatch(SOURCE, /\bnum\(/);
-  assert.match(SOURCE, /asOf must be YYYY-MM-DD/);
-  assert.match(SOURCE, /reports\.read/);
+const { listApplicationTrialBalance } = await import("./trial-balance-read");
+
+function context(permissions: string[], allowedSubsidiaryIds: Set<string> | null): ApplicationContext {
+  return {
+    authz: {
+      user: { orgId: "trial-balance-unit-test" },
+      permissions: new Set(permissions),
+      allowedSubsidiaryIds,
+    },
+    source: "api",
+    requestId: "trial-balance-unit-request",
+    apiKeyId: null,
+  } as unknown as ApplicationContext;
+}
+
+test("trial balance refuses callers without reports.read before reading the ledger", async () => {
+  await assert.rejects(
+    listApplicationTrialBalance(context(["gl.read"], null), { asOf: "2026-07-31" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "forbidden"
+      && error.status === 403
+      && error.details?.permission === "reports.read",
+  );
+});
+
+test("trial balance refuses an empty subsidiary scope before reading the ledger", async () => {
+  await assert.rejects(
+    listApplicationTrialBalance(context(["reports.read"], new Set()), { asOf: "2026-07-31" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "forbidden"
+      && error.details?.permission === "subsidiary.restricted",
+  );
+});
+
+test("trial balance refuses a malformed as-of date", async () => {
+  await assert.rejects(
+    listApplicationTrialBalance(context(["reports.read"], null), { asOf: "2026-7-31" }),
+    (error: unknown) => error instanceof ApplicationError
+      && error.code === "invalid_input"
+      && error.status === 422
+      && error.message === "asOf must be YYYY-MM-DD",
+  );
 });
