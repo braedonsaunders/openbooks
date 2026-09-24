@@ -126,9 +126,9 @@ async function toDTO(exec: SqlExecutor, orgId: string, row: SurveyRow): Promise<
   };
 }
 
-async function loadSurvey(exec: SqlExecutor, orgId: string, surveyId: string): Promise<SurveyRow> {
+async function loadSurvey(exec: SqlExecutor, orgId: string, surveyId: string, forUpdate = false): Promise<SurveyRow> {
   const row = (await exec.execute<SurveyRow>(sql`
-    ${SURVEY_COLS} where org_id = ${orgId} and id = ${surveyId}
+    ${SURVEY_COLS} where org_id = ${orgId} and id = ${surveyId} ${forUpdate ? sql`for update` : sql``}
   `)).rows[0];
   if (!row) throw new HrmSurveysError("NOT_FOUND", "survey is not visible in this organization");
   return row;
@@ -535,7 +535,7 @@ export async function closeSurvey(input: {
     // respondent in scope — unanimity, not the read slice.
     const allowed = await requireHrmSurveysManage(db, input.orgId, input.actorId);
     await assertSurveysFeature(db, input.orgId);
-    const survey = await loadSurvey(db, input.orgId, input.surveyId);
+    const survey = await loadSurvey(db, input.orgId, input.surveyId, true);
     assertSurveyMutationScope(await loadSurveyInviteeEmployers(db, input.orgId, survey.id), allowed);
     if (survey.status !== "open") {
       throw new HrmSurveysError("REFUSED", `only open surveys close — this one is ${survey.status}`);

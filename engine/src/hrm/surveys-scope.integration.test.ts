@@ -213,13 +213,14 @@ test("H-SURVEYS: the anonymity minimum applies after scoping", { skip: !DB }, as
     assert.equal(full.responded, 2);
     assert.equal(full.comments[0]!.texts.length, 2);
 
-    // A-scoped: one in-scope response clears nothing — no comments, and
-    // the lone A response is the only aggregate input.
+    // A-scoped: the one-response slice is below the disclosure floor, so
+    // counts and aggregates are suppressed along with comments.
     const scoped = await getSurveyResults({ orgId: org.orgId, actorId: managerA, surveyId: draft.id });
-    assert.equal(scoped.invitations, 1);
-    assert.equal(scoped.responded, 1);
+    assert.equal(scoped.suppressed, true);
+    assert.equal(scoped.invitations, 0);
+    assert.equal(scoped.responded, 0);
     assert.equal(scoped.comments.length, 0, "a scoped slice of one de-anonymizes nobody");
-    assert.equal(scoped.enps?.responses, 1);
+    assert.equal(scoped.enps, null);
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -266,10 +267,10 @@ test("H-SURVEYS: confidential responses attribute through the sealed link", { sk
       assert.equal(full.responded, 2);
       assert.equal(full.comments[0]!.texts.length, 2);
       const scoped = await getSurveyResults({ orgId: org.orgId, actorId: managerA, surveyId: draft.id });
-      assert.equal(scoped.invitations, 1);
-      assert.equal(scoped.responded, 1);
-      assert.equal(scoped.enps?.responses, 1);
-      assert.equal(scoped.enps?.score, 100);
+      assert.equal(scoped.suppressed, true);
+      assert.equal(scoped.invitations, 0);
+      assert.equal(scoped.responded, 0);
+      assert.equal(scoped.enps, null);
       assert.equal(scoped.comments.length, 0, "one in-scope response clears no minimum of two");
     } finally {
       await dropScratchOrg(org.orgId);
