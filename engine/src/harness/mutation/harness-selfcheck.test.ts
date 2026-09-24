@@ -11,7 +11,8 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -55,18 +56,20 @@ function runMoneyTests(dir: string): { pass: number; fail: number; status: numbe
   return { pass: pick("pass"), fail: pick("fail"), status: run.status };
 }
 
-test("a deliberately planted money.ts mutant is reported as killed", () => {
-  const dir = mkdtempSync(join(tmpdir(), "openbooks-mutation-selfcheck-"));
+test("a deliberately planted money.ts mutant is reported as killed", async () => {
+  const fixtureDir = mkdtempSync(join(tmpdir(), "openbooks-mutation-selfcheck-"));
   try {
     const nodeModules = join(REPO_ROOT, "node_modules");
-    if (existsSync(nodeModules)) symlinkSync(nodeModules, join(dir, "node_modules"));
-    const pristine = readFileSync(join(REPO_ROOT, "engine", "src", "money", "money.ts"), "utf8");
-    const suite = readFileSync(join(REPO_ROOT, "engine", "src", "money", "money.test.ts"), "utf8");
+    if (existsSync(nodeModules)) symlinkSync(nodeModules, join(fixtureDir, "node_modules"));
+    copyFileSync(join(REPO_ROOT, "engine", "src", "money", "money.ts"), join(fixtureDir, "money.ts"));
+    copyFileSync(join(REPO_ROOT, "engine", "src", "money", "money.test.ts"), join(fixtureDir, "money.test.ts"));
+    const pristine = await readFile(join(fixtureDir, "money.ts"), "utf8");
+    const suite = await readFile(join(fixtureDir, "money.test.ts"), "utf8");
 
     // The pristine copy must pass in this setup, or a kill below proves nothing.
-    writeFileSync(join(dir, "money.ts"), pristine);
-    writeFileSync(join(dir, "money.test.ts"), suite);
-    const baseline = runMoneyTests(dir);
+    writeFileSync(join(fixtureDir, "money.ts"), pristine);
+    writeFileSync(join(fixtureDir, "money.test.ts"), suite);
+    const baseline = runMoneyTests(fixtureDir);
     assert.ok(baseline.pass > 0, `pristine money.test.ts must pass in temp (status ${baseline.status})`);
     assert.equal(baseline.fail, 0);
 
@@ -80,13 +83,13 @@ test("a deliberately planted money.ts mutant is reported as killed", () => {
         m.mutatedSource.includes("decimalPlaces !== 0 ? whole!"),
     );
     assert.ok(planted, "operator set must produce the formatMoney guard-flip mutant in money.ts");
-    writeFileSync(join(dir, "money.ts"), planted.mutatedSource);
-    const mutated = runMoneyTests(dir);
+    writeFileSync(join(fixtureDir, "money.ts"), planted.mutatedSource);
+    const mutated = runMoneyTests(fixtureDir);
     assert.ok(
       mutated.fail > 0,
       `planted mutant must be killed (pass=${mutated.pass} fail=${mutated.fail} status=${mutated.status})`,
     );
   } finally {
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(fixtureDir, { recursive: true, force: true });
   }
 });
