@@ -50,6 +50,12 @@
     "failedTitle": "このアプリを開けませんでした。",
     "failedHint": "更新してみてください。問題が続く場合は、管理者にお問い合わせください。"
   },
+  "bridge": {
+    "previewDraftRefusal": "ドラフトプレビューではバックエンドアクションを実行せず、ライブデータにもアクセスしません",
+    "unknownMethod": "不明なブリッジメソッド: {method}",
+    "callFailed": "ブリッジ呼び出しに失敗しました",
+    "callFailedWithStatus": "ブリッジ呼び出しに失敗しました (ステータス {status})"
+  },
   "runtime": {
     "notFoundTitle": "アプリが見つかりません",
     "notInstalled": "このアプリはインストールされていないか、有効なバージョンがありません。",

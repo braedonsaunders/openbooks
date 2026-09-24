@@ -50,6 +50,12 @@
     "failedTitle": "Não foi possível abrir este app.",
     "failedHint": "Tente atualizar. Se continuar acontecendo, entre em contato com seu administrador."
   },
+  "bridge": {
+    "previewDraftRefusal": "A prévia do rascunho não executa ações de backend nem acessa dados reais",
+    "unknownMethod": "Método de ponte desconhecido: {method}",
+    "callFailed": "A chamada de ponte falhou",
+    "callFailedWithStatus": "A chamada de ponte falhou (status {status})"
+  },
   "runtime": {
     "notFoundTitle": "Aplicativo não encontrado",
     "notInstalled": "Este aplicativo não está instalado ou não tem uma versão ativa.",

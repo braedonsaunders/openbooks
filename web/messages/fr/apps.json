@@ -50,6 +50,12 @@
     "failedTitle": "Impossible d’ouvrir cette application.",
     "failedHint": "Essayez d’actualiser la page. Si le problème persiste, contactez votre administrateur."
   },
+  "bridge": {
+    "previewDraftRefusal": "L’aperçu du brouillon n’exécute aucune action backend et n’accède pas aux données réelles",
+    "unknownMethod": "Méthode de pont inconnue : {method}",
+    "callFailed": "L’appel de pont a échoué",
+    "callFailedWithStatus": "L’appel de pont a échoué (statut {status})"
+  },
   "runtime": {
     "notFoundTitle": "Application introuvable",
     "notInstalled": "Cette application n'est pas installée ou n'a aucune version active.",
