@@ -36,7 +36,7 @@ import { CloseWizard } from '../../app/(app)/close/CloseWizard'
 import { NewScriptButton, ScriptDrawer } from '../../app/(app)/admin/scripts/ScriptDrawer'
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
-import { str, type WidgetRenderer } from './widget-props'
+import { num, str, type WidgetRenderer } from './widget-props'
 
 /** Admin setup and configuration adapters. Compose native components without changing their props or boundaries. */
 export const SETUP_WIDGETS = {
@@ -327,10 +327,10 @@ export const SETUP_WIDGETS = {
       badgeReady={props.badgeReady === true}
       progressLabel={str(props, 'progressLabel') ?? ''}
       progressOf={str(props, 'progressOf') ?? ''}
-      progressPercent={Number(props.progressPercent ?? 0)}
-      progressMin={Number(props.progressMin ?? 0)}
-      progressMax={Number(props.progressMax ?? 0)}
-      progressNow={Number(props.progressNow ?? 0)}
+      progressPercent={num(props, 'progressPercent') ?? 0}
+      progressMin={num(props, 'progressMin') ?? 0}
+      progressMax={num(props, 'progressMax') ?? 0}
+      progressNow={num(props, 'progressNow') ?? 0}
     />
   ),
   /** `state` is a closed complete | review | waiting vocabulary the loader

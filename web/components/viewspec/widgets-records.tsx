@@ -299,7 +299,18 @@ export const RECORDS_WIDGETS = {
    *  Absent fails closed. */
   'document-row-actions': (props) => {
     const kind = String(props.kind ?? '')
-    const namespace = DOC_KINDS[kind]?.permNamespace
+    const config = DOC_KINDS[kind]
+    // An unknown kind must refuse visibly and offer no actions (fail closed):
+    // the non-null assertion this replaces crashed the whole row, and through
+    // it the table, on the first unregistered kind.
+    if (!config) {
+      return (
+        <span role="alert" className="text-xs text-red-600 dark:text-red-400">
+          Unknown document kind &ldquo;{kind}&rdquo;
+        </span>
+      )
+    }
+    const namespace = config.permNamespace
     const namespaced = namespace === 'gl' ? props.canPostGl
       : namespace === 'ar' ? props.canPostAr
       : namespace === 'ap' ? props.canPostAp
@@ -308,7 +319,7 @@ export const RECORDS_WIDGETS = {
       <DocumentRowActions
         id={String(props.id ?? '')}
         status={String(props.status ?? '')}
-        config={DOC_KINDS[kind]!}
+        config={config}
         openHref={`${str(props, 'basePath') ?? ''}?doc=${String(props.id ?? '')}`}
         canPost={(namespaced ?? props.canPost) === true}
       />
