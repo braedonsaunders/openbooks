@@ -290,7 +290,7 @@ function patchRequest(url: string, body: unknown): Request {
     assert.deepEqual(routeState.calls, [
       {
         fn: "proposeLine",
-        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: 3, proposedRate: null, reason: null },
+        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: "3", proposedRate: null, reason: null },
       },
     ]);
     reset("hrm.compensation.approve");
@@ -327,13 +327,59 @@ function patchRequest(url: string, body: unknown): Request {
       [],
       "no malformed proposal reaches the service",
     );
-    // The canonical string converts to the engine's number contract.
+    // The canonical string reaches the engine as exact decimal text.
     const canonical = await lineRoute!.PATCH(patchRequest(url, { proposedPct: "3.50" }), params as never);
     assert.equal(canonical.status, 200);
     assert.deepEqual(routeState.calls, [
       {
         fn: "proposeLine",
-        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: 3.5, proposedRate: null, reason: null },
+        args: { orgId: "org-1", actorId: "user-1", lineId: LINE_ID, proposedPct: "3.5", proposedRate: null, reason: null },
+      },
+    ]);
+  });
+
+  test("JSON number compatibility uses canonical text and refuses beyond its six-place precision", async () => {
+    reset("hrm.compensation.read");
+    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+    const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
+    const compatible = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 3.5 }), params as never);
+    assert.equal(compatible.status, 200);
+    assert.deepEqual(routeState.calls[0]?.args, {
+      orgId: "org-1", actorId: "user-1", lineId: LINE_ID,
+      proposedPct: "3.5", proposedRate: null, reason: null,
+    });
+    const wholeNumber = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 1_234_567_890 }), params as never);
+    assert.equal(wholeNumber.status, 200);
+    assert.equal((routeState.calls[1]?.args as { proposedPct: string }).proposedPct, "1234567890");
+    const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct: 9_007_199_254.000002 }), params as never);
+    assert.equal(refused.status, 400);
+    assert.match(((await refused.json()) as { error: string }).error, /proposedPct must be a non-negative percent/);
+    assert.equal(routeState.calls.length, 2, "an imprecise JSON number never reaches compensation pricing");
+  });
+
+  test("line propose preserves high-magnitude percent text through the service boundary", async () => {
+    reset("hrm.compensation.read");
+    const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
+    const proposedPct = "9007199254.000001";
+    const response = await lineRoute!.PATCH(
+      patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
+        proposedPct,
+        reason: "precision regression",
+      }),
+      params as never,
+    );
+    assert.equal(response.status, 200);
+    assert.deepEqual(routeState.calls, [
+      {
+        fn: "proposeLine",
+        args: {
+          orgId: "org-1",
+          actorId: "user-1",
+          lineId: LINE_ID,
+          proposedPct,
+          proposedRate: null,
+          reason: "precision regression",
+        },
       },
     ]);
   });
