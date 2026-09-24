@@ -5,7 +5,7 @@ import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
 import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
 import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 
@@ -28,7 +28,7 @@ export async function POST(
     body.action === "close" || body.action === "attest"
       ? "close.approve"
       : "close.run";
-  const gate = await guardPermission(permission);
+  const gate = await guardFeaturePermission(permission, "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;

@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { addCloseEvidence } from "@openbooks/engine/src/close/tasks.ts";
 import { CloseError } from "@openbooks/engine/src/close/period-policy.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const gate = await guardPermission("close.run");
+  const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;

@@ -2,7 +2,7 @@ import { guardCloseScope } from "@/lib/close-scope";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -15,7 +15,7 @@ export async function GET(
   const { id } = await params;
   if (!isUuid(id))
     return NextResponse.json({ error: "invalid run id" }, { status: 400 });
-  const gate = await guardPermission("close.read");
+  const gate = await guardFeaturePermission("close.read", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;

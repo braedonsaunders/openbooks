@@ -22,7 +22,7 @@ const routeState: RouteState = { authz: null };
 
 const mockAuthz = `
   const state = globalThis[Symbol.for('openbooks.close-posting-periods-route-test')]
-  export async function guardPermission() {
+  export async function guardFeaturePermission() {
     if (!state.authz) return new Response(null, { status: 401 })
     return state.authz
   }
@@ -38,7 +38,7 @@ const hooks = registerHooks({
       };
     }
     if (
-      specifier === "../../../../lib/authz"
+      specifier === "../../../../lib/feature-gates"
       && context.parentURL?.includes("close/posting-periods")
     ) {
       return { url: "mock:authz", shortCircuit: true };
@@ -166,8 +166,8 @@ test("posting-periods route validates input and auth", { skip: !DB }, async () =
       }),
     );
     assert.equal(badCommit.status, 422);
-    // The unauthenticated path is the shared guardPermission (covered by the
-    // authz suite): the module mock cannot mint a NextResponse, so a plain
+    // The unauthenticated path is the shared guardFeaturePermission (covered
+    // by the authz suite): the module mock cannot mint a NextResponse, so a plain
     // Response 401 would not take the route's `instanceof NextResponse` arm.
   } finally {
     routeState.authz = null;
