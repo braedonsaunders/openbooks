@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { renderPdfDocument } from "@openbooks/pdf";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
+import { lockScopeRow } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { resolveWage, laborCostingSettings } from "../../projects/labor-costing.ts";
@@ -13,6 +14,7 @@ import {
   requireHrmCompensationManage,
   requireHrmCompensationManageOnEmployment,
   requireHrmCompensationReadOnEmployment,
+  lockEmploymentsForScope,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { resolveBandForScope } from "./bands.ts";
@@ -265,13 +267,7 @@ export async function generateStatement(query: {
   const actorId = requireActorId(query.actorId);
   const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
-    // Subject first: unknown and cross-org ids refuse before any grant is
-    // consulted, so the refusal can never confirm which half failed.
-    const employment = (await db.execute<{ worker_party_id: string }>(sql`
-      select worker_party_id from worker_employments where org_id = ${orgId} and id = ${employmentId}`)).rows[0];
-    if (!employment) {
-      throw employmentNotVisible();
-    }
+    let workerPartyId: string | undefined;
     // HR's manage path (grant plus employer-subsidiary scope), with a
     // fallback to the person's own employment through hrm.self.read so a
     // restricted manage grant never removes existing self-service;
@@ -279,22 +275,41 @@ export async function generateStatement(query: {
     // missing, foreign, and hidden employments are indistinguishable.
     // The gate runs before the payload build and the insert, so a
     // refused generate writes no statement row.
-    if (await actorHasPermission(db, orgId, actorId, "hrm.compensation.manage")) {
+    const manageGrant = await actorHasPermission(db, orgId, actorId, "hrm.compensation.manage");
+    const own = await isOwnEmployment(orgId, actorId, employmentId);
+    if (manageGrant) {
       try {
+        const [subject] = await lockEmploymentsForScope(db, [employmentId], { orgId, actorId });
+        if (!subject) throw employmentNotVisible();
+        workerPartyId = subject.workerPartyId;
         await scopedCompensationManage(orgId, actorId, employmentId);
       } catch (e) {
-        if (!(e instanceof CompensationError)) throw e;
-        if (await isOwnEmployment(orgId, actorId, employmentId)) {
+        if (!(e instanceof CompensationError) && !(e instanceof HrmAuthorizationError)) throw e;
+        if (own) {
           // Own employment outside a restricted manage lens: self-service.
+          const locked = await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
+          const employment = (await db.execute<{ worker_party_id: string }>(sql`
+            select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`)).rows[0];
+          if (!employment) throw employmentNotVisible();
+          workerPartyId = employment.worker_party_id;
         } else {
-          throw e;
+          throw employmentNotVisible();
         }
       }
-    } else if (!(await isOwnEmployment(orgId, actorId, employmentId))) {
+    } else if (own) {
+      // Self-service can intentionally reach the actor's own employment
+      // outside their HR lens; lock its canonical row before reading pay.
+      const locked = await lockScopeRow(db, orgId, "employment", employmentId, null, "update");
+      const employment = (await db.execute<{ worker_party_id: string }>(sql`
+        select worker_party_id from worker_employments where org_id = ${orgId} and id = ${locked.id}`)).rows[0];
+      if (!employment) throw employmentNotVisible();
+      workerPartyId = employment.worker_party_id;
+    } else {
       throw employmentNotVisible();
     }
+    if (!workerPartyId) throw employmentNotVisible();
     const today = await businessToday(orgId);
-    const payload = await buildPayload(orgId, employmentId, employment.worker_party_id, query.cycleId ?? null, today);
+    const payload = await buildPayload(orgId, employmentId, workerPartyId, query.cycleId ?? null, today);
     const row = (await db.execute<StatementRow>(sql`
       insert into hrm_comp_statements
         (org_id, employment_id, cycle_id, period_from, period_to, payload, generated_by, created_by, updated_by)
