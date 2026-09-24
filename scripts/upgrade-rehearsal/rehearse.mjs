@@ -195,6 +195,14 @@ async function seedSamples(sourceDir) {
  * A seeder is candidate-owned code that drives the SOURCE release's own engine
  * (it is copied into the source tree and runs on the source's runtime). It
  * must print `{"orgIds": [...]}` as its last JSON line.
+ *
+ * OPENBOOKS_DB_URL stays the runtime login: engine-mediated seeders provision
+ * through the source kernel, which establishes its own tenant context. Raw-SQL
+ * seeders that shape PRE-EXISTING orgs also get OPENBOOKS_SEED_DB_URL (the
+ * migration login this runner uses): with no tenant context RLS hides every
+ * org row from the runtime login, so raw SQL cannot even discover the org to
+ * seed into. Row content is login-independent; RLS gates visibility, never
+ * what is stored.
  */
 async function seedWithSeeder(step, sourceDir) {
   const file = join(HERE, "seeders", `${step.name}.ts`);
@@ -204,7 +212,7 @@ async function seedWithSeeder(step, sourceDir) {
   copyFileSync(file, join(targetDir, `${step.name}.ts`));
   const stdout = await run("seed", "npx", ["tsx", join("engine", "src", "upgrade-rehearsal-seed", `${step.name}.ts`), ...(step.args ?? [])], {
     cwd: sourceDir,
-    env: sourceRuntimeEnv(),
+    env: { ...sourceRuntimeEnv(), OPENBOOKS_SEED_DB_URL: requireEnv("OPENBOOKS_DB_URL") },
   });
   const orgIds = lastJsonLine("seed", stdout).orgIds;
   if (!Array.isArray(orgIds) || orgIds.length === 0) throw new PhaseRefusal("seed", `seeder ${step.name} reported no orgIds`);
