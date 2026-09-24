@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
+import { TAX_FILING_WRITE_PERMISSION } from '../../api/tax/filings/route'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import type { FilingHistoryRecord } from './FilingHistoryDrawer'
 import type { TaxFormOption, TaxHistoryRow } from './sections'
@@ -176,7 +177,7 @@ export async function loadTax(
       { key: 'history', label: t('tabs.history'), href: '/tax?tab=history', active: tab === 'history', count: badgeCount },
     ],
     forms: forms.map((form) => ({ ...form })),
-    canSave: can(authz, 'reports.create'),
+    canSave: can(authz, TAX_FILING_WRITE_PERMISSION),
     history: {
       searchPlaceholder: t('history.search'),
       statusLabel: t('history.statusLabel'),
@@ -220,7 +221,7 @@ export async function loadTax(
           remountKey: String(selected.id),
           filing: selected,
           closeHref,
-          canFile: can(authz, 'reports.create'),
+          canFile: can(authz, TAX_FILING_WRITE_PERMISSION),
         }
       : null,
   }

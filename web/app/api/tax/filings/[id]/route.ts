@@ -3,12 +3,13 @@ import { NextResponse } from 'next/server'
 import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { TAX_FILING_WRITE_PERMISSION } from '../route'
 
 export const runtime = 'nodejs'
 
 /** Record the one-way prepared → filed transition and government reference. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('compliance.file')
+  const gate = await guardPermission(TAX_FILING_WRITE_PERMISSION)
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
