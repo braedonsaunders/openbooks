@@ -70,9 +70,12 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
      limit 1`)).rows[0]?.name;
   assert.ok(employerName, "the persisted employer resolves to a name");
   const actions = catalog.recruiting.offerActions;
+  const offerStatus = catalog.recruiting.offerStatus;
   const offer: OfferDrawerData = {
     ...detail,
     employerName,
+    statusLabel: offerStatus[detail.status as keyof typeof offerStatus],
+    effectiveStatusLabel: offerStatus[detail.effectiveStatus as keyof typeof offerStatus],
     closeHref: "/hrm/recruiting",
     draft: null,
     labels: {
@@ -84,6 +87,15 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
   const cand = await getCandidateDetail({ orgId, actorId: adminId, candidateId: created.candidate.id });
   const candidate: CandidateDrawerData = {
     ...cand,
+    interviews: [{
+      id: "interview-readable-kind",
+      applicationId: application.id,
+      kind: "phone",
+      kindLabel: catalog.recruiting.interviewKind.phone,
+      scheduledAt: "2026-09-24T15:00:00Z",
+      status: "completed",
+      outcome: null,
+    }],
     closeHref: "/hrm/recruiting",
     labels: {
       applications: catalog.recruiting.drawer.applications,
@@ -113,6 +125,7 @@ test("the saved-offer drawer renders the persisted legal employer", { skip: !DB 
     // is proven by its parts: the translated label and the persisted name.
     assert.ok(html.includes(seed.offer.labels.employer), "the employer row label renders");
     assert.ok(html.includes(seed.offer.employerName), "the drawer shows the persisted legal employer name");
+    assert.ok(html.includes(seed.offer.statusLabel), "the drawer shows the translated offer status");
     assert.ok(html.includes(seed.offer.compensationAmount), "the terms render alongside the entity");
     assert.ok(!html.includes(seed.employerSubsidiaryId), "the raw employer id never renders — the name does");
     assert.ok(html.includes(seed.offer.labels.send), "the draft action island mounts with the stubbed router");
@@ -127,6 +140,8 @@ test("the candidate drawer renders its own visible title", { skip: !DB }, async 
     const html = renderToString(<CandidateDrawerBody detail={seed.candidate} />);
     assert.ok(html.includes(seed.candidate.displayName), "the candidate drawer is titled for its own record");
     assert.ok(html.includes("REQ-"), "the candidate's requisition link renders");
+    assert.ok(html.includes("Phone"), "the candidate's interview kind is rendered as a translated label");
+    assert.ok(!html.includes("phone"), "the raw interview kind code is not rendered");
   } finally {
     await seed.cleanup();
   }

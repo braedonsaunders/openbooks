@@ -703,6 +703,14 @@
       "hold": "Aguardar",
       "reject": "Recusar"
     },
+    "offerStatus": {
+      "draft": "Rascunho",
+      "sent": "Enviada",
+      "accepted": "Aceita",
+      "declined": "Recusada",
+      "withdrawn": "Retirada",
+      "expired": "Expirada"
+    },
     "offerCard": {
       "title": "Redigir as condições",
       "job": "Cargo",

@@ -703,6 +703,14 @@
       "hold": "Warten",
       "reject": "Ablehnen"
     },
+    "offerStatus": {
+      "draft": "Entwurf",
+      "sent": "Gesendet",
+      "accepted": "Angenommen",
+      "declined": "Abgelehnt",
+      "withdrawn": "Zurückgezogen",
+      "expired": "Abgelaufen"
+    },
     "offerCard": {
       "title": "Konditionen entwerfen",
       "job": "Stellenbezeichnung",

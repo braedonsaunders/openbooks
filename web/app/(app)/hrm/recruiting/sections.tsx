@@ -166,7 +166,7 @@ export interface CandidateDrawerData {
     status: string;
     appliedOn: string;
   }[]
-  interviews: readonly { id: string; applicationId: string; kind: string; scheduledAt: string; status: string; outcome: string | null }[]
+  interviews: readonly { id: string; applicationId: string; kind: string; kindLabel: string; scheduledAt: string; status: string; outcome: string | null }[]
   closeHref: string
   labels: { applications: string; interviews: string; email: string; phone: string; source: string }
   outcomeOptions: Option[]
@@ -185,7 +185,9 @@ export interface OfferDrawerData {
   compensationCurrency: string
   compensationBasis: string
   status: string
+  statusLabel: string
   effectiveStatus: string
+  effectiveStatusLabel: string
   sentAt: string | null
   expiresOn: string | null
   respondedAt: string | null
@@ -396,7 +398,7 @@ export function CandidateDrawerBody({ detail }: { detail: CandidateDrawerData })
           {detail.interviews.map((interview) => (
             <div key={interview.id} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {interview.kind} · {interview.scheduledAt} · {interview.status}
+                {interview.kindLabel} · {interview.scheduledAt} · {interview.status}
                 {interview.outcome ? ` · ${interview.outcome}` : null}
               </p>
               {interview.status === 'scheduled' ? (
@@ -429,8 +431,8 @@ export function OfferDrawerBody({ detail }: { detail: OfferDrawerData }) {
           {detail.compensationAmount} {detail.compensationCurrency} {detail.compensationBasis} · {detail.proposedStartOn}
         </p>
         <div className="mt-2 flex gap-1.5">
-          <Badge variant="outline">{detail.status}</Badge>
-          {detail.effectiveStatus !== detail.status ? <Badge variant="warning">{detail.effectiveStatus}</Badge> : null}
+          <Badge variant="outline">{detail.statusLabel}</Badge>
+          {detail.effectiveStatus !== detail.status ? <Badge variant="warning">{detail.effectiveStatusLabel}</Badge> : null}
         </div>
         {detail.declineReason ? (
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{detail.declineReason}</p>

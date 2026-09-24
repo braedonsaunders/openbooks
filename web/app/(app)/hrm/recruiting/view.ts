@@ -522,6 +522,10 @@ export async function loadRecruitingPage(
       const detail = await getCandidateDetail({ orgId: authz.user.orgId, actorId: authz.user.id, candidateId })
       candidate = {
         ...detail,
+        interviews: detail.interviews.map((interview) => ({
+          ...interview,
+          kindLabel: t(`recruiting.interviewKind.${interview.kind}`),
+        })),
         closeHref: recruitingHref(preservedParams, { status }),
         labels: {
           applications: t('recruiting.drawer.applications'),
@@ -560,6 +564,8 @@ export async function loadRecruitingPage(
       }
       offer = {
         ...detail,
+        statusLabel: t(`recruiting.offerStatus.${detail.status}`),
+        effectiveStatusLabel: t(`recruiting.offerStatus.${detail.effectiveStatus}`),
         employerName: offerEmployerName,
         closeHref: recruitingHref(preservedParams, { status }),
         draft: draftLabel
