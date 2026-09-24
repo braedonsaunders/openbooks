@@ -6,6 +6,7 @@ import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { mul, neg, roundMoney, sum } from "../money/money.ts";
 import { SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
 
@@ -196,19 +197,22 @@ const COA: [string, string, string, string][] = [
  * Signed base amounts: debit positive, credit negative; they sum to zero.
  * Scaled by `s` so different companies open at different sizes.
  */
-function openingBalanceLines(accounts: Record<string, string>, s: number): { accountId: string; amount: number }[] {
-  const raw: [string, number][] = [
-    ["bank", 420_000], ["bankSavings", 260_000], ["ar", 185_000], ["prepaid", 24_000],
-    ["prepaidInsurance", 31_000], ["inventory", 46_000], ["equipment", 640_000], ["vehicles", 185_000],
-    ["furniture", 92_000], ["leasehold", 128_000], ["accumDep", -286_000], ["deposits", 18_000],
-    ["ap", -98_000], ["creditCard", -21_500], ["accruedPayroll", -37_000], ["deferredRevenue", -52_000],
-    ["currentDebt", -60_000], ["lineOfCredit", -150_000], ["notesPayable", -430_000],
-    ["commonStock", -10_000], ["apic", -240_000],
+function openingBalanceLines(accounts: Record<string, string>, scale: string): { accountId: string; amount: string }[] {
+  const raw: [string, string][] = [
+    ["bank", "420000"], ["bankSavings", "260000"], ["ar", "185000"], ["prepaid", "24000"],
+    ["prepaidInsurance", "31000"], ["inventory", "46000"], ["equipment", "640000"], ["vehicles", "185000"],
+    ["furniture", "92000"], ["leasehold", "128000"], ["accumDep", "-286000"], ["deposits", "18000"],
+    ["ap", "-98000"], ["creditCard", "-21500"], ["accruedPayroll", "-37000"], ["deferredRevenue", "-52000"],
+    ["currentDebt", "-60000"], ["lineOfCredit", "-150000"], ["notesPayable", "-430000"],
+    ["commonStock", "-10000"], ["apic", "-240000"],
   ];
-  const lines = raw.map(([k, v]) => ({ accountId: accounts[k]!, amount: Math.round(v * s) }));
+  const lines = raw.map(([key, value]) => ({
+    accountId: accounts[key]!,
+    amount: roundMoney(mul(value, scale), 0),
+  }));
   // Retained Earnings is the balancing residual (prior years' accumulated result).
-  const residual = lines.reduce((acc, l) => acc + l.amount, 0);
-  lines.push({ accountId: accounts.retainedEarnings!, amount: -residual });
+  const residual = sum(lines.map((line) => line.amount));
+  lines.push({ accountId: accounts.retainedEarnings!, amount: neg(residual) });
   return lines;
 }
 
@@ -534,7 +538,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
   // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal
   // opens its own transaction; running it inside withBypass's pinned tx would nest and
   // prematurely commit). Scaled so different companies open at different sizes.
-  const scale = profile.openingScale ?? (profile.industry === "construction" ? 2.5 : 1);
+  const scale = profile.openingScale ?? (profile.industry === "construction" ? "2.5" : "1");
   await withOrgContext(world.orgId, () =>
     createScriptJournal(
       world.orgId,
@@ -543,7 +547,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
         documentDate: window.startDate,
         memo: "Opening balances",
         referenceNumber: "OPENING",
-        lines: openingBalanceLines(world.accounts, scale).map((l) => ({ accountId: l.accountId, amount: String(l.amount) })),
+        lines: openingBalanceLines(world.accounts, scale),
       },
       { post: true },
     ),

@@ -153,12 +153,12 @@ export const generalContractor: Profile = {
   baseCurrency: "USD",
   country: "US",
   coa: CONSTRUCTION_COA,
-  openingScale: 3.5,
+  openingScale: "3.5",
   workforce: CREW,
   jobPortfolio: PORTFOLIO,
   equipmentDayRate: 380,
   materialMarkup: 0.15,
-  officeOverheadPerMonth: 40000, // PMs, estimators, admin, yard — office staff beyond the field crew
+  officeOverheadPerMonth: "40000", // PMs, estimators, admin, yard — office staff beyond the field crew
   utilization: 0.82,
   vendors: [
     // Job-cost vendors — bills tagged to jobs via the AP cycle (real job costing).

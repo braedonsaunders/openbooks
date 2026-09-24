@@ -643,8 +643,8 @@ test("ob.journal.create is refused inside custom_gl_lines", { skip: !DB }, async
           return ob.journal.create({
             documentDate: "2026-07-15",
             lines: [
-              { accountId: ${JSON.stringify(org.accounts.freight)}, amount: 5 },
-              { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: -5 },
+              { accountId: ${JSON.stringify(org.accounts.freight)}, amount: "5" },
+              { accountId: ${JSON.stringify(org.accounts.clearing)}, amount: "-5" },
             ],
           });
         }`,

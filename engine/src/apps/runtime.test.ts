@@ -249,7 +249,7 @@ test("journal.create round-trips input and post flag through the adapter", async
   };
   const r = await runAppEndpoint({
     source: `function handler() {
-      var draft = ob.journal.create({ memo: "m", lines: [{ accountCode: "5100", amount: 10 }, { accountCode: "2100", amount: -10 }] });
+      var draft = ob.journal.create({ memo: "m", lines: [{ accountCode: "5100", amount: "10" }, { accountCode: "2100", amount: "-10" }] });
       var posted = ob.journal.create({ lines: [] }, { post: true });
       return { draft: draft, posted: posted };
     }`,

@@ -126,7 +126,7 @@ export interface Profile {
    */
   coa?: CoaEntry[];
   /** Opening-balance scale (1 = mid-size services firm; larger = bigger company). */
-  openingScale?: number;
+  openingScale?: string;
   /**
    * The company's cost structure, so the P&L is enterprise-realistic instead of
    * revenue-with-token-costs. Each month the environment books a payroll run and
@@ -176,13 +176,13 @@ export interface Profile {
   /** Fraction of subscribers billed monthly for usage overages (0-1). */
   usageBillingRate?: number;
   /** SaaS fixed monthly payroll/opex (R&D + S&M + G&A), booked month-end. */
-  saasMonthlyPayroll?: number;
+  saasMonthlyPayroll?: string;
   /**
    * Monthly office/PM/admin overhead payroll — the staff a contractor carries
    * beyond the billable field crew (project managers, estimators, admin, yard).
    * Booked as a month-end operating expense so company NET margin lands realistic
    * (~10%) even though job-level GROSS margin is high (~45%). */
-  officeOverheadPerMonth?: number;
+  officeOverheadPerMonth?: string;
   /** Target billable utilization (0-1): fraction of an 8h day a worker bills. */
   utilization?: number;
   /** ISO 4217-ish description only; the CoA is fixed but categories vary by use. */

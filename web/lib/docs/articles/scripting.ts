@@ -97,8 +97,8 @@ with nothing written.
 function main(ctx) {
   // ctx.kernelLines is frozen: read it, never mutate it.
   return { lines: [
-    { accountCode: '6100', amount: 42.50, departmentId: ctx.document.departmentId, memo: 'Program share' },
-    { accountCode: '1199', amount: -42.50, memo: 'Program share offset' },
+    { accountCode: '6100', amount: '42.50', departmentId: ctx.document.departmentId, memo: 'Program share' },
+    { accountCode: '1199', amount: '-42.50', memo: 'Program share offset' },
   ] }
 }
 ~~~
@@ -255,8 +255,8 @@ ob.journal.create({
   documentDate: ctx.document.date,
   memo: 'Accrual',
   lines: [
-    { accountCode: '6000', amount: 100.00, description: 'Expense' },  // debit +
-    { accountCode: '2100', amount: -100.00, description: 'Accrual' }, // credit -
+    { accountCode: '6000', amount: "100.00", description: 'Expense' },  // debit +
+    { accountCode: '2100', amount: "-100.00", description: 'Accrual' }, // credit -
   ],
 }, { post: true })
 ~~~

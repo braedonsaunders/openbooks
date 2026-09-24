@@ -28,8 +28,8 @@ test("a balanced two-line journal validates and normalizes", () => {
     documentDate: "2026-07-16",
     memo: "accrual",
     lines: [
-      { accountId: A, amount: 100.5, description: "debit side" },
-      { accountId: B, amount: -100.5 },
+      { accountId: A, amount: "100.5", description: "debit side" },
+      { accountId: B, amount: "-100.5" },
     ],
   });
   assert.equal(v.documentDate, "2026-07-16");
@@ -82,8 +82,8 @@ test("account codes are accepted in place of ids", () => {
   const v = validateJournalInput({
     documentDate: "2026-07-16",
     lines: [
-      { accountCode: "5100", amount: 10 },
-      { accountCode: "2100", amount: -10 },
+      { accountCode: "5100", amount: "10" },
+      { accountCode: "2100", amount: "-10" },
     ],
   });
   assert.equal(v.lines[0]!.accountCode, "5100");
@@ -91,36 +91,36 @@ test("account codes are accepted in place of ids", () => {
 
 test("an unbalanced journal is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 100 }, { accountId: B, amount: -99.99 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "100" }, { accountId: B, amount: "-99.99" }] }),
     (e: Error) => e instanceof JournalWriteError && /not balanced/.test(e.message),
   );
 });
 
 test("fewer than 2 lines is refused", () => {
-  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 0 }] }), /at least 2 lines/);
+  assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }] }), /at least 2 lines/);
 });
 
 test("zero and non-numeric amounts are refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 0 }, { accountId: B, amount: 0 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "0" }, { accountId: B, amount: "0" }] }),
     /nonzero number/,
   );
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: -1 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "abc" }, { accountId: B, amount: "-1" }] }),
     /nonzero number/,
   );
 });
 
 test("a line without any account reference is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ amount: 5 }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ amount: "5" }, { accountId: B, amount: "-5" }] }),
     /accountId or accountCode required/,
   );
 });
 
 test("a malformed accountId is refused", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: "nope", amount: 5 }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: "nope", amount: "5" }, { accountId: B, amount: "-5" }] }),
     /invalid accountId/,
   );
 });
@@ -129,19 +129,19 @@ test("malformed department/project ids are refused, never silently dropped", () 
   // A mistyped dimension used to validate to null, posting the line without
   // its dimension. Fail closed like accountId instead.
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 5, departmentId: "not-a-uuid" }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "5", departmentId: "not-a-uuid" }, { accountId: B, amount: "-5" }] }),
     (e: Error) => e instanceof JournalWriteError && /invalid departmentId/.test(e.message),
   );
   assert.throws(
-    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: 5, projectId: "also-bogus" }, { accountId: B, amount: -5 }] }),
+    () => validateJournalInput({ documentDate: "2026-07-16", lines: [{ accountId: A, amount: "5", projectId: "also-bogus" }, { accountId: B, amount: "-5" }] }),
     (e: Error) => e instanceof JournalWriteError && /invalid projectId/.test(e.message),
   );
   // Well-formed ids pass through; absent/empty stays null.
   const v = validateJournalInput({
     documentDate: "2026-07-16",
     lines: [
-      { accountId: A, amount: 5, departmentId: A, projectId: B },
-      { accountId: B, amount: -5 },
+      { accountId: A, amount: "5", departmentId: A, projectId: B },
+      { accountId: B, amount: "-5" },
     ],
   });
   assert.equal(v.lines[0]!.departmentId, A);
@@ -152,11 +152,11 @@ test("malformed department/project ids are refused, never silently dropped", () 
 
 test("bad dates are refused; a missing date is refused rather than defaulted to UTC today", () => {
   assert.throws(
-    () => validateJournalInput({ documentDate: "07/16/2026", lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
+    () => validateJournalInput({ documentDate: "07/16/2026", lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
     /invalid documentDate/,
   );
   assert.throws(
-    () => validateJournalInput({ lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
+    () => validateJournalInput({ lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
     /documentDate is required/,
   );
 });
@@ -167,21 +167,21 @@ test("impossible calendar dates are refused, never passed to the database", () =
   // 500-class failure) instead of a named JournalWriteError.
   for (const documentDate of ["2024-02-30", "2023-02-29", "2024-04-31", "2024-13-01", "0000-01-01"]) {
     assert.throws(
-      () => validateJournalInput({ documentDate, lines: [{ accountId: A, amount: 1 }, { accountId: B, amount: -1 }] }),
+      () => validateJournalInput({ documentDate, lines: [{ accountId: A, amount: "1" }, { accountId: B, amount: "-1" }] }),
       (e: Error) => e instanceof JournalWriteError && /invalid documentDate/.test(e.message),
       `expected ${documentDate} to be refused`,
     );
   }
 });
 
-test("4dp rounding keeps a float-noise journal balanced", () => {
-  // 0.1 + 0.2 - 0.3 = 5.55e-17 in floats; must still count as balanced.
+test("exact decimal journal lines preserve a balanced sum", () => {
+  // Decimal text must not carry IEEE-754 drift into the balance check.
   const v = validateJournalInput({
     documentDate: "2026-07-16",
     lines: [
-      { accountId: A, amount: 0.1 },
-      { accountId: A, amount: 0.2 },
-      { accountId: B, amount: -0.3 },
+      { accountId: A, amount: "0.1" },
+      { accountId: A, amount: "0.2" },
+      { accountId: B, amount: "-0.3" },
     ],
   });
   assert.equal(v.totalDebits, "0.3000");
@@ -200,7 +200,7 @@ test("posting-rule control accounts load employeePayable via shared helper", () 
 });
 
 test("line cap is enforced", () => {
-  const lines = Array.from({ length: 201 }, (_, i) => ({ accountId: A, amount: i % 2 === 0 ? 1 : -1 }));
+  const lines = Array.from({ length: 201 }, (_, i) => ({ accountId: A, amount: i % 2 === 0 ? "1" : "-1" }));
   assert.throws(() => validateJournalInput({ documentDate: "2026-07-16", lines }), /too many lines/);
 });
 
@@ -240,8 +240,8 @@ test("a forced post:true failure commits zero documents or lines — no orphan d
           documentDate: "2031-01-15",
           memo: "orphan probe",
           lines: [
-            { accountId: org.accounts.bank, amount: 25 },
-            { accountId: org.accounts.adjustment, amount: -25 },
+            { accountId: org.accounts.bank, amount: "25" },
+            { accountId: org.accounts.adjustment, amount: "-25" },
           ],
         },
         { post: true },
@@ -268,8 +268,8 @@ test("an actor-less scheduled script posts under explicit system provenance", { 
         documentDate: org.date,
         memo: "scheduled accrual",
         lines: [
-          { accountId: org.accounts.deferred, amount: 40 },
-          { accountId: org.accounts.recognized, amount: -40 },
+          { accountId: org.accounts.deferred, amount: "40" },
+          { accountId: org.accounts.recognized, amount: "-40" },
         ],
       },
       { post: true },
@@ -316,8 +316,8 @@ test("a scheduled null-actor post:true that fails approval routing is rejected w
           documentDate: org.date,
           memo: "scheduled accrual",
           lines: [
-            { accountId: org.accounts.deferred, amount: 40 },
-            { accountId: org.accounts.recognized, amount: -40 },
+            { accountId: org.accounts.deferred, amount: "40" },
+            { accountId: org.accounts.recognized, amount: "-40" },
           ],
         },
         { post: true },
@@ -353,8 +353,8 @@ test("a foreign-organization line department is refused with a domain error and 
           documentDate: orgA.date,
           memo: "foreign dept probe",
           lines: [
-            { accountId: orgA.accounts.bank, amount: 25, departmentId: deptB },
-            { accountId: orgA.accounts.adjustment, amount: -25 },
+            { accountId: orgA.accounts.bank, amount: "25", departmentId: deptB },
+            { accountId: orgA.accounts.adjustment, amount: "-25" },
           ],
         },
         {},
@@ -386,8 +386,8 @@ test("every UUID segment accepts the full a-f hex range", () => {
     const v = validateJournalInput({
       documentDate: "2026-07-16",
       lines: [
-        { accountId, amount: 5 },
-        { accountId: B, amount: -5 },
+        { accountId, amount: "5" },
+        { accountId: B, amount: "-5" },
       ],
     });
     assert.equal(v.lines[0]!.accountId, accountId, accountId);
@@ -438,8 +438,8 @@ test("memo, reference, and description caps truncate at their documented widths"
     memo: `m${"e".repeat(2000)}`,
     referenceNumber: `r${"e".repeat(100)}`,
     lines: [
-      { accountId: A, amount: 5, description: `d${"e".repeat(500)}` },
-      { accountId: B, amount: -5 },
+      { accountId: A, amount: "5", description: `d${"e".repeat(500)}` },
+      { accountId: B, amount: "-5" },
     ],
   });
   assert.equal(v.memo, `m${"e".repeat(1999)}`);

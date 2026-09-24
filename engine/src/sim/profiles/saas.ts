@@ -121,14 +121,14 @@ export const saasCompany: Profile = {
   baseCurrency: "USD",
   country: "US",
   coa: SAAS_COA,
-  openingScale: 2.0,
+  openingScale: "2.0",
   subscriptionPlans: PLANS,
   subscribers: SUBSCRIBERS,
   usageBillingRate: 0.25,
   // Payroll (R&D + S&M + G&A) is a software company's dominant cost and is FIXED
   // monthly (not revenue-pegged) — the SaaS driver books it at month-end so annual
   // up-front billings don't distort the burn.
-  saasMonthlyPayroll: 640000,
+  saasMonthlyPayroll: "640000",
   vendors: [
     { name: "AWS", termDays: 30, expenseCategories: ["hostingCogs"], billMin: 18000, billMax: 60000 },
     { name: "Datadog Observability", termDays: 30, expenseCategories: ["hostingCogs"], billMin: 3000, billMax: 12000 },

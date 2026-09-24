@@ -20,8 +20,8 @@ function postingSource(date: string): string {
       documentDate: ${JSON.stringify(date)},
       memo: "sched1 occurrence probe",
       lines: [
-        { accountCode: "5100", amount: 25 },
-        { accountCode: "2000", amount: -25 },
+        { accountCode: "5100", amount: "25" },
+        { accountCode: "2000", amount: "-25" },
       ],
     });
   }`;

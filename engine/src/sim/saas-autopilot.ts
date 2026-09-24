@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { addDays, dayOfMonth, isMonthEnd } from "./manifest.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
+import { add, cmp, mulPercent, neg } from "../money/money.ts";
 import { runDueSubscriptions, changeSubscription } from "../billing/subscription-billing.ts";
 import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue/recognition.ts";
 import { runDunningForOrg } from "../receivables/dunning.ts";
@@ -72,11 +73,11 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       res.recognized = rec.posted;
     } catch (e) { console.error(`[saas ${today}] recognition skipped: ${(e as Error).message}`); }
 
-    const payroll = profile.saasMonthlyPayroll ?? 0;
-    if (payroll > 0 && a.bank && a.rdExpense && a.smExpense && a.gaExpense) {
-      const rd = Math.round(payroll * 0.5);
-      const sm = Math.round(payroll * 0.3);
-      const ga = payroll - rd - sm;
+    const payroll = profile.saasMonthlyPayroll ?? "0";
+    if (cmp(payroll, "0") > 0 && a.bank && a.rdExpense && a.smExpense && a.gaExpense) {
+      const rd = mulPercent(payroll, "50", 2);
+      const sm = mulPercent(payroll, "30", 2);
+      const ga = add(payroll, neg(add(rd, sm)));
       await createScriptJournal(
         world.orgId,
         world.actors.controller,
@@ -88,7 +89,7 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
             { accountId: a.rdExpense!, amount: rd, description: "R&D payroll" },
             { accountId: a.smExpense!, amount: sm, description: "Sales & marketing" },
             { accountId: a.gaExpense!, amount: ga, description: "G&A" },
-            { accountId: a.bank!, amount: -payroll, description: "Payroll paid" },
+            { accountId: a.bank!, amount: neg(payroll), description: "Payroll paid" },
           ],
         },
         { post: true },
