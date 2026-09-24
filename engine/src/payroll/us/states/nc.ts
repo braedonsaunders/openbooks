@@ -248,17 +248,26 @@ export function ncSupplementalFlat(payDate: string, supplemental: string): strin
 
 function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const rates = ncRatesForPayDate(input.payDate);
+  const isNonresidentAlien = certificateFlag(input.certificate, "nonresident_alien");
 
   // NC-4 EZ line 3 / NC-4 NRA: the employee certifies no liability, or claims
   // the Servicemembers Civil Relief Act military-spouse exemption.
   if (certificateFlag(input.certificate, "exempt")) {
+    if (isNonresidentAlien) {
+      throw new PayrollError(
+        "North Carolina Form NC-4 NRA does not permit an exempt claim; file the applicable "
+        + "NC-4 NRA withholding entries instead",
+      );
+    }
     return {
       state: "NC", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
       factors: { NC_EXEMPT: "1" },
     };
   }
 
-  const schedule = ncScheduleFor(certificateChoice(input.certificate, "filing_status"));
+  const schedule = isNonresidentAlien
+    ? "single_married_surviving"
+    : ncScheduleFor(certificateChoice(input.certificate, "filing_status"));
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   // § 12 method (b): "Add the supplemental and regular wages for the most
   // recent payroll period this year. Then figure the income tax as if the total
@@ -275,7 +284,42 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
 
   // NC-4 line 2 — "Additional amount, if any, you want withheld from each pay
   // period (Enter whole dollars)".
-  const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
+  const additionalAnswer = certificateAmount(input.certificate, "additional_per_period");
+  let extra = U(additionalAnswer ?? "0");
+  if (isNonresidentAlien) {
+    if (additionalAnswer === null) {
+      throw new PayrollError(
+        "North Carolina Form NC-4 NRA requires its Line 2 additional withholding amount; "
+        + "file a completed NC-4 NRA before calculating",
+      );
+    }
+    if (input.certificate.answers.india_student_or_apprentice_resident == null) {
+      throw new PayrollError(
+        "North Carolina Form NC-4 NRA requires confirmation whether the employee is a student "
+        + "or business apprentice resident of India; record the certificate fact before calculating",
+      );
+    }
+    if (extra % DOLLAR !== 0n) {
+      throw new PayrollError("North Carolina Form NC-4 NRA Line 2 must be entered in whole dollars");
+    }
+    if (certificateFlag(input.certificate, "india_student_or_apprentice_resident")) {
+      if (extra !== 0n) {
+        throw new PayrollError(
+          "North Carolina Form NC-4 NRA Line 2 must be $0 for a student or business apprentice "
+          + "who is a resident of India; correct the certificate before calculating",
+        );
+      }
+      factors.NC_NRA_INDIA_ZERO_ADJUSTMENT = "1";
+    } else if (wages * BigInt(input.periodsPerYear) <= U(rates.annual.standardDeduction.single_married_surviving)) {
+      // NC-30 §13's worked example directs $21 on $500 monthly wages at 4.09%.
+      // Round the cap upward to preserve that published amount; Line 2 itself
+      // is stated in whole dollars on Form NC-4 NRA.
+      const cap = ((mulRateCents(wages, rates.withholdingRate) + DOLLAR - 1n) / DOLLAR) * DOLLAR;
+      if (extra > cap) extra = cap;
+      factors.NC_NRA_ADDITIONAL_CAP = D(extra);
+    }
+    factors.NC_NRA_SINGLE_SCHEDULE = "1";
+  }
   return {
     state: "NC",
     year: rates.year,
@@ -298,6 +342,9 @@ export const NC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NC_ALLOWANCES: "North Carolina allowances",
   NC_NET_WAGES: "North Carolina net wages",
   NC_TAX: "North Carolina tax",
+  NC_NRA_SINGLE_SCHEDULE: "NC-4 NRA single schedule required",
+  NC_NRA_ADDITIONAL_CAP: "NC-4 NRA additional withholding limited for low wages",
+  NC_NRA_INDIA_ZERO_ADJUSTMENT: "NC-4 NRA India student/apprentice zero adjustment",
 };
 
 export const NC_WITHHOLDING: UsStateWithholdingEngine = {

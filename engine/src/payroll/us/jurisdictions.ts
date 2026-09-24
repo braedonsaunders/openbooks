@@ -991,7 +991,7 @@ const NC_NC4: PayrollCertificate = {
   label: "North Carolina Employee's Withholding Allowance Certificate",
   scope: { level: "region", region: "NC" },
   purpose: "withholding",
-  citation: "NC Form NC-4 (Web 11-24); NC-30 (2026) sections 13 and 27",
+  citation: "NC Form NC-4 (Web 11-24); NC-30 (2026) sections 13 and 27; NC-4 NRA",
   summary:
     "\"If you do not submit Form NC-4 to your employer, your employer must withhold as if your "
     + "filing status is 'Single' with no allowances.\" Form NC-4 EZ and Form NC-4 NRA are the "
@@ -1020,6 +1020,17 @@ const NC_NC4: PayrollCertificate = {
       key: "additional_per_period", label: "Line 2 — Additional amount per pay period",
       kind: "amount", decimals: 4, min: "0",
       help: "In whole dollars on the form.",
+    },
+    {
+      key: "nonresident_alien", label: "This is a nonresident alien withholding certificate (NC-4 NRA)",
+      kind: "flag",
+      help: "For NC-4 NRA, North Carolina requires the Single schedule regardless of marital status and a completed Line 2 additional withholding amount.",
+    },
+    {
+      key: "india_student_or_apprentice_resident",
+      label: "NC-4 NRA employee is a student or business apprentice resident of India",
+      kind: "flag",
+      help: "Required when NC-4 NRA is selected. NC-30 §13 directs these employees to enter $0 on Line 2.",
     },
     {
       key: "exempt", label: "NC-4 EZ line 3 or 4 — Exempt", kind: "flag",
