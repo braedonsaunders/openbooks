@@ -280,6 +280,9 @@ export async function PUT(req: Request) {
   if (cfg.mode !== undefined && cfg.mode !== 'off' && cfg.mode !== 'post') {
     return NextResponse.json({ error: 'invalid mode' }, { status: 422 })
   }
+  if (cfg.allowUnratedTime !== undefined && typeof cfg.allowUnratedTime !== 'boolean') {
+    return NextResponse.json({ error: 'invalid allowUnratedTime' }, { status: 422 })
+  }
   const components = parseComponents(cfg.components)
   if (!components.ok) return NextResponse.json({ error: components.error }, { status: 422 })
   const settings = {
@@ -287,6 +290,7 @@ export async function PUT(req: Request) {
     hoursPerDay,
     annualHours,
     components: components.value,
+    allowUnratedTime: cfg.allowUnratedTime === true,
   }
 
   // Control accounts ride the same save (existing controlAccounts keys).

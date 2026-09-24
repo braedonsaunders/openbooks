@@ -121,6 +121,7 @@ export function LaborCostingWorkspace(props: {
 
   // ---- settings state ------------------------------------------------------
   const [mode, setMode] = useState(props.settings.mode)
+  const [allowUnratedTime, setAllowUnratedTime] = useState(props.settings.allowUnratedTime === true)
   const [hoursPerDay, setHoursPerDay] = useState(String(props.settings.hoursPerDay))
   const [annualHours, setAnnualHours] = useState(String(props.settings.annualHours))
   const [components, setComponents] = useState<LaborCostComponent[]>(props.settings.components)
@@ -130,11 +131,12 @@ export function LaborCostingWorkspace(props: {
 
   // Unsaved-changes tracking: everything the Save action persists, in one
   // stable snapshot. Rates save instantly and are not part of this.
-  const makeSnap = (v: { mode: string; hoursPerDay: string; annualHours: string; components: LaborCostComponent[]; laborWip: string; laborClearing: string; payrollVariance: string }) =>
-    JSON.stringify([v.mode, v.hoursPerDay, v.annualHours, v.components, v.laborWip, v.laborClearing, v.payrollVariance])
+  const makeSnap = (v: { mode: string; allowUnratedTime: boolean; hoursPerDay: string; annualHours: string; components: LaborCostComponent[]; laborWip: string; laborClearing: string; payrollVariance: string }) =>
+    JSON.stringify([v.mode, v.allowUnratedTime, v.hoursPerDay, v.annualHours, v.components, v.laborWip, v.laborClearing, v.payrollVariance])
   const [savedSnap, setSavedSnap] = useState(() =>
     makeSnap({
       mode: props.settings.mode,
+      allowUnratedTime: props.settings.allowUnratedTime === true,
       hoursPerDay: String(props.settings.hoursPerDay),
       annualHours: String(props.settings.annualHours),
       components: props.settings.components,
@@ -145,6 +147,7 @@ export function LaborCostingWorkspace(props: {
   )
   const currentSnap = makeSnap({
     mode,
+    allowUnratedTime,
     hoursPerDay,
     annualHours,
     components,
@@ -189,6 +192,7 @@ export function LaborCostingWorkspace(props: {
         body: JSON.stringify({
           settings: {
             mode,
+            allowUnratedTime,
             hoursPerDay: Number(hoursPerDay),
             annualHours: Number(annualHours),
             components,
@@ -211,6 +215,7 @@ export function LaborCostingWorkspace(props: {
 
   function discardChanges() {
     setMode(props.settings.mode)
+    setAllowUnratedTime(props.settings.allowUnratedTime === true)
     setHoursPerDay(String(props.settings.hoursPerDay))
     setAnnualHours(String(props.settings.annualHours))
     setComponents(props.settings.components)
@@ -328,6 +333,7 @@ export function LaborCostingWorkspace(props: {
         onApplied={(applied) => {
           const next = {
             mode: applied.mode,
+            allowUnratedTime,
             hoursPerDay,
             annualHours,
             components: applied.components,
@@ -685,6 +691,18 @@ export function LaborCostingWorkspace(props: {
                 </button>
               ))}
             </div>
+            <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={allowUnratedTime}
+                onChange={(e) => setAllowUnratedTime(e.target.checked)}
+              />
+              <span>
+                <span className="font-medium">{t('posting.allowUnrated')}</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">{t('posting.allowUnratedHint')}</span>
+              </span>
+            </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="lc-wip">{t('posting.laborWip')}</Label>

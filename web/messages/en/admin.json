@@ -3701,7 +3701,9 @@
         "laborWip": "Labor WIP / job cost account",
         "laborClearing": "Labor clearing account",
         "overheadNote": "Overhead is not part of this rate — it is applied by the Overhead Model as its own layer.",
-        "payrollVariance": "Payroll variance account"
+        "payrollVariance": "Payroll variance account",
+        "allowUnrated": "Allow unrated time",
+        "allowUnratedHint": "When on, approving time with no covering wage row succeeds and those hours stay unpriced. When off, approval refuses until a wage row covers every entry."
       },
       "reconciliation": {
         "title": "Payroll reconciliation",

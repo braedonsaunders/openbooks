@@ -1659,6 +1659,8 @@
         "modePost": "Standardkosten auf Aufträge buchen",
         "overheadNote": "Gemeinkosten sind nicht Teil dieses Satzes – sie werden vom Gemeinkostenmodell als eigene Schicht angewandt.",
         "payrollVariance": "Lohnabweichungskonto",
+        "allowUnrated": "Unbewertete Zeit zulassen",
+        "allowUnratedHint": "Wenn aktiv, wird Zeit ohne passenden Lohnsatz genehmigt und bleibt unbepreist. Wenn inaktiv, verweigert die Genehmigung, bis ein Lohnsatz jeden Eintrag abdeckt.",
         "title": "Buchung"
       },
       "wizard": {

@@ -3653,7 +3653,9 @@
         "laborWip": "Cuenta de obra en curso / costo de proyecto",
         "laborClearing": "Cuenta puente de mano de obra",
         "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa.",
-        "payrollVariance": "Cuenta de variación de nómina"
+        "payrollVariance": "Cuenta de variación de nómina",
+        "allowUnrated": "Permitir tiempo sin tarifa",
+        "allowUnratedHint": "Cuando está activado, el tiempo sin tarifa salarial se aprueba y queda sin valorizar. Cuando está desactivado, la aprobación se rechaza hasta que una tarifa cubra cada entrada."
       },
       "reconciliation": {
         "title": "Conciliación de nómina",

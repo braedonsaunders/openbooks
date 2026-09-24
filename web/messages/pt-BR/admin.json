@@ -3701,7 +3701,9 @@
         "laborWip": "Conta de mão de obra em WIP / custo da obra",
         "laborClearing": "Conta de compensação de mão de obra",
         "overheadNote": "Indireto não faz parte desta taxa — é aplicado pelo Modelo de indiretos como camada própria.",
-        "payrollVariance": "Conta de variação de folha"
+        "payrollVariance": "Conta de variação de folha",
+        "allowUnrated": "Permitir tempo sem tarifa",
+        "allowUnratedHint": "Quando ativado, o tempo sem tarifa salarial é aprovado e permanece sem valor. Quando desativado, a aprovação é recusada até que uma tarifa cubra cada lançamento."
       },
       "reconciliation": {
         "title": "Conciliação da folha",

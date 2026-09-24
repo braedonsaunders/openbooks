@@ -124,3 +124,22 @@ test("project financials fail closed when a measure functional has no spot cover
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("approved hours with no cost rate price nothing and surface as unrated", { skip: !DB }, async () => {
+  const { org, projectId } = await seedTwoCurrencyProject();
+  try {
+    // Six approved hours with no wage evidence (legacy or an explicit
+    // unrated opt-in): priced labour must not move, and the hours must
+    // appear as unrated instead of a silent $0.
+    const unratedEmp = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+      values (${unratedEmp}, ${org.orgId}, 'employee', 'Unrated Worker', ${org.subsidiaryId}, true, '{}'::jsonb)`);
+    await db.execute(sql`insert into time_entries (id, org_id, employee_party_id, worked_on, hours, project_id, status, is_billable, custom)
+      values (${randomUUID()}, ${org.orgId}, ${unratedEmp}, ${org.date}, '6.0000', ${projectId}, 'approved', false, '{}'::jsonb)`);
+    const labor = await resolveProjectFinancials(org.orgId, projectId, laborProfile);
+    assert.equal(labor.measures.labor_cost, "1175.0000");
+    assert.equal(labor.measures.labor_unrated_hours, "6.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

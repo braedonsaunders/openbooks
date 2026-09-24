@@ -3653,7 +3653,9 @@
         "laborWip": "Compte travaux en cours / coût projet",
         "laborClearing": "Compte d'attente main-d'œuvre",
         "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
-        "payrollVariance": "Compte d'écart de paie"
+        "payrollVariance": "Compte d'écart de paie",
+        "allowUnrated": "Autoriser le temps non tarifé",
+        "allowUnratedHint": "Lorsque cette option est activée, le temps sans taux de salaire est approuvé et reste non valorisé. Sinon, l'approbation est refusée jusqu'à ce qu'un taux couvre chaque entrée."
       },
       "reconciliation": {
         "title": "Rapprochement de paie",

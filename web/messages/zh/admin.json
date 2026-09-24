@@ -3701,7 +3701,9 @@
         "laborWip": "人工在产 / 项目成本科目",
         "laborClearing": "人工清算科目",
         "overheadNote": "间接费用不属此费率——由间接费用模型作为独立层应用。",
-        "payrollVariance": "工资差异科目"
+        "payrollVariance": "工资差异科目",
+        "allowUnrated": "允许无费率工时",
+        "allowUnratedHint": "开启后，无覆盖工资标准的工时也可批准，且这些工时保持未计价。关闭后，在每个条目都被工资标准覆盖之前，批准将被拒绝。"
       },
       "reconciliation": {
         "title": "工资对账",

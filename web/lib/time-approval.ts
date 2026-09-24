@@ -32,6 +32,29 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   if (!(await isFeatureEnabled(orgId, 'projects'))) return
   const settings = await laborCostingSettings(orgId)
   await snapshotLaborCostRates(orgId, timeEntryIds, { actorId })
+  // The snapshot stamps every entry a wage row covers and skips the rest —
+  // its stamped count is not the verdict. An entry still rateless after the
+  // snapshot has NO covering wage row: approving it would create approved
+  // time without its cost evidence. Refuse by name instead, unless the org
+  // explicitly allows unrated time.
+  // Every caller runs this inside the approval transaction before stamping
+  // the header, so the refusal rolls the entry flips back with it.
+  const uncovered = (await db.execute<{ employee_name: string | null; worked_on: string }>(sql`
+    select p.display_name as employee_name, te.worked_on::text as worked_on
+      from time_entries te
+      left join parties p on p.id = te.employee_party_id and p.org_id = te.org_id
+     where te.org_id = ${orgId}
+       and te.id = any(${`{${timeEntryIds.join(',')}}`}::uuid[])
+       and te.cost_rate is null
+     order by p.display_name, te.worked_on
+  `)).rows
+  if (uncovered.length > 0 && !settings.allowUnratedTime) {
+    const shown = uncovered.slice(0, 10).map((row) => `${row.employee_name ?? 'unknown employee'} on ${row.worked_on}`)
+    const more = uncovered.length > shown.length ? `, and ${uncovered.length - shown.length} more` : ''
+    throw new Error(
+      `cannot approve ${uncovered.length === 1 ? 'a time entry' : `${uncovered.length} time entries`} with no covering wage rate: ${shown.join('; ')}${more} — add a wage row covering those dates, or allow unrated time in labor costing setup`,
+    )
+  }
   await snapshotTimeBillRates(orgId, timeEntryIds)
   if (settings.mode === 'post') await postProjectLaborCost(orgId, actorId, timeEntryIds)
   await applyOverheadForTime(orgId, actorId, timeEntryIds)
