@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument, type CloseModule, NON_POSTING_DOCUMENT_KINDS } from "./period-policy.ts";
 import { resolveCoveringPeriod } from "./period-resolution.ts";
+import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 
 /**
@@ -65,6 +66,15 @@ type CandidateRow = {
   effective_date: string;
 };
 
+/**
+ * The caller's subsidiary scope as a set, or null for unrestricted. An
+ * explicit empty set denies every row; only an explicit null is unrestricted.
+ */
+function scopeSet(opts: PostingPeriodAssignmentOptions): ReadonlySet<string> | null {
+  if (opts.subsidiaryIds === undefined || opts.subsidiaryIds === null) return null;
+  return new Set(opts.subsidiaryIds);
+}
+
 async function loadCandidates(
   runner: SqlExecutor,
   orgId: string,
@@ -85,14 +95,19 @@ async function loadCandidates(
            ? sql`and d.id = any(${uuidArray(opts.documentIds)}::uuid[])`
            : sql`and false`
          : sql``}
-       ${scopeIds ? sql`and (d.subsidiary_id = any(${uuidArray(scopeIds)}::uuid[]) or d.subsidiary_id is null)` : sql``}
+       ${scopeIds
+         // A null subsidiary fails closed for restricted callers, exactly
+         // like direct document access: only an unrestricted caller (null
+         // scope) may see or touch unattributed documents.
+         ? sql`and d.subsidiary_id = any(${uuidArray(scopeIds)}::uuid[])`
+         : sql``}
      order by d.document_date, d.document_number`)).rows;
   if (opts.documentIds !== undefined && opts.documentIds.length > 0) {
     const seen = new Set(rows.map((row) => row.id));
     const missing = opts.documentIds.filter((id) => !seen.has(id));
     if (missing.length > 0) {
       throw new PostingPeriodAssignmentError(
-        `${missing.length} document(s) are not assignable (unknown, not approved, or already assigned)`,
+        `${missing.length} document(s) are not assignable (unknown, not approved, already assigned, or outside your subsidiary scope)`,
       );
     }
   }
@@ -194,8 +209,23 @@ export async function commitPostingPeriodAssignment(
   return withOrgTransaction(orgId, () =>
     db.transaction(async (tx) => {
       const candidates = await loadCandidates(tx, orgId, opts);
+      const scope = scopeSet(opts);
       const result: PostingPeriodCommitResult = { assigned: [], skipped: [], refused: [] };
       for (const row of candidates) {
+        // Lock the document and recheck its subsidiary inside the write
+        // transaction: the candidate read above is unlocked, so a concurrent
+        // A→B rehome between that read and this update must not let an
+        // A-scoped caller assign B's document. The predicate runs under the
+        // row lock, so it sees the latest committed subsidiary — never the
+        // candidate's stale one. A null subsidiary fails closed for
+        // restricted callers, like the candidate filter above.
+        const locked = (await tx.execute<{ subsidiary_id: string | null }>(sql`
+          select subsidiary_id from documents
+           where id = ${row.id} and org_id = ${orgId} for update`)).rows[0];
+        if (!locked || !subsidiaryScopeAllows(scope, locked.subsidiary_id)) {
+          result.skipped.push({ documentId: row.id, reason: "no longer assignable" });
+          continue;
+        }
         const resolved = await resolveCandidate(tx, orgId, opts.bookId, row);
         if (resolved.blocked || !resolved.periodId) {
           result.refused.push({ documentId: row.id, reason: resolved.blockReason ?? "not assignable" });
@@ -207,6 +237,7 @@ export async function commitPostingPeriodAssignment(
                  updated_at = now(), updated_by = ${opts.actorId}
            where id = ${row.id} and org_id = ${orgId}
              and status = 'approved' and posting_period_id is null
+             ${scope ? sql`and subsidiary_id = any(${uuidArray([...scope])}::uuid[])` : sql``}
           returning id`)).rows;
         if (updated.length === 0) {
           result.skipped.push({ documentId: row.id, reason: "no longer assignable" });
