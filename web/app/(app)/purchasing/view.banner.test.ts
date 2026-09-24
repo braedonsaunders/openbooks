@@ -1,100 +1,91 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// F-t06-027: enabling Multi-subsidiary crashed the purchasing workspace with
-// React error 441 — the same MissingRatesError out of SSR as the statements.
-// The loader must convert the typed rates refusal into a banner with a derive
-// link and never throw it. Since F-t03-009 the grid below the banner renders
-// live vitals (lenient scope), not fail-closed zeros.
-const source = readFileSync(new URL('./view.ts', import.meta.url), 'utf8')
-
-test('a rates refusal becomes a typed banner, never an SSR throw (F-t06-027)', () => {
-  assert.match(
-    source,
-    /instanceof MissingRatesError/,
-    'the loader must recognize the typed rates refusal',
-  )
-  assert.match(
-    source,
-    /if \(\!\(e instanceof MissingRatesError\)\) throw e/,
-    'only the rates refusal converts — every other error still throws',
-  )
-  assert.match(
-    source,
-    /code: 'rates-not-derived'/,
-    'the blocked notice must carry its stable code',
-  )
-  assert.match(
-    source,
-    /deriveHref: '\/close'/,
-    'the blocked notice must link to period close to derive rates',
-  )
+const state = { canCreate: true, ordersEnabled: true, unexpected: false }
+Object.assign(globalThis, { __purchasingViewTest: state })
+registerHooks({
+  resolve(specifier, context, next) {
+    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
+    if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
+    if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getLocale(){return "en"}export async function getTranslations(namespace){const t=(key)=>namespace==="reports"&&key==="statement.ratesBlockedTitle"?"Exchange rates are missing":namespace==="reports"&&key==="statement.ratesBlockedAction"?"Derive rates":key;t.has=()=>false;return t}' }
+    if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(authz,permission){return permission==="ap.create"?globalThis.__purchasingViewTest.canCreate:true}export function assertCan(){throw new Error("unexpected refusal")}' }
+    if (specifier === '../../../lib/consolidation' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
+      export class MissingRatesError extends Error {}
+      export async function reportSubsidiaryView(){if(globalThis.__purchasingViewTest.unexpected)throw new Error('database unavailable');throw new MissingRatesError('USD/CAD rates are not derived through 2026-09-24')}
+      export async function reportSubsidiaryScope(){return {subsidiary:{ids:['sub-1'],includeNullSubsidiary:false},currency:'USD',label:'Main entity',consolidated:false,options:[],picker:[{id:'sub-1',label:'Main entity'}]}}
+    `) }
+    if (specifier === '../../../lib/cash/core' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolveAsOf(){return "2026-09-24"}' }
+    if (specifier === '../../../lib/module-home/purchasing' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function purchasingHome(){return {ordersEnabled:globalThis.__purchasingViewTest.ordersEnabled,expensesEnabled:true,badges:{vendors:7,openPos:2,payments7d:3,unpostedExpenses:1},openPoValue:500,spend30d:900,apOverdue:50,apOutstanding:600,dueNext7:200,paid7dValue:100,topExposure:[],openPos:2,trend:[]}}' }
+    if (specifier === '../../../lib/nav/resolve' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function resolveNav(){return [{id:"purchasing",items:[]}]}' }
+    if (specifier === '../../../components/module-home/group-tabs' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function groupTabs(){return []}' }
+    if (specifier === '@/lib/money-server') return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {moneyCompact:(value)=>String(value)}}' }
+    if (specifier === '../../../lib/format') return { shortCircuit: true, url: 'data:text/javascript,export function trendWeekLabel(value){return String(value)}' }
+    return next(specifier, context)
+  },
 })
 
-// F-t03-009: a dormant foreign subsidiary with no derived consolidated rates
-// zeroed the whole workspace (SIM Meridian: 0 vendors / $0 spend / $0
-// payables beside 'All clear' with 7 vendors and ~$125K of open posted
-// bills). The loader recovers like the banking overview — same visibility
-// and picker through the lenient scope, banner pinned beside LIVE figures.
-test('a rates refusal recovers through the lenient scope with live figures (F-t03-009)', () => {
-  assert.match(
-    source,
-    /reportSubsidiaryScope/,
-    'the loader must fall back to the lenient scope on a rates refusal',
-  )
-  assert.match(
-    source,
-    /subsidiary: scoped\.subsidiary/,
-    'the fallback must carry the resolved scope (figures keep loading)',
-  )
-  assert.doesNotMatch(
-    source,
-    /BLOCKED_HOME/,
-    'no fail-closed zeros path: every computable figure renders beside the banner',
-  )
+const { loadPurchasing, purchasingSpec } = await import('./view')
+
+function block(data: Awaited<ReturnType<typeof loadPurchasing>>, type: string) {
+  const find = (value: unknown): Record<string, unknown> | undefined => {
+    if (Array.isArray(value)) return value.map(find).find(Boolean)
+    if (!value || typeof value !== 'object') return undefined
+    const record = value as Record<string, unknown>
+    if (record.kind === 'widget' && record.widget === type) return record
+    for (const child of Object.values(record)) {
+      const found = find(child)
+      if (found) return found
+    }
+    return undefined
+  }
+  return find(purchasingSpec(data))
+}
+
+test('missing consolidated rates remain a visible remedy beside live purchasing figures', async () => {
+  const data = await loadPurchasing({})
+  assert.deepEqual(data.ratesBlocked, {
+    code: 'rates-not-derived',
+    title: 'Exchange rates are missing',
+    description: 'USD/CAD rates are not derived through 2026-09-24',
+    deriveLabel: 'Derive rates',
+    deriveHref: '/close',
+  })
+  assert.deepEqual(data.subsidiaryPicker, [{ id: 'sub-1', label: 'Main entity' }])
+  assert.equal(data.subsidiaryValue, 'sub-1')
+  assert.equal(data.vendorsValue, '7', 'rates refusal keeps independently readable purchasing vitals')
+  assert.equal(data.openPosValue, '500')
+  const notice = block(data, 'empty-state')
+  assert.ok(notice && notice.kind === 'widget')
+  const noticeProps = notice.props as Record<string, unknown>
+  assert.equal(noticeProps.title, data.ratesBlocked.title)
+  assert.equal(noticeProps.description, data.ratesBlocked.description)
+  assert.deepEqual(noticeProps.actionProps, { href: '/close', label: 'Derive rates' })
 })
 
-test('the rates banner pins above live vitals with a derive link (F-t06-027)', () => {
-  assert.match(
-    source,
-    /widgetBlock\('empty-state'/,
-    'the spec must render a banner state for the blocked workspace',
-  )
-  assert.match(
-    source,
-    /action: 'link-button'/,
-    'the banner must offer the derive link as an action',
-  )
-  assert.match(
-    source,
-    /}, f\('ratesBlocked'\)\)/,
-    'the banner shows exactly when the notice is set',
-  )
+test('unexpected purchasing loader errors still reach the caller', async () => {
+  state.unexpected = true
+  try { await assert.rejects(loadPurchasing({}), /database unavailable/) }
+  finally { state.unexpected = false }
 })
 
-// UX-20: the empty commitments hero names its prerequisite in copy and
-// offers the create action only where the caller holds ap.create — a reader
-// without it keeps the honest zero with no misleading button.
-test('the empty commitments hero carries its granted create action (UX-20)', () => {
-  assert.match(
-    source,
-    /heroEmptyAction: !can\(authz, 'ap\.create'\)/,
-    'the empty action must be gated on the AP creation grant',
-  )
-  assert.match(
-    source,
-    /\?orderNew=1', label: t\('home\.hero\.createOrder'\)/,
-    'order-enabled tenants link straight into a new purchase order',
-  )
-  assert.match(
-    source,
-    /doc=new&kind=vendor_bill', label: t\('home\.hero\.createBill'\)/,
-    'tenants without orders link into a new vendor bill instead',
-  )
-  assert.match(
-    source,
-    /emptyAction: data\.heroEmptyAction/,
-    'the spec must carry the action to the commitments section',
-  )
+test('empty commitments offer only the granted action supported by the tenant configuration', async () => {
+  state.canCreate = true
+  state.ordersEnabled = true
+  const withOrders = await loadPurchasing({})
+  const withOrdersAction = block(withOrders, 'commitments-section')
+  assert.ok(withOrdersAction && withOrdersAction.kind === 'widget')
+  assert.deepEqual((withOrdersAction.props as Record<string, unknown>).emptyAction, { href: '/purchase-orders?orderNew=1', label: 'home.hero.createOrder' })
+
+  state.ordersEnabled = false
+  const withoutOrders = await loadPurchasing({})
+  const billAction = block(withoutOrders, 'commitments-section')
+  assert.ok(billAction && billAction.kind === 'widget')
+  assert.deepEqual((billAction.props as Record<string, unknown>).emptyAction, { href: '/ap/bills?doc=new&kind=vendor_bill', label: 'home.hero.createBill' })
+
+  state.canCreate = false
+  const readOnly = await loadPurchasing({})
+  const readOnlyAction = block(readOnly, 'commitments-section')
+  assert.ok(readOnlyAction && readOnlyAction.kind === 'widget')
+  assert.equal((readOnlyAction.props as Record<string, unknown>).emptyAction, null, 'readers cannot be offered an action that their grant refuses')
 })
