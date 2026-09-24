@@ -51,7 +51,9 @@
     "sourceColumn": "数据源",
     "chartColumn": "图表",
     "newButton": "新建卡片",
-    "createDraftFailed": "无法创建草稿卡片"
+    "createDraftFailed": "无法创建草稿卡片",
+    "filterEmptyTitle": "没有符合这些筛选条件的卡片",
+    "filterEmptyDescription": "请尝试其他搜索或状态筛选。"
   },
   "dashboards": {
     "description": "将已发布的卡片排布到共享仪表板上。",

@@ -51,7 +51,9 @@
     "sourceColumn": "Source",
     "chartColumn": "Chart",
     "newButton": "New card",
-    "createDraftFailed": "Could not create a draft card"
+    "createDraftFailed": "Could not create a draft card",
+    "filterEmptyTitle": "No cards match these filters",
+    "filterEmptyDescription": "Try a different search or status filter."
   },
   "dashboards": {
     "description": "Arrange published cards on shared dashboards.",

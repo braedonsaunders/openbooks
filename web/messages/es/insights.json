@@ -51,7 +51,9 @@
     "sourceColumn": "Origen",
     "chartColumn": "Gráfico",
     "newButton": "Nueva tarjeta",
-    "createDraftFailed": "No se pudo crear un borrador de tarjeta"
+    "createDraftFailed": "No se pudo crear un borrador de tarjeta",
+    "filterEmptyTitle": "Ninguna tarjeta coincide con estos filtros",
+    "filterEmptyDescription": "Pruebe con otra búsqueda u otro filtro de estado."
   },
   "dashboards": {
     "description": "Organice las tarjetas publicadas en paneles compartidos.",
