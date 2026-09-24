@@ -7,6 +7,7 @@ import { Button, Input } from "@openbooks/ui";
 import { useMoney } from "./money-provider";
 import { useBusinessToday } from "./business-date-provider";
 import { useAppAction } from "../lib/use-app-action";
+import { decimalCmp } from "../lib/statement-format";
 
 type Settlement = {
   applicationId: string;
@@ -36,7 +37,20 @@ type OpenItem = {
   currency: string;
 };
 
-const units = (value: string): number => Math.round(Number(value || "0") * 10000);
+/**
+ * Exact sign test for an operator-entered amount: the engine's BigInt
+ * minor-unit comparison, never IEEE-754 floats. Empty or non-numeric input
+ * counts as non-positive (filtered, as before); an amount the ledger cannot
+ * represent (precision past numeric(19,4)) is refused in-panel instead of
+ * rounding through Math.round on its way to the server.
+ */
+function isPositiveEntry(value: string): boolean {
+  try {
+    return decimalCmp(value || "0", "0") > 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Apply a posted credit memo to open items with NO cash, and release what it
@@ -106,8 +120,11 @@ export function CreditApplicationsPanel({
   // A credit with nothing left and nothing settled has nothing to say. An
   // unposted credit has no open-item line at all.
   if (!available || !state || state.lineId === null) return null;
-  const remaining = units(state.open);
-  if (remaining <= 0 && state.settlements.length === 0) return null;
+  // Exact minor-unit sign on the canonical ledger string: a dust remainder
+  // (e.g. 0.0001) is still positive, so the panel shows instead of rounding
+  // away through floats.
+  const remainingSign = decimalCmp(state.open, "0");
+  if (remainingSign <= 0 && state.settlements.length === 0) return null;
 
   async function startApply() {
     if (!partyId) return;
@@ -131,7 +148,7 @@ export function CreditApplicationsPanel({
   async function apply() {
     if (!state || !partyId) return;
     const credits = Object.entries(amounts)
-      .filter(([, amount]) => units(amount) > 0)
+      .filter(([, amount]) => isPositiveEntry(amount))
       .map(([toLineId, amount]) => ({
         fromLineId: state.lineId!,
         toLineId,
@@ -206,7 +223,7 @@ export function CreditApplicationsPanel({
           <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
             {t("remaining", { amount: money(state.open, { currency }) })}
           </span>
-          {canApply && remaining > 0 && openItems === null ? (
+          {canApply && remainingSign > 0 && openItems === null ? (
             <Button size="sm" variant="outline" disabled={busy || !partyId} onClick={() => void startApply()}>
               {t("apply")}
             </Button>

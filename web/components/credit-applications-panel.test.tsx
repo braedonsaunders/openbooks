@@ -318,6 +318,57 @@ test("a settled credit lists what it paid and releases it by id", async () => {
   }
 });
 
+test("F5-8: a dust remainder still shows the panel under exact math", async () => {
+  // 0.0001 is positive money the ledger can hold. The float path happened to
+  // round it to 1 unit here, but any float rescaling risks rounding dust to
+  // zero and hiding the panel; the exact minor-unit sign keeps it visible.
+  const net = scriptFetch(() => stateBody("0.0001"));
+  try {
+    const { host, root } = await mount();
+    assert.match(host.textContent ?? "", /Credit applications/);
+    assert.match(host.textContent ?? "", /remaining/);
+    await act(async () => { root.unmount(); });
+  } finally {
+    net.restore();
+  }
+});
+
+test("F5-8: an amount past ledger precision is refused in-panel, without a request", async () => {
+  // 0.00006 is positive but not representable as numeric(19,4): the float
+  // path rounded it to 1 unit and POSTed it to the server, which owns that
+  // refusal. The exact path refuses it in the panel before any request.
+  const net = scriptFetch((url) => {
+    if (url.includes("/api/payments/open-items")) {
+      return Response.json({
+        items: [
+          {
+            lineId: INVOICE_LINE, documentNumber: "INV-4004", entryNumber: "JE-4",
+            dueDate: null, open: "90.0000", currency: "USD",
+          },
+        ],
+      });
+    }
+    return stateBody("250.0000");
+  });
+  try {
+    const { host, root } = await mount();
+    await act(async () => { button(host, "Apply to open items")!.click(); });
+    await act(async () => { await tick(); });
+    const input = host.querySelector("input[type=number]") as HTMLInputElement;
+    await act(async () => {
+      nativeSetValue(input, "0.00006");
+    });
+    await act(async () => { button(host, "Apply credit")!.click(); });
+    await act(async () => { await tick(); });
+
+    assert.equal(net.sent.filter((s) => s.method === "POST").length, 0);
+    assert.match(host.textContent ?? "", /Enter an amount on at least one open item/);
+    await act(async () => { root.unmount(); });
+  } finally {
+    net.restore();
+  }
+});
+
 test("a reader without the pay permission sees the state but no controls", async () => {
   const net = scriptFetch(() =>
     stateBody("100.0000", [
