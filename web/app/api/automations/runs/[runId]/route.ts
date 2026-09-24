@@ -17,7 +17,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ runId: string 
   const { runId } = await ctx.params;
   if (!isUuid(runId)) return NextResponse.json({ error: "run id must be a uuid" }, { status: 400 });
   try {
-    const run = await getAutomationRun(gate.user.orgId, gate.user.id, runId);
+    const run = await getAutomationRun(gate.user.orgId, gate.user.id, runId, gate.allowedSubsidiaryIds);
     return NextResponse.json({ run });
   } catch (e) {
     return automationErrorResponse(e);

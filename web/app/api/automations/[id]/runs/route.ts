@@ -24,6 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       gate.user.id,
       id,
       status ?? undefined,
+      gate.allowedSubsidiaryIds,
     );
     return NextResponse.json({ runs });
   } catch (e) {
