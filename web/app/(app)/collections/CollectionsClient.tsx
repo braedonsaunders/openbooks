@@ -1,11 +1,12 @@
 "use client";
 
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 import { confirmDialog } from "../../../lib/confirm";
+import { readApiErrorMessage } from "../../../lib/api-error";
 
 interface Schedule {
   id: string;
@@ -402,28 +403,56 @@ function DunningPanel() {
   const t = useTranslations("ar.collections.dunning");
   const tErrors = useTranslations("ar.collections.errors");
 
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
-  const load = () => {
-    return fetch("/api/dunning").then((r) => {
-      if (r.ok) return r.json().then((body) => setPolicies(body.policies ?? []));
-    });
-  };
-  useEffect(() => { void load(); }, []);
+  const load = useCallback(() => {
+    return fetch("/api/dunning")
+      .then(async (r) => {
+        // The status is checked before the body parses: a non-JSON 502 page
+        // must name the failure, never throw a SyntaxError out of the effect.
+        if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotLoad")));
+        const body = (await r.json()) as { policies?: Policy[] };
+        setPolicies(body.policies ?? []);
+      })
+      .catch((e: unknown) => {
+        setError(e instanceof Error ? e.message : tErrors("couldNotLoad"));
+      });
+  }, [tErrors]);
+  useEffect(() => { void load(); }, [load]);
 
   const create = async () => {
     setError(null);
-    const r = await fetch("/api/dunning", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(draft),
-    });
-    if (!r.ok) { setError((await r.json().catch(() => ({}))).error ?? tErrors("couldNotCreate")); return; }
-    setDraft({ name: "", gracePeriodDays: 0, stages: [BLANK_STAGE] });
-    void load();
+    try {
+      const r = await fetch("/api/dunning", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(draft),
+      });
+      if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotCreate")));
+      await r.json().catch(() => null);
+      setDraft({ name: "", gracePeriodDays: 0, stages: [BLANK_STAGE] });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : tErrors("couldNotCreate"));
+    }
   };
 
-  const remove = async (id: string) => { await fetch(`/api/dunning/${id}`, { method: "DELETE" }); void load(); };
+  // A delete refusal (policy in use, the last active ladder) rides in the
+  // body: it is checked, named, and rendered — never swallowed — and the
+  // row stays until the server confirms the delete, so a refused row can
+  // never silently reappear as a phantom success.
+  const remove = async (id: string) => {
+    setDeleteError(null);
+    try {
+      const r = await fetch(`/api/dunning/${id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error(await readApiErrorMessage(r, tErrors("couldNotDelete")));
+      await r.json().catch(() => null);
+      await load();
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : tErrors("couldNotDelete"));
+    }
+  };
 
   const setStage = (i: number, patch: Partial<Stage>) =>
     setDraft({ ...draft, stages: draft.stages.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
@@ -473,6 +502,7 @@ function DunningPanel() {
       </Card>
 
       <div className="space-y-3">
+        {deleteError && <p role="alert" className="text-sm text-red-600">{deleteError}</p>}
         {policies.map((p) => (
           <Card key={p.id} className="p-4">
             <div className="flex items-center justify-between">

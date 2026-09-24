@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "Falha na ação",
-      "couldNotCreate": "Não foi possível criar"
+      "couldNotCreate": "Não foi possível criar",
+      "couldNotLoad": "Não foi possível carregar as políticas de cobrança",
+      "couldNotDelete": "Não foi possível excluir a política"
     },
     "subscriptions": {
       "mrr": "Receita recorrente mensal",

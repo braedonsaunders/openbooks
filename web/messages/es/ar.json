@@ -186,7 +186,9 @@
     },
     "errors": {
       "actionFailed": "La acción no se pudo completar",
-      "couldNotCreate": "No se pudo crear"
+      "couldNotCreate": "No se pudo crear",
+      "couldNotLoad": "No se pudieron cargar las políticas de recobro",
+      "couldNotDelete": "No se pudo eliminar la política"
     },
     "subscriptions": {
       "mrr": "Ingresos recurrentes mensuales",
