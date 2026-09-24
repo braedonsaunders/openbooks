@@ -251,6 +251,19 @@ function generateCopySql(
       exprs.push("null");
     } else if ((fkTarget && rebaseSet.has(fkTarget)) || t.forceRebase.has(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}') end)`);
+    } else if (t.name === "hrm_employment_change_requests" && c.name === "decision_snapshot") {
+      // OM-13c: the decision snapshot binds flow_run_id BY VALUE (storage
+      // CHECK ..._snapshot_binding), but the copy rebases flow_run_id to the
+      // sandbox run while a verbatim snapshot still names the source run —
+      // the INSERT dies on the binding CHECK before any post-copy fixup can
+      // run. Rebind the snapshot's flow_run_id to the rebased run at copy
+      // time. Every other bound key (payload digest, schema version,
+      // expected revision) is rebase-invariant, and rows without a snapshot
+      // (drafts) or without a run pass through untouched.
+      exprs.push(
+        `(case when "decision_snapshot" is null or "flow_run_id" is null then "decision_snapshot" ` +
+          `else jsonb_set("decision_snapshot", '{flow_run_id}', to_jsonb(ob_rebase("flow_run_id", '${seed}')::text)) end)`,
+      );
     } else if (t.name === "flow_runs" && c.name === "occurrence_key") {
       // OM-13-CLONE: occurrence_key sits in a global partial unique with no
       // org_id, so a verbatim copy collides with the source's own row (PG
