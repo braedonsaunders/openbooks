@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, SearchSelect } from '@openbooks/ui'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 export interface ChargeItemOption {
   id: string
   name: string
@@ -105,27 +106,32 @@ export function ChargesSection({
   async function submit() {
     if (!itemId) return toast.error(t('pickItem'))
     setBusy(true)
-    const res = await fetch('/api/project-charges', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        projectId,
-        lines: [{ itemId, quantity,
-          costRate: equipmentEnabled && equipmentUnitId ? null : (costRate || null),
-          billRate: equipmentEnabled && equipmentUnitId ? null : (billRate || null),
-          isBillable: true,
-          ...(equipmentEnabled ? { equipmentUnitId: equipmentUnitId || null, employeeId: (equipmentUnitId && employeeId) || null } : {}) }],
-      }),
-    })
-    if (res.ok) {
+    try {
+      const res = await fetch('/api/project-charges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectId,
+          lines: [{ itemId, quantity,
+            costRate: equipmentEnabled && equipmentUnitId ? null : (costRate || null),
+            billRate: equipmentEnabled && equipmentUnitId ? null : (billRate || null),
+            isBillable: true,
+            ...(equipmentEnabled ? { equipmentUnitId: equipmentUnitId || null, employeeId: (equipmentUnitId && employeeId) || null } : {}) }],
+        }),
+      })
+      // The status is checked before the body is parsed: a non-JSON error
+      // body (a proxy page, an empty 502) must surface the refusal, never a
+      // SyntaxError from res.json() that also wedges the button.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('failed')))
       toast.success(t('created'))
       setItemId(''); setEquipmentUnitId(''); setEmployeeId(''); setQuantity('1'); setCostRate(''); setBillRate('')
       onFormOpenChange(false)
       router.refresh()
-    } else {
-      toast.error((await res.json()).error ?? t('failed'))
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t('failed'))
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
   const statusVariant = (s: string) => (s === 'posted' ? 'success' : s === 'voided' ? 'outline' : 'secondary')
