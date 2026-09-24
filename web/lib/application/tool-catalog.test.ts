@@ -106,6 +106,23 @@ test("every tool wires a handler and a parsing input schema", () => {
   }
 });
 
+test("every mutating tool requires a retry key and is protected by executeIdempotent", () => {
+  for (const tool of APPLICATION_TOOLS) {
+    if (tool.readOnly) {
+      assert.equal(tool.mutationProtection, "none", `${tool.name} is read-only`);
+      continue;
+    }
+    assert.equal(tool.mutationProtection, "execute-idempotent", `${tool.name} must use the catalog mutation wrapper`);
+    const shape = (tool.inputSchema as unknown as {
+      shape?: Record<string, { isOptional?: () => boolean; safeParse: (value: unknown) => { success: boolean } }>;
+    }).shape;
+    const key = shape?.idempotencyKey;
+    assert.ok(key, `${tool.name} must declare idempotencyKey in its input schema`);
+    assert.equal(key.isOptional?.(), false, `${tool.name} must require idempotencyKey`);
+    assert.equal(key.safeParse("catalog-retry-key-001").success, true, `${tool.name} must accept a valid retry key`);
+  }
+});
+
 test("every tool wires a permission gate that answers for any actor", () => {
   for (const tool of APPLICATION_TOOLS) {
     assert.equal(
