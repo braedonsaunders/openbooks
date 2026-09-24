@@ -36,7 +36,7 @@ import {
   type ReportRowScopeRule,
   type ReportTemporalBin,
 } from './types'
-import { utcCivilDate } from './fiscal-calendar'
+import { fiscalMonthOffset, fiscalYearOf, utcCivilDate } from './fiscal-calendar'
 
 /** Structural pg-client contract (pg.Pool / pg.Client / pg.PoolClient). */
 export type PgQueryable = {
@@ -108,9 +108,14 @@ export async function runCustomQuery(
     throw new Error('Custom query missing or has unknown entity')
   }
 
+  const fiscalStartMonth = opts.fiscalStartMonth != null
+    && opts.fiscalStartMonth >= 1
+    && opts.fiscalStartMonth <= 12
+    ? opts.fiscalStartMonth
+    : 1
   const compiled = compileCustomQuery(entity, q, opts.orgId, {
     maxRows: opts.maxRows,
-    fiscalStartMonth: opts.fiscalStartMonth,
+    fiscalStartMonth,
     asOf: opts.asOf,
     page: opts.page,
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
@@ -150,7 +155,7 @@ export async function runCustomQuery(
     )
     result = shapeSummarizeResult(
       entity, compiled.breakouts, compiled.measures, rows, labels,
-      compiled.groupBy, compiled.totals ?? null, singles,
+      compiled.groupBy, compiled.totals ?? null, singles, fiscalStartMonth,
     )
   } else {
     result = shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
@@ -303,6 +308,7 @@ function shapeSummarizeResult(
   groupBy: string | null = null,
   totals: ReportCustomQuery['totals'] = null,
   singles: DenominationSingles = { txn: true, base: true, book: true },
+  fiscalStartMonth = 1,
 ): ReportRunResult {
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
@@ -313,7 +319,7 @@ function shapeSummarizeResult(
   const rows = dataRows.map((row) => [
     ...breakouts.map((b, i) =>
       b.bin
-        ? formatBreakoutValue(row[`d${i}`], b.bin)
+        ? formatBreakoutValue(row[`d${i}`], b.bin, fiscalStartMonth)
         : formatCellValue(entity, b.column, row[`d${i}`], labels),
     ),
     ...measures.map((m, i) => formatMeasureValue(entity, m, row[`m${i}`])),
@@ -664,11 +670,28 @@ function binRange(v: unknown, bin: ReportTemporalBin): { from: string; to: strin
 }
 
 /** Format a temporal-bucketed dimension value for display. */
-function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin): string | number | null {
+function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin, fiscalStartMonth = 1): string | number | null {
   if (!bin) return formatCustomValue(v)
   if (v === null || typeof v === 'undefined') return null
   const iso = v instanceof Date ? v.toISOString() : String(v)
   switch (bin) {
+    case 'fiscal_year': {
+      const dateIso = v instanceof Date
+        ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`
+        : iso.slice(0, 10)
+      return `FY ${fiscalYearOf(dateIso, fiscalStartMonth)}`
+    }
+    case 'fiscal_quarter':
+    case 'fiscal_period': {
+      const dateIso = v instanceof Date
+        ? `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, '0')}-${String(v.getDate()).padStart(2, '0')}`
+        : iso.slice(0, 10)
+      const fiscalYear = fiscalYearOf(dateIso, fiscalStartMonth)
+      const offset = fiscalMonthOffset(dateIso, fiscalStartMonth)
+      return bin === 'fiscal_quarter'
+        ? `Q${Math.floor(offset / 3) + 1} FY ${fiscalYear}`
+        : `P${offset + 1} FY ${fiscalYear}`
+    }
     case 'year':
       return iso.slice(0, 4)
     case 'quarter': {
