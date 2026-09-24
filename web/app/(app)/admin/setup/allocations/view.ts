@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { grid, page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, getAuthz } from '../../../../../lib/authz'
+import { accessDeniedHref } from '../../../../../lib/gate-targets'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 
 export type AllocationsTab = 'rules' | 'drivers' | 'runs'
@@ -32,7 +33,12 @@ export async function loadAllocations(
 ): Promise<AllocationsSetupData> {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage')) redirect('/')
+  // The house refusal names the primary grant (F1T-10): a reader without
+  // either setup grant sees /access-denied, never a silent bounce home.
+  // crm.setup.manage is the documented alternative — either one admits.
+  if (!can(authz, 'admin.setup.manage') && !can(authz, 'crm.setup.manage')) {
+    redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
+  }
   await requireFeatureEnabled(authz.user.orgId, 'allocations')
   const t = await getTranslations('allocations')
   const raw = typeof sp.tab === 'string' ? sp.tab : 'rules'

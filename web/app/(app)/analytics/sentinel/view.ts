@@ -4,6 +4,7 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { redirect } from 'next/navigation'
 import { requirePermission } from '../../../../lib/authz'
+import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { sentinelAccessDenied } from '../../../../lib/analytics/sentinel-access'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
@@ -25,8 +26,9 @@ import type { SentinelView } from './SentinelView'
  *
  * Loader work copied VERBATIM from page.tsx. The gate here is the strictest in the app —
  * full-ledger forensics demands an unrestricted subsidiary fence AND
- * `admin.audit.read`, and anything less redirects to `/`. It runs in the
- * loader, so the gate runs in the loader.
+ * `admin.audit.read`, and anything less redirects to /access-denied naming
+ * the missing requirement. It runs in the loader, so the gate runs in the
+ * loader.
  *
  * `sentinelData` takes the whole `Authz` because it fences its own SQL. That
  * object never reaches the spec: the loader hands the widget the finished
@@ -45,7 +47,10 @@ export interface SentinelData {
 export async function loadSentinel(sp: Record<string, string | undefined>): Promise<SentinelData> {
   const t = await getTranslations('analytics.sentinel')
   const authz = await requirePermission('reports.read')
-  if (sentinelAccessDenied(authz) !== null) redirect('/')
+  // The house refusal names the missing requirement (F1T-10) — the same
+  // name the API maps to its 403 — never a silent bounce home.
+  const sentinelDenied = sentinelAccessDenied(authz)
+  if (sentinelDenied !== null) redirect(accessDeniedHref({ permission: sentinelDenied }))
 
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })

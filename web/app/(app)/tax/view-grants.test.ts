@@ -70,7 +70,8 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:navigation',
-    `export function notFound() { throw new Error('notFound') }`,
+    `export function notFound() { throw new Error('notFound') }
+     export function redirect(url) { throw new Error('redirect:' + url) }`,
   ],
   [
     'mock:viewspec',

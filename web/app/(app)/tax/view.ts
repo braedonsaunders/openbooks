@@ -2,10 +2,11 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../lib/authz'
+import { accessDeniedHref } from '../../../lib/gate-targets'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../lib/tax-filing-permission'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import type { FilingHistoryRecord } from './FilingHistoryDrawer'
@@ -98,10 +99,12 @@ export async function loadTax(
 ): Promise<TaxData> {
   const authz = await requirePermission('reports.read')
   // Returns and filings have no subsidiary dimension: every tax REST path
-  // refuses an entity-restricted caller (guardSubsidiaryScope(gate, null) → 404),
-  // and this page applies the identical fence rather than rendering the
-  // org-wide filing history to them.
-  if (authz.allowedSubsidiaryIds !== null) notFound()
+  // refuses an entity-restricted caller (guardSubsidiaryScope(gate, null) → 404).
+  // This page applies the identical fence — the same callers are refused —
+  // but names it (F1T-10) instead of answering a silent 404.
+  if (authz.allowedSubsidiaryIds !== null) {
+    redirect(accessDeniedHref({ permission: 'unrestricted subsidiary access' }))
+  }
   const { orgId } = authz.user
   const t = await getTranslations('tax')
   const tab = pickString(sp.tab) === 'history' ? 'history' : 'prepare'

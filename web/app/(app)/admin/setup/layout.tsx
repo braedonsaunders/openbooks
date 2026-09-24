@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { can, getAuthz } from '../../../../lib/authz'
+import { accessDeniedHref } from '../../../../lib/gate-targets'
 import { resolvedFeatureState, featureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITIES } from '../../../../lib/setup/registry'
 import { SetupNav } from './SetupNav'
@@ -18,8 +19,14 @@ export default async function SetupLayout({ children }: { children: ReactNode })
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const canManageSetup = can(authz, 'admin.setup.manage')
-  // /dashboard is the one canonical home (UX-17) — never the duplicate /.
-  if (!canManageSetup && !can(authz, 'crm.setup.manage')) redirect('/dashboard')
+  // The shell names the primary grant (F1T-10): without either setup grant
+  // the operator sees /access-denied, never a silent bounce. The layout runs
+  // before every setup loader, so this is the refusal that actually reaches
+  // anyone — a loader-side refusal alone would be dead code behind it.
+  // crm.setup.manage is the documented alternative — either one admits.
+  if (!canManageSetup && !can(authz, 'crm.setup.manage')) {
+    redirect(accessDeniedHref({ permission: 'admin.setup.manage' }))
+  }
   const t = await getTranslations('admin')
   const canExport = can(authz, 'data.export')
   const canImport = can(authz, 'data.import')
