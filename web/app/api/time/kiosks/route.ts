@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { registerKiosk, revokeKiosk, setWorkerPin } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { ScopeNotFoundError, UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -18,12 +20,19 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
   const { db } = await import('@openbooks/engine/src/platform/db.ts')
   const { sql } = await import('drizzle-orm')
+  const visibleProject = gate.allowedSubsidiaryIds === null
+    ? sql``
+    : sql`and project_id is not null and exists (
+        select 1 from projects p
+         where p.org_id = time_kiosks.org_id and p.id = time_kiosks.project_id
+           and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}
+      )`
   const rows = (await db.execute(sql`
     select id::text as id, name, location_id::text as "locationId",
            project_id::text as "projectId", pin_required as "pinRequired",
            photo_required as "photoRequired", last_seen_at::text as "lastSeenAt",
            is_active as "isActive"
-      from time_kiosks where org_id = ${gate.user.orgId} order by name`)).rows
+      from time_kiosks where org_id = ${gate.user.orgId} ${visibleProject} order by name`)).rows
   return NextResponse.json({ kiosks: rows })
 }
 
@@ -74,11 +83,11 @@ export async function POST(req: Request) {
   const body = parsedBody.data
   try {
     if (body.action === 'revoke') {
-      await revokeKiosk(user.orgId, body.kioskId, user.id)
+      await revokeKiosk({ orgId: user.orgId, kioskId: body.kioskId, actorUserId: user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'set-pin') {
-      await setWorkerPin({ orgId: user.orgId, actorUserId: user.id, employeePartyId: body.employeePartyId, pin: body.pin })
+      await setWorkerPin({ orgId: user.orgId, actorUserId: user.id, employeePartyId: body.employeePartyId, pin: body.pin, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
       return NextResponse.json({ ok: true })
     }
     const input = body
@@ -88,6 +97,7 @@ export async function POST(req: Request) {
       name: input.name,
       locationId: input.locationId || null,
       projectId: input.projectId || null,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       pinRequired: input.pinRequired,
       photoRequired: input.photoRequired,
     })
@@ -96,6 +106,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ kiosk, token })
   } catch (error) {
     if (error instanceof FieldTimeError) return bad(error.message)
+    if (error instanceof ScopeNotFoundError) return bad('not found', 404)
+    if (error instanceof UnrestrictedScopeError) return bad('requires unrestricted subsidiary access', 403)
     throw error
   }
 }

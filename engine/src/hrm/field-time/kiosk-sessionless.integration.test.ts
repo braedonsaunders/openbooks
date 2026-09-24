@@ -64,8 +64,8 @@ test("a sessionless device resolves its kiosk and identifies by PIN with no org 
       const employmentId = randomUUID();
       await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${worker}, ${org.subsidiaryId}, 1)`);
       await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
-      const { token } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate" });
-      await setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821" });
+      const { token } = await registerKiosk({ orgId: org.orgId, actorUserId: randomUUID(), name: "Gate", allowedSubsidiaryIds: null });
+      await setWorkerPin({ orgId: org.orgId, actorUserId: randomUUID(), employeePartyId: worker, pin: "4821", allowedSubsidiaryIds: null });
       return token;
     });
     // No withOrg wrapper anywhere below: this is the device's exact shape.
