@@ -529,9 +529,19 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
     residenceSubs = residenceSubs.filter((levy) => !independent(levy));
 
     const rule = work.subRegionConflictRule;
-    if (workSubs.length === 0 || residenceSubs.length === 0 || sameRegionSubs()) {
-      // Nothing to settle: only one side has a levy, or the two sides are the
-      // same jurisdiction and would be double-counted.
+    if (workSubs.length === 0 || residenceSubs.length === 0) {
+      // Nothing to settle: only one side has a levy.
+      levies.push(...residenceSubs, ...workSubs);
+      return;
+    }
+    if (rule === "both" && sameRegionSubs()) {
+      // The same jurisdiction reaches this employee as a resident and as a
+      // worker (an Ohio same-city employee; a Yonkers resident working in
+      // Yonkers). Under `both` that is ONE levy in the plan, withheld once on
+      // the resident basis — pushing both lists prices the full rate twice.
+      // (Under `higher_rate` the two reaches are the comparison itself, so
+      // this branch does not fire there; under `work_only`/`residence_only`
+      // only one side is pushed anyway.)
       const seen = new Set<string>();
       for (const levy of [...residenceSubs, ...workSubs]) {
         const key = `${levy.region}:${levy.subRegion}`;
@@ -565,8 +575,17 @@ export function resolveWithholding(input: WithholdingResolutionInput): Withholdi
     }
   }
 
+  /**
+   * True when the same sub-region jurisdiction appears on BOTH sides — the
+   * employee lives AND works in it. Compared as region:sub-region identity,
+   * never as a bare code: two regions may spell unrelated levies the same
+   * way, and those are two levies, not one counted twice.
+   */
   function sameRegionSubs(): boolean {
-    return false;
+    const residenceKeys = new Set(
+      residenceSubs.map((levy) => `${levy.region}:${levy.subRegion}`),
+    );
+    return workSubs.some((levy) => residenceKeys.has(`${levy.region}:${levy.subRegion}`));
   }
 
   /**
