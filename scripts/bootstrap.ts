@@ -1746,6 +1746,21 @@ const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "index names and definitions, same foreign-key names and references, "
       + "validated — so only the digest moves. Restamp, not reapply: the "
       + "revision stages the build but changes no enforced state.",
+    filename: "generated/0328_obligation_legacy_reconciliation.sql",
+    from: "1c526dc25a2edb8aa2ec2da422bcf11b6eef00cba2021994359e5e512a3a0d0f",
+    to: "4ef841e91a1c3ec9c0609c93a677f562b0e5b44c601ad549a553b4efb8715703",
+    strategy: "restamp",
+    reason:
+      "staged revision replaces the validated CHECK with a guarded ADD "
+      + "CONSTRAINT ... NOT VALID plus a guarded VALIDATE that treats an "
+      + "already-validated guard as done, instead of scanning every "
+      + "performance_obligations row under the ALTER TABLE lock. The three "
+      + "columns are added by this same migration, so every pre-existing row "
+      + "trivially holds all three NULLs and satisfies the shape. A database "
+      + "recorded at the old digest holds the identical end catalog — same "
+      + "name, same expression, validated — so only the digest moves. "
+      + "Restamp, not reapply: the revision stages the build but changes no "
+      + "enforced state.",
   },
 ];
 
