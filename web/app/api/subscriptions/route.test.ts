@@ -149,6 +149,9 @@ const mockSources = new Map<string, string>([
         state.engineCalls.push({ fn: 'changeSubscription', args })
         return { invoiceId: null, documentNumber: null, adjustment: '0.0000' }
       }
+      export async function lockCustomerForScope(tx) {
+        return tx.execute({ queryChunks: ['select scoped customer lock for share'] })
+      }
       export async function lockSubscriptionCustomerForScope(tx) {
         return tx.execute({ queryChunks: ['select customer for share'] })
       }
@@ -403,6 +406,10 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
     startOn: "2026-08-26",
   });
   assert.equal(createAllowed.status, 201, "in-scope customers remain manageable");
+  assert.ok(
+    routeState.transactionQueries.some((query) => sqlText(query).includes("scoped customer lock for share")),
+    "creation must lock and recheck the customer inside the insert transaction",
+  );
 
   reset();
   routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
