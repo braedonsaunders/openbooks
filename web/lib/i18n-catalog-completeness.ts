@@ -77,6 +77,8 @@ export function readFallbackManifest(): FallbackManifest {
  * - `assets.leases` German "Revision"/"Status", Portuguese "Status" and
  *   French "Description" are the same ordinary nouns, used for the same
  *   table headers in both languages.
+ * - `revenue.modify` French "Description" is the same ordinary noun, used
+ *   for the same form field in both languages.
  */
 export const I18N1_IDENTICAL_BY_FACT: ReadonlySet<string> = new Set([
   'de:accounting.lifecycle.status|Status',
@@ -84,6 +86,7 @@ export const I18N1_IDENTICAL_BY_FACT: ReadonlySet<string> = new Set([
   'de:assets.leases.colStatus|Status',
   'de:assets.leases.revision|Revision',
   'fr:assets.leases.fieldDescription|Description',
+  'fr:revenue.modify.fieldDescription|Description',
   'pt-BR:assets.leases.colStatus|Status',
   'de:entities.propertyManagement.detail.description|{subsidiary} · {location}',
   'de:entities.propertyManagement.detail.fields.name|Name',
