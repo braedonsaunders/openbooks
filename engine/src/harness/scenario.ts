@@ -554,13 +554,64 @@ export async function runScenario(
   // the cutoff. GL balance and open-item remaining are BOTH reconstructed to the
   // cutoff (payments applied after it don't reduce the balance, and their GL is
   // excluded too) so the volatile current month can't create a phantom mismatch.
+  //
+  // Governed voids need their own bucket. Voiding a bill/invoice posts a
+  // reversal entry that negates the voided legs (all non-open-item) and flips
+  // the original entry to 'reversed': the pair nets to zero in GL, but the
+  // voided document leaves the open-item subledger while its mirror leg reads
+  // as an independent direct JE — a 222.22 void breaks the tie by exactly
+  // 222.22 with no money actually missing. The mirror is not activity outside
+  // the subledger; it IS the subledger item's negation, so a void effective
+  // on/before the cutoff hides the pair from every bucket together, while a
+  // void effective after the cutoff leaves the document live as-of it (the
+  // same live-as-of shape as the product's open-items projection in
+  // web/lib/cash/open-items.ts — live when voided after the date — keyed here
+  // on the reversal entry's business posting date, the date the books reverse).
+  // The hidden pair must itself net to zero per
+  // control account — a mis-posted reversal is a real bug, and hiding it
+  // blindly would be the band-aid. Reversal chains are followed transitively:
+  // a reversal entry is itself posted, so deeper chains stay in the bucket.
+  const voidMirrorCtes = sql`
+    void_docs as (
+      select d.id, d.posted_entry_id,
+             (select r.posting_date from journal_entries r
+               where r.id = d.reversal_entry_id and r.org_id = d.org_id) as reversal_date
+        from documents d
+       where d.org_id = ${orgId} and d.status = 'voided' and d.posted_entry_id is not null
+    ),
+    void_hidden as (
+      select id, posted_entry_id from void_docs
+       where reversal_date is not null and reversal_date <= ${cutoff}
+    ),
+    void_live as (
+      select id from void_docs
+       where reversal_date is null or reversal_date > ${cutoff}
+    ),
+    void_chain(entry_id) as (
+      select posted_entry_id from void_hidden
+       union
+      select e.id
+        from journal_entries e join void_chain c on e.reverses_entry_id = c.entry_id
+       where e.org_id = ${orgId} and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+    ),
+    voidtie as (
+      select a.id, a.name as account, a.number, sum(l.amount) as mirror
+        from accounts a
+        join journal_lines l on l.account_id = a.id
+        join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
+        join void_chain vc on vc.entry_id = l.entry_id
+       where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
+       group by a.id, a.name, a.number
+    )`;
   const tie = await all<{ account: string; number: string | null; kind: string; gl: string; subledger: string; direct: string }>(sql`
-    with gl as (
+    with recursive ${voidMirrorCtes},
+    gl as (
       select a.id, a.name as account, a.number, a.type as kind, sum(l.amount) as gl
         from accounts a
         join journal_lines l on l.account_id = a.id
         join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
        where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
+         and not exists (select 1 from void_chain vc where vc.entry_id = l.entry_id)
        group by a.id, a.name, a.number, a.type),
     sub as (
       -- Signed point-in-time open balance per control account: each open-item
@@ -579,16 +630,18 @@ export async function runScenario(
         join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
         join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
         join accounts acc on acc.id = l.account_id and acc.type in ('asset_receivable','liability_payable')
-       where d.org_id = ${orgId} and d.status = 'posted'
+       where d.org_id = ${orgId} and (d.status = 'posted' or d.id in (select id from void_live))
        group by acc.id),
     direct as (
       -- Non-open-item postings straight to a control account (manual JEs,
-      -- opening balances): legitimate activity outside the subledger.
+      -- opening balances): legitimate activity outside the subledger. Void
+      -- mirrors are excluded here — they are hidden with their pair above.
       select a.id, sum(l.amount) as direct
         from accounts a
         join journal_lines l on l.account_id = a.id and not l.is_open_item
         join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
        where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
+         and not exists (select 1 from void_chain vc where vc.entry_id = l.entry_id)
        group by a.id)
     select gl.account, gl.number, gl.kind, gl.gl::text as gl,
            coalesce(sub.subledger,0)::text as subledger, coalesce(direct.direct,0)::text as direct
@@ -597,6 +650,16 @@ export async function runScenario(
   // GL = subledger (open-item aging) + direct (JEs to control). The residual
   // isolates application-graph anomalies (settlements that don't net between the
   // two open-item lines they link) — a real bug — from legitimate direct JEs.
+  // The hidden void pairs are asserted separately: they must net to zero per
+  // control account, so a mis-posted reversal still fails loudly here instead
+  // of hiding behind the exclusion above.
+  const voidTie = await all<{ account: string; number: string | null; mirror: string }>(sql`
+    with recursive ${voidMirrorCtes}
+    select account, number, mirror::text as mirror from voidtie order by number`);
+  const worstVoid = voidTie.reduce(
+    (worst, row) => cmp(abs(row.mirror), worst) > 0 ? abs(row.mirror) : worst,
+    "0.0000",
+  );
   const controlTieOut = tie.map((r) => {
     const diff = toUnits(r.gl) - toUnits(r.subledger) - toUnits(r.direct);
     return { account: r.account, number: r.number, kind: r.kind, gl: r.gl, subledger: r.subledger, direct: r.direct, diff: fromUnits(diff) };
@@ -607,8 +670,9 @@ export async function runScenario(
   );
   checks.push({
     name: "subledger-gl-tieout",
-    ok: cmp(worstTie, "0.0100") < 0,
-    detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}`,
+    ok: cmp(worstTie, "0.0100") < 0 && cmp(worstVoid, "0.0100") < 0,
+    detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}` +
+      (voidTie.length > 0 ? `; void mirrors net ${worstVoid} across ${voidTie.length} account(s) (want 0)` : ""),
   });
 
   // -- Inventory subledger ↔ GL tie-out per legal entity and control account.
