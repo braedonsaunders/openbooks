@@ -4358,7 +4358,8 @@
       "title": "You were redirected",
       "settingsBody": "/admin/settings now lives here, under Company Setup — update your bookmark.",
       "indexBody": "Setup now opens on the go-live checklist — start here.",
-      "providersBody": "Payment providers need the Online payments feature — turn it on here to continue."
+      "providersBody": "Payment providers need the Online payments feature — turn it on here to continue.",
+      "entityBody": "This setup page has moved to its module — update your bookmark."
     },
     "guide": {
       "hero": {

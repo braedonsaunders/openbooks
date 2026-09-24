@@ -21,6 +21,7 @@ export const AI_RAILS_SETTINGS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'aiGovernanceLedger',
   rehomed: true, // section on the Admin → AI page
+  rehomedTo: '/admin/ai',
   iconKey: 'settings',
   orgScoped: true,
   actorCols: true,

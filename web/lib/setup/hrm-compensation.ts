@@ -46,6 +46,7 @@ export const JOB_FAMILIES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
   rehomed: true, // section on the Compensation page
+  rehomedTo: '/hrm/compensation',
   iconKey: 'layers',
   orgScoped: true,
   actorCols: true,
@@ -71,6 +72,7 @@ export const JOB_LEVELS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
   rehomed: true, // section on the Compensation page
+  rehomedTo: '/hrm/compensation',
   iconKey: 'ladder',
   orgScoped: true,
   actorCols: true,
@@ -104,6 +106,7 @@ export const PAY_BANDS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'hrmCompensation',
   rehomed: true, // section on the Compensation page
+  rehomedTo: '/hrm/compensation',
   iconKey: 'scale',
   orgScoped: true,
   actorCols: true,

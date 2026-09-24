@@ -26,6 +26,7 @@ export const PROJECT_GEOFENCES_ENTITY: SetupEntity = {
   groupKey: 'projects',
   featureKey: 'fieldTimeGeofence',
   rehomed: true, // section on the project page
+  rehomedTo: '/projects',
   iconKey: 'map-pin',
   orgScoped: true,
   actorCols: true,
@@ -54,6 +55,7 @@ export const TIME_KIOSKS_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'fieldTimeKiosk',
   rehomed: true, // section on the Timesheets setup surface
+  rehomedTo: '/time/setup',
   iconKey: 'tablet',
   orgScoped: true,
   actorCols: true,
@@ -83,6 +85,7 @@ export const TIME_APPROVAL_STAGES_ENTITY: SetupEntity = {
   groupKey: 'workforce',
   featureKey: 'fieldTimeMultiStageApproval',
   rehomed: true, // section on the Timesheets setup surface
+  rehomedTo: '/time/setup',
   iconKey: 'git-branch',
   orgScoped: true,
   actorCols: true,

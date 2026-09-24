@@ -25,6 +25,7 @@ const keys = [
   'setup.redirectNotice.settingsBody',
   'setup.redirectNotice.indexBody',
   'setup.redirectNotice.providersBody',
+  'setup.redirectNotice.entityBody',
   'setup.wizard.skipped',
 ] as const
 
@@ -93,6 +94,7 @@ test('each alias source renders its own reason', () => {
   assert.match(renderNotice('settings'), /\/admin\/settings now lives here/)
   assert.match(renderNotice('setup-index'), /go-live checklist/)
   assert.match(renderNotice('payment-providers'), /Online payments/)
+  assert.match(renderNotice('setup-entity'), /moved to its module/)
 })
 
 test('no source renders no notice', () => {

@@ -24,6 +24,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
+import { movedUrl } from '../../../../../lib/moved-redirect'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { resolvedFeatureState, featureEnabled } from '../../../../../lib/features'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
@@ -181,23 +182,16 @@ export async function loadSetupEntity(
     await requireFeatureEnabled(orgId, 'multiCurrency')
   }
 
-  const assetSetupTabs: Record<string, string> = {
-    'tax-regimes': 'regimes',
-    'tax-pool-classes': 'classes',
-    'tax-first-year-rules': 'first-year',
-  }
-  if (assetSetupTabs[entityKey]) {
-    redirect(mergeHref('/admin/setup/tax-depreciation', sp, { tab: assetSetupTabs[entityKey] }))
-  }
-  const bookDepreciationTabs: Record<string, string> = {
-    'depreciation-methods': 'methods',
-    'depreciation-book-policies': 'books',
-  }
-  if (bookDepreciationTabs[entityKey]) {
-    redirect(mergeHref('/admin/setup/depreciation', sp, { tab: bookDepreciationTabs[entityKey] }))
-  }
-
   const baseEntity = isCompany || isPeriodClose || isFxProvider ? undefined : SETUP_ENTITY_BY_KEY.get(entityKey)
+  // Rehomed entities redirect to the home the registry records, with the
+  // ?movedFrom notice — derived for every rehomed entity, never a hand
+  // list. The home's own section address (e.g. ?tab=) wins over reader
+  // params; everything else rides along. Unknown keys still 404 below.
+  if (baseEntity?.rehomed && baseEntity.rehomedTo) {
+    const [homePath, homeQuery] = baseEntity.rehomedTo.split('?', 2)
+    const homeParams = Object.fromEntries(new URLSearchParams(homeQuery ?? ''))
+    redirect(movedUrl(homePath ?? '/admin/setup', 'setup-entity', { ...sp, ...homeParams }))
+  }
   if (!isCompany && !isPeriodClose && !isFxProvider && (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed)) {
     notFound()
   }

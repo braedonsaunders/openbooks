@@ -4339,7 +4339,8 @@
       "title": "Vous avez été redirigé",
       "settingsBody": "/admin/settings se trouve désormais ici, dans Configuration de l'entreprise — mettez à jour votre favori.",
       "indexBody": "La configuration s'ouvre désormais sur la liste de mise en service — commencez ici.",
-      "providersBody": "Les prestataires de paiement nécessitent la fonction Paiements en ligne — activez-la ici pour continuer."
+      "providersBody": "Les prestataires de paiement nécessitent la fonction Paiements en ligne — activez-la ici pour continuer.",
+      "entityBody": "Cette page de configuration a déménagé vers son module — mettez à jour votre signet."
     },
     "guide": {
       "hero": {
