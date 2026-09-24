@@ -27,6 +27,7 @@
   "costSource": "实际成本来源",
   "costDimension": "成本科目组",
   "laborSource": "人工成本来源",
+  "laborDimension": "人工成本科目组",
   "overheadSource": "间接费用来源",
   "overheadDimension": "间接费用科目组",
   "budgetSource": "成本预算来源",

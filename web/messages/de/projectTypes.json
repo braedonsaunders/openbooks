@@ -27,6 +27,7 @@
   "costSource": "Quelle der Ist-Kosten",
   "costDimension": "Kostenkontengruppe",
   "laborSource": "Quelle der Arbeitskosten",
+  "laborDimension": "Arbeitskostenkontengruppe",
   "overheadSource": "Quelle der Gemeinkosten",
   "overheadDimension": "Gemeinkostenkontengruppe",
   "budgetSource": "Quelle des Kostenbudgets",

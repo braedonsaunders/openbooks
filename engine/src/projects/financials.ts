@@ -396,6 +396,14 @@ async function resolveProjectFinancialsInSnapshot(
         : profile.laborCost.source === 'account_group'
           ? (!profile.laborCost.dimension
               ? Promise.reject(new Error("laborCost.source 'account_group' requires laborCost.dimension"))
+              : laborIds.length === 0
+                ? Promise.reject(new Error(
+                    `laborCost.source 'account_group' is unresolved: ` +
+                    (profile.laborCost.groupKeys?.length
+                      ? `groupKeys [${profile.laborCost.groupKeys.join(", ")}] resolve to no active accounts`
+                      : `dimension '${profile.laborCost.dimension}' has no active accounts`) +
+                    ` — refusing instead of pricing labor as zero; reactivate the group or correct the project type's labor source`,
+                  ))
               : db.execute(sql`select sub.base_currency as func, max(e.posting_date)::text as late,
                    coalesce(sum(l.amount) filter (where ${costPredicate(laborCostSource, laborIds)}), 0) as labor
                  from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id join accounts a on a.id = l.account_id and a.org_id = l.org_id

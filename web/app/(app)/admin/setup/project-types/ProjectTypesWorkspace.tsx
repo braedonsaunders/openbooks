@@ -346,6 +346,7 @@ export function ProjectTypesWorkspace({
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as unknown as "account_types" | "account_group" | "none" } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as unknown as "account_group" | "none" | "in_actual_cost" | "time_rate" | "estimated_time_rate" | "payroll_je" } })} />
+              {fp.laborCost.source === 'account_group' ? <EnumField label={t('laborDimension')} value={fp.laborCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => {
                 const method = v as FinancialProfile['overhead']['method']
                 setFp({

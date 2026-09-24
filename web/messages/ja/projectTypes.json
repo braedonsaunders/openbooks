@@ -27,6 +27,7 @@
   "costSource": "実際原価のソース",
   "costDimension": "原価の勘定グループ",
   "laborSource": "労務原価のソース",
+  "laborDimension": "労務原価の勘定グループ",
   "overheadSource": "間接費のソース",
   "overheadDimension": "間接費の勘定グループ",
   "budgetSource": "原価予算のソース",
