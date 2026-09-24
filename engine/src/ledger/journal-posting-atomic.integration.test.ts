@@ -589,6 +589,65 @@ test(
   },
 );
 
+test(
+  "foreign-currency journal posting uses the direct quote when both same-day directions exist",
+  { skip: !DB },
+  async () => {
+    const org = await withBypass(() => createScratchOrg());
+    try {
+      const actorId = await withBypass(() => createScratchUser(org.orgId, "FX tie-break poster", "admin"));
+      const documentId = randomUUID();
+      await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`
+          insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+          values
+            (${org.orgId}, 'EUR', 'CAD', ${org.date}, 'spot', '2.0000000000', 'manual'),
+            (${org.orgId}, 'CAD', 'EUR', ${org.date}, 'spot', '0.2500000000', 'manual')
+        `);
+        await db.execute(sql`
+          insert into documents
+            (id, org_id, kind, status, document_number, subsidiary_id,
+             document_date, posting_date, currency, subtotal, tax_total, total, created_by)
+          values
+            (${documentId}, ${org.orgId}, 'journal', 'draft', 'JE-FX-DIRECTION',
+             ${org.subsidiaryId}, ${org.date}, ${org.date}, 'EUR', '100', '0', '100', ${actorId})
+        `);
+        await db.execute(sql`
+          insert into document_lines
+            (org_id, document_id, line_number, account_id, description,
+             amount, quantity, unit_price, tax_amount)
+          values
+            (${org.orgId}, ${documentId}, 1, ${org.accounts.bank}, 'EUR debit', '100', '1', '100', '0'),
+            (${org.orgId}, ${documentId}, 2, ${org.accounts.cogs}, 'EUR credit', '-100', '1', '-100', '0')
+        `);
+        await db.execute(sql`
+          update documents
+             set status = 'approved', submitted_by = ${actorId}, submitted_at = now()
+           where id = ${documentId} and org_id = ${org.orgId}
+        `);
+      });
+
+      const entryId = await withOrgTransaction(org.orgId, async () =>
+        postDocument(documentId, postingControlDeps(org), { deferEffects: true }),
+      );
+      const lines = await withOrgContext(org.orgId, () =>
+        db.execute<{ amount: string; fx_rate: string; txn_amount: string }>(sql`
+          select amount::text as amount, fx_rate::text as fx_rate, txn_amount::text as txn_amount
+            from journal_lines
+           where org_id = ${org.orgId} and entry_id = ${entryId}
+           order by line_number
+        `),
+      );
+      assert.deepEqual(lines.rows, [
+        { amount: "200.0000", fx_rate: "2.0000000000", txn_amount: "100.0000" },
+        { amount: "-200.0000", fx_rate: "2.0000000000", txn_amount: "-100.0000" },
+      ]);
+    } finally {
+      await withBypass(() => dropScratchOrg(org.orgId));
+    }
+  },
+);
+
 /**
  * PA1: postDocument is atomic by default, whatever the caller does. The
  * prepare phase used to run outside the posting transaction: an UNWRAPPED
