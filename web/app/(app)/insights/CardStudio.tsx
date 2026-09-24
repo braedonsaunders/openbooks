@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Filter, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { UNTITLED_CARD_NAME as UNTITLED_CARD } from '../../../lib/insight-untitled'
 import { confirmDialog } from '../../../lib/confirm'
 import {
   INITIAL_CARD_SAVE,
@@ -36,9 +37,6 @@ import type { CardRow } from '../../api/insights/_lib'
 
 const field = 'space-y-1.5'
 const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
-// Sentinel persisted to the DB for unnamed cards — stored data, never translated.
-// The drawer title shows the localized `cardStudio.untitled` instead.
-const UNTITLED_CARD = 'Untitled card'
 
 type MeasureState = { field: string | ''; agg: AggFn }
 type DimensionState = { field: string; bin: DateBin | '' }
@@ -156,13 +154,24 @@ export function CardStudio({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query }),
       })
-      const data = await res.json()
       if (seq !== previewSeq.current) return
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the named refusal, never a SyntaxError from
+      // res.json() that collapses to the generic preview failure.
       if (!res.ok) {
-        setPreviewError(data.error ?? t('errors.queryFailed'))
+        const message = await readApiErrorMessage(res, t('errors.queryFailed'))
+        if (seq !== previewSeq.current) return
+        setPreviewError(message)
         setResult(null)
       } else {
-        setResult(data as QueryResult)
+        const data = (await res.json().catch(() => null)) as QueryResult | null
+        if (seq !== previewSeq.current) return
+        if (!data || !Array.isArray(data.rows)) {
+          setPreviewError(t('errors.queryFailed'))
+          setResult(null)
+        } else {
+          setResult(data)
+        }
       }
     } catch {
       if (seq === previewSeq.current) setPreviewError(t('cardStudio.previewRequestFailed'))
@@ -322,33 +331,41 @@ export function CardStudio({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ publish: next, expectedUpdatedAt: revisionRef.current }),
       })
-      const data = await res.json()
-      if (!res.ok) toast.error(data.error ?? t('errors.updateFailed'))
-      else {
-        setStatus(next ? 'published' : 'draft')
-        toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
-        revisionRef.current = typeof data.updated_at === 'string' ? data.updated_at : null
-      }
+      // The status is checked before the body is parsed: a non-JSON error
+      // body must surface the failure, never a SyntaxError from res.json().
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('errors.updateFailed')))
+      const data = (await res.json().catch(() => null)) as { updated_at?: unknown } | null
+      setStatus(next ? 'published' : 'draft')
+      toast.success(next ? t('cardStudio.publishedToast') : t('cardStudio.draftToast'))
+      revisionRef.current = typeof data?.updated_at === 'string' ? data.updated_at : null
       router.refresh()
-    } catch {
-      toast.error(t('errors.updateFailed'))
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('errors.updateFailed'))
     } finally {
       setBusy(false)
     }
   }
 
   async function remove() {
-    if (!confirm(t('cardStudio.deleteConfirm'))) return
+    const confirmed = await confirmDialog({
+      message: t('cardStudio.deleteConfirm'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
     setBusy(true)
-    const res = await fetch(`/api/insights/cards/${card.id}`, { method: 'DELETE' })
-    if (!res.ok) {
-      toast.error(t('cardStudio.deleteFailed'))
+    try {
+      const res = await fetch(`/api/insights/cards/${card.id}`, { method: 'DELETE' })
+      // The status is checked before the body is parsed: the server's named
+      // refusal wins over the generic fallback.
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('cardStudio.deleteFailed')))
+      toast.success(t('cardStudio.deletedToast'))
+      router.push('/insights')
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error && error.message ? error.message : t('cardStudio.deleteFailed'))
+    } finally {
       setBusy(false)
-      return
     }
-    toast.success(t('cardStudio.deletedToast'))
-    router.push('/insights')
-    router.refresh()
   }
 
   /** Create mode only: the single idempotent POST behind explicit Save. */
@@ -370,17 +387,14 @@ export function CardStudio({
           vizSettings,
         }),
       })
+      // The status is checked before the body is trusted: the server's named
+      // refusal (and remedy) wins over the generic fallback.
       if (!res.ok) {
-        const failure = (await res.json().catch(() => null)) as { error?: unknown } | null
-        toast.error(
-          typeof failure?.error === 'string' && failure.error
-            ? failure.error
-            : t('cards.createDraftFailed'),
-        )
+        toast.error(await readApiErrorMessage(res, t('cards.createDraftFailed')))
         return
       }
-      const data = (await res.json()) as { id?: unknown }
-      if (typeof data.id !== 'string' || !data.id) {
+      const data = (await res.json().catch(() => null)) as { id?: unknown } | null
+      if (!data || typeof data.id !== 'string' || !data.id) {
         toast.error(t('cards.createDraftFailed'))
         return
       }
