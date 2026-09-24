@@ -150,6 +150,7 @@ export function hrmSpec(data: HrmHomeData): PageSpec {
                         overdueLabel: data.onboarding.overdueLabel,
                         upcomingLabel: data.onboarding.upcomingLabel,
                         empty: data.onboarding.empty,
+                        noDueSoon: data.onboarding.noDueSoon,
                         viewAll: data.onboarding.viewAll,
                         viewAllHref: data.onboarding.viewAllHref,
                       }),

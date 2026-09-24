@@ -115,6 +115,7 @@ export interface HrmOnboardingPanelData {
   overdueLabel: string
   upcomingLabel: string
   empty: string
+  noDueSoon: string
   viewAll: string
   viewAllHref: string
 }
