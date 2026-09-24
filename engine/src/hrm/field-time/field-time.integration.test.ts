@@ -8,7 +8,7 @@
  * - Batch post creates entries once and equipment charges once; a second
  *   post refuses; the charge posts the same balanced job-cost and
  *   recovery rows the equipment-charge path asserts.
- * - The multi-stage chain runs through Flows with stage 2 rejecting.
+ * - The multi-stage chain runs through Flows with stage 3 rejecting.
  * - Feature-off: recording refuses with the remedy, never a row.
  */
 import assert from "node:assert/strict";
@@ -313,7 +313,7 @@ test("a foreman double-submit names the existing batch instead of a 500", { skip
   }
 });
 
-test("a declared two-stage chain rejects at stage 2 with reasons", { skip: !DB }, async () => {
+test("a declared three-stage chain rejects at its third stage with reasons", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await enableFieldTime(org.orgId);
@@ -326,7 +326,11 @@ test("a declared two-stage chain rejects at stage 2 with reasons", { skip: !DB }
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
       await saveChain({
         orgId: org.orgId, actorUserId: actor, subject: "crew_time_batch",
-        stages: [{ order: 1, approverKind: "supervisor" }, { order: 2, approverKind: "payroll" }],
+        stages: [
+          { order: 1, approverKind: "supervisor" },
+          { order: 2, approverKind: "payroll" },
+          { order: 3, approverKind: "supervisor" },
+        ],
       });
       const batchId = await createBatch({
         orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
@@ -339,7 +343,8 @@ test("a declared two-stage chain rejects at stage 2 with reasons", { skip: !DB }
       });
       await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
       assert.equal(await approveBatchStage({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }), "approved_stage_1");
-      await rejectBatch({ orgId: org.orgId, actorUserId: actor, batchId, reason: "Stage 2: split the overtime line", allowedSubsidiaryIds: null });
+      assert.equal(await approveBatchStage({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }), "approved_stage_2");
+      await rejectBatch({ orgId: org.orgId, actorUserId: actor, batchId, reason: "Stage 3: split the overtime line", allowedSubsidiaryIds: null });
       const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${batchId}`)).rows[0]?.status;
       assert.equal(status, "rejected");
       const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }));
