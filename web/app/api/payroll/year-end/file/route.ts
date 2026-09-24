@@ -37,7 +37,7 @@ function parseBody(body: Record<string, unknown>): FileInput | NextResponse {
   return { country: body.country, filing: body.filing, year, params }
 }
 
-async function serveFile(gate: Authz, input: FileInput) {
+async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' = 'POST') {
   const { country, filing: filingKey, year, params } = input
   // A filing that is ISSUED per employee declares an `issue` block, and
   // `issue.param` names the body key its selection travels under. That
@@ -62,6 +62,12 @@ async function serveFile(gate: Authz, input: FileInput) {
     throw e
   }
   const issue = filing.issue ?? null
+  if (method === 'GET' && issue && params[issue.param] != null) {
+    return NextResponse.json(
+      { error: 'issue filing selections must be submitted in a POST body' },
+      { status: 405 },
+    )
+  }
   const section = (await orgYearEndFilings(gate.user.orgId, year))
     .find((candidate) => candidate.country === country && candidate.key === filingKey)
   const selected = issue ? params[issue.param] : undefined
@@ -133,12 +139,6 @@ export async function GET(req: Request) {
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
   const params = Object.fromEntries(url.searchParams)
-  if (params.employees != null) {
-    return NextResponse.json(
-      { error: 'issue filing selections must be submitted in a POST body' },
-      { status: 405 },
-    )
-  }
   const yearRefusal = payrollYearRefusal(params.year)
   if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
   const year = Number(params.year)
@@ -147,7 +147,7 @@ export async function GET(req: Request) {
     filing: params.filing ?? '',
     year,
     params,
-  })
+  }, 'GET')
 }
 
 /**
