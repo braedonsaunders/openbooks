@@ -275,6 +275,17 @@ async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string):
   }
 }
 
+/**
+ * Base-currency value of one planned transaction-currency amount: the same
+ * mulRate conversion the run's journal posts (DR deferred / CR earned are
+ * stamped in base). The run total and the preview total both sum THIS, so a
+ * mixed-currency run reports the posted base total — never a mixed-currency
+ * sum that matches neither the preview nor the ledger.
+ */
+export function recognitionBaseAmount(planned: string, fxRate: string): string {
+  return mulRate(planned, fxRate);
+}
+
 export type VariableEstimationMethod = "expected_value" | "most_likely_amount";
 
 export interface VariableConsiderationInput {
@@ -1984,7 +1995,7 @@ export async function runRevenueRecognition(
         continue;
       }
       result.posted++;
-      result.totalAmount = add(result.totalAmount, posted.planned);
+      result.totalAmount = add(result.totalAmount, recognitionBaseAmount(posted.planned, posted.row.recognition_fx_rate));
       result.entries.push({
         contract: posted.row.contract_number,
         obligation: posted.row.obligation_desc,
@@ -2759,7 +2770,7 @@ export async function previewRevenueRecognition(
       }
     }
 
-    if (skipReason === null) totalAmount = add(totalAmount, mulRate(amount, row.recognition_fx_rate));
+    if (skipReason === null) totalAmount = add(totalAmount, recognitionBaseAmount(amount, row.recognition_fx_rate));
 
     rows.push({
       lineId: row.line_id,

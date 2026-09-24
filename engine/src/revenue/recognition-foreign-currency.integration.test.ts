@@ -10,7 +10,8 @@ import {
   dropScratchOrg,
   seedFlowActors,
 } from "../testing/fixtures.ts";
-import { runRevenueRecognition } from "./recognition.ts";
+import { previewRevenueRecognition, runRevenueRecognition } from "./recognition.ts";
+import type { ScratchOrg } from "../testing/fixtures.ts";
 
 // Foreign-currency revenue recognition (0256): a schedule never amended
 // used to convert its plan at FX rate 1 in the functional currency, while
@@ -36,6 +37,47 @@ async function runMigration(): Promise<void> {
     .join("\n");
   assert.match(body, /0256_recognition_schedule_transaction_rate/, "migration file must be the shipped artifact");
   await db.execute(sql.raw(body));
+}
+
+async function postForeignInvoice(
+  org: ScratchOrg,
+  adminId: string,
+  invoice: { number: string; currency: string; fx: string; total: number },
+): Promise<void> {
+  const documentId = randomUUID();
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, document_number, party_id, subsidiary_id,
+       document_date, posting_date, due_date, currency, fx_rate, status,
+       subtotal, tax_total, total, is_final_invoice, custom, extra_dims,
+       created_by, updated_by)
+    values
+      (${documentId}, ${org.orgId}, 'customer_invoice', ${invoice.number},
+       ${org.customerId}, ${org.subsidiaryId}, ${org.date}, ${org.date},
+       ${org.date}, ${invoice.currency}, ${invoice.fx}, 'draft', ${invoice.total}, 0, ${invoice.total}, false,
+       '{}'::jsonb, '{}'::jsonb, ${adminId}, ${adminId})
+  `);
+  await db.execute(sql`
+    insert into document_lines
+      (id, org_id, document_id, line_number, item_id, account_id,
+       quantity, unit_price, amount, tax_amount, is_billable,
+       quantity_fulfilled, quantity_billed, custom, tax_overridden,
+       extra_dims, created_by, updated_by)
+    values
+      (${randomUUID()}, ${org.orgId}, ${documentId}, 1,
+       ${org.items.service}, ${org.accounts.revenue}, 1, ${invoice.total}, ${invoice.total}, 0,
+       false, 0, 0, '{}'::jsonb, false, '{}'::jsonb,
+       ${adminId}, ${adminId})
+  `);
+  await db.execute(sql`
+    update documents set status = 'approved', updated_at = now()
+     where id = ${documentId} and org_id = ${org.orgId}
+  `);
+  await postDocument(
+    documentId,
+    { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } },
+    { audit: { actorId: adminId, source: "test" } },
+  );
 }
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -126,6 +168,47 @@ test("a euro invoice recognizes out its full dollar-deferred balance at the hist
       select distinct currency, fx_rate::text as fx_rate from journal_lines
        where org_id = ${org.orgId} and account_id = ${org.accounts.deferred}`)).rows;
     assert.deepEqual(legs, [{ currency: "EUR", fx_rate: "1.1000000000" }]);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("a mixed-currency run totals the posted base amounts, like the preview", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  const actors = await seedFlowActors(org.orgId);
+  try {
+    await runMigration();
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units)
+      values ('EUR', 'Euro', 2) on conflict (code) do nothing`);
+    await db.execute(sql`
+      insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${org.orgId}, 'EUR', 'CAD', ${org.date}, 'spot', '1.1000000000', 'manual')`);
+    // One-period terms keep the arithmetic exact: EUR 1,000 @ 1.10 posts
+    // CAD 1,100 and CAD 1,000 @ 1 posts CAD 1,000.
+    await db.execute(sql`
+      update recognition_rules set recognition_periods = 1 where org_id = ${org.orgId}`);
+    await postForeignInvoice(org, actors.adminId, { number: "INV-FX-EUR", currency: "EUR", fx: "1.10", total: 1000 });
+    await postForeignInvoice(org, actors.adminId, { number: "INV-FX-CAD", currency: "CAD", fx: "1", total: 1000 });
+
+    const preview = await previewRevenueRecognition(org.orgId, { asOfDate: "2026-07-31" });
+    const run = await runRevenueRecognition(org.orgId, "2026-07-31", actors.adminId);
+    assert.equal(run.posted, 2);
+
+    // The run total is the base total the journals post — never the
+    // mixed-currency transaction sum (which would read 2000.0000 here).
+    assert.equal(run.totalAmount, "2100.0000");
+    assert.equal(preview.totalAmount, run.totalAmount);
+
+    const postedBase = (await db.execute<{ total: string }>(sql`
+      select coalesce(sum(line.amount), 0)::text as total
+        from journal_lines line
+        join journal_entries entry on entry.id = line.entry_id
+       where line.org_id = ${org.orgId}
+         and line.account_id = ${org.accounts.deferred}
+         and entry.status = 'posted'
+         and entry.origin = 'revenue_recognition'`)).rows[0]!.total;
+    assert.equal(postedBase, run.totalAmount);
   } finally {
     await dropScratchOrg(org.orgId);
   }
