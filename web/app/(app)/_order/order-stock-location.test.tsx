@@ -147,12 +147,14 @@ test('the order picker shows only for several locations and stocked rows', async
   assert.ok(warehouseHeader(), 'several locations must offer the Warehouse column')
   const stocked = warehouseSelectsIn(0)
   assert.equal(stocked.length, 1, 'the stocked row must offer exactly one warehouse picker')
+  const picker = stocked[0]
+  assert.ok(picker, 'the stocked row must offer the picker')
   assert.deepEqual(
-    [...stocked[0].options].map((o) => o.text),
+    [...picker.options].map((o) => o.text),
     ['—', 'WH-1', 'WH-2'],
     'the picker must offer every active location',
   )
-  assert.equal(stocked[0].value, LOC_1, 'the stored line warehouse must hydrate the picker')
+  assert.equal(picker.value, LOC_1, 'the stored line warehouse must hydrate the picker')
   assert.equal(warehouseSelectsIn(1).length, 0, 'a non-stocked row must get no warehouse picker')
 })
 
@@ -164,7 +166,9 @@ test('a single location never asks a question', async (t) => {
     return null
   })
   t.after(restoreFetch)
-  const { unmount } = await mountDraft([stockedLine(), expenseLine()], [LOCATIONS[0]])
+  const single = LOCATIONS[0]
+  assert.ok(single, 'the fixture must offer one location')
+  const { unmount } = await mountDraft([stockedLine(), expenseLine()], [single])
   t.after(unmount)
   assert.equal(warehouseHeader(), false, 'one location must render no Warehouse column')
   assert.equal(warehouseSelectsIn(0).length, 0, 'one location must render no picker even on stocked rows')
@@ -215,8 +219,10 @@ test('the save payload sends the picked line warehouse', async (t) => {
   assert.equal(bodies.length, 1, 'save must issue one draft PATCH')
   const lines = (bodies[0] as { lines?: { stockLocationId?: unknown }[] }).lines
   assert.ok(Array.isArray(lines) && lines.length > 0, 'the save payload must carry lines')
+  const firstLine = lines[0]
+  assert.ok(firstLine, 'the save payload must carry the stocked line')
   assert.equal(
-    lines[0].stockLocationId,
+    firstLine.stockLocationId,
     LOC_2,
     'the save payload must send the picked warehouse on the stocked line',
   )
