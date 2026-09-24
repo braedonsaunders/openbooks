@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
+import { U } from "../canada/decimal.ts";
 import { sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers US_EMPLOYEE_FACTS, so every read below resolves
@@ -214,6 +215,9 @@ export async function computeUsStatutory(
       tenantRates: config.subRegionRates,
     }),
   });
+  const supplementalPaymentTiming = U(income) === 0n && U(nonPeriodic) > 0n
+    ? "separate" as const
+    : "combined" as const;
 
   const blocking = blockingGaps(resolution);
   const advisory = advisoryGaps(resolution);
@@ -292,6 +296,7 @@ export async function computeUsStatutory(
       // explicitly through taxQualifiedDeductions (the Nebraska minimum).
       wages: income,
       supplemental: nonPeriodic,
+      supplementalPaymentTiming,
       federalIncomeTax: statutory.fit,
       taxQualifiedDeductions,
       certificateFor,

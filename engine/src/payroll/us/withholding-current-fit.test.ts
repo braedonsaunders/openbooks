@@ -6,7 +6,8 @@ import {
   type ResolvedCertificate,
 } from '../certificates.ts'
 import { PAYROLL_COUNTRY_PACKS } from '../packs.ts'
-import { computeUsWithholding } from './withholding.ts'
+import { computeUsWithholding, US_SEPARATE_SUPPLEMENTAL_METHODS } from './withholding.ts'
+import { US_STATES } from './rates.ts'
 import { AL_WITHHOLDING } from './states/al.ts'
 import { OR_WITHHOLDING } from './states/or.ts'
 import type { ResolvedWithholdingLevy } from '../withholding-resolution.ts'
@@ -183,5 +184,45 @@ test('PA Act 32 EIT withholds at the winning reach rate and refuses a missing on
   assert.throws(
     () => computeUsWithholding(missing),
     /their own and DCED revises/,
+  )
+})
+
+test('Delaware refuses separately paid supplemental wages without Section 14 differential inputs', () => {
+  // Delaware Employer's Guide, Section 14, requires incremental withholding on
+  // a separately paid bonus. https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+  const input = {
+    levy: levy('DE', 'us_de_sdw4a'),
+    payDate: '2026-07-21', periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '0.0000', supplemental: '1000.0000',
+    supplementalPaymentTiming: 'separate' as const,
+    certificateFor: () => null, tenantRates: () => undefined,
+    federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0]
+
+  assert.throws(
+    () => computeUsWithholding(input),
+    /DE income tax separately paid supplemental wages require a declared state method; Delaware Employer's Guide Section 14 requires the incremental withholding differential.*refused by name/,
+  )
+})
+
+test('US supplemental withholding refuses when payment timing was not captured', () => {
+  const input = {
+    levy: levy('DE', 'us_de_sdw4a'),
+    payDate: PAY_DATE, periodEnd: PERIOD_END, periodsPerYear: 26,
+    wages: '2000.0000', supplemental: '500.0000',
+    certificateFor: () => null, tenantRates: () => undefined,
+    federalIncomeTax: '0.0000',
+  } as Parameters<typeof computeUsWithholding>[0]
+
+  assert.throws(
+    () => computeUsWithholding(input),
+    /supplemental timing is missing for DE income tax.*refused by name/,
+  )
+})
+
+test('every US state and DC declares a separate-supplemental method', () => {
+  assert.deepEqual(
+    Object.keys(US_SEPARATE_SUPPLEMENTAL_METHODS).sort(),
+    [...US_STATES].sort(),
   )
 })

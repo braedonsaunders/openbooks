@@ -46,6 +46,8 @@ import { add as addMoney } from "../../money/money.ts";
 import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
+import { U } from "../canada/decimal.ts";
+import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import {
   miCityWithholding,
   ohMunicipalWithholding,
@@ -60,6 +62,40 @@ import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
 
 export class UsWithholdingError extends PayrollError {}
+
+export type UsSeparateSupplementalMethod =
+  | { kind: "refuse"; detail: string }
+  | { kind: "not_applicable" }
+  | { kind: "aggregate"; source: string }
+  | { kind: "differential"; source: string }
+  | { kind: "flat"; rates: readonly { effectiveFrom: string; rate: string; source: string }[] };
+
+/**
+ * State method declarations for a supplemental check paid apart from regular
+ * wages. Every US jurisdiction is present so adding a state to `US_STATES`
+ * creates a compile-time obligation to declare its supplemental treatment.
+ * The current tax states refuse until their official separate-payment method
+ * and required facts are implemented; no-tax jurisdictions have no state
+ * withholding to calculate.
+ */
+const US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS = Object.fromEntries(
+  US_STATES.map((state) => [
+    state,
+    NO_WITHHOLDING_STATES.has(state)
+      ? { kind: "not_applicable" as const }
+      : { kind: "refuse" as const, detail: "the state method is not yet transcribed" },
+  ]),
+) as Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
+
+export const US_SEPARATE_SUPPLEMENTAL_METHODS = {
+  ...US_DEFAULT_SEPARATE_SUPPLEMENTAL_METHODS,
+  DE: {
+    kind: "refuse",
+    // Delaware Employer's Guide Section 14:
+    // https://revenue.delaware.gov/employers-guide-withholding-regulations-employers-duties/
+    detail: "Delaware Employer's Guide Section 14 requires the incremental withholding differential and its regular-pay basis",
+  } as const,
+} satisfies Readonly<Record<(typeof US_STATES)[number], UsSeparateSupplementalMethod>>;
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the
@@ -114,6 +150,8 @@ export interface UsWithholdingInput {
   wages: string;
   /** Supplemental wages this period. */
   supplemental?: string;
+  /** Whether supplemental wages were paid with regular wages or separately. */
+  supplementalPaymentTiming?: "combined" | "separate";
   /** Current paycheck's computed federal income-tax withholding. */
   federalIncomeTax: string;
   /** Tax-qualified deductions from this period, used by Nebraska's floor. */
@@ -151,6 +189,25 @@ export interface UsWithholdingResult {
  */
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
+  const supplemental = input.supplemental == null ? 0n : U(input.supplemental);
+  if (supplemental > 0n && input.supplementalPaymentTiming == null) {
+    throw new UsWithholdingError(
+      `separately paid or combined supplemental timing is missing for ${levy.label}; record whether this payment was issued with regular wages before calculating — refused by name`,
+    );
+  }
+  if (supplemental > 0n && input.supplementalPaymentTiming === "separate") {
+    const method = US_SEPARATE_SUPPLEMENTAL_METHODS[levy.region as keyof typeof US_SEPARATE_SUPPLEMENTAL_METHODS];
+    if (method.kind === "not_applicable") return null;
+    if (method.kind === "refuse") {
+      throw new UsWithholdingError(
+        `${levy.label} separately paid supplemental wages require a declared state method; ${method.detail}. `
+        + "Record the jurisdiction's official method and required inputs before calculating — refused by name",
+      );
+    }
+    throw new UsWithholdingError(
+      `${levy.label} separately paid supplemental method ${method.kind} is declared but its calculator is not available in this pack version — update the pack before calculating; refused by name`,
+    );
+  }
   const certificate = levy.certificateKey
     ? input.certificateFor(levy.certificateKey) ?? emptyResolvedCertificate(levy.certificateKey)
     : emptyResolvedCertificate(`${levy.label} publishes no withholding certificate`);
@@ -168,6 +225,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       periodsPerYear: input.periodsPerYear,
       wages: input.wages,
       supplemental: input.supplemental,
+      supplementalPaymentTiming: input.supplementalPaymentTiming,
       federalIncomeTax: input.federalIncomeTax,
       taxQualifiedDeductions: input.taxQualifiedDeductions,
       certificate,
