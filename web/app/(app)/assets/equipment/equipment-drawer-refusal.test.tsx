@@ -114,7 +114,7 @@ function freshGlobals() {
 
 const UNIT_ID = randomUUID();
 
-function payload() {
+function payload(revision = 0) {
   return {
     unit: {
       id: UNIT_ID,
@@ -136,13 +136,13 @@ function payload() {
       serial_number: "",
       capacity_quantity: null,
       capacity_unit: null,
-      revision: 0,
+      revision,
     },
     metrics: { recovery: "0", billed_revenue: "0", direct_costs: "0", depreciation: "0", usage: "0", billable: "0" },
   };
 }
 
-async function mountDrawer(extraProps: Record<string, unknown> = {}) {
+async function mountDrawer(extraProps: Record<string, unknown> = {}, revision = 0) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -151,7 +151,7 @@ async function mountDrawer(extraProps: Record<string, unknown> = {}) {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <EquipmentDrawer
-            payload={payload()}
+          payload={payload(revision)}
             items={[]}
             assets={[]}
             books={[]}
@@ -268,3 +268,20 @@ test("a dead network on save pins the fallback and releases Save", async (t) => 
   assert.equal(save.disabled, false, "busy must release after a transport failure");
 });
 
+test("an edit sends the revision that was loaded with the unit", async (t) => {
+  freshGlobals();
+  const patches: { revision?: number }[] = [];
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url === `/api/equipment/${UNIT_ID}` && init?.method === "PATCH") {
+      patches.push(JSON.parse(String(init.body)) as { revision?: number });
+      return Response.json({});
+    }
+    return null;
+  });
+  t.after(restoreFetch);
+  const { unmount } = await mountDrawer({}, 12);
+  t.after(unmount);
+  await openEditAndSave();
+  assert.equal(patches.length, 1, "one save sends one optimistic-concurrency token");
+  assert.equal(patches[0]?.revision, 12, "the server must fence against the row version the operator opened");
+});
