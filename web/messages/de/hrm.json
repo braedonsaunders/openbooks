@@ -617,6 +617,9 @@
     },
     "drawer": {
       "title": "Anfrage {number}",
+      "offerTitle": "Angebot · {employer}",
+      "candidateTitle": "Kandidat {name}",
+      "employer": "Arbeitgeber",
       "pipeline": "Prozess",
       "applications": "Bewerbungen",
       "noApplications": "Noch keine Kandidaten zugeordnet.",
