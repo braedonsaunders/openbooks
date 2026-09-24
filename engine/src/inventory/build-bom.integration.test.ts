@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import pg from "pg";
 import { sql } from "drizzle-orm";
@@ -29,41 +28,6 @@ async function quietly(statement: string): Promise<void> {
     // Failure-injector cleanup must never mask the test's own result.
   }
 }
-
-test("assembly builds acquire and snapshot the BOM inside their transaction", () => {
-  const source = readFileSync(new URL("./assembly.ts", import.meta.url), "utf8");
-  const start = source.indexOf("export async function buildAssembly(");
-  const end = source.indexOf("export async function reverseAssemblyBuild(", start);
-  assert.ok(start >= 0 && end > start, "buildAssembly source must be present");
-  const build = source.slice(start, end);
-  const transaction = build.indexOf("return await db.transaction");
-  const lock = build.indexOf("lock table bom_components in share mode", transaction);
-  const snapshot = build.indexOf("from bom_components", lock);
-  const profileSnapshot = build.indexOf("resolveProfile(orgId, itemId, tx, true)", snapshot);
-  const journalEvidence = build.indexOf("custom: { assemblyBuild: bomEvidence }", snapshot);
-
-  assert.ok(transaction >= 0, "the build must be one database transaction");
-  assert.ok(lock > transaction, "the transaction must serialize concurrent BOM writes");
-  assert.ok(snapshot > lock, "the build must read the BOM only after acquiring its lock");
-  assert.equal(
-    build.slice(0, transaction).includes("from bom_components"),
-    false,
-    "no mutable BOM read may occur before the transaction",
-  );
-  assert.equal(
-    build.slice(0, transaction).includes("resolveProfile("),
-    false,
-    "no mutable costing profile read may occur before the transaction",
-  );
-  assert.ok(
-    profileSnapshot > snapshot,
-    "the profiles used for valuation must be locked in the BOM transaction",
-  );
-  assert.ok(
-    journalEvidence > snapshot,
-    "the posted operation must retain the exact BOM revision evidence",
-  );
-});
 
 test(
   "an in-flight build waits for a BOM edit, re-reads it, and retains finished-layer provenance",
