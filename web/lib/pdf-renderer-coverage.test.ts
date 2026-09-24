@@ -1,3 +1,4 @@
+// source-pin-contract: renderer-outage mapping invariant — every API route whose static import closure reaches the Chromium render entries must map the outage to the named 503; subjects derived by walking web/app/api plus the import graph, never hand-listed.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'

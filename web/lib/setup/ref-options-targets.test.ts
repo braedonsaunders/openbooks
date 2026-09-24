@@ -23,6 +23,7 @@ import { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake } from ".
  * (or otherwise non-code/name) entity fails here, not in render.
  */
 
+// source-pin-contract: ref-picker column invariant — every registry entity served as a ref-option source must resolve its generic picker value/label/order columns to real fields; subjects derived from the setup registry crossed with every published migration, never hand-listed.
 const MIGRATIONS = "schema/migrations/generated";
 
 /** Real column names per table, from the published DDL. */

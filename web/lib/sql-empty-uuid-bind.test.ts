@@ -22,6 +22,7 @@ function walk(dir: string, out: string[] = []): string[] {
   return out
 }
 
+// source-pin-contract: uuid-bind hygiene invariant — no SQL id comparison anywhere under web/ may bind an empty-string fallback (PostgreSQL validates every bound parameter, so `${id ?? ''}` fails 22P02 even beside a true OR branch); subjects derived by walking the web tree, never hand-listed.
 const EMPTY_UUID_BIND = /id\s*=\s*\$\{[^}]*\?\?\s*''\s*\}/g
 
 test('no sql id comparison binds an empty-string fallback', () => {

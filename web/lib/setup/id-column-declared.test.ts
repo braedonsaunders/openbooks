@@ -20,6 +20,7 @@ import { SETUP_ENTITIES } from "./registry";
  * in the e2e suite.
  */
 
+// source-pin-contract: setup-reader identity invariant — every setup entity must name the column that identifies one of its rows (idColumn or a table with a uuid id in the published migrations); subjects derived from the setup registry crossed with every published migration, never hand-listed.
 const MIGRATIONS = "schema/migrations/generated";
 
 /** Tables that declare a uuid `id`, from the published migrations. */
