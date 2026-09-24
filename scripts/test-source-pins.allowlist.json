@@ -333,7 +333,6 @@
     "web/lib/payroll-filing-amendments.test.ts": 3,
     "web/lib/payroll-setup-checklist.test.ts": 1,
     "web/lib/project-costing.test.ts": 1,
-    "web/lib/recurring-delete-audit.test.ts": 2,
     "web/lib/report-definition-export-calendar.test.ts": 3,
     "web/lib/report-drill.test.ts": 1,
     "web/lib/report-registers-book.integration.test.ts": 2,
