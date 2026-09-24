@@ -58,7 +58,6 @@
     "engine/src/revenue/leases.test.ts": 1,
     "engine/src/scripting/custom-gl-lines.integration.test.ts": 3,
     "engine/src/scripting/permissions.integration.test.ts": 4,
-    "engine/src/sftp/server.test.ts": 1,
     "engine/src/sim/saas-autopilot.test.ts": 2,
     "engine/src/sync/applications-current-entry.test.ts": 2,
     "engine/src/sync/connection-dynamics-tokens.test.ts": 1,

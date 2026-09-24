@@ -40,10 +40,8 @@ test('units, database shards and simulation run independently without omitted te
   // with no output and the only evidence is "the job timed out".
   // Raised 12m -> 16m (job 16 -> 20) after shard 5 hit the 12m wall on
   // 30f3f660d while shards 1-4 finished in 3m44s-6m06s. That spread is
-  // IMBALANCE, not growth: scripts/test-timings.json predicts all five shards
-  // at an identical 13.4 min, which is both wrong about the spread AND already
-  // above the 12m budget it was being held to. The timings need refreshing;
-  // until they are, the budget must at least exceed the balancer's own estimate.
+  // IMBALANCE, not growth. Shards are now a plain round robin (the committed
+  // timing record was removed), so the budget keeps headroom for the spread.
   assert.match(unit, /timeout --signal=TERM --kill-after=10s 16m npm run test:unit/)
   assert.match(unit, /timeout-minutes: 20/)
   assert.match(unit, /apt-get install -y qpdf/)

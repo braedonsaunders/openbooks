@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { existsSync, globSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, globSync, mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -140,74 +140,19 @@ export function testManifest() {
   return { all, unit, integration, restore }
 }
 
-// Measured per-file wall clock, in milliseconds, recorded by
-// scripts/test-timings-reporter.mjs and refreshed by `npm run test:timings`.
-// Shard membership is derived from it, so it is data rather than
-// configuration: a stale or absent entry costs balance, never correctness.
-const TIMINGS_PATH = resolve(ROOT, 'scripts/test-timings.json')
-
-let timingsCache
-export function fileTimings() {
-  if (timingsCache !== undefined) return timingsCache
-  timingsCache = null
-  if (existsSync(TIMINGS_PATH)) {
-    try {
-      const parsed = JSON.parse(readFileSync(TIMINGS_PATH, 'utf8'))
-      if (parsed && typeof parsed.files === 'object' && parsed.files !== null) timingsCache = parsed.files
-    } catch {
-      // A corrupt record must not take CI down; fall back to file-count balance.
-      timingsCache = null
-    }
-  }
-  return timingsCache
-}
-
 /**
- * Split files into `count` buckets of approximately equal measured cost.
- *
- * File-count balance is the wrong objective: the 16 database shards held an
- * even 63-64 files each and still spread 312s-632s, because per-file cost
- * ranges over three orders of magnitude. The slowest shard sets the job's
- * latency, so pack by recorded duration instead — longest-processing-time
- * first, which keeps the worst bucket near the mean rather than near the sum
- * of whatever the round robin happened to collide.
+ * Split files into `count` buckets round-robin, in repository order.
  *
  * Deterministic and total by construction: the CI "Verify every test file ran
  * exactly once" gate re-derives this partition and compares it to what each
- * runner actually executed, so ties break on path and never on iteration order.
+ * runner actually executed. Shards were once packed by measured per-file cost
+ * from a committed timing record. That record was machine-generated data in
+ * the repository, so it was removed; if a shard nears its timeout, widen the
+ * matrix rather than reintroduce committed measurements.
  */
-export function balancedShards(files, count, timings = fileTimings()) {
+export function balancedShards(files, count) {
   const buckets = Array.from({ length: count }, () => [])
-  if (!timings) {
-    // No measurements yet. Preserve the historical round robin so a fresh
-    // checkout still partitions identically on every runner.
-    files.forEach((file, position) => buckets[position % count].push(file))
-    return buckets
-  }
-  const weightOf = (file) => (typeof timings[file] === 'number' && timings[file] > 0 ? timings[file] : undefined)
-  const measured = files.map(weightOf).filter((weight) => weight !== undefined).sort((left, right) => left - right)
-  if (measured.length === 0) {
-    files.forEach((file, position) => buckets[position % count].push(file))
-    return buckets
-  }
-  // A test added since the last calibration is charged the median, so it is
-  // neither ignored (which would overload its shard) nor treated as the worst
-  // case (which would strand a runner).
-  const fallback = measured[Math.floor(measured.length / 2)]
-  const ordered = files
-    .map((file) => ({ file, weight: weightOf(file) ?? fallback }))
-    .sort((left, right) => right.weight - left.weight || (left.file < right.file ? -1 : left.file > right.file ? 1 : 0))
-  const load = new Array(count).fill(0)
-  for (const { file, weight } of ordered) {
-    let target = 0
-    for (let candidate = 1; candidate < count; candidate += 1) if (load[candidate] < load[target]) target = candidate
-    buckets[target].push(file)
-    load[target] += weight
-  }
-  // Run each shard in repository order so a shard's log reads the way it
-  // always has; only membership changes, not execution order within a shard.
-  const position = new Map(files.map((file, index) => [file, index]))
-  for (const bucket of buckets) bucket.sort((left, right) => position.get(left) - position.get(right))
+  files.forEach((file, position) => buckets[position % count].push(file))
   return buckets
 }
 
@@ -402,18 +347,6 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     '--test',
     '--test-force-exit',
     ...forwarded,
-    // Measure per-file cost so `npm run test:timings` can repack the shards.
-    // Naming any reporter suppresses Node's default, so restore the spec
-    // output when the caller did not already choose one.
-    ...(process.env.OPENBOOKS_TEST_TIMINGS
-      ? [
-          ...(forwarded.some((argument) => argument.startsWith('--test-reporter'))
-            ? []
-            : ['--test-reporter=spec', '--test-reporter-destination=stdout']),
-          '--test-reporter=./scripts/test-timings-reporter.mjs',
-          '--test-reporter-destination=stdout',
-        ]
-      : []),
     ...(suite === 'unit' ? ['--test-timeout=180000'] : []),
     // Database files share a disposable schema and many exercise deliberate
     // lock/claim races internally. Keep file-level execution serial so one

@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { createServer } from 'node:net'
 import test from 'node:test'
-import { testManifest, stopFixtureOwner, literalTestPath, shardFiles, fileTimings } from './test-suite.mjs'
+import { testManifest, stopFixtureOwner, literalTestPath, shardFiles } from './test-suite.mjs'
 
 test('every tracked supported test belongs to exactly one canonical suite', () => {
   const manifest = testManifest()
@@ -73,39 +73,8 @@ for (const [suite, count] of [['unit', 4], ['integration', 16]]) test(`${suite} 
   assert.deepEqual(shards.flat().sort(), [...files].sort())
   assert.equal(new Set(shards.flat()).size, files.length)
   assert.ok(shards.every((shard) => shard.length > 0))
-  // Shards are balanced on measured cost, not on file count. Per-file cost
-  // ranges over three orders of magnitude, so an even file split still spread
-  // the database shards 312s-632s -- a cheap shard legitimately holds many
-  // more files than an expensive one, and that is the packer working. Assert
-  // the property the file-count check was reaching for, which is the one that
-  // actually matters: no shard may be pathologically heavy, because the
-  // slowest shard alone sets the job's latency. Without a timing record the
-  // packer is still a round robin, so count balance is the right claim there.
-  const timings = fileTimings()
-  if (timings) {
-    const measured = files
-      .map((file) => timings[file])
-      .filter((value) => typeof value === 'number' && value > 0)
-      .sort((left, right) => left - right)
-    const median = measured[Math.floor(measured.length / 2)] ?? 0
-    const loads = shards.map((shard) => shard.reduce((total, file) => total + (timings[file] ?? median), 0))
-    const mean = loads.reduce((total, load) => total + load, 0) / count
-    // Compare against what any packer could achieve, not against the mean. A
-    // single file cannot be split across runners, so the best possible slowest
-    // shard is bounded below by the heaviest file as well as by the mean --
-    // today the heaviest integration file is already 57% of a mean shard, and
-    // a bound of mean alone would eventually red main over a test nobody can
-    // rebalance. Judging the packer against max(mean, heaviest) keeps this a
-    // statement about the packer rather than about the suite's shape.
-    const heaviest = Math.max(...files.map((file) => timings[file] ?? median))
-    const achievable = Math.max(mean, heaviest)
-    assert.ok(
-      Math.max(...loads) <= achievable * 1.2,
-      `slowest ${suite} shard is ${(Math.max(...loads) / 1000).toFixed(0)}s against an achievable ${(achievable / 1000).toFixed(0)}s`,
-    )
-  } else {
-    assert.ok(Math.max(...shards.map((shard) => shard.length)) - Math.min(...shards.map((shard) => shard.length)) <= 1)
-  }
+  // Round robin: file counts differ by at most one.
+  assert.ok(Math.max(...shards.map((shard) => shard.length)) - Math.min(...shards.map((shard) => shard.length)) <= 1)
   for (const invalid of ['0/8', '9/8', '1/0', '1/99999', '1/8junk', '1.5/8']) {
     assert.throws(() => shardFiles(files, invalid))
   }
