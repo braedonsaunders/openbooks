@@ -83,7 +83,6 @@
     "web/components/global-create-menu.test.ts": 1,
     "web/components/views-menu.test.ts": 1,
     "web/lib/application/document-concurrency.test.ts": 2,
-    "web/lib/application/fx-read.test.ts": 1,
     "web/lib/application/inventory-read.test.ts": 1,
     "web/lib/application/open-items.test.ts": 1,
     "web/lib/application/party-read.test.ts": 2,

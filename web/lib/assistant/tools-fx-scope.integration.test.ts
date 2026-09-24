@@ -24,6 +24,8 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
+const { listApplicationFxRates } = await import('../application/fx-read.ts');
+const { ApplicationError } = await import('../application/errors.ts');
 type ApplicationContext = import('../application/context.ts').ApplicationContext;
 
 function userFor(orgId: string, userId: string): SessionUser {
@@ -171,6 +173,23 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       assert.equal(rateRows[0]!.rate, '1.4000000000');
       assert.equal(rateRows[0]!.source, 'manual');
 
+      const applicationRates = await listApplicationFxRates(
+        appCtx(org.orgId, actors.adminId, ['gl.read']),
+        { fromCurrency: 'USD', toCurrency: 'CAD' },
+      );
+      assert.equal(applicationRates.total, 1);
+      assert.deepEqual(applicationRates.rates.map(({ asOf, rateType, rate, source }) => [asOf, rateType, rate, source]), [
+        ['2026-07-31', 'spot', '1.4000000000', 'manual'],
+      ]);
+      await assert.rejects(
+        listApplicationFxRates(appCtx(org.orgId, actors.adminId, ['gl.read']), {
+          fromCurrency: 'US', toCurrency: 'CAD',
+        }),
+        (error: unknown) => error instanceof ApplicationError
+          && error.code === 'invalid_input'
+          && error.message.includes('fromCurrency and toCurrency must be ISO 4217 codes'),
+      );
+
       // The governed run posts the adjustment plus its next-period mirror;
       // the rerun is incremental (nothing new).
       const app = appCtx(org.orgId, actors.adminId, ['close.run']);
@@ -281,6 +300,15 @@ test('fx tools refuse without permission, with the module off, or across orgs', 
       assert.deepEqual(await executeAssistantTool(reader, 'list_fx_rates', { fromCurrency: 'USD', toCurrency: 'CAD' }), {
         ok: false, error: 'multi_currency_feature_disabled',
       });
+      await assert.rejects(
+        listApplicationFxRates(appCtx(org.orgId, actors.adminId, ['gl.read']), {
+          fromCurrency: 'USD', toCurrency: 'CAD',
+        }),
+        (error: unknown) => error instanceof ApplicationError
+          && error.code === 'not_found'
+          && error.status === 404
+          && error.message === 'multiCurrency is off; enable it from GET /api/v1/settings/features',
+      );
       await assert.rejects(
         executeApplicationTool(applicationTool('run_revaluation')!, appCtx(org.orgId, actors.adminId, ['close.run']), {
           periodId, idempotencyKey: 'a05-reval-off-1',
