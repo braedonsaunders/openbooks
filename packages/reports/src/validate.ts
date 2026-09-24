@@ -164,6 +164,14 @@ export function validateCustomQuery(
         if (!Array.isArray(rawValue) || rawValue.length === 0) {
           throw new Error(`Filter rule for '${String(field)}' (${op}) requires at least one value`)
         }
+        // A mixed-type array would narrow silently downstream (non-matching
+        // kinds are dropped from the list), so the report would filter on a
+        // subset the studio never showed. Refuse it here by field and
+        // operator name: one array, one scalar kind.
+        const kinds = new Set(rawValue.map((v) => (typeof v === 'string' ? 'text' : typeof v === 'number' ? 'number' : 'other')))
+        if (kinds.size !== 1 || kinds.has('other')) {
+          throw new Error(`Filter rule for '${String(field)}' (${op}) requires values of one type (all text or all numbers)`)
+        }
       } else if (op === 'between_days_ago' || op === 'due_within_days') {
         if (rawValue === '') {
           throw new Error(`Filter rule for '${String(field)}' (${op}) requires a number of days`)

@@ -64,6 +64,34 @@ test('a single bad leg throws instead of running the report unfiltered', () => {
   )
 })
 
+test('a mixed-type in-filter is refused by field and operator name', () => {
+  assert.throws(
+    () => validateCustomQuery(plan({ combinator: 'and', rules: [{ field: 'status', op: 'in', value: ['posted', 1] }] })),
+    (error: unknown) => {
+      const message = (error as Error).message
+      return message.includes('status') && message.includes('in') && message.includes('one type')
+    },
+  )
+})
+
+test('a non-scalar in-filter value is refused instead of narrowing silently', () => {
+  assert.throws(
+    () => validateCustomQuery(plan({ combinator: 'and', rules: [{ field: 'status', op: 'not_in', value: ['posted', null] }] })),
+    (error: unknown) => {
+      const message = (error as Error).message
+      return message.includes('status') && message.includes('not_in')
+    },
+  )
+})
+
+test('homogeneous in-filter arrays still validate and compile', () => {
+  const query = validateCustomQuery(
+    plan({ combinator: 'and', rules: [{ field: 'status', op: 'in', value: ['posted', 'approved'] }] }),
+  )
+  const compiled = compileRuleGroup(documents, query.filters!, new SqlParams())
+  assert.match(compiled!, /IN/)
+})
+
 test('value-less operators and real values still validate and compile', () => {
   const query = validateCustomQuery(
     plan({
