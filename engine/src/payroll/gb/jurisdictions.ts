@@ -8,13 +8,6 @@
  *
  * Two deliberate non-declarations:
  *
- * - Student-loan and postgraduate-loan repayments: the April 2026 plan
- *   thresholds are published
- *   (https://www.gov.uk/guidance/special-rules-for-student-loans) and the
- *   starter checklist already ASKS the plan question (see GB_STARTER_CHECKLIST
- *   below), but no slot or engine consumes the answer yet. The answer is
- *   collected, not computed — declaring a slot would seed components the
- *   engine never fills, which is silent wrong money dressed as completeness.
  * - Workplace-pension auto-enrolment: the 2026/27 trigger (£10,000) and
  *   qualifying-earnings band (£6,240–£50,270) are published (see rates.ts),
  *   but minimum contributions ride each employer's scheme, not a pack table.
@@ -70,8 +63,8 @@ export const GB_REGIONS: PayrollRegionCoverage = {
  *
  * Filed by the EMPLOYEE when they have no recent P45 — which is why it is a
  * certificate and not a profile fact. It carries the starter declaration
- * (A/B/C: which the employer reports on the first Full Payment Submission)
- * and the student-loan plan question. It is NOT a W-4 clone: there are no
+ * (A/B/C: which the employer reports on the first Full Payment Submission),
+ * the student-loan plan, and the postgraduate-loan question. It is NOT a W-4 clone: there are no
  * allowances, no filing statuses, no extra withholding amount — the checklist
  * routes the employee to an emergency code and HMRC issues the real one.
  *
@@ -86,7 +79,8 @@ const GB_STARTER_CHECKLIST: PayrollCertificate = {
   purpose: "withholding",
   citation:
     "HMRC Starter checklist for PAYE (https://www.gov.uk/guidance/starter-checklist-for-paye); "
-    + "employer guide https://www.gov.uk/new-employee-tax-code",
+    + "employer guide https://www.gov.uk/new-employee-tax-code; student-loan payroll specification "
+    + "https://www.gov.uk/government/publications/payroll-technical-specifications-student-loans/collection-of-student-loans-from-6-april-2026",
   summary:
     "Completed by a new starter who has no recent P45, before the first payday. "
     + "It sets the starter declaration reported on the first Full Payment Submission "
@@ -134,10 +128,18 @@ const GB_STARTER_CHECKLIST: PayrollCertificate = {
         { value: "plan_2", label: "Plan 2" },
         { value: "plan_4", label: "Plan 4 (Scotland)" },
         { value: "plan_5", label: "Plan 5 (postgraduate-plan undergraduate)" },
-        { value: "postgraduate", label: "Postgraduate loan" },
       ],
-      help: "Collected from the starter checklist's student-loan question. A selected plan currently "
-        + "blocks payroll because this pack cannot yet calculate the required loan repayment.",
+      help: "Select the employee's active undergraduate student-loan plan. If they also have a "
+        + "postgraduate loan, record that separately below; both deductions can apply together.",
+    },
+    {
+      key: "student_loan_postgraduate",
+      label: "Postgraduate loan repayment applies",
+      kind: "flag",
+      required: true,
+      help: "Select yes when HMRC's PGL1 notice, the P45, or the employee's starter information "
+        + "requires postgraduate-loan deductions. This can be yes at the same time as an "
+        + "undergraduate plan.",
     },
   ],
 };

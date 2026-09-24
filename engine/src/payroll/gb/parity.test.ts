@@ -17,6 +17,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { toUnits } from "../../money/money.ts";
 import {
+  calculateGbLoanDeductions,
   calculateGbNic,
   calculateGbPaye,
   gbNicThresholdsForPeriod,
@@ -540,6 +541,70 @@ test("sweep: NIC at, below and above PT, ST and UEL", () => {
   assert.equal(weekly("100").employer, "0.6000");
   assert.equal(weekly("967").employee, "58.0000");
   assert.equal(weekly("968").employee, "58.0200");
+});
+
+test("HMRC loan deductions use per-period NIC pay and floor each repayment to whole pounds", () => {
+  const monthlyPlan2 = calculateGbLoanDeductions({
+    earnings: "3000",
+    periodsPerYear: 12,
+    taxYear: 2026,
+    studentLoanPlan: "plan_2",
+    postgraduateLoan: false,
+  });
+  assert.deepEqual(monthlyPlan2, { studentLoan: "49.0000", postgraduateLoan: "0.0000" });
+
+  // HMRC's 2026/27 weekly Plan 2 threshold is floor(£29,385 / 52, pennies) = £565.09.
+  // (£1,000 - £565.09) × 9% = £39.1419, rounded down to £39.
+  const weeklyPlan2 = calculateGbLoanDeductions({
+    earnings: "1000",
+    periodsPerYear: 52,
+    taxYear: 2026,
+    studentLoanPlan: "plan_2",
+    postgraduateLoan: false,
+  });
+  assert.equal(weeklyPlan2.studentLoan, "39.0000");
+
+  const concurrent = calculateGbLoanDeductions({
+    earnings: "3000",
+    periodsPerYear: 12,
+    taxYear: 2026,
+    studentLoanPlan: "plan_2",
+    postgraduateLoan: true,
+  });
+  assert.deepEqual(concurrent, { studentLoan: "49.0000", postgraduateLoan: "75.0000" });
+
+  const monthly = (studentLoanPlan: string, postgraduateLoan = false) =>
+    calculateGbLoanDeductions({
+      earnings: "3000",
+      periodsPerYear: 12,
+      taxYear: 2026,
+      studentLoanPlan,
+      postgraduateLoan,
+    });
+  assert.deepEqual(monthly("plan_1"), { studentLoan: "68.0000", postgraduateLoan: "0.0000" });
+  assert.deepEqual(monthly("plan_4"), { studentLoan: "16.0000", postgraduateLoan: "0.0000" });
+  assert.deepEqual(monthly("plan_5"), { studentLoan: "82.0000", postgraduateLoan: "0.0000" });
+  assert.deepEqual(monthly("none", true), { studentLoan: "0.0000", postgraduateLoan: "75.0000" });
+});
+
+test("loan deductions use the threshold edition effective for the pay tax year", () => {
+  const plan1 = (taxYear: number) => calculateGbLoanDeductions({
+    earnings: "3000",
+    periodsPerYear: 12,
+    taxYear,
+    studentLoanPlan: "plan_1",
+    postgraduateLoan: false,
+  }).studentLoan;
+  assert.equal(plan1(2024), "82.0000"); // floor((3000 - floor(24990/12)) × 9%)
+  assert.equal(plan1(2025), "74.0000");
+  assert.equal(plan1(2026), "68.0000");
+  assert.throws(
+    () => calculateGbLoanDeductions({
+      earnings: "3000", periodsPerYear: 12, taxYear: 2025,
+      studentLoanPlan: "plan_5", postgraduateLoan: false,
+    }),
+    /Plan 5.*did not apply in tax year 2025/,
+  );
 });
 
 test("sweep: PAYE and NIC never decrease as pay rises, 0 to £20,000 monthly", () => {

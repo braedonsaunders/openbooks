@@ -21,7 +21,7 @@
  *   rates.ts), so it is a tenant-entered slot, never a computed constant.
  * - Auto-enrolment trigger + qualifying-earnings band: declared data, no
  *   engine (minimum contributions ride each employer's scheme).
- * - Student-loan / postgraduate-loan thresholds, Class 1A/1B, statutory
+ * - Class 1A/1B, statutory
  *   sick/maternity pay, the apprenticeship levy and RTI mechanics:
  *   named, declared nothing.
  *

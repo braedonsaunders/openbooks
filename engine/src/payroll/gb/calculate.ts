@@ -177,6 +177,108 @@ export function calculateGbNic(input: {
 }
 
 /**
+ * HMRC student-loan annual thresholds and repayment rates for the GB years
+ * whose PAYE/NIC editions this pack transcribes. Plan 5 first applies in
+ * 2026/27. Source: HMRC's payroll technical specification, "Collection of
+ * student loans from 6 April 2026", annual-threshold and recovery-rate tables:
+ * https://www.gov.uk/government/publications/payroll-technical-specifications-student-loans/collection-of-student-loans-from-6-april-2026
+ * Rates for 2024/25 and 2025/26 are corroborated by the SL3 tables at
+ * https://www.gov.uk/government/publications/sl3-student-loan-deduction-tables/2024-to-2025-student-and-postgraduate-loan-deduction-tables
+ * and
+ * https://www.gov.uk/government/publications/sl3-student-loan-deduction-tables/2025-to-2026-student-and-postgraduate-loan-deduction-tables.
+ * HMRC uses earnings subject to Class 1 NIC, divides the annual
+ * threshold by pay periods (flooring to a penny), then floors each loan
+ * deduction to whole pounds.
+ */
+const GB_STUDENT_LOAN_ANNUAL_THRESHOLDS: Readonly<Record<number, {
+  plan1: string;
+  plan2: string;
+  plan4: string;
+  plan5: string | null;
+  postgraduate: string;
+}>> = {
+  2024: { plan1: "24990", plan2: "27295", plan4: "31395", plan5: null, postgraduate: "21000" },
+  2025: { plan1: "26065", plan2: "28470", plan4: "32745", plan5: null, postgraduate: "21000" },
+  2026: { plan1: "26900", plan2: "29385", plan4: "33795", plan5: "25000", postgraduate: "21000" },
+};
+
+export interface GbLoanDeductions {
+  studentLoan: string;
+  postgraduateLoan: string;
+}
+
+/**
+ * Price HMRC's per-period deductions on the employee's Class 1 NIC-able pay.
+ * Each active loan type is rounded down independently to whole pounds, so a
+ * postgraduate loan and an undergraduate plan can both be collected.
+ */
+export function calculateGbLoanDeductions(input: {
+  earnings: string;
+  periodsPerYear: number;
+  taxYear: number;
+  studentLoanPlan: string;
+  postgraduateLoan: boolean;
+}): GbLoanDeductions {
+  const edition = GB_STUDENT_LOAN_ANNUAL_THRESHOLDS[input.taxYear];
+  if (!edition) {
+    throw new PayrollPackError(
+      "GB student-loan deductions have no HMRC threshold edition for tax year " + input.taxYear
+      + "; use a payroll edition with that published year's thresholds.",
+    );
+  }
+  if (!Number.isSafeInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
+    throw new PayrollPackError(
+      "GB student-loan deductions need a positive periods-per-year value, got " + input.periodsPerYear,
+    );
+  }
+  const earnings = toUnits(input.earnings);
+  if (earnings < 0n) {
+    throw new PayrollPackError(
+      "GB student-loan deductions need non-negative NIC-able earnings, got " + input.earnings,
+    );
+  }
+
+  const deduction = (annualThreshold: string, rate: string): string => {
+    const periodThreshold = gbFloorPennyUnits(toUnits(annualThreshold) / BigInt(input.periodsPerYear));
+    const excess = earnings > periodThreshold ? earnings - periodThreshold : 0n;
+    return fromUnits(gbFloorPoundUnits(applyRate(excess, rate)));
+  };
+
+  let studentLoan = "0.0000";
+  switch (input.studentLoanPlan) {
+    case "none":
+      break;
+    case "plan_1":
+      studentLoan = deduction(edition.plan1, "0.09");
+      break;
+    case "plan_2":
+      studentLoan = deduction(edition.plan2, "0.09");
+      break;
+    case "plan_4":
+      studentLoan = deduction(edition.plan4, "0.09");
+      break;
+    case "plan_5":
+      if (edition.plan5 === null) {
+        throw new PayrollPackError(
+          "GB Plan 5 student-loan deductions did not apply in tax year " + input.taxYear + "/"
+          + (input.taxYear + 1),
+        );
+      }
+      studentLoan = deduction(edition.plan5, "0.09");
+      break;
+    default:
+      throw new PayrollPackError("GB student-loan plan \"" + input.studentLoanPlan + "\" is not recognized");
+  }
+
+  return {
+    studentLoan,
+    postgraduateLoan: input.postgraduateLoan
+      ? deduction(edition.postgraduate, "0.06")
+      : "0.0000",
+  };
+}
+
+/**
  * Liability on ANNUAL taxable pay units across a transcribed band table, in
  * 1e4 units. Annual semantics only: a full year's taxable pay (the
  * K475/1257L goldens price here). Every rate is a whole percent parsed

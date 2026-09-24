@@ -109,6 +109,10 @@ function gbContext(overrides: {
     storedCertificates: [],
     certificateFor: certificateForCodes({
       gb_nic_category: { category_letter: "A" },
+      gb_starter_checklist: {
+        student_loan_plan: "none",
+        student_loan_postgraduate: "false",
+      },
       ...(overrides.codes ?? {}),
     }),
     bool: (value: string | null | undefined) => value === "true",
@@ -145,7 +149,9 @@ test("a 2025/26 correction prices the 2025 tables end to end", async () => {
   });
   const factors = await computeGbStatutory(ctx);
   assert.equal(factors.GB_TAX, "590.2000");
-  assert.deepEqual(pushed.map((line) => line.amount), ["590.2000", "236.1600", "537.4500"]);
+  assert.deepEqual(pushed.map((line) => line.amount), [
+    "590.2000", "236.1600", "0.0000", "0.0000", "537.4500",
+  ]);
 });
 
 test("a pay date is never priced from another year's tables", async () => {
@@ -166,8 +172,8 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
   // £1,413): 331 × 19% = £62.89 plus 870.75 × 20% = £174.15 → £237.04.
   // NIC is the same UK-wide schedule as rUK.
   const { ctx, pushed } = gbContext({
-    region: "SCT",
     tx: stubTx(EMPTY_YTD),
+    region: "SCT",
     income: "2250",
     pensionable: "2250",
     codes: { gb_tax_code_notice: { tax_code: "S1257L", non_cumulative: null } },
@@ -177,20 +183,92 @@ test("SCT with an S-code prices the Scottish bands end to end", async () => {
   assert.equal(factors.GB_TAX, "236.8900");
 });
 
-test("a recorded student-loan plan refuses instead of completing without its deduction", async () => {
+test("a recorded student-loan plan is deducted from NIC-able earnings", async () => {
   const { ctx, pushed } = gbContext({
+    tx: stubTx(EMPTY_YTD),
     codes: {
       ...NOTICE_1257L,
-      gb_starter_checklist: { starter_declaration: "A", student_loan_plan: "plan_2" },
+      gb_starter_checklist: {
+        starter_declaration: "A",
+        student_loan_plan: "plan_2",
+        student_loan_postgraduate: "false",
+      },
     },
     income: "3000",
     pensionable: "3000",
   });
 
-  await assert.rejects(
-    () => computeGbStatutory(ctx),
-    /records plan_2: HMRC student-loan and postgraduate-loan deductions are not yet implemented/,
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(factors.GB_STUDENT_LOAN, "49.0000");
+  assert.equal(factors.GB_POSTGRADUATE_LOAN, "0.0000");
+  assert.deepEqual(
+    pushed.map((line) => [line.systemKey, line.amount]),
+    [
+      ["paye", "390.2000"],
+      ["nic", "156.1600"],
+      ["student_loan", "49.0000"],
+      ["postgraduate_loan", "0.0000"],
+      ["nic", "387.4500"],
+    ],
   );
+});
+
+test("a postgraduate loan is collected alongside the selected undergraduate plan", async () => {
+  const { ctx, pushed } = gbContext({
+    tx: stubTx(EMPTY_YTD),
+    codes: {
+      ...NOTICE_1257L,
+      gb_starter_checklist: {
+        starter_declaration: "A",
+        student_loan_plan: "plan_2",
+        student_loan_postgraduate: "true",
+      },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+
+  const factors = await computeGbStatutory(ctx);
+  assert.equal(factors.GB_STUDENT_LOAN, "49.0000");
+  assert.equal(factors.GB_POSTGRADUATE_LOAN, "75.0000");
+  assert.deepEqual(
+    pushed.filter((line) => line.systemKey === "student_loan" || line.systemKey === "postgraduate_loan")
+      .map((line) => [line.systemKey, line.amount]),
+    [["student_loan", "49.0000"], ["postgraduate_loan", "75.0000"]],
+  );
+});
+
+test("missing student-loan facts refuse by name instead of silently treating the employee as debt-free", async () => {
+  const { ctx, pushed } = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_starter_checklist: {
+        starter_declaration: "A",
+        student_loan_plan: null,
+        student_loan_postgraduate: "false",
+      },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+  await assert.rejects(() => computeGbStatutory(ctx), /cannot calculate without student loan plan/);
+  assert.deepEqual(pushed, []);
+});
+
+test("missing postgraduate-loan status refuses instead of omitting a concurrent deduction", async () => {
+  const { ctx, pushed } = gbContext({
+    codes: {
+      ...NOTICE_1257L,
+      gb_starter_checklist: {
+        starter_declaration: "A",
+        student_loan_plan: "none",
+        student_loan_postgraduate: null,
+      },
+    },
+    income: "3000",
+    pensionable: "3000",
+  });
+  await assert.rejects(() => computeGbStatutory(ctx), /cannot calculate without postgraduate loan status/);
   assert.deepEqual(pushed, []);
 });
 
@@ -266,6 +344,8 @@ test("NT pushes zeros and reads nothing", async () => {
     [
       ["paye", "deduction", "0.0000"],
       ["nic", "deduction", "267.5000"],
+      ["student_loan", "deduction", "0.0000"],
+      ["postgraduate_loan", "deduction", "0.0000"],
       ["nic", "employer_contribution", "687.4500"],
     ],
   );
@@ -284,6 +364,8 @@ test("BR prices the whole period with no YTD read", async () => {
     [
       ["paye", "deduction", "640.0000"],
       ["nic", "deduction", "172.1600"],
+      ["student_loan", "deduction", "0.0000"],
+      ["postgraduate_loan", "deduction", "0.0000"],
       ["nic", "employer_contribution", "417.4500"],
     ],
   );
@@ -291,6 +373,8 @@ test("BR prices the whole period with no YTD read", async () => {
     GB_TAXABLE: "3200.0000",
     GB_ADDPAY: "0.0000",
     GB_TAX: "640.0000",
+    GB_STUDENT_LOAN: "0.0000",
+    GB_POSTGRADUATE_LOAN: "0.0000",
   });
 });
 
@@ -307,6 +391,8 @@ test("cumulative 1257L in month 1 prices from zero priors", async () => {
     [
       ["paye", "deduction", "240.2000"],
       ["nic", "deduction", "96.1600"],
+      ["student_loan", "deduction", "0.0000"],
+      ["postgraduate_loan", "deduction", "0.0000"],
       ["nic", "employer_contribution", "274.9500"],
     ],
   );
@@ -336,7 +422,11 @@ test("declaration A certifies the empty record", async () => {
     pensionable: "2250",
     codes: {
       ...NOTICE_1257L,
-      gb_starter_checklist: { starter_declaration: "A", student_loan_plan: "none" },
+      gb_starter_checklist: {
+        starter_declaration: "A",
+        student_loan_plan: "none",
+        student_loan_postgraduate: "false",
+      },
     },
   });
   await computeGbStatutory(ctx);

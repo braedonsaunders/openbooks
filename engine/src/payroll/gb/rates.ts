@@ -25,9 +25,9 @@
  *   tenant-entered slot, never a computed constant.
  * - Auto-enrolment trigger + qualifying-earnings band: declared data, no
  *   engine (minimum contributions ride each employer's scheme).
- * - Student-loan / postgraduate-loan thresholds: LOCATED on the employer
- *   rates page, deliberately NOT transcribed — no slot, no engine (see
- *   jurisdictions.ts header). Class 1A/1B, statutory sick/maternity pay,
+ * - Student-loan / postgraduate-loan annual thresholds: declared in
+ *   calculate.ts by tax-year edition from HMRC's payroll technical
+ *   specification and SL3 tables. Class 1A/1B, statutory sick/maternity pay,
  *   the apprenticeship levy and RTI mechanics likewise: named, declared
  *   nothing.
  *

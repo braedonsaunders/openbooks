@@ -88,6 +88,8 @@ async function p60Population(orgId: string, taxYear: number): Promise<PayrollFil
     tax: total((slip) => slip.taxDeducted),
     nicEe: total((slip) => slip.nicEmployee),
     nicEr: total((slip) => slip.nicEmployer),
+    studentLoan: total((slip) => slip.studentLoanDeducted),
+    postgraduateLoan: total((slip) => slip.postgraduateLoanDeducted),
   };
   return {
     rowKey: "rowId",
@@ -97,6 +99,8 @@ async function p60Population(orgId: string, taxYear: number): Promise<PayrollFil
       { key: "pay", label: "Pay in this employment", align: "right", money: true },
       { key: "tax", label: "Tax deducted", align: "right", money: true },
       { key: "nic", label: "Employee NIC", align: "right", money: true },
+      { key: "studentLoan", label: "Student loan", align: "right", money: true },
+      { key: "postgraduateLoan", label: "Postgraduate loan", align: "right", money: true },
       { key: "taxCode", label: "Final tax code" },
     ],
     rows: slips.map((slip) => ({
@@ -106,6 +110,8 @@ async function p60Population(orgId: string, taxYear: number): Promise<PayrollFil
       pay: slip.payInEmployment,
       tax: slip.taxDeducted,
       nic: slip.nicEmployee,
+      studentLoan: slip.studentLoanDeducted,
+      postgraduateLoan: slip.postgraduateLoanDeducted,
       taxCode: slip.finalTaxCode ?? "—",
     })),
     totals: [
@@ -114,6 +120,8 @@ async function p60Population(orgId: string, taxYear: number): Promise<PayrollFil
       { label: "Total PAYE deducted", value: totals.tax, money: true },
       { label: "Employee NIC (primary)", value: totals.nicEe, money: true },
       { label: "Employer NIC (secondary)", value: totals.nicEr, money: true },
+      { label: "Student-loan deductions", value: totals.studentLoan, money: true },
+      { label: "Postgraduate-loan deductions", value: totals.postgraduateLoan, money: true },
     ],
   };
 }
@@ -233,11 +241,10 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       { code: "sap", label: "Statutory Adoption Pay paid", value: "Not held — the pack prices no statutory payments" },
       { code: "spbp", label: "Statutory Parental Bereavement Pay paid", value: "Not held — the pack prices no statutory payments" },
       { code: "sncp", label: "Statutory Neonatal Care Pay paid", value: "Not held — the pack prices no statutory payments" },
-      // RD1 (whole £s only). No student-loan or postgraduate-loan slot
-      // exists and the engine fills none (jurisdictions.ts header), so there
-      // are no deductions to report — stated, not zeroed.
-      { code: "student-loan", label: "Student Loan deductions in this employment (whole £s only)", value: "None — the pack prices no student-loan repayments" },
-      { code: "postgrad-loan", label: "Postgraduate Loan deductions in this employment (whole £s only)", value: "None — the pack prices no postgraduate-loan repayments" },
+      // RD1 reports whole pounds. Loan calculation floors each payroll
+      // deduction to pounds, so these cumulative totals are whole pounds too.
+      { code: "student-loan", label: "Student Loan deductions in this employment (whole £s only)", value: slip.studentLoanDeducted },
+      { code: "postgrad-loan", label: "Postgraduate Loan deductions in this employment (whole £s only)", value: slip.postgraduateLoanDeducted },
     ],
     notes: [
       "Pay and tax 'In this employment' are the figures to use for a tax return, if the employee gets one (RD1 best practice).",
@@ -260,9 +267,9 @@ async function p60Slip(orgId: string, taxYear: number, rowId: string): Promise<P
  *
  * Fields (same sources): the employer PAYE reference, the employee's name,
  * National Insurance number, payroll number, the leaving date, the tax code
- * at leaving (with basis), and total pay and tax to date in this employment
- * for the tax year. Student-loan deductions: the P45 asks whether they
- * continue — none can, because the pack prices none (jurisdictions.ts).
+ * at leaving (with basis), total pay and tax to date in this employment, and
+ * whether student or postgraduate loan deductions continue under the latest
+ * starter checklist on file.
  */
 async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
   const { gbP45Leavers } = await gbYearEnd();
@@ -295,7 +302,11 @@ async function p45Slip(orgId: string, taxYear: number, rowId: string): Promise<P
       { code: "tax-code", label: "Tax code at leaving", value: leaver.finalTaxCode + (leaver.scottishCode ? " — Scottish taxpayer rate" : "") },
       { code: "pay-to-date", label: "Total pay to date in this employment", value: leaver.payInEmployment, emphasis: true },
       { code: "tax-to-date", label: "Total tax to date in this employment", value: leaver.taxDeducted, emphasis: true },
-      { code: "student-loan", label: "Student Loan deductions to continue", value: "No — the pack prices no student-loan repayments" },
+      {
+        code: "student-loan",
+        label: "Student Loan deductions to continue",
+        value: leaver.studentLoanContinues || leaver.postgraduateLoanContinues ? "Yes" : "No",
+      },
     ],
     notes: [
       "Part 1 goes to HMRC through the Full Payment Submission — RTI, not produced here.",

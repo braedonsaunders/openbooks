@@ -1449,6 +1449,14 @@ export interface GbYearStatement {
   nicEmployee: string;
   /** Employer (secondary) Class 1 NIC — the `nic` employer lines. */
   nicEmployer: string;
+  /** Student-loan deductions reported on committed statutory lines. */
+  studentLoanDeducted: string;
+  /** Postgraduate-loan deductions reported on committed statutory lines. */
+  postgraduateLoanDeducted: string;
+  /** Whether the latest filed GB checklist says a student loan is active. */
+  studentLoanContinues: boolean;
+  /** Whether the latest filed GB checklist says a postgraduate loan is active. */
+  postgraduateLoanContinues: boolean;
   /**
    * The final tax code from the P6/P9 coding notice on file, with the
    * week-1/month-1 marker appended when the notice carries it (RD1: the final
@@ -1501,6 +1509,14 @@ async function gbYearStatements(
                  join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                 where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'employer_contribution'
                   and pc.system_key = 'nic')) as nic_employer,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
+                  and pc.system_key = 'student_loan')) as student_loan,
+           sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
+                 join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
+                where l.org_id = ${orgId} and l.stub_id = c.id and l.kind = 'deduction'
+                  and pc.system_key = 'postgraduate_loan')) as postgraduate_loan,
            (select cert.answers->>'tax_code'
               from employee_tax_certificates cert
              where cert.org_id = ${orgId} and cert.employee_party_id = c.employee_party_id
@@ -1513,6 +1529,18 @@ async function gbYearStatements(
                and cert.country = 'GB' and cert.certificate_key = 'gb_tax_code_notice'
                and cert.superseded_on is null
              order by cert.effective_from desc nulls last limit 1) as non_cumulative,
+           (select cert.answers->>'student_loan_plan'
+              from employee_tax_certificates cert
+             where cert.org_id = ${orgId} and cert.employee_party_id = c.employee_party_id
+               and cert.country = 'GB' and cert.certificate_key = 'gb_starter_checklist'
+               and cert.superseded_on is null
+             order by cert.effective_from desc nulls last limit 1) as student_loan_plan,
+           (select cert.answers->>'student_loan_postgraduate'
+              from employee_tax_certificates cert
+             where cert.org_id = ${orgId} and cert.employee_party_id = c.employee_party_id
+               and cert.country = 'GB' and cert.certificate_key = 'gb_starter_checklist'
+               and cert.superseded_on is null
+             order by cert.effective_from desc nulls last limit 1) as postgraduate_loan_active,
            er.employee_number as payroll_number,
            er.terminated_on::text as terminated_on
       from committed c
@@ -1534,6 +1562,10 @@ async function gbYearStatements(
       taxDeducted: num(row.tax),
       nicEmployee: num(row.nic_employee),
       nicEmployer: num(row.nic_employer),
+      studentLoanDeducted: num(row.student_loan),
+      postgraduateLoanDeducted: num(row.postgraduate_loan),
+      studentLoanContinues: row.student_loan_plan != null && String(row.student_loan_plan) !== "none",
+      postgraduateLoanContinues: String(row.postgraduate_loan_active ?? "false") === "true",
       finalTaxCode: rawCode == null ? null : (nonCumulative ? `${rawCode} (week 1/month 1)` : rawCode),
       scottishCode: rawCode != null && /^s/i.test(rawCode),
       payrollNumber: row.payroll_number == null ? null : String(row.payroll_number),

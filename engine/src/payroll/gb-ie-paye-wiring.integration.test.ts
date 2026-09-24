@@ -161,7 +161,9 @@ test(
                 ${org.subsidiaryId}, true, ${actorId}, ${actorId})`);
       const gbEmployee = await makeEmployee(org.orgId, org.subsidiaryId, actorId, gbScheduleId, "GB", "ENG", "36000", "GBP");
       await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_tax_code_notice", { tax_code: "1257L" }, "2026-04-06");
-      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_starter_checklist", { starter_declaration: "A" }, "2026-04-06");
+      await fileCertificate(org.orgId, gbEmployee, actorId, "GB", "gb_starter_checklist", {
+        starter_declaration: "A", student_loan_plan: "none", student_loan_postgraduate: "false",
+      }, "2026-04-06");
       const gbRun = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: gbScheduleId,
         periodStart: "2026-05-01", periodEnd: "2026-05-31", payDate: "2026-06-05",
