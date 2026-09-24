@@ -73,8 +73,8 @@ for (const mode of ['restricted', 'all'] as const) {
         const result = await executeAssistantTool(authz, 'find_documents', {});
         assert.equal(result.ok, true, JSON.stringify(result));
         assert.ok(result.ok);
-        const numbers = ((result.data as { items: { documentNumber: string }[] }).items)
-          .map((item) => item.documentNumber).sort();
+        const items = (result.data as { items: { documentNumber: string; updatedAt: string }[] }).items;
+        const numbers = items.map((item) => item.documentNumber).sort();
         assert.deepEqual(
           numbers,
           mode === 'all'
@@ -82,6 +82,12 @@ for (const mode of ['restricted', 'all'] as const) {
             : ['VISIBLE-BILL', 'VISIBLE-INV'],
           `${mode}: a restricted caller must not list hidden-subsidiary documents`,
         );
+        const listed = items.find((item) => item.documentNumber === 'VISIBLE-BILL');
+        const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
+          select revision_seq::text as revision from documents
+           where org_id = ${org.orgId} and document_number = 'VISIBLE-BILL'
+        `));
+        assert.equal(listed?.updatedAt, persisted.rows[0]?.revision);
       });
     } finally {
       state.user = null;
@@ -206,6 +212,12 @@ test('get_document hides a hidden-subsidiary document from a restricted caller',
       assert.ok(authz);
       const visible = await executeAssistantTool(authz, 'get_document', { documentId: visibleId });
       assert.equal(visible.ok, true, JSON.stringify(visible));
+      assert.ok(visible.ok);
+      const visibleData = visible.data as { updatedAt: string };
+      const persisted = await withBypassContext(() => db.execute<{ revision: string }>(sql`
+        select revision_seq::text as revision from documents where id = ${visibleId}
+      `));
+      assert.equal(visibleData.updatedAt, persisted.rows[0]?.revision);
       const hiddenResult = await executeAssistantTool(authz, 'get_document', { documentId: hiddenId });
       assert.equal(hiddenResult.ok, false, `hidden document must read as missing, got ${JSON.stringify(hiddenResult)}`);
     });
@@ -273,6 +285,34 @@ for (const mode of ['restricted', 'all'] as const) {
             : [1, ['JE-VISIBLE']],
           `${mode}: total must count exactly the entries the listing returns`,
         );
+        const visibleDetail = await executeAssistantTool(authz, 'get_journal_entry', { entryId: fullyVisible });
+        assert.equal(visibleDetail.ok, true, JSON.stringify(visibleDetail));
+        assert.ok(visibleDetail.ok);
+        const detail = visibleDetail.data as { lines: { lineNumber: number; amount: string }[] };
+        assert.deepEqual(detail.lines.map((line) => [line.lineNumber, line.amount]), [
+          [1, '50.0000'],
+          [2, '-50.0000'],
+        ]);
+
+        // A hidden header cannot be opened even when its lines are visible.
+        const hiddenHeader = randomUUID();
+        await withBypassContext(async () => {
+          await db.execute(sql`
+            insert into journal_entries
+              (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+            values
+              (${hiddenHeader}, ${org.orgId}, ${org.bookId}, ${hidden},
+               'JE-HIDDEN-HEADER', '2026-07-15', ${org.periodId}, 'hidden header', 'draft', 'manual')`);
+          await db.execute(sql`
+            insert into journal_lines
+              (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+            values
+              (${org.orgId}, ${hiddenHeader}, 1, ${org.accounts.bank}, ${org.subsidiaryId}, '25.00', 'CAD', '25.00', '1'),
+              (${org.orgId}, ${hiddenHeader}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, '-25.00', 'CAD', '-25.00', '1')`);
+        });
+        const hiddenDetail = await executeAssistantTool(authz, 'get_journal_entry', { entryId: hiddenHeader });
+        assert.equal(hiddenDetail.ok, mode === 'all', JSON.stringify(hiddenDetail));
+        if (mode === 'restricted') assert.deepEqual(hiddenDetail, { ok: false, error: 'entry_not_found' });
       });
     } finally {
       state.user = null;
