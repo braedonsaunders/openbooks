@@ -170,22 +170,30 @@ async function validateVendorReturnSource(
       `${label} source receipt must match its item, stock location, and legal entity`,
     );
   }
-  if (source.source_document_kind !== null) {
-    // Stock arrives either on the vendor bill (legacy bill-is-the-receipt) or
-    // on a goods receipt against the purchase order; both name the vendor.
-    if (
-      source.source_document_kind !== "vendor_bill"
-      && source.source_document_kind !== PURCHASE_RECEIPT_DOCUMENT_KIND
-    ) {
-      throw new InventoryError(
-        `${label} source receipt is attached to a non-purchase document`,
-      );
-    }
-    if (!vendorId || source.source_vendor_id !== vendorId) {
-      throw new InventoryError(
-        `${label} source receipt belongs to a different vendor`,
-      );
-    }
+  // A receipt with no source document (opening balance, manual adjustment)
+  // names no vendor: crediting one for it pays a vendor that never supplied
+  // the goods. Refuse by name — a commercial-only credit (no
+  // inventory-return evidence) stays available for balance-forward stock.
+  if (source.source_document_kind === null) {
+    throw new InventoryError(
+      `${label} source receipt has no purchase document behind it — returns credit the vendor that supplied the goods, ` +
+        `so raise the credit without inventory-return evidence instead of returning balance-forward stock`,
+    );
+  }
+  // Stock arrives either on the vendor bill (legacy bill-is-the-receipt) or
+  // on a goods receipt against the purchase order; both name the vendor.
+  if (
+    source.source_document_kind !== "vendor_bill"
+    && source.source_document_kind !== PURCHASE_RECEIPT_DOCUMENT_KIND
+  ) {
+    throw new InventoryError(
+      `${label} source receipt is attached to a non-purchase document`,
+    );
+  }
+  if (!vendorId || source.source_vendor_id !== vendorId) {
+    throw new InventoryError(
+      `${label} source receipt belongs to a different vendor`,
+    );
   }
   if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {

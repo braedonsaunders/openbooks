@@ -9,6 +9,8 @@ import {
   restoredReturnCost,
 } from "./documents-customer-credits.ts";
 import { postDocument } from "../ledger/posting-document.ts";
+import { PostingError } from "../ledger/posting-contracts.ts";
+import { issueInventory, receiveInventory } from "./movements.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -369,6 +371,56 @@ test(
       assert.equal(posted!.status, "posted");
       // A goodwill credit must not invent a stock movement.
       assert.equal((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity, "3.0000");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a customer return against a document-less shipment is refused by name",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      // Balance-forward stock shipped by a manual adjustment: a posted
+      // issue with no source document, so no customer can be verified
+      // against the credit's party.
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        unitCost: "4",
+        subsidiaryId: org.subsidiaryId,
+        offsetAccountId: org.accounts.clearing,
+        date: org.date,
+      });
+      const manualIssue = await issueInventory(org.orgId, null, {
+        itemId: org.items.fifo,
+        stockLocationId: org.stockLocationId,
+        quantity: "10",
+        subsidiaryId: org.subsidiaryId,
+        date: org.date,
+      });
+      const credit = await createApprovedCustomerReturn(org, {
+        itemId: org.items.fifo,
+        quantity: "4",
+        unitPrice: "25",
+        amount: "100",
+        sourceIssueMovementId: manualIssue.movementId,
+      });
+      // The old code skipped the customer match for null-provenance
+      // shipments and refunded a customer that never received the goods.
+      await assert.rejects(
+        () => postDocument(credit.documentId, depsFor(org)),
+        (error: unknown) =>
+          error instanceof PostingError &&
+          /has no sales document behind it/.test(error.message) &&
+          /without inventory-return evidence/.test(error.message),
+      );
+      const status = (await db.execute<{ status: string }>(sql`
+        select status from documents where id = ${credit.documentId} and org_id = ${org.orgId}`)).rows[0]!;
+      assert.equal(status.status, "approved");
     } finally {
       await dropScratchOrg(org.orgId);
     }

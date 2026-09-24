@@ -186,22 +186,30 @@ async function validateCustomerReturnSource(
       `${label} source shipment must match its item, stock location, and legal entity`,
     );
   }
-  if (source.source_document_kind !== null) {
-    // Stock leaves either on the invoice (combined ship-and-bill) or on a
-    // shipment against the sales order; both name the customer.
-    if (
-      source.source_document_kind !== "customer_invoice" &&
-      source.source_document_kind !== SALES_FULFILLMENT_DOCUMENT_KIND
-    ) {
-      throw new InventoryError(
-        `${label} source shipment is attached to a non-sales document`,
-      );
-    }
-    if (!customerId || source.source_customer_id !== customerId) {
-      throw new InventoryError(
-        `${label} source shipment belongs to a different customer`,
-      );
-    }
+  // A shipment with no source document (manual adjustment) names no
+  // customer: crediting one for it refunds a customer that never received
+  // the goods. Refuse by name — a commercial-only credit (no
+  // inventory-return evidence) stays available for balance-forward stock.
+  if (source.source_document_kind === null) {
+    throw new InventoryError(
+      `${label} source shipment has no sales document behind it — returns credit the customer that received the goods, ` +
+        `so raise the credit without inventory-return evidence instead of returning balance-forward stock`,
+    );
+  }
+  // Stock leaves either on the invoice (combined ship-and-bill) or on a
+  // shipment against the sales order; both name the customer.
+  if (
+    source.source_document_kind !== "customer_invoice" &&
+    source.source_document_kind !== SALES_FULFILLMENT_DOCUMENT_KIND
+  ) {
+    throw new InventoryError(
+      `${label} source shipment is attached to a non-sales document`,
+    );
+  }
+  if (!customerId || source.source_customer_id !== customerId) {
+    throw new InventoryError(
+      `${label} source shipment belongs to a different customer`,
+    );
   }
   if (line.tracking === "lot") {
     if (!line.selection.lotId || line.selection.serialId) {
