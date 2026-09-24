@@ -255,7 +255,10 @@ export async function loadContinuousTab(
           distributionTitle: t('performance.continuous.calibration.distributionTitle'),
           distribution: distEntries.map(([key, count]) => ({ key, count, width: Math.round((count / distMax) * 100) })),
           missingTitle: t('performance.continuous.calibration.missingTitle'),
-          missing: session.missing.map((m) => ({ review: m.reviewId.slice(0, 8), reason: m.reason })),
+          missing: session.missing.map((m) => ({
+            review: m.subjectName,
+            reason: t(`performance.continuous.calibration.missingReasons.${m.reason}` as never),
+          })),
           openLabel: t('performance.continuous.calibration.openSession'),
           closeLabel: t('performance.continuous.calibration.closeSession'),
           failed: t('performance.actionFailed'),
@@ -540,4 +543,3 @@ export function continuousBlocks(data: ContinuousData): PageSpec['body'] {
   }
   return blocks
 }
-

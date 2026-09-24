@@ -1000,6 +1000,12 @@
         "distributionTitle": "Rating distribution",
         "unrated": "Unrated",
         "missingTitle": "Missing from this session",
+        "missingReasons": {
+          "facilitator_own": "Facilitator's own review",
+          "not_manager_review": "Not a manager review",
+          "not_submitted": "Not submitted",
+          "not_in_scope": "Outside session scope"
+        },
         "openSession": "Open session",
         "closeSession": "Close session",
         "sessionName": "Session name",

@@ -945,6 +945,12 @@
         "distributionTitle": "Bewertungsverteilung",
         "unrated": "Unbewertet",
         "missingTitle": "In dieser Sitzung fehlend",
+        "missingReasons": {
+          "facilitator_own": "Eigene Beurteilung der Moderation",
+          "not_manager_review": "Keine Beurteilung durch eine Führungskraft",
+          "not_submitted": "Nicht eingereicht",
+          "not_in_scope": "Außerhalb des Sitzungskreises"
+        },
         "openSession": "Sitzung öffnen",
         "closeSession": "Sitzung schließen",
         "sessionName": "Sitzungsname",
