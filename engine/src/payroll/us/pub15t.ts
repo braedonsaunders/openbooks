@@ -242,11 +242,13 @@ export function calculatePub15T(input: Pub15TInput): Pub15TResult {
 
   // ---- FIT: flat-rate method over the supplemental payment -----------------
   let supplementalFit = ZERO;
-  if (supplemental > ZERO && !input.fitExempt) {
+  if (supplemental > ZERO) {
     const priorSupplemental = opt(ytd.supplemental);
     const threshold = U(rates.supplemental.mandatoryThreshold);
     const atFlat = cappedSlice(supplemental, threshold, priorSupplemental);
-    supplementalFit = mulRateCents(atFlat, rates.supplemental.flatRate)
+    // Pub. 15 §7 makes the 37% slice mandatory regardless of the employee's
+    // W-4 exemption election; only the optional lower flat slice is waived.
+    supplementalFit = (input.fitExempt ? ZERO : mulRateCents(atFlat, rates.supplemental.flatRate))
       + mulRateCents(supplemental - atFlat, rates.supplemental.mandatoryHighRate);
   }
   const fit = periodicFit + supplementalFit + (input.fitExempt ? ZERO : extra);
