@@ -557,7 +557,9 @@ export async function payRunReadiness(
   });
 
   const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
-  if (!run) return tally(0);
+  // A missing run is a named not-found, never an empty bill of health:
+  // tally(0) reports zero blockers for a run that does not exist.
+  if (!run) throw new PayrollError("pay run not found");
   const people = await scope(orgId, documentId, run, allowedSubsidiaryIds);
 
   // --- Org configuration: a commit cannot balance without these ------------
@@ -1692,9 +1694,11 @@ export async function payRunFunding(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<PayRunFunding> {
   const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
-  if (!run && allowedSubsidiaryIds != null) throw new PayrollError("pay run not found");
+  // A missing run is a named not-found regardless of scope: without a run
+  // every account reads sufficient against a zero net pay.
+  if (!run) throw new PayrollError("pay run not found");
   const today = await businessToday(orgId);
-  const payDate = run?.pay_date ?? today;
+  const payDate = run.pay_date;
 
   const totals = (await db.execute<{ net: string; gross: string; employer: string }>(sql`
     select coalesce(sum(s.net_pay), 0)::text as net,
@@ -1800,7 +1804,10 @@ export async function payRunChanges(
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
 ): Promise<StubChange[]> {
   const run = await runContext(orgId, documentId, allowedSubsidiaryIds);
-  if (!run && allowedSubsidiaryIds != null) throw new PayrollError("pay run not found");
+  // A missing run is a named not-found regardless of scope: without one the
+  // empty stub set reads as a clean no-changes diff for a run that is not
+  // there at all.
+  if (!run) throw new PayrollError("pay run not found");
   const rows = (await db.execute<{
       employee_party_id: string; name: string; gross: string; net_pay: string;
       prev_gross: string | null; prev_net: string | null; prev_pay_date: string | null;
