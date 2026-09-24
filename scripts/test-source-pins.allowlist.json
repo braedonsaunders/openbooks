@@ -19,7 +19,6 @@
     "engine/src/platform/operations-config.test.ts": 2,
     "engine/src/projects/field-ticket-labor-evidence.test.ts": 3,
     "engine/src/projects/financial-adjustments.test.ts": 1,
-    "engine/src/projects/labor-costing.test.ts": 1,
     "engine/src/projects/merge.integration.test.ts": 1,
     "engine/src/projects/overhead-adjustments.test.ts": 1,
     "engine/src/projects/types.test.ts": 3,
