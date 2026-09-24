@@ -55,6 +55,7 @@ export async function GET(req: Request) {
       year,
       row,
       revision,
+      gate.allowedSubsidiaryIds ?? undefined,
     )
     const branding = await orgBranding()
     if ((url.searchParams.get('format') ?? 'json') === 'pdf') {

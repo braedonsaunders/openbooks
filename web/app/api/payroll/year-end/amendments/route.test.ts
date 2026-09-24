@@ -8,14 +8,22 @@ interface RecordedIssue {
   rowIds?: readonly string[]
   note?: string | null
   reason?: string | null
+  scope?: unknown
+}
+
+interface GuardCall {
+  kind: 'rowIds' | 'data'
+  rowIds: string[]
 }
 
 interface RouteState {
   issues: RecordedIssue[]
+  gateScope: string[] | null
+  guardCalls: GuardCall[]
 }
 
 const stateKey = Symbol.for('openbooks.payroll-amendments-route-test')
-const state: RouteState = { issues: [] }
+const state: RouteState = { issues: [], gateScope: null, guardCalls: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollAmendmentsNextResponse = NextResponse
 
@@ -32,28 +40,48 @@ const mockSources = new Map<string, string>([
   [
     'mock:feature-gates',
     `
+      const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
       export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.gateScope }
       }
     `,
   ],
   [
     'mock:subsidiary-scope',
     `
-      export async function guardPayrollFilingRowIds() { return null }
-      export async function guardPayrollFilingData() { return null }
+      const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
+      const NextResponse = globalThis.openbooksPayrollAmendmentsNextResponse
+      const denied = () => new NextResponse('subsidiary scope denied', { status: 403 })
+      // row-b belongs to an entity outside the restricted test scope; row-a
+      // is in scope. An unrestricted gate (null) allows everything.
+      export async function guardPayrollFilingRowIds(gate, country, filing, rowIds) {
+        state.guardCalls.push({ kind: 'rowIds', rowIds: [...rowIds] })
+        if (gate.allowedSubsidiaryIds !== null && rowIds.some((id) => id === 'row-b')) return denied()
+        return null
+      }
+      export async function guardPayrollFilingData(gate, country, filing, data) {
+        const ids = data.rows.map((row) => String(row[data.rowKey] ?? ''))
+        state.guardCalls.push({ kind: 'data', rowIds: ids })
+        if (gate.allowedSubsidiaryIds !== null && ids.includes('row-b')) return denied()
+        return null
+      }
     `,
   ],
   [
     'mock:yearend',
     `
-      export async function orgYearEndFilings() { return [] }
+      export async function orgYearEndFilings() {
+        return [{
+          country: 'CA', key: 't4',
+          data: { rowKey: 'rowId', columns: [], rows: [{ rowId: 'row-a' }, { rowId: 'row-b' }] },
+        }]
+      }
     `,
   ],
   [
     'mock:db',
     `
-      export const db = { execute: async () => ({ rows: [] }) }
+      export const db = { execute: async () => ({ rows: [{ rowId: 'row-a' }] }) }
     `,
   ],
   [
@@ -124,6 +152,12 @@ hooks.deregister()
 
 function reset(): void {
   state.issues.length = 0
+  state.guardCalls.length = 0
+  state.gateScope = null
+}
+
+function restrict(): void {
+  state.gateScope = ['sub-a']
 }
 
 function post(body: Record<string, unknown>): Promise<Response> {
@@ -225,7 +259,59 @@ test('a confirmed cancellation passes its trimmed reason into the filing note', 
     taxYear: 2026,
     revision: 'cancelled',
     rowIds: ['row-1'],
+    scope: undefined,
     note: 'Employee belonged to the other entity',
     reason: 'Employee belonged to the other entity',
   }])
+})
+
+test('a restricted original with rowIds [] is guarded on the full population, not the empty list', async () => {
+  reset()
+  restrict()
+  const response = await post({ revision: 'original', rowIds: [] })
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(state.issues, [])
+  // The bypass this closes: the old code guarded only the caller list (empty
+  // → allowed) while the service persisted the whole population. The full
+  // population is what gets guarded now.
+  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: ['row-a', 'row-b'] }])
+})
+
+test('a restricted original naming one in-scope row is still refused: the service files the whole return', async () => {
+  reset()
+  restrict()
+  const response = await post({ revision: 'original', rowIds: ['row-a'] })
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(state.issues, [])
+  assert.deepEqual(state.guardCalls, [{ kind: 'data', rowIds: ['row-a', 'row-b'] }])
+})
+
+test('a restricted correction naming in-scope rows is allowed: it persists exactly those rows', async () => {
+  reset()
+  restrict()
+  const response = await post({ revision: 'amended', rowIds: ['row-a'] })
+
+  assert.equal(response.status, 200)
+  assert.equal(state.issues.length, 1)
+  assert.deepEqual(state.guardCalls, [{ kind: 'rowIds', rowIds: ['row-a'] }])
+})
+
+test('a restricted GET with filed history still guards the current population', async () => {
+  reset()
+  restrict()
+  // The stored submission covers row-a only, but the current population has
+  // grown row-b: the lifecycle would return row-b's label, id and status, so
+  // the read is refused rather than exposing the new out-of-scope slip.
+  const response = await get('?country=CA&filing=t4&year=2026')
+
+  assert.equal(response.status, 403)
+})
+
+test('an unrestricted GET with filed history still reads', async () => {
+  reset()
+  const response = await get('?country=CA&filing=t4&year=2026')
+
+  assert.equal(response.status, 200)
 })

@@ -15,6 +15,7 @@ import {
   type PayrollFilingSlipData,
   type PayrollYearEndFiling,
 } from "./filing-registry.ts";
+import type { PayrollSubsidiaryScope } from "./scope.ts";
 
 /**
  * The payroll filing LIFECYCLE — original → amended → cancelled.
@@ -380,6 +381,7 @@ export async function filingLifecycle(
   country: string,
   filingKey: string,
   taxYear: number,
+  scope?: PayrollSubsidiaryScope,
 ): Promise<PayrollFilingLifecycle> {
   const filing = yearEndFiling(country, filingKey);
   const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
@@ -388,7 +390,7 @@ export async function filingLifecycle(
   let data: PayrollFilingData = { rowKey: "rowId", columns: [], rows: [] };
   let populationRefusal: string | null = null;
   try {
-    data = await filing.population(orgId, taxYear);
+    data = await filing.population(orgId, taxYear, scope);
   } catch (error) {
     if (!(error instanceof PayrollError)) throw error;
     populationRefusal = error.message;
@@ -525,9 +527,18 @@ export interface RecordFilingIssueInput {
   /**
    * The rows the artifact covers. Required for a correction — an amendment
    * names the slips it restates — and ignored for an original, which by
-   * definition covers the whole population.
+   * definition covers the whole population. A caller-supplied list NEVER
+   * narrows an original: the route guards the service's actual population,
+   * not this list.
    */
   rowIds?: readonly string[];
+  /**
+   * The actor's subsidiary visibility (null/undefined = unrestricted),
+   * passed straight into every population this issue builds. Enforcement
+   * stays with the caller's subsidiary-scope guard — no pack narrows yet —
+   * so a restricted actor's original is refused there, never half-filed.
+   */
+  scope?: PayrollSubsidiaryScope;
   note?: string | null;
   /**
    * The operator's explanation for a cancellation. The API requires this
@@ -657,7 +668,7 @@ async function issueOriginal(
     const last = submissions[submissions.length - 1]!;
     throw alreadyIssued(last.revisionNumber, last.revision);
   }
-  const data = await filing.population(orgId, taxYear);
+  const data = await filing.population(orgId, taxYear, input.scope);
   const rows = data.rows;
   if (rows.length === 0) {
     throw new PayrollError(
@@ -730,7 +741,7 @@ async function issueCorrection(
     );
   }
 
-  const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear);
+  const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, input.scope);
   if (lifecycle.populationRefusal && revision === "amended") {
     throw new PayrollError(
       `${filing.label} for ${taxYear} cannot be recomputed, so no amendment can be built: `
@@ -790,7 +801,7 @@ async function issueCorrection(
   // approved are the same object.
   const data = lifecycle.populationRefusal
     ? { rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData
-    : await filing.population(orgId, taxYear);
+    : await filing.population(orgId, taxYear, input.scope);
   const dataByRow = new Map(
     data.rows.map((row) => [String(row[data.rowKey] ?? ""), row] as const),
   );
@@ -975,6 +986,7 @@ export async function filingCorrectionSlip(
   taxYear: number,
   rowId: string,
   revision: PayrollFilingCorrectionKind,
+  scope?: PayrollSubsidiaryScope,
 ): Promise<PayrollFilingSlipData> {
   const filing = yearEndFiling(country, filingKey);
   if (!filing.amendment.supported) throw new PayrollError(filing.amendment.refusal);
@@ -997,11 +1009,11 @@ export async function filingCorrectionSlip(
       `no issued ${filing.label} for ${taxYear} reported this row, so there is nothing to correct`,
     );
   }
-  const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear);
+  const lifecycle = await filingLifecycle(orgId, country, filingKey, taxYear, scope);
   const review = lifecycle.rows.find((row) => row.rowId === rowId);
   const data = lifecycle.populationRefusal
     ? { rowKey: "rowId", columns: [], rows: [] } as PayrollFilingData
-    : await filing.population(orgId, taxYear);
+    : await filing.population(orgId, taxYear, scope);
   const row = data.rows.find((candidate) => String(candidate[data.rowKey] ?? "") === rowId);
   const current = revision === "cancelled" || !row
     ? { slip: null, reported: previous.slip.reported }
