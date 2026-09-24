@@ -135,6 +135,11 @@ function toReported(raw: unknown): PayrollFilingReported {
   return {
     fields: Array.isArray(value.fields) ? value.fields : [],
     confidential: Array.isArray(value.confidential) ? value.confidential : [],
+    ...(value.privateFacts && typeof value.privateFacts === "object"
+      ? { privateFacts: Object.fromEntries(Object.entries(value.privateFacts).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      )) }
+      : {}),
   };
 }
 
@@ -507,6 +512,9 @@ async function currentReported(
   const confidential = filing.amendment.supported && filing.amendment.confidential
     ? await filing.amendment.confidential(orgId, taxYear, rowId)
     : [];
+  const privateFacts = filing.amendment.supported && filing.amendment.privateFacts
+    ? await filing.amendment.privateFacts(orgId, taxYear, rowId)
+    : undefined;
   if (filing.slip) {
     const slip = await filing.slip.build(orgId, taxYear, rowId);
     const fields: PayrollFilingReportedField[] = [
@@ -517,7 +525,7 @@ async function currentReported(
         code: box.code, label: box.label, value: box.value, ...(box.money ? { money: true } : {}),
       })),
     ];
-    return { slip, reported: { fields, confidential } };
+    return { slip, reported: { fields, confidential, ...(privateFacts ? { privateFacts } : {}) } };
   }
   return {
     slip: null,
@@ -529,6 +537,7 @@ async function currentReported(
         ...(column.money ? { money: true } : {}),
       })),
       confidential,
+      ...(privateFacts ? { privateFacts } : {}),
     },
   };
 }

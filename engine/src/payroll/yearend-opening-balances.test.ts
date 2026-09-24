@@ -37,7 +37,7 @@ const t4 = (employeePartyId: string, overrides: Partial<T4Slip> = {}): T4Slip =>
   box14EmploymentIncome: "50000.0000", box16Cpp: "3000.0000", box16aCpp2: "0",
   box18Ei: "800.0000", box22IncomeTax: "9000.0000",
   box24EiInsurable: "50000.0000", box26CppPensionable: "50000.0000",
-  box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 12,
+  box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 12, employerCpp: "0", employerCpp2: "0", employerEi: "0",
   ...overrides,
 });
 
