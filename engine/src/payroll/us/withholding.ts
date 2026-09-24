@@ -43,11 +43,11 @@ import {
   emptyResolvedCertificate,
   type ResolvedCertificate,
 } from "../certificates.ts";
-import { add as addMoney, roundDiv } from "../../money/money.ts";
+import { add as addMoney, mulRatio, roundDiv } from "../../money/money.ts";
 import type { ResolvedWithholdingLevy } from "../withholding-resolution.ts";
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
-import { D, mulRateCents, U } from "../canada/decimal.ts";
+import { D, mulRateCents, rate6, U } from "../canada/decimal.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import {
   miCityWithholding,
@@ -63,6 +63,7 @@ import { inCounty, inCountyWithholding } from "./states/in.ts";
 import { orTransitWithholding } from "./states/or.ts";
 import {
   requireUsResidentWithholdingFacts,
+  requireUsWageAllocation,
   type UsResidentWithholdingFacts,
   type UsWageAllocation,
 } from "./states/types.ts";
@@ -360,6 +361,8 @@ export interface UsWithholdingResult {
   label: string;
   tax: string;
   factors: Record<string, string>;
+  /** Local W-2 box 18 wages; absent when a work-locality split is unknown. */
+  localTaxableWages?: string;
 }
 
 /**
@@ -368,6 +371,18 @@ export interface UsWithholdingResult {
  */
 export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingResult | null {
   const { levy } = input;
+  const localTaxableWages = (() => {
+    if (levy.level !== "sub_region") return undefined;
+    const compensation = addMoney(input.wages, input.supplemental ?? "0");
+    if (levy.side === "residence") return compensation;
+    const matching = (input.wageAllocations ?? []).filter(
+      (allocation) => allocation.region === levy.region && allocation.subRegion === levy.subRegion,
+    );
+    if (matching.length === 0) return undefined;
+    const allocation = requireUsWageAllocation(input.wageAllocations, levy.region, levy.subRegion!);
+    return mulRatio(compensation, rate6(allocation.workShare), 1_000_000n);
+  })();
+  const localWageTrace = localTaxableWages === undefined ? {} : { localTaxableWages };
   const residentWithholdingFacts = levy.basis === "resident_out_of_region"
     ? requireUsResidentWithholdingFacts(
       input.residentWithholdingFacts,
@@ -506,6 +521,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         code: engine.state,
         label: engine.label,
         tax: addMoney(regular.tax, D(supplementalTax)),
+        ...localWageTrace,
         factors: {
           ...regular.factors,
           US_SUPPLEMENTAL_METHOD: "flat",
@@ -575,7 +591,10 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       socialInsuranceDeducted: input.socialInsuranceDeducted,
       ytd: input.ytd,
     });
-    return { code: engine.state, label: engine.label, tax: result.tax, factors: result.factors };
+    return {
+      code: engine.state, label: engine.label, tax: result.tax, factors: result.factors,
+      ...localWageTrace,
+    };
   }
 
   const subRegion = levy.subRegion!;
@@ -699,7 +718,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         });
         return {
           code: `OH-${subRegion}`, label: declared?.label ?? `Ohio school district ${subRegion}`,
-          tax: result.tax, factors: result.factors,
+          tax: result.tax, factors: result.factors, ...localWageTrace,
         };
       }
       // A municipality. `ohMunicipalWithholding` throws, naming the
@@ -713,6 +732,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         code: `OH-${subRegion}`, label: declared?.label ?? `${subRegion} municipal income tax`,
         tax,
         factors: { OH_MUNICIPAL: subRegion, OH_MUNICIPAL_RATE: rates?.rate ?? "", OH_MUNICIPAL_TAX: tax },
+        ...localWageTrace,
       };
     }
     case "MI": {
@@ -738,7 +758,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       });
       return {
         code: `MI-${subRegion}`, label: declared?.label ?? `${subRegion} city income tax`,
-        tax: result.tax, factors: result.factors,
+        tax: result.tax, factors: result.factors, ...localWageTrace,
       };
     }
     case "IN": {
@@ -770,7 +790,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
       });
       return {
         code: `IN-${subRegion}`, label: declared?.label ?? `${county.name} County income tax`,
-        tax: countyResult.tax, factors: countyResult.factors,
+        tax: countyResult.tax, factors: countyResult.factors, ...localWageTrace,
       };
     }
     case "PA": {
@@ -795,6 +815,7 @@ export function computeUsWithholding(input: UsWithholdingInput): UsWithholdingRe
         code: `PA-${subRegion}`, label: declared?.label ?? `PA local EIT (PSD ${subRegion})`,
         tax,
         factors: { PA_EIT_PSD: subRegion, PA_EIT_RATE: rate, PA_EIT_TAX: tax },
+        ...localWageTrace,
       };
     }
     default:
