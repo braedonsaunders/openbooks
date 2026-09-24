@@ -16,6 +16,7 @@
  * pure calculators serve those cases directly.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { sql } from "drizzle-orm";
 import { empFact } from "../employee-facts.ts";
 // Side effect: registers ES_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -45,6 +46,48 @@ function dec(value: string, what: string): bigint {
     return U(value);
   } catch {
     fail(`${what} is not a decimal amount: "${value}"`);
+  }
+}
+
+/**
+ * Article 87 requires recalculating the annual withholding and spreading the
+ * difference over the remaining expected remuneration after a relevant
+ * change. This adapter does not carry the prior-retention/remaining-pay
+ * inputs, so a change visible in committed same-year payroll must be refused
+ * before it emits a plausible but understated IRPF line. Drafts and voided
+ * runs are deliberately excluded: neither is money actually paid or withheld.
+ */
+async function refuseIfPriorPayChanged(
+  ctx: PayrollStatutoryComputeContext,
+  payDate: string,
+  currentOrdinaryGross: string,
+): Promise<void> {
+  const { tx, orgId, employeePartyId, documentId, taxYear } = ctx;
+  if (!tx) fail("Article 87 change detection requires committed payroll history");
+  if (!orgId || !employeePartyId || !documentId) {
+    fail("Article 87 change detection requires the organization, employee, and run identifiers");
+  }
+  const prior = await tx.execute<{ changed: boolean }>(sql`
+    select exists (
+      select 1
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
+      where s.org_id = ${orgId}
+        and s.employee_party_id = ${employeePartyId}
+        and s.tax_year = ${taxYear}
+        and s.pay_date < ${payDate}::date
+        and r.run_status = 'committed'
+        and d.status <> 'voided'
+        and s.gross <> ${currentOrdinaryGross}::numeric
+    ) as changed
+  `);
+  if (prior.rows[0]?.changed === true) {
+    fail(
+      "prior committed pay in this tax year differs from current ordinary pay; the Article 87 "
+      + "regularization needs year-to-date retentions and remaining expected remuneration. "
+      + "Reconcile the employee's year-to-date and remaining annual pay before releasing this run",
+    );
   }
 }
 
@@ -162,6 +205,14 @@ export async function computeEsStatutory(
 
   const periodPay = dec(income, "income") + dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
   if (periodPay < 0n) fail("period pay must be non-negative");
+
+  const currentGross = dec(ctx.gross ?? D(periodPay), "gross");
+  const nonPeriodicUnits = dec(nonPeriodic === "" ? "0" : nonPeriodic, "nonPeriodic");
+  if (currentGross < nonPeriodicUnits) {
+    fail("non-periodic pay exceeds current gross pay");
+  }
+  const currentOrdinaryGross = D(currentGross - nonPeriodicUnits);
+  await refuseIfPriorPayChanged(ctx, payDate, currentOrdinaryGross);
 
   // Monthly SS on the period bases; the employee share annualised feeds IRPF
   // COTIZACIONES (exact when the base holds all year; mid-year changes take

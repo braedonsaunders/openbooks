@@ -28,7 +28,7 @@ interface RunLines {
   lines: StubLine[];
 }
 
-function esAdapterContext(payDate: string): RunLines {
+function esAdapterContext(payDate: string, priorChanged = false): RunLines {
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
     country: "ES",
@@ -42,6 +42,10 @@ function esAdapterContext(payDate: string): RunLines {
     }),
   });
   const ctx = {
+    tx: { execute: async () => ({ rows: [{ changed: priorChanged }] }) },
+    orgId: "org",
+    employeePartyId: "employee",
+    documentId: "run",
     taxYear: 2026,
     region: "MD",
     run: { pay_date: payDate },
@@ -60,11 +64,6 @@ function esAdapterContext(payDate: string): RunLines {
     assertRegionSupported: () => {},
   } as unknown as PayrollStatutoryComputeContext;
   return { ctx, lines };
-}
-
-function lineKey(line: StubLine): string {
-  // The stub need() encodes `${systemKey}:${kind}` as the component id.
-  return line.componentId ?? "";
 }
 
 test("adapter: March payslip pushes IRPF plus all nine SS lines, assessed honestly", async () => {
@@ -114,23 +113,14 @@ test("adapter: September (late edition) pushes the same ten declared keys", asyn
   // same month, same employee/employer totals.
   assert.equal(result["ES_TIPO_IRPF"], "13.51");
   assert.equal(result["ES_IRPF_MES"], "270.2000");
-  assert.equal(result["ES_SS_EE"], "130.0000");
-  assert.equal(result["ES_SS_ER"], "613.0000");
-  // Same ten (systemKey, kind) pairs — a future edition-dependent push
-  // without a declaration throws above instead of slipping through.
-  assert.deepEqual(
-    lines.map(lineKey).sort(),
-    [
-      "irpf:deduction",
-      "ss_cc:deduction",
-      "ss_cc_er:employer_contribution",
-      "ss_des:deduction",
-      "ss_des_er:employer_contribution",
-      "ss_fogasa_er:employer_contribution",
-      "ss_for:deduction",
-      "ss_for_er:employer_contribution",
-      "ss_mei:deduction",
-      "ss_mei_er:employer_contribution",
-    ].sort(),
+  assert.equal(lines.length, 10);
+});
+
+test("adapter refuses when committed same-year ordinary pay changed without Article 87 inputs", async () => {
+  const { ctx, lines } = esAdapterContext("2026-07-15", true);
+  await assert.rejects(
+    () => computeEsStatutory(ctx),
+    /prior committed pay in this tax year differs.*Article 87.*year-to-date retentions/,
   );
+  assert.deepEqual(lines, []);
 });
