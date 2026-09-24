@@ -90,7 +90,7 @@ function asManager(orgId: string) {
 }
 
 test("the overview resolves KPI labels and one row per pack", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview({}));
@@ -121,7 +121,7 @@ test("the overview resolves KPI labels and one row per pack", { skip: !DB }, asy
 });
 
 test("the overview sorts by findings descending", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() =>
@@ -167,7 +167,7 @@ test("a fresh run resolves a relative last-run cell", { skip: !DB }, async () =>
 });
 
 test("an unknown sort falls back to pack ascending", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     asManager(org.orgId);
     const data = await withBypassContext(() => loadAgentsOverview({ sort: "nope" }));
