@@ -746,6 +746,31 @@ test("F11 six-decimal percents store consistent rate evidence; deeper refuses", 
   });
 });
 
+test("high-magnitude decimal-text percent preserves exact stored percent and wage", { skip: !DB }, async () => {
+  await withHarness(async (h) => {
+    const { org } = h;
+    const { level } = await seedArchitecture(org.orgId, h.hrId);
+    const emp = await seedPositionedEmployment(org.orgId, org.subsidiaryId, { levelId: level.id });
+    await seedWage(org.orgId, h.hrId, emp.workerPartyId, "100000");
+    const cycle = await createCycle({
+      orgId: org.orgId, actorId: h.hrId, name: "Precision 2025", kind: "merit",
+      effectiveOn: "2025-04-01", currency: "CAD", guidelineKind: "matrix", guideline: GUIDELINE,
+    });
+    await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    const [line] = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
+    await proposeLine({
+      orgId: org.orgId,
+      actorId: h.hrId,
+      lineId: line!.id,
+      proposedPct: "9007199254.000001",
+      reason: "precision regression",
+    });
+    const stored = await storedLine(org.orgId, line!.id);
+    assert.equal(stored.proposed_pct, "9007199254.000001");
+    assert.equal(stored.proposed_rate, "9007199354000.0010");
+  });
+});
+
 test("F11 proposal wages round once, exactly, and the push carries them", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const { org } = h;
