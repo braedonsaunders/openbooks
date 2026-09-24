@@ -1,4 +1,5 @@
 import { scheduledReportAuthz, withReportAuthz, type ReportAuthorization } from '../../../../../lib/report-execution-context'
+import { can } from '../../../../../lib/authz'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -91,6 +92,20 @@ export async function GET(req: Request) {
       { orgId, t, period: scheduledPeriod, query: scheduledQ },
       { extraFilters },
     ))
+    // The artifact records the permission set its CONTENT required at render
+    // time (e.g. payroll.read for a journal/GL bearing pay-run lines), so a
+    // download can refuse viewers who lack it without re-rendering per
+    // viewer. A principal whose grants no longer cover the content cannot
+    // mint the artifact: fail the run rather than deliver it.
+    const contentPermissions = data.requiredPermissions ?? []
+    if (!contentPermissions.every((permission) => can(authz, permission))) {
+      throw new Error('Report execution permission was revoked')
+    }
+    await db.execute(sql`
+      update report_runs
+         set authorization_snapshot = coalesce(authorization_snapshot, '{}'::jsonb) || ${JSON.stringify({ requiredPermissions: contentPermissions })}::jsonb
+       where id = ${runId} and org_id = ${orgId}
+    `)
     const stamp = await businessToday(orgId)
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, {

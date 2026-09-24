@@ -3,7 +3,7 @@ import { AsyncLocalStorage } from 'node:async_hooks'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
 import { getAuthz, resolveUserAuthz, can, type Authz } from './authz'
-import { canRunReportEntity, canRunReportStatement } from './report-authz'
+import { canRunReportEntity, canRunReportStatement, reportEntityPermission } from './report-authz'
 import type { SessionUser } from './auth'
 
 const execution = new AsyncLocalStorage<Authz>()
@@ -22,6 +22,13 @@ export type ReportAuthorization = {
   version: 1
   userId: string
   allowedSubsidiaryIds: string[] | null
+  /** Extra permissions the RENDERED content required beyond the definition
+   * gate — e.g. payroll.read for a journal/GL artifact bearing pay-run
+   * lines, whose kind is gated by the reports feature only. Recorded at
+   * render time; downloads refuse viewers who lack them (by name) instead
+   * of re-rendering per viewer. Absent on artifacts rendered before the
+   * field existed: those keep the definition-level gate only. */
+  requiredPermissions?: string[]
   definition: {
     report_type: 'query' | 'statement'
     query: unknown
@@ -33,8 +40,13 @@ export type ReportAuthorization = {
 }
 
 export function snapshotReportAuthorization(authz: Authz, definition: ReportAuthorization['definition']): ReportAuthorization {
+  // Query definitions name their entity permission up front (a payroll
+  // register snapshot carries payroll.read from creation). Statement content
+  // is data-dependent, so the render stamps requiredPermissions later.
+  const entityPermission = definition.report_type === 'query' ? reportEntityPermission(definition.query) : null
   return { version: 1, userId: authz.user.id,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds].sort(),
+    ...(entityPermission ? { requiredPermissions: [entityPermission] } : {}),
     definition }
 }
 
@@ -46,14 +58,28 @@ export async function canAccessReportDefinition(authz: Authz, def: ReportAuthori
 
 /** Historical output requires the original data permissions and the entire
  * original scope. A narrower reader cannot safely consume unfiltered bytes. */
-export async function canAccessReportArtifact(authz: Authz, raw: unknown): Promise<boolean> {
-  if (!raw || typeof raw !== 'object') return false
+export type ReportArtifactAccess = { ok: true; missingPermissions: [] } | { ok: false; missingPermissions: string[] }
+
+export async function reportArtifactAccessDetail(authz: Authz, raw: unknown): Promise<ReportArtifactAccess> {
+  if (!raw || typeof raw !== 'object') return { ok: false, missingPermissions: [] }
   const snapshot = raw as ReportAuthorization
   if (snapshot.version !== 1 || !snapshot.definition ||
-      !(snapshot.allowedSubsidiaryIds === null || Array.isArray(snapshot.allowedSubsidiaryIds))) return false
+      !(snapshot.allowedSubsidiaryIds === null || Array.isArray(snapshot.allowedSubsidiaryIds))) return { ok: false, missingPermissions: [] }
   if (authz.allowedSubsidiaryIds !== null && (snapshot.allowedSubsidiaryIds === null ||
-      !snapshot.allowedSubsidiaryIds.every((id) => authz.allowedSubsidiaryIds!.has(id)))) return false
-  return canAccessReportDefinition(authz, snapshot.definition)
+      !snapshot.allowedSubsidiaryIds.every((id) => authz.allowedSubsidiaryIds!.has(id)))) return { ok: false, missingPermissions: [] }
+  if (!(await canAccessReportDefinition(authz, snapshot.definition))) return { ok: false, missingPermissions: [] }
+  // Render-time content permissions: a malformed record fails closed with no
+  // names to give; an absent one predates recording (definition gate only).
+  if (snapshot.requiredPermissions === undefined) return { ok: true, missingPermissions: [] }
+  if (!Array.isArray(snapshot.requiredPermissions) ||
+      !snapshot.requiredPermissions.every((p) => typeof p === 'string')) return { ok: false, missingPermissions: [] }
+  const missing = snapshot.requiredPermissions.filter((p) => !can(authz, p))
+  if (missing.length > 0) return { ok: false, missingPermissions: missing }
+  return { ok: true, missingPermissions: [] }
+}
+
+export async function canAccessReportArtifact(authz: Authz, raw: unknown): Promise<boolean> {
+  return (await reportArtifactAccessDetail(authz, raw)).ok
 }
 
 /** Re-resolve active membership and grants at execution, never trust a saved
