@@ -30,7 +30,7 @@ const journalDraftSchema = z.object({
         account: z.string().max(120)
           .describe("Account number (preferred, e.g. '5100') or exact account name"),
         description: z.string().max(200).optional(),
-        amount: z.number()
+        amount: z.string()
           .describe("Signed base amount: positive = debit, negative = credit"),
       }),
     )
