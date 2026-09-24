@@ -35,6 +35,8 @@ import { loadAccount } from '../../api/accounts/_lib'
 import { segmentRegistry } from '../../../lib/segments'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../lib/features'
 import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
+import { listScopedAccountOptions } from '../../../lib/scoped-options'
+import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { decimalAdd, decimalCmp, decimalSum } from '../../../lib/statement-format'
 import type { HierarchyAccountGroup } from './AccountsHierarchyTable'
 import type { AccountDrawer } from './AccountDrawer'
@@ -89,9 +91,7 @@ const CLASS_KEYS: Record<string, string> = {
 const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense'] as const
 
 type AccountDrawerProps = Parameters<typeof AccountDrawer>[0]
-type ParentOption = { id: string; number: string | null; name: string; type: string }
 type CurrencyOption = { code: string; name: string }
-type SubsidiaryOption = { id: string; name: string }
 const FLAT_PER_PAGE = 50
 
 export interface AccountSearchRow {
@@ -218,11 +218,8 @@ export async function loadAccounts(
   const drawerOptions =
     openAccount || creating
       ? await Promise.all([
-          db.execute<ParentOption>(sql`
-          select id, number, name, type from accounts
-           where org_id = ${authz.user.orgId} and is_summary
-           order by number nulls last, name
-        `),
+          listScopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { summaryOnly: true })
+            .then((rows) => ({ rows })),
           multiCurrencyEnabled
             ? db.execute<CurrencyOption>(sql`select code, name from currencies order by code`)
             // Single-currency orgs offer only the base currency, so a
@@ -230,11 +227,11 @@ export async function loadAccounts(
             : baseCurrency
               ? db.execute<CurrencyOption>(sql`select code, name from currencies where code = ${baseCurrency}`)
               : Promise.resolve({ rows: [] as CurrencyOption[] }),
-          db.execute<SubsidiaryOption>(sql`
-          select id, name from subsidiaries
-           where org_id = ${authz.user.orgId}
-           order by name
-        `),
+          subsidiaryUiOptions(authz.user.orgId).then((rows) => ({
+            rows: rows.filter((option) =>
+              authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds.has(option.id),
+            ),
+          })),
           loadFieldDefs('accounts'),
           segmentRegistry(authz.user.orgId),
         ])

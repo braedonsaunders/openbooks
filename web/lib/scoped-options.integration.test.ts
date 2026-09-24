@@ -21,12 +21,16 @@ test('account option reader includes only accounts assigned to the caller subsid
       const visibleAccount = randomUUID()
       const hiddenAccount = randomUUID()
       const sharedAccount = randomUUID()
+      const visibleParent = randomUUID()
+      const hiddenParent = randomUUID()
       await db.execute(sql`insert into subsidiaries(id, org_id, parent_id, name, base_currency, country)
         values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Other legal entity', 'CAD', 'CA')`)
       await db.execute(sql`insert into accounts(id, org_id, number, name, type, subsidiary_id, is_active, is_summary)
         values (${visibleAccount}, ${org.orgId}, '93001', 'Visible clearing', 'expense', ${org.subsidiaryId}, true, false),
                (${hiddenAccount}, ${org.orgId}, '93002', 'Hidden clearing', 'expense', ${otherSubsidiary}, true, false),
-               (${sharedAccount}, ${org.orgId}, '93003', 'Shared clearing', 'expense', null, true, false)`)
+               (${sharedAccount}, ${org.orgId}, '93003', 'Shared clearing', 'expense', null, true, false),
+               (${visibleParent}, ${org.orgId}, '93004', 'Visible parent', 'expense', ${org.subsidiaryId}, true, true),
+               (${hiddenParent}, ${org.orgId}, '93005', 'Hidden parent', 'expense', ${otherSubsidiary}, true, true)`)
 
       const restricted = await listScopedAccountOptions(org.orgId, new Set([org.subsidiaryId]), { activeOnly: true, postingOnly: true })
       const unrestricted = await listScopedAccountOptions(org.orgId, null, { activeOnly: true, postingOnly: true })
@@ -35,6 +39,9 @@ test('account option reader includes only accounts assigned to the caller subsid
       assert.ok(!restricted.some((account) => hiddenIds.has(account.id)))
       assert.ok(unrestricted.some((account) => account.id === hiddenAccount))
       assert.ok(unrestricted.some((account) => account.id === sharedAccount))
+      const restrictedParents = await listScopedAccountOptions(org.orgId, new Set([org.subsidiaryId]), { summaryOnly: true })
+      assert.ok(restrictedParents.some((account) => account.id === visibleParent))
+      assert.ok(!restrictedParents.some((account) => account.id === hiddenParent))
     } finally {
       await dropScratchOrg(org.orgId)
     }
