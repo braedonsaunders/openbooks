@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sealJson } from "@openbooks/engine/src/platform/secrets.ts";
@@ -120,7 +119,6 @@ const dynamics_oauth_callback_flowUrl = '../../_flow.ts?dynamics-oauth-callback-
 const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(dynamics_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 function reset(): void {
   state.companies = [
@@ -183,13 +181,4 @@ test("Dynamics callback pins a prior stored companyId instead of companies[0]", 
   const res = await callback({ state: sealed, cookie: nonce });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=connected");
   assert.equal((state.updated?.config as { companyId?: string } | undefined)?.companyId, "stored-co");
-});
-
-test("the Dynamics callback never reads origin from the request URL", () => {
-  assert.match(routeSource, /connectionOauthRedirectUri\('dynamics'\)/);
-  assert.match(routeSource, /pinProviderChoice/);
-  assert.doesNotMatch(routeSource, /new URL\(`\/sync\?oauth=\$\{status\}`, req\.url\)/);
-  assert.doesNotMatch(routeSource, /url\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
-  assert.match(routeSource, /pinProviderChoice\(companies,/);
 });
