@@ -117,6 +117,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
     name,
     id,
     'aria-label': ariaLabel,
+    'aria-labelledby': ariaLabelledBy,
     ...rest
   },
   ref,
@@ -186,6 +187,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         searchPlaceholder={searchPlaceholder}
         sheetTitle={sheetTitle ?? placeholder ?? parsed.placeholder}
         ariaLabel={ariaLabel}
+        ariaLabelledBy={ariaLabelledBy}
         clearable={parsed.clearable}
         emptyLabel={parsed.emptyLabel}
         disabled={disabled}

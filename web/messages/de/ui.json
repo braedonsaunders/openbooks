@@ -89,6 +89,7 @@
     "maxRowsReached": "Maximum von {count} Zeilen erreicht."
   },
   "lineGrid": {
+    "lineNumberHeader": "Zeile",
     "addLine": "Zeile hinzufügen",
     "keyboardHint": "Eingabe fügt hinzu/bewegt nach unten · Alt+↑/↓ ordnet um · ⌘D dupliziert · ⌘⌫ entfernt",
     "lineActionsAria": "Aktionen für Zeile {number}",

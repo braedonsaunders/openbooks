@@ -17,7 +17,7 @@
  *    (autosave) and computed values (tax, totals) via readonly columns
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Lock, LockOpen, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
@@ -102,6 +102,7 @@ function DecimalCell<Row extends Record<string, unknown>>({
   rowKey,
   colKey,
   registerDraft,
+  ariaLabelledBy,
 }: {
   value: unknown
   scale: number
@@ -110,6 +111,7 @@ function DecimalCell<Row extends Record<string, unknown>>({
   rowKey: string
   colKey: string
   registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
+  ariaLabelledBy: string
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const shown = draft ?? displayLineDecimal(value, scale)
@@ -139,6 +141,7 @@ function DecimalCell<Row extends Record<string, unknown>>({
       value={shown}
       placeholder="0"
       aria-invalid={invalid || undefined}
+      aria-labelledby={ariaLabelledBy}
       onFocus={() => setDraft(displayLineDecimal(value, scale))}
       onChange={(event) => {
         setDraft(event.target.value)
@@ -233,6 +236,9 @@ export function LineGrid<Row extends Record<string, unknown>>({
 }) {
   const t = useTranslations('ui.lineGrid')
   const tEntry = useTranslations('allocations')
+  const headerIdPrefix = useId()
+  const headerIds = columns.map((_column, index) => `${headerIdPrefix}-column-${index}`)
+  const rowLabelPrefix = `${headerIdPrefix}-row`
   const containerRef = useRef<HTMLDivElement>(null)
   const [menuRow, setMenuRow] = useState<number | null>(null)
   const distMenu = useContextMenu()
@@ -503,12 +509,15 @@ export function LineGrid<Row extends Record<string, unknown>>({
         ref={containerRef}
         className="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
       >
-        <div className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
+        <div role="grid" className="grid min-w-fit" style={{ gridTemplateColumns: template }}>
+          <div role="row" className="contents">
           {/* header */}
-          {!readOnly && <div className="border-b border-slate-200 dark:border-slate-800" />}
-          {columns.map((c) => (
+          {!readOnly && <div role="columnheader" className="border-b border-slate-200 dark:border-slate-800"><span className="sr-only">{t('lineNumberHeader')}</span></div>}
+          {columns.map((c, columnIndex) => (
             <div
               key={c.key}
+              id={headerIds[columnIndex]}
+              role="columnheader"
               className={cn(
                 'border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400',
                 c.align === 'right' && 'text-right',
@@ -525,19 +534,22 @@ export function LineGrid<Row extends Record<string, unknown>>({
             </div>
           ))}
           {showDist ? (
-            <div className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+            <div role="columnheader" className="border-b border-slate-200 px-2.5 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
               {tEntry('entry.distributionColumn')}
             </div>
           ) : null}
+          </div>
 
           {/* rows */}
           {rows.map((row, i) => (
+            <div key={rowKeys[i]!} role="row" className="contents">
             <RowCells
-              key={rowKeys[i]!}
               row={row}
               rowKey={rowKeys[i]!}
               index={i}
               columns={columns}
+              headerIds={headerIds}
+              rowLabelId={`${rowLabelPrefix}-${i}`}
               readOnly={readOnly}
               cellBase={cellBase}
               inputBase={inputBase}
@@ -576,6 +588,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
               onToggleGroupLock={showDist && distribution ? distribution.onToggleLock : undefined}
               onUnsplitGroup={showDist && distribution ? distribution.onUnsplit : undefined}
             />
+            </div>
           ))}
         </div>
       </div>
@@ -629,6 +642,7 @@ function TaxCell<Row extends Record<string, unknown>>({
   inputBase,
   registerDraft,
   onCommit,
+  ariaLabelledBy,
 }: {
   row: Row
   column: LineGridColumn<Row>
@@ -636,6 +650,7 @@ function TaxCell<Row extends Record<string, unknown>>({
   inputBase: string
   registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
   onCommit: (next: { taxAmount: string; overridden: boolean }) => void
+  ariaLabelledBy: string
 }) {
   const t = useTranslations('ui.lineGrid.tax')
   const overridden = row.taxOverridden === true
@@ -682,6 +697,7 @@ function TaxCell<Row extends Record<string, unknown>>({
         value={shown}
         placeholder="0.00"
         aria-invalid={invalidAmount(shown) || undefined}
+        aria-labelledby={ariaLabelledBy}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={(e) => commit(e.target.value)}
         title={
@@ -718,6 +734,8 @@ function RowCells<Row extends Record<string, unknown>>({
   rowKey,
   index: i,
   columns,
+  headerIds,
+  rowLabelId,
   readOnly,
   cellBase,
   inputBase,
@@ -744,6 +762,8 @@ function RowCells<Row extends Record<string, unknown>>({
   rowKey: string
   index: number
   columns: LineGridColumn<Row>[]
+  headerIds: string[]
+  rowLabelId: string
   readOnly: boolean
   cellBase: string
   inputBase: string
@@ -785,6 +805,7 @@ function RowCells<Row extends Record<string, unknown>>({
       ) : null}
       {!readOnly ? (
         <div className={cn(cellBase, 'justify-center px-0')}>
+          <span id={rowLabelId} className="sr-only">{t('lineActionsAria', { number: i + 1 })}</span>
           <Popover
             open={menuOpen}
             onOpenChange={setMenuOpen}
@@ -836,6 +857,7 @@ function RowCells<Row extends Record<string, unknown>>({
       ) : null}
 
       {columns.map((c, colIndex) => {
+        const ariaLabelledBy = `${headerIds[colIndex]} ${rowLabelId}`
         const value = row[c.key]
         if (readOnly || c.type === 'readonly') {
           // Resolve select/search-select values to their human label — never
@@ -879,10 +901,11 @@ function RowCells<Row extends Record<string, unknown>>({
           return <div key={c.key} className={cn(cellBase, 'px-2.5 text-sm')} />
         }
         return (
-          <div
-            key={c.key}
-            data-lg-row={i}
-            data-lg-col={colIndex}
+            <div
+              key={c.key}
+              data-lg-row={i}
+              data-lg-col={colIndex}
+              role="gridcell"
             className={cn(cellBase, indented && colIndex === 0 && 'pl-6')}
             onKeyDown={(e) => handleKeyDown(e, i, colIndex)}
             onContextMenu={onCellContextMenu}
@@ -890,6 +913,7 @@ function RowCells<Row extends Record<string, unknown>>({
             {c.type === 'search-select' ? (
               <SearchSelect
                 options={c.options ?? []}
+                ariaLabelledBy={ariaLabelledBy}
                 value={(value as string) ?? ''}
                 onChange={(v) => commitCell(rowKey, c.key, v ?? '')}
                 placeholder={c.placeholder ?? '—'}
@@ -898,6 +922,7 @@ function RowCells<Row extends Record<string, unknown>>({
               />
             ) : c.type === 'select' ? (
               <Select
+                aria-labelledby={ariaLabelledBy}
                 value={(value as string) ?? ''}
                 onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className="w-full border-0 bg-transparent shadow-none"
@@ -911,6 +936,7 @@ function RowCells<Row extends Record<string, unknown>>({
             ) : c.type === 'amount' ? (
               <input
                 inputMode="decimal"
+                aria-labelledby={ariaLabelledBy}
                 value={(value as string) ?? ''}
                 placeholder={c.placeholder ?? '0.00'}
                 aria-invalid={
@@ -934,6 +960,7 @@ function RowCells<Row extends Record<string, unknown>>({
                 rowKey={rowKey}
                 colKey={c.key}
                 registerDraft={registerDraft}
+                ariaLabelledBy={ariaLabelledBy}
               />
             ) : c.type === 'tax' ? (
               <TaxCell
@@ -942,11 +969,13 @@ function RowCells<Row extends Record<string, unknown>>({
                 rowKey={rowKey}
                 inputBase={inputBase}
                 registerDraft={registerDraft}
+                ariaLabelledBy={ariaLabelledBy}
                 onCommit={(next) => commitTax(rowKey, c, next)}
               />
             ) : (
               <input
                 value={(value as string) ?? ''}
+                aria-labelledby={ariaLabelledBy}
                 placeholder={c.placeholder}
                 onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className={inputBase}

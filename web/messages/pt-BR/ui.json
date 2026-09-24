@@ -89,6 +89,7 @@
     "maxRowsReached": "Máximo de {count} linhas atingido."
   },
   "lineGrid": {
+    "lineNumberHeader": "Linha",
     "addLine": "Adicionar linha",
     "keyboardHint": "Enter adiciona/desce · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ remove",
     "lineActionsAria": "Ações da linha {number}",

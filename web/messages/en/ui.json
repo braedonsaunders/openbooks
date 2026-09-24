@@ -89,6 +89,7 @@
     "maxRowsReached": "Maximum of {count} rows reached."
   },
   "lineGrid": {
+    "lineNumberHeader": "Line",
     "addLine": "Add line",
     "keyboardHint": "Enter adds/moves down · Alt+↑/↓ reorders · ⌘D duplicates · ⌘⌫ removes",
     "lineActionsAria": "Line {number} actions",

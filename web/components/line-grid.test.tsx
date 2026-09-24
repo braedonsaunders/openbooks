@@ -84,6 +84,26 @@ interface TestRow extends Record<string, unknown> {
 
 const store: { rows: TestRow[] } = { rows: [] };
 
+test("editable cells are named by their column header and line number", async (t) => {
+  const { host, done } = await mount([line("a", "1"), line("b", "2")]);
+  t.after(done);
+
+  assert.ok(host.querySelector('[role="grid"]'), "the line editor exposes grid semantics");
+  assert.ok(host.querySelector('[role="columnheader"]'), "column captions expose header semantics");
+  const input = cellInput(host, 1, 0);
+  const labels = input.getAttribute("aria-labelledby")?.split(/\s+/) ?? [];
+  assert.equal(labels.length, 2, "each input references its column and row labels");
+  const labelText = labels.map((id) => document.getElementById(id)?.textContent?.trim());
+  assert.deepEqual(labelText, ["Qty", "Line 2 actions"]);
+  const selectors = [...host.querySelectorAll('div[data-lg-row="1"] button[aria-haspopup="listbox"]')];
+  assert.equal(selectors.length, 2, "the search-select and select triggers render");
+  for (const selector of selectors) {
+    const selectorLabels = selector.getAttribute("aria-labelledby")?.split(/\s+/) ?? [];
+    assert.equal(selectorLabels.length, 2, "each selector references its column and row labels");
+    assert.ok(selectorLabels.every((id) => document.getElementById(id)?.textContent?.trim()), "each selector label reference resolves");
+  }
+});
+
 function Probe({ initial }: { initial: TestRow[] }) {
   const [rows, setRows] = useState(initial);
   const apply = (next: TestRow[]) => {
@@ -102,6 +122,8 @@ function Probe({ initial }: { initial: TestRow[] }) {
       onTaxChange: (index, next) =>
         apply(store.rows.map((r, j) => (j === index ? { ...r, taxAmount: next.taxAmount, taxOverridden: next.overridden } : r))),
     },
+    { key: "category", label: "Category", width: "140px", type: "search-select", options: [{ value: "goods", label: "Goods" }] },
+    { key: "kind", label: "Kind", width: "120px", type: "select", options: [{ value: "expense", label: "Expense" }] },
   ];
   return (
     <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
