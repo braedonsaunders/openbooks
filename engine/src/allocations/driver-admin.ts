@@ -561,6 +561,39 @@ async function assertNoValueOverlap(
   }
 }
 
+async function assertActiveDimensionValue(
+  tx: SqlExecutor,
+  orgId: string,
+  dimension: AllocationDimension,
+  dimensionValueId: string,
+): Promise<void> {
+  const tableByDimension: Partial<Record<AllocationDimension, string>> = {
+    department: "departments",
+    location: "locations",
+    class: "classes",
+    project: "projects",
+    subsidiary: "subsidiaries",
+  };
+  let found: boolean;
+  if (dimension.startsWith("extra:")) {
+    const segmentKey = dimension.slice("extra:".length);
+    found = (await tx.execute<{ id: string }>(sql`
+      select sv.id from segment_values sv
+      join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id
+      where sv.org_id = ${orgId} and sv.id = ${dimensionValueId}
+        and sv.is_active and sd.is_active and sd.key = ${segmentKey}
+    `)).rows.length === 1;
+  } else {
+    const table = tableByDimension[dimension];
+    if (!table) fail("validation", "driver has an unsupported dimension");
+    found = (await tx.execute<{ id: string }>(sql`
+      select id from ${sql.raw(table)}
+      where org_id = ${orgId} and id = ${dimensionValueId} and is_active
+    `)).rows.length === 1;
+  }
+  if (!found) fail("validation", "Choose an active value from the driver's dimension.");
+}
+
 export async function createDriverValue(
   orgId: string,
   actorId: string,
@@ -574,9 +607,11 @@ export async function createDriverValue(
   if (to !== null && to < from) fail("validation", "effectiveTo must be on or after effectiveFrom");
   const value = validateDriverValueDecimal(input.value);
   return db.transaction(async (tx) => {
-    const driver = await tx.execute<Record<string, unknown>>(sql`
-      select id from allocation_drivers where org_id = ${orgId} and id = ${driverId}`);
-    if (!driver.rows[0]) fail("not_found", "driver not found");
+    const driver = await tx.execute<{ dimension: AllocationDimension }>(sql`
+      select dimension from allocation_drivers where org_id = ${orgId} and id = ${driverId}`);
+    const driverRow = driver.rows[0];
+    if (!driverRow) fail("not_found", "driver not found");
+    await assertActiveDimensionValue(tx, orgId, driverRow.dimension, input.dimensionValueId);
     await assertNoValueOverlap(tx, orgId, driverId, input.dimensionValueId, { from, to });
     let row: Record<string, unknown>;
     try {

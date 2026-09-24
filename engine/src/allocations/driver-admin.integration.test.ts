@@ -174,6 +174,40 @@ test("manual values: exact decimals, overlap guard, end-dating, onDate read", { 
   }
 });
 
+test("manual values must reference an active value in the driver's dimension", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const driver = await createDriver(org.orgId, actorId, {
+      key: "department-headcount",
+      name: "Department headcount",
+      dimension: "department",
+      sourceKind: "manual",
+    });
+    await assert.rejects(
+      createDriverValue(org.orgId, actorId, driver.id, {
+        dimensionValueId: org.subsidiaryId,
+        effectiveFrom: "2026-01-01",
+        value: "1",
+      }),
+      (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
+    );
+    const inactiveDepartment = randomUUID();
+    await db.execute(sql`insert into departments (id, org_id, name, is_active)
+      values (${inactiveDepartment}, ${org.orgId}, 'Inactive department', false)`);
+    await assert.rejects(
+      createDriverValue(org.orgId, actorId, driver.id, {
+        dimensionValueId: inactiveDepartment,
+        effectiveFrom: "2026-01-01",
+        value: "1",
+      }),
+      (error: unknown) => error instanceof DriverAdminError && error.code === "validation",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("manual driver windows stay non-overlapping under concurrent inserts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
