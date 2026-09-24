@@ -99,7 +99,7 @@ async function seedAcceptance(org: Awaited<ReturnType<typeof createScratchOrg>>,
     insert into payment_surcharge_rules
       (org_id, name, calculation, percent, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
     values (${org.orgId}, 'Card fee', 'percent', '3', ${org.accounts.revenue}, null, 'all', '2020-01-01', ${userId}, ${userId})`);
-  const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+  const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
   return { userId, invoiceId, link };
 }
 
@@ -454,7 +454,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
         (org_id, name, calculation, percent, fee_income_account_id, provider, payment_method, effective_from, created_by, updated_by)
       values (${org.orgId}, 'Card fee', 'percent', '3', ${org.accounts.revenue}, null, 'all', '2020-01-01', ${userId}, ${userId})`);
 
-    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
     assert.equal(link.amount, "100.0000");
     assert.equal(link.surchargeAmount, "3.0000");
 
@@ -573,7 +573,7 @@ test("the pay-link bearer token never rests in plaintext", { skip: !DB }, async 
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
               ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" })}, ${userId}, ${userId})`);
-    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
 
     // The row on disk: no plaintext token anywhere.
     const stored = (await db.execute<{ token: string | null; token_hash: string | null; token_sealed: string | null }>(sql`
@@ -589,7 +589,7 @@ test("the pay-link bearer token never rests in plaintext", { skip: !DB }, async 
     const page = await publicPaymentPage(link.token);
     assert.equal(page?.status, "active");
     assert.equal(page?.invoiceAmount, "100.0000");
-    const listed = await listPaymentLinks(org.orgId, invoiceId);
+    const listed = await listPaymentLinks(org.orgId, invoiceId, null);
     assert.equal(listed[0]?.token, link.token, "display copy unseals to the same token");
   } finally {
     await dropScratchOrg(org.orgId);
@@ -626,7 +626,7 @@ test("a provider outage answering HTML surfaces as the named refusal, never a pa
         (org_id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true, ${org.accounts.bank},
               ${sealJson({ apiKey: "sk_test_itest", webhookSecret: "whsec_itest" })}, ${userId}, ${userId})`);
-    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" });
+    const link = await createPaymentLink(org.orgId, userId, { documentId: invoiceId, provider: "stripe" }, null);
     await assert.rejects(
       () =>
         createCheckoutSession(link.token, "https://app.test/pay/" + link.token, async () => ({
@@ -1286,11 +1286,11 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     const stripeLink = await createPaymentLink(org.orgId, userId, {
       documentId: await postedInvoice("INV-METHOD-STRIPE"),
       provider: "stripe",
-    });
+    }, null);
     const debitLink = await createPaymentLink(org.orgId, userId, {
       documentId: await postedInvoice("INV-METHOD-GC"),
       provider: "gocardless",
-    });
+    }, null);
     assert.equal(stripeLink.surchargeAmount, "3.0000");
     assert.equal(debitLink.surchargeAmount, "2.0000");
 
@@ -1364,7 +1364,7 @@ test("surcharge resolution honors the payment method across card and bank-debit 
     const configuredLink = await createPaymentLink(org.orgId, userId, {
       documentId: await postedInvoice("INV-METHOD-CONFIG"),
       provider: "stripe",
-    });
+    }, null);
     assert.equal(configuredLink.surchargeAmount, "3.0000");
 
     // One active surcharge window per identity is a storage invariant

@@ -19,6 +19,7 @@ import { sameCurrencyAllocation, type AllocationInput } from "./settlement-polic
 import { postDocument } from "../ledger/posting-document.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -1070,15 +1071,34 @@ export type PaymentLinkView = {
   createdAt: string;
 };
 
-export async function listPaymentLinks(orgId: string, documentId: string): Promise<PaymentLinkView[]> {
-  const r = (await db.execute<Omit<PaymentLinkView, "tokenState"> & { token_sealed: string | null; token: string | null }>(sql`
-    select id, token, token_sealed, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
-           currency, status, expires_on::text as "expiresOn", memo,
-           paid_payment_document_id as "paidPaymentDocumentId", created_at as "createdAt"
-      from payment_links
-     where org_id = ${orgId} and document_id = ${documentId}
-     order by created_at desc
-  `));
+export async function listPaymentLinks(
+  orgId: string,
+  documentId: string,
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<PaymentLinkView[]> {
+  // The document is locked and the scope rechecked inside the same unit as
+  // the token reads: an unlocked route precheck can authorize invoice A
+  // while a concurrent A→B rehome lands before the sealed tokens
+  // are unsealed.
+  const r = await withOrg(orgId, async () => {
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from documents
+       where id = ${documentId} and org_id = ${orgId}
+       for update
+    `));
+    if (!owned.rows[0] || !subsidiaryScopeAllows(allowedSubsidiaryIds, owned.rows[0].subsidiaryId)) {
+      throw new ScopeNotFoundError();
+    }
+    return db.execute<Omit<PaymentLinkView, "tokenState"> & { token_sealed: string | null; token: string | null }>(sql`
+      select id, token, token_sealed, document_id as "documentId", provider, amount, surcharge_amount as "surchargeAmount",
+             currency, status, expires_on::text as "expiresOn", memo,
+             paid_payment_document_id as "paidPaymentDocumentId", created_at as "createdAt"
+        from payment_links
+       where org_id = ${orgId} and document_id = ${documentId}
+       order by created_at desc
+    `);
+  });
   // token_sealed is authoritative (written since at-rest sealing); the raw
   // token column survives only until bootstrap's seal-and-null step and
   // covers links created between migration and that step.
@@ -1102,6 +1122,8 @@ export async function createPaymentLink(
   orgId: string,
   actorId: string,
   input: { documentId: string; provider: AcceptanceProvider; bankAccountId?: string | null; expiresOn?: string | null; memo?: string | null },
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<PaymentLinkView> {
   assertAcceptanceUuid(input.documentId, "document");
   if (input.provider !== "stripe" && input.provider !== "adyen" && input.provider !== "gocardless") {
@@ -1117,12 +1139,18 @@ export async function createPaymentLink(
     throw new PaymentAcceptanceError("expiresOn must be a real calendar date (YYYY-MM-DD)");
   }
   return await withOrg(orgId, async () => {
-    const docs = (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string; currency: string; document_number: string; open_balance: string }>(sql`
+    // Locked before anything else: the scope verdict and every validation
+    // below see the latest committed subsidiary, and a concurrent rehome
+    // blocks until the link commits instead of slipping between a route
+    // precheck and this mint.
+    const docs = (await db.execute<{ id: string; kind: string; status: string; party_id: string | null; subsidiary_id: string | null; currency: string; document_number: string; open_balance: string }>(sql`
       select id, kind, status, party_id, subsidiary_id, currency, document_number, open_balance
         from documents where id = ${input.documentId} and org_id = ${orgId}
+        for update
     `));
     const doc = docs.rows[0];
-    if (!doc) throw new PaymentAcceptanceError("invoice not found");
+    if (!doc || !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiary_id)) throw new ScopeNotFoundError();
+    if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
     if (doc.kind !== "customer_invoice") throw new PaymentAcceptanceError("payment links attach to customer invoices");
     if (doc.status !== "posted") throw new PaymentAcceptanceError("invoice is not posted");
     if (!doc.party_id) throw new PaymentAcceptanceError("invoice has no customer");
@@ -1175,13 +1203,37 @@ export async function createPaymentLink(
               } })}::jsonb,
               ${actorId})
     `);
-    const links = await listPaymentLinks(orgId, doc.id);
+    const links = await listPaymentLinks(orgId, doc.id, allowedSubsidiaryIds);
     return links.find((l) => l.id === id.rows[0]!.id)!;
   });
 }
 
-export async function voidPaymentLink(orgId: string, actorId: string, linkId: string): Promise<void> {
+export async function voidPaymentLink(
+  orgId: string,
+  actorId: string,
+  linkId: string,
+  /** REQUIRED, no default: null is the explicit unrestricted sentinel. */
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<void> {
   await withOrg(orgId, async () => {
+    // Lock the link, then its invoice, and recheck the invoice's scope under
+    // both locks: the route's unlocked precheck on the stored link entity
+    // can authorize link L while a concurrent rehome moves L's invoice to
+    // another entity before this void commits.
+    const link = (await db.execute<{ document_id: string }>(sql`
+      select document_id from payment_links
+       where org_id = ${orgId} and id = ${linkId}
+       for update
+    `)).rows[0];
+    if (!link) throw new ScopeNotFoundError();
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from documents
+       where id = ${link.document_id} and org_id = ${orgId}
+       for update
+    `)).rows[0];
+    if (!owned || !subsidiaryScopeAllows(allowedSubsidiaryIds, owned.subsidiaryId)) {
+      throw new ScopeNotFoundError();
+    }
     const r = (await db.execute<{ id: string }>(sql`
       update payment_links set status = 'void', updated_at = now(), updated_by = ${actorId}
        where org_id = ${orgId} and id = ${linkId} and status = 'active'
