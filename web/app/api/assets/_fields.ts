@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { cmp, normalizeMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { depreciationPeriodCount } from "@openbooks/engine/src/assets/depreciation-limits.ts";
@@ -243,6 +244,33 @@ export async function parseAccountOverride(
     throw new FieldRefusal(code);
   }
   return candidate.toLowerCase();
+}
+
+/** Keep every referenced posting account visible until an asset write commits.
+ * Asset account pickers allow shared and descendant accounts, so lock without
+ * a generic subsidiary predicate, then reapply the asset-specific visibility
+ * predicate against the locked rows. */
+export async function lockAccountOverridesForAssetWrite(
+  tx: SqlExecutor,
+  orgId: string,
+  allowedSubsidiaryIds: readonly string[] | null,
+  overrides: readonly { id: string | null | undefined; code: string }[],
+): Promise<void> {
+  const byId = new Map<string, string>();
+  for (const override of overrides) {
+    if (override.id) byId.set(override.id, override.code);
+  }
+  for (const [id, code] of [...byId].sort(([a], [b]) => a.localeCompare(b))) {
+    try {
+      await lockScopeRow(tx, orgId, "account", id, null, "share");
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new FieldRefusal(code);
+      throw error;
+    }
+    if (!(await accountExists(tx, id, orgId, allowedSubsidiaryIds))) {
+      throw new FieldRefusal(code);
+    }
+  }
 }
 
 export async function parseDepreciationMethodId(

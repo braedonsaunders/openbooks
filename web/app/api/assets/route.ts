@@ -10,6 +10,7 @@ import { guardFeaturePermission } from "../../../lib/feature-gates";
 import { isUuid } from "../../../lib/list-params";
 import {
   FieldRefusal,
+  lockAccountOverridesForAssetWrite,
   checkOpeningBasis,
   checkOpeningMonth,
   checkOpeningPair,
@@ -267,6 +268,11 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const outcome = await db.transaction(async (tx) => {
+          await lockAccountOverridesForAssetWrite(tx, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, [
+            { id: assetAccountId, code: "invalid_asset_account" },
+            { id: accumAccountId, code: "invalid_accumulated_account" },
+            { id: expenseAccountId, code: "invalid_expense_account" },
+          ]);
           // Same org-wide fence as the legacy draft factory and the
           // equipment-capitalization path: max()+1 stays serialized across
           // every allocator, and the unique constraint is the final
@@ -355,6 +361,9 @@ export async function POST(request: Request) {
       }
     }
   } catch (error) {
+    if (error instanceof FieldRefusal) {
+      return bad(error.code, REFUSAL_FIELD[error.code]);
+    }
     const message = error instanceof Error ? error.message : String(error);
     if (message.includes("idempotency_key_conflict")) {
       return bad("invalid_idempotency_key", undefined, 409);
