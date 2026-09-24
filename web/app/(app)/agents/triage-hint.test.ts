@@ -25,7 +25,7 @@ const hint = (locale: string): string => {
 };
 
 for (const locale of LOCALES) {
-  test(`F-t11-008: shortcut legend qualifies a/d as drawer flows in ${locale}`, () => {
+  test(`shortcut legend qualifies a/d as drawer flows in ${locale}`, () => {
     const segments = hint(locale)
       .split("·")
       .map((part) => part.trim());

@@ -47,7 +47,7 @@ async function asReader(orgId: string) {
   state.user = { id: actor, orgId, name: 'Reader', email: 't11status@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: orgId, homeOrgId: orgId, homeUserId: actor };
 }
 
-test('F-t11-006: Status filter surfaces resolved and dismissed findings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('status filter surfaces resolved and dismissed findings', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   // Scratch bootstrap + fixture seeds run under bypass (cluster-safe fixture
   // path); the loader under test runs org-scoped like production.
   const org = await withBypassContext(() => createScratchOrg());
