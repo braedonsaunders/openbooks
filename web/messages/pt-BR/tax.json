@@ -187,7 +187,7 @@
         "difference": "Diferença",
         "effect": "Efeito fiscal"
       },
-      "auto": "auto",
+      "auto": "Automático",
       "manual": "manual"
     },
     "postFailed": "Não foi possível lançar a provisão."
