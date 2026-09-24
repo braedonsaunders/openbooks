@@ -5,6 +5,7 @@
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
 import { add, cmp, fromUnits, isZero, mulDecimal, roundDiv, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { ADJUSTMENT_TARGET_TYPES } from './rate-adjustment-types'
 
 /** A percentage the pricing cannot read exactly — stored values are capped at
  * 10 decimals, so anything else is a caller bug, refused by name. */
@@ -193,6 +194,13 @@ export function priceAdjustments(
   const charges: AdjustmentCharge[] = []
   for (const adjustment of adjustments) {
     if (adjustment.presentation !== 'separate') continue
+    for (const target of adjustment.targets) {
+      if (!ADJUSTMENT_TARGET_TYPES.includes(target.targetType as (typeof ADJUSTMENT_TARGET_TYPES)[number])) {
+        throw new RateAdjustmentPricingError(
+          `rate card adjustment "${adjustment.code}" has unsupported target "${target.targetType}" — edit the card to use a supported invoice-line target before invoicing`,
+        )
+      }
+    }
     const unitPriced = adjustment.calculation === 'per_hour' || adjustment.calculation === 'per_day'
     switch (adjustment.calculation) {
       case 'percent': case 'fixed': case 'per_hour': case 'per_day': case 'text': break
