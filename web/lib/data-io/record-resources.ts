@@ -323,7 +323,7 @@ async function writeRecords(
         continue
       }
 
-      const searchText = await buildSearchText(sections, computed, recNo || '')
+      const searchText = await buildSearchText(ctx.orgId, sections, computed, recNo || '')
       if (exists) {
         if (!ctx.dryRun) {
           if (existingId === null) throw new Error('imported record has no persisted identity')

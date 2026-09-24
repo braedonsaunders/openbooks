@@ -9,9 +9,9 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 /**
  * The active locale for this request: the user's personal choice
  * (users.locale) when set, else the tenant default (orgs.settings.defaultLocale),
- * else English. Unauthenticated requests (login page) get the tenant default
- * of the install's org, and so do callers with no request scope at all
- * (background agents, harness scripts), where cookies() throws. Cached per
+ * else English. Requests with no authenticated tenant (login page, background
+ * agents, harness scripts) use the neutral application default; there is no
+ * safe tenant default to read without an organization identity. Cached per
  * request — the i18n request config and the account menu both ask.
  */
 export const resolveLocale = cache(async (): Promise<Locale> => {
@@ -41,11 +41,7 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
     }
   }
 
-  const r = await withBypassContext(async () => (await db.execute(
-      sql`select settings ->> 'defaultLocale' as org_default from orgs limit 1`,
-    )));
-  const orgDefault = r.rows[0]?.org_default;
-  return isLocale(orgDefault) ? orgDefault : DEFAULT_LOCALE;
+  return DEFAULT_LOCALE;
 });
 
 /**

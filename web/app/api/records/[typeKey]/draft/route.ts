@@ -91,7 +91,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
     `custrec:${typeKey}`,
     recordNumberPrefix(typeKey),
   )
-  const searchText = await buildSearchText(lint.sections, data, recordNumber)
+  const searchText = await buildSearchText(user.orgId, lint.sections, data, recordNumber)
 
   const r = (await db.execute<{ id: string; record_number: string }>(sql`
     insert into custom_records (org_id, type_id, type_key, record_number, data, search_text, created_by, updated_by)

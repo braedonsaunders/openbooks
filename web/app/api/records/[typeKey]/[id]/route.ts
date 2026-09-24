@@ -366,7 +366,7 @@ export async function PATCH(
     }
 
     const searchText =
-      nextData !== undefined ? await buildSearchText(sections, nextData, record.record_number) : undefined
+      nextData !== undefined ? await buildSearchText(user.orgId, sections, nextData, record.record_number) : undefined
     // Monotonic revision advance (same idiom as document and prebill-line
     // writers): every committed update moves the token forward, so equal
     // strings really do mean "nothing changed since you read it".

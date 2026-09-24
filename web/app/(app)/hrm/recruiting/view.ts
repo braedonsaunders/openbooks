@@ -417,7 +417,7 @@ export async function loadRecruitingPage(
       )
       let offerEmployerOptions = offerScoped.map((option) => ({ value: option.id, label: option.name }))
       if (offerEmployerOptions.length === 0 && offerVisible.length === 0) {
-        const root = await rootSubsidiary()
+        const root = await rootSubsidiary(authz.user.orgId)
         offerEmployerOptions = [{ value: root.id, label: root.name }]
       }
       requisition = {
@@ -632,7 +632,7 @@ export async function loadRecruitingPage(
     let employerRefusal: string | null = null
     if (employers.length === 0) {
       if (visible.length === 0) {
-        const root = await rootSubsidiary()
+        const root = await rootSubsidiary(authz.user.orgId)
         employers = [{ value: root.id, label: root.name }]
       } else {
         employerRefusal = t('recruiting.create.noEmployer')

@@ -20,6 +20,7 @@ registerHooks({
 })
 
 const { listRecordTypes, listRecords, getRecord, createApplicationRecord, updateApplicationRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
+const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import('../records.ts')
 const { ApplicationError } = await import('./errors.ts')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -140,6 +141,29 @@ function contextFor(fixture: Fixture, allowedSubsidiaryIds: ReadonlySet<string>)
 function notFound(error: unknown): boolean {
   return error instanceof ApplicationError && error.code === 'not_found'
 }
+
+test(
+  'custom-record label resolution never returns a referenced party from another organization',
+  { skip: !env.OPENBOOKS_DB_URL },
+  async () => {
+    const orgA = await withBypass(() => createScratchOrg())
+    const orgB = await withBypass(() => createScratchOrg())
+    try {
+      const sections = [{
+        id: 'main',
+        label: 'Main',
+        fields: [{ id: 'counterparty', label: 'Counterparty', type: 'party' }],
+      }] as unknown as Parameters<typeof resolveEntityLabelsFromModule>[1]
+      const labels = await withBypass(() => resolveEntityLabelsFromModule(orgA.orgId, sections, [
+        { counterparty: orgB.vendorId },
+      ]))
+      assert.equal(labels.parties.has(orgB.vendorId), false)
+    } finally {
+      await withBypass(() => dropScratchOrg(orgA.orgId))
+      await withBypass(() => dropScratchOrg(orgB.orgId))
+    }
+  },
+)
 
 test(
   'document-backed list/get succeed under a multi-subsidiary scope and multi-kind allowlist',

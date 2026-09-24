@@ -15,7 +15,7 @@ registerHooks({
 
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { subsidiaryOptions } = await import('./subsidiaries')
+const { rootSubsidiary, subsidiaryOptions } = await import('./subsidiaries')
 
 /**
  * subsidiaryOptions feeds every subsidiary picker plus the consolidation
@@ -42,6 +42,17 @@ test('subsidiaryOptions never lists another tenant under an org context', { skip
       select id from subsidiaries where org_id = ${orgA.orgId}`))
     const own = new Set(orgOf.rows.map((r) => r.id))
     for (const o of options) assert.ok(own.has(o.id), `option ${o.id} (${o.name}) is not org A's`)
+
+    const root = await withBypass(() => rootSubsidiary(orgA.orgId))
+    assert.equal(root.id, orgA.subsidiaryId, 'root lookup must bind the requested organization under BYPASSRLS')
+    const explicitOptions = await withBypass(() => subsidiaryOptions(false, false, orgA.orgId))
+    assert.ok(explicitOptions.length > 0)
+    assert.ok(explicitOptions.every((option) => own.has(option.id)))
+    assert.deepEqual(
+      await withBypass(() => subsidiaryOptions()),
+      [],
+      'a helper with no explicit or ambient tenant must fail closed under BYPASSRLS',
+    )
   } finally {
     await withBypass(() => dropScratchOrg(orgA.orgId))
     await withBypass(() => dropScratchOrg(orgB.orgId))
