@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
@@ -67,7 +66,6 @@ const dynamics_oauth_start_flowUrl = '../../_flow.ts?dynamics-oauth-start-flow'
 const { CONNECTION_OAUTH_COOKIE } = (await import(dynamics_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
 hooks.deregister();
 
-const routeSource = readFileSync(new URL("./route.ts", import.meta.url), "utf8");
 
 function cookieMap(response: Response): Map<string, string> {
   const raw =
@@ -104,10 +102,4 @@ test("Dynamics start mints a one-time nonce in sealed state and the CSRF cookie"
   const payload = unsealJson<{ nonce?: string }>(location.searchParams.get("state"));
   assert.ok((payload?.nonce?.length ?? 0) >= 16);
   assert.equal(cookieMap(res).get(CONNECTION_OAUTH_COOKIE), payload?.nonce);
-});
-
-test("the Dynamics start route never reads origin from the request URL", () => {
-  assert.match(routeSource, /connectionOauthRedirectUri\('dynamics'\)/);
-  assert.doesNotMatch(routeSource, /new URL\(req\.url\)\.origin/);
-  assert.doesNotMatch(routeSource, /trustedRequestOrigin/);
 });

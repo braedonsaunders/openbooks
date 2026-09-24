@@ -136,7 +136,6 @@
     "web/app/api/platform/connections/[id]/run/route.test.ts": 1,
     "web/app/api/platform/connections/[id]/test/route.test.ts": 1,
     "web/app/api/platform/connections/oauth/dynamics/callback/route.test.ts": 1,
-    "web/app/api/platform/connections/oauth/dynamics/start/route.test.ts": 1,
     "web/app/api/platform/connections/oauth/qbo/callback/route.test.ts": 1,
     "web/app/api/platform/connections/oauth/qbo/start/route.test.ts": 1,
     "web/app/api/platform/connections/oauth/xero/callback/route.test.ts": 1,
