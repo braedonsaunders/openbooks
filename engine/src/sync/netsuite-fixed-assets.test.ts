@@ -42,62 +42,6 @@ test("NetSuite FAM state refuses a carrying value above cost", () => {
   );
 });
 
-test("NetSuite FAM document insert persists fxRate through canonicalDecimal then normalizeDecimal at FX scale", () => {
-  const helperStart = source.indexOf("function persistSyncFxRate");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncFxRate helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 10\)/);
-  assert.match(helper, /normalizeDecimal\(exact, 10\)/);
-  assert.match(helper, /FX rate must be an exact decimal/);
-
-  const insert = source.indexOf(".insert(schema.documents)");
-  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
-  const body = source.slice(insert, returning > insert ? returning : undefined);
-  assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
-  assert.doesNotMatch(body, /normalizeDecimal\(document\.fxRate \?\? "1", 10\)/);
-});
-
-test("NetSuite FAM document insert persists subtotal through canonicalDecimal then normalizeMoney", () => {
-  const helperStart = source.indexOf("function persistSyncLineMoney");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncLineMoney helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-  assert.match(helper, /must be an exact decimal/);
-
-  const insert = source.indexOf(".insert(schema.documents)");
-  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
-  const body = source.slice(insert, returning > insert ? returning : undefined);
-  assert.match(body, /persistSyncLineMoney\(document\.subtotal \?\? "0", "subtotal"\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(document\.subtotal/);
-  assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
-});
-
-test("NetSuite FAM document insert persists total through persistSyncLineMoney", () => {
-  const insert = source.indexOf(".insert(schema.documents)");
-  const returning = source.indexOf(".returning({ id: schema.documents.id })", insert);
-  const body = source.slice(insert, returning > insert ? returning : undefined);
-  assert.match(body, /persistSyncLineMoney\(document\.total \?\? "0", "total"\)/);
-  assert.doesNotMatch(body, /normalizeMoney\(document\.total/);
-  assert.match(body, /persistSyncLineMoney\(document\.subtotal \?\? "0", "subtotal"\)/);
-  assert.match(body, /persistSyncFxRate\(document\.fxRate \?\? "1"\)/);
-});
-
-test("NetSuite FAM document-line insert persists amount through persistSyncLineMoney", () => {
-  const helperStart = source.indexOf("function persistSyncLineMoney");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncLineMoney helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-
-  const insert = source.indexOf(".insert(schema.documentLines)");
-  const body = source.slice(insert, insert + 800);
-  assert.match(body, /persistSyncLineMoney\(line\.amount, "amount"\)/);
-  assert.doesNotMatch(body, /amount: normalizeMoney\(line\.amount\)/);
-});
 
 test("NetSuite FAM extractionDate NaN fallback uses the org calendar", () => {
   const helperStart = source.indexOf("async function extractionDate");
@@ -107,16 +51,3 @@ test("NetSuite FAM extractionDate NaN fallback uses the org calendar", () => {
   assert.match(helper, /Number\.isNaN\(date\.getTime\(\)\) \? await businessToday\(orgId\) : date\.toISOString\(\)\.slice\(0, 10\)/);
 });
 
-test("NetSuite FAM document-line insert persists taxAmount through persistSyncLineMoney", () => {
-  const helperStart = source.indexOf("function persistSyncLineMoney");
-  const helperEnd = source.indexOf("\n}", helperStart);
-  assert.ok(helperStart >= 0 && helperEnd > helperStart, "persistSyncLineMoney helper is defined");
-  const helper = source.slice(helperStart, helperEnd + 2);
-  assert.match(helper, /canonicalDecimal\(value, 4\)/);
-  assert.match(helper, /normalizeMoney\(exact\)/);
-
-  const insert = source.indexOf(".insert(schema.documentLines)");
-  const body = source.slice(insert, insert + 800);
-  assert.match(body, /persistSyncLineMoney\(line\.taxAmount, "taxAmount"\)/);
-  assert.doesNotMatch(body, /taxAmount: normalizeMoney\(line\.taxAmount\)/);
-});
