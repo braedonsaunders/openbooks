@@ -23,6 +23,7 @@ import {
 } from "@openbooks/ui";
 import { useMoney } from "@/components/money-provider";
 import { useBusinessToday } from "@/components/business-date-provider";
+import { useTranslations } from "next-intl";
 import { readApiErrorMessage } from "@/lib/api-error";
 import {
   financialChangeEventLabel,
@@ -36,23 +37,16 @@ const frequencyMonths: Record<string, number> = {
   annual: 12,
 };
 type Choices = { accounts: Option[]; subsidiaries: Option[] };
-const frequencies = [
-  { value: "monthly", label: "Monthly" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "annual", label: "Annual" },
-];
-const timings = [
-  { value: "advance", label: "Advance — beginning of period" },
-  { value: "arrears", label: "Arrears — end of period" },
-];
-async function request(url: string, body: unknown) {
+async function request(url: string, body: unknown, fallback: string) {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok)
-    throw new Error(await readApiErrorMessage(res, "Lease action failed"));
+  // The status is checked before the body parses, and the translated
+  // fallback (never a hard-coded English string) carries the status when
+  // the server names no refusal.
+  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallback));
   return (await res.json()) as {
     leaseId?: string;
     changeId?: string;
@@ -74,19 +68,12 @@ function Field({
     </div>
   );
 }
-const accountFields = [
-  ["rouAsset", "Right-of-use asset"],
-  ["leaseLiability", "Lease liability"],
-  ["interestExpense", "Interest expense"],
-  ["amortizationExpense", "ROU amortization expense"],
-  ["leaseExpense", "Operating / exempt lease expense"],
-  ["payment", "Bank / payment clearing"],
-] as const;
 export function NewLeaseButton({
   accounts,
   subsidiaries,
   parent,
 }: { parent?: LeaseDisplay } & Choices) {
+  const t = useTranslations("assets");
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -94,7 +81,7 @@ export function NewLeaseButton({
         onClick={() => setOpen(true)}
         variant={parent ? "outline" : "default"}
       >
-        {parent ? "Add separate lease" : "New lease"}
+        {parent ? t("leases.addSeparate") : t("leases.newLease")}
       </Button>
       {open ? (
         <LeaseCreateForm
@@ -113,8 +100,27 @@ function LeaseCreateForm({
   parent,
   close,
 }: { parent?: LeaseDisplay; close: () => void } & Choices) {
+  const t = useTranslations("assets"),
+    tCommon = useTranslations("common");
   const router = useRouter(),
     today = useBusinessToday();
+  const frequencies = [
+    { value: "monthly", label: t("leases.freqMonthly") },
+    { value: "quarterly", label: t("leases.freqQuarterly") },
+    { value: "annual", label: t("leases.freqAnnual") },
+  ];
+  const timings = [
+    { value: "advance", label: t("leases.timeAdvance") },
+    { value: "arrears", label: t("leases.timeArrears") },
+  ];
+  const accountFields = [
+    ["rouAsset", t("leases.acctRou")],
+    ["leaseLiability", t("leases.acctLiability")],
+    ["interestExpense", t("leases.acctInterest")],
+    ["amortizationExpense", t("leases.acctAmortization")],
+    ["leaseExpense", t("leases.acctLeaseExpense")],
+    ["payment", t("leases.acctPayment")],
+  ] as const;
   const [f, setF] = useState<Record<string, string>>({
     subsidiaryId:
       parent?.subsidiary_id ??
@@ -188,8 +194,8 @@ function LeaseCreateForm({
               commensurateStandalonePrice: !!flags.commensurateStandalonePrice,
               agreement,
             },
-          })
-        : await request("/api/leases", agreement);
+          }, t("leases.saveFailed"))
+        : await request("/api/leases", agreement, t("leases.saveFailed"));
       close();
       router.push(
         result.changeId
@@ -198,7 +204,7 @@ function LeaseCreateForm({
       );
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Lease could not be saved");
+      toast.error(e instanceof Error ? e.message : t("leases.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -208,27 +214,27 @@ function LeaseCreateForm({
       open
       onClose={close}
       stacked={!!parent}
-      title={parent ? "Separate lease from modification" : "New lessee lease"}
+      title={parent ? t("leases.createTitleSeparate") : t("leases.createTitle")}
       size="2xl"
     >
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Legal entity">
+          <Field label={t("leases.fieldEntity")}>
             <SearchSelect
               value={f.subsidiaryId ?? ""}
               options={subsidiaries}
               onChange={(v) => set("subsidiaryId", v ?? "")}
-              ariaLabel="Legal entity"
+              ariaLabel={t("leases.fieldEntity")}
             />
           </Field>
           {(
             [
-              ["leaseNumber", "Lease number"],
-              ["description", "Description"],
-              ["commencementOn", "Commencement date"],
-              ["termPeriods", "Payment periods"],
-              ["paymentAmount", "Payment amount"],
-              ["annualDiscountRatePercent", "Annual discount rate (%)"],
+              ["leaseNumber", t("leases.fieldLeaseNumber")],
+              ["description", t("leases.fieldDescription")],
+              ["commencementOn", t("leases.fieldCommencement")],
+              ["termPeriods", t("leases.fieldPeriods")],
+              ["paymentAmount", t("leases.fieldPaymentAmount")],
+              ["annualDiscountRatePercent", t("leases.fieldRate")],
             ] as const
           ).map(([key, label]) => (
             <Field key={key} label={label}>
@@ -240,7 +246,7 @@ function LeaseCreateForm({
               />
             </Field>
           ))}
-          <Field label="Frequency">
+          <Field label={t("leases.fieldFrequency")}>
             <Select
               value={f.paymentFrequency}
               onChange={(e) => set("paymentFrequency", e.target.value)}
@@ -252,7 +258,7 @@ function LeaseCreateForm({
               ))}
             </Select>
           </Field>
-          <Field label="Contractual payment timing">
+          <Field label={t("leases.fieldTiming")}>
             <Select
               value={f.paymentTiming}
               onChange={(e) => set("paymentTiming", e.target.value)}
@@ -265,17 +271,17 @@ function LeaseCreateForm({
             </Select>
           </Field>
         </div>
-        <Field label="Recognition exemption election">
+        <Field label={t("leases.fieldExemption")}>
           <Select
             value={f.exemption ?? ""}
             onChange={(e) => set("exemption", e.target.value)}
           >
             {[
-              { value: "", label: "None — recognize ROU and liability" },
-              { value: "short_term", label: "Qualifying short-term lease" },
+              { value: "", label: t("leases.exemptNone") },
+              { value: "short_term", label: t("leases.exemptShortTerm") },
               {
                 value: "low_value",
-                label: "Low-value underlying asset (IFRS only)",
+                label: t("leases.exemptLowValue"),
               },
             ].map((option) => (
               <option key={option.value} value={option.value}>
@@ -285,15 +291,15 @@ function LeaseCreateForm({
           </Select>
         </Field>
         <fieldset className="space-y-2">
-          <legend className="font-medium">Classification evidence</legend>
+          <legend className="font-medium">{t("leases.evidenceLegend")}</legend>
           {(
             [
-              ["transfersOwnership", "Ownership transfers"],
+              ["transfersOwnership", t("leases.evictTransfers")],
               [
                 "purchaseOptionReasonablyCertain",
-                "Purchase option is reasonably certain",
+                t("leases.evictPurchaseCertain"),
               ],
-              ["specializedAsset", "Asset has no alternative use"],
+              ["specializedAsset", t("leases.evictSpecialized")],
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="flex gap-2">
@@ -309,9 +315,9 @@ function LeaseCreateForm({
           ))}
           {(
             [
-              ["economicLifeMonths", "Remaining economic life (months)"],
-              ["pvOfPayments", "PV for classification"],
-              ["fairValue", "Asset fair value"],
+              ["economicLifeMonths", t("leases.fieldLife")],
+              ["pvOfPayments", t("leases.fieldPv")],
+              ["fairValue", t("leases.fieldFairValue")],
             ] as const
           ).map(([key, label]) => (
             <Field key={key} label={label}>
@@ -337,17 +343,16 @@ function LeaseCreateForm({
         </div>
         <fieldset className="space-y-2">
           <legend className="font-medium">
-            Previously recorded cost adjustments
+            {t("leases.costTitle")}
           </legend>
           <p className="text-sm">
-            Amounts are reclassified from the clearing account; they do not
-            create another cash payment.
+            {t("leases.costHint")}
           </p>
           {(
             [
-              ["initialDirectCosts", "Initial direct costs"],
-              ["prepayments", "Prepayments before commencement"],
-              ["incentives", "Incentives received"],
+              ["initialDirectCosts", t("leases.costInitial")],
+              ["prepayments", t("leases.costPrepayments")],
+              ["incentives", t("leases.costIncentives")],
             ] as const
           ).map(([key, label]) => (
             <Field key={key} label={label}>
@@ -358,25 +363,25 @@ function LeaseCreateForm({
               />
             </Field>
           ))}
-          <Field label="Cost / prepaid expense clearing">
+          <Field label={t("leases.costClearing")}>
             <SearchSelect
               value={f.costClearingAccountId ?? ""}
               options={accounts}
               onChange={(v) => set("costClearingAccountId", v ?? "")}
-              ariaLabel="Cost clearing account"
+              ariaLabel={t("leases.costClearingAria")}
               clearable
             />
           </Field>
         </fieldset>
         {parent ? (
           <>
-            <Field label="Reason">
+            <Field label={t("leases.fieldReason")}>
               <Textarea
                 value={f.reason ?? ""}
                 onChange={(e) => set("reason", e.target.value)}
               />
             </Field>
-            <Field label="Standalone-price and scope assessment">
+            <Field label={t("leases.fieldAssessment")}>
               <Textarea
                 value={f.assessment ?? ""}
                 onChange={(e) => set("assessment", e.target.value)}
@@ -384,10 +389,10 @@ function LeaseCreateForm({
             </Field>
             {(
               [
-                ["additionalRightOfUse", "The agreement adds a right of use"],
+                ["additionalRightOfUse", t("leases.addsRight")],
                 [
                   "commensurateStandalonePrice",
-                  "The added consideration is commensurate with its standalone price",
+                  t("leases.commensurate"),
                 ],
               ] as const
             ).map(([key, label]) => (
@@ -406,10 +411,10 @@ function LeaseCreateForm({
         ) : null}
         <div className="flex gap-2">
           <Button disabled={busy} onClick={save}>
-            {parent ? "Create approval proposal" : "Save draft lease"}
+            {parent ? t("leases.createProposal") : t("leases.saveDraft")}
           </Button>
           <Button variant="outline" onClick={close}>
-            Cancel
+            {tCommon("actions.cancel")}
           </Button>
         </div>
       </div>
@@ -424,9 +429,19 @@ function ChangeLease({
   accounts: Option[];
 }) {
   const today = useBusinessToday();
+  const t = useTranslations("assets");
   const router = useRouter(),
     [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false);
+  const frequencies = [
+    { value: "monthly", label: t("leases.freqMonthly") },
+    { value: "quarterly", label: t("leases.freqQuarterly") },
+    { value: "annual", label: t("leases.freqAnnual") },
+  ];
+  const timings = [
+    { value: "advance", label: t("leases.timeAdvance") },
+    { value: "arrears", label: t("leases.timeArrears") },
+  ];
   const [operation, setOperation] = useState("modification"),
     [date, setDate] = useState(today),
     [reason, setReason] = useState(""),
@@ -504,12 +519,12 @@ function ChangeLease({
               },
             }
           : {}),
-      });
+      }, t("leases.changeFailed"));
       router.push(`/accounting/changes?change=${result.changeId}`);
       router.refresh();
       setOpen(false);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Change proposal failed");
+      toast.error(e instanceof Error ? e.message : t("leases.changeFailed"));
     } finally {
       setBusy(false);
     }
@@ -520,20 +535,20 @@ function ChangeLease({
       onOpenChange={handleOpenChange}
       trigger={
         <Button variant="outline" onClick={() => handleOpenChange(!open)}>
-          Change / terminate
+          {t("leases.changeTrigger")}
         </Button>
       }
     >
       <div className="max-h-[75vh] w-96 space-y-3 overflow-y-auto p-4">
-        <Field label="Change type">
+        <Field label={t("leases.changeType")}>
           <Select
             value={operation}
             onChange={(e) => setOperation(e.target.value)}
           >
             {[
-              { value: "modification", label: "Contract modification" },
-              { value: "remeasurement", label: "Remeasurement" },
-              { value: "termination", label: "Full termination" },
+              { value: "modification", label: t("leases.opModification") },
+              { value: "remeasurement", label: t("leases.opRemeasurement") },
+              { value: "termination", label: t("leases.opTermination") },
             ].map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -541,7 +556,7 @@ function ChangeLease({
             ))}
           </Select>
         </Field>
-        <Field label="Effective date">
+        <Field label={t("leases.fieldEffectiveDate")}>
           <Input
             type="date"
             value={date}
@@ -550,22 +565,22 @@ function ChangeLease({
         </Field>
         {operation !== "termination" ? (
           <>
-            <Field label="Remaining payment periods">
+            <Field label={t("leases.fieldRemainingPeriods")}>
               <Input
                 value={periods}
                 onChange={(e) => setPeriods(e.target.value)}
               />
             </Field>
-            <Field label="Revised payment">
+            <Field label={t("leases.fieldRevisedPayment")}>
               <Input
                 value={payment}
                 onChange={(e) => setPayment(e.target.value)}
               />
             </Field>
-            <Field label="Annual discount rate (%)">
+            <Field label={t("leases.fieldRate")}>
               <Input value={rate} onChange={(e) => setRate(e.target.value)} />
             </Field>
-            <Field label="Payment frequency">
+            <Field label={t("leases.fieldFrequency")}>
               <Select
                 value={frequency}
                 onChange={(e) => setFrequency(e.target.value)}
@@ -577,7 +592,7 @@ function ChangeLease({
                 ))}
               </Select>
             </Field>
-            <Field label="Payment timing">
+            <Field label={t("leases.fieldTiming")}>
               <Select
                 value={timing}
                 onChange={(e) => setTiming(e.target.value)}
@@ -591,14 +606,14 @@ function ChangeLease({
             </Field>
             {(
               [
-                ["transfersOwnership", "Ownership transfers"],
+                ["transfersOwnership", t("leases.evictTransfers")],
                 [
                   "purchaseOptionReasonablyCertain",
-                  "Purchase option reasonably certain",
+                  t("leases.evictPurchaseChange"),
                 ],
                 [
                   "specializedAsset",
-                  "Specialized asset with no alternative use",
+                  t("leases.evictSpecializedChange"),
                 ],
               ] as const
             ).map(([key, label]) => (
@@ -611,7 +626,7 @@ function ChangeLease({
                 {label}
               </label>
             ))}
-            <Field label="Remaining economic life (months)">
+            <Field label={t("leases.fieldLife")}>
               <Input
                 value={String(criteria.economicLifeMonths ?? "")}
                 onChange={(e) =>
@@ -624,10 +639,10 @@ function ChangeLease({
             </Field>
             {(
               [
-                ["pvOfPayments", "Assessed present value of payments"],
-                ["fairValue", "Asset fair value"],
-                ["termThresholdPercent", "Major part threshold (%)"],
-                ["pvThresholdPercent", "Substantially all threshold (%)"],
+                ["pvOfPayments", t("leases.fieldPvAssessed")],
+                ["fairValue", t("leases.fieldFairValue")],
+                ["termThresholdPercent", t("leases.fieldTermThreshold")],
+                ["pvThresholdPercent", t("leases.fieldPvThreshold")],
               ] as const
             ).map(([key, label]) => (
               <Field key={key} label={label}>
@@ -638,7 +653,7 @@ function ChangeLease({
               </Field>
             ))}
             {operation === "modification" ? (
-              <Field label="Right-of-use scope removed (%)">
+              <Field label={t("leases.fieldScopeRemoved")}>
                 <Input
                   value={scope}
                   onChange={(e) => setScope(e.target.value)}
@@ -647,38 +662,37 @@ function ChangeLease({
             ) : null}
           </>
         ) : null}
-        <Field label="Settlement payment (negative for a refund)">
+        <Field label={t("leases.fieldSettlement")}>
           <Input
             value={settlement}
             onChange={(e) => setSettlement(e.target.value)}
           />
         </Field>
-        <Field label="Gain / loss account">
+        <Field label={t("leases.fieldGainAccount")}>
           <SearchSelect
             value={gainAccount}
             options={accounts}
             onChange={(v) => setGainAccount(v ?? "")}
-            ariaLabel="Gain or loss account"
+            ariaLabel={t("leases.gainAria")}
           />
         </Field>
-        <Field label="Reason">
+        <Field label={t("leases.fieldReason")}>
           <Textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}
           />
         </Field>
-        <Field label="Scope, rate and classification assessment">
+        <Field label={t("leases.fieldAssessmentChange")}>
           <Textarea
             value={assessment}
             onChange={(e) => setAssessment(e.target.value)}
           />
         </Field>
         <p className="text-xs">
-          This creates an immutable proposal. Independent approval is required
-          before balances or future payments change.
+          {t("leases.proposalHint")}
         </p>
         <Button disabled={busy} onClick={propose}>
-          Create approval proposal
+          {t("leases.createProposal")}
         </Button>
       </div>
     </Popover>
@@ -690,6 +704,7 @@ export function LeaseDrawer({
   accounts,
   subsidiaries,
 }: { payload: LeasePayload; canManage: boolean } & Choices) {
+  const t = useTranslations("assets");
   const router = useRouter(),
     { money } = useMoney(),
     [busy, setBusy] = useState(false),
@@ -698,17 +713,24 @@ export function LeaseDrawer({
   async function act(action: "commence" | "post") {
     setBusy(true);
     try {
-      const r = await request(`/api/leases/${l.id}/${action}`, {
-        asOfDate: date,
-      });
+      const r = await request(
+        `/api/leases/${l.id}/${action}`,
+        {
+          asOfDate: date,
+        },
+        t("leases.actionFailed"),
+      );
       toast.success(
         action === "post"
-          ? `${r.posted} schedule events posted; ${r.skipped} skipped`
-          : "Lease commenced",
+          ? t("leases.postToast", {
+              posted: r.posted ?? 0,
+              skipped: r.skipped ?? 0,
+            })
+          : t("leases.commenceToast"),
       );
       router.refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Lease action failed");
+      toast.error(e instanceof Error ? e.message : t("leases.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -730,29 +752,29 @@ export function LeaseDrawer({
         </div>
         <dl className="grid grid-cols-2 gap-3">
           <div>
-            <dt>Payment</dt>
+            <dt>{t("leases.summaryPayment")}</dt>
             <dd>
               {money(l.payment_amount)} / {l.payment_frequency}
             </dd>
           </div>
           <div>
-            <dt>Commencement</dt>
+            <dt>{t("leases.summaryCommencement")}</dt>
             <dd>{l.commencement_on}</dd>
           </div>
           <div>
-            <dt>Initial unpaid liability</dt>
+            <dt>{t("leases.summaryLiability")}</dt>
             <dd>
               {l.initial_liability
                 ? money(l.initial_liability)
-                : "Not commenced"}
+                : t("leases.notCommenced")}
             </dd>
           </div>
           <div>
-            <dt>Initial right-of-use asset</dt>
+            <dt>{t("leases.summaryRou")}</dt>
             <dd>
               {l.initial_rou_asset
                 ? money(l.initial_rou_asset)
-                : "Not commenced"}
+                : t("leases.notCommenced")}
             </dd>
           </div>
         </dl>
@@ -760,7 +782,7 @@ export function LeaseDrawer({
           <div className="flex flex-wrap items-center gap-2">
             {l.status === "draft" ? (
               <Button disabled={busy} onClick={() => act("commence")}>
-                Commence lease
+                {t("leases.commenceLease")}
               </Button>
             ) : l.status === "active" ? (
               <>
@@ -768,11 +790,11 @@ export function LeaseDrawer({
                   className="w-40"
                   type="date"
                   value={date}
-                  aria-label="Post through date"
+                  aria-label={t("leases.postThroughDate")}
                   onChange={(e) => setDate(e.target.value)}
                 />
                 <Button disabled={busy} onClick={() => act("post")}>
-                  Post through date
+                  {t("leases.postThroughDate")}
                 </Button>
                 <ChangeLease lease={l} accounts={accounts} />
                 <NewLeaseButton
@@ -785,16 +807,16 @@ export function LeaseDrawer({
           </div>
         ) : null}
         <section>
-          <h3 className="font-semibold">Payment and accrual history</h3>
+          <h3 className="font-semibold">{t("leases.scheduleTitle")}</h3>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Revision</TableHead>
-                <TableHead>Cash date</TableHead>
-                <TableHead>Accrual date</TableHead>
-                <TableHead>Payment</TableHead>
-                <TableHead>Interest</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>{t("leases.colRevision")}</TableHead>
+                <TableHead>{t("leases.colCashDate")}</TableHead>
+                <TableHead>{t("leases.colAccrualDate")}</TableHead>
+                <TableHead>{t("leases.colPayment")}</TableHead>
+                <TableHead>{t("leases.colInterest")}</TableHead>
+                <TableHead>{t("leases.colStatus")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -809,12 +831,12 @@ export function LeaseDrawer({
                   <TableCell>{money(row.interest)}</TableCell>
                   <TableCell>
                     {row.superseded
-                      ? "Superseded"
+                      ? t("leases.statusSuperseded")
                       : row.accrual_posted
-                        ? "Accrued"
+                        ? t("leases.statusAccrued")
                         : row.payment_posted
-                          ? "Paid; accrual pending"
-                          : "Planned"}
+                          ? t("leases.statusPaidPending")
+                          : t("leases.statusPlanned")}
                   </TableCell>
                 </TableRow>
               ))}
@@ -822,7 +844,7 @@ export function LeaseDrawer({
           </Table>
         </section>
         <section>
-          <h3 className="font-semibold">Accounting events</h3>
+          <h3 className="font-semibold">{t("leases.eventsTitle")}</h3>
           {payload.changes.map((c) => (
             <p key={c.id}>
               <Link

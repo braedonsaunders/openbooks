@@ -1,3 +1,4 @@
+import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { Button, PageHeader } from "@openbooks/ui";
@@ -38,13 +39,14 @@ export default async function LeasesPage({
       : Promise.resolve(null),
   ]);
   const canManage = can(auth, "assets.manage");
+  const t = await getTranslations("assets");
   const tabs = await groupTabs("accounting", "/assets/leases", { orgId });
   return (
     <ListPageLayout
       header={
         <PageHeader
-          title="Lessee leases"
-          description="Contractual payments, right-of-use accounting, and approved lifecycle changes."
+          title={t("leases.pageTitle")}
+          description={t("leases.pageDescription")}
           actions={
             <>
               {canManage ? (
@@ -54,7 +56,7 @@ export default async function LeasesPage({
                 />
               ) : null}
               <Button asChild variant="outline">
-                <Link href="/accounting/changes">Accounting events</Link>
+                <Link href="/accounting/changes">{t("leases.eventsTitle")}</Link>
               </Button>
               <ModuleHomeTabs tabs={tabs} />
             </>
