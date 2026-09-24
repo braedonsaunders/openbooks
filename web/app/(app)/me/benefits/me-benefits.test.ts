@@ -1,42 +1,57 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { registerHooks } from "node:module";
 import test from "node:test";
 
-// Shared-table composition contract for /me/benefits. Elections with the
-// stored payroll amounts, open windows, and dependents render through the
-// shared `table` block; elect and change ride URL-param dialogs posting to
-// the Me routes, which delegate to the existing enrollment service. The
-// page computes no amount — the loader renders stored figures only.
-const page = readFileSync(new URL("./page.tsx", import.meta.url), "utf8");
-const view = readFileSync(new URL("./view.ts", import.meta.url), "utf8");
-const loader = readFileSync(new URL("../../../../lib/hrm/self-service.ts", import.meta.url), "utf8");
-
-test("me benefits renders through ModuleView with a loader-owned spec", () => {
-  assert.match(page, /<ModuleView/, "page renders through the shared ModuleView host");
-  assert.match(page, /loadMeBenefitsPage/, "page loads through the benefits loader");
-  assert.match(view, /meBenefitsSpec/, "view exposes the spec builder");
-  assert.match(view, /module-home-tabs/, "header carries the route-tab strip");
+// Behaviour contract for the benefits page (/me/benefits). The spec
+// builder runs over hand-built data: a refused read renders its title
+// and remedy, and the elect/change dialogs render only with their dialog
+// data. Row scoping to the login stays covered by
+// engine/src/hrm/self-service/scope.test.ts and the benefits workspace
+// integration tests, which own the service reads.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "server-only") {
+      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
+    }
+    return nextResolve(specifier, context);
+  },
 });
 
-test("benefit rows render through the shared table block", () => {
-  assert.match(view, /table\(\{/, "rows compose a table block");
-  assert.match(view, /variant: 'app'/, "the table uses the app list variant");
-  assert.match(view, /rows: f\('elections'\)/, "elections read the loader-resolved rows");
-  assert.match(view, /rows: f\('windows'\)/, "windows read the loader-resolved rows");
-  assert.match(view, /rows: f\('dependents'\)/, "dependents read the loader-resolved rows");
-  assert.match(view, /badge\(item\('statusLabel'\), \{ variant: item\('statusVariant'\) \}\)/, "status rides the shared badge");
-  assert.ok(!/<table/.test(view), "the spec holds no hand-rolled table");
+const { meBenefitsSpec } = await import("./view.ts");
+
+function specJson(data: Record<string, unknown>): string {
+  return JSON.stringify(meBenefitsSpec(data as never));
+}
+
+const TABS = [{ label: "Benefits", href: "/me/benefits" }];
+
+function baseData(): Record<string, unknown> {
+  return {
+    tabs: TABS,
+    refusal: null,
+    dialog: null,
+    changeDialog: null,
+    dialogCloseHref: "/me/benefits",
+  } as unknown as Record<string, unknown>;
+}
+
+test("a refused benefits read renders the remedy", () => {
+  const data = baseData();
+  data.refusal = { title: "No benefits", message: "ask an administrator for a linked employment" };
+  const json = specJson(data);
+  assert.ok(json.includes("\"empty-state\""), "the refusal renders through the empty-state block");
+  assert.ok(json.includes("No benefits"), "the refusal title reaches the page");
+  assert.ok(json.includes("ask an administrator for a linked employment"), "the refusal remedy reaches the page");
 });
 
-test("the primary action lives in the page header through the shared button", () => {
-  const header = view.slice(view.indexOf("pageHeader("));
-  assert.ok(header.indexOf("'link-button'") < header.indexOf("'module-home-tabs'"), "the link-button precedes the tab strip");
-  assert.match(view, /hrm-benefit-dialog/, "elect rides the shared dialog widget");
-  assert.match(view, /hrm-benefit-change-dialog/, "change rides the shared dialog widget");
-});
+test("the dialogs render only with their dialog data", () => {
+  const json = specJson(baseData());
+  assert.ok(json.includes("\"hrm-benefit-dialog\""), "the elect dialog widget renders");
+  assert.ok(json.includes("\"hrm-benefit-change-dialog\""), "the change dialog widget renders");
+  assert.ok(json.includes('"dialog":null'), "no dialog carries data it was not given");
 
-test("the benefits loader scopes every row to the login and computes nothing", () => {
-  assert.match(loader, /getMyBenefitsWorkspace\(\{\s*orgId/, "the page reads the self-service workspace, never an org list");
-  assert.match(view, /requirePermission\('hrm\.self\.read'\)/, "page requires the self-service grant");
-  assert.match(view, /requireFeatureEnabled\(authz\.user\.orgId, 'hrm'\)/, "a switched-off hrm switch redirects to the feature remedy, never a bare 404");
+  const withDialog = baseData();
+  withDialog.dialog = { title: "Elect coverage" };
+  const dialogJson = specJson(withDialog);
+  assert.ok(dialogJson.includes("Elect coverage"), "the dialog carries its data");
 });
