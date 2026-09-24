@@ -58,6 +58,16 @@ function isCrossRunInstructionConflict(error: unknown): boolean {
   return false;
 }
 
+const expectGenerationRefused = (
+  attempt: Promise<unknown>,
+  message = /approve the payment run before generating its file/,
+) =>
+  assert.rejects(attempt, (error: unknown) => {
+    assert.ok(error instanceof PaymentError);
+    assert.match(error.message, message);
+    return true;
+  });
+
 /** Poll until some session is blocked by the given backend, proving the two
  *  writers really contend instead of merely running near each other. */
 async function waitForBlockedBy(blockerPid: number, minimum = 1): Promise<number> {
@@ -2028,12 +2038,6 @@ test("payment-file reprocessing cannot drag a settled or returned run out of its
       effectiveOn: org.date,
       bankReference: "BANK-SETTLE-1",
     }));
-    const expectGenerationRefused = (attempt: Promise<unknown>) =>
-      assert.rejects(attempt, (error: unknown) => {
-        assert.ok(error instanceof PaymentError);
-        assert.match(error.message, /approve the payment run before generating its file/);
-        return true;
-      });
     const terminalState = async () => withOrgContext(org.orgId, async () =>
       (await db.execute<{ run_status: string; artifacts: number }>(sql`
         select run.status as run_status,
@@ -2072,7 +2076,7 @@ test("a partially failed run still accepts legitimate file regeneration and repr
   const org = await withBypass(() => createScratchOrg());
   try {
     const actorId = await withBypass(() => createScratchUser(org.orgId, "Regen operator", "admin"));
-    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId));
+    const seeded = await withOrgContext(org.orgId, () => seedPostingClaimRun(org, actorId, 2));
     // A prior posting attempt left the run retryable.
     await withOrgContext(org.orgId, () => db.execute(sql`
       update payment_runs set status = 'partially_failed', updated_by = ${actorId}
@@ -2108,6 +2112,29 @@ test("a partially failed run still accepts legitimate file regeneration and repr
       sequences: [1, 2],
       parents: [null, first.id],
     });
+
+    // A retryable run may contain a mixture of already-sent and still-pending
+    // instructions. A replacement file must never contain the sent instruction
+    // again, so this surface refuses the mixed composition before superseding
+    // the current artifact.
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update payment_instructions set status = 'sent', updated_by = ${actorId}
+       where id = ${seeded.instructionId} and org_id = ${org.orgId}
+    `));
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update payment_runs set status = 'partially_failed', updated_by = ${actorId}
+       where id = ${seeded.runId} and org_id = ${org.orgId}
+    `));
+    await expectGenerationRefused(withOrgContext(org.orgId, () =>
+      generatePaymentFileArtifact(seeded.runId, org.orgId, actorId, { reprocessFileId: second.id })),
+    /already left pending while the file was rendered/);
+    const afterRefusal = await withOrgContext(org.orgId, async () =>
+      (await db.execute<{ statuses: string[]; sequences: number[] }>(sql`
+        select array_agg(status order by sequence_number) as statuses,
+               array_agg(sequence_number order by sequence_number) as sequences
+          from payment_files where payment_run_id = ${seeded.runId} and org_id = ${org.orgId}
+      `)).rows[0]);
+    assert.deepEqual(afterRefusal, { statuses: ["superseded", "approved"], sequences: [1, 2] });
   } finally {
     // The scratch-org teardown does not know about payment artifacts; drop
     // them under the same teardown grants (the append-only evidence guards

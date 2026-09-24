@@ -886,6 +886,26 @@ export async function generatePaymentFileArtifact(
     `));
     const liveStatus = gate.rows[0]?.status;
     if (!liveStatus) throw new PaymentError("approve the payment run before generating its file");
+    // Rendering happened before the run lock. Bind those bytes to the exact
+    // pending instruction set under the lock: a partially failed run may
+    // already have sent siblings, and re-exporting them would pay twice.
+    const lockedInstructions = (await db.execute<{ id: string; status: string }>(sql`
+      select id, status from payment_instructions
+       where payment_run_id = ${runId} and org_id = ${orgId}
+       order by id
+       for update
+    `)).rows;
+    const renderedIds = ctx.payments.map((payment) => payment.id).sort();
+    const pendingIds = lockedInstructions.filter((instruction) => instruction.status === "pending").map((instruction) => instruction.id);
+    if (
+      lockedInstructions.some((instruction) => instruction.status !== "pending")
+      || renderedIds.length !== pendingIds.length
+      || renderedIds.some((id, index) => id !== pendingIds[index])
+    ) {
+      throw new PaymentError(
+        "payment instructions changed or already left pending while the file was rendered; do not regenerate a file containing instructions already sent",
+      );
+    }
     if (!opts?.reprocessFileId) {
       const live = await findLiveRunArtifact(runId, orgId);
       if (live) return live;
