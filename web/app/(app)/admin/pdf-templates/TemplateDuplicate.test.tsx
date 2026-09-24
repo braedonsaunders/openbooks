@@ -224,6 +224,80 @@ test("F-t13-001: starter Duplicate pre-fills a non-colliding name", async () => 
   }
 });
 
+// F4T2-5: the offered duplicate default carries no language — the persisted
+// English "(copy)" is gone, so the default is the digits-only unique name.
+test("F4T2-5: row Duplicate pre-fills a language-neutral unique name", async () => {
+  (globalThis as Record<string, unknown>).__templateToasts = [];
+  (globalThis as Record<string, unknown>).__templatePushes = [];
+  globalThis.fetch = (async (url: unknown) => {
+    assert.match(String(url), /\/api\/pdf-templates\/tid-1$/);
+    return Response.json({
+      row: {
+        id: "tid-1",
+        name: "My template",
+        recordType: "customer_invoice",
+        description: null,
+        sourceHtml: "<p>x</p>",
+        headerHtml: "",
+        footerHtml: "",
+        paperSize: "letter",
+        orientation: "portrait",
+        marginMm: 10,
+      },
+    });
+  }) as typeof fetch;
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    /* eslint-disable react/no-children-prop */
+    root.render(
+      React.createElement(NextIntlClientProvider, {
+        locale: "en",
+        messages,
+        timeZone: "UTC",
+        children: React.createElement(
+          React.Fragment,
+          null,
+          React.createElement(PromptRoot, {}),
+          React.createElement(DuplicateTemplateButton, {
+            templateId: "tid-1",
+            takenNames: new Set(["My template"]),
+          }),
+        ),
+      }),
+    );
+    /* eslint-enable react/no-children-prop */
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  try {
+    await act(async () => {
+      const staleCancel = [...document.body.querySelectorAll('[role="dialog"] button')].find(
+        (b) => b.textContent?.trim() === "Cancel",
+      );
+      staleCancel?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const button = [...host.querySelectorAll("button")].find((b) =>
+      b.textContent?.includes("Duplicate"),
+    );
+    assert.ok(button, "row Duplicate button must render");
+    await act(async () => {
+      button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    });
+    const input = document.body.querySelector('[role="dialog"] input') as HTMLInputElement | null;
+    assert.ok(input, "name prompt dialog must open");
+    assert.equal(input.value, "My template 2");
+    assert.ok(!input.value.includes("(copy)"), "the default carries no persisted English");
+  } finally {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  }
+});
+
 // F4T2-4: the duplicate round-trip checks the status before parsing, toasts
 // the named refusal on failure, and never navigates to /undefined.
 function setInputValue(input: HTMLInputElement, value: string) {

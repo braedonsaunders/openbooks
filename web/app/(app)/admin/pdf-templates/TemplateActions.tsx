@@ -103,7 +103,9 @@ export function DuplicateTemplateButton({
       }
       const name = await promptDialog({
         title: t('list.duplicate'),
-        initialValue: uniqueTemplateName(`${src.name} (copy)`, takenNames ?? new Set([src.name])),
+        // Digits-only suffix, never a persisted English "(copy)": the offered
+        // default must not collide and must carry no language.
+        initialValue: uniqueTemplateName(src.name, takenNames ?? new Set([src.name])),
       })
       if (!name?.trim()) return
       const created = await fetch('/api/pdf-templates', {
