@@ -300,5 +300,10 @@
     "retryRun": "承認を再実行する",
     "retried": "承認を再実行しました — 新しいステップは作業リストにあります",
     "retryFailed": "再実行に失敗しました"
+  },
+  "customFields": {
+    "noOptions": "選択肢が定義されていません",
+    "selectRecord": "レコードを選択…",
+    "loadFailed": "レコードを読み込めませんでした"
   }
 }

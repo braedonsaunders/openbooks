@@ -300,5 +300,10 @@
     "retryRun": "重试审批",
     "retried": "审批已重新驱动——新环节已在工作清单中",
     "retryFailed": "重试失败"
+  },
+  "customFields": {
+    "noOptions": "未定义选项",
+    "selectRecord": "选择一条记录…",
+    "loadFailed": "无法加载记录"
   }
 }
