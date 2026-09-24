@@ -137,6 +137,21 @@ function signOffButton(): HTMLButtonElement {
   return found as HTMLButtonElement
 }
 
+test('adjustment inputs are associated with their visible labels', async (t) => {
+  await mountWorkspace(t, (async () => Response.json({})) as typeof fetch)
+  const adjust = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Adjust'))
+  assert.ok(adjust, 'the workspace offers an adjustment action')
+  await act(async () => {
+    adjust.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+  })
+  for (const name of ['Reconcile through', 'Statement balance']) {
+    const label = [...document.querySelectorAll('label')].find((candidate) => candidate.textContent?.includes(name))
+    assert.ok(label, `${name} label renders`)
+    assert.ok(label.control, `${name} label controls its input`)
+  }
+})
+
 test('a sign-off refusal surfaces the server message', async (t) => {
   await mountWorkspace(t, (async () => Response.json(
     { error: 'Cannot sign off: 3 statement line(s) through the cutoff remain unmatched' },
