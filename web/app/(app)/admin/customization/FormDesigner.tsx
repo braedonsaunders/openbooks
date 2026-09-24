@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, Plus, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { supportedFormActionsFor } from '../../../../lib/customization/form-actions'
 import {
   customFieldDefKey,
   customFieldCreationTargetFor,
@@ -636,7 +637,11 @@ export function FormDesigner({
           <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('designer.forms.actionsSection')}</h3>
           <p className="text-xs text-slate-400">{t('designer.forms.actionsHelp')}</p>
           <div className="space-y-1.5 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
-            {layout.actions.map((action, ai) => (
+            {/* Only the actions this record kind's drawer implements are
+                offered: a toggle for an unhandled kind saves OK and changes
+                nothing (a dead toggle). Indexes stay in layout.actions so
+                reorder and visibility edits hit the right row. */}
+            {layout.actions.map((action, ai) => !supportedFormActionsFor(recordType).some((k) => k === action.key) ? null : (
               <div key={action.key} className="flex items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
                 <GripVertical size={14} className="text-slate-300" />
                 <span className="flex-1 text-xs font-medium text-slate-600 dark:text-slate-300">{actionLabel(action.key)}</span>
