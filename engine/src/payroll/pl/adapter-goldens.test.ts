@@ -10,7 +10,7 @@
  * tests have no database. A recording stub would NOT catch a missing
  * declaration; this closure does.
  *
- * Ten lines, enumerated so the next addition fails loudly this same way.
+ * Eleven lines, enumerated so the next addition fails loudly this same way.
  *
  * Run with `node --import tsx` on this file.
  */
@@ -51,6 +51,9 @@ function plAdapterContext(payDate: string): RunLines {
     pensionable: "8000.00",
     insurable: "0",
     periodsPerYear: 12,
+    resolveStatutoryRates: async () => ({
+      values: (key: string) => key === "pl_wypadkowe" ? { stopa: "1.67" } : null,
+    }),
     pushStatutory,
     certificateFor: (key: string) =>
       key === "pl_pit2"
@@ -66,13 +69,14 @@ function lineKey(line: StubLine): string {
   return line.componentId ?? "";
 }
 
-test("adapter: June payslip pushes PIT plus all nine ZUS lines, assessed honestly", async () => {
+test("adapter: June payslip pushes PIT plus all ten ZUS lines, assessed honestly", async () => {
   const { ctx, lines } = plAdapterContext("2026-06-15");
   const result = await computePlStatutory(ctx);
   // 8 000 brutto, PIT-2 filed (300 zł), KUP 250: dochód 6 653, no 120k
   // crossing — zaliczka 498 zł. ZUS ee 1 096,80; zdrowotna 621,29.
   // Employer: emerytalne 780,80 + rentowe 520,00 + FP 80,00 + FS 116,00
-  // + FGŚP 8,00. Wypadkowe has no channel: unpushed.
+  // + FGŚP 8,00 + wypadkowe 133,60 at the payer's ZUS-notified 1,67% rate
+  // (ZUS, 2026 guidance: https://www.zus.pl/documents/10182/167567/poradnik_wypadkowe.pdf/15281e1b-c3f3-472a-81b3-7d10e1a434c8).
   assert.equal(result["ZALICZKA"], "498.0000");
   assert.equal(result["ZUS_EE"], "1096.8000");
   assert.equal(result["ZDR"], "621.2900");
@@ -81,6 +85,7 @@ test("adapter: June payslip pushes PIT plus all nine ZUS lines, assessed honestl
   assert.equal(result["FP"], "80.0000");
   assert.equal(result["FS"], "116.0000");
   assert.equal(result["FGSP"], "8.0000");
+  assert.equal(result["WYP_ER"], "133.6000");
   // PIT moves with pre-tax deductions; every contribution is rate × base.
   assert.deepEqual(
     lines.map((line) => [
@@ -102,6 +107,7 @@ test("adapter: June payslip pushes PIT plus all nine ZUS lines, assessed honestl
       ["fp_er:employer_contribution", "employer_contribution", "Fundusz Pracy (pracodawca)", "80.0000", 212, "earnings"],
       ["fs_er:employer_contribution", "employer_contribution", "Fundusz Solidarnościowy (pracodawca)", "116.0000", 213, "earnings"],
       ["fgsp_er:employer_contribution", "employer_contribution", "FGŚP (pracodawca)", "8.0000", 214, "earnings"],
+      ["wypadkowe_er:employer_contribution", "employer_contribution", "Składka wypadkowa (pracodawca)", "133.6000", 215, "earnings"],
     ],
   );
   assert.deepEqual(
@@ -117,7 +123,20 @@ test("adapter: June payslip pushes PIT plus all nine ZUS lines, assessed honestl
       "zus_rent:deduction",
       "zus_rent_er:employer_contribution",
       "zus_zdr:deduction",
+      "wypadkowe_er:employer_contribution",
     ].sort(),
+  );
+});
+
+test("adapter refuses a missing ZUS wypadkowe rate instead of omitting WYP-ER", async () => {
+  const { ctx } = plAdapterContext("2026-06-15");
+  const noRate = {
+    ...ctx,
+    resolveStatutoryRates: async () => ({ values: () => null }),
+  } as unknown as PayrollStatutoryComputeContext;
+  await assert.rejects(
+    () => computePlStatutory(noRate),
+    /PL wypadkowe refuses.*ZUS-notified rate.*Payroll Setup/,
   );
 });
 

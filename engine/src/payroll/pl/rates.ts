@@ -7,8 +7,8 @@
  * ./tables-{2024,2025,2026}.ts for the instruments). The monthly
  * PIT-2-filed employment payslip with standard contributions computes end
  * to end in every transcribed year, proven by the parity harnesses.
- * Tenant-declared wypadkowe has no engine channel and the named variants
- * stay refused (see PL_REFUSALS_{2024,2025,2026}).
+ * The employer's wypadkowe rate is payer-specific and resolved from the
+ * effective-dated `pl_wypadkowe` statutory-rate slot; missing rates refuse.
  *
  * Year differences the engine models as data: the annual base limit
  * (234 720 / 260 190 / 282 600 zł), the minimum wage (4 242 → 4 300 zł

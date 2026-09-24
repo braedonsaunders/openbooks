@@ -89,9 +89,7 @@ const PL_SLOTS: PayrollCountryPack["statutorySlots"] = [
     components: [
       // Employer social contributions collected by ZUS: emerytalne and
       // rentowe on the capped base; wypadkowe on the full revenue at the
-      // tenant-declared rate (no pack channel carries it, so the adapter
-      // pushes no wypadkowe line — the component is declared so the slot
-      // owns the rate when a channel lands).
+      // payer-specific ZUS-notified rate.
       { code: "EMERYT-ER", name: "Składka emerytalna (pracodawca)", systemKey: "zus_emeryt_er", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "RENT-ER", name: "Składka rentowa (pracodawca)", systemKey: "zus_rent_er", kind: "employer_contribution", sequence: 211, assessedOn: "earnings", remittance: "tax_authority" },
       { code: "WYP-ER", name: "Składka wypadkowa (pracodawca)", systemKey: "wypadkowe_er", kind: "employer_contribution", sequence: 215, assessedOn: "earnings", remittance: "tax_authority" },
@@ -126,13 +124,13 @@ const PL_RATES: PayrollPackRates = {
       scope: "org",
       systemKeys: ["wypadkowe_er"],
       regions: ["PL"],
-      // Not yet reviewed: the engine prices wypadkowe when declared and zero
-      // otherwise, so the slot keeps today's behaviour until explicitly
-      // migrated to refuse or zero.
-      whenUnconfigured: "legacy",
+      // The payer-specific ZUS rate cannot be inferred from published tables.
+      // Missing it would omit an always-owed employer contribution.
+      whenUnconfigured: "refuse",
       citation:
         "Ustawa o systemie ubezpieczeń społecznych, art. 22 ust. 2 (różnicowanie stopy wypadkowej); "
-        + "ZUS, Ustalanie stopy procentowej składki na ubezpieczenie wypadkowe (stan prawny 1 stycznia 2026)",
+        + "ZUS, Ustalanie stopy procentowej składki na ubezpieczenie wypadkowe (stan prawny 1 stycznia 2026), "
+        + "https://www.zus.pl/documents/10182/167567/poradnik_wypadkowe.pdf/15281e1b-c3f3-472a-81b3-7d10e1a434c8",
       variesBecause:
         "ZUS sets each payer its own wypadkowe rate from its activity risk category and claims record — a figure no published table can supply.",
       fields: [

@@ -183,6 +183,9 @@ function adapterCtx(taxYear: number, payDate: string, income: string) {
     pensionable: income,
     insurable: "0",
     periodsPerYear: 12,
+    resolveStatutoryRates: async () => ({
+      values: (key: string) => key === "pl_wypadkowe" ? { stopa: "1.67" } : null,
+    }),
     pushStatutory,
     certificateFor: (key: string) =>
       key === "pl_pit2"
