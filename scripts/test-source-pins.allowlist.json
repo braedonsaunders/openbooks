@@ -370,7 +370,6 @@
     "web/lib/reports-posted.test.ts": 2,
     "web/lib/security-headers.test.ts": 2,
     "web/lib/setup-route-contract.test.ts": 1,
-    "web/lib/setup/agents.test.ts": 1,
     "web/lib/statement-export-calendar.test.ts": 4,
     "web/lib/tax-filing-export-calendar.test.ts": 2,
     "web/lib/tax-return-export-calendar.test.ts": 2,
