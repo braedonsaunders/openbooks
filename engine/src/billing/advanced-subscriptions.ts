@@ -6,6 +6,7 @@ import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { add, mul, normalizeMoney, prorateDays, toUnits } from "../money/money.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { advanceAnchoredMonth } from "./cadence.ts";
 
 export type Interval = "weekly" | "monthly" | "quarterly" | "annually";
 
@@ -40,8 +41,6 @@ async function assertEnabled(orgId: string): Promise<void> {
   }
 }
 
-function pad(n: number): string { return String(n).padStart(2, "0"); }
-
 /** Exact positive integer at the persisted PostgreSQL integer boundary. */
 export function subscriptionPeriodCount(value: unknown, label = "interval count"): number {
   const count = typeof value === "string" && /^\d+$/.test(value) ? Number(value) : value;
@@ -59,7 +58,15 @@ function assertRenewalPolicy(value: unknown): asserts value is RenewalPolicy {
   if (value !== "auto" && value !== "manual" && value !== "none") throw new AdvancedSubscriptionError("invalid renewal policy");
 }
 
-export function advanceLifecycleDate(isoDate: string, interval: Interval, intervalCount = 1): string {
+/**
+ * Step a lifecycle date while keeping terms consecutive. Month steps pin the
+ * ORIGINAL anchor day through the house anchored helper: stepping from an
+ * already-clamped date (Jan 31 → Feb 28 → Mar 28) drifts month-end anchors
+ * and opens gaps in coverage, so every step re-pins the anchor instead of
+ * inheriting the clamped day. Callers that repeat the step pass the lifecycle
+ * anchor; a single step defaults to the date's own day, which is exact.
+ */
+export function advanceLifecycleDate(isoDate: string, interval: Interval, intervalCount = 1, anchorDay?: number | null): string {
   validDate(isoDate, "billing date", true);
   const n = subscriptionPeriodCount(intervalCount);
   if (!["weekly", "monthly", "quarterly", "annually"].includes(interval)) {
@@ -73,14 +80,16 @@ export function advanceLifecycleDate(isoDate: string, interval: Interval, interv
     }
     return date.toISOString().slice(0, 10);
   }
+  const anchor = anchorDay ?? date.getUTCDate();
+  if (!Number.isSafeInteger(anchor) || anchor < 1 || anchor > 31) {
+    throw new AdvancedSubscriptionError("billing anchor day must be between 1 and 31");
+  }
   const monthStep = (interval === "monthly" ? 1 : interval === "quarterly" ? 3 : 12) * n;
-  const idx = date.getUTCMonth() + monthStep;
-  const targetYear = date.getUTCFullYear() + Math.floor(idx / 12);
-  if (targetYear > 9999) throw new AdvancedSubscriptionError("billing date exceeds the supported calendar");
-  const targetMonth = idx % 12;
-  const lastDay = new Date(0);
-  lastDay.setUTCFullYear(targetYear, targetMonth + 1, 0);
-  return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth + 1)}-${pad(Math.min(date.getUTCDate(), lastDay.getUTCDate()))}`;
+  try {
+    return advanceAnchoredMonth(date.getUTCFullYear(), date.getUTCMonth() + 1, monthStep, anchor);
+  } catch {
+    throw new AdvancedSubscriptionError("billing date exceeds the supported calendar");
+  }
 }
 
 export interface CatalogComponentInput {
@@ -219,6 +228,7 @@ interface BillingPreparationRow extends Record<string, unknown> {
 interface BillingLifecycleRow extends Record<string, unknown> {
   contractRevision: number; billingTiming: BillingTiming; currentPeriodStart: string | null;
   nextBillOn: string; interval: Interval; intervalCount: number;
+  termStartsOn: string | null; trialEndsOn: string | null;
 }
 
 function validDate(value: string | null | undefined, label: string, required = false): string | null {
@@ -325,10 +335,28 @@ export function renewalAction(input: { billingTiming: BillingTiming; dueOn: stri
   return input.policy === "auto" ? "renew" : "stop";
 }
 
-export function lifecycleBillingPeriod(input: { billOn: string; serviceAnchor: string; billingTiming: BillingTiming; interval: Interval; intervalCount: number }) {
+export function lifecycleBillingPeriod(input: { billOn: string; serviceAnchor: string; billingTiming: BillingTiming; interval: Interval; intervalCount: number; anchorDay?: number | null }) {
   return input.billingTiming === "advance"
-    ? { periodStartsOn: input.billOn, periodEndsOn: advanceLifecycleDate(input.billOn, input.interval, input.intervalCount) }
+    ? {
+      periodStartsOn: input.billOn,
+      // The end re-pins the lifecycle anchor (day one of service), never the
+      // clamped bill date — otherwise month-end windows drift and lose days.
+      periodEndsOn: advanceLifecycleDate(input.billOn, input.interval, input.intervalCount, input.anchorDay ?? Number(input.billOn.slice(8, 10))),
+    }
     : { periodStartsOn: input.serviceAnchor, periodEndsOn: input.billOn };
+}
+
+/**
+ * The lifecycle anchor day: the day of month service first billed from —
+ * the trial end when a trial pushes service past the term start, else the
+ * term start. Durable term fields, so repeated ticks re-pin the same day
+ * instead of stepping from each clamped window end.
+ */
+export function lifecycleAnchorDay(input: { termStartsOn: string | null; trialEndsOn: string | null; fallback: string }): number {
+  const source = input.trialEndsOn && input.termStartsOn && input.trialEndsOn > input.termStartsOn
+    ? input.trialEndsOn
+    : (input.termStartsOn ?? input.fallback);
+  return Number(source.slice(8, 10));
 }
 
 export function subscriptionComponentTotal(lines: Array<{ quantity: string; unitPrice: string }>): string {
@@ -1126,7 +1154,8 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   const lifecycle = (await db.execute<BillingLifecycleRow>(sql`
     select l.contract_revision as "contractRevision", l.billing_timing as "billingTiming",
            s.current_period_start as "currentPeriodStart", s.next_bill_on as "nextBillOn",
-           v.interval, v.interval_count as "intervalCount"
+           v.interval, v.interval_count as "intervalCount",
+           l.term_starts_on as "termStartsOn", l.trial_ends_on as "trialEndsOn"
       from subscription_lifecycles l join subscriptions s on s.id = l.subscription_id and s.org_id = l.org_id
       join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = l.org_id
      where l.org_id = ${orgId} and l.subscription_id = ${subscriptionId}
@@ -1137,7 +1166,14 @@ export async function advancedBillingSnapshot(orgId: string, subscriptionId: str
   // timing change dated after billOn must not rewrite this invoice.
   const effective = await effectiveLifecycleState(orgId, subscriptionId, billOn, { billingTiming: row.billingTiming, termEndsOn: null });
   const serviceAnchor = periodStartOverride ?? row.currentPeriodStart ?? billOn;
-  const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({ billOn, serviceAnchor, billingTiming: effective.billingTiming, interval: row.interval, intervalCount: row.intervalCount });
+  const { periodStartsOn, periodEndsOn } = lifecycleBillingPeriod({
+    billOn,
+    serviceAnchor,
+    billingTiming: effective.billingTiming,
+    interval: row.interval,
+    intervalCount: row.intervalCount,
+    anchorDay: lifecycleAnchorDay({ termStartsOn: row.termStartsOn, trialEndsOn: row.trialEndsOn, fallback: serviceAnchor }),
+  });
   // One fetch covers both timings: a stored window overlaps the service
   // interval exactly when it starts before the end-exclusive boundary and
   // ends on or after the start (open-ended counts as overlapping). Advance
