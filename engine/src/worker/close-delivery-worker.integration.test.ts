@@ -163,6 +163,68 @@ test("close delivery without a sender falls back to the package author", { skip:
   }
 });
 
+test("an enqueue failure records no delivery and fails the job (provable non-acceptance)", { skip: !DB }, async () => {
+  // C-51: a throw at enqueueEmail is a failure, never a success. With the
+  // queue reachable and the job provably absent, the settlement drops the
+  // attempt's staged refs and rethrows — the worker must not record
+  // package.delivered and must fail so BullMQ retries.
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, runId } = await seedReportablePackage(org.orgId, sender);
+    await assert.rejects(
+      processCloseDeliveryJobData(
+        { orgId: org.orgId, packageId, runId, senderId: sender },
+        {
+          renderReport: async () => Buffer.from("%PDF-1.4 close-probe\n%%EOF"),
+          enqueueEmail: async () => {
+            throw new Error("redis outage at add");
+          },
+          probeQueuedJob: async () => null,
+        },
+      ),
+      /redis outage at add/,
+    );
+    const delivered = (await db.execute<{ id: string }>(sql`
+      select id from close_events
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+    assert.equal(delivered.length, 0, "a failed handoff must never read as delivered");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("an enqueue failure with an unreachable queue records no delivery and fails the job", { skip: !DB }, async () => {
+  // Companion case: the queue cannot even be probed (outage), so the
+  // settlement keeps the staged refs and rethrows — same worker outcome.
+  const org = await createScratchOrg();
+  try {
+    const sender = await createScratchUser(org.orgId, "Sender", "sender");
+    const { packageId, runId } = await seedReportablePackage(org.orgId, sender);
+    await assert.rejects(
+      processCloseDeliveryJobData(
+        { orgId: org.orgId, packageId, runId, senderId: sender },
+        {
+          renderReport: async () => Buffer.from("%PDF-1.4 close-probe\n%%EOF"),
+          enqueueEmail: async () => {
+            throw new Error("redis outage at add");
+          },
+          probeQueuedJob: async () => {
+            throw new Error("redis outage at probe");
+          },
+        },
+      ),
+      /redis outage at add/,
+    );
+    const delivered = (await db.execute<{ id: string }>(sql`
+      select id from close_events
+       where org_id = ${org.orgId} and run_id = ${runId} and event_type = 'package.delivered'`)).rows;
+    assert.equal(delivered.length, 0, "a failed handoff must never read as delivered");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("close delivery without any principal refuses by name", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
