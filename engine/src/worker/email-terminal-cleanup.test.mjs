@@ -16,6 +16,7 @@ globalThis.__emailTerminalCleanupTest = {
   sendViaCalls: 0,
   uncertainMarks: 0,
   deleted: [],
+  transportResolution: { state: 'ready', transport: { provider: 'test' } },
 }
 const state = globalThis.__emailTerminalCleanupTest
 
@@ -45,7 +46,7 @@ const sources = {
   '../platform/db.ts': 'export const db = { execute: async () => ({ rows: [] }) }; export const withOrgContext = (_org, action) => action();',
   '../organization/sandbox-guard.ts': 'export const isSandboxOrg = async () => false;',
   '../delivery/email-config.ts': `
-    export const resolveOrgEmailTransport = async () => ({ provider: 'test' });
+    export const resolveOrgEmailTransportDetailed = async () => globalThis.__emailTerminalCleanupTest.transportResolution;
     export const claimEmailDeliveryLog = async () => ({ id: 'log', attempts: globalThis.__emailTerminalCleanupTest.attempts });
     export const appendEmailAttemptEvent = async () => [];
     export const confirmEmailSentGuarded = async () => true;
@@ -102,6 +103,7 @@ function reset() {
   state.sendViaCalls = 0
   state.uncertainMarks = 0
   state.deleted = []
+  state.transportResolution = { state: 'ready', transport: { provider: 'test' } }
 }
 
 test('uncertain on the final attempt deletes staged blobs, keeps evidence, never resends', async () => {
@@ -126,4 +128,18 @@ test('non-terminal uncertainty keeps staged blobs for the still-pending delivery
   assert.equal(state.uncertainMarks, 1)
   assert.deepEqual(state.deleted, [], 'only a terminal delivery may drop staged bytes')
   assert.equal(state.sendViaCalls, 1)
+})
+
+test('configured but unusable transport fails with its remedy and does not ack or send', async () => {
+  reset()
+  state.transportResolution = {
+    state: 'unusable',
+    reason: 'credential could not be unsealed; re-enter it under Settings → Email',
+  }
+  await assert.rejects(
+    state.handler(job({ attemptsMade: 0, attempts: 5 })),
+    /configured but unusable: credential could not be unsealed.*re-enter it under Settings → Email/,
+  )
+  assert.equal(state.sendViaCalls, 0, 'a damaged credential must never reach the provider')
+  assert.deepEqual(state.deleted, [], 'retries remain available until the transport is repaired')
 })

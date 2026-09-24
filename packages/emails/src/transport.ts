@@ -168,19 +168,59 @@ function buildTransport(c: PlainEmailConfig): EmailTransport | null {
   }
 }
 
-/** Unseal a stored config and build its transport, or null when not configured. */
-export function resolveEmailTransport(raw: RawEmailConfig | null | undefined): EmailTransport | null {
-  if (!raw || !raw.provider || raw.enabled !== true) return null
+/**
+ * Why a stored config cannot send. `unconfigured` means nothing is owed —
+ * no provider, or delivery disabled — and the caller may ack the mail as
+ * suppressed. `unusable` means delivery IS owed but the configuration
+ * cannot produce a transport (rotated session secret, corrupt credential,
+ * incomplete fields): acking that as "not configured" would drop every mail
+ * forever, so the caller must fail and retry with this named reason.
+ */
+export type EmailTransportResolution =
+  | { state: 'unconfigured' }
+  | { state: 'unusable'; reason: string }
+  | { state: 'ready'; transport: EmailTransport }
+
+/** Unseal a stored config and build its transport, naming why it cannot send. */
+export function resolveEmailTransportDetailed(raw: RawEmailConfig | null | undefined): EmailTransportResolution {
+  if (!raw || !raw.provider || raw.enabled !== true) return { state: 'unconfigured' }
   try {
     validateStoredEmailConfig(raw, { requireComplete: true })
-  } catch {
-    return null
+  } catch (error) {
+    return {
+      state: 'unusable',
+      reason: `the stored email configuration is incomplete: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
   let secret: string | undefined
   if (raw.keyCiphertext && raw.keyNonce) {
-    secret = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce }) ?? undefined
+    const unsealed = unsealSecret({ ciphertext: raw.keyCiphertext, nonce: raw.keyNonce })
+    if (unsealed === null) {
+      return {
+        state: 'unusable',
+        reason:
+          'the stored provider credential could not be unsealed with the current session secret ' +
+          '(it was rotated or is corrupt); re-enter the credential under Settings → Email before mail can send',
+      }
+    }
+    secret = unsealed
   }
-  return buildTransport({ ...raw, secret })
+  const resolved = buildTransport({ ...raw, secret })
+  if (!resolved) {
+    return {
+      state: 'unusable',
+      reason:
+        'the stored email configuration is missing its sending credential or sender identity; ' +
+        're-enter the credential and sender under Settings → Email before mail can send',
+    }
+  }
+  return { state: 'ready', transport: resolved }
+}
+
+/** Unseal a stored config and build its transport, or null when not configured. */
+export function resolveEmailTransport(raw: RawEmailConfig | null | undefined): EmailTransport | null {
+  const resolved = resolveEmailTransportDetailed(raw)
+  return resolved.state === 'ready' ? resolved.transport : null
 }
 
 // --- send -------------------------------------------------------------------

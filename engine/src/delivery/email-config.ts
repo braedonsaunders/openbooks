@@ -3,10 +3,12 @@ import { documentRevisionSql, isDocumentRevisionToken } from "../records/revisio
 import type { EmailActor } from "@openbooks/schema";
 import {
   resolveEmailTransport,
+  resolveEmailTransportDetailed,
   sealSecret,
   validateStoredEmailConfig,
   type AttemptRecord,
   type EmailTransport,
+  type EmailTransportResolution,
   type RawEmailConfig,
 } from "@openbooks/emails";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -216,6 +218,15 @@ export async function saveOrgEmailConfig(
 /** Resolve an org's sendable transport (secret unsealed), or null if unconfigured. */
 export async function resolveOrgEmailTransport(orgId: string): Promise<EmailTransport | null> {
   return resolveEmailTransport(await readOrgEmailConfig(orgId));
+}
+
+/**
+ * Resolve an org's transport naming why it cannot send (E05). `unusable`
+ * (rotated session secret, corrupt credential) must fail and retry — never
+ * ack as "not configured", which would drop every mail forever.
+ */
+export async function resolveOrgEmailTransportDetailed(orgId: string): Promise<EmailTransportResolution> {
+  return resolveEmailTransportDetailed(await readOrgEmailConfig(orgId));
 }
 
 // --- email_log ---------------------------------------------------------------

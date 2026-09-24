@@ -18,7 +18,7 @@ import {
   markPaymentRemittanceAttempt,
   markPaymentRemittanceFailed,
   markPaymentRemittanceSent,
-  resolveOrgEmailTransport,
+  resolveOrgEmailTransportDetailed,
 } from "../delivery/email-config.ts";
 import { sql } from "drizzle-orm";
 import { deleteStoredEmailAttachments, loadEmailAttachments } from "../delivery/email-attachments.ts";
@@ -71,10 +71,12 @@ class PostAcceptanceBookkeepingError extends Error {
  * - A prior confirmed acceptance closes the job with that provider message id
  *   without touching the wire again.
  *
- * A missing transport is recorded as `suppressed` and acked (no infinite
- * retry); definite send failures are recorded and rethrown so BullMQ retries
- * with backoff. Definite-failure row updates are status-guarded so they can
- * never overwrite `sent` or `uncertain`.
+ * A missing transport (unconfigured org) is recorded as `suppressed` and
+ * acked (no infinite retry); a configured-but-unusable transport fails with
+ * its named reason so BullMQ retries with backoff. Definite send failures
+ * are recorded and rethrown so BullMQ retries with backoff. Definite-failure
+ * row updates are status-guarded so they can never overwrite `sent` or
+ * `uncertain`.
  */
 export function createEmailWorker(): Worker<EmailJobData> {
   return new Worker<EmailJobData>(
@@ -192,8 +194,13 @@ export function createEmailWorker(): Worker<EmailJobData> {
         return { suppressed: true, sandbox: true };
       }
 
-      const transport = await resolveOrgEmailTransport(d.orgId);
-      if (!transport) {
+      // E05: an UNCONFIGURED org (no provider, delivery disabled) suppresses
+      // and acks below; a CONFIGURED-BUT-UNUSABLE org (rotated session
+      // secret, corrupt credential) must fail and retry with its named
+      // reason — acking it as "not configured" would drop every mail
+      // forever with no alarm.
+      const resolution = await resolveOrgEmailTransportDetailed(d.orgId);
+      if (resolution.state === "unconfigured") {
         const claimed = await claimEmailDeliveryLog({
           orgId: d.orgId,
           jobId: job.id ?? null,
@@ -227,14 +234,15 @@ export function createEmailWorker(): Worker<EmailJobData> {
         return { suppressed: true };
       }
 
+      const resolvedTransport = resolution.state === "ready" ? resolution.transport : null;
       const canonical = await claimEmailDeliveryLog({
         orgId: d.orgId,
         deliveryKey,
         jobId: job.id ?? null,
-        provider: transport.provider,
+        provider: resolvedTransport?.provider ?? null,
         recipients: [d.to],
-        fromAddr: transport.from,
-        replyToAddr: transport.replyTo ?? null,
+        fromAddr: resolvedTransport?.from ?? null,
+        replyToAddr: resolvedTransport?.replyTo ?? null,
         subject: d.subject,
         categoryKey: d.meta?.category ?? null,
         meta: d.meta ?? {},
@@ -288,13 +296,26 @@ export function createEmailWorker(): Worker<EmailJobData> {
         throw new Error(`email delivery deferred by reconciliation: ${decision.reason}`);
       }
 
-      await appendEmailAttemptEvent(d.orgId, canonical.id, {
-        attempt: nextAttemptNo,
-        outcome: "started",
-        detail: `sending via ${transport.provider} with identity ${deliveryKey}`,
-      });
+      const transport = resolvedTransport;
+      if (transport) {
+        await appendEmailAttemptEvent(d.orgId, canonical.id, {
+          attempt: nextAttemptNo,
+          outcome: "started",
+          detail: `sending via ${transport.provider} with identity ${deliveryKey}`,
+        });
+      }
 
       try {
+        // A configured-but-unusable transport fails here — inside the
+        // attempt boundary, so the failure lands on the lineage as notSent
+        // evidence and BullMQ retries it instead of acking the mail as "not
+        // configured" forever. The mail was never transmitted.
+        if (!transport) {
+          throw new Error(
+            `email provider is configured but unusable: ${resolution.state === "unusable" ? resolution.reason : "unknown transport fault"} — ` +
+              `fix the provider credential, then the queued retry sends`,
+          );
+        }
         // Check current grants immediately before transmission. Keep this in
         // the attempt boundary so revoked access becomes durable not-sent
         // evidence, and accepted retries can reconcile without sending again.
