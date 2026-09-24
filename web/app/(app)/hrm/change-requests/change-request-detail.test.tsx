@@ -138,6 +138,8 @@ async function mountDialog(opts: {
   closeHref: string
   subject: typeof SUBJECT | null
   departmentOptions?: { value: string; label: string }[]
+  // F3-36: the drawer's lifecycle actions follow the loader grant.
+  canManage?: boolean
   fetchHandler: FetchHandler
 }): Promise<{ unmount: () => Promise<void> }> {
   const pushes: string[] = []
@@ -160,6 +162,7 @@ async function mountDialog(opts: {
           closeHref={opts.closeHref}
           subject={opts.subject}
           departmentOptions={opts.departmentOptions ?? []}
+          canManage={opts.canManage ?? true}
         />,
       ),
     )
@@ -394,6 +397,32 @@ test('no request id renders nothing', async () => {
   })
   try {
     assert.equal(textOf().trim(), '', 'the dialog stays closed without an id')
+  } finally {
+    await unmount()
+  }
+})
+
+test('F3-36: a read-only viewer sees the draft detail with no Edit, Submit or Withdraw', async () => {
+  const { unmount } = await mountDialog({
+    requestId: REQUEST_ID,
+    closeHref: '/hrm/change-requests',
+    subject: SUBJECT,
+    canManage: false,
+    fetchHandler: (url) => {
+      if (url === `/api/hrm/change-requests/${REQUEST_ID}`) {
+        return Response.json({ request: draftHire() })
+      }
+      return null
+    },
+  })
+  try {
+    const text = textOf()
+    assert.match(text, /Quinn Vidal/, 'the detail stays readable without the grant')
+    // Buttons, not body text: the detail copy itself says "Submitted".
+    const buttons = [...document.querySelectorAll('button')].map((b) => b.textContent ?? '')
+    for (const label of ['Edit draft', 'Submit', 'Withdraw']) {
+      assert.ok(!buttons.includes(label), `${label} never renders without the manage grant`)
+    }
   } finally {
     await unmount()
   }

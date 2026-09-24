@@ -47,10 +47,12 @@ const labels: Record<string, string> = {
   actionFailed: 'Failed.',
 }
 
-function drawerWith(events: { kind: string; recordedAt: string }[]): Drawer {
+function drawerWith(events: { kind: string; recordedAt: string }[], canManage = true): Drawer {
   return {
     closeHref: '/hrm/documents',
     title: 'Offer letter',
+    // F3-38: the write actions follow the loader grant.
+    canManage,
     document: {
       id: 'doc-1',
       status: 'sent',
@@ -68,7 +70,7 @@ function drawerWith(events: { kind: string; recordedAt: string }[]): Drawer {
   } as unknown as Drawer
 }
 
-async function renderText(drawer: Drawer): Promise<{ text: string; unmount: () => Promise<void> }> {
+async function renderText(drawer: Drawer): Promise<{ text: string; doc: Document; unmount: () => Promise<void> }> {
   const { JSDOM } = await import('jsdom')
   const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
     url: 'http://localhost/hrm/documents',
@@ -93,6 +95,7 @@ async function renderText(drawer: Drawer): Promise<{ text: string; unmount: () =
   })
   return {
     text: doc.body.textContent ?? '',
+    doc: doc as unknown as Document,
     unmount: async () => {
       await act(async () => {
         root.unmount()
@@ -127,6 +130,33 @@ test('F3-67: an unrecognized event kind falls back to its code, never blank', as
   const m = await renderText(drawerWith([{ kind: 'mystery_kind', recordedAt: '2026-09-04' }]))
   try {
     assert.match(m.text, /mystery_kind/, 'an unknown kind stays visible as its code')
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('F3-38: a sent document offers Send, Remind, Hold and Void to the manage grant', async () => {
+  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], true))
+  try {
+    const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
+    for (const label of ['Send', 'Remind', 'Hold', 'Void']) {
+      assert.ok(buttons.includes(label), `${label} renders for the manage grant`)
+    }
+  } finally {
+    await m.unmount()
+  }
+})
+
+test('F3-38: a read-only viewer sees the document with no Send, Remind, Hold or Void', async () => {
+  const m = await renderText(drawerWith([{ kind: 'sent', recordedAt: '2026-09-02' }], false))
+  try {
+    // The body carries no title (the UrlDrawer owns it) — Signers/Events
+    // prove the detail still renders without the grant.
+    assert.match(m.text, /Signers/, 'the document detail stays readable without the grant')
+    const buttons = [...m.doc.querySelectorAll('button')].map((b) => b.textContent ?? '')
+    for (const label of ['Send', 'Remind', 'Hold', 'Void']) {
+      assert.ok(!buttons.includes(label), `${label} never renders without the manage grant`)
+    }
   } finally {
     await m.unmount()
   }

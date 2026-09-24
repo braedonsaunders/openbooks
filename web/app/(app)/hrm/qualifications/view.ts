@@ -129,6 +129,9 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
                     qualificationId: f('dialogQualificationId'),
                     closeHref: f('dialogCloseHref'),
                     recordOpen: f('recordOpen'),
+                    // F3-37: Verify, Renew and Revoke render only with the
+                    // manage grant, never on stored status alone.
+                    canManage: f('canManage'),
                   },
                   f('dialogVisible'),
                 ),

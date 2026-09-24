@@ -404,8 +404,11 @@ export async function loadQualificationsPage(
     dialogQualificationId: sp.qualification && sp.qualification !== 'new' ? sp.qualification : null,
     dialogCloseHref: href(baseParams({ qualification: undefined, record: undefined })),
     dialogOpen: !!sp.qualification && sp.qualification !== 'new',
-    recordOpen: sp.qualification === 'new' || sp.record === 'new',
-    dialogVisible: !!sp.qualification || sp.record === 'new',
+    // F3-37: the blank record form is a write surface like the header
+    // record button — it opens only with the manage grant, never for a
+    // read-only viewer holding the URL.
+    recordOpen: (sp.qualification === 'new' || sp.record === 'new') && canManage,
+    dialogVisible: (!!sp.qualification && sp.qualification !== 'new') || ((sp.qualification === 'new' || sp.record === 'new') && canManage),
     taxonomyTitle: t('qualifications.taxonomyTitle'),
     requirementsTitle: t('qualifications.requirementsTitle'),
     requirementsEmpty: t('qualifications.requirementsEmpty'),

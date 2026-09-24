@@ -26,12 +26,16 @@ export function ChangeRequestRowActions({
   employmentId,
   appliedChangeId,
   departmentOptions,
+  canManage,
 }: {
   requestId: string
   requestStatus: string
   employmentId: string
   appliedChangeId?: string | null
   departmentOptions: { value: string; label: string }[]
+  /** Loader-resolved manage grant — the queue table renders this island
+   * only inside the gated actions column. */
+  canManage: boolean
 }) {
   const router = useRouter()
   return (
@@ -40,6 +44,7 @@ export function ChangeRequestRowActions({
       employmentId={employmentId}
       appliedChangeId={appliedChangeId ?? null}
       departmentOptions={departmentOptions}
+      canManage={canManage}
       onChanged={() => router.refresh()}
     />
   )
