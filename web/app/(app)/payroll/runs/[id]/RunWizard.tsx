@@ -1978,16 +1978,33 @@ export function BulkEditDrawer({
     required: true,
   })
   const valid = componentId !== '' && amountError === null
+  // A half-typed bulk adjustment never closes silently: Esc, the backdrop and
+  // the X button all funnel through onClose, and Cancel asks too, so typed
+  // work survives a stray click. A clean drawer still closes without prompting.
+  const dirty = componentId !== '' || amount !== '' || note !== '' || replace
+  async function confirmDiscard(): Promise<boolean> {
+    if (!dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+  function closeWithConfirm() {
+    void confirmDiscard().then((ok) => {
+      if (ok) onClose()
+    })
+  }
   return (
     <Drawer
       open
-      onClose={onClose}
+      onClose={closeWithConfirm}
       size="sm"
       title={t('wizard.review.bulkEdit')}
       description={t('wizard.review.bulkDescription', { count })}
       footer={
         <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>{tCommon('actions.cancel')}</Button>
+          <Button variant="ghost" onClick={closeWithConfirm}>{tCommon('actions.cancel')}</Button>
           <Button
             disabled={!valid || busy}
             onClick={() => void onApply({ componentId, amount, note: note || undefined, replaceComponent: replace, idempotencyKey: requestKey })}
