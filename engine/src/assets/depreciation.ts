@@ -2333,7 +2333,7 @@ export async function runDepreciation(
        )`));
   for (const s of stale.rows) {
     try {
-      await buildSchedule(s.asset_id, orgId, actorId, s.book_id);
+      await buildSchedule(s.asset_id, orgId, actorId, s.book_id, allowedSubsidiaryIds);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       result.problems.push(`${s.asset_number}: schedule extension skipped (${msg.slice(0, 120)})`);
