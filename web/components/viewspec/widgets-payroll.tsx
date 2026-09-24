@@ -5,6 +5,7 @@ import { YearEndView } from '../../app/(app)/payroll/year-end/YearEndView'
 import { SeparationsView } from '../../app/(app)/payroll/separations/SeparationsView'
 import { OpeningBalancesView } from '../../app/(app)/payroll/opening-balances/OpeningBalancesView'
 import { EntitlementOpeningsView } from '../../app/(app)/payroll/opening-balances/EntitlementOpeningsView'
+import { EmployerLevyOpeningsView } from '../../app/(app)/payroll/opening-balances/EmployerLevyOpeningsView'
 import { ParallelRunView } from '../../app/(app)/payroll/parallel-run/ParallelRunView'
 import { LaborCostingWorkspace } from '../../app/(app)/admin/setup/labor-costing/LaborCostingWorkspace'
 import { LaborPricingHeading, LaborPricingView } from '../../app/(app)/admin/setup/labor-pricing/sections'
@@ -82,6 +83,15 @@ export const PAYROLL_WIDGETS = {
   'entitlement-openings-grid': (props) => (
     <EntitlementOpeningsView
       initial={props.initial as ComponentProps<typeof EntitlementOpeningsView>['initial']}
+      canManage={props.canManage === true}
+    />
+  ),
+  /** Employer-side adoption carry-in, one row per pack-declared levy. */
+  'employer-levy-openings-grid': (props) => (
+    <EmployerLevyOpeningsView
+      year={num(props, 'year') ?? new Date().getFullYear()}
+      levies={(props.levies as ComponentProps<typeof EmployerLevyOpeningsView>['levies']) ?? []}
+      rows={(props.rows as ComponentProps<typeof EmployerLevyOpeningsView>['rows']) ?? []}
       canManage={props.canManage === true}
     />
   ),

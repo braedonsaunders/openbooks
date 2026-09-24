@@ -20,6 +20,11 @@ import {
   priorPayrollRegisterResource,
 } from './prior-payroll-register-resource'
 import {
+  PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
+  PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY,
+  payrollEmployerLevyOpeningsResource,
+} from './payroll-employer-levy-openings-resource'
+import {
   FIXED_ASSETS_DESCRIPTOR,
   FIXED_ASSETS_KEY,
   fixedAssetsResource,
@@ -222,6 +227,7 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
     ? [
         PAYROLL_OPENING_BALANCES_DESCRIPTOR,
         PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR,
+        PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
       ]
     : []
@@ -250,6 +256,10 @@ export async function getResource(
   if (key === PAYROLL_OPENING_ENTITLEMENTS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollOpeningEntitlementsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === PAYROLL_EMPLOYER_LEVY_OPENINGS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(payrollEmployerLevyOpeningsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   if (key === FIXED_ASSETS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'fixedAssets'))) return null

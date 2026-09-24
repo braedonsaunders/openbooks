@@ -143,6 +143,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'email-settings-form': { props: ['initial'] },
   'email-subject-cell': { props: ['category', 'subject'] },
   'empty-state': { props: ['action', 'actionProps', 'description', 'icon', 'title'] },
+  'employer-levy-openings-grid': { props: ['canManage', 'levies', 'rows', 'year'] },
   'entitlement-openings-grid': { props: ['canManage', 'initial'] },
   'entity-list-view': { props: ['drawer', 'emptyAction', 'emptyDescription', 'emptyTitle', 'recordType', 'sp'], open: true },
   'entry-cell': { props: ['docId', 'docKind', 'entryId', 'entryNumber'] },
