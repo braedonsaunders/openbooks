@@ -14,6 +14,7 @@ import { loadAsset, loadAssetWithRunner } from '../_lib'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import {
   FieldRefusal,
+  lockAccountOverridesForAssetWrite,
   checkCustomReferences,
   checkOpeningBasis,
   checkOpeningMonth,
@@ -411,6 +412,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   try {
     const payload = await db.transaction(async (tx) => {
+      await lockAccountOverridesForAssetWrite(tx, user.orgId, gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : null, [
+        { id: assetAccountId, code: 'invalid_asset_account' },
+        { id: accumulatedAccountId, code: 'invalid_accumulated_account' },
+        { id: expenseAccountId, code: 'invalid_expense_account' },
+      ])
       // The reads above are only an early refusal. Lock and reload the
       // authoritative asset inside the save transaction so a depreciation
       // posting that commits while this request is preparing cannot be
@@ -540,6 +546,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
     return NextResponse.json(payload)
   } catch (error) {
+    if (error instanceof FieldRefusal) return patchFieldBad(error)
     if (error instanceof PostedBasisEditConflict) {
       return NextResponse.json({ error: error.message }, { status: 409 })
     }
