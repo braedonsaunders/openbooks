@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import {
   assertTaxYear,
   declaredProgramBaseFields,
@@ -14,7 +15,6 @@ import {
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { guardPayrollEmployees } from '../subsidiary-scope'
 import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -186,21 +186,17 @@ export async function POST(req: Request) {
     })
   }
 
-  const denied = await guardPayrollEmployees(
-    gate,
-    rows.map((row) => row.employeePartyId),
-  )
-  if (denied) return denied
-
   try {
     const result = await saveOpeningBalances({
       orgId: gate.user.orgId,
       actorId: gate.user.id,
       taxYear: assertTaxYear(body.taxYear),
       rows,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
     return NextResponse.json(result)
   } catch (error) {
+    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
     // A refusal is data the operator has to see per row, not a bare 4xx: a
     // whole-workforce load rejected for one transposed column must say which
     // employee, and nothing was written.

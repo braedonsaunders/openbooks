@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { saveOpeningBalances } from "./opening-balances.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { db } from "../platform/db.ts";
+import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { payRunStaleness } from "./readiness.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -59,6 +63,43 @@ test(
         }),
         /already used this carry-in for 2026/,
       );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "opening-balance save rechecks employee scope after a committed rehome",
+  { skip: !process.env.OPENBOOKS_DB_URL },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const movedTo = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${movedTo}, ${fx.orgId}, ${fx.subsidiaryId}, 'Opening balance rehome target', 'CAD', 'CA')
+      `);
+      await db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId} where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+      const precheck = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from parties where org_id = ${fx.orgId} and id = ${fx.employeeId}
+      `)).rows[0];
+      assert.equal(precheck?.subsidiary_id, fx.subsidiaryId, "the route precheck sees the employee in scope");
+
+      // Both statements autocommit: the move lands after the precheck and
+      // before the service's own write transaction, with no outer test txn.
+      await db.execute(sql`update parties set subsidiary_id = ${movedTo} where org_id = ${fx.orgId} and id = ${fx.employeeId}`);
+      await assert.rejects(saveOpeningBalances({
+        orgId: fx.orgId,
+        actorId: fx.actorId,
+        taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "60000" } }],
+        allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      }), (error: unknown) => error instanceof ScopeNotFoundError);
+      const stored = await db.execute(sql`
+        select 1 from payroll_opening_balances where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}
+      `);
+      assert.equal(stored.rows.length, 0, "the out-of-scope carry-in writes no balance row");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

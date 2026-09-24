@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
 import { db } from "../platform/db.ts";
+import { lockScopeRows } from "../organization/subsidiary-scope.ts";
 import { add, cmp, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import {
@@ -777,6 +778,10 @@ export async function saveOpeningBalances(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    // The route's scope query is only an early refusal. Lock the current
+    // employee rows again in the write transaction so a rehome cannot move a
+    // caller-approved employee out of scope before any carry-in is changed.
+    await lockScopeRows(tx, input.orgId, input.rows.map((row) => ({ kind: "party", id: row.employeePartyId })), input.allowedSubsidiaryIds ?? null, "share");
     // Serialize with any pay-run commit for these employees' statutory year:
     // a commit in flight finishes first and the lock check below sees its
     // stubs; a save that wins the fence commits first and the run's freshness
