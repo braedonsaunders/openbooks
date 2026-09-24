@@ -2,11 +2,82 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { rl1Slips, rl1Summary } from "./canada/quebec/rl1.ts";
+import { db, pool } from "../platform/db.ts";
+import { rl1Return, rl1Slips, rl1Summary } from "./canada/quebec/rl1.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function waitUntilBlockedBy(blockerPid: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const result = await pool.query<{ blocked: boolean }>(
+      `select exists (
+         select 1 from pg_stat_activity
+          where datname = current_database() and $1 = any(pg_blocking_pids(pid))
+       ) as blocked`,
+      [blockerPid],
+    );
+    if (result.rows[0]?.blocked) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.fail(`RL-1 return did not reach the pay-stubs read blocked by backend ${blockerPid}`);
+}
+
+async function setRl1IdentificationNumber(orgId: string, value: string): Promise<void> {
+  const writer = await pool.connect();
+  try {
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls', 'on', true)");
+    const result = await writer.query<{ id_number: string }>(
+      `update orgs
+          set settings = jsonb_set(
+            settings,
+            '{payroll}',
+            coalesce(settings->'payroll', '{}'::jsonb) || jsonb_build_object(
+              'rl1Transmitter',
+              coalesce(settings #> '{payroll,rl1Transmitter}', '{}'::jsonb) ||
+                jsonb_build_object('identificationNumber', $2::text)
+            ),
+            true
+          )
+        where id = $1
+        returning settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number`,
+      [orgId, value],
+    );
+    assert.equal(result.rowCount, 1, "transmitter configuration update must affect the scratch organization");
+    assert.equal(result.rows[0]!.id_number, value);
+    await writer.query("commit");
+  } catch (error) {
+    await writer.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    writer.release();
+  }
+}
+
+async function setOpeningTaxableYtd(orgId: string, employeeId: string, value: string): Promise<void> {
+  const writer = await pool.connect();
+  try {
+    await writer.query("begin");
+    await writer.query("select set_config('app.bypass_rls', 'on', true)");
+    const result = await writer.query<{ taxable_ytd: string }>(
+      `update payroll_opening_balances
+          set taxable_ytd = $3::numeric
+        where org_id = $1 and employee_party_id = $2 and tax_year = 2026
+        returning taxable_ytd`,
+      [orgId, employeeId, value],
+    );
+    assert.equal(result.rowCount, 1, "opening YTD update must affect the seeded scratch employee");
+    assert.equal(result.rows[0]!.taxable_ytd, value);
+    await writer.query("commit");
+  } catch (error) {
+    await writer.query("rollback").catch(() => undefined);
+    throw error;
+  } finally {
+    writer.release();
+  }
+}
 
 /**
  * The RL-1's opening-balance carry-in, end to end.
@@ -184,6 +255,48 @@ test(
       assert.equal(summary.slips, 2);
       assert.equal(summary.boxA, "45000.0000");
     } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "RL-1 return reports opening balances from the snapshot used for its slips",
+  { skip: !DB },
+  async () => {
+    const fx = await seedQcYear();
+    const blocker = await pool.connect();
+    let returnPromise: ReturnType<typeof rl1Return> | undefined;
+    let lockHeld = false;
+    try {
+      await setRl1IdentificationNumber(fx.orgId, "RQ-OLD-123");
+      await blocker.query("begin");
+      const pidResult = await blocker.query<{ pid: number }>("select pg_backend_pid() as pid");
+      const blockerPid = pidResult.rows[0]!.pid;
+      await blocker.query("lock table pay_stubs in access exclusive mode");
+      lockHeld = true;
+
+      returnPromise = rl1Return(fx.orgId, 2026);
+      await waitUntilBlockedBy(blockerPid);
+      // The return has already begun its payroll read and is waiting for the
+      // later opening-balance read. Under read committed, that later read
+      // would combine the changed carry-in with the pre-change stub set.
+      await setOpeningTaxableYtd(fx.orgId, fx.qcStubEmployee, "20000.0000");
+      await blocker.query("commit");
+      lockHeld = false;
+
+      const result = await returnPromise;
+      assert.equal(result.identificationNumber, "RQ-OLD-123");
+      assert.equal(result.slips.length, 2);
+      assert.equal(result.summary.slips, result.slips.length);
+      assert.equal(result.summary.boxA, "45000.0000");
+      const stub = result.slips.find((slip) => slip.employeePartyId === fx.qcStubEmployee);
+      assert.ok(stub);
+      assert.equal(stub.boxA, "40000.0000");
+    } finally {
+      if (lockHeld) await blocker.query("rollback").catch(() => undefined);
+      blocker.release();
+      await returnPromise?.catch(() => undefined);
       await dropScratchOrgReporting(fx.orgId);
     }
   },
