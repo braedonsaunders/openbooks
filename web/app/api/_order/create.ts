@@ -20,8 +20,7 @@ import {
   loadOrder,
   orderTaxProfileMap,
 } from './lib'
-import { resolveLinePriceBasis } from './line-selection'
-import { selectPostableOrderLines, type OrderLineInput } from './line-selection'
+import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
 
 /**
  * Shared collection-POST for the three order-cycle modules (quote /
@@ -258,6 +257,7 @@ export async function createOrder(
     taxAmount: string
     extraDims: Record<string, string>
   })[] = []
+  const itemQuantities = overallItemQuantities(valid)
   for (let i = 0; i < computed.lines.length; i++) {
     const l = computed.lines[i]!
     const lineDims = validateExtraDims(l.extraDims, segments)
@@ -268,10 +268,17 @@ export async function createOrder(
     if (amount === 'invalid' || taxInputAmount === 'invalid' || taxAmount === 'invalid') {
       return bad('Order totals contain an invalid amount')
     }
-    // Pricing provenance (0336): the drawer echoes the preview basis it
-    // priced from; hand-priced lines carry none. A basis for a different
-    // price is stale lineage and refuses instead of persisting.
-    const priceBasis = resolveLinePriceBasis(i + 1, l.unitPrice, l.priceBasis)
+    // Client provenance is only a signal that the line came from a preview;
+    // the server derives the persisted basis from the current catalog.
+    const priceBasis = await resolveLinePriceBasis({
+      lineNumber: i + 1,
+      orgId: user.orgId,
+      customerId: body.partyId ?? null,
+      currency,
+      documentDate,
+      line: l,
+      overallItemQuantity: itemQuantities.get(l.itemId ?? '') ?? (l.quantity ?? '0'),
+    })
     if (priceBasis !== null && 'error' in priceBasis) return bad(priceBasis.error)
     preparedLines.push({
       ...l,
@@ -376,6 +383,9 @@ export async function createOrder(
       // neither burns a row nor a sequence value. The allocator serializes
       // concurrent savers on the org-wide counter row.
       const documentNumber = await allocateDocumentNumber(tx, user.orgId, cfg.kind, cfg.numberPrefix)
+      // The advisory lock and prior-row lookup above serialize same-key
+      // writers; this conflict arm is a defensive race fence for any unseen
+      // competing writer, and a missing returned row throws below.
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, document_date, due_date,
@@ -389,10 +399,6 @@ export async function createOrder(
            ${JSON.stringify(headerDims ? headerDims.cleaned : {})}::jsonb,
            ${body.memo ?? null}, ${subtotal}, ${taxTotal}, ${total},
            ${user.id}, ${user.id})
-        // A conflicting id is expected and benign: the advisory lock plus
-        // claimIdempotentCreate above serialize same-key writers, so this arm
-        // only fires for a loser racing a just-committed first save — and a
-        // zero-row insert must never read as success, hence the throw below.
         on conflict (id) do nothing
         returning id
       `))
