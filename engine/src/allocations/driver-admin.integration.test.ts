@@ -116,6 +116,41 @@ test("gl_activity driver refuses cross-org accounts", { skip: !DB }, async () =>
   }
 });
 
+test("scoped driver list and detail redact foreign subsidiary account references consistently", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const foreignSubsidiaryId = randomUUID();
+    const foreignAccountId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${foreignSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Foreign entity', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into accounts (id, org_id, number, name, type, subsidiary_id)
+      values (${foreignAccountId}, ${org.orgId}, '9900', 'Foreign expense', 'expense', ${foreignSubsidiaryId})`);
+    const glDriver = await createDriver(org.orgId, actorId, {
+      key: "scoped-gl-account", name: "Scoped GL", dimension: "department", sourceKind: "gl_activity",
+      config: { accountScope: { kind: "accounts", accountIds: [org.accounts.revenue, foreignAccountId] } },
+    });
+    const statisticalDriver = await createDriver(org.orgId, actorId, {
+      key: "scoped-stat-account", name: "Scoped statistical", dimension: "department", sourceKind: "statistical_journal",
+      config: { unit: "entries", accountIds: [org.accounts.revenue, foreignAccountId] },
+    });
+    const scope = new Set([org.subsidiaryId]);
+    const listed = await listDrivers(org.orgId, { allowedSubsidiaryIds: scope });
+    const listedGl = listed.find(({ id }) => id === glDriver.id)!;
+    const listedStatistical = listed.find(({ id }) => id === statisticalDriver.id)!;
+    assert.deepEqual((listedGl.config.accountScope as { accountIds: string[] }).accountIds, [org.accounts.revenue]);
+    assert.deepEqual(listedStatistical.config.accountIds, [org.accounts.revenue]);
+    assert.deepEqual((await getDriver(org.orgId, glDriver.id, undefined, scope))?.config, listedGl.config);
+    assert.deepEqual((await getDriver(org.orgId, statisticalDriver.id, undefined, scope))?.config, listedStatistical.config);
+    assert.deepEqual((await listDrivers(org.orgId, { allowedSubsidiaryIds: new Set() })).find(({ id }) => id === glDriver.id)?.config.accountScope,
+      { kind: "accounts", accountIds: [org.accounts.revenue] });
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("manual values: exact decimals, overlap guard, end-dating, onDate read", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

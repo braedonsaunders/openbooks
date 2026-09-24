@@ -47,7 +47,7 @@ export async function GET(req: Request) {
     if (manage instanceof NextResponse) return manage;
   }
   try {
-    const drivers = await listDrivers(gate.user.orgId, { includeInactive });
+    const drivers = await listDrivers(gate.user.orgId, { includeInactive, allowedSubsidiaryIds: gate.allowedSubsidiaryIds });
     return NextResponse.json({ drivers });
   } catch (error) {
     return toResponse(error);
